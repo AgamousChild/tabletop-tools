@@ -3,11 +3,12 @@
   "version": "0.0.1",
   "private": true,
   "scripts": {
-    "dev": "pnpm --parallel --filter nocheat-server --filter nocheat-client --filter versus-server --filter versus-client --filter listbuilder-server --filter listbuilder-client --filter tracker-server --filter tracker-client dev",
+    "dev": "pnpm --parallel --filter nocheat-server --filter nocheat-client --filter versus-server --filter versus-client --filter listbuilder-server --filter listbuilder-client --filter tracker-server --filter tracker-client --filter tournament-server --filter tournament-client dev",
     "dev:nocheat": "pnpm --parallel --filter nocheat-server --filter nocheat-client dev",
     "dev:versus": "pnpm --parallel --filter versus-server --filter versus-client dev",
     "dev:listbuilder": "pnpm --parallel --filter listbuilder-server --filter listbuilder-client dev",
     "dev:tracker": "pnpm --parallel --filter tracker-server --filter tracker-client dev",
+    "dev:tournament": "pnpm --parallel --filter tournament-server --filter tournament-client dev",
     "build": "pnpm -r --filter '*-client' build",
     "test": "pnpm -r test"
   },
