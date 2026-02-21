@@ -1,0 +1,21 @@
+node_modules
+dist
+.env
+.env.local
+*.local
+.turbo
+.wrangler
+
+# Local databases
+*.db
+*.db-shm
+*.db-wal
+
+# Debug artifacts
+debug-images/
+
+# Local SSL certs
+certs/
+
+# Claude session files
+.claude/
