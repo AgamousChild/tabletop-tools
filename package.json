@@ -3,8 +3,8 @@
   "version": "0.0.1",
   "private": true,
   "scripts": {
-    "dev": "pnpm --parallel --filter nocheat-server --filter nocheat-client --filter versus-server --filter versus-client --filter list-builder-server --filter list-builder-client --filter game-tracker-server --filter game-tracker-client --filter tournament-server --filter tournament-client dev",
-    "dev:nocheat": "pnpm --parallel --filter nocheat-server --filter nocheat-client dev",
+    "dev": "pnpm --parallel --filter no-cheat-server --filter no-cheat-client --filter versus-server --filter versus-client --filter list-builder-server --filter list-builder-client --filter game-tracker-server --filter game-tracker-client --filter tournament-server --filter tournament-client dev",
+    "dev:no-cheat": "pnpm --parallel --filter no-cheat-server --filter no-cheat-client dev",
     "dev:versus": "pnpm --parallel --filter versus-server --filter versus-client dev",
     "dev:list-builder": "pnpm --parallel --filter list-builder-server --filter list-builder-client dev",
     "dev:game-tracker": "pnpm --parallel --filter game-tracker-server --filter game-tracker-client dev",

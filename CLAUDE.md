@@ -21,7 +21,7 @@ tabletop-tools/
     auth/     ← shared Better Auth — one login across all tools
     db/       ← shared Turso schema and Drizzle client
   apps/
-    nocheat/  ← dice cheat detection (this project)
+    no-cheat/  ← dice cheat detection (this project)
     ...       ← future tools
 ```
 
