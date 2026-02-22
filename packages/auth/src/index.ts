@@ -8,10 +8,11 @@ import {
 import { betterAuth } from 'better-auth'
 import { drizzleAdapter } from 'better-auth/adapters/drizzle'
 import { username } from 'better-auth/plugins'
+import { and, eq, gt } from 'drizzle-orm'
 
 export function createAuth(
   db: Db,
-  baseURL = 'http://localhost:3001',
+  baseURL = 'http://localhost:3000',
   trustedOrigins: string[] = [],
 ) {
   return betterAuth({
@@ -36,3 +37,50 @@ export function createAuth(
 }
 
 export type Auth = ReturnType<typeof createAuth>
+
+export type User = {
+  id: string
+  email: string
+  name: string
+}
+
+/**
+ * Validate a session from request headers.
+ *
+ * Reads the better-auth.session_token cookie, looks it up in the shared DB,
+ * and returns the user if the session exists and has not expired.
+ *
+ * App servers call this instead of running their own auth instance.
+ * The central auth-server (apps/auth-server) handles all auth routes.
+ */
+export async function validateSession(db: Db, headers: Headers): Promise<User | null> {
+  const cookieHeader = headers.get('cookie') ?? ''
+  const tokenEntry = cookieHeader
+    .split(';')
+    .map((c) => c.trim())
+    .find((c) => c.startsWith('better-auth.session_token='))
+
+  if (!tokenEntry) return null
+
+  // Use indexOf to split only on the first '=' — signed cookie value may contain '='
+  const signedToken = decodeURIComponent(tokenEntry.slice(tokenEntry.indexOf('=') + 1))
+  if (!signedToken) return null
+
+  // Better Auth signed cookie format: <raw_token>.<hmac_sha256_signature>
+  // The DB stores only the raw token — strip the trailing signature
+  const lastDot = signedToken.lastIndexOf('.')
+  const token = lastDot > 0 ? signedToken.substring(0, lastDot) : signedToken
+
+  const [row] = await db
+    .select({
+      id: authUsers.id,
+      email: authUsers.email,
+      name: authUsers.name,
+    })
+    .from(authSessions)
+    .innerJoin(authUsers, eq(authSessions.userId, authUsers.id))
+    .where(and(eq(authSessions.token, token), gt(authSessions.expiresAt, new Date())))
+    .limit(1)
+
+  return row ?? null
+}
