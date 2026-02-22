@@ -1,4 +1,4 @@
-# CLAUDE.md — ListBuilder (Meta List Builder)
+# CLAUDE.md — list-builder
 
 > Read SOUL.md first. Every decision here flows from it.
 
@@ -17,7 +17,7 @@
 
 ## What This App Is
 
-ListBuilder is a smart army list builder for Warhammer 40K where every unit carries a live performance rating derived from real GT+ tournament data. As you build a list, it surfaces higher-rated alternatives at the same points cost. Ratings update as new event data comes in and reset when GW releases a new balance dataslate or codex.
+list-builder is a smart army list builder for Warhammer 40K where every unit carries a live performance rating derived from real GT+ tournament data. As you build a list, it surfaces higher-rated alternatives at the same points cost. Ratings update as new event data comes in and reset when GW releases a new balance dataslate or codex.
 
 ---
 
@@ -215,11 +215,9 @@ Unit card:
 
 ## Rules for Every Session
 
-- Plan before touching anything — understand every layer first.
-- No features that aren't needed yet.
-- Ratings must be derived correctly. Test the scoring logic.
-- Keep the stack shallow. Don't add layers.
-- Stop when it works. Don't polish what doesn't need polishing.
+See root `CLAUDE.md` — Rules for Every Session.
+
+App-specific: **Ratings must be derived correctly. Test the scoring logic.**
 
 ---
 

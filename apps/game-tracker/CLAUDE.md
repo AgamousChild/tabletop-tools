@@ -1,4 +1,4 @@
-# CLAUDE.md — Tracker (Match Tracker)
+# CLAUDE.md — game-tracker
 
 > Read SOUL.md first. Every decision here flows from it.
 
@@ -16,7 +16,7 @@
 
 ## What This App Is
 
-Tracker is a live game companion for Warhammer 40K matches. It records the full match turn by turn — one photo per turn of the board state, plus everything that happened: units lost, objectives scored, CP spent. At the end, the full history feeds back into ListBuilder to inform unit ratings.
+game-tracker is a live game companion for Warhammer 40K matches. It records the full match turn by turn — one photo per turn of the board state, plus everything that happened: units lost, objectives scored, CP spent. At the end, the full history feeds back into list-builder to inform unit ratings.
 
 ---
 
@@ -149,7 +149,7 @@ Login
   → "New Match"
       → Select opponent faction (from BSData)
       → Select mission
-      → (optional) Load your army list from ListBuilder
+      → (optional) Load your army list from list-builder
 
   LOOP — repeat each turn:
     → "Start Turn N"
@@ -167,15 +167,15 @@ Login
     → Enter final scores
     → Result recorded (WIN / LOSS / DRAW)
     → Full turn history with photos saved
-    → Data fed back to ListBuilder rating engine
+    → Data fed back to list-builder rating engine
 ```
 
 ### Photos
-One photo per turn, always stored — this is the match record. Unlike NoCheat where photos are discarded, here they are the point. Stored in Cloudflare R2 per match.
+One photo per turn, always stored — this is the match record. Unlike no-cheat where photos are discarded, here they are the point. Stored in Cloudflare R2 per match.
 
-### NoCheat Integration
+### no-cheat Integration
 If dice seem suspicious mid-match:
-- One tap opens a NoCheat dice check session
+- One tap opens a no-cheat dice check session
 - On close, returns to the match in progress
 
 ### new-meta Integration
@@ -213,10 +213,7 @@ Turn entry screen:
 
 ## Rules for Every Session
 
-- Plan before touching anything — understand every layer first.
-- No features that aren't needed yet.
-- Keep the stack shallow. Don't add layers.
-- Stop when it works. Don't polish what doesn't need polishing.
+See root `CLAUDE.md` — Rules for Every Session.
 
 ---
 

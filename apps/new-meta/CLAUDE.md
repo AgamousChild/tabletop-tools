@@ -247,8 +247,4 @@ Client has no logic tests yet (scaffold only). Tests will be written as pages ar
 
 ## Rules for Every Session
 
-- Plan before touching anything.
-- No features that aren't needed yet.
-- Keep the stack shallow. Don't add layers.
-- Stop when it works.
-- After implementation: update this doc to reflect what was actually built.
+See root `CLAUDE.md` — Rules for Every Session.
