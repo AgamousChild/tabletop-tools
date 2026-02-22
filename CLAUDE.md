@@ -259,6 +259,27 @@ Turn N
 
 ---
 
+### Tournament Manager (`apps/tournament`)
+A full tournament management platform — the job BCP does, built properly. Two distinct roles: Tournament Organizers run events; players register, submit lists, and report results.
+
+**What it runs:**
+- Swiss pairings generated each round by the server — correct algorithm, tested exhaustively
+- Live pairings board (designed for display on a screen in the venue)
+- Live standings with proper tiebreakers: W-L-D → VP margin → Strength of Schedule → total VP
+- Result reporting with confirmation — either player reports, opponent confirms, TO resolves disputes
+- Army list submission and locking flow
+
+**ELO ladder across all events:**
+- Every player carries a global ELO rating, updated after each confirmed match result
+- K-factor: 32 for new players (< 30 rated games), 16 for established
+- Starting rating: 1200
+- Updates when a round closes — not at end of tournament, after every confirmed game
+- Ratings visible on player profiles and on the standings board
+
+**Tournament lifecycle:** `DRAFT → REGISTRATION → CHECK_IN → IN_PROGRESS → COMPLETE`
+
+---
+
 ### Combat Simulator — How It Differs from Unit Crunch
 
 Unit Crunch is the community benchmark. The Versus app is not a replacement — it's a different product.
