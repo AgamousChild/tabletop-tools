@@ -70,7 +70,9 @@ export function parseTabletopAdmiralCsv(
 
 interface ColumnMap {
   placement: number
+  playerName: number
   faction: number
+  detachment: number
   points: number
   wins: number
   losses: number
@@ -79,13 +81,15 @@ interface ColumnMap {
 }
 
 const HEADER_ALIASES: Record<keyof ColumnMap, string[]> = {
-  placement: ['rank', 'place', 'placement', 'finish', 'position'],
-  faction:   ['faction', 'army', 'detachment', 'faction/army'],
-  points:    ['cp', 'championship points', 'vp', 'points', 'total', 'tournament points'],
-  wins:      ['win', 'wins', 'w'],
-  losses:    ['loss', 'losses', 'l'],
-  draws:     ['draw', 'draws', 'd'],
-  listText:  ['list', 'army list', 'roster', 'list text'],
+  placement:  ['rank', 'place', 'placement', 'finish', 'position'],
+  playerName: ['player', 'name', 'player name', 'player_name'],
+  faction:    ['faction', 'army', 'faction/army'],
+  detachment: ['detachment', 'sub_faction', 'sub faction', 'subfaction'],
+  points:     ['cp', 'championship points', 'vp', 'points', 'total', 'tournament points'],
+  wins:       ['win', 'wins', 'w'],
+  losses:     ['loss', 'losses', 'l'],
+  draws:      ['draw', 'draws', 'd'],
+  listText:   ['list', 'army list', 'roster', 'list text'],
 }
 
 function buildColumnMap(headers: string[]): ColumnMap {
@@ -98,13 +102,15 @@ function buildColumnMap(headers: string[]): ColumnMap {
   }
 
   return {
-    placement: findCol(HEADER_ALIASES.placement),
-    faction:   findCol(HEADER_ALIASES.faction),
-    points:    findCol(HEADER_ALIASES.points),
-    wins:      findCol(HEADER_ALIASES.wins),
-    losses:    findCol(HEADER_ALIASES.losses),
-    draws:     findCol(HEADER_ALIASES.draws),
-    listText:  findCol(HEADER_ALIASES.listText),
+    placement:  findCol(HEADER_ALIASES.placement),
+    playerName: findCol(HEADER_ALIASES.playerName),
+    faction:    findCol(HEADER_ALIASES.faction),
+    detachment: findCol(HEADER_ALIASES.detachment),
+    points:     findCol(HEADER_ALIASES.points),
+    wins:       findCol(HEADER_ALIASES.wins),
+    losses:     findCol(HEADER_ALIASES.losses),
+    draws:      findCol(HEADER_ALIASES.draws),
+    listText:   findCol(HEADER_ALIASES.listText),
   }
 }
 
@@ -115,12 +121,14 @@ function parsePlayerRow(cells: string[], col: ColumnMap): TournamentPlayer | nul
 
   return {
     placement,
-    faction:  col.faction  >= 0 ? (cells[col.faction]  ?? '').trim() : '',
-    points:   col.points   >= 0 ? parseInt(cells[col.points]   ?? '0', 10) : 0,
-    wins:     col.wins     >= 0 ? parseInt(cells[col.wins]     ?? '0', 10) : 0,
-    losses:   col.losses   >= 0 ? parseInt(cells[col.losses]   ?? '0', 10) : 0,
-    draws:    col.draws    >= 0 ? parseInt(cells[col.draws]    ?? '0', 10) : 0,
-    listText: col.listText >= 0 ? (cells[col.listText] ?? '').trim() || undefined : undefined,
+    playerName: col.playerName >= 0 ? (cells[col.playerName] ?? '').trim() || undefined : undefined,
+    faction:    col.faction    >= 0 ? (cells[col.faction]    ?? '').trim() : '',
+    detachment: col.detachment >= 0 ? (cells[col.detachment] ?? '').trim() || undefined : undefined,
+    points:     col.points     >= 0 ? parseInt(cells[col.points]   ?? '0', 10) : 0,
+    wins:       col.wins       >= 0 ? parseInt(cells[col.wins]     ?? '0', 10) : 0,
+    losses:     col.losses     >= 0 ? parseInt(cells[col.losses]   ?? '0', 10) : 0,
+    draws:      col.draws      >= 0 ? parseInt(cells[col.draws]    ?? '0', 10) : 0,
+    listText:   col.listText   >= 0 ? (cells[col.listText] ?? '').trim() || undefined : undefined,
   }
 }
 
