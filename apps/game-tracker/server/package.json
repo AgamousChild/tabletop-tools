@@ -1,5 +1,5 @@
 {
-  "name": "tracker-server",
+  "name": "game-tracker-server",
   "version": "0.0.1",
   "private": true,
   "type": "module",
