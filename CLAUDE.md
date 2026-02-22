@@ -30,23 +30,44 @@ tabletop-tools/
 
 ## Architecture: Two-Tier with tRPC
 
+All image processing and model inference runs **in the browser**. No image data or
+pixel data ever leaves the device. The server only receives pip counts (an array of
+integers) and computes statistics. No AI API calls are made anywhere in this app.
+
 ```
-┌─────────────────────────────────┐
-│  Tier 1: React Client           │
-│  - Login / Auth UI              │
-│  - Camera / file upload         │
-│  - Session results display      │
-│  - tRPC client (type-safe)      │
-└────────────────┬────────────────┘
-                 │ tRPC over HTTP
-┌────────────────▼────────────────┐
-│  Tier 2: tRPC Server            │
-│  - Auth router                  │
-│  - Session router               │
-│  - CV layer (pip reader)        │
-│  - Statistical engine (Z-score) │
-│  - SQLite via Turso (edge DB)   │
-└─────────────────────────────────┘
+┌──────────────────────────────────────────────────────┐
+│  Tier 1: React Client (browser)                      │
+│                                                      │
+│  ┌─── CV Pipeline (runs per frame) ────────────────┐ │
+│  │  opencv.js (WASM)                               │ │
+│  │  1. Grayscale + adaptive threshold              │ │
+│  │  2. Contour detection → isolate die faces       │ │
+│  │  3. Per-face: normalize to 64×64, center-crop   │ │
+│  │  4a. Classify: local TF.js model (if trained)   │ │
+│  │  4b. Fallback: SimpleBlobDetector (untrained)   │ │
+│  └─────────────────────────────────────────────────┘ │
+│                                                      │
+│  ┌─── Model Store (IndexedDB) ──────────────────────┐ │
+│  │  One trained model per dice set                 │ │
+│  │  MobileNetV3-Small, fine-tuned in browser       │ │
+│  │  ~30-60 labeled images, ~20 epochs, < 2 min     │ │
+│  └─────────────────────────────────────────────────┘ │
+│                                                      │
+│  - Login / Auth UI                                   │
+│  - Training workflow (capture + label + train)       │
+│  - Live capture screen                               │
+│  - Session results display                           │
+│  - tRPC client (type-safe)                           │
+└────────────────────────┬─────────────────────────────┘
+                         │ tRPC — pip counts only
+                         │ (integers, never pixels)
+┌────────────────────────▼─────────────────────────────┐
+│  Tier 2: tRPC Server                                 │
+│  - Auth router                                       │
+│  - Session router                                    │
+│  - Statistical engine (Z-score, chi-squared)         │
+│  - SQLite via Turso (edge DB)                        │
+└──────────────────────────────────────────────────────┘
 ```
 
 ---
@@ -67,7 +88,162 @@ tabletop-tools/
 | Auth | Better Auth | TypeScript-first, self-hosted |
 | Deploy | Cloudflare Workers + Pages | Free tier covers personal use — near-zero cost |
 | Statistics | simple-statistics | Z-score, chi-squared, mean, std deviation |
-| CV | TensorFlow.js (@tensorflow/tfjs) | Pip detection in the browser — image never leaves the device |
+| CV preprocessing | opencv.js (WASM) | Classical CV in browser — grayscale, threshold, contours, blob detection |
+| ML training | @tensorflow/tfjs | Local in-browser training only — no API calls, models stored in IndexedDB |
+| ML runtime | @tensorflow/tfjs | Local inference from trained model — MobileNetV3-Small, fine-tuned on user's dice |
+
+---
+
+## Detection Pipeline
+
+### Guiding principles (from Dicer / OpenCV dice fairness research)
+
+- **Preprocessing does not use AI** — only classical image operations (threshold,
+  morphology, contour detection). This is fast, deterministic, and works offline
+  with zero latency from inference APIs.
+- **Center-weighted feature scoring** — when normalizing a die face ROI, the
+  center region is more reliable than edges (which show rounded corners, shadows,
+  and adjacent die). Crop to ~80% of the face bounds before classification.
+- **Contour filtering** — before pip classification, remove contours on the die
+  face that are not candidate pips (too large, too elongated, touching the edge).
+  This makes the classifier robust to rotation and lighting variance.
+- **Scale normalization** — all die faces are resized to the same pixel dimensions
+  (64×64) before classification, eliminating scale as a variable.
+
+### Phase 1: Classical CV preprocessing (opencv.js)
+
+Runs on every captured frame. No model required. Used both as the standalone
+fallback and as the first stage feeding the trained classifier.
+
+```
+Camera frame (ImageData)
+  ↓
+  Grayscale
+  ↓
+  Gaussian blur (5×5 kernel) — reduce noise
+  ↓
+  Adaptive threshold (block size 11, C=2) — handles uneven lighting
+  ↓
+  Morphological close (3×3 kernel) — fill pip holes
+  ↓
+  findContours → filter by:
+      area range (min die face area, max scene area)
+      aspect ratio 0.7–1.3 (roughly square → die face)
+  ↓
+  Per detected die face:
+      Extract ROI → center-crop to 80% → resize to 64×64
+      ↓
+      [Go to Phase 2 or fallback]
+```
+
+### Phase 2a: Trained classifier (preferred)
+
+Runs when a model has been trained for this dice set (stored in IndexedDB).
+
+```
+64×64 normalized die face ROI
+  ↓
+  MobileNetV3-Small (fine-tuned with TF.js on user's own dice photos)
+      — pre-trained ImageNet backbone, last 2 layers replaced + fine-tuned
+      — 6-class output: pip values 1–6
+      — ~500 KB quantized model stored in IndexedDB per dice set
+  ↓
+  Confidence > 0.85 → accept pip count
+  Confidence ≤ 0.85 → flag as uncertain, show manual override prompt
+```
+
+### Phase 2b: Classical fallback (SimpleBlobDetector)
+
+Used when no model is trained yet, or when Phase 2a is uncertain.
+
+```
+64×64 normalized die face ROI
+  ↓
+  SimpleBlobDetector with:
+      filterByArea:       minArea=20, maxArea=600
+      filterByCircularity: minCircularity=0.5
+      filterByInertia:    minInertiaRatio=0.4
+      threshold range:    10–200 (stepped by 10)
+  ↓
+  Count keypoints → pip value (1–6)
+  If count > 6 → reject as false detection
+```
+
+### Multiple dice in one frame
+
+```
+After isolating N die face ROIs from the scene:
+  → Run Phase 2a/2b on each
+  → pip_values = [value1, value2, ..., valueN]
+  → Display annotated preview: each die face outlined, pip count overlaid
+  → User confirms or taps to correct any misread face
+  → Confirmed array sent to server as a single roll record
+```
+
+---
+
+## Model Training Workflow
+
+**When**: First time a dice set is used. Optional — the app works without training
+(classical fallback), but the trained model is faster and more accurate on the
+user's specific dice under their specific lighting.
+
+**How long**: ~2 minutes to collect images, ~1 minute to train (browser, no GPU
+required — MobileNetV3-Small is fast on CPU).
+
+**Data required**: 5–10 photos of each face value (1–6) = 30–60 labeled images total.
+Transfer learning from ImageNet means this small dataset is sufficient.
+
+```
+Training flow:
+
+1. User opens dice set → taps "Train Model for This Dice Set"
+
+2. For each face value (1 through 6):
+   App shows: "Show me a die rolled to [N] — tap capture"
+   ├── Camera opens (rear-facing)
+   ├── User rolls the die to that value, frames it
+   ├── Tap to capture (repeat 5–10×, varying orientation + lighting)
+   ├── Each capture: full pipeline through Phase 1 → extract 64×64 ROI
+   ├── ROI labeled as class N, stored in memory
+   └── Progress: "Face 4 of 6 — 7 captures so far"
+
+3. After all 6 faces are captured:
+   "Ready to train — 42 labeled images"
+   → Tap "Train"
+
+4. In-browser training:
+   ├── Load MobileNetV3-Small base (TF.js, ImageNet weights, frozen)
+   ├── Add classification head: GlobalAvgPool → Dense(128, relu) → Dense(6, softmax)
+   ├── Fine-tune head only: Adam, lr=0.001, 20 epochs, batch=8
+   ├── Progress bar with live loss display
+   └── Validation: hold out 20% of captures, show per-class accuracy
+
+5. On completion:
+   ├── Model serialized → saved to IndexedDB keyed by dice_set_id
+   ├── "Model ready — 94% validation accuracy"
+   └── Training images discarded from memory (never stored)
+
+6. Model is now used automatically for all future rolls with this dice set.
+   User can retrain at any time (new lighting conditions, new dice).
+```
+
+### Model storage
+
+```typescript
+// IndexedDB — keyed by dice_set_id
+// One model per dice set, replaced on retrain
+// Model is tf.LayersModel artifacts: model.json + weights.bin
+
+const MODEL_DB = 'nocheat-models'
+const MODEL_STORE = 'trained-classifiers'
+
+// Key: dice_set_id (TEXT)
+// Value: { model: SerializedModel, trainedAt: number, accuracy: number }
+```
+
+Models never leave the device. They are not synced to the server. If a user
+reinstalls the browser or clears storage, they re-train (2 minutes).
 
 ---
 
@@ -133,6 +309,23 @@ session.get(id)                                → session + all rolls
 
 ## User Flow (Frictionless by Design)
 
+### First time with a new dice set — optional training (2 min)
+
+```
+Create dice set → "Train Model?" prompt
+  YES:
+    → Training mode opens (see Model Training Workflow above)
+    → After training: "Model ready — 94% accuracy on your dice"
+    → Ready to play
+
+  SKIP:
+    → Uses classical fallback (SimpleBlobDetector)
+    → Works fine for standard dice with good contrast
+    → Can train later from dice set settings
+```
+
+### Every session
+
 ```
 Login (once)
   → Tap your dice set
@@ -140,11 +333,16 @@ Login (once)
   → Live camera opens (rear-facing, getUserMedia)
 
   LOOP — repeat for each roll:
-    → Point at dice → tap to capture frame
-    → TensorFlow.js reads pips (browser-side)
-    → Frame discarded
-    → Pip values sent to server
+    → Lay all dice flat, in frame
+    → Tap to capture frame
+    → Browser pipeline runs (< 200ms):
+        opencv.js → isolate each die face
+        TF.js model (or blob detector) → classify each face
+        Annotated preview shown: each die outlined, pip count overlaid
+    → Confirm result (tap) or correct any misread die
+    → Confirmed pip_values[] sent to server
     → Running Z-score shown ("Roll 4 of your session")
+    → Frame discarded immediately — image never stored or transmitted
 
   CLOSE SESSION:
     → Tap "Done"
@@ -162,6 +360,7 @@ Login (once)
 
 No session naming. No manual input required. Sessions are labeled automatically per dice set.
 Photos are only ever stored when dice are flagged as loaded AND the user explicitly chooses to save them.
+All image processing is local — no pixels leave the device, ever.
 
 ### Camera Integration
 
@@ -407,8 +606,19 @@ src/
       zscore.ts
       zscore.test.ts
     cv/
-      pipReader.ts
-      pipReader.test.ts
+      preprocess.ts        ← grayscale, threshold, contour detection
+      preprocess.test.ts   ← synthetic image fixtures, not real dice photos
+      blobDetector.ts      ← SimpleBlobDetector fallback
+      blobDetector.test.ts ← known pip layouts as binary image fixtures
+      classifier.ts        ← TF.js model load/run/save (IndexedDB abstraction)
+      classifier.test.ts   ← mock model, test input/output shape contract
+      pipeline.ts          ← compose preprocess + classify → pip_values[]
+      pipeline.test.ts     ← end-to-end with fixtures
 ```
 
-The statistical engine especially must be fully tested. Z-score calculations, distribution checks, loaded/fair thresholds — all covered before any of that code ships.
+The statistical engine must be fully tested. Z-score calculations, distribution checks,
+loaded/fair thresholds — all covered before any of that code ships.
+
+The CV pipeline must be tested with synthetic image fixtures (programmatically
+generated binary images with circles at known positions). Never use real photos of
+dice as test fixtures — they are not reproducible across machines.
