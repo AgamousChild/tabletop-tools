@@ -11,7 +11,8 @@
   },
   "dependencies": {
     "@tabletop-tools/db": "workspace:*",
-    "better-auth": "^1.4.0"
+    "better-auth": "^1.4.0",
+    "drizzle-orm": "^0.38.0"
   },
   "devDependencies": {
     "@libsql/client": "^0.14.0",

@@ -1,4 +1,4 @@
-import type { Auth } from '@tabletop-tools/auth'
+import { validateSession } from '@tabletop-tools/auth'
 import type { Db } from '@tabletop-tools/db'
 import { fetchRequestHandler } from '@trpc/server/adapters/fetch'
 import { Hono } from 'hono'
@@ -6,13 +6,10 @@ import { cors } from 'hono/cors'
 
 import { appRouter } from './routers'
 
-export function createServer(auth: Auth, db: Db) {
+export function createServer(db: Db) {
   const app = new Hono()
 
   app.use('*', cors({ origin: (origin) => origin ?? '*', credentials: true }))
-
-  // Better Auth handles all auth routes
-  app.on(['GET', 'POST'], '/api/auth/**', (c) => auth.handler(c.req.raw))
 
   // tRPC
   app.all('/trpc/*', async (c) => {
@@ -21,14 +18,8 @@ export function createServer(auth: Auth, db: Db) {
       req: c.req.raw,
       router: appRouter,
       createContext: async ({ req }) => {
-        const session = await auth.api.getSession({ headers: req.headers })
-        return {
-          user: session?.user
-            ? { id: session.user.id, email: session.user.email, name: session.user.name }
-            : null,
-          req,
-          db,
-        }
+        const user = await validateSession(db, req.headers)
+        return { user, req, db }
       },
     })
   })

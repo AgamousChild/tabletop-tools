@@ -3,12 +3,13 @@ import { createDb } from '@tabletop-tools/db'
 import { existsSync, unlinkSync } from 'fs'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 
-import { createAuth } from './index'
+import { createAuth, validateSession } from './index'
 
 const TEST_DB = `test-auth-${Date.now()}.db`
 const TEST_DB_URL = `file:./${TEST_DB}`
 
 let auth: ReturnType<typeof createAuth>
+let db: ReturnType<typeof createDb>
 
 beforeAll(async () => {
   const setup = createClient({ url: TEST_DB_URL })
@@ -62,7 +63,7 @@ beforeAll(async () => {
 
   setup.close()
 
-  const db = createDb({ url: TEST_DB_URL })
+  db = createDb({ url: TEST_DB_URL })
   auth = createAuth(db)
 })
 
@@ -161,6 +162,31 @@ describe('getSession', () => {
     })
 
     expect(session).toBeNull()
+  })
+})
+
+describe('validateSession', () => {
+  it('returns the user for a valid session cookie', async () => {
+    const { cookie } = await signIn('test@example.com', 'password123')
+    const user = await validateSession(db, new Headers({ cookie }))
+
+    expect(user).not.toBeNull()
+    expect(user?.email).toBe('test@example.com')
+    expect(user?.id).toBeDefined()
+    expect(user?.name).toBeDefined()
+  })
+
+  it('returns null for an invalid token', async () => {
+    const user = await validateSession(
+      db,
+      new Headers({ cookie: 'better-auth.session_token=invalid-xyz' }),
+    )
+    expect(user).toBeNull()
+  })
+
+  it('returns null when no cookie is present', async () => {
+    const user = await validateSession(db, new Headers())
+    expect(user).toBeNull()
   })
 })
 

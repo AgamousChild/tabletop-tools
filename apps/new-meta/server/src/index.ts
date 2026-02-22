@@ -1,7 +1,8 @@
 import 'dotenv/config'
+
 import { serve } from '@hono/node-server'
 import { createDb } from '@tabletop-tools/db'
-import { createAuth } from '@tabletop-tools/auth'
+
 import { createServer } from './server.js'
 
 const db = createDb({
@@ -9,12 +10,7 @@ const db = createDb({
   authToken: process.env['TURSO_AUTH_TOKEN'],
 })
 
-const trustedOrigins = process.env['TRUSTED_ORIGINS']
-  ? process.env['TRUSTED_ORIGINS'].split(',')
-  : ['http://localhost:5173', 'http://localhost:5174', 'http://localhost:5175', 'http://localhost:5176']
-
-const auth = createAuth(db, 'http://localhost:3006', trustedOrigins)
-const app = createServer(auth, db)
+const app = createServer(db)
 
 serve({ fetch: app.fetch, port: 3006, hostname: '0.0.0.0' }, (info) => {
   console.log(`new-meta server running at http://localhost:${info.port}`)
