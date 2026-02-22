@@ -3,12 +3,20 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { Camera } from './Camera'
 
-// Mock detectPips so Camera tests don't depend on image processing
-vi.mock('../lib/cv/pipReader', () => ({
-  detectPips: vi.fn().mockResolvedValue(4),
+// Mock tRPC — Camera calls trpc.vision.readDice.useMutation() to process frames
+vi.mock('../lib/trpc', () => ({
+  trpc: {
+    vision: {
+      readDice: {
+        useMutation: () => ({
+          mutateAsync: vi.fn().mockResolvedValue({ values: [4] }),
+        }),
+      },
+    },
+  },
 }))
 
-// jsdom doesn't implement canvas.getContext — provide a minimal mock
+// jsdom doesn't implement canvas.getContext or toDataURL — provide minimal mocks
 beforeEach(() => {
   vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue({
     drawImage: vi.fn(),
@@ -17,7 +25,12 @@ beforeEach(() => {
       width: 1,
       height: 1,
     }),
+    putImageData: vi.fn(),
   } as unknown as CanvasRenderingContext2D)
+
+  vi.spyOn(HTMLCanvasElement.prototype, 'toDataURL').mockReturnValue(
+    'data:image/jpeg;base64,abc123',
+  )
 
   Object.defineProperty(globalThis.navigator, 'mediaDevices', {
     value: {
@@ -36,17 +49,19 @@ describe('Camera', () => {
     expect(screen.getByRole('button', { name: /capture/i })).toBeInTheDocument()
   })
 
-  it('calls onCapture with the detected pip count when the button is clicked', async () => {
+  it('calls onCapture with the detected pip values when captured and confirmed', async () => {
     const onCapture = vi.fn()
     render(<Camera onCapture={onCapture} />)
     fireEvent.click(screen.getByRole('button', { name: /capture/i }))
-    await waitFor(() => expect(onCapture).toHaveBeenCalledWith(4))
+    await waitFor(() => screen.getByRole('button', { name: /confirm/i }))
+    fireEvent.click(screen.getByRole('button', { name: /confirm/i }))
+    expect(onCapture).toHaveBeenCalledWith([4])
   })
 
   it('shows the detected pip value after capture', async () => {
     render(<Camera onCapture={() => {}} />)
     fireEvent.click(screen.getByRole('button', { name: /capture/i }))
-    await waitFor(() => expect(screen.getByText(/detected: 4/i)).toBeInTheDocument())
+    await waitFor(() => expect(screen.getByText(/1 die detected/i)).toBeInTheDocument())
   })
 
   it('shows an error if getUserMedia fails', async () => {
