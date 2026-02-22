@@ -19,7 +19,7 @@ tabletop-tools/
     auth/     ← shared Better Auth
     db/       ← shared Turso schema and Drizzle client
   apps/
-    tracker/  ← this app
+    game-tracker/  ← this app
 ```
 
 Server port: **3004**
@@ -74,7 +74,7 @@ Same as the platform. No additions without a reason.
 // matches
 id               TEXT PRIMARY KEY
 user_id          TEXT NOT NULL
-list_id          TEXT              -- optional: references lists.id (from listbuilder)
+list_id          TEXT              -- optional: references lists.id (from list-builder)
 opponent_faction TEXT NOT NULL     -- BSData faction key
 mission          TEXT NOT NULL     -- mission name
 result           TEXT              -- WIN | LOSS | DRAW — null while in progress

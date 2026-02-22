@@ -201,7 +201,7 @@ Attacks
 
 ---
 
-### Meta List Builder (`apps/listbuilder`)
+### Meta List Builder (`apps/list-builder`)
 A smart army list builder where every unit in a codex carries a live performance rating based on real GT+ tournament data. As you build a list, the tool surfaces higher-rated alternatives at the same points cost.
 
 **How ratings work:**
@@ -228,7 +228,7 @@ User adds unit → tool shows:
 
 ---
 
-### Match Tracker (`apps/tracker`)
+### Match Tracker (`apps/game-tracker`)
 A live game companion. Records the full match turn by turn — one photo per turn of the board state, plus what happened that turn.
 
 **Per turn:**

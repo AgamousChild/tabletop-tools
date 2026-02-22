@@ -19,7 +19,7 @@ tabletop-tools/
     auth/          ← shared Better Auth
     db/            ← shared Turso schema and Drizzle client
   apps/
-    listbuilder/   ← this app
+    list-builder/  ← this app
 ```
 
 Server port: **3003**
