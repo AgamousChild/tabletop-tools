@@ -244,6 +244,113 @@ importers:
         specifier: ^2.0.0
         version: 2.1.9(@types/node@20.19.33)(jsdom@28.1.0(@noble/hashes@2.0.1))
 
+  apps/new-meta/client:
+    dependencies:
+      '@tanstack/react-query':
+        specifier: ^5.56.0
+        version: 5.90.21(react@18.3.1)
+      '@trpc/client':
+        specifier: ^11.0.0
+        version: 11.10.0(@trpc/server@11.10.0(typescript@5.9.3))(typescript@5.9.3)
+      '@trpc/react-query':
+        specifier: ^11.0.0
+        version: 11.10.0(@tanstack/react-query@5.90.21(react@18.3.1))(@trpc/client@11.10.0(@trpc/server@11.10.0(typescript@5.9.3))(typescript@5.9.3))(@trpc/server@11.10.0(typescript@5.9.3))(react@18.3.1)(typescript@5.9.3)
+      '@trpc/server':
+        specifier: ^11.0.0
+        version: 11.10.0(typescript@5.9.3)
+      better-auth:
+        specifier: ^1.4.18
+        version: 1.4.18(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(vitest@2.1.9(@types/node@20.19.33)(jsdom@28.1.0(@noble/hashes@2.0.1)))
+      react:
+        specifier: ^18.3.1
+        version: 18.3.1
+      react-dom:
+        specifier: ^18.3.1
+        version: 18.3.1(react@18.3.1)
+    devDependencies:
+      '@testing-library/jest-dom':
+        specifier: ^6.9.1
+        version: 6.9.1
+      '@testing-library/react':
+        specifier: ^16.3.2
+        version: 16.3.2(@testing-library/dom@10.4.1)(@types/react-dom@18.3.7(@types/react@18.3.28))(@types/react@18.3.28)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
+      '@types/react':
+        specifier: ^18.3.1
+        version: 18.3.28
+      '@types/react-dom':
+        specifier: ^18.3.1
+        version: 18.3.7(@types/react@18.3.28)
+      '@vitejs/plugin-react':
+        specifier: ^4.3.1
+        version: 4.7.0(vite@5.4.21(@types/node@20.19.33))
+      autoprefixer:
+        specifier: ^10.4.20
+        version: 10.4.24(postcss@8.5.6)
+      jsdom:
+        specifier: ^28.1.0
+        version: 28.1.0(@noble/hashes@2.0.1)
+      postcss:
+        specifier: ^8.4.47
+        version: 8.5.6
+      tailwindcss:
+        specifier: ^3.4.14
+        version: 3.4.19(tsx@4.21.0)
+      typescript:
+        specifier: ^5.4.0
+        version: 5.9.3
+      vite:
+        specifier: ^5.4.10
+        version: 5.4.21(@types/node@20.19.33)
+      vite-tsconfig-paths:
+        specifier: ^5.0.1
+        version: 5.1.4(typescript@5.9.3)(vite@5.4.21(@types/node@20.19.33))
+      vitest:
+        specifier: ^2.0.0
+        version: 2.1.9(@types/node@20.19.33)(jsdom@28.1.0(@noble/hashes@2.0.1))
+
+  apps/new-meta/server:
+    dependencies:
+      '@hono/node-server':
+        specifier: ^1.13.0
+        version: 1.19.9(hono@4.12.0)
+      '@tabletop-tools/auth':
+        specifier: workspace:*
+        version: link:../../../packages/auth
+      '@tabletop-tools/db':
+        specifier: workspace:*
+        version: link:../../../packages/db
+      '@tabletop-tools/game-content':
+        specifier: workspace:*
+        version: link:../../../packages/game-content
+      '@trpc/server':
+        specifier: ^11.0.0
+        version: 11.10.0(typescript@5.9.3)
+      dotenv:
+        specifier: ^17.3.1
+        version: 17.3.1
+      hono:
+        specifier: ^4.6.0
+        version: 4.12.0
+      zod:
+        specifier: ^3.23.0
+        version: 3.25.76
+    devDependencies:
+      '@types/node':
+        specifier: ^20.0.0
+        version: 20.19.33
+      drizzle-kit:
+        specifier: ^0.30.0
+        version: 0.30.6
+      tsx:
+        specifier: ^4.7.0
+        version: 4.21.0
+      typescript:
+        specifier: ^5.4.0
+        version: 5.9.3
+      vitest:
+        specifier: ^2.0.0
+        version: 2.1.9(@types/node@20.19.33)(jsdom@28.1.0(@noble/hashes@2.0.1))
+
   apps/no-cheat/client:
     dependencies:
       '@tanstack/react-query':

@@ -71,7 +71,9 @@ export interface UnitResult {
 
 export interface TournamentPlayer {
   placement: number
+  playerName?: string   // player's display name from the import source
   faction: string       // user-entered string — NOT validated against GW
+  detachment?: string   // user-entered detachment name — NOT validated against GW
   listText?: string     // optional army list as pasted text
   wins: number
   losses: number

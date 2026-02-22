@@ -210,6 +210,8 @@ export const tournamentPlayers = sqliteTable('tournament_players', {
   displayName: text('display_name').notNull(),
   // user-entered string — NOT a BSData FK
   faction: text('faction').notNull(),
+  // user-entered detachment name — NOT validated against GW data
+  detachment: text('detachment'),
   // army list pasted as raw text — stored verbatim, never parsed for GW content
   listText: text('list_text'),
   listLocked: integer('list_locked').notNull().default(0),
@@ -301,4 +303,37 @@ export const importedTournamentResults = sqliteTable('imported_tournament_result
   // JSON of TournamentRecord[]
   parsedData: text('parsed_data').notNull(),
   importedAt: integer('imported_at').notNull(),
+})
+
+// === Glicko-2 tables (new-meta app) ===
+
+export const playerGlicko = sqliteTable('player_glicko', {
+  id: text('id').primaryKey(),
+  // null = anonymous player (name-string import, not matched to a platform account)
+  userId: text('user_id').references(() => authUsers.id),
+  playerName: text('player_name').notNull(),
+  rating: real('rating').notNull().default(1500),
+  ratingDeviation: real('rating_deviation').notNull().default(350),
+  volatility: real('volatility').notNull().default(0.06),
+  gamesPlayed: integer('games_played').notNull().default(0),
+  // import ID of the last tournament period that updated this record
+  lastRatingPeriod: text('last_rating_period'),
+  updatedAt: integer('updated_at').notNull(),
+})
+
+export const glickoHistory = sqliteTable('glicko_history', {
+  id: text('id').primaryKey(),
+  playerId: text('player_id')
+    .notNull()
+    .references(() => playerGlicko.id),
+  // import ID or "native-YYYY-QN" for native match records
+  ratingPeriod: text('rating_period').notNull(),
+  ratingBefore: real('rating_before').notNull(),
+  rdBefore: real('rd_before').notNull(),
+  ratingAfter: real('rating_after').notNull(),
+  rdAfter: real('rd_after').notNull(),
+  volatilityAfter: real('volatility_after').notNull(),
+  delta: real('delta').notNull(),
+  gamesInPeriod: integer('games_in_period').notNull(),
+  recordedAt: integer('recorded_at').notNull(),
 })

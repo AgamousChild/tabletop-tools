@@ -66,12 +66,14 @@ export function parseGenericCsv(csv: string): TournamentRecord[] {
     if (!player) {
       player = {
         placement,
+        playerName: col.playerName >= 0 ? (cells[col.playerName] ?? '').trim() || undefined : undefined,
         faction,
-        wins:     col.wins     >= 0 ? parseInt(cells[col.wins]     ?? '0', 10) : 0,
-        losses:   col.losses   >= 0 ? parseInt(cells[col.losses]   ?? '0', 10) : 0,
-        draws:    col.draws    >= 0 ? parseInt(cells[col.draws]    ?? '0', 10) : 0,
-        points:   col.points   >= 0 ? parseInt(cells[col.points]   ?? '0', 10) : 0,
-        listText: col.listText >= 0 ? (cells[col.listText] ?? '').trim() || undefined : undefined,
+        detachment: col.detachment >= 0 ? (cells[col.detachment] ?? '').trim() || undefined : undefined,
+        wins:       col.wins       >= 0 ? parseInt(cells[col.wins]     ?? '0', 10) : 0,
+        losses:     col.losses     >= 0 ? parseInt(cells[col.losses]   ?? '0', 10) : 0,
+        draws:      col.draws      >= 0 ? parseInt(cells[col.draws]    ?? '0', 10) : 0,
+        points:     col.points     >= 0 ? parseInt(cells[col.points]   ?? '0', 10) : 0,
+        listText:   col.listText   >= 0 ? (cells[col.listText] ?? '').trim() || undefined : undefined,
         unitResults: [],
       }
       players.set(playerKey, player)
@@ -121,7 +123,9 @@ interface ColumnMap {
   eventDate: number
   format: number
   placement: number
+  playerName: number
   faction: number
+  detachment: number
   wins: number
   losses: number
   draws: number
@@ -138,7 +142,9 @@ const HEADER_ALIASES: Record<keyof ColumnMap, string[]> = {
   eventDate:       ['event_date', 'event date', 'date'],
   format:          ['format', 'event_format', 'event format'],
   placement:       ['placement', 'place', 'rank', 'finish'],
-  faction:         ['faction', 'army', 'detachment'],
+  playerName:      ['player_name', 'player name', 'player', 'name'],
+  faction:         ['faction', 'army'],
+  detachment:      ['detachment', 'sub_faction', 'sub faction', 'subfaction'],
   wins:            ['wins', 'w', 'win'],
   losses:          ['losses', 'l', 'loss'],
   draws:           ['draws', 'd', 'draw'],

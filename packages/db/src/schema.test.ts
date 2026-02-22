@@ -8,12 +8,14 @@ import {
   diceRollingSessions,
   diceSets,
   eloHistory,
+  glickoHistory,
   importedTournamentResults,
   listUnits,
   lists,
   matches,
   pairings,
   playerElo,
+  playerGlicko,
   rolls,
   rounds,
   tournamentPlayers,
@@ -183,6 +185,7 @@ beforeAll(async () => {
     user_id TEXT NOT NULL REFERENCES "user"(id),
     display_name TEXT NOT NULL,
     faction TEXT NOT NULL,
+    detachment TEXT,
     list_text TEXT,
     list_locked INTEGER NOT NULL DEFAULT 0,
     checked_in INTEGER NOT NULL DEFAULT 0,
@@ -245,6 +248,33 @@ beforeAll(async () => {
     raw_data TEXT NOT NULL,
     parsed_data TEXT NOT NULL,
     imported_at INTEGER NOT NULL
+  )`)
+
+  // Glicko-2 tables
+  await client.execute(`CREATE TABLE player_glicko (
+    id TEXT PRIMARY KEY,
+    user_id TEXT REFERENCES "user"(id),
+    player_name TEXT NOT NULL,
+    rating REAL NOT NULL DEFAULT 1500,
+    rating_deviation REAL NOT NULL DEFAULT 350,
+    volatility REAL NOT NULL DEFAULT 0.06,
+    games_played INTEGER NOT NULL DEFAULT 0,
+    last_rating_period TEXT,
+    updated_at INTEGER NOT NULL
+  )`)
+
+  await client.execute(`CREATE TABLE glicko_history (
+    id TEXT PRIMARY KEY,
+    player_id TEXT NOT NULL REFERENCES player_glicko(id),
+    rating_period TEXT NOT NULL,
+    rating_before REAL NOT NULL,
+    rd_before REAL NOT NULL,
+    rating_after REAL NOT NULL,
+    rd_after REAL NOT NULL,
+    volatility_after REAL NOT NULL,
+    delta REAL NOT NULL,
+    games_in_period INTEGER NOT NULL,
+    recorded_at INTEGER NOT NULL
   )`)
 
   // Seed shared users for FK tests
@@ -752,5 +782,127 @@ describe('importedTournamentResults', () => {
 
     const parsed = JSON.parse(result[0]?.parsedData ?? '[]')
     expect(parsed[0].players[0].faction).toBe('Alpha')
+  })
+})
+
+// ============================================================
+// tournamentPlayers detachment column
+// ============================================================
+
+describe('tournamentPlayers detachment', () => {
+  it('stores detachment as nullable string', async () => {
+    await db.insert(tournamentPlayers).values({
+      id: 'tp-det-1',
+      tournamentId: 'tourn-1',
+      userId: 'user-1',
+      displayName: 'Alice',
+      faction: 'Space Marines',
+      detachment: 'Gladius Task Force',
+      listLocked: 0,
+      checkedIn: 0,
+      dropped: 0,
+      registeredAt: Date.now(),
+    })
+
+    const result = await db
+      .select()
+      .from(tournamentPlayers)
+      .where(eq(tournamentPlayers.id, 'tp-det-1'))
+    expect(result).toHaveLength(1)
+    expect(result[0]?.detachment).toBe('Gladius Task Force')
+  })
+
+  it('detachment is null when not provided', async () => {
+    await db.insert(tournamentPlayers).values({
+      id: 'tp-det-2',
+      tournamentId: 'tourn-1',
+      userId: 'user-2',
+      displayName: 'Bob',
+      faction: 'Orks',
+      listLocked: 0,
+      checkedIn: 0,
+      dropped: 0,
+      registeredAt: Date.now(),
+    })
+
+    const result = await db
+      .select()
+      .from(tournamentPlayers)
+      .where(eq(tournamentPlayers.id, 'tp-det-2'))
+    expect(result[0]?.detachment).toBeNull()
+  })
+})
+
+// ============================================================
+// Glicko-2 table tests
+// ============================================================
+
+describe('playerGlicko', () => {
+  it('creates a Glicko-2 entry at default values', async () => {
+    await db.insert(playerGlicko).values({
+      id: 'glicko-1',
+      playerName: 'Alice',
+      updatedAt: Date.now(),
+    })
+
+    const result = await db.select().from(playerGlicko).where(eq(playerGlicko.id, 'glicko-1'))
+    expect(result).toHaveLength(1)
+    expect(result[0]?.rating).toBe(1500)
+    expect(result[0]?.ratingDeviation).toBe(350)
+    expect(result[0]?.volatility).toBeCloseTo(0.06)
+    expect(result[0]?.gamesPlayed).toBe(0)
+    expect(result[0]?.userId).toBeNull()
+  })
+
+  it('links to a platform account when userId is provided', async () => {
+    await db.insert(playerGlicko).values({
+      id: 'glicko-2',
+      userId: 'user-1',
+      playerName: 'Test User',
+      updatedAt: Date.now(),
+    })
+
+    const result = await db.select().from(playerGlicko).where(eq(playerGlicko.id, 'glicko-2'))
+    expect(result[0]?.userId).toBe('user-1')
+    expect(result[0]?.playerName).toBe('Test User')
+  })
+
+  it('updates rating after a period', async () => {
+    await db
+      .update(playerGlicko)
+      .set({ rating: 1687, ratingDeviation: 94, gamesPlayed: 5, updatedAt: Date.now() })
+      .where(eq(playerGlicko.id, 'glicko-1'))
+
+    const result = await db.select().from(playerGlicko).where(eq(playerGlicko.id, 'glicko-1'))
+    expect(result[0]?.rating).toBeCloseTo(1687)
+    expect(result[0]?.ratingDeviation).toBeCloseTo(94)
+    expect(result[0]?.gamesPlayed).toBe(5)
+  })
+})
+
+describe('glickoHistory', () => {
+  it('records a rating period update', async () => {
+    await db.insert(glickoHistory).values({
+      id: 'gh-1',
+      playerId: 'glicko-1',
+      ratingPeriod: 'import-1',
+      ratingBefore: 1500,
+      rdBefore: 350,
+      ratingAfter: 1687,
+      rdAfter: 94,
+      volatilityAfter: 0.06,
+      delta: 187,
+      gamesInPeriod: 5,
+      recordedAt: Date.now(),
+    })
+
+    const result = await db
+      .select()
+      .from(glickoHistory)
+      .where(eq(glickoHistory.playerId, 'glicko-1'))
+    expect(result).toHaveLength(1)
+    expect(result[0]?.ratingPeriod).toBe('import-1')
+    expect(result[0]?.delta).toBeCloseTo(187)
+    expect(result[0]?.gamesInPeriod).toBe(5)
   })
 })
