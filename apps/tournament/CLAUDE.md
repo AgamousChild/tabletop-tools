@@ -114,7 +114,7 @@ id             TEXT PRIMARY KEY
 tournament_id  TEXT NOT NULL        -- references tournaments.id
 user_id        TEXT NOT NULL        -- references users.id
 display_name   TEXT NOT NULL        -- shown on pairings board and standings
-faction        TEXT NOT NULL        -- BSData faction key
+faction        TEXT NOT NULL        -- user-entered string — NOT a BSData FK
 list_text      TEXT                 -- full army list pasted as text (BattleScribe / New Recruit format)
 list_locked    INTEGER NOT NULL DEFAULT 0  -- 1 = TO has locked lists, no more edits
 checked_in     INTEGER NOT NULL DEFAULT 0  -- 1 = player present on event day

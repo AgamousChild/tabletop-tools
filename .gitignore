@@ -19,3 +19,10 @@ certs/
 
 # Claude session files
 .claude/
+
+# Game content data — never commit GW IP
+bsdata/
+wahapedia-export/
+game-content-data/
+*.cat
+*.gst
