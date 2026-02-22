@@ -1,4 +1,4 @@
-# CLAUDE.md — Tournament (Tournament Manager)
+# CLAUDE.md — tournament
 
 > Read SOUL.md first. Every decision here flows from it.
 
@@ -497,11 +497,9 @@ Mission: Sweeping Engagement
 
 ## Rules for Every Session
 
-- Plan before touching anything — understand every layer first.
-- No features that aren't needed yet.
-- The Swiss algorithm must be correct. An incorrect pairing ruins a real event.
-- Keep the stack shallow. Don't add layers.
-- Stop when it works. Don't polish what doesn't need polishing.
+See root `CLAUDE.md` — Rules for Every Session.
+
+App-specific: **The Swiss algorithm must be correct. An incorrect pairing ruins a real event.**
 
 ---
 

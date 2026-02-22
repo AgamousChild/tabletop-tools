@@ -1,4 +1,4 @@
-# CLAUDE.md — Versus (Combat Simulator)
+# CLAUDE.md — versus
 
 > Read SOUL.md first. Every decision here flows from it.
 
@@ -236,11 +236,9 @@ Result display is data-forward:
 
 ## Rules for Every Session
 
-- Plan before touching anything — understand every layer first.
-- No features that aren't needed yet.
-- The math must be correct. Test the rules engine exhaustively.
-- Keep the stack shallow. Don't add layers.
-- Stop when it works. Don't polish what doesn't need polishing.
+See root `CLAUDE.md` — Rules for Every Session.
+
+App-specific: **The math must be correct. Test the rules engine exhaustively.**
 
 ---
 

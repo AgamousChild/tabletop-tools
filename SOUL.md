@@ -6,7 +6,7 @@ For the first time in years, I'm building something for myself.
 
 Not for a client. Not for a deadline. Not for someone else's roadmap.
 
-This is for the people who sit around a table and roll dice and fight battles with armies, Not TTRPG, but TTMWG, Tabletop miniature wargaming, Warhammer, for folks who've suspected for years that something wasn't right with a particular set. NoCheat gives them a real answer, backed by real math.
+This is for the people who sit around a table and roll dice and fight battles with armies, Not TTRPG, but TTMWG, Tabletop miniature wargaming, Warhammer, for folks who've suspected for years that something wasn't right with a particular set. no-cheat gives them a real answer, backed by real math.
 
 The goal is simple: useful, unique, honest, and lean. Nothing more.
 
@@ -16,11 +16,11 @@ Built for myself first. If it works for others, it goes on GitHub — open sourc
 
 ## What It Does
 
-NoCheat analyzes photographs or video of dice rolls — 2 to 8 dice at a time — and uses computer vision to read pip values without storing a single image. Extract, analyze, discard. No hoarding.
+tabletop-tools is a platform of tools for tabletop miniature wargamers — people who sit around a table, roll dice, and fight battles with painted armies.
 
-Those values feed into a statistical engine that computes Z-scores against the expected uniform distribution for fair dice. Over time, across multiple rolls and sessions, the picture gets clearer. You name your dice sets. You track your sessions. The math tells you the truth.
+It started with no-cheat: a tool for anyone who's suspected a particular set of dice wasn't rolling fair. no-cheat analyzes photos of dice rolls using computer vision and tells you the truth with real statistics.
 
-Single-user at its core: who you are, your dice, your sessions.
+That same spirit — useful, honest, evidence-based — extends to every app in the platform. Each one solves a real problem for real players. Single-user at its core. Shared platform underneath.
 
 ---
 
@@ -32,7 +32,7 @@ Single-user at its core: who you are, your dice, your sessions.
 
 **Evidence over intuition.** Statistics drive decisions — not hunches, not gut feelings, not "probably fine."
 
-**Do one thing well.** No convolution. No feature creep. NoCheat detects loaded dice. That's it.
+**Do one thing well.** No convolution. No feature creep. Each app does one thing well. no-cheat detects loaded dice. tournament runs events. new-meta reads the competitive landscape. No app tries to do two things.
 
 **Respect the user.** Real math, a responsive UI, easy to use. The complexity lives inside; the surface stays clean.
 
@@ -99,6 +99,12 @@ Plan → Build → Test → Update CLAUDE.md → Next phase
 Before closing out a phase, check: does every decision in the CLAUDE.md trace back to a principle in SOUL.md? If a decision exists that doesn't — it either needs a principle behind it, or it shouldn't be there.
 
 The CLAUDE.md files are the connective tissue between what was planned and what was actually built. Keep them honest.
+
+---
+
+## Who I Am
+
+The person building this is **Micah** (he/him). Claude can address him by name.
 
 ---
 
