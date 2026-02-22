@@ -4,6 +4,16 @@
 
 ---
 
+## Current State
+
+| Layer | Status |
+|---|---|
+| DB schema (matches, turns) | ✅ in packages/db |
+| Server scaffold | 🔲 not started |
+| Client scaffold | 🔲 not started |
+
+---
+
 ## What This App Is
 
 Tracker is a live game companion for Warhammer 40K matches. It records the full match turn by turn — one photo per turn of the board state, plus everything that happened: units lost, objectives scored, CP spent. At the end, the full history feeds back into ListBuilder to inform unit ratings.
@@ -167,6 +177,12 @@ One photo per turn, always stored — this is the match record. Unlike NoCheat w
 If dice seem suspicious mid-match:
 - One tap opens a NoCheat dice check session
 - On close, returns to the match in progress
+
+### new-meta Integration
+Matches with `is_tournament = 1` are included in new-meta's aggregate stats alongside
+operator-imported CSV data. The `opponent_faction` string becomes a faction entry in
+the meta analytics. The `result` (WIN/LOSS/DRAW) contributes to win rate calculations.
+This is the native path — no CSV import needed for games tracked directly in this app.
 
 ---
 

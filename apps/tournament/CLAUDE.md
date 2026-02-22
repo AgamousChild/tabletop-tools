@@ -4,6 +4,19 @@
 
 ---
 
+## Current State
+
+| Layer | Status |
+|---|---|
+| DB schema (tournaments, tournament_players, rounds, pairings, player_elo, elo_history) | ✅ in packages/db |
+| Server scaffold | 🔲 not started |
+| Client scaffold | 🔲 not started |
+
+The schema for this app is already built into `packages/db/src/schema.ts` and tested.
+When implementation begins: read the schema, verify it matches this doc, then scaffold.
+
+---
+
 ## What This App Is
 
 Tournament is a full tournament management platform for Warhammer 40K events — the job BCP does, but without the friction and without being owned by a third party.
@@ -267,6 +280,20 @@ function deriveResult(p1VP: number, p2VP: number): 'P1_WIN' | 'P2_WIN' | 'DRAW' 
 ---
 
 ## ELO Rating System
+
+**ELO is used here; Glicko-2 is used in new-meta. They serve different purposes.**
+
+ELO updates after every individual confirmed game result — inside a tournament, round
+by round. It answers: "who is the better player right now, across all games played on
+this platform?" It's simple, widely understood, and updates frequently enough to be
+meaningful mid-event.
+
+Glicko-2 (in `apps/new-meta`) answers a different question: "who is performing best
+in the competitive meta across multiple events?" It requires a rating period (one full
+tournament) and produces uncertainty bands that ELO lacks.
+
+Both systems share the same `authUsers` table. The `playerGlicko` table (Glicko-2) and
+`player_elo` table (ELO) are separate and complementary.
 
 Every player on the platform carries a persistent ELO rating, updated after every confirmed match result — not just at tournament end. Swiss pairings determine who plays who within an event; ELO measures who is actually improving across all events over time.
 
