@@ -73,7 +73,7 @@ Unit profiles come from BSData — the community-maintained 40K data files (`.ca
 - Parse XML → transform to JSON → load into shared Turso DB
 - Covers all factions, units, weapons, and abilities
 - Sync periodically as new codexes and balance dataslates release
-- Shared with `apps/listbuilder` — same DB tables
+- Shared with `apps/list-builder` — same DB tables
 
 **Target system:** Warhammer 40K only.
 
@@ -82,7 +82,7 @@ Unit profiles come from BSData — the community-maintained 40K data files (`.ca
 ## Database Schema
 
 ```typescript
-// units  (populated from BSData sync, shared with listbuilder)
+// units  (populated from BSData sync, shared with list-builder)
 id          TEXT PRIMARY KEY
 faction     TEXT NOT NULL       -- e.g. "Space Marines"
 name        TEXT NOT NULL       -- e.g. "Brutalis Dreadnought"
