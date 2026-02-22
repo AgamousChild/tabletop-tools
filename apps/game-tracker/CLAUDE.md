@@ -70,31 +70,37 @@ Same as the platform. No additions without a reason.
 
 ## Database Schema
 
+`opponent_faction` is a **user-entered string** — not a BSData FK. The platform never
+validates it against GW data. `your_units_lost` / `their_units_lost` are JSON arrays of
+`{ contentId, name }` where `name` is denormalized so the turn displays correctly even if
+the content adapter is unavailable.
+
 ```typescript
 // matches
-id               TEXT PRIMARY KEY
-user_id          TEXT NOT NULL
-list_id          TEXT              -- optional: references lists.id (from list-builder)
-opponent_faction TEXT NOT NULL     -- BSData faction key
-mission          TEXT NOT NULL     -- mission name
-result           TEXT              -- WIN | LOSS | DRAW — null while in progress
-your_final_score INTEGER           -- null while in progress
-their_final_score INTEGER          -- null while in progress
-created_at       INTEGER NOT NULL
-closed_at        INTEGER           -- null while match is open
+id                TEXT PRIMARY KEY
+user_id           TEXT NOT NULL
+list_id           TEXT              -- optional: references lists.id (from list-builder)
+opponent_faction  TEXT NOT NULL     -- user-entered string — NOT a BSData FK
+mission           TEXT NOT NULL     -- mission name
+result            TEXT              -- WIN | LOSS | DRAW — null while in progress
+your_final_score  INTEGER           -- null while in progress
+their_final_score INTEGER           -- null while in progress
+is_tournament     INTEGER NOT NULL DEFAULT 0  -- 1 feeds into list-builder rating engine
+created_at        INTEGER NOT NULL
+closed_at         INTEGER           -- null while match is open
 
 // turns
-id                   TEXT PRIMARY KEY
-match_id             TEXT NOT NULL      -- references matches.id
-turn_number          INTEGER NOT NULL
-photo_url            TEXT               -- Cloudflare R2 — always stored for match record
-your_units_lost      TEXT NOT NULL      -- JSON array of unit ids / names
-their_units_lost     TEXT NOT NULL      -- JSON array of unit ids / names
-primary_scored       INTEGER NOT NULL   -- VP from primary this turn
-secondary_scored     INTEGER NOT NULL   -- VP from secondary this turn
-cp_spent             INTEGER NOT NULL
-notes                TEXT               -- optional freetext
-created_at           INTEGER NOT NULL
+id                TEXT PRIMARY KEY
+match_id          TEXT NOT NULL     -- references matches.id
+turn_number       INTEGER NOT NULL
+photo_url         TEXT              -- Cloudflare R2 — always stored for match record
+your_units_lost   TEXT NOT NULL     -- JSON: [{ contentId, name }] — name denormalized
+their_units_lost  TEXT NOT NULL     -- JSON: [{ contentId, name }] — name denormalized
+primary_scored    INTEGER NOT NULL  -- VP from primary this turn
+secondary_scored  INTEGER NOT NULL  -- VP from secondary this turn
+cp_spent          INTEGER NOT NULL
+notes             TEXT              -- optional freetext
+created_at        INTEGER NOT NULL
 ```
 
 ---

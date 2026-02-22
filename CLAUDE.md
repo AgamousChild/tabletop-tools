@@ -17,12 +17,13 @@ NoCheat is the first app in the **Tabletop Tools** platform — a monorepo of to
 ```
 tabletop-tools/
   packages/
-    ui/       ← shared components, dark theme, Geist, shadcn
-    auth/     ← shared Better Auth — one login across all tools
-    db/       ← shared Turso schema and Drizzle client
+    ui/             ← shared components, dark theme, Geist, shadcn
+    auth/           ← shared Better Auth — one login across all tools
+    db/             ← shared Turso schema and Drizzle client
+    game-content/   ← GameContentAdapter boundary (zero GW content)
   apps/
-    no-cheat/  ← dice cheat detection (this project)
-    ...       ← future tools
+    no-cheat/       ← dice cheat detection (this project)
+    ...             ← future tools
 ```
 
 ---
@@ -194,8 +195,9 @@ Attacks
 - Community-maintained 40K army data files (`.cat`, `.gst` XML format)
 - Covers all factions, unit profiles, weapons, abilities
 - Actively maintained after GW shut down BattleScribe
-- Parse XML → transform to JSON → load into shared Turso DB
-- Periodic sync as new codexes and balance dataslates release
+- Operator clones BSData locally and sets `BSDATA_DIR` env var
+- Platform loads into memory at server startup via `BSDataAdapter` — nothing stored in DB
+- No GW content ever committed to this repository
 
 **Target system:** Warhammer 40K only.
 
@@ -210,11 +212,12 @@ A smart army list builder where every unit in a codex carries a live performance
 - Ratings reset when GW releases a new balance dataslate or codex update
 - Old data is discarded — only the current meta window counts
 
-**Data source: BCP (Best Coast Pairings) — GT and larger events only**
-- Scraped from BCP using a personal account
-- GT+ filter ensures player skill is consistent enough for unit performance data to be meaningful
-- Local and small events excluded — too much skill variance
-- Scraper runs on a schedule, ingests new GT results, recalculates all ratings
+**Ratings source: native match records + operator-imported tournament data**
+- Native matches from `apps/game-tracker` with `is_tournament = 1`
+- Operator imports external tournament CSV exports via the platform admin panel
+  (BCP export, Tabletop Admiral export, or platform's generic CSV format)
+- GT+ filter applied at import time — small events excluded
+- No BCP scraping by the platform; operator obtains and imports data themselves
 
 **List builder behavior:**
 ```

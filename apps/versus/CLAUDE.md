@@ -15,11 +15,12 @@ Versus lets you pit two Warhammer 40K units against each other — ranged or mel
 ```
 tabletop-tools/
   packages/
-    ui/       ← shared components, dark theme, Geist, shadcn
-    auth/     ← shared Better Auth
-    db/       ← shared Turso schema and Drizzle client
+    ui/             ← shared components, dark theme, Geist, shadcn
+    auth/           ← shared Better Auth
+    db/             ← shared Turso schema and Drizzle client
+    game-content/   ← GameContentAdapter interface + BSDataAdapter
   apps/
-    versus/   ← this app
+    versus/         ← this app
 ```
 
 Server port: **3002**
@@ -66,14 +67,27 @@ Same as the platform. No additions without a reason.
 
 ---
 
-## Unit Data: BSData
+## Unit Data: BSData (via GameContentAdapter)
 
-Unit profiles come from BSData — the community-maintained 40K data files (`.cat`, `.gst` XML format). These are the same files BattleScribe used before GW shut it down.
+Unit profiles come from BSData — the community-maintained 40K data files (`.cat`, `.gst` XML format). The operator clones BSData themselves and points the server at it via `BSDATA_DIR`.
 
-- Parse XML → transform to JSON → load into shared Turso DB
-- Covers all factions, units, weapons, and abilities
-- Sync periodically as new codexes and balance dataslates release
-- Shared with `apps/list-builder` — same DB tables
+**The platform ships zero GW content.** No unit data is stored in the DB or bundled in this repo.
+
+- BSData XML loads into memory at server startup from the operator's local BSData clone
+- No `units` table in the DB — routers call `ctx.gameContent.searchUnits(...)` instead
+- If `BSDATA_DIR` is not set, the server uses `NullAdapter` and returns empty results gracefully
+- Shared adapter pattern with `apps/list-builder` — same `GameContentAdapter` interface
+
+```typescript
+// Operator configures:
+BSDATA_DIR=/path/to/bsdata-clone/wh40k-10e
+
+// Server startup (apps/versus/server/src/index.ts):
+const gameContent = process.env['BSDATA_DIR']
+  ? new BSDataAdapter({ dataDir: process.env['BSDATA_DIR'] })
+  : new NullAdapter()
+await gameContent.load()
+```
 
 **Target system:** Warhammer 40K only.
 
@@ -81,25 +95,19 @@ Unit profiles come from BSData — the community-maintained 40K data files (`.ca
 
 ## Database Schema
 
-```typescript
-// units  (populated from BSData sync, shared with list-builder)
-id          TEXT PRIMARY KEY
-faction     TEXT NOT NULL       -- e.g. "Space Marines"
-name        TEXT NOT NULL       -- e.g. "Brutalis Dreadnought"
-profile     TEXT NOT NULL       -- JSON: { M, T, Sv, W, Ld, OC }
-weapons     TEXT NOT NULL       -- JSON array of weapon profiles
-abilities   TEXT NOT NULL       -- JSON array of ability strings
-points      INTEGER NOT NULL
-bsdata_id   TEXT UNIQUE NOT NULL
-updated_at  INTEGER NOT NULL
+No `units` table. Unit data lives in memory via `GameContentAdapter`.
 
+```typescript
 // simulations  (optional — saved results)
-id            TEXT PRIMARY KEY
-user_id       TEXT NOT NULL
-attacker_id   TEXT NOT NULL    -- references units.id
-defender_id   TEXT NOT NULL    -- references units.id
-result        TEXT NOT NULL    -- JSON: full simulation output
-created_at    INTEGER NOT NULL
+// attacker_content_id / defender_content_id are plain TEXT — no FK into units
+id                    TEXT PRIMARY KEY
+user_id               TEXT NOT NULL
+attacker_content_id   TEXT NOT NULL    -- content adapter ID
+attacker_name         TEXT NOT NULL    -- denormalized for display
+defender_content_id   TEXT NOT NULL    -- content adapter ID
+defender_name         TEXT NOT NULL    -- denormalized for display
+result                TEXT NOT NULL    -- JSON: full simulation output
+created_at            INTEGER NOT NULL
 ```
 
 ---
@@ -231,9 +239,8 @@ src/
     rules/
       pipeline.ts
       pipeline.test.ts
-    bsdata/
-      parser.ts
-      parser.test.ts
 ```
+
+BSData parsing lives in `packages/game-content` — do not duplicate it here.
 
 The rules engine must be fully unit-tested. Every weapon ability, every modifier interaction — covered before it ships.
