@@ -4,6 +4,21 @@
 
 ---
 
+## Current State
+
+| Layer | Status |
+|---|---|
+| DB schema (simulations table) | ✅ in packages/db |
+| packages/game-content BSDataAdapter | ✅ built + tested |
+| Server scaffold | 🔲 not started |
+| Client scaffold | 🔲 not started |
+
+BSData loading and the `GameContentAdapter` interface live in `packages/game-content`.
+When implementation begins: the rules engine goes in `server/src/lib/rules/`, not in
+the game-content package. game-content provides unit profiles; versus provides the math.
+
+---
+
 ## What This App Is
 
 Versus lets you pit two Warhammer 40K units against each other — ranged or melee — and calculates the statistical outcome. It knows your army, knows the meta, and tells you things you didn't know to ask. It is not a replacement for Unit Crunch; it is a different product.

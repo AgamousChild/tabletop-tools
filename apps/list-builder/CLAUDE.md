@@ -4,6 +4,17 @@
 
 ---
 
+## Current State
+
+| Layer | Status |
+|---|---|
+| DB schema (unit_ratings, lists, list_units) | ✅ in packages/db |
+| packages/game-content BSDataAdapter | ✅ built + tested |
+| Server scaffold | 🔲 not started |
+| Client scaffold | 🔲 not started |
+
+---
+
 ## What This App Is
 
 ListBuilder is a smart army list builder for Warhammer 40K where every unit carries a live performance rating derived from real GT+ tournament data. As you build a list, it surfaces higher-rated alternatives at the same points cost. Ratings update as new event data comes in and reset when GW releases a new balance dataslate or codex.
@@ -163,7 +174,7 @@ Suggestion: Brutalis Dreadnought  90pts  Rating: A-
             (+5pts, significantly stronger in the current meta)
 ```
 
-Ratings reset to null when a new balance dataslate or codex drops. The meta window label (e.g. `"2025-Q2"`) changes and the BCP scraper starts a fresh accumulation from that point.
+Ratings reset to null when a new balance dataslate or codex drops. The meta window label (e.g. `"2025-Q2"`) changes and a fresh window begins — old data is excluded from new-window queries.
 
 ---
 
@@ -225,4 +236,13 @@ src/
 ```
 
 BSData parsing lives in `packages/game-content` — do not duplicate it here.
-There is no BCP scraper. Rating data comes from imported CSVs processed by the platform.
+
+There is no BCP scraper. Rating data comes exclusively from:
+- Native match records in `apps/game-tracker` where `is_tournament = 1`
+- CSV files the operator imports via the admin panel (BCP export, Tabletop Admiral, generic)
+
+The operator obtains external tournament data themselves and imports it. This platform
+never makes external network requests to BCP or any other service.
+
+Meta window labels are shared with `apps/new-meta` — the same imported tournament data
+feeds both the rating engine here and the aggregate analytics there.

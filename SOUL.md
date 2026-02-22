@@ -73,6 +73,35 @@ If you are fighting with a system issue and try three different fixes without su
 
 ---
 
+## The CLAUDE.md Feedback Loop
+
+Every app in this platform has a CLAUDE.md. These are living documents, not one-time design writeups. After every implementation phase, they get updated to reflect what actually exists.
+
+**The loop:**
+```
+Plan → Build → Test → Update CLAUDE.md → Next phase
+```
+
+**What triggers an update:**
+- A phase of implementation completes (scaffold, schema, routers, UI)
+- A design decision gets settled during implementation that differs from what was planned
+- Something turns out to work differently than the doc describes
+
+**What a CLAUDE.md must contain:**
+- What this app is and why it exists — traceable to SOUL.md
+- Current state: what's built, what's planned, what's not started
+- Actual file structure (real paths, real port numbers)
+- Architecture decisions that were made, not just proposed
+- Test coverage: what tests exist and what they verify
+- Known limitations or design trade-offs
+
+**Alignment check:**
+Before closing out a phase, check: does every decision in the CLAUDE.md trace back to a principle in SOUL.md? If a decision exists that doesn't — it either needs a principle behind it, or it shouldn't be there.
+
+The CLAUDE.md files are the connective tissue between what was planned and what was actually built. Keep them honest.
+
+---
+
 ## How Claude and I Work Together
 
 Plan before touching anything. Evaluate the full architecture. Understand every layer. Then — and only then — suggest changes.
