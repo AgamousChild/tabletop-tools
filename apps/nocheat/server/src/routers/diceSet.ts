@@ -1,7 +1,8 @@
-import { z } from 'zod'
-import { eq, desc } from 'drizzle-orm'
 import { diceSets } from '@tabletop-tools/db'
-import { router, protectedProcedure } from '../trpc'
+import { desc, eq } from 'drizzle-orm'
+import { z } from 'zod'
+
+import { protectedProcedure, router } from '../trpc'
 
 export const diceSetRouter = router({
   create: protectedProcedure
@@ -17,10 +18,7 @@ export const diceSetRouter = router({
         createdAt: now,
       })
 
-      const [created] = await ctx.db
-        .select()
-        .from(diceSets)
-        .where(eq(diceSets.id, id))
+      const [created] = await ctx.db.select().from(diceSets).where(eq(diceSets.id, id))
 
       return created!
     }),

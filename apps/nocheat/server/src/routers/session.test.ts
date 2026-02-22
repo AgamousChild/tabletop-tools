@@ -1,6 +1,7 @@
-import { describe, it, expect, beforeAll, afterAll } from 'vitest'
 import { createClient } from '@libsql/client'
 import { createDbFromClient } from '@tabletop-tools/db'
+import { afterAll, beforeAll, describe, expect, it } from 'vitest'
+
 import { createCallerFactory } from '../trpc'
 import { appRouter } from './index'
 
@@ -127,16 +128,16 @@ describe('session.addRoll', () => {
 
   it('rejects if the session does not belong to the user', async () => {
     const caller = createCaller(bob)
-    await expect(
-      caller.session.addRoll({ sessionId, pipValues: [1, 2, 3] }),
-    ).rejects.toMatchObject({ code: 'FORBIDDEN' })
+    await expect(caller.session.addRoll({ sessionId, pipValues: [1, 2, 3] })).rejects.toMatchObject(
+      { code: 'FORBIDDEN' },
+    )
   })
 
   it('rejects pip values outside the 1–6 range', async () => {
     const caller = createCaller(alice)
-    await expect(
-      caller.session.addRoll({ sessionId, pipValues: [0, 7] }),
-    ).rejects.toMatchObject({ code: 'BAD_REQUEST' })
+    await expect(caller.session.addRoll({ sessionId, pipValues: [0, 7] })).rejects.toMatchObject({
+      code: 'BAD_REQUEST',
+    })
   })
 
   it('rejects adding rolls to a closed session', async () => {

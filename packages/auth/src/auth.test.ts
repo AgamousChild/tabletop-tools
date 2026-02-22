@@ -1,7 +1,8 @@
-import { beforeAll, afterAll, describe, it, expect } from 'vitest'
 import { createClient } from '@libsql/client'
-import { existsSync, unlinkSync } from 'fs'
 import { createDb } from '@tabletop-tools/db'
+import { existsSync, unlinkSync } from 'fs'
+import { afterAll, beforeAll, describe, expect, it } from 'vitest'
+
 import { createAuth } from './index'
 
 const TEST_DB = `test-auth-${Date.now()}.db`

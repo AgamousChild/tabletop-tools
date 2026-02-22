@@ -1,8 +1,9 @@
-import { Hono } from 'hono'
-import { cors } from 'hono/cors'
-import { fetchRequestHandler } from '@trpc/server/adapters/fetch'
 import type { Auth } from '@tabletop-tools/auth'
 import type { Db } from '@tabletop-tools/db'
+import { fetchRequestHandler } from '@trpc/server/adapters/fetch'
+import { Hono } from 'hono'
+import { cors } from 'hono/cors'
+
 import { appRouter } from './routers'
 
 export function createServer(auth: Auth, db: Db) {

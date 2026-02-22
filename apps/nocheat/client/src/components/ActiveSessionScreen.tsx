@@ -1,4 +1,5 @@
-import { useState, useEffect } from 'react'
+import { useEffect, useState } from 'react'
+
 import { trpc } from '../lib/trpc'
 import { Camera } from './Camera'
 import { ResultScreen } from './ResultScreen'
@@ -124,11 +125,7 @@ export function ActiveSessionScreen({ diceSet, onDone }: Props) {
   if (phase.name === 'result') {
     return (
       <div className="min-h-screen bg-slate-950 text-slate-100 p-4 flex items-center justify-center">
-        <ResultScreen
-          result={phase.result}
-          onSavePhoto={handleSavePhoto}
-          onDismiss={onDone}
-        />
+        <ResultScreen result={phase.result} onSavePhoto={handleSavePhoto} onDismiss={onDone} />
       </div>
     )
   }

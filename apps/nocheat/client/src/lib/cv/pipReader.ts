@@ -1,4 +1,4 @@
-import { toGrayscale, binarize, countBlobs } from './imageUtils'
+import { binarize, countBlobs, toGrayscale } from './imageUtils'
 
 /**
  * Detect the pip count from a die face captured on a canvas.

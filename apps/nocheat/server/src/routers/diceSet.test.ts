@@ -1,6 +1,7 @@
-import { describe, it, expect, beforeAll, afterAll } from 'vitest'
 import { createClient } from '@libsql/client'
 import { createDbFromClient } from '@tabletop-tools/db'
+import { afterAll, beforeAll, describe, expect, it } from 'vitest'
+
 import { createCallerFactory } from '../trpc'
 import { appRouter } from './index'
 
@@ -59,12 +60,12 @@ describe('diceSet.create', () => {
 })
 
 describe('diceSet.list', () => {
-  it('returns only the authenticated user\'s dice sets', async () => {
+  it("returns only the authenticated user's dice sets", async () => {
     const aliceCaller = createCaller(aliceCtx)
     const bobCaller = createCaller(bobCtx)
 
     await aliceCaller.diceSet.create({ name: 'Blue Crystals' })
-    await bobCaller.diceSet.create({ name: 'Bob\'s Dice' })
+    await bobCaller.diceSet.create({ name: "Bob's Dice" })
 
     const aliceSets = await aliceCaller.diceSet.list()
     expect(aliceSets.some((s) => s.name === 'Red Dragons')).toBe(true)

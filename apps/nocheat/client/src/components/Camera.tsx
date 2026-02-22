@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
+
 import { trpc } from '../lib/trpc'
 
 type Props = {
@@ -103,9 +104,7 @@ export function Camera({ onCapture, onCaptureFrame, captureOnly = false, capture
 
   function adjustValue(index: number, delta: number) {
     if (!detected) return
-    setDetected(detected.map((v, i) =>
-      i === index ? Math.min(6, Math.max(1, v + delta)) : v
-    ))
+    setDetected(detected.map((v, i) => (i === index ? Math.min(6, Math.max(1, v + delta)) : v)))
   }
 
   if (error) {
@@ -119,13 +118,7 @@ export function Camera({ onCapture, onCaptureFrame, captureOnly = false, capture
   return (
     <div className="space-y-4">
       <div className="relative rounded-lg overflow-hidden bg-slate-900 aspect-square">
-        <video
-          ref={videoRef}
-          autoPlay
-          playsInline
-          muted
-          className="w-full h-full object-cover"
-        />
+        <video ref={videoRef} autoPlay playsInline muted className="w-full h-full object-cover" />
         <canvas ref={canvasRef} className="hidden" />
         {reading && (
           <div className="absolute inset-0 bg-slate-950/70 flex items-center justify-center">

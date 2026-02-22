@@ -1,6 +1,7 @@
-import { describe, it, expect, vi, beforeAll, afterAll } from 'vitest'
 import { createClient } from '@libsql/client'
 import { createDbFromClient } from '@tabletop-tools/db'
+import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest'
+
 import { createCallerFactory } from '../trpc'
 import { appRouter } from './index'
 

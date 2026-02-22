@@ -1,8 +1,9 @@
-import { describe, it, expect, beforeAll, afterAll } from 'vitest'
 import { createClient } from '@libsql/client'
 import { createDbFromClient } from '@tabletop-tools/db'
-import { createCallerFactory } from './trpc'
+import { afterAll, beforeAll, describe, expect, it } from 'vitest'
+
 import { appRouter } from './routers'
+import { createCallerFactory } from './trpc'
 
 const client = createClient({ url: ':memory:' })
 const db = createDbFromClient(client)

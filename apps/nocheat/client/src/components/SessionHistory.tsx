@@ -31,9 +31,7 @@ function formatDate(ts: number): string {
 
 export function SessionHistory({ sessions, onSelect }: Props) {
   if (sessions.length === 0) {
-    return (
-      <p className="text-slate-400 text-center py-8">No sessions yet. Start one below.</p>
-    )
+    return <p className="text-slate-400 text-center py-8">No sessions yet. Start one below.</p>
   }
 
   return (
@@ -52,9 +50,7 @@ export function SessionHistory({ sessions, onSelect }: Props) {
               </div>
               <div className="flex items-center gap-3 text-xs text-slate-400">
                 {session.opponentName && <span>vs {session.opponentName}</span>}
-                {session.zScore != null && (
-                  <span>Z: {session.zScore.toFixed(2)}</span>
-                )}
+                {session.zScore != null && <span>Z: {session.zScore.toFixed(2)}</span>}
               </div>
             </button>
           </li>

@@ -1,5 +1,5 @@
-import { initTRPC, TRPCError } from '@trpc/server'
 import type { Db } from '@tabletop-tools/db'
+import { initTRPC, TRPCError } from '@trpc/server'
 
 export type User = {
   id: string

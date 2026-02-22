@@ -1,7 +1,9 @@
 import 'dotenv/config'
+
 import { serve } from '@hono/node-server'
-import { createDb } from '@tabletop-tools/db'
 import { createAuth } from '@tabletop-tools/auth'
+import { createDb } from '@tabletop-tools/db'
+
 import { createServer } from './server'
 
 const db = createDb({

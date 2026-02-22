@@ -12,11 +12,7 @@ type Props = {
 
 export function DiceSetList({ diceSets, onSelect }: Props) {
   if (diceSets.length === 0) {
-    return (
-      <p className="text-slate-400 text-center py-8">
-        No dice sets yet. Create one below.
-      </p>
-    )
+    return <p className="text-slate-400 text-center py-8">No dice sets yet. Create one below.</p>
   }
 
   return (

@@ -1,6 +1,6 @@
-import { authClient } from './lib/auth'
 import { AuthScreen } from './components/AuthScreen'
 import { DiceSetScreen } from './components/DiceSetScreen'
+import { authClient } from './lib/auth'
 
 export default function App() {
   const { data: session, isPending, refetch } = authClient.useSession()

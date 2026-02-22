@@ -1,5 +1,5 @@
 import Anthropic from '@anthropic-ai/sdk'
-import { writeFileSync, mkdirSync } from 'fs'
+import { mkdirSync, writeFileSync } from 'fs'
 import { join } from 'path'
 
 const client = new Anthropic()
@@ -8,7 +8,10 @@ const client = new Anthropic()
  * Given a base64-encoded image, returns the face values of all dice visible.
  * e.g. [3, 5, 2] for three dice showing 3, 5, and 2.
  */
-export async function readDice(imageBase64: string, mediaType: 'image/jpeg' | 'image/png' = 'image/jpeg'): Promise<number[]> {
+export async function readDice(
+  imageBase64: string,
+  mediaType: 'image/jpeg' | 'image/png' = 'image/jpeg',
+): Promise<number[]> {
   // Save image for debugging
   try {
     const debugDir = join(process.cwd(), 'debug-images')
@@ -57,16 +60,14 @@ STEP 4 — Return ONLY a JSON array of integers, one per die, in reading order (
     ],
   })
 
-  const text = response.content.find(b => b.type === 'text')?.text.trim() ?? '[]'
+  const text = response.content.find((b) => b.type === 'text')?.text.trim() ?? '[]'
   console.log('[vision] raw response:', text)
 
   try {
     const match = text.match(/\[[\d,\s]*\]/)
     const values = JSON.parse(match ? match[0] : text)
     if (!Array.isArray(values)) return []
-    return values
-      .map(Number)
-      .filter((n) => Number.isInteger(n) && n >= 1 && n <= 6)
+    return values.map(Number).filter((n) => Number.isInteger(n) && n >= 1 && n <= 6)
   } catch {
     console.log('[vision] parse failed for:', text)
     return []

@@ -1,8 +1,9 @@
-import { beforeAll, afterAll, describe, it, expect } from 'vitest'
 import { createClient } from '@libsql/client'
-import { drizzle } from 'drizzle-orm/libsql'
 import { eq } from 'drizzle-orm'
-import { authUsers, diceSets, diceRollingSessions, rolls } from './schema'
+import { drizzle } from 'drizzle-orm/libsql'
+import { afterAll, beforeAll, describe, expect, it } from 'vitest'
+
+import { authUsers, diceRollingSessions, diceSets, rolls } from './schema'
 
 const client = createClient({ url: ':memory:' })
 const db = drizzle(client)

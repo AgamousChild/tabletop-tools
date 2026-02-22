@@ -1,8 +1,10 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { S3Client, PutObjectCommand } from '@aws-sdk/client-s3'
+import { S3Client } from '@aws-sdk/client-s3'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
+
 import { uploadToR2 } from './r2'
 
 vi.mock('@aws-sdk/client-s3', async (importOriginal) => {
+  // eslint-disable-next-line @typescript-eslint/consistent-type-imports
   const original = await importOriginal<typeof import('@aws-sdk/client-s3')>()
   return {
     ...original,
@@ -48,8 +50,8 @@ describe('uploadToR2', () => {
 
   it('throws if the S3 send fails', async () => {
     vi.mocked(fakeClient.send).mockRejectedValueOnce(new Error('Network error'))
-    await expect(
-      uploadToR2(fakeClient, 'key', Buffer.from('data'), 'image/jpeg'),
-    ).rejects.toThrow('Network error')
+    await expect(uploadToR2(fakeClient, 'key', Buffer.from('data'), 'image/jpeg')).rejects.toThrow(
+      'Network error',
+    )
   })
 })

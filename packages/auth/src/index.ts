@@ -1,9 +1,19 @@
+import {
+  authAccounts,
+  authSessions,
+  authUsers,
+  authVerifications,
+  type Db,
+} from '@tabletop-tools/db'
 import { betterAuth } from 'better-auth'
 import { drizzleAdapter } from 'better-auth/adapters/drizzle'
 import { username } from 'better-auth/plugins'
-import { type Db, authUsers, authSessions, authAccounts, authVerifications } from '@tabletop-tools/db'
 
-export function createAuth(db: Db, baseURL = 'http://localhost:3001', trustedOrigins: string[] = []) {
+export function createAuth(
+  db: Db,
+  baseURL = 'http://localhost:3001',
+  trustedOrigins: string[] = [],
+) {
   return betterAuth({
     baseURL,
     trustedOrigins,

@@ -1,11 +1,15 @@
-import { describe, it, expect } from 'vitest'
-import { toGrayscale, binarize, countBlobs } from './imageUtils'
+import { describe, expect, it } from 'vitest'
+
+import { binarize, countBlobs, toGrayscale } from './imageUtils'
 
 // Build a synthetic 4x4 RGBA image (all white)
 function whiteRgba(w: number, h: number): Uint8ClampedArray {
   const data = new Uint8ClampedArray(w * h * 4)
   for (let i = 0; i < data.length; i += 4) {
-    data[i] = 255; data[i + 1] = 255; data[i + 2] = 255; data[i + 3] = 255
+    data[i] = 255
+    data[i + 1] = 255
+    data[i + 2] = 255
+    data[i + 3] = 255
   }
   return data
 }
@@ -13,7 +17,10 @@ function whiteRgba(w: number, h: number): Uint8ClampedArray {
 // Paint a single pixel black in an RGBA buffer
 function blackPixel(data: Uint8ClampedArray, x: number, y: number, w: number) {
   const i = (y * w + x) * 4
-  data[i] = 0; data[i + 1] = 0; data[i + 2] = 0; data[i + 3] = 255
+  data[i] = 0
+  data[i + 1] = 0
+  data[i + 2] = 0
+  data[i + 3] = 255
 }
 
 describe('toGrayscale', () => {
@@ -41,9 +48,9 @@ describe('binarize', () => {
   it('marks pixels below threshold as dark (0)', () => {
     const gray = new Uint8Array([50, 200, 100, 180, 30, 220])
     const binary = binarize(gray, 128)
-    expect(binary[0]).toBe(0)  // 50 < 128 → dark
-    expect(binary[2]).toBe(0)  // 100 < 128 → dark
-    expect(binary[4]).toBe(0)  // 30 < 128 → dark
+    expect(binary[0]).toBe(0) // 50 < 128 → dark
+    expect(binary[2]).toBe(0) // 100 < 128 → dark
+    expect(binary[4]).toBe(0) // 30 < 128 → dark
   })
 
   it('marks pixels at or above threshold as light (255)', () => {
@@ -75,8 +82,8 @@ describe('countBlobs', () => {
   it('detects a single isolated dark blob', () => {
     const grid = [
       [255, 255, 255, 255, 255],
-      [255,   0,   0, 255, 255],
-      [255,   0,   0, 255, 255],
+      [255, 0, 0, 255, 255],
+      [255, 0, 0, 255, 255],
       [255, 255, 255, 255, 255],
       [255, 255, 255, 255, 255],
     ]
@@ -87,8 +94,8 @@ describe('countBlobs', () => {
   it('detects two separate dark blobs', () => {
     const grid = [
       [255, 255, 255, 255, 255],
-      [255,   0, 255,   0, 255],
-      [255,   0, 255,   0, 255],
+      [255, 0, 255, 0, 255],
+      [255, 0, 255, 0, 255],
       [255, 255, 255, 255, 255],
       [255, 255, 255, 255, 255],
     ]
@@ -99,7 +106,7 @@ describe('countBlobs', () => {
   it('ignores blobs smaller than minSize', () => {
     const grid = [
       [255, 255, 255, 255, 255],
-      [255,   0, 255,   0, 255], // two single-pixel blobs
+      [255, 0, 255, 0, 255], // two single-pixel blobs
       [255, 255, 255, 255, 255],
       [255, 255, 255, 255, 255],
       [255, 255, 255, 255, 255],
@@ -111,7 +118,8 @@ describe('countBlobs', () => {
 
   it('counts six blobs for a die-six pattern', () => {
     // 9x9 grid with 6 blobs (2x2 each), like a die face
-    const g = 255, d = 0
+    const g = 255,
+      d = 0
     const grid = [
       [g, g, g, g, g, g, g, g, g],
       [g, d, d, g, g, g, d, d, g],

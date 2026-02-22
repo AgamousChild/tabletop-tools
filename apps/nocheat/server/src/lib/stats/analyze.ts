@@ -12,11 +12,11 @@ const HIGH_THRESHOLD = 60
 const Z_THRESHOLD = 2.5
 
 export type AnalysisResult = {
-  zScore: number            // worst-case z-score across all faces
+  zScore: number // worst-case z-score across all faces
   isLoaded: boolean
   confidence: 'low' | 'medium' | 'high'
-  outlierFace: number       // face (1–6) with the highest deviation; 0 if insufficient data
-  observedRate: number      // observed proportion for the outlier face; 0 if insufficient data
+  outlierFace: number // face (1–6) with the highest deviation; 0 if insufficient data
+  observedRate: number // observed proportion for the outlier face; 0 if insufficient data
 }
 
 /**
@@ -45,7 +45,7 @@ export function analyze(rolls: number[][]): AnalysisResult {
 
   // Compute z-score per face: (observed proportion - expected proportion) / std error
   // std error = sqrt(p * (1-p) / n)
-  const stdErr = Math.sqrt(EXPECTED_FREQ * (1 - EXPECTED_FREQ) / n)
+  const stdErr = Math.sqrt((EXPECTED_FREQ * (1 - EXPECTED_FREQ)) / n)
   const zScores = FACES.map((f) => {
     const observed = counts[f] / n
     return (observed - EXPECTED_FREQ) / stdErr

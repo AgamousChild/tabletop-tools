@@ -1,9 +1,10 @@
 import { useState } from 'react'
+
 import { authClient } from '../lib/auth'
 import { trpc } from '../lib/trpc'
-import { DiceSetList } from './DiceSetList'
-import { CreateDiceSetForm } from './CreateDiceSetForm'
 import { ActiveSessionScreen } from './ActiveSessionScreen'
+import { CreateDiceSetForm } from './CreateDiceSetForm'
+import { DiceSetList } from './DiceSetList'
 
 type Props = {
   onSignOut: () => void
@@ -19,12 +20,7 @@ export function DiceSetScreen({ onSignOut }: Props) {
   })
 
   if (activeDiceSet) {
-    return (
-      <ActiveSessionScreen
-        diceSet={activeDiceSet}
-        onDone={() => setActiveDiceSet(null)}
-      />
-    )
+    return <ActiveSessionScreen diceSet={activeDiceSet} onDone={() => setActiveDiceSet(null)} />
   }
 
   async function handleSignOut() {
@@ -49,15 +45,10 @@ export function DiceSetScreen({ onSignOut }: Props) {
           Your Dice Sets
         </h2>
 
-        <DiceSetList
-          diceSets={diceSets}
-          onSelect={(ds) => setActiveDiceSet(ds)}
-        />
+        <DiceSetList diceSets={diceSets} onSelect={(ds) => setActiveDiceSet(ds)} />
 
         <div className="mt-6">
-          <CreateDiceSetForm
-            onCreate={(name) => createMutation.mutate({ name })}
-          />
+          <CreateDiceSetForm onCreate={(name) => createMutation.mutate({ name })} />
           {createMutation.error && (
             <p className="text-red-400 text-sm mt-2">{createMutation.error.message}</p>
           )}

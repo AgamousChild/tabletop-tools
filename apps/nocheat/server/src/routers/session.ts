@@ -1,10 +1,11 @@
-import { z } from 'zod'
-import { eq, and, desc } from 'drizzle-orm'
-import { diceRollingSessions, rolls, diceSets } from '@tabletop-tools/db'
+import { diceRollingSessions, diceSets, rolls } from '@tabletop-tools/db'
 import { TRPCError } from '@trpc/server'
-import { router, protectedProcedure } from '../trpc'
+import { and, desc, eq } from 'drizzle-orm'
+import { z } from 'zod'
+
 import { analyze } from '../lib/stats/analyze'
 import { createR2Client, uploadToR2 } from '../lib/storage/r2'
+import { protectedProcedure, router } from '../trpc'
 
 export const sessionRouter = router({
   start: protectedProcedure
@@ -80,10 +81,7 @@ export const sessionRouter = router({
       })
 
       // Fetch all rolls so far to compute running z-score
-      const allRolls = await ctx.db
-        .select()
-        .from(rolls)
-        .where(eq(rolls.sessionId, input.sessionId))
+      const allRolls = await ctx.db.select().from(rolls).where(eq(rolls.sessionId, input.sessionId))
 
       const rollData = allRolls.map((r) => JSON.parse(r.pipValues) as number[])
       const { zScore } = analyze(rollData)
@@ -109,10 +107,7 @@ export const sessionRouter = router({
       }
 
       // Fetch all rolls and run full analysis
-      const allRolls = await ctx.db
-        .select()
-        .from(rolls)
-        .where(eq(rolls.sessionId, input.sessionId))
+      const allRolls = await ctx.db.select().from(rolls).where(eq(rolls.sessionId, input.sessionId))
 
       const rollData = allRolls.map((r) => JSON.parse(r.pipValues) as number[])
       const { zScore, isLoaded, outlierFace, observedRate } = analyze(rollData)
@@ -185,10 +180,16 @@ export const sessionRouter = router({
         throw new TRPCError({ code: 'FORBIDDEN', message: 'Session not found' })
       }
       if (!session.closedAt) {
-        throw new TRPCError({ code: 'BAD_REQUEST', message: 'Session must be closed before saving a photo' })
+        throw new TRPCError({
+          code: 'BAD_REQUEST',
+          message: 'Session must be closed before saving a photo',
+        })
       }
       if (!session.isLoaded) {
-        throw new TRPCError({ code: 'BAD_REQUEST', message: 'Evidence photos are only saved for loaded dice' })
+        throw new TRPCError({
+          code: 'BAD_REQUEST',
+          message: 'Evidence photos are only saved for loaded dice',
+        })
       }
 
       const imageBuffer = Buffer.from(input.imageData, 'base64')

@@ -7,11 +7,7 @@
  * Convert RGBA pixel data to grayscale using the luminosity formula.
  * Returns a Uint8Array of length width * height.
  */
-export function toGrayscale(
-  rgba: Uint8ClampedArray,
-  width: number,
-  height: number,
-): Uint8Array {
+export function toGrayscale(rgba: Uint8ClampedArray, width: number, height: number): Uint8Array {
   const gray = new Uint8Array(width * height)
   for (let i = 0; i < width * height; i++) {
     const r = rgba[i * 4]!
@@ -69,10 +65,10 @@ export function countBlobs(
           const cy = Math.floor(curr / width)
 
           const neighbours = [
-            cy > 0 ? curr - width : -1,          // up
+            cy > 0 ? curr - width : -1, // up
             cy < height - 1 ? curr + width : -1, // down
-            cx > 0 ? curr - 1 : -1,              // left
-            cx < width - 1 ? curr + 1 : -1,      // right
+            cx > 0 ? curr - 1 : -1, // left
+            cx < width - 1 ? curr + 1 : -1, // right
           ]
 
           for (const n of neighbours) {

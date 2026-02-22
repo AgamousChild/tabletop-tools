@@ -1,4 +1,5 @@
 import { useState } from 'react'
+
 import { authClient } from '../lib/auth'
 
 type Props = {
@@ -89,7 +90,10 @@ export function AuthScreen({ onAuthenticated }: Props) {
             <>
               No account?{' '}
               <button
-                onClick={() => { setMode('register'); setError(null) }}
+                onClick={() => {
+                  setMode('register')
+                  setError(null)
+                }}
                 className="text-amber-400 hover:underline"
               >
                 Register
@@ -99,7 +103,10 @@ export function AuthScreen({ onAuthenticated }: Props) {
             <>
               Have an account?{' '}
               <button
-                onClick={() => { setMode('login'); setError(null) }}
+                onClick={() => {
+                  setMode('login')
+                  setError(null)
+                }}
                 className="text-amber-400 hover:underline"
               >
                 Log in

@@ -1,5 +1,6 @@
-import { createClient, type Client, type Config } from '@libsql/client'
+import { type Client, type Config, createClient } from '@libsql/client'
 import { drizzle } from 'drizzle-orm/libsql'
+
 import * as schema from './schema'
 
 export function createDbFromClient(client: Client) {

@@ -1,4 +1,5 @@
-import { describe, it, expect } from 'vitest'
+import { describe, expect, it } from 'vitest'
+
 import { analyze } from './analyze'
 
 // Helper: generate rolls with a uniform distribution across faces 1–6
@@ -6,18 +7,7 @@ function uniformRolls(totalRolls: number): number[][] {
   const rolls: number[][] = []
   for (let i = 0; i < totalRolls; i++) {
     // Cycle evenly through faces 1–6
-    rolls.push([((i % 6) + 1)])
-  }
-  return rolls
-}
-
-// Helper: generate rolls heavily biased toward face 6
-function biasedRolls(totalRolls: number, biasedFace: number, biasRatio: number): number[][] {
-  const rolls: number[][] = []
-  for (let i = 0; i < totalRolls; i++) {
-    // biasRatio of rolls land on biasedFace, rest spread evenly across others
-    const roll = Math.random() < biasRatio ? biasedFace : ((i % 5) + 1 === biasedFace ? 1 : (i % 5) + 1)
-    rolls.push([roll])
+    rolls.push([(i % 6) + 1])
   }
   return rolls
 }
