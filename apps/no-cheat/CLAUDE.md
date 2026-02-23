@@ -20,13 +20,16 @@ no-cheat is the founding app of the Tabletop Tools platform.
 
 | Layer | Status |
 |---|---|
-| Server scaffold (Hono + tRPC) | done |
-| DB schema (dice_sets, sessions, rolls) | done |
-| Client scaffold (React + Vite) | done |
-| Statistical engine (Z-score, chi-sq, Markov) | not started |
-| CV pipeline (opencv.js) | not started |
-| Clustering engine | not started |
-| UI screens | partial — result screen, roll entry scaffolded |
+| Server scaffold (Hono + tRPC) | ✅ done — 50 tests |
+| DB schema (dice_sets, sessions, rolls) | ✅ done |
+| Auth (federated via apps/auth-server) | ✅ done — 11 tests |
+| Statistical engine (Z-score, chi-sq) | ✅ done — 17 tests |
+| Session & roll procedures | ✅ done — 44 tests |
+| Evidence photo upload (R2) | ✅ done — 6 tests |
+| Client UI (all screens wired) | ✅ done — 66 tests |
+| CV pipeline (opencv.js, local) | 🔲 not started — Camera uses Anthropic API as interim |
+| Clustering engine | 🔲 not started |
+| Deployment (Cloudflare Workers + Pages) | 🔲 not started |
 
 ---
 
