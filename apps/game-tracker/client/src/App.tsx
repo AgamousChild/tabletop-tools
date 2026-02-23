@@ -1,7 +1,21 @@
+import { authClient } from './lib/auth'
+import { AuthScreen } from './components/AuthScreen'
+import { GameTrackerScreen } from './components/GameTrackerScreen'
+
 export default function App() {
-  return (
-    <div className="min-h-screen bg-slate-950 flex items-center justify-center">
-      <p className="text-slate-400">Tracker — Match Tracker coming soon.</p>
-    </div>
-  )
+  const { data: session, isPending, refetch } = authClient.useSession()
+
+  if (isPending) {
+    return (
+      <div className="min-h-screen bg-slate-950 flex items-center justify-center">
+        <p className="text-slate-400">Loading…</p>
+      </div>
+    )
+  }
+
+  if (!session) {
+    return <AuthScreen onAuthenticated={() => void refetch()} />
+  }
+
+  return <GameTrackerScreen onSignOut={() => void refetch()} />
 }
