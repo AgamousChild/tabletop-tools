@@ -1,5 +1,6 @@
 import { initTRPC, TRPCError } from '@trpc/server'
 import type { Db } from '@tabletop-tools/db'
+import type { R2Storage } from './lib/storage/r2'
 
 export type User = {
   id: string
@@ -11,6 +12,7 @@ export type Context = {
   user: User | null
   req: Request
   db: Db
+  storage: R2Storage
 }
 
 const t = initTRPC.context<Context>().create()
