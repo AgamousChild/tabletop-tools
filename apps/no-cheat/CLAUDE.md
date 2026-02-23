@@ -25,7 +25,7 @@ no-cheat is the founding app of the Tabletop Tools platform.
 | Auth (federated via apps/auth-server) | ✅ done — 11 tests |
 | Statistical engine (Z-score, chi-sq) | ✅ done — 17 tests |
 | Session & roll procedures | ✅ done — 44 tests |
-| Evidence photo upload (R2) | ✅ done — 6 tests |
+| Evidence photo upload (R2) | ✅ done — 9 tests (r2 + savePhoto); vision/Anthropic API removed |
 | Client UI (all screens wired) | ✅ done — 66 tests |
 | CV pipeline (pure TS, local) | ✅ done — 83 tests; Camera wired, cluster progress + labeling UI built |
 | Clustering engine | ✅ done — agglomerative clustering + template matching + IDB persistence |

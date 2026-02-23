@@ -105,20 +105,22 @@ All processing is pure TypeScript — no opencv.js dependency, no AI API calls.
 
 ---
 
-## Phase 9: Evidence Photo Storage
+## Phase 9: Evidence Photo Storage ✅ complete
 
 Only triggered when a session closes with a loaded verdict.
 
-- [ ] Create a Cloudflare R2 bucket
-- [ ] Implement server-side photo upload handler (receives image, stores to R2, returns URL)
-- [ ] Add `photo_url` update to `session.close` when `savePhoto = true`
-- [ ] Build the evidence prompt UI:
-  - Shown only when `is_loaded = true`
-  - "Save Evidence Photo" button re-opens camera for one final capture
-  - Upload on confirm, discard on skip
-- [ ] Write tests for upload and skip paths
+- [x] Implement server-side photo upload handler (`r2.ts` — `createR2Client`, `uploadToR2`)
+- [x] `session.savePhoto` procedure — validates session is closed + loaded, uploads to R2, stores URL (6 tests)
+- [x] `ResultScreen` — shows verdict (LOADED/FAIR), Z-score, observed rate, Save Evidence + Dismiss buttons (10 tests)
+- [x] `ActiveSessionScreen` — evidence capture phase: Camera in captureOnly mode, `session.savePhoto` mutation
+- [x] Removed Anthropic API image pipeline (`vision.ts`, `readDice.ts`) — architecture violation eliminated
+- [x] Removed dead `EvidencePrompt` component (superseded by ResultScreen)
+- [x] Removed `@anthropic-ai/sdk` and `jimp` unused dependencies
+- [ ] Create Cloudflare R2 bucket — infrastructure step, deferred to Phase 11 deployment
 
-**Exit criteria:** When dice are flagged as loaded, user can save a photo. The URL is stored in the session record.
+**Exit criteria met:** When dice are flagged as loaded, user can save a photo via Camera captureOnly mode. URL stored in the session record. No pixels ever leave the device for analysis — only the evidence photo the user explicitly chooses to save.
+
+50 server tests / 144 client tests passing.
 
 ---
 
