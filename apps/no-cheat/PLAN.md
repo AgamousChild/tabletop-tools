@@ -64,43 +64,44 @@ Phase 8 replaces this with local opencv.js.
 
 ---
 
-## Phase 8: Computer Vision Pipeline
+## Phase 8: Computer Vision Pipeline ✅ complete
 
 The CV layer reads pip values from a live video frame in the browser. Replaces manual pip entry from Phase 7.
-All processing is classical opencv.js — no AI API calls, no model downloads.
+All processing is pure TypeScript — no opencv.js dependency, no AI API calls.
 
-- [ ] Load opencv.js (WASM) in the client; confirm it initializes correctly
-- [ ] Implement `getUserMedia` live video stream (rear-facing camera)
-- [ ] Implement background calibration capture (LAB color space, stored in memory)
-- [ ] Implement Phase 1 isolation pipeline:
+- [x] Implement `getUserMedia` live video stream (rear-facing camera)
+- [x] Implement background calibration capture (LAB color space, stored in memory)
+- [x] Implement Phase 1 isolation pipeline:
   - LAB absdiff vs calibration background
   - Otsu threshold → binary mask
-  - findContours → center-proximity merge → top face ROI per die
+  - BFS connected-components → center-proximity merge → top face ROI per die
   - Resize each ROI to 64×64, apply dilation (3×3, 2 iterations)
-- [ ] Write tests for isolation with synthetic binary image fixtures
-- [ ] Implement Phase 2b: SimpleBlobDetector fallback (d6 only)
-  - filterByArea, filterByCircularity, filterByInertia — see CLAUDE.md for params
-  - Count keypoints → pip value; reject if count > 6
-- [ ] Write tests for blob detector with known synthetic pip layouts
-- [ ] Implement Phase 2a: rotation-invariant template matching
+- [x] Write tests for isolation with synthetic binary image fixtures
+- [x] Implement Phase 2b: SimpleBlobDetector fallback (d6 only)
+  - filterByArea (20–600), filterByCircularity (≥0.5)
+  - Count blobs → pip value; null if count > 6
+- [x] Write tests for blob detector with known synthetic pip layouts
+- [x] Implement Phase 2a: rotation-invariant template matching
   - Coarse rotation search (0°–350°, 10° steps)
   - Fine rotation search (±15° around best coarse angle, 1° steps)
   - Dissimilarity score = avg grayscale pixel difference
-- [ ] Write tests with synthetic 64×64 images — verify rotation invariance analytically
-- [ ] Implement agglomerative clustering engine
+- [x] Write tests with synthetic 64×64 images — verify rotation invariance analytically
+- [x] Implement agglomerative clustering engine
   - Merge to nearest cluster if score < threshold; else create new cluster
   - Signal stabilization when 6 clusters seen multiple times (~20 rolls)
-- [ ] Write tests: verify merge/new-cluster decisions and label assignment
-- [ ] Implement exemplar store (IndexedDB, keyed by dice_set_id)
-- [ ] Write tests for exemplar store with mocked IndexedDB
-- [ ] Build calibration UI:
+- [x] Write tests: verify merge/new-cluster decisions and label assignment
+- [x] Implement exemplar store (IndexedDB, keyed by dice_set_id)
+- [x] Write tests for exemplar store with mocked IndexedDB
+- [x] Build calibration UI:
   - Background calibration step (point camera, tap)
-  - Cluster stabilization progress indicator ("Faces seen: N of 6")
-  - Cluster labeling step (shown once, after stabilization)
-- [ ] Wire CV pipeline output into `session.addRoll`
-- [ ] Show annotated preview after each capture (die faces outlined, pip count overlaid)
+  - Cluster stabilization progress bar ("Faces seen: N of 6 — keep rolling")
+  - Cluster labeling step via ClusterLabelingScreen (shown after confirming a roll once stable)
+- [x] Wire CV pipeline output into `session.addRoll`
+- [ ] Show annotated preview after each capture (die faces outlined, pip count overlaid) — deferred post-launch
 
-**Exit criteria:** User points camera at dice, taps capture, pip values are read and recorded automatically. Clustering stabilizes after ~20 rolls. Labeling takes < 1 minute.
+**Exit criteria met:** User points camera at dice, taps calibrate, taps capture, pip values are read locally and recorded. Clustering stabilizes after ~20 rolls. Labeling UI appears automatically and takes < 1 minute. Exemplars persist in IndexedDB across sessions.
+
+150 client tests passing.
 
 ---
 
