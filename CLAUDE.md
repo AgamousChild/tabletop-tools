@@ -33,17 +33,16 @@ tabletop-tools/
 
 ## App Registry
 
-| App | Dir | Port | Status | Purpose |
+| App | Port | Tests | Status | Purpose |
 |---|---|---|---|---|
-| auth-server | `apps/auth-server` | 3000 | Done | Central Better Auth — shared login for all apps |
-| no-cheat | `apps/no-cheat` | 3001 | Phases 1–9 done (194 tests); deployment next | Detect loaded dice via CV + statistics |
-| versus | `apps/versus` | 3002 | Scaffold only | Combat simulator — unit vs unit math |
-| list-builder | `apps/list-builder` | 3003 | Scaffold only | Meta list builder with live unit ratings |
-| game-tracker | `apps/game-tracker` | 3004 | Scaffold only | Turn-by-turn match recorder |
-| tournament | `apps/tournament` | 3005 | Scaffold only | Full tournament management platform |
-| new-meta | `apps/new-meta` | 3006 | Done (122 tests) | Warhammer 40K meta analytics |
+| no-cheat | 3001 | 194 | Phases 1–10 done; deployment next | Detect loaded dice via CV + statistics |
+| versus | 3002 | 80 | Phases 1–6 done; deployment next | Simulate 40K combat: hit/wound/save/damage |
+| list-builder | 3003 | 58 | Phases 2–8 done; deployment next | Build lists with live meta ratings from GT data |
+| game-tracker | 3004 | 39 | Phases 2–7 done; deployment next | Track matches turn-by-turn with photos |
+| tournament | 3005 | 52 | Phases 2–9 done; deployment next | Swiss events: pairings, results, standings, ELO |
+| new-meta | 3006 | 122 | Phases 1–6 done; deployment next | Meta analytics: win rates, Glicko-2 ratings |
 
-Each app has its own `CLAUDE.md` with full spec, architecture, schema, and implementation plan.
+Each app has its own `CLAUDE.md` with full spec, architecture, schema, and implementation detail.
 
 ---
 
@@ -67,33 +66,77 @@ Each app has its own `CLAUDE.md` with full spec, architecture, schema, and imple
 
 ## Data Boundary Rules
 
-No GW (Games Workshop) content is ever committed to this repository.
+**No GW (Games Workshop) content is ever committed to this repository.**
 
 Unit profiles, weapon stats, ability text, and faction data are loaded at runtime from
-BSData (community-maintained XML) or from operator-imported files. The platform adapts
-to this data at startup — it does not store or version-control it.
+BSData (community-maintained XML). The platform adapts to this data at startup via
+`packages/game-content`. Nothing from GW ever lands in committed source files or the DB schema.
 
-Every app that touches 40K data routes through `packages/game-content` (the `GameContentAdapter`
-boundary). Nothing from GW ever lands in the database schema or in committed source files.
+```typescript
+// packages/game-content exports:
+interface GameContentAdapter {
+  load(): Promise<void>
+  getUnit(id: string): Promise<UnitProfile | null>
+  searchUnits(opts: { faction?: string; query?: string }): Promise<UnitProfile[]>
+  listFactions(): Promise<string[]>
+}
+
+// At server startup — operator sets BSDATA_DIR env var:
+const gameContent = process.env.BSDATA_DIR
+  ? new BSDataAdapter(process.env.BSDATA_DIR)   // loads BSData XML at startup
+  : new NullAdapter()                            // returns empty responses (dev/test)
+await gameContent.load()
+```
+
+**What this means in practice:**
+- No `.cat` or `.gst` BSData XML files committed
+- Faction strings entered by users are stored verbatim — never validated against GW data
+- Army list text is stored raw — never parsed for GW content
+- If `BSDATA_DIR` is unset, apps serve empty unit lists (not an error)
+- `GameContentDisclaimer` UI component (in `packages/ui`) surfaces the data source to users
 
 ---
 
 ## Shared Server Pattern
 
-Every app server follows the same shape:
+Every app server follows this exact shape:
 
-```
-Hono HTTP server
-  └── tRPC adapter mounted at /trpc
-        ├── auth router        (shared — wraps Better Auth)
-        ├── [app-specific routers]
-        └── Drizzle → Turso   (shared DB client from packages/db)
+```typescript
+// server/src/trpc.ts
+export type Context = {
+  user: User | null   // null = unauthenticated
+  req: Request
+  db: Db
+  // app-specific additions (storage: R2Storage, gameContent: GameContentAdapter, …)
+}
+
+export const protectedProcedure = t.procedure.use(({ ctx, next }) => {
+  if (!ctx.user) throw new TRPCError({ code: 'UNAUTHORIZED' })
+  return next({ ctx: { ...ctx, user: ctx.user } })
+})
+
+// server/src/server.ts
+export function createServer(db: Db /*, …app-specific deps */) {
+  const app = new Hono()
+  app.use('*', cors({ origin: (origin) => origin ?? '*', credentials: true }))
+  app.all('/trpc/*', async (c) =>
+    fetchRequestHandler({
+      endpoint: '/trpc',
+      req: c.req.raw,
+      router: appRouter,
+      createContext: async ({ req }) => {
+        const user = await validateSession(db, req.headers)
+        return { user, req, db }
+      },
+    }),
+  )
+  return app
+}
 ```
 
-- Auth is handled once in `packages/auth` and imported into every server
-- DB client is shared from `packages/db` (Drizzle + libSQL)
-- Each app server has its own `drizzle.config.ts` pointing at its own Turso DB URL
-- tRPC context carries the authenticated user — routers enforce auth via middleware
+Auth is handled by Better Auth HTTP routes mounted separately (not in tRPC). The tRPC context
+carries the already-validated user. All protected procedures share the `protectedProcedure`
+middleware pattern. Router tests use `createCallerFactory` with an in-memory SQLite database.
 
 ---
 
@@ -145,5 +188,11 @@ The workflow for every change:
 pnpm test --watch   # keep this running during development
 ```
 
-Tests live next to the code they test (`foo.ts` / `foo.test.ts`). The specific test
-file structure for each app is documented in that app's own CLAUDE.md.
+Tests live next to the code they test (`foo.ts` / `foo.test.ts`). Pure functions
+(stats, algorithms, business logic) are always tested in isolation before wiring into
+tRPC routers. Routers are tested using `createCallerFactory` against an in-memory
+SQLite database — no mocks for the database layer.
+
+The specific test file structure for each app is documented in that app's own CLAUDE.md.
+
+**Platform total: 654 tests, all passing.**
