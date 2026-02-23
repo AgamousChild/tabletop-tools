@@ -1,6 +1,13 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 
+import type { Cluster } from '../lib/cv/cluster'
 import { createPipeline } from '../lib/cv/pipeline'
+import { getClusterSet, saveClusterSet } from '../lib/store/exemplarStore'
+import { ClusterLabelingScreen } from './ClusterLabelingScreen'
+
+// Clusters are considered stable (ready to label) when all 6 faces have
+// been seen at least this many times.
+const STABLE_EXEMPLAR_COUNT = 3
 
 type Props = {
   diceSetId?: string
@@ -22,9 +29,13 @@ export function Camera({
   const [error, setError] = useState<string | null>(null)
   const [detected, setDetected] = useState<number[] | null>(null)
   const [calibrated, setCalibrated] = useState(false)
+  const [clusterCount, setClusterCount] = useState(0)
+  const [showLabeling, setShowLabeling] = useState(false)
+  const [labeledClusters, setLabeledClusters] = useState(false)
 
   const pipeline = useMemo(() => createPipeline(diceSetId ?? 'default'), [diceSetId])
 
+  // Start camera stream
   useEffect(() => {
     let stream: MediaStream | null = null
 
@@ -42,6 +53,20 @@ export function Camera({
       stream?.getTracks().forEach((t) => t.stop())
     }
   }, [])
+
+  // Load existing cluster set from IndexedDB on mount
+  useEffect(() => {
+    if (!diceSetId) return
+    getClusterSet(diceSetId).then((set) => {
+      if (set && set.clusters.length > 0) {
+        pipeline.state.clusters = set.clusters
+        setClusterCount(set.clusters.length)
+        if (set.clusters.some((c) => c.pipValue !== null)) {
+          setLabeledClusters(true)
+        }
+      }
+    })
+  }, [diceSetId, pipeline])
 
   function handleCalibrateBackground() {
     const video = videoRef.current
@@ -76,7 +101,17 @@ export function Camera({
 
     const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height)
     const results = pipeline.processFrame(imageData.data, canvas.width, canvas.height)
-    const pipValues = results.map((r) => r.blobCount ?? 1)
+
+    // Update cluster count for progress display
+    setClusterCount(pipeline.state.clusters.length)
+
+    // Map results to pip values: prefer labeled cluster value, fall back to blob count
+    const pipValues = results.map((r) => {
+      const cluster = pipeline.state.clusters.find((c) => c.id === r.clusterId)
+      const blobPip = r.blobCount && r.blobCount > 0 ? r.blobCount : 1
+      return cluster?.pipValue ?? blobPip
+    })
+
     setDetected(pipValues)
   }
 
@@ -84,6 +119,16 @@ export function Camera({
     if (!detected) return
     onCapture(detected)
     setDetected(null)
+
+    // After confirming a roll, check if labeling should now be triggered
+    if (!labeledClusters && !captureOnly) {
+      const clusters = pipeline.state.clusters
+      const isStable =
+        clusters.length >= 6 && clusters.every((c) => c.exemplars.length >= STABLE_EXEMPLAR_COUNT)
+      if (isStable) {
+        setShowLabeling(true)
+      }
+    }
   }
 
   function handleRetake() {
@@ -95,6 +140,21 @@ export function Camera({
     setDetected(detected.map((v, i) => (i === index ? Math.min(6, Math.max(1, v + delta)) : v)))
   }
 
+  function handleLabelingComplete(labels: Map<string, number>) {
+    for (const [clusterId, pipValue] of labels) {
+      pipeline.labelCluster(clusterId, pipValue)
+    }
+    setLabeledClusters(true)
+    setShowLabeling(false)
+
+    if (diceSetId) {
+      void saveClusterSet(diceSetId, {
+        clusters: pipeline.state.clusters,
+        updatedAt: Date.now(),
+      })
+    }
+  }
+
   if (error) {
     return (
       <div className="rounded-lg bg-slate-900 border border-slate-800 p-6 text-center">
@@ -103,6 +163,11 @@ export function Camera({
     )
   }
 
+  // Which clusters still need labeling
+  const unlabeledClusters: Cluster[] = pipeline.state.clusters.filter(
+    (c) => c.pipValue === null,
+  )
+
   return (
     <div className="space-y-4">
       <div className="relative rounded-lg overflow-hidden bg-slate-900 aspect-square">
@@ -110,7 +175,12 @@ export function Camera({
         <canvas ref={canvasRef} className="hidden" />
       </div>
 
-      {!calibrated && !captureOnly ? (
+      {showLabeling ? (
+        <ClusterLabelingScreen
+          clusters={unlabeledClusters}
+          onComplete={handleLabelingComplete}
+        />
+      ) : !calibrated && !captureOnly ? (
         <div className="space-y-2">
           <p className="text-center text-slate-400 text-sm">
             Point camera at the empty surface where you'll roll, then tap to calibrate.
@@ -180,12 +250,39 @@ export function Camera({
           </div>
         </div>
       ) : (
-        <button
-          onClick={handleCapture}
-          className="w-full py-3 rounded-lg bg-amber-400 text-slate-950 font-bold text-lg hover:bg-amber-300 transition-colors"
-        >
-          {captureLabel ?? 'Capture'}
-        </button>
+        <div className="space-y-3">
+          <button
+            onClick={handleCapture}
+            className="w-full py-3 rounded-lg bg-amber-400 text-slate-950 font-bold text-lg hover:bg-amber-300 transition-colors"
+          >
+            {captureLabel ?? 'Capture'}
+          </button>
+
+          {/* Cluster progress — shown while rolling, hidden once labeled */}
+          {calibrated && !captureOnly && clusterCount > 0 && (
+            <div className="space-y-1">
+              {labeledClusters ? (
+                <p className="text-center text-emerald-400 text-sm">
+                  ✓ Dice calibrated — full recognition active
+                </p>
+              ) : (
+                <>
+                  <p className="text-center text-slate-400 text-sm">
+                    {clusterCount >= 6
+                      ? 'All faces seen — label after next confirm'
+                      : `Faces seen: ${clusterCount} of 6 — keep rolling`}
+                  </p>
+                  <div className="w-full bg-slate-800 rounded-full h-1.5">
+                    <div
+                      className="bg-amber-400 h-1.5 rounded-full transition-all"
+                      style={{ width: `${Math.min((clusterCount / 6) * 100, 100)}%` }}
+                    />
+                  </div>
+                </>
+              )}
+            </div>
+          )}
+        </div>
       )}
     </div>
   )

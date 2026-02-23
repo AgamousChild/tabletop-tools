@@ -20,9 +20,12 @@ import { addToCluster, labelCluster as doLabelCluster } from './cluster'
 import type { Cluster } from './cluster'
 import { detectBlobs } from './blobDetector'
 import { extractRois } from './isolate'
+import type { Roi } from './isolate'
 import { dilate, resizeTo64 } from './normalize'
 
 export interface RoiResult {
+  /** Bounding box of this die face in the original frame */
+  roi: Roi
   /** Internal cluster identifier (maps to a pip value after labeling) */
   clusterId: string
   /** Pip count from the SimpleBlobDetector (null if detection failed) */
@@ -121,7 +124,7 @@ export function createPipeline(diceSetId: string): Pipeline {
 
       const blobCount = detectBlobs(normalized)
 
-      results.push({ clusterId, blobCount, normalized })
+      results.push({ roi, clusterId, blobCount, normalized })
     }
 
     return results

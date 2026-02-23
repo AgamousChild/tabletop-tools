@@ -110,7 +110,7 @@ describe('pipeline', () => {
     expect(result).toHaveLength(2)
   })
 
-  it('each result has a clusterId and a blobCount', () => {
+  it('each result has a roi, clusterId and a blobCount', () => {
     const pipeline = createPipeline('set-1')
     const bgData = makeRgbaBuffer(W, H, [])
     pipeline.captureBackground(bgData, W, H)
@@ -119,6 +119,7 @@ describe('pipeline', () => {
       { x: 30, y: 30, size: 45, pips: [[52, 52]] },
     ])
     const result = pipeline.processFrame(frameData, W, H)
+    expect(result[0]).toHaveProperty('roi')
     expect(result[0]).toHaveProperty('clusterId')
     expect(result[0]).toHaveProperty('blobCount')
   })
