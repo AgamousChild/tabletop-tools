@@ -24,7 +24,7 @@ full dataset. That's the whole premise.
 | DB schema (playerGlicko, glickoHistory, detachment) | ✅ built + tested |
 | packages/game-content CSV parsers (detachment, playerName) | ✅ built + tested |
 | Server — all routers + lib | ✅ built + tested (51 tests) |
-| Client — pages + components | 🔲 scaffold only (no logic wired) |
+| Client — pages + components | ✅ built + tested (71 tests) |
 
 ---
 

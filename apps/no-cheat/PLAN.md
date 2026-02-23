@@ -35,15 +35,12 @@ check, diceSet, session, vision, and savePhoto routers all wired. 3 trpc tests p
 
 ---
 
-## Phase 5: Dice Sets
+## Phase 5: Dice Sets ✅ complete
 
-- [ ] Implement `diceSet.create(name)` procedure
-- [ ] Implement `diceSet.list()` procedure
-- [ ] Write tests for both procedures
-- [ ] Build dice set creation UI
-- [ ] Build dice set selection screen (the home screen after login)
+`diceSet.create` and `diceSet.list` implemented and tested (covered in 50 server tests).
+Client: CreateDiceSetForm, DiceSetList, DiceSetScreen wired and tested (covered in 66 client tests).
 
-**Exit criteria:** A user can create a named dice set and see it listed on login.
+**Exit criteria met:** A user can create a named dice set and see it listed on login.
 
 ---
 

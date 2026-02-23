@@ -35,12 +35,13 @@ tabletop-tools/
 
 | App | Dir | Port | Status | Purpose |
 |---|---|---|---|---|
-| no-cheat | `apps/no-cheat` | 3001 | scaffold + schema done | Detect loaded dice via CV + statistics |
-| versus | `apps/versus` | 3002 | not started | Combat simulator — unit vs unit math |
-| list-builder | `apps/list-builder` | 3003 | not started | Meta list builder with live unit ratings |
-| game-tracker | `apps/game-tracker` | 3004 | not started | Turn-by-turn match recorder |
-| tournament | `apps/tournament` | 3005 | not started | Full tournament management platform |
-| new-meta | `apps/new-meta` | 3006 | scaffold only | Warhammer 40K meta analytics |
+| auth-server | `apps/auth-server` | 3000 | Done | Central Better Auth — shared login for all apps |
+| no-cheat | `apps/no-cheat` | 3001 | Phases 1–7 done (116 tests); Phase 8 (CV) next | Detect loaded dice via CV + statistics |
+| versus | `apps/versus` | 3002 | Scaffold only | Combat simulator — unit vs unit math |
+| list-builder | `apps/list-builder` | 3003 | Scaffold only | Meta list builder with live unit ratings |
+| game-tracker | `apps/game-tracker` | 3004 | Scaffold only | Turn-by-turn match recorder |
+| tournament | `apps/tournament` | 3005 | Scaffold only | Full tournament management platform |
+| new-meta | `apps/new-meta` | 3006 | Done (122 tests) | Warhammer 40K meta analytics |
 
 Each app has its own `CLAUDE.md` with full spec, architecture, schema, and implementation plan.
 
