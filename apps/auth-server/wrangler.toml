@@ -8,7 +8,10 @@ compatibility_flags = ["nodejs_compat"]
 #   wrangler secret put TURSO_AUTH_TOKEN
 #   wrangler secret put AUTH_SECRET
 
-# Variables — set in wrangler.toml or Cloudflare dashboard
 [vars]
-AUTH_BASE_URL = "https://tabletop-tools-auth.workers.dev"
-# TRUSTED_ORIGINS = "https://no-cheat.pages.dev,https://tournament.pages.dev,..."
+AUTH_BASE_URL = "https://auth.tabletop-tools.net"
+TRUSTED_ORIGINS = "https://no-cheat.tabletop-tools.net,https://new-meta.tabletop-tools.net,https://tournament.tabletop-tools.net,https://versus.tabletop-tools.net,https://list-builder.tabletop-tools.net,https://game-tracker.tabletop-tools.net"
+
+[[routes]]
+pattern = "auth.tabletop-tools.net/*"
+zone_name = "tabletop-tools.net"

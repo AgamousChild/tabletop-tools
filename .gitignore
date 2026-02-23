@@ -11,9 +11,10 @@ dist
 *.db-shm
 *.db-wal
 
-# TypeScript build artifacts in src/ (from tsc without outDir)
+# TypeScript build artifacts
 *.tsbuildinfo
 *.d.ts.map
+dist-node/
 
 # Debug artifacts
 debug-images/
