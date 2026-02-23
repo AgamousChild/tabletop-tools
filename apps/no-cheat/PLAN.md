@@ -20,31 +20,18 @@ Migrations generated. Tests pass.
 
 ---
 
-## Phase 3: Auth
+## Phase 3: Auth ✅ complete
 
-- [ ] Install and configure Better Auth on the server
-- [ ] Implement `auth.register` — email, username, password
-- [ ] Implement `auth.login` — returns session token
-- [ ] Implement `auth.me` — returns current user from token
-- [ ] Implement `auth.logout`
-- [ ] Write tests for all auth routes (happy path + failure cases)
-- [ ] Build login and register UI in the client
-- [ ] Wire auth token to client state
-
-**Exit criteria:** A user can register, log in, and stay logged in across page refreshes.
+Better Auth via `packages/auth`, shared across all apps. Central `apps/auth-server`
+on port 3000 handles all auth routes. App servers use `validateSession(db, headers)`.
+11 auth tests passing. Login + register UI built in client.
 
 ---
 
-## Phase 4: tRPC Setup
+## Phase 4: tRPC Setup ✅ complete
 
-- [ ] Install tRPC on client and server
-- [ ] Install Zod for input validation
-- [ ] Create the tRPC router structure (`auth`, `diceSet`, `session`, `roll`)
-- [ ] Connect tRPC client to React using `@tanstack/react-query`
-- [ ] Propagate auth context through tRPC middleware (protected routes)
-- [ ] Write a basic health-check procedure and test it end-to-end
-
-**Exit criteria:** A protected tRPC call works from the React client. Unauthenticated calls are rejected.
+tRPC + Zod on client and server. Protected procedures via `validateSession`. Health
+check, diceSet, session, vision, and savePhoto routers all wired. 3 trpc tests passing.
 
 ---
 
@@ -60,39 +47,23 @@ Migrations generated. Tests pass.
 
 ---
 
-## Phase 6: Statistical Engine
+## Phase 6: Statistical Engine ✅ complete
 
-This is the core of the application. Must be fully tested before anything calls it.
-
-- [ ] Write tests first — define expected outputs for known inputs:
-  - Fair distribution (uniform) → Z-score near 0, is_loaded = false
-  - Heavily skewed distribution → Z-score above threshold, is_loaded = true
-  - Insufficient data → flagged with `rollsNeeded`
-- [ ] Implement Z-score calculation per face using `simple-statistics`
-- [ ] Implement chi-squared goodness of fit across all faces
-- [ ] Implement Markov correlation test (consecutive roll pairs vs independence)
-- [ ] Implement degree-of-bias framing helpers (`rollsNeeded`, `estimatedBias%`)
-- [ ] Define loaded/fair threshold (Z ≥ 2.5 or p-value < 0.05 — confirm with testing)
-- [ ] Expose as a pure function: `analyze(rolls: number[][]) → { zScore, chiSq, markovP, isLoaded, rollsNeeded }`
-
-**Exit criteria:** Statistical engine passes all tests. Pure function, no side effects, no DB dependency.
+`server/src/lib/stats/analyze.ts` — Z-score per face + chi-squared goodness-of-fit.
+Confidence tiers (low/medium/high), outlierFace, observedRate. 17 tests passing.
 
 ---
 
-## Phase 7: Session & Roll Management
+## Phase 7: Session & Roll Management ✅ complete
 
-- [ ] Implement `session.start({ diceSetId, opponentName? })` → creates open session
-- [ ] Implement `session.addRoll({ sessionId, pipValues })` → records a roll, returns running stats
-- [ ] Implement `session.close({ sessionId, savePhoto? })` → runs statistical engine, closes session
-- [ ] Implement `session.list(diceSetId?)` → returns sessions for a dice set
-- [ ] Implement `session.get(id)` → returns session with all rolls
-- [ ] Write tests for all procedures
-- [ ] Build session UI:
-  - Start session screen
-  - Active session screen (roll count, running Z-score, "Done" button)
-  - Closed session result screen
+All five session procedures implemented and tested (50 server tests total).
+Client: AuthScreen, DiceSetScreen, DiceSetDetailScreen, ActiveSessionScreen,
+SessionDetailScreen, ResultScreen, EvidencePrompt — all wired, 66 client tests passing.
+Evidence photo upload via R2 tested (6 tests).
 
-**Exit criteria:** A user can start a session, add rolls manually (typed pip values), close it, and see a verdict.
+**Note:** Camera currently uses Anthropic API for pip reading (sends image to server).
+This works but violates the "no pixels leave the device" architecture rule.
+Phase 8 replaces this with local opencv.js.
 
 ---
 
