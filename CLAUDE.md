@@ -36,7 +36,7 @@ tabletop-tools/
 | App | Dir | Port | Status | Purpose |
 |---|---|---|---|---|
 | auth-server | `apps/auth-server` | 3000 | Done | Central Better Auth — shared login for all apps |
-| no-cheat | `apps/no-cheat` | 3001 | Phases 1–7 done (116 tests); Phase 8 (CV) next | Detect loaded dice via CV + statistics |
+| no-cheat | `apps/no-cheat` | 3001 | Phases 1–9 done (194 tests); deployment next | Detect loaded dice via CV + statistics |
 | versus | `apps/versus` | 3002 | Scaffold only | Combat simulator — unit vs unit math |
 | list-builder | `apps/list-builder` | 3003 | Scaffold only | Meta list builder with live unit ratings |
 | game-tracker | `apps/game-tracker` | 3004 | Scaffold only | Turn-by-turn match recorder |

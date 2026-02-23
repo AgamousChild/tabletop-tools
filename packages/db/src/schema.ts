@@ -91,6 +91,24 @@ export const rolls = sqliteTable('rolls', {
   createdAt: integer('created_at').notNull(),
 })
 
+// === Versus tables ===
+//
+// IMPORTANT: No foreign keys into game content.
+// attacker_content_id / defender_content_id are plain TEXT.
+
+export const simulations = sqliteTable('simulations', {
+  id: text('id').primaryKey(),
+  userId: text('user_id')
+    .notNull()
+    .references(() => authUsers.id),
+  attackerContentId: text('attacker_content_id').notNull(),
+  attackerName: text('attacker_name').notNull(),
+  defenderContentId: text('defender_content_id').notNull(),
+  defenderName: text('defender_name').notNull(),
+  result: text('result').notNull(),  // JSON — full simulation output
+  createdAt: integer('created_at').notNull(),
+})
+
 // === List Builder tables ===
 //
 // IMPORTANT: No foreign keys into game content.

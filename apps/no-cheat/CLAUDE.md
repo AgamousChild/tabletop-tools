@@ -38,17 +38,17 @@ no-cheat is the founding app of the Tabletop Tools platform.
 All image processing runs **in the browser**. No image data or pixel data ever leaves
 the device. The server only receives pip counts (an array of integers) and computes
 statistics. No AI API calls are made anywhere in this app — clustering and template
-matching are pure opencv.js + JS.
+matching are pure TypeScript, no WASM, no opencv.js.
 
 ```
 ┌──────────────────────────────────────────────────────┐
 │  Tier 1: React Client (browser)                      │
 │                                                      │
 │  ┌─── CV Pipeline (runs per frame) ────────────────┐ │
-│  │  opencv.js (WASM)                               │ │
+│  │  Pure TypeScript — no WASM, no opencv.js        │ │
 │  │  1. LAB absdiff against calibration background  │ │
-│  │  2. Otsu threshold → contour detection          │ │
-│  │  3. Center-proximity merge → top face ROI       │ │
+│  │  2. Otsu threshold → BFS connected-components   │ │
+│  │  3. Union-find centroid merge → top face ROI    │ │
 │  │  4. Per-face: normalize 64×64, dilation         │ │
 │  │  5a. Cluster match: rotation-invariant template │ │
 │  │      matching → agglomerative clustering        │ │
@@ -71,9 +71,8 @@ matching are pure opencv.js + JS.
                          │ (integers, never pixels)
 ┌────────────────────────▼─────────────────────────────┐
 │  Tier 2: tRPC Server                                 │
-│  - Auth router                                       │
 │  - Session router                                    │
-│  - Statistical engine (Z-score, chi-squared, Markov) │
+│  - Statistical engine (Z-score, chi-squared)         │
 │  - SQLite via Turso (edge DB)                        │
 └──────────────────────────────────────────────────────┘
 ```
@@ -114,9 +113,9 @@ Capture background frame
 
 This background image is subtracted from every live frame to isolate the die.
 
-### Phase 1: Die face isolation (opencv.js)
+### Phase 1: Die face isolation
 
-Runs on every captured frame.
+Runs on every captured frame. Pure TypeScript — no opencv.js dependency.
 
 ```
 Camera frame (ImageData)
@@ -127,13 +126,11 @@ Camera frame (ImageData)
   ↓
   Otsu threshold → binary mask
   ↓
-  findContours on binary mask
+  BFS 4-connectivity flood-fill → connected components
+  Filter components: minimum area = 100 pixels (noise removal)
   ↓
-  For each die in scene:
-      Compute convex hull of all contours → find hull centroid
-      Find contour nearest to centroid
-      Merge contours within proximity threshold AND outside die-profile exclusion mask
-      → top face ROI
+  Union-find merge: components whose centroids are within 20px are merged
+  → bounding box per merged group = one die face ROI
   ↓
   Per die face:
       Extract ROI → resize to 64×64
@@ -141,10 +138,6 @@ Camera frame (ImageData)
       ↓
       [Go to Phase 2a or 2b]
 ```
-
-The die profile exclusion mask prevents the outer die body from being merged into
-the top face region. Its dimensions are a parameter of the die type (d6 has different
-proportions than d10).
 
 ### Phase 2a: Agglomerative clustering with rotation-invariant template matching
 
@@ -186,13 +179,11 @@ Used before clusters are established, or as a cross-check for d6.
 ```
 64×64 normalized die face ROI
   ↓
-  SimpleBlobDetector with:
+  BFS blob detection with filters:
       filterByArea:        minArea=20, maxArea=600
       filterByCircularity: minCircularity=0.5
-      filterByInertia:     minInertiaRatio=0.4
-      threshold range:     10–200 (stepped by 10)
   ↓
-  Count keypoints → pip value (1–6)
+  Count blobs → pip value (1–6)
   If count > 6 → reject as false detection
 ```
 
@@ -342,46 +333,44 @@ Auth tables (users, sessions, accounts) are shared via `packages/auth` / `packag
 
 ## tRPC Routers
 
-```typescript
-// Auth
-auth.register(email, username, password)
-auth.login(email, password)     → session token
-auth.me()                       → current user
+Auth is handled by Better Auth HTTP routes (not tRPC). The tRPC routers are:
 
+```typescript
 // Dice Sets
 diceSet.create(name)
 diceSet.list()
 
 // Sessions
-session.start({ diceSetId, opponentName? })   → session
-session.addRoll({ sessionId, pipValues })      → { rollCount, zScoreSoFar, markovP }
-session.close({ sessionId, savePhoto? })       → { zScore, chiSq, markovP, isLoaded, rollsNeeded }
-session.list(diceSetId?)
-session.get(id)                                → session + all rolls
+session.start({ diceSetId, opponentName? })        → session
+session.addRoll({ sessionId, pipValues })           → { rollCount, zScore }
+session.close({ sessionId })                        → { zScore, isLoaded, outlierFace, observedRate, rollCount }
+session.list({ diceSetId? })                        → session[]
+session.get({ sessionId })                          → { session, rolls }
+session.savePhoto({ sessionId, imageData })         → { photoUrl }
 ```
+
+`savePhoto` requires the session to be closed and `isLoaded = true`. `imageData` is a base64 JPEG string. The photo is uploaded to Cloudflare R2 and the URL stored on the session record.
 
 ---
 
 ## Statistical Engine
 
-Three tests run on every session close:
+All analysis runs in `server/src/lib/stats/analyze.ts`. Called on every `addRoll` (running Z-score)
+and again on `close` (final verdict).
 
 **Chi-squared test** — are face frequencies significantly non-uniform?
 - Expected: each face ~1/6 of all rolls
-- Reports: chi-sq statistic, p-value, which face is most biased
+- Used internally to identify the outlier face; not separately exposed in the return value
 
-**Z-score on high face** — is one specific face rolled significantly more than expected?
-- Targeted at 6-bias (the most common loaded die pattern)
-- Reports: observed %, expected %, Z-score
+**Z-score on outlier face** — is the most-biased face rolled significantly more than expected?
+- Identifies which face is the most skewed, then computes Z-score for that face's frequency
+- Returns: `zScore`, `outlierFace` (1–6), `observedRate` (fraction of rolls showing that face)
 
-**Markov correlation test** — are consecutive rolls correlated?
-- Physical loading can create temporal patterns (e.g. heavy side always follows heavy side)
-- Test: count pairs (roll[N], roll[N+1]), compare to independence assumption
-- Reports: correlation p-value
+**Verdict** — `isLoaded: boolean` — true when Z-score exceeds the loaded threshold
 
 **Degree-of-bias framing** — shown alongside the result:
 - If fair: "At this bias level, you'd need ~N more rolls before a signal would appear"
-- If loaded: "Estimated N% more likely to roll 6 than a fair die"
+- If loaded: "Estimated N% more likely to roll [face] than a fair die"
 - Avoids false confidence from small sample sizes
 
 ---
@@ -401,10 +390,9 @@ Login (once)
     → Lay all dice flat, in frame
     → Tap to capture frame
     → Browser pipeline runs (< 200ms):
-        opencv.js → LAB absdiff → isolate each die face
-        Clustering engine → match or assign to cluster → pip value (or cluster ID)
-        Annotated preview shown: each die outlined, pip count (or cluster label) overlaid
-    → Confirm result (tap) or correct any misread die
+        LAB absdiff → BFS isolation → normalize → cluster match → pip value (or cluster ID)
+    → Detected pip count shown ("1 die detected — pip value: 4")
+    → Confirm result (tap)
     → Confirmed pip_values[] sent to server
     → Running Z-score shown ("Roll 4 of your session")
     → Frame discarded immediately — image never stored or transmitted
@@ -418,7 +406,7 @@ Login (once)
 
   CLOSE SESSION:
     → Tap "Done"
-    → Final statistics computed: Z-score, chi-squared, Markov correlation
+    → Final statistics computed: Z-score, chi-squared (internal)
 
     IF FAIR:
       → "These dice look fair"
@@ -489,40 +477,45 @@ Tests are written before the code. See root CLAUDE.md for the full TDD workflow.
 
 Tests live next to the code they test:
 
+**Server:**
 ```
-src/
-  lib/
-    stats/
-      zscore.ts
-      zscore.test.ts
-      chiSquared.ts
-      chiSquared.test.ts
-      markov.ts              ← temporal correlation test
-      markov.test.ts
-      degreesOfBias.ts       ← sample-size framing helpers
-      degreesOfBias.test.ts
-    cv/
-      background.ts          ← LAB calibration capture + absdiff
-      background.test.ts     ← synthetic LAB images
-      isolate.ts             ← contour detection, center-proximity merge, top face ROI
-      isolate.test.ts        ← synthetic binary images with known contour layouts
-      normalize.ts           ← resize to 64×64, dilation
-      normalize.test.ts
-      blobDetector.ts        ← SimpleBlobDetector d6 fallback
-      blobDetector.test.ts   ← known pip layouts as binary image fixtures
-      templateMatch.ts       ← rotation-invariant template matching (coarse + fine)
-      templateMatch.test.ts  ← synthetic 64×64 images, verify rotation invariance
-      cluster.ts             ← agglomerative clustering engine
-      cluster.test.ts        ← verify merge/new-cluster decisions, label assignment
-      pipeline.ts            ← compose all stages → pip_values[]
-      pipeline.test.ts       ← end-to-end with synthetic fixtures
-    store/
-      exemplarStore.ts       ← IndexedDB read/write for cluster exemplars
-      exemplarStore.test.ts  ← mocked IndexedDB
+server/src/lib/
+  stats/
+    analyze.ts             ← all stats: Z-score, chi-squared, verdict, observedRate
+    analyze.test.ts        ← 16 tests
+  storage/
+    r2.ts                  ← Cloudflare R2 upload helper
+    r2.test.ts
 ```
 
-The statistical engine must be fully tested. Z-score, chi-squared, Markov correlation,
-degree-of-bias framing — all covered before any of that code ships.
+**Client:**
+```
+client/src/lib/
+  cv/
+    background.ts          ← LAB calibration capture + absdiff
+    background.test.ts     ← synthetic LAB images
+    isolate.ts             ← BFS connected-components + union-find merge → ROIs
+    isolate.test.ts        ← synthetic binary images with known blob layouts
+    normalize.ts           ← resize to 64×64, dilation
+    normalize.test.ts
+    blobDetector.ts        ← BFS blob detector: area + circularity filter
+    blobDetector.test.ts   ← known pip layouts as binary image fixtures
+    templateMatch.ts       ← rotation-invariant template matching (coarse + fine)
+    templateMatch.test.ts  ← synthetic 64×64 images, verify rotation invariance
+    cluster.ts             ← agglomerative clustering engine
+    cluster.test.ts        ← verify merge/new-cluster decisions, label assignment
+    imageUtils.ts          ← grayscale conversion, LAB helpers
+    imageUtils.test.ts
+    pipReader.ts           ← compose blob detection → pip count
+    pipReader.test.ts
+    pipeline.ts            ← compose all stages → RoiResult[]
+    pipeline.test.ts       ← end-to-end with synthetic fixtures
+  store/
+    exemplarStore.ts       ← IndexedDB read/write for cluster exemplars
+    exemplarStore.test.ts  ← mocked IndexedDB
+```
+
+The statistical engine is fully covered. Z-score and chi-squared tested in `analyze.test.ts`.
 
 The CV pipeline must be tested with synthetic image fixtures (programmatically
 generated binary images with circles at known positions). Never use real photos of
