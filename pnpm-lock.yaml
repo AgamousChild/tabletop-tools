@@ -215,6 +215,9 @@ importers:
       '@tabletop-tools/db':
         specifier: workspace:*
         version: link:../../../packages/db
+      '@tabletop-tools/game-content':
+        specifier: workspace:*
+        version: link:../../../packages/game-content
       '@trpc/server':
         specifier: ^11.0.0
         version: 11.10.0(typescript@5.9.3)
