@@ -176,7 +176,7 @@ export function ActiveSessionScreen({ diceSet, onDone }: Props) {
           </button>
         </div>
 
-        <Camera onCapture={handleCapture} />
+        <Camera onCapture={handleCapture} diceSetId={diceSet.id} />
 
         {addRollMutation.isPending && (
           <p className="text-center text-slate-400 text-sm">Recording roll…</p>
