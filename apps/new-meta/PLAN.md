@@ -55,11 +55,11 @@ Protected — requires authenticated session.
 
 ---
 
-## Phase 7: Deployment
+## Phase 7: Deployment ✅ infrastructure ready
 
-- [ ] Configure Cloudflare Workers for the tRPC server (port 3006)
-- [ ] Configure Cloudflare Pages for the React client
-- [ ] Set environment variables (Turso connection, auth secrets)
+- [x] Configure Cloudflare Workers for the tRPC server — `server/wrangler.toml` + `server/src/worker.ts`
+- [x] Configure Cloudflare Pages for the React client — `client/wrangler.toml` + `client/functions/trpc/[[path]].ts`
+- [ ] Set environment variables — `wrangler secret put TURSO_DB_URL` + `wrangler secret put TURSO_AUTH_TOKEN`
 - [ ] Run full end-to-end test on deployed environment with a real CSV import
 
 **Exit criteria:** new-meta is live. An admin can import a tournament CSV and see results in the dashboard within seconds.

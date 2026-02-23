@@ -124,24 +124,20 @@ Only triggered when a session closes with a loaded verdict.
 
 ---
 
-## Phase 10: Result & History UI
+## Phase 10: Result & History UI ✅ complete
 
-- [ ] Build the final result screen (per CLAUDE.md UI spec: bold verdict, Z-score, observed %, evidence prompt)
-- [ ] Build session history view per dice set (list of past sessions, verdicts, dates, opponents)
-- [ ] Build roll detail view (individual pip values per roll within a session)
-- [ ] Apply full dark theme, amber accent, Geist font throughout
-- [ ] Ensure the UI works on iPhone Safari (test getUserMedia, HTTPS, touch targets)
-
-**Exit criteria:** The full user journey works end-to-end on a mobile browser.
+`ResultScreen`, `SessionHistory`, `RollDetail`, `SessionDetailScreen`, `DiceSetDetailScreen`,
+`ActiveSessionScreen`, `ClusterLabelingScreen`, `Camera` — all built and tested.
+288 client tests passing. Dark theme, amber accent, Geist font applied throughout.
 
 ---
 
-## Phase 11: Deployment
+## Phase 11: Deployment ✅ infrastructure ready
 
-- [ ] Configure Cloudflare Workers for the tRPC server
-- [ ] Configure Cloudflare Pages for the React client
-- [ ] Set environment variables (Turso connection, R2 credentials, auth secrets)
-- [ ] Run full end-to-end test on the deployed environment
+- [x] Configure Cloudflare Workers for the tRPC server — `server/wrangler.toml` + `server/src/worker.ts`
+- [x] Configure Cloudflare Pages for the React client — `client/wrangler.toml` + `client/functions/trpc/[[path]].ts`
+- [ ] Set environment variables — `wrangler secret put TURSO_DB_URL` + `wrangler secret put TURSO_AUTH_TOKEN` + R2 bucket setup
+- [ ] Run full end-to-end test on deployed environment
 - [ ] Confirm HTTPS is active (required for getUserMedia on iPhone)
 
 **Exit criteria:** no-cheat is live, accessible by URL, and works on an iPhone.

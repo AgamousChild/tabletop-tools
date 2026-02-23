@@ -25,6 +25,7 @@ const makeUnit = (id: string, name = 'Test Unit', faction = 'Space Marines'): Un
 })
 
 const mockAdapter: GameContentAdapter = {
+  load: vi.fn().mockResolvedValue(undefined),
   getUnit: vi.fn(),
   searchUnits: vi.fn(),
   listFactions: vi.fn(),

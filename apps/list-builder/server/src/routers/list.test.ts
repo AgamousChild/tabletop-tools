@@ -25,6 +25,7 @@ const makeUnit = (id: string, name = 'Test Unit', points = 100): UnitProfile => 
 })
 
 const mockAdapter: GameContentAdapter = {
+  load: vi.fn().mockResolvedValue(undefined),
   getUnit: vi.fn(),
   searchUnits: vi.fn(),
   listFactions: vi.fn(),

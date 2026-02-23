@@ -53,6 +53,7 @@ export interface UnitProfile {
 // ============================================================
 
 export interface GameContentAdapter {
+  load(): Promise<void>
   getUnit(id: string): Promise<UnitProfile | null>
   searchUnits(query: { faction?: string; name?: string }): Promise<UnitProfile[]>
   listFactions(): Promise<string[]>

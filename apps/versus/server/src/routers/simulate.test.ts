@@ -42,6 +42,7 @@ function makeUnit(id: string, overrides: Partial<UnitProfile> = {}): UnitProfile
 }
 
 const mockAdapter: GameContentAdapter = {
+  load: vi.fn().mockResolvedValue(undefined),
   getUnit: vi.fn(),
   searchUnits: vi.fn(),
   listFactions: vi.fn(),

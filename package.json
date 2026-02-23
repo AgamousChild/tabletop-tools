@@ -12,7 +12,13 @@
     "build": "pnpm -r --filter '*-client' build",
     "test": "pnpm -r test",
     "lint": "eslint apps/*/server/src apps/*/client/src packages --ext .ts,.tsx",
-    "lint:fix": "eslint apps/*/server/src apps/*/client/src packages --ext .ts,.tsx --fix"
+    "lint:fix": "eslint apps/*/server/src apps/*/client/src packages --ext .ts,.tsx --fix",
+    "deploy:no-cheat": "pnpm --filter no-cheat-server wrangler deploy && pnpm --filter no-cheat-client wrangler pages deploy dist",
+    "deploy:versus": "pnpm --filter versus-server wrangler deploy && pnpm --filter versus-client wrangler pages deploy dist",
+    "deploy:list-builder": "pnpm --filter list-builder-server wrangler deploy && pnpm --filter list-builder-client wrangler pages deploy dist",
+    "deploy:game-tracker": "pnpm --filter game-tracker-server wrangler deploy && pnpm --filter game-tracker-client wrangler pages deploy dist",
+    "deploy:tournament": "pnpm --filter tournament-server wrangler deploy && pnpm --filter tournament-client wrangler pages deploy dist",
+    "deploy:new-meta": "pnpm --filter new-meta-server wrangler deploy && pnpm --filter new-meta-client wrangler pages deploy dist"
   },
   "devDependencies": {
     "@typescript-eslint/eslint-plugin": "^7.0.0",
@@ -23,7 +29,8 @@
     "eslint-plugin-react-hooks": "^7.0.1",
     "eslint-plugin-simple-import-sort": "^12.1.1",
     "prettier": "^3.8.1",
-    "typescript": "^5.4.0"
+    "typescript": "^5.4.0",
+    "wrangler": "^3.0.0"
   },
   "engines": {
     "node": ">=20.0.0",
