@@ -27,8 +27,8 @@ no-cheat is the founding app of the Tabletop Tools platform.
 | Session & roll procedures | ✅ done — 44 tests |
 | Evidence photo upload (R2) | ✅ done — 6 tests |
 | Client UI (all screens wired) | ✅ done — 66 tests |
-| CV pipeline (opencv.js, local) | 🔲 not started — Camera uses Anthropic API as interim |
-| Clustering engine | 🔲 not started |
+| CV pipeline (pure TS, local) | ✅ done — 68 tests; Camera wired to local pipeline |
+| Clustering engine | ✅ done — agglomerative clustering + template matching |
 | Deployment (Cloudflare Workers + Pages) | 🔲 not started |
 
 ---
