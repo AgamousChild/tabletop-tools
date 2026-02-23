@@ -29,7 +29,7 @@ no-cheat is the founding app of the Tabletop Tools platform.
 | Client UI (all screens wired) | ✅ done — 66 tests |
 | CV pipeline (pure TS, local) | ✅ done — 83 tests; Camera wired, cluster progress + labeling UI built |
 | Clustering engine | ✅ done — agglomerative clustering + template matching + IDB persistence |
-| Deployment (Cloudflare Workers + Pages) | 🔲 not started |
+| Deployment (Cloudflare Workers + Pages) | ✅ worker.ts + wrangler.toml configured — run `wrangler deploy` + `wrangler pages deploy dist` |
 
 ---
 

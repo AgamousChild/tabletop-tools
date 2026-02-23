@@ -1,0 +1,14 @@
+name = "tabletop-tools-auth"
+main = "src/worker.ts"
+compatibility_date = "2024-09-23"
+compatibility_flags = ["nodejs_compat"]
+
+# Secrets — set via:
+#   wrangler secret put TURSO_DB_URL
+#   wrangler secret put TURSO_AUTH_TOKEN
+#   wrangler secret put AUTH_SECRET
+
+# Variables — set in wrangler.toml or Cloudflare dashboard
+[vars]
+AUTH_BASE_URL = "https://tabletop-tools-auth.workers.dev"
+# TRUSTED_ORIGINS = "https://no-cheat.pages.dev,https://tournament.pages.dev,..."

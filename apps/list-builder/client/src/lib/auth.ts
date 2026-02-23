@@ -1,3 +1,4 @@
+/// <reference types="vite/client" />
 import { createAuthClient } from 'better-auth/react'
 
 const AUTH_SERVER_URL =

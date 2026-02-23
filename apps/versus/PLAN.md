@@ -57,12 +57,12 @@ removed / best+worst case → save result.
 
 ---
 
-## Phase 7: Deployment
+## Phase 7: Deployment ✅ infrastructure ready
 
-- [ ] Configure Cloudflare Workers for the tRPC server
-- [ ] Configure Cloudflare Pages for the React client
-- [ ] Set environment variables (`BSDATA_DIR`, Turso connection, auth secrets)
-- [ ] Confirm `NullAdapter` fallback works if `BSDATA_DIR` is not set
+- [x] Configure Cloudflare Workers for the tRPC server — `server/wrangler.toml` + `server/src/worker.ts` (uses NullAdapter — no BSDATA_DIR on Workers)
+- [x] Configure Cloudflare Pages for the React client — `client/wrangler.toml` + `client/functions/trpc/[[path]].ts`
+- [ ] Set environment variables — `wrangler secret put TURSO_DB_URL` + `wrangler secret put TURSO_AUTH_TOKEN`
+- [x] `NullAdapter` fallback confirmed — used in worker.ts when no BSDATA_DIR
 - [ ] Run full end-to-end test on deployed environment
 
 **Exit criteria:** Versus is live and accessible by URL.

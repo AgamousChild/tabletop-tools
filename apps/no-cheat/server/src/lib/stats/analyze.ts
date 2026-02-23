@@ -1,5 +1,3 @@
-import { chiSquaredGoodnessOfFit } from 'simple-statistics'
-
 const FACES = [1, 2, 3, 4, 5, 6]
 const EXPECTED_FREQ = 1 / FACES.length // ~0.1667 per face
 
@@ -58,18 +56,18 @@ export function analyze(rolls: number[][]): AnalysisResult {
   const outlierFace = FACES[outlierIdx]!
   const observedRate = counts[outlierFace] / n
 
-  // Also run a chi-squared goodness-of-fit test as a secondary check
-  const observedCounts = FACES.map((f) => counts[f])
-  const expectedCounts = FACES.map(() => n * EXPECTED_FREQ)
-  let chiSquaredP: number
-  try {
-    chiSquaredP = chiSquaredGoodnessOfFit(observedCounts, expectedCounts, 5)
-  } catch {
-    chiSquaredP = 1
-  }
+  // Chi-squared goodness-of-fit (df = 5 for 6 faces)
+  // Critical value at p = 0.05, df = 5 is 11.07
+  const CHI_SQ_CRITICAL = 11.07
+  const chiSq = FACES.reduce((sum, f) => {
+    const obs = counts[f] ?? 0
+    const exp = n * EXPECTED_FREQ
+    return sum + (obs - exp) ** 2 / exp
+  }, 0)
+  const chiSquaredSignificant = chiSq > CHI_SQ_CRITICAL
 
-  // Loaded if either: any face z-score is extreme, or chi-squared p < 0.05
-  const isLoaded = maxZ >= Z_THRESHOLD || chiSquaredP < 0.05
+  // Loaded if either: any face z-score is extreme, or chi-squared is significant
+  const isLoaded = maxZ >= Z_THRESHOLD || chiSquaredSignificant
 
   return {
     zScore: Math.round(maxZ * 100) / 100,

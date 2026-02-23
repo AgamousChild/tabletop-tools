@@ -14,6 +14,7 @@ export function createAuth(
   db: Db,
   baseURL = 'http://localhost:3000',
   trustedOrigins: string[] = [],
+  secret = process.env['AUTH_SECRET'] ?? 'dev-secret-change-in-production',
 ) {
   return betterAuth({
     baseURL,
@@ -32,7 +33,7 @@ export function createAuth(
       requireEmailVerification: false,
     },
     plugins: [username()],
-    secret: process.env['AUTH_SECRET'] ?? 'dev-secret-change-in-production',
+    secret,
   })
 }
 

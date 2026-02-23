@@ -70,11 +70,11 @@ avoidance, bye assignment, table numbers, win groups, unavoidable rematches.
 
 ---
 
-## Phase 10: Deployment
+## Phase 10: Deployment ✅ infrastructure ready
 
-- [ ] Configure Cloudflare Workers for the tRPC server
-- [ ] Configure Cloudflare Pages for the React client
-- [ ] Set environment variables (Turso connection, auth secrets)
+- [x] Configure Cloudflare Workers for the tRPC server — `server/wrangler.toml` + `server/src/worker.ts`
+- [x] Configure Cloudflare Pages for the React client — `client/wrangler.toml` + `client/functions/trpc/[[path]].ts`
+- [ ] Set environment variables (Turso connection, auth secrets) — run `wrangler secret put TURSO_DB_URL` + `wrangler secret put TURSO_AUTH_TOKEN` in server dir
 - [ ] Run full end-to-end test on deployed environment
 
 **Exit criteria:** Tournament is live and accessible by URL. A full event can be run from DRAFT to COMPLETE.

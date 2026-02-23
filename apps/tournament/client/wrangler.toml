@@ -1,0 +1,6 @@
+name = "tabletop-tools-tournament-client"
+pages_build_output_dir = "dist"
+
+[[services]]
+binding = "API"
+service = "tabletop-tools-tournament"

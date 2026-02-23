@@ -72,12 +72,12 @@ Actual R2 upload requires deployment configuration (Phase 9).
 
 ---
 
-## Phase 9: Deployment
+## Phase 9: Deployment ✅ infrastructure ready (R2 pending)
 
-- [ ] Configure Cloudflare Workers for the tRPC server
-- [ ] Configure Cloudflare Pages for the React client
-- [ ] Create and configure the R2 bucket for turn photos
-- [ ] Set environment variables (Turso connection, R2 credentials, auth secrets)
+- [x] Configure Cloudflare Workers for the tRPC server — `server/wrangler.toml` + `server/src/worker.ts` (uses NullR2Storage — no R2 binding yet)
+- [x] Configure Cloudflare Pages for the React client — `client/wrangler.toml` + `client/functions/trpc/[[path]].ts`
+- [ ] Create and configure the R2 bucket for turn photos — add `[[r2_buckets]]` binding in wrangler.toml
+- [ ] Set environment variables — `wrangler secret put TURSO_DB_URL` + `wrangler secret put TURSO_AUTH_TOKEN`
 - [ ] Run full end-to-end test on deployed environment
 
 **Exit criteria:** game-tracker is live. A full match can be tracked from setup to close.

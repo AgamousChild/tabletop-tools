@@ -6,6 +6,7 @@
   "scripts": {
     "dev": "drizzle-kit push && node --watch --import tsx/esm src/index.ts",
     "build": "tsc",
+    "deploy": "wrangler deploy",
     "test": "vitest run --passWithNoTests",
     "test:watch": "vitest",
     "db:push": "drizzle-kit push"

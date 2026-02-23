@@ -7,6 +7,8 @@ import type { GameContentAdapter, UnitProfile } from '../../types.js'
  * unit searches return empty arrays rather than crashing.
  */
 export class NullAdapter implements GameContentAdapter {
+  async load(): Promise<void> {}
+
   async getUnit(_id: string): Promise<UnitProfile | null> {
     return null
   }

@@ -1,0 +1,6 @@
+name = "tabletop-tools-versus-client"
+pages_build_output_dir = "dist"
+
+[[services]]
+binding = "API"
+service = "tabletop-tools-versus"
