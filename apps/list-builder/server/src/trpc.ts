@@ -1,5 +1,6 @@
 import { initTRPC, TRPCError } from '@trpc/server'
 import type { Db } from '@tabletop-tools/db'
+import type { GameContentAdapter } from '@tabletop-tools/game-content'
 
 export type User = {
   id: string
@@ -11,6 +12,7 @@ export type Context = {
   user: User | null
   req: Request
   db: Db
+  gameContent: GameContentAdapter
 }
 
 const t = initTRPC.context<Context>().create()

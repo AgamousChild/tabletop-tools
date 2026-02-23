@@ -15,86 +15,43 @@ All server routers and lib are built and tested (51 tests passing):
 - `lib/detachment.ts` — detachment extraction from BattleScribe / New Recruit / dash format
 - All tRPC routers: `meta`, `player`, `source`, `admin`
 
-Client scaffold exists (Vite + React), but no logic is wired yet.
+---
+
+## Phase 2: Dashboard Page ✅ complete
+
+`Dashboard.tsx` connected to `trpc.meta.factions()` and `trpc.meta.matchups()`.
+`FactionTable`, `MatchupMatrix`, `MetaWindowSelector` components built and tested.
+All filter by selected meta window.
 
 ---
 
-## Phase 2: Wire Dashboard Page
+## Phase 3: FactionDetail Page ✅ complete
 
-- [ ] Connect `Dashboard.tsx` to `trpc.meta.factions()`
-- [ ] Build `FactionTable` component: faction name, win rate, game count, color coding
-  - Win rate ≥ 55% → emerald
-  - Win rate ≤ 45% → red
-  - Otherwise → neutral
-- [ ] Connect `Dashboard.tsx` to `trpc.meta.matchups()`
-- [ ] Build `MatchupMatrix` component: N×N grid, mirror matches show —
-- [ ] Wire `MetaWindowSelector` dropdown to `trpc.meta.windows()`
-- [ ] All three components filter by selected meta window
-- [ ] Write component tests (mock tRPC, known faction/matchup data)
-
-**Exit criteria:** Dashboard loads faction table and matchup matrix, filtered by meta window.
+`FactionDetail.tsx` connected to `meta.faction`, `meta.detachments`, `meta.lists`,
+`meta.timeline`. `ListCard` component built.
 
 ---
 
-## Phase 3: Wire FactionDetail Page
+## Phase 4: PlayerRanking Page ✅ complete
 
-- [ ] Connect `FactionDetail.tsx` to `trpc.meta.faction({ faction })`
-- [ ] Show: faction win rate, game count, top detachments
-- [ ] Connect to `trpc.meta.detachments({ faction })`
-- [ ] Show detachment breakdown: name, win rate, game count
-- [ ] Connect to `trpc.meta.lists({ faction, limit? })`
-- [ ] Render army lists using `ListCard` component (collapsible text display)
-- [ ] Connect to `trpc.meta.timeline({ faction })`
-- [ ] Build weekly win rate chart (simple line chart or table)
-- [ ] Write component tests
-
-**Exit criteria:** Clicking a faction shows its full breakdown: detachments, top lists, win rate over time.
+`PlayerRanking.tsx` connected to `player.leaderboard()` and `player.search()`.
+`GlickoBar` component built — displays `rating ± 2×RD` uncertainty band.
 
 ---
 
-## Phase 4: Wire PlayerRanking Page
+## Phase 5: SourceData + TournamentDetail Pages ✅ complete
 
-- [ ] Connect `PlayerRanking.tsx` to `trpc.player.leaderboard()`
-- [ ] Build `GlickoBar` component: displays `rating ± 2×RD` — wide bar = uncertain player
-- [ ] Show ranked leaderboard: position, name, rating ± uncertainty, games played
-- [ ] Wire player search to `trpc.player.search({ name })`
-- [ ] Wire player profile link to `trpc.player.profile({ playerId })`
-- [ ] Build player profile view: rating history, recent results
-- [ ] Write component tests
-
-**Exit criteria:** Leaderboard shows all ranked players with Glicko-2 ratings and uncertainty bands. Player profiles load correctly.
+`SourceData.tsx` and `TournamentDetail.tsx` connected to `source.tournaments()`,
+`source.tournament()`, and `source.download()`. Download buttons wired for JSON + CSV.
 
 ---
 
-## Phase 5: Wire SourceData + TournamentDetail Pages
+## Phase 6: Admin Page ✅ complete
 
-- [ ] Connect `SourceData.tsx` to `trpc.source.tournaments()`
-- [ ] Show tournament list: name, date, player count, format, meta window
-- [ ] Link each tournament to `TournamentDetail.tsx`
-- [ ] Connect `TournamentDetail.tsx` to `trpc.source.tournament({ importId })`
-- [ ] Show all players + submitted lists for the event
-- [ ] Wire download buttons to `trpc.source.download({ importId, format })`
-  - JSON download: full parsed `TournamentRecord[]`
-  - CSV download: flattened records
-- [ ] Write component tests
+`Admin.tsx` connected to `admin.import()`, `admin.recomputeGlicko()`, `admin.linkPlayer()`.
+Protected — requires authenticated session.
 
-**Exit criteria:** Every imported tournament is browsable. Every record is downloadable. Radical transparency — nothing is hidden.
-
----
-
-## Phase 6: Wire Admin Page
-
-- [ ] Connect `Admin.tsx` to `trpc.admin.import(...)` — protected, auth required
-- [ ] Build CSV import form:
-  - CSV file input (paste or upload)
-  - Format selector: BCP | Tabletop Admiral | Generic
-  - Event name, event date, meta window label, min rounds, min players
-  - Submit → shows import summary: imported, skipped, errors, players updated
-- [ ] Wire "Recompute Glicko" button to `trpc.admin.recomputeGlicko()`
-- [ ] Wire player linking form to `trpc.admin.linkPlayer({ glickoId, userId })`
-- [ ] Ensure Admin page is only visible and accessible to authenticated users
-
-**Exit criteria:** Admin can import a CSV, see import results, trigger Glicko recomputation, and link anonymous player records to accounts.
+**Total: 71 client tests + 51 server tests = 122 tests.**
 
 ---
 

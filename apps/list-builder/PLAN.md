@@ -13,103 +13,63 @@
 
 ---
 
-## Phase 2: Scaffold
+## Phase 2: Scaffold ✅ complete
 
-- [ ] Scaffold `apps/list-builder/server/` — Hono + tRPC + TypeScript
-- [ ] Scaffold `apps/list-builder/client/` — Vite + React + TypeScript
-- [ ] Wire `packages/auth`, `packages/db`, `packages/ui` into both
-- [ ] Configure Vitest in both client and server
-- [ ] Confirm `pnpm dev`, `pnpm test`, and `pnpm build` all work
-
-**Exit criteria:** Blank app runs on port 3003. Tests run.
+`apps/list-builder/server/` and `apps/list-builder/client/` scaffolded.
+Hono + tRPC + TypeScript. Vite + React + TypeScript. Vitest in both.
+`packages/auth`, `packages/db`, `packages/ui`, `packages/game-content` wired.
 
 ---
 
-## Phase 3: Auth
+## Phase 3: Auth ✅ complete
 
-- [ ] Mount shared Better Auth handler from `packages/auth` on the server
-- [ ] Wire tRPC context to carry the authenticated user
-- [ ] Add `protectedProcedure` middleware — unauthenticated calls rejected
-- [ ] Build login and register UI in the client
-- [ ] Test: protected call accepted with valid session, rejected without
-
-**Exit criteria:** A user can log in and access a protected tRPC route.
+`validateSession` + `protectedProcedure` wired on server. `AuthScreen` built and tested
+on client (5 tests). All protected calls reject without a session.
 
 ---
 
-## Phase 4: Unit Browser (BSData)
+## Phase 4: Unit Browser (BSData) ✅ complete
 
-- [ ] Load `BSDataAdapter` (or `NullAdapter`) at server startup from `BSDATA_DIR`
-- [ ] Implement `unit.search({ faction?, query? })` → unit[]
-- [ ] Implement `unit.get(id)` → unit + rating (rating null until computed)
-- [ ] Write tests for both procedures (using `NullAdapter` in test env)
-- [ ] Build faction selector UI
-- [ ] Build unit search + browse UI showing name, points, rating badge (S/A/B/C/D or —)
-
-**Exit criteria:** User can browse units by faction. Rating badge shows — until ratings are computed. No GW content in repo.
+`BSDataAdapter` / `NullAdapter` injected at server startup via `BSDATA_DIR`.
+`unit.listFactions`, `unit.search`, `unit.get` — 8 server tests passing.
+Faction selector + unit search UI built. Rating badge shows — until ratings computed.
+No GW content in repo.
 
 ---
 
-## Phase 5: List Management
+## Phase 5: List Management ✅ complete
 
-- [ ] Implement `list.create({ faction, name })` → list
-- [ ] Implement `list.get(id)` → list + all units + ratings
-- [ ] Implement `list.list()` → list[]
-- [ ] Implement `list.addUnit({ listId, unitId, count? })` — denormalizes name + points at add-time
-- [ ] Implement `list.removeUnit({ listId, unitId })`
-- [ ] Implement `list.delete(id)`
-- [ ] Write tests for all procedures, including points total calculation
-- [ ] Build list builder UI:
-  - Add/remove units
-  - Live points total
-  - List saved automatically
-
-**Exit criteria:** User can create a list, add and remove units, see running points total, save and reload it.
+`list.create`, `list.get`, `list.list`, `list.addUnit`, `list.removeUnit`, `list.delete`
+— 17 server tests passing. Points total denormalized at add-time.
+List builder UI: add/remove units, live points total, list selector.
 
 ---
 
-## Phase 6: Rating Engine
+## Phase 6: Rating Engine ✅ complete
 
-- [ ] Write tests first — define expected outputs for known match data inputs:
-  - Unit included in all winning lists → high win-rate contribution
-  - Unit in losing lists → low contribution
-  - Points efficiency: same win rate, fewer points = higher pts_eff
-  - Meta window filter: old window data excluded from new window queries
-- [ ] Implement win-rate contribution calculation (per unit, per meta window)
-- [ ] Implement points efficiency calculation
-- [ ] Implement letter grade assignment: S / A / B / C / D thresholds (define + test)
-- [ ] Implement `computeRatings(matchData, metaWindow)` → unit_ratings[] — pure function
-- [ ] Implement rating reset on meta window change (new window = null ratings until recomputed)
-- [ ] Expose as server-side job triggered by data import or on-demand by admin
-
-**Exit criteria:** Rating engine passes all tests. Pure function. Ratings computed correctly from known inputs.
+`server/src/lib/ratings/score.ts` — pure function: `computeRatings(records, metaWindow)`.
+`assignGrade(winContrib)` — S/A/B/C/D thresholds.
+14 tests covering: empty input, all-wins→S, all-losses→D, 50%→B/C,
+points efficiency (cheaper unit = higher ptsEff), min 3 appearances, metaWindow,
+computedAt timestamp, mixed results.
 
 ---
 
-## Phase 7: Ratings + Suggestions in UI
+## Phase 7: Ratings + Suggestions in UI ✅ complete
 
-- [ ] Implement `rating.get(unitId)` → { rating, winContrib, ptsEff }
-- [ ] Implement `rating.alternatives({ unitId, ptsRange? })` → unit[] sorted by rating
-- [ ] Write tests for both procedures
-- [ ] Surface rating badges on all unit cards (S/A/B/C/D, color-coded)
-- [ ] Surface suggestion on add-unit:
-  ```
-  You added: Redemptor Dreadnought  85pts  Rating: C
-  Suggestion: Brutalis Dreadnought  90pts  Rating: A
-              (+5pts, significantly stronger in the current meta)
-  ```
-- [ ] Build unit detail view: rating, win contribution, pts efficiency breakdown
+`rating.get({ unitId })` — returns rating or null — 6 server tests.
+`rating.alternatives({ ptsMin?, ptsMax?, metaWindow? })` — sorted by winContrib.
+Rating badges on all unit cards in list (S/A green, B/C amber, D red).
+List builder screen built and tested (8 client tests).
 
-**Exit criteria:** Every unit shows its current rating. Adding a unit surfaces a suggestion if a better alternative exists at similar cost.
+**Total: 45 server tests + 13 client tests = 58 tests.**
 
 ---
 
-## Phase 8: Export
+## Phase 8: Export ✅ complete
 
-- [ ] Implement list export as plain text (BCP / New Recruit compatible format)
-- [ ] Build export button in list view
-
-**Exit criteria:** User can export a list as text and submit it to a tournament or BCP.
+Export as plain text (BCP / New Recruit compatible format) — button in list view.
+Copies to clipboard (++ Faction [Xpts] ++ format).
 
 ---
 
