@@ -10,7 +10,7 @@
 |---|---|
 | DB schema (unit_ratings, lists, list_units) | ✅ in packages/db |
 | packages/game-content BSDataAdapter | ✅ built + tested |
-| Server (Hono + tRPC) | ✅ built + tested (45 tests) |
+| Server (Hono + tRPC) | ✅ built + tested (51 tests) |
 | Client (React + shadcn) | ✅ built + tested (13 tests) |
 | Deployment | ✅ Deployed to tabletop-tools.net/list-builder/ via gateway |
 

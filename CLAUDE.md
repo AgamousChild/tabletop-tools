@@ -45,14 +45,14 @@ via service bindings. Auth runs on a Workers Route at `tabletop-tools.net/auth/*
 
 | App | Port | Tests | Status | Purpose |
 |---|---|---|---|---|
-| no-cheat | 3001 | 194 | Deployed | Detect loaded dice via CV + statistics |
-| versus | 3002 | 80 | Deployed | Simulate 40K combat: hit/wound/save/damage |
-| list-builder | 3003 | 58 | Deployed | Build lists with live meta ratings from GT data |
-| game-tracker | 3004 | 39 | Deployed | Track matches turn-by-turn with photos |
-| tournament | 3005 | 52 | Deployed | Swiss events: pairings, results, standings, ELO |
-| new-meta | 3006 | 122 | Deployed | Meta analytics: win rates, Glicko-2 ratings |
+| no-cheat | 3001 | 202 | Deployed | Detect loaded dice via CV + statistics |
+| versus | 3002 | 84 | Deployed | Simulate 40K combat: hit/wound/save/damage |
+| list-builder | 3003 | 64 | Deployed | Build lists with live meta ratings from GT data |
+| game-tracker | 3004 | 45 | Deployed | Track matches turn-by-turn with photos |
+| tournament | 3005 | 58 | Deployed | Swiss events: pairings, results, standings, ELO |
+| new-meta | 3006 | 128 | Deployed | Meta analytics: win rates, Glicko-2 ratings |
 | data-import | — | 17 | Deployed (client-only, no server) | BSData importer: fetch + parse XML → IndexedDB |
-| admin | 3007 | 39 | Built | Platform dashboard: users, sessions, app stats, BSData, imports |
+| admin | 3007 | 45 | Built | Platform dashboard: users, sessions, app stats, BSData, imports |
 
 Each app has its own `CLAUDE.md` with full spec, architecture, schema, and implementation detail.
 
@@ -207,7 +207,7 @@ SQLite database — no mocks for the database layer.
 
 The specific test file structure for each app is documented in that app's own CLAUDE.md.
 
-**Platform total: 736 tests, all passing.**
+**Platform total: 866 tests, all passing.**
 
 ---
 

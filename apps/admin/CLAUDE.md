@@ -17,7 +17,7 @@ Shows platform-wide stats: user counts, active sessions, app usage, and activity
 
 | Layer | Status |
 |---|---|
-| Server scaffold (Hono + tRPC) | Done — 23 tests |
+| Server scaffold (Hono + tRPC) | Done — 38 tests |
 | Client UI (dashboard + pages) | Done — 7 tests |
 | Admin access control | Done — ADMIN_EMAILS env var |
 | Gateway integration | Done — service binding + Pages Function |
@@ -67,7 +67,8 @@ apps/admin/
       routers/
         index.ts          appRouter (health + stats)
         stats.ts          admin-only — overview, recentUsers, activeSessions, appActivity
-        stats.test.ts     23 tests
+        stats.test.ts     32 tests
+      server.test.ts      6 tests — HTTP session integration (cookie → validateSession → CRUD)
   client/
     package.json          name: "admin-client"
     index.html
@@ -131,8 +132,9 @@ wrangler deploy
 ## Testing
 
 ```
-server/src/routers/stats.test.ts    23 tests — access control, empty DB, data counts, users, sessions, activity
+server/src/routers/stats.test.ts    32 tests — access control, empty DB, data counts, users, sessions, activity
+server/src/server.test.ts            6 tests — HTTP session integration (cookie → validateSession → admin CRUD)
 client/src/components/StatCard.test.tsx  4 tests — renders label, value, subtitle
 client/src/App.test.tsx             3 tests — loading, auth gate, nav when logged in
-Total: 30 tests, all passing
+Total: 45 tests, all passing
 ```

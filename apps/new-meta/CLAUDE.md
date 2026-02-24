@@ -23,7 +23,7 @@ full dataset. That's the whole premise.
 |---|---|
 | DB schema (playerGlicko, glickoHistory, detachment) | ✅ built + tested |
 | packages/game-content CSV parsers (detachment, playerName) | ✅ built + tested |
-| Server — all routers + lib | ✅ built + tested (51 tests) |
+| Server — all routers + lib | ✅ built + tested (57 tests) |
 | Client — pages + components | ✅ built + tested (71 tests) |
 | Deployment | ✅ Deployed to tabletop-tools.net/new-meta/ via gateway |
 
@@ -239,7 +239,7 @@ lib/aggregate.test.ts  23 tests — faction stats, win rates, draws×0.5, detach
                                   timeline, getWeekStart, empty input
 lib/playerMatch.test.ts 11 tests — case-insensitive, displayUsername, no partial/fuzzy
 lib/detachment.test.ts  8 tests — BattleScribe, New Recruit, dash format, null fallback
-Total: 51 tests, all passing
+Total: 57 tests, all passing
 ```
 
 Client has no logic tests yet (scaffold only). Tests will be written as pages are wired.
