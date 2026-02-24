@@ -1,12 +1,12 @@
 #!/bin/bash
 set -e
 
-# Deploy all 6 app server Workers
+# Deploy all 7 app server Workers
 # Run from repo root: bash scripts/deploy-workers.sh
 
 REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 
-APPS="no-cheat versus list-builder game-tracker tournament new-meta"
+APPS="no-cheat versus list-builder game-tracker tournament new-meta admin"
 
 for app in $APPS; do
   echo "=== Deploying $app server Worker ==="

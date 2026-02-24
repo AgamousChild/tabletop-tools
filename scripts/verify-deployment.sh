@@ -41,13 +41,13 @@ echo ""
 
 echo "Static pages:"
 check "Landing page" "$BASE/" "200"
-for app in no-cheat versus list-builder game-tracker tournament new-meta data-import; do
+for app in no-cheat versus list-builder game-tracker tournament new-meta data-import admin; do
   check "$app SPA" "$BASE/$app/" "200"
 done
 
 echo ""
 echo "tRPC health endpoints (server apps only — data-import has no server):"
-for app in no-cheat versus list-builder game-tracker tournament new-meta; do
+for app in no-cheat versus list-builder game-tracker tournament new-meta admin; do
   check_json "$app /trpc/health" "$BASE/$app/trpc/health"
 done
 
