@@ -30,11 +30,12 @@ tabletop-tools/
     game-tracker/   ← match tracker                (port 3004)
     tournament/     ← tournament manager           (port 3005)
     new-meta/       ← 40K meta analytics           (port 3006)
+    admin/          ← platform admin dashboard     (port 3007)
   e2e/              ← Playwright browser tests (all apps, landing, auth flows)
 ```
 
 All apps are served from a single origin: `tabletop-tools.net/<app>/`. The gateway
-project builds all 7 client SPAs into `dist/<app>/` and deploys as one Cloudflare Pages
+project builds all 8 client SPAs into `dist/<app>/` and deploys as one Cloudflare Pages
 project. Pages Functions in the gateway proxy each app's `/trpc` calls to its Worker
 via service bindings. Auth runs on a Workers Route at `tabletop-tools.net/auth/*`.
 
@@ -51,6 +52,7 @@ via service bindings. Auth runs on a Workers Route at `tabletop-tools.net/auth/*
 | tournament | 3005 | 52 | Deployed | Swiss events: pairings, results, standings, ELO |
 | new-meta | 3006 | 122 | Deployed | Meta analytics: win rates, Glicko-2 ratings |
 | data-import | — | 17 | Deployed (client-only, no server) | BSData importer: fetch + parse XML → IndexedDB |
+| admin | 3007 | 39 | Built | Platform dashboard: users, sessions, app stats, BSData, imports |
 
 Each app has its own `CLAUDE.md` with full spec, architecture, schema, and implementation detail.
 
@@ -205,7 +207,7 @@ SQLite database — no mocks for the database layer.
 
 The specific test file structure for each app is documented in that app's own CLAUDE.md.
 
-**Platform total: 697 tests, all passing.**
+**Platform total: 736 tests, all passing.**
 
 ---
 

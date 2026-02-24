@@ -10,7 +10,7 @@ rm -rf "$DIST"
 mkdir -p "$DIST"
 
 # Build each app with its base path
-for app in no-cheat versus list-builder game-tracker tournament new-meta data-import; do
+for app in no-cheat versus list-builder game-tracker tournament new-meta data-import admin; do
   echo "Building $app..."
   cd "$REPO_ROOT/apps/$app/client"
   pnpm build

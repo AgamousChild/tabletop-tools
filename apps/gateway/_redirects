@@ -5,3 +5,4 @@
 /tournament/*    /tournament/index.html    200
 /new-meta/*      /new-meta/index.html      200
 /data-import/*   /data-import/index.html   200
+/admin/*         /admin/index.html         200

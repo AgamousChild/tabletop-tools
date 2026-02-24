@@ -24,3 +24,7 @@ service = "tabletop-tools-tournament"
 [[services]]
 binding = "NEW_META_API"
 service = "tabletop-tools-new-meta"
+
+[[services]]
+binding = "ADMIN_API"
+service = "tabletop-tools-admin"
