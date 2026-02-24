@@ -9,11 +9,9 @@
 | Layer | Status |
 |---|---|
 | DB schema (tournaments, tournament_players, rounds, pairings, player_elo, elo_history) | ✅ in packages/db |
-| Server scaffold | 🔲 not started |
-| Client scaffold | 🔲 not started |
-
-The schema for this app is already built into `packages/db/src/schema.ts` and tested.
-When implementation begins: read the schema, verify it matches this doc, then scaffold.
+| Server (Hono + tRPC) | ✅ built + tested (42 tests) |
+| Client (React + shadcn) | ✅ built + tested (10 tests) |
+| Deployment | ✅ Deployed to tabletop-tools.net/tournament/ via gateway |
 
 ---
 
@@ -522,3 +520,14 @@ src/
       derive.ts
       derive.test.ts
 ```
+
+### E2E Browser Tests
+
+Playwright E2E tests live in `e2e/specs/tournament.spec.ts` (shared across the platform in `e2e/`).
+These run against the deployed app in a real browser and verify:
+- Auth gate works (authenticated → TournamentScreen)
+- Tournament header visible
+- Create Tournament button present
+- Sign Out button present
+
+Run: `cd e2e && BASE_URL=https://tabletop-tools.net pnpm test -- --grep tournament`

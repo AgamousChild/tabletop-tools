@@ -1,0 +1,26 @@
+name = "tabletop-tools"
+pages_build_output_dir = "dist"
+
+[[services]]
+binding = "NO_CHEAT_API"
+service = "tabletop-tools-no-cheat"
+
+[[services]]
+binding = "VERSUS_API"
+service = "tabletop-tools-versus"
+
+[[services]]
+binding = "LIST_BUILDER_API"
+service = "tabletop-tools-list-builder"
+
+[[services]]
+binding = "GAME_TRACKER_API"
+service = "tabletop-tools-game-tracker"
+
+[[services]]
+binding = "TOURNAMENT_API"
+service = "tabletop-tools-tournament"
+
+[[services]]
+binding = "NEW_META_API"
+service = "tabletop-tools-new-meta"

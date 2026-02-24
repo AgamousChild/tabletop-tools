@@ -1,5 +1,29 @@
 # Deployment Guide — tabletop-tools.net
 
+## Architecture
+
+All 7 apps are served from a single origin: `tabletop-tools.net/<app>/`.
+
+```
+tabletop-tools.net/                → Landing page (hub)
+tabletop-tools.net/no-cheat/      → no-cheat SPA
+tabletop-tools.net/versus/        → versus SPA
+tabletop-tools.net/list-builder/  → list-builder SPA
+tabletop-tools.net/game-tracker/  → game-tracker SPA
+tabletop-tools.net/tournament/    → tournament SPA
+tabletop-tools.net/new-meta/      → new-meta SPA
+tabletop-tools.net/data-import/   → data-import SPA (client-only, no server)
+tabletop-tools.net/auth/*         → auth-server Worker (Workers Route)
+```
+
+**How it works:**
+1. One unified Cloudflare Pages project (`tabletop-tools`) serves all static assets
+2. Pages Functions proxy each app's `/trpc` calls to its Worker via service bindings
+3. Auth-server Worker responds to `tabletop-tools.net/auth/*` via a Workers Route
+4. All apps share one origin — enabling shared IndexedDB, localStorage, and auth cookies
+
+---
+
 ## Prerequisites
 
 - Cloudflare account with `tabletop-tools.net` added as a site
@@ -83,8 +107,9 @@ wrangler secret put TURSO_DB_URL      # libsql://tabletop-tools-agamouschild.tur
 wrangler secret put TURSO_AUTH_TOKEN  # token from Step 3
 ```
 
-Then in Cloudflare dashboard → Workers & Pages → `tabletop-tools-auth` → Settings → Triggers:
-- Add custom domain: `auth.tabletop-tools.net`
+The Workers Route `tabletop-tools.net/auth/*` is defined in `wrangler.toml` and deploys automatically.
+
+**How auth routing works:** The auth Worker receives requests at `/auth/api/auth/**` via the Workers Route. Better Auth is configured with `basePath: '/auth/api/auth'` so it matches the incoming URL directly — no URL rewriting needed. The request is passed straight to `auth.handler(c.req.raw)`. The client's `VITE_AUTH_SERVER_URL=https://tabletop-tools.net/auth` causes the Better Auth client to send requests to `https://tabletop-tools.net/auth/api/auth/<route>`. In dev mode, the auth server runs at `localhost:3000` with the default basePath `/api/auth` — routes are at `/api/auth/**` directly.
 
 ---
 
@@ -108,60 +133,116 @@ wrangler secret put TURSO_AUTH_TOKEN
 | game-tracker | `tabletop-tools-game-tracker` |
 | new-meta | `tabletop-tools-new-meta` |
 
-No custom domains needed on the server Workers — the client Pages Functions reach them via service bindings.
+No custom domains needed on the server Workers — the gateway Pages Functions reach them via service bindings.
 
 ---
 
-## Step 8: Deploy each client to Cloudflare Pages
+## Step 8: Build and deploy the unified gateway
 
 ```bash
-cd apps/<app>/client
-pnpm build                  # builds with .env.production baked in
-wrangler pages deploy dist  # first run creates the Pages project
+# Build all 7 app clients + landing page into apps/gateway/dist/
+cd apps/gateway
+bash build.sh
+
+# Create the Pages project (first time only)
+wrangler pages project create tabletop-tools --production-branch main
+
+# Deploy
+wrangler pages deploy dist --project-name tabletop-tools
 ```
 
-After the first deploy of each app, go to Cloudflare dashboard → Pages project → Custom domains and add:
+After the first deploy, add the custom domain:
 
-| App | Custom domain |
-|---|---|
-| no-cheat | `no-cheat.tabletop-tools.net` |
-| tournament | `tournament.tabletop-tools.net` |
-| versus | `versus.tabletop-tools.net` |
-| list-builder | `list-builder.tabletop-tools.net` |
-| game-tracker | `game-tracker.tabletop-tools.net` |
-| new-meta | `new-meta.tabletop-tools.net` |
+In Cloudflare dashboard → Pages → `tabletop-tools` → Custom domains → Add `tabletop-tools.net`
 
-Cloudflare Pages handles SSL certificates automatically for each subdomain.
+Cloudflare will create the necessary DNS records automatically (CNAME-flattened for the apex domain).
 
 ---
 
-## Step 9: Service bindings
+## Step 9: Verify
 
-The service bindings in each `client/wrangler.toml` activate automatically once both the Worker and the Pages project exist in the same Cloudflare account. No additional configuration needed.
+```bash
+# Landing page
+curl -sI "https://tabletop-tools.net/" | head -1
 
-Each client's `functions/trpc/[[path]].ts` proxies `/trpc/*` requests to the corresponding Worker via the `API` binding.
+# Each app
+for app in no-cheat versus list-builder game-tracker tournament new-meta data-import; do
+  curl -sI "https://tabletop-tools.net/$app/" | head -1
+done
+
+# tRPC health (server apps only — data-import has no server)
+for app in no-cheat versus list-builder game-tracker tournament new-meta; do
+  curl -s "https://tabletop-tools.net/$app/trpc/health"
+done
+
+# Auth
+curl -s "https://tabletop-tools.net/auth/health"
+```
+
+### E2E Browser Tests
+
+The most thorough verification is the Playwright E2E suite:
+
+```bash
+cd e2e && BASE_URL=https://tabletop-tools.net pnpm test
+```
+
+This runs 30+ browser tests across all apps — landing page, auth flows, cross-app
+session sharing, and every app's main screen. If auth or any app is broken, these
+tests surface it immediately.
+
+**Known prerequisite:** Step 4 (database migration) must be completed before auth
+tests will pass. Without the `user`, `session`, `account`, and `verification` tables
+in Turso, signup/login returns 500.
 
 ---
 
 ## Redeployment
 
-After code changes:
+Repeatable scripts in `scripts/`:
+
+```bash
+# Full deployment (build + all workers + auth + gateway)
+bash scripts/deploy-all.sh
+
+# Just the gateway (client changes only)
+bash scripts/deploy-gateway.sh
+
+# Just the auth-server
+bash scripts/deploy-auth.sh
+
+# Just the app server Workers
+bash scripts/deploy-workers.sh
+
+# Verify everything is up
+bash scripts/verify-deployment.sh
+
+# Tear down old subdomains (after verifying new deployment works)
+bash scripts/teardown-subdomains.sh
+```
+
+Or manually:
 
 ```bash
 # Redeploy a server Worker
 cd apps/<app>/server && wrangler deploy
 
-# Redeploy a client Pages project
-cd apps/<app>/client && pnpm build && wrangler pages deploy dist
+# Redeploy the gateway (all clients)
+cd apps/gateway && bash build.sh && wrangler pages deploy dist --project-name tabletop-tools
 ```
 
 Secrets only need to be set once — they persist across deployments.
 
 ---
 
-## BSData (versus / list-builder)
+## BSData (data-import / versus / list-builder)
 
-These two apps use `NullAdapter` in production until the operator provides BSData:
+The **data-import** app is a client-only SPA that fetches BSData XML directly from GitHub,
+parses it in the browser, and stores `UnitProfile[]` in IndexedDB. No server or Worker needed.
+Consumer apps (versus, list-builder) check IndexedDB first — if units exist there, they use
+them instead of the tRPC `unit.*` routes. This eliminates the need for server-side BSData loading.
+
+The server-side apps still use `NullAdapter` in production until the operator provides BSData:
 
 ```bash
 # Clone BSData locally

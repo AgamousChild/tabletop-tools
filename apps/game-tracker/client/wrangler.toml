@@ -1,6 +1,0 @@
-name = "tabletop-tools-game-tracker-client"
-pages_build_output_dir = "dist"
-
-[[services]]
-binding = "API"
-service = "tabletop-tools-game-tracker"

@@ -9,8 +9,9 @@
 | Layer | Status |
 |---|---|
 | DB schema (matches, turns) | ✅ in packages/db |
-| Server scaffold | 🔲 not started |
-| Client scaffold | 🔲 not started |
+| Server (Hono + tRPC) | ✅ built + tested (26 tests) |
+| Client (React + shadcn) | ✅ built + tested (13 tests) |
+| Deployment | ✅ Deployed to tabletop-tools.net/game-tracker/ via gateway |
 
 ---
 
@@ -231,3 +232,14 @@ src/
       r2.ts
       r2.test.ts
 ```
+
+### E2E Browser Tests
+
+Playwright E2E tests live in `e2e/specs/game-tracker.spec.ts` (shared across the platform in `e2e/`).
+These run against the deployed app in a real browser and verify:
+- Auth gate works (authenticated → GameTrackerScreen)
+- Game Tracker header visible
+- New Match button present
+- Match History section present
+
+Run: `cd e2e && BASE_URL=https://tabletop-tools.net pnpm test -- --grep game-tracker`

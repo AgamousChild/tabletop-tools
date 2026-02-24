@@ -26,15 +26,17 @@ export default {
 
     const auth = createAuth(
       db,
-      env.AUTH_BASE_URL ?? 'https://auth.tabletop-tools.workers.dev',
+      env.AUTH_BASE_URL ?? 'https://tabletop-tools.net',
       trustedOrigins,
       env.AUTH_SECRET,
+      '/auth/api/auth',
     )
 
     const app = new Hono()
     app.use('*', cors({ origin: (origin) => origin ?? '*', credentials: true }))
-    app.on(['GET', 'POST'], '/api/auth/**', (c) => auth.handler(c.req.raw))
-    app.get('/health', (c) => c.json({ status: 'ok' }))
+    app.get('/auth/health', (c) => c.json({ status: 'ok' }))
+    // Workers Route delivers requests at /auth/** — basePath matches directly
+    app.on(['GET', 'POST'], '/auth/api/auth/**', (c) => auth.handler(c.req.raw))
 
     return app.fetch(request, env)
   },

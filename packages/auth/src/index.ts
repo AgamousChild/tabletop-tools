@@ -15,9 +15,11 @@ export function createAuth(
   baseURL = 'http://localhost:3000',
   trustedOrigins: string[] = [],
   secret = process.env['AUTH_SECRET'] ?? 'dev-secret-change-in-production',
+  basePath = '/api/auth',
 ) {
   return betterAuth({
     baseURL,
+    basePath,
     trustedOrigins,
     database: drizzleAdapter(db, {
       provider: 'sqlite',
@@ -56,10 +58,12 @@ export type User = {
  */
 export async function validateSession(db: Db, headers: Headers): Promise<User | null> {
   const cookieHeader = headers.get('cookie') ?? ''
-  const tokenEntry = cookieHeader
-    .split(';')
-    .map((c) => c.trim())
-    .find((c) => c.startsWith('better-auth.session_token='))
+  // Better Auth uses '__Secure-better-auth.session_token' on HTTPS (production)
+  // and 'better-auth.session_token' on HTTP (local dev)
+  const cookies = cookieHeader.split(';').map((c) => c.trim())
+  const tokenEntry =
+    cookies.find((c) => c.startsWith('__Secure-better-auth.session_token=')) ??
+    cookies.find((c) => c.startsWith('better-auth.session_token='))
 
   if (!tokenEntry) return null
 

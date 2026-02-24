@@ -4,7 +4,8 @@ import tsconfigPaths from 'vite-tsconfig-paths'
 import { readFileSync } from 'fs'
 import { resolve } from 'path'
 
-export default defineConfig({
+export default defineConfig(({ command }) => ({
+  base: command === 'build' ? '/no-cheat/' : '/',
   plugins: [react(), tsconfigPaths()],
   server: {
     host: true,
@@ -28,4 +29,4 @@ export default defineConfig({
     environment: 'jsdom',
     setupFiles: ['./src/test/setup.ts'],
   },
-})
+}))

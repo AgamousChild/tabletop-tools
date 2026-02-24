@@ -29,7 +29,7 @@ no-cheat is the founding app of the Tabletop Tools platform.
 | Client UI (all screens wired) | ✅ done — 66 tests |
 | CV pipeline (pure TS, local) | ✅ done — 83 tests; Camera wired, cluster progress + labeling UI built |
 | Clustering engine | ✅ done — agglomerative clustering + template matching + IDB persistence |
-| Deployment (Cloudflare Workers + Pages) | ✅ worker.ts + wrangler.toml configured — run `wrangler deploy` + `wrangler pages deploy dist` |
+| Deployment (Cloudflare Workers + Pages) | ✅ Deployed to tabletop-tools.net/no-cheat/ via gateway |
 
 ---
 
@@ -523,3 +523,13 @@ dice as test fixtures — they are not reproducible across machines.
 
 The template matching and clustering code must be tested with synthetic 64×64 images
 where the correct rotation and similarity scores are known analytically.
+
+### E2E Browser Tests
+
+Playwright E2E tests live in `e2e/specs/no-cheat.spec.ts` (shared across the platform in `e2e/`).
+These run against the deployed app in a real browser and verify:
+- Auth gate works (unauthenticated → AuthScreen, authenticated → DiceSetScreen)
+- Main screen loads after auth with sign out button
+- Dice set management UI is present
+
+Run: `cd e2e && BASE_URL=https://tabletop-tools.net pnpm test -- --grep no-cheat`

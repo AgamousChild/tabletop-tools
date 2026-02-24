@@ -20,14 +20,23 @@ tabletop-tools/
     auth/           ← shared Better Auth — one login across all tools
     db/             ← shared Turso schema and Drizzle client
     game-content/   ← GameContentAdapter boundary (zero GW content)
+    game-data-store/← shared IndexedDB store for client-side game data + React hooks
   apps/
+    gateway/        ← unified Cloudflare Pages project (landing page + tRPC proxies)
+    data-import/    ← BSData importer (client-only SPA, no server)
     no-cheat/       ← dice cheat detection        (port 3001)
     versus/         ← combat simulator             (port 3002)
     list-builder/   ← meta list builder            (port 3003)
     game-tracker/   ← match tracker                (port 3004)
     tournament/     ← tournament manager           (port 3005)
     new-meta/       ← 40K meta analytics           (port 3006)
+  e2e/              ← Playwright browser tests (all apps, landing, auth flows)
 ```
+
+All apps are served from a single origin: `tabletop-tools.net/<app>/`. The gateway
+project builds all 7 client SPAs into `dist/<app>/` and deploys as one Cloudflare Pages
+project. Pages Functions in the gateway proxy each app's `/trpc` calls to its Worker
+via service bindings. Auth runs on a Workers Route at `tabletop-tools.net/auth/*`.
 
 ---
 
@@ -35,12 +44,13 @@ tabletop-tools/
 
 | App | Port | Tests | Status | Purpose |
 |---|---|---|---|---|
-| no-cheat | 3001 | 194 | Phases 1–10 done; deployment next | Detect loaded dice via CV + statistics |
-| versus | 3002 | 80 | Phases 1–6 done; deployment next | Simulate 40K combat: hit/wound/save/damage |
-| list-builder | 3003 | 58 | Phases 2–8 done; deployment next | Build lists with live meta ratings from GT data |
-| game-tracker | 3004 | 39 | Phases 2–7 done; deployment next | Track matches turn-by-turn with photos |
-| tournament | 3005 | 52 | Phases 2–9 done; deployment next | Swiss events: pairings, results, standings, ELO |
-| new-meta | 3006 | 122 | Phases 1–6 done; deployment next | Meta analytics: win rates, Glicko-2 ratings |
+| no-cheat | 3001 | 194 | Deployed | Detect loaded dice via CV + statistics |
+| versus | 3002 | 80 | Deployed | Simulate 40K combat: hit/wound/save/damage |
+| list-builder | 3003 | 58 | Deployed | Build lists with live meta ratings from GT data |
+| game-tracker | 3004 | 39 | Deployed | Track matches turn-by-turn with photos |
+| tournament | 3005 | 52 | Deployed | Swiss events: pairings, results, standings, ELO |
+| new-meta | 3006 | 122 | Deployed | Meta analytics: win rates, Glicko-2 ratings |
+| data-import | — | 17 | Deployed (client-only, no server) | BSData importer: fetch + parse XML → IndexedDB |
 
 Each app has its own `CLAUDE.md` with full spec, architecture, schema, and implementation detail.
 
@@ -195,4 +205,65 @@ SQLite database — no mocks for the database layer.
 
 The specific test file structure for each app is documented in that app's own CLAUDE.md.
 
-**Platform total: 654 tests, all passing.**
+**Platform total: 697 tests, all passing.**
+
+---
+
+## E2E Browser Tests (Playwright)
+
+End-to-end tests exercise the full deployed application in a real browser. They catch
+integration bugs (auth routing, CORS, Worker crashes) that unit tests cannot.
+
+**Stack:** Playwright + Chromium. TypeScript-native, auto-waits, multi-browser support.
+
+```
+e2e/
+  playwright.config.ts          ← 3 projects: auth-flow, public, authed
+  global-setup.ts               ← creates test user → auth-state.json
+  fixtures/
+    auth.ts                     ← signUp / logIn / logOut / testEmail helpers
+  specs/
+    landing.spec.ts             ← landing page loads, 7 app cards link correctly
+    auth.spec.ts                ← register, login, logout, session persistence
+    cross-app-auth.spec.ts      ← login in one app → session carries to another
+    no-cheat.spec.ts            ← auth gate → main screen, dice set UI
+    versus.spec.ts              ← auth gate → simulator, faction selectors
+    list-builder.spec.ts        ← auth gate → list builder, faction selector
+    game-tracker.spec.ts        ← auth gate → main screen, new match button
+    tournament.spec.ts          ← auth gate → main screen, create tournament button
+    new-meta.spec.ts            ← NO auth gate → nav tabs, dashboard renders
+    data-import.spec.ts         ← NO auth gate → repo config, load button
+```
+
+### Three Playwright Projects
+
+| Project | Auth | What it tests |
+|---|---|---|
+| `auth-flow` | None (tests auth itself) | Register, login, logout, cross-app session |
+| `public` | None (no auth needed) | Landing page, new-meta, data-import |
+| `authed` | `storageState` from global-setup | All auth-gated apps (no-cheat, versus, list-builder, game-tracker, tournament) |
+
+The `authed` project depends on `auth-flow` — auth-flow creates the session state
+file that authed tests reuse.
+
+### Running E2E Tests
+
+```bash
+# Against production
+cd e2e && BASE_URL=https://tabletop-tools.net pnpm test
+
+# Against local dev (start gateway or app dev servers first)
+cd e2e && pnpm test
+
+# Headed mode (see the browser)
+cd e2e && pnpm test:headed
+
+# Playwright UI mode (interactive debugging)
+cd e2e && pnpm test:ui
+```
+
+### Targeting
+
+- `BASE_URL` env var: defaults to `http://localhost:5173` for local dev
+- Set to `https://tabletop-tools.net` for production
+- Auth tests require a working auth endpoint (register + login)

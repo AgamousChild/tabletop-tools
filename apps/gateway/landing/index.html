@@ -1,0 +1,118 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Tabletop Tools</title>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&display=swap');
+
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: 'Geist', system-ui, -apple-system, sans-serif;
+      background: #0f172a;
+      color: #f1f5f9;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 3rem 1rem;
+    }
+
+    h1 {
+      font-size: 2.5rem;
+      font-weight: 700;
+      margin-bottom: 0.5rem;
+    }
+
+    .accent { color: #fbbf24; }
+
+    .subtitle {
+      color: #94a3b8;
+      font-size: 1.1rem;
+      margin-bottom: 3rem;
+    }
+
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+      gap: 1rem;
+      max-width: 960px;
+      width: 100%;
+    }
+
+    a.card {
+      display: block;
+      background: #1e293b;
+      border: 1px solid #334155;
+      border-radius: 0.75rem;
+      padding: 1.5rem;
+      text-decoration: none;
+      color: #f1f5f9;
+      transition: border-color 0.15s, transform 0.15s;
+    }
+
+    a.card:hover {
+      border-color: #fbbf24;
+      transform: translateY(-2px);
+    }
+
+    .card-title {
+      font-size: 1.25rem;
+      font-weight: 600;
+      margin-bottom: 0.5rem;
+    }
+
+    .card-desc {
+      color: #94a3b8;
+      font-size: 0.9rem;
+      line-height: 1.5;
+    }
+
+    footer {
+      margin-top: auto;
+      padding-top: 3rem;
+      color: #475569;
+      font-size: 0.8rem;
+    }
+  </style>
+</head>
+<body>
+  <h1>Tabletop <span class="accent">Tools</span></h1>
+  <p class="subtitle">Tools for tabletop miniature wargamers</p>
+
+  <div class="grid">
+    <a class="card" href="/no-cheat/">
+      <div class="card-title">No Cheat</div>
+      <div class="card-desc">Detect loaded dice using computer vision and statistics. Point your camera, roll, and know.</div>
+    </a>
+    <a class="card" href="/versus/">
+      <div class="card-title">Versus</div>
+      <div class="card-desc">Simulate 40K combat. Pick two units, see the math: expected wounds, model kills, distributions.</div>
+    </a>
+    <a class="card" href="/list-builder/">
+      <div class="card-title">List Builder</div>
+      <div class="card-desc">Build army lists with live meta ratings from GT data. See what's winning before you build.</div>
+    </a>
+    <a class="card" href="/game-tracker/">
+      <div class="card-title">Game Tracker</div>
+      <div class="card-desc">Track matches turn by turn with photos, VP scoring, and unit losses. Your full game history.</div>
+    </a>
+    <a class="card" href="/tournament/">
+      <div class="card-title">Tournament</div>
+      <div class="card-desc">Run Swiss events: registration, pairings, results, live standings, and ELO ratings.</div>
+    </a>
+    <a class="card" href="/new-meta/">
+      <div class="card-title">New Meta</div>
+      <div class="card-desc">40K meta analytics: faction win rates, detachment stats, Glicko-2 player rankings.</div>
+    </a>
+    <a class="card" href="/data-import/">
+      <div class="card-title">Data Import</div>
+      <div class="card-desc">Load unit data from BSData into your browser. No account needed — data stays on your device.</div>
+    </a>
+  </div>
+
+  <footer>tabletop-tools.net</footer>
+</body>
+</html>
