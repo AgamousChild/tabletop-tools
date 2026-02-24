@@ -1,6 +1,6 @@
 import 'dotenv/config'
 
-import { serve } from '@hono/node-server'
+import { startDevServer } from '@tabletop-tools/server-core'
 import { createDb } from '@tabletop-tools/db'
 import { BSDataAdapter, NullAdapter } from '@tabletop-tools/game-content'
 
@@ -17,8 +17,7 @@ const gameContent = process.env['BSDATA_DIR']
 
 await gameContent.load()
 
-const app = createServer(db, gameContent)
-
-serve({ fetch: app.fetch, port: 3003, hostname: '0.0.0.0' }, (info) => {
-  console.log(`list-builder server running at http://localhost:${info.port}`)
+startDevServer({
+  port: 3003,
+  createApp: async () => createServer(db, gameContent),
 })

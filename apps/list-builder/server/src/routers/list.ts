@@ -1,5 +1,5 @@
 import { TRPCError } from '@trpc/server'
-import { eq, and } from 'drizzle-orm'
+import { eq, and, inArray, desc } from 'drizzle-orm'
 import { z } from 'zod'
 import { lists, listUnits, unitRatings } from '@tabletop-tools/db'
 
@@ -53,17 +53,20 @@ export const listRouter = router({
         .from(listUnits)
         .where(eq(listUnits.listId, input.id))
 
-      // Fetch ratings for all units in the list
+      // Batch-fetch ratings for all units in the list (single query)
+      const contentIds = units.map((u) => u.unitContentId)
+      const ratings = contentIds.length > 0
+        ? await ctx.db
+            .select()
+            .from(unitRatings)
+            .where(inArray(unitRatings.unitContentId, contentIds))
+            .orderBy(desc(unitRatings.computedAt))
+        : []
       const ratingMap = new Map<string, typeof unitRatings.$inferSelect>()
-      for (const unit of units) {
-        const [rating] = await ctx.db
-          .select()
-          .from(unitRatings)
-          .where(eq(unitRatings.unitContentId, unit.unitContentId))
-          .orderBy(unitRatings.computedAt)
-          .limit(1)
-        if (rating) {
-          ratingMap.set(unit.unitContentId, rating)
+      for (const r of ratings) {
+        // Keep only the most recent rating per unit (first seen wins due to ORDER BY desc)
+        if (!ratingMap.has(r.unitContentId)) {
+          ratingMap.set(r.unitContentId, r)
         }
       }
 

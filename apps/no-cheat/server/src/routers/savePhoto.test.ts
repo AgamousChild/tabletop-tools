@@ -4,12 +4,11 @@ import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest'
 
 import { createCallerFactory } from '../trpc'
 import { appRouter } from './index'
+import type { R2Storage } from '../lib/storage/r2'
 
-// Mock R2 so tests don't require real cloud credentials
-vi.mock('../lib/storage/r2', () => ({
-  createR2Client: vi.fn(() => ({})),
-  uploadToR2: vi.fn().mockResolvedValue('https://cdn.example.com/evidence/test.jpg'),
-}))
+const mockStorage: R2Storage = {
+  upload: vi.fn().mockResolvedValue('https://cdn.example.com/evidence/test.jpg'),
+}
 
 const client = createClient({ url: ':memory:' })
 const db = createDbFromClient(client)
@@ -49,8 +48,8 @@ afterAll(() => client.close())
 
 const createCaller = createCallerFactory(appRouter)
 const req = new Request('http://localhost')
-const alice = { user: { id: 'user-1', email: 'alice@example.com', name: 'Alice' }, req, db }
-const bob = { user: { id: 'user-2', email: 'bob@example.com', name: 'Bob' }, req, db }
+const alice = { user: { id: 'user-1', email: 'alice@example.com', name: 'Alice' }, req, db, storage: mockStorage }
+const bob = { user: { id: 'user-2', email: 'bob@example.com', name: 'Bob' }, req, db, storage: mockStorage }
 
 // Minimal base64 JPEG header to pass validation
 const fakeBase64 = Buffer.from('fake-jpeg-data').toString('base64')
@@ -127,7 +126,7 @@ describe('session.savePhoto', () => {
 
   it('rejects unauthenticated callers', async () => {
     const sessionId = await createLoadedSession()
-    const caller = createCaller({ user: null, req, db })
+    const caller = createCaller({ user: null, req, db, storage: mockStorage })
     await expect(
       caller.session.savePhoto({ sessionId, imageData: fakeBase64 }),
     ).rejects.toMatchObject({ code: 'UNAUTHORIZED' })

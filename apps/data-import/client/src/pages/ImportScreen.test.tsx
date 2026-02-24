@@ -6,6 +6,14 @@ import { ImportScreen } from './ImportScreen'
 vi.mock('../lib/github', () => ({
   listCatalogFiles: vi.fn(),
   fetchCatalogXml: vi.fn(),
+  RateLimitError: class RateLimitError extends Error {
+    resetAt: Date
+    constructor(resetAt: Date, message?: string) {
+      super(message ?? `Rate limited. Try again at ${resetAt.toLocaleTimeString()}.`)
+      this.name = 'RateLimitError'
+      this.resetAt = resetAt
+    }
+  },
 }))
 
 import { listCatalogFiles, fetchCatalogXml } from '../lib/github'
@@ -24,6 +32,10 @@ beforeEach(() => {
     }
   })
 })
+
+function catalogResult(files: Array<{ name: string; faction: string; downloadUrl: string; size: number }>) {
+  return { files, rateLimit: null }
+}
 
 describe('ImportScreen', () => {
   it('renders the import screen with title', () => {
@@ -44,10 +56,12 @@ describe('ImportScreen', () => {
   })
 
   it('loads catalog files when Load button clicked', async () => {
-    mockListCatalogFiles.mockResolvedValueOnce([
-      { name: 'Orks.cat', faction: 'Orks', downloadUrl: 'https://example.com/orks.cat', size: 200000 },
-      { name: 'Aeldari.cat', faction: 'Aeldari', downloadUrl: 'https://example.com/aeldari.cat', size: 150000 },
-    ])
+    mockListCatalogFiles.mockResolvedValueOnce(
+      catalogResult([
+        { name: 'Orks.cat', faction: 'Orks', downloadUrl: 'https://example.com/orks.cat', size: 200000 },
+        { name: 'Aeldari.cat', faction: 'Aeldari', downloadUrl: 'https://example.com/aeldari.cat', size: 150000 },
+      ]),
+    )
 
     render(<ImportScreen />)
     fireEvent.click(screen.getByText('Load Catalog List'))
@@ -70,9 +84,11 @@ describe('ImportScreen', () => {
   })
 
   it('shows faction count in select header', async () => {
-    mockListCatalogFiles.mockResolvedValueOnce([
-      { name: 'Orks.cat', faction: 'Orks', downloadUrl: 'https://example.com/orks.cat', size: 200000 },
-    ])
+    mockListCatalogFiles.mockResolvedValueOnce(
+      catalogResult([
+        { name: 'Orks.cat', faction: 'Orks', downloadUrl: 'https://example.com/orks.cat', size: 200000 },
+      ]),
+    )
 
     render(<ImportScreen />)
     fireEvent.click(screen.getByText('Load Catalog List'))
@@ -83,9 +99,11 @@ describe('ImportScreen', () => {
   })
 
   it('shows file sizes', async () => {
-    mockListCatalogFiles.mockResolvedValueOnce([
-      { name: 'Orks.cat', faction: 'Orks', downloadUrl: 'https://example.com/orks.cat', size: 200000 },
-    ])
+    mockListCatalogFiles.mockResolvedValueOnce(
+      catalogResult([
+        { name: 'Orks.cat', faction: 'Orks', downloadUrl: 'https://example.com/orks.cat', size: 200000 },
+      ]),
+    )
 
     render(<ImportScreen />)
     fireEvent.click(screen.getByText('Load Catalog List'))
@@ -96,10 +114,12 @@ describe('ImportScreen', () => {
   })
 
   it('toggles faction selection with All/None', async () => {
-    mockListCatalogFiles.mockResolvedValueOnce([
-      { name: 'Orks.cat', faction: 'Orks', downloadUrl: 'https://example.com/orks.cat', size: 200000 },
-      { name: 'Aeldari.cat', faction: 'Aeldari', downloadUrl: 'https://example.com/aeldari.cat', size: 150000 },
-    ])
+    mockListCatalogFiles.mockResolvedValueOnce(
+      catalogResult([
+        { name: 'Orks.cat', faction: 'Orks', downloadUrl: 'https://example.com/orks.cat', size: 200000 },
+        { name: 'Aeldari.cat', faction: 'Aeldari', downloadUrl: 'https://example.com/aeldari.cat', size: 150000 },
+      ]),
+    )
 
     render(<ImportScreen />)
     fireEvent.click(screen.getByText('Load Catalog List'))

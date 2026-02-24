@@ -1,4 +1,4 @@
-import { AuthScreen } from './components/AuthScreen'
+import { AuthScreen } from '@tabletop-tools/ui'
 import { DiceSetScreen } from './components/DiceSetScreen'
 import { authClient } from './lib/auth'
 
@@ -14,7 +14,7 @@ export default function App() {
   }
 
   if (!session) {
-    return <AuthScreen onAuthenticated={() => refetch()} />
+    return <AuthScreen title="NoCheat" subtitle="Dice integrity for tabletop wargamers" authClient={authClient} onAuthenticated={() => refetch()} />
   }
 
   return <DiceSetScreen onSignOut={() => refetch()} />

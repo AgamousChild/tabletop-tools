@@ -8,6 +8,8 @@ import { createAuth, validateSession } from './index'
 const TEST_DB = `test-auth-${Date.now()}.db`
 const TEST_DB_URL = `file:./${TEST_DB}`
 
+const AUTH_SECRET = 'dev-secret-change-in-production'
+
 let auth: ReturnType<typeof createAuth>
 let db: ReturnType<typeof createDb>
 
@@ -203,5 +205,74 @@ describe('logout', () => {
     })
 
     expect(session).toBeNull()
+  })
+})
+
+// ============================================================
+// V2: HMAC signature verification
+// ============================================================
+
+describe('validateSession with HMAC verification', () => {
+  it('accepts a valid signed cookie when secret is provided', async () => {
+    const { cookie } = await signIn('test@example.com', 'password123')
+    const user = await validateSession(db, new Headers({ cookie }), AUTH_SECRET)
+
+    expect(user).not.toBeNull()
+    expect(user?.email).toBe('test@example.com')
+  })
+
+  it('rejects a cookie with tampered signature', async () => {
+    const { cookie } = await signIn('test@example.com', 'password123')
+    // Flip the last character of the cookie to tamper with the HMAC
+    const lastChar = cookie.charAt(cookie.length - 1)
+    const tampered = cookie.slice(0, -1) + (lastChar === '0' ? '1' : '0')
+
+    const user = await validateSession(db, new Headers({ cookie: tampered }), AUTH_SECRET)
+    expect(user).toBeNull()
+  })
+
+  it('rejects a cookie with no signature separator', async () => {
+    const user = await validateSession(
+      db,
+      new Headers({ cookie: 'better-auth.session_token=noseparator' }),
+      AUTH_SECRET,
+    )
+    expect(user).toBeNull()
+  })
+
+  it('rejects a cookie signed with wrong secret', async () => {
+    const { cookie } = await signIn('test@example.com', 'password123')
+    const user = await validateSession(db, new Headers({ cookie }), 'wrong-secret-entirely')
+
+    expect(user).toBeNull()
+  })
+
+  it('falls back to V1 behavior when no secret is provided', async () => {
+    const { cookie } = await signIn('test@example.com', 'password123')
+    // No secret param — should strip signature and accept (V1 backwards compat)
+    const user = await validateSession(db, new Headers({ cookie }))
+
+    expect(user).not.toBeNull()
+    expect(user?.email).toBe('test@example.com')
+  })
+})
+
+// ============================================================
+// V2: Expanded User type
+// ============================================================
+
+describe('validateSession returns expanded User', () => {
+  it('includes all canonical User fields', async () => {
+    const { cookie } = await signIn('test@example.com', 'password123')
+    const user = await validateSession(db, new Headers({ cookie }))
+
+    expect(user).not.toBeNull()
+    expect(user?.id).toBeTypeOf('string')
+    expect(user?.email).toBe('test@example.com')
+    expect(user?.name).toBe('Test User')
+    expect(user?.emailVerified).toBe(false)
+    expect(user?.image).toBeNull()
+    expect(user?.createdAt).toBeInstanceOf(Date)
+    expect(user?.updatedAt).toBeInstanceOf(Date)
   })
 })

@@ -12,6 +12,7 @@
     "test:watch": "vitest"
   },
   "dependencies": {
+    "@tabletop-tools/ui": "workspace:*",
     "@tanstack/react-query": "^5.56.0",
     "@trpc/client": "^11.0.0",
     "@trpc/react-query": "^11.0.0",

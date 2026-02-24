@@ -1,3 +1,4 @@
+import { eq, and } from 'drizzle-orm'
 import { z } from 'zod'
 import { router, publicProcedure } from '../trpc.js'
 import { importedTournamentResults } from '@tabletop-tools/db'
@@ -15,21 +16,27 @@ const MetaWindowSchema = z.string().optional()
 const FormatSchema = z.string().optional()
 const MinGamesSchema = z.number().int().min(1).default(5)
 
-/** Load TournamentRecord[] from the DB, filtered by metaWindow and format. */
+/** Load TournamentRecord[] from the DB, filtered by metaWindow and format in SQL. */
 async function loadRecords(
   db: Db,
   opts: { metaWindow?: string; format?: string },
 ): Promise<TournamentRecord[]> {
-  const rows = await db.select().from(importedTournamentResults)
+  const conditions = []
+  if (opts.metaWindow) {
+    conditions.push(eq(importedTournamentResults.metaWindow, opts.metaWindow))
+  }
+  if (opts.format) {
+    conditions.push(eq(importedTournamentResults.format, opts.format))
+  }
 
-  const filtered = rows.filter((row: any) => {
-    if (opts.metaWindow && row.metaWindow !== opts.metaWindow) return false
-    if (opts.format && row.format !== opts.format) return false
-    return true
-  })
+  const query = conditions.length > 0
+    ? db.select().from(importedTournamentResults).where(and(...conditions))
+    : db.select().from(importedTournamentResults)
+
+  const rows = await query
 
   const records: TournamentRecord[] = []
-  for (const row of filtered) {
+  for (const row of rows) {
     try {
       const parsed = JSON.parse(row.parsedData)
       if (Array.isArray(parsed)) records.push(...parsed)

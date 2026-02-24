@@ -1,6 +1,6 @@
 import { createClient } from '@libsql/client'
 import { createDbFromClient } from '@tabletop-tools/db'
-import { afterAll, beforeAll, describe, expect, it } from 'vitest'
+import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest'
 
 import { appRouter } from './routers'
 import { createCallerFactory } from './trpc'
@@ -36,16 +36,20 @@ afterAll(() => client.close())
 
 const createCaller = createCallerFactory(appRouter)
 
+const nullStorage = { upload: vi.fn().mockResolvedValue('null://discarded') }
+
 const anonCtx = {
   user: null,
   req: new Request('http://localhost'),
   db,
+  storage: nullStorage,
 } as const
 
 const authCtx = {
   user: { id: 'user-1', email: 'test@example.com', name: 'Test User' },
   req: new Request('http://localhost'),
   db,
+  storage: nullStorage,
 } as const
 
 describe('health', () => {

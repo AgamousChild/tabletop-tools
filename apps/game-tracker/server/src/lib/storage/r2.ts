@@ -7,6 +7,31 @@ export type R2Storage = {
 }
 
 /**
+ * Create R2 storage backed by a Workers R2 bucket binding.
+ * The bucket is provided by the Worker environment (`env.PHOTOS_BUCKET`).
+ */
+export function createR2Storage(
+  bucket: { put(key: string, value: ArrayBuffer, options?: { httpMetadata?: { contentType: string } }): Promise<unknown> },
+  publicUrl: string,
+): R2Storage {
+  return {
+    async upload(key: string, dataUrl: string): Promise<string> {
+      // Extract base64 data from data URL
+      const base64 = dataUrl.replace(/^data:[^;]+;base64,/, '')
+      const binary = atob(base64)
+      const bytes = new Uint8Array(binary.length)
+      for (let i = 0; i < binary.length; i++) {
+        bytes[i] = binary.charCodeAt(i)
+      }
+      await bucket.put(key, bytes.buffer, {
+        httpMetadata: { contentType: 'image/jpeg' },
+      })
+      return `${publicUrl}/${key}`
+    },
+  }
+}
+
+/**
  * No-op storage — used in development and tests when R2 is not configured.
  * Photos are accepted but discarded; photo_url is stored as null.
  */
@@ -16,18 +41,4 @@ export function createNullR2Storage(): R2Storage {
       return null
     },
   }
-}
-
-/**
- * Create R2 storage from environment variables.
- * Falls back to NullR2Storage if R2 is not configured.
- *
- * In production, configure:
- *   R2_ACCOUNT_ID, R2_ACCESS_KEY_ID, R2_SECRET_ACCESS_KEY, R2_BUCKET_NAME
- */
-export function createR2StorageFromEnv(): R2Storage {
-  // R2 upload requires @aws-sdk/client-s3 with Cloudflare R2 endpoint.
-  // That dependency is added when the deployment is configured (Phase 9).
-  // For now, fall back to null storage in all environments.
-  return createNullR2Storage()
 }

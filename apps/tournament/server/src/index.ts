@@ -1,6 +1,6 @@
 import 'dotenv/config'
 
-import { serve } from '@hono/node-server'
+import { startDevServer } from '@tabletop-tools/server-core'
 import { createDb } from '@tabletop-tools/db'
 
 import { createServer } from './server'
@@ -10,8 +10,7 @@ const db = createDb({
   authToken: process.env['TURSO_AUTH_TOKEN'],
 })
 
-const app = createServer(db)
-
-serve({ fetch: app.fetch, port: 3005, hostname: '0.0.0.0' }, (info) => {
-  console.log(`tournament server running at http://localhost:${info.port}`)
+startDevServer({
+  port: 3005,
+  createApp: async () => createServer(db),
 })

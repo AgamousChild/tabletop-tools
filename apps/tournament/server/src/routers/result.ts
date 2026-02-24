@@ -1,3 +1,4 @@
+import { TRPCError } from '@trpc/server'
 import { eq } from 'drizzle-orm'
 import { z } from 'zod'
 
@@ -20,8 +21,8 @@ export const resultRouter = router({
         .from(pairings)
         .where(eq(pairings.id, input.pairingId))
         .get()
-      if (!pairing) throw new Error('Pairing not found')
-      if (pairing.result === 'BYE') throw new Error('Cannot report BYE result')
+      if (!pairing) throw new TRPCError({ code: 'NOT_FOUND', message: 'Pairing not found' })
+      if (pairing.result === 'BYE') throw new TRPCError({ code: 'BAD_REQUEST', message: 'Cannot report BYE result' })
 
       // Check user is one of the players in this pairing
       const player1 = await ctx.db
@@ -39,7 +40,7 @@ export const resultRouter = router({
 
       const isPlayer =
         player1?.userId === ctx.user.id || player2?.userId === ctx.user.id
-      if (!isPlayer) throw new Error('Not a player in this pairing')
+      if (!isPlayer) throw new TRPCError({ code: 'FORBIDDEN', message: 'Not a player in this pairing' })
 
       const result = deriveResult(input.player1VP, input.player2VP)
 
@@ -65,8 +66,8 @@ export const resultRouter = router({
         .from(pairings)
         .where(eq(pairings.id, input))
         .get()
-      if (!pairing) throw new Error('Pairing not found')
-      if (!pairing.result) throw new Error('No result to confirm')
+      if (!pairing) throw new TRPCError({ code: 'NOT_FOUND', message: 'Pairing not found' })
+      if (!pairing.result) throw new TRPCError({ code: 'BAD_REQUEST', message: 'No result to confirm' })
 
       const player2 = pairing.player2Id
         ? await ctx.db
@@ -86,7 +87,7 @@ export const resultRouter = router({
           .where(eq(tournamentPlayers.id, pairing.player1Id))
           .get()
         if (player1?.userId !== ctx.user.id && player2?.userId !== ctx.user.id) {
-          throw new Error('Not a player in this pairing')
+          throw new TRPCError({ code: 'FORBIDDEN', message: 'Not a player in this pairing' })
         }
       }
 
@@ -106,7 +107,43 @@ export const resultRouter = router({
         .from(pairings)
         .where(eq(pairings.id, input))
         .get()
-      if (!pairing) throw new Error('Pairing not found')
+      if (!pairing) throw new TRPCError({ code: 'NOT_FOUND', message: 'Pairing not found' })
+
+      // Authorization: must be a participant or the TO
+      const player1 = await ctx.db
+        .select()
+        .from(tournamentPlayers)
+        .where(eq(tournamentPlayers.id, pairing.player1Id))
+        .get()
+      const player2 = pairing.player2Id
+        ? await ctx.db
+            .select()
+            .from(tournamentPlayers)
+            .where(eq(tournamentPlayers.id, pairing.player2Id))
+            .get()
+        : null
+      const isParticipant =
+        player1?.userId === ctx.user.id || player2?.userId === ctx.user.id
+
+      if (!isParticipant) {
+        // Check if user is the TO
+        const round = await ctx.db
+          .select()
+          .from(rounds)
+          .where(eq(rounds.id, pairing.roundId))
+          .get()
+        const tournament = round
+          ? await ctx.db
+              .select()
+              .from(tournaments)
+              .where(eq(tournaments.id, round.tournamentId))
+              .get()
+          : null
+        if (!tournament || tournament.toUserId !== ctx.user.id) {
+          throw new TRPCError({ code: 'FORBIDDEN', message: 'Only participants or the TO can dispute' })
+        }
+      }
+
       // Flag for TO by clearing confirmation
       await ctx.db
         .update(pairings)
@@ -129,7 +166,7 @@ export const resultRouter = router({
         .from(pairings)
         .where(eq(pairings.id, input.pairingId))
         .get()
-      if (!pairing) throw new Error('Pairing not found')
+      if (!pairing) throw new TRPCError({ code: 'NOT_FOUND', message: 'Pairing not found' })
 
       // Check user is the TO for this tournament
       const round = await ctx.db
@@ -145,7 +182,7 @@ export const resultRouter = router({
             .get()
         : null
       if (!tournament || tournament.toUserId !== ctx.user.id) {
-        throw new Error('Not authorized')
+        throw new TRPCError({ code: 'FORBIDDEN', message: 'Not authorized' })
       }
 
       const result = deriveResult(input.player1VP, input.player2VP)

@@ -1,4 +1,4 @@
-import { eq, desc } from 'drizzle-orm'
+import { eq, desc, and } from 'drizzle-orm'
 import { z } from 'zod'
 import { unitRatings } from '@tabletop-tools/db'
 
@@ -26,15 +26,20 @@ export const ratingRouter = router({
       }),
     )
     .query(async ({ ctx, input }) => {
-      // Get all rated units, then filter by points range via the content adapter
+      // Filter by metaWindow in SQL to reduce result set
+      const conditions = []
+      if (input.metaWindow) conditions.push(eq(unitRatings.metaWindow, input.metaWindow))
+
       const allRatings = await ctx.db
         .select()
         .from(unitRatings)
+        .where(conditions.length > 0 ? and(...conditions) : undefined)
         .orderBy(desc(unitRatings.winContrib))
 
       if (allRatings.length === 0) return []
 
       // For each rated unit, fetch its profile to check points cost
+      // (getUnit is an in-memory lookup via GameContentAdapter, not a DB query)
       const results: Array<typeof unitRatings.$inferSelect & { points: number }> = []
 
       for (const r of allRatings) {
@@ -42,7 +47,6 @@ export const ratingRouter = router({
         if (!unit) continue
         if (input.ptsMin != null && unit.points < input.ptsMin) continue
         if (input.ptsMax != null && unit.points > input.ptsMax) continue
-        if (input.metaWindow && r.metaWindow !== input.metaWindow) continue
         results.push({ ...r, points: unit.points })
       }
 

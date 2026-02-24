@@ -10,8 +10,8 @@ import {
   clearAll,
 } from '@tabletop-tools/game-data-store'
 import type { ImportMeta } from '@tabletop-tools/game-data-store'
-import { listCatalogFiles, fetchCatalogXml } from '../lib/github'
-import type { CatalogFile } from '../lib/github'
+import { listCatalogFiles, fetchCatalogXml, RateLimitError } from '../lib/github'
+import type { CatalogFile, RateLimitInfo } from '../lib/github'
 
 interface ImportProgress {
   current: number
@@ -25,6 +25,8 @@ interface ImportResult {
   errors: string[]
 }
 
+type FactionStatus = 'pending' | 'importing' | 'success' | 'failed'
+
 export function ImportScreen() {
   const [repo, setRepo] = useState('BSData/wh40k-10e')
   const [branch, setBranch] = useState('main')
@@ -35,6 +37,8 @@ export function ImportScreen() {
   const [importing, setImporting] = useState(false)
   const [progress, setProgress] = useState<ImportProgress | null>(null)
   const [result, setResult] = useState<ImportResult | null>(null)
+  const [factionStatuses, setFactionStatuses] = useState<Record<string, FactionStatus>>({})
+  const [rateLimit, setRateLimit] = useState<RateLimitInfo | null>(null)
 
   // Current data state
   const [currentMeta, setCurrentMeta] = useState<ImportMeta | null>(null)
@@ -67,13 +71,20 @@ export function ImportScreen() {
     setCatalogs([])
     setSelected(new Set())
     setResult(null)
+    setFactionStatuses({})
+    setRateLimit(null)
 
     try {
-      const files = await listCatalogFiles(repo, branch)
+      const { files, rateLimit: rl } = await listCatalogFiles(repo, branch)
       setCatalogs(files)
       setSelected(new Set(files.map((f) => f.name)))
+      setRateLimit(rl)
     } catch (err) {
-      setLoadError(err instanceof Error ? err.message : String(err))
+      if (err instanceof RateLimitError) {
+        setLoadError(`Rate limited. Try again at ${err.resetAt.toLocaleTimeString()}.`)
+      } else {
+        setLoadError(err instanceof Error ? err.message : String(err))
+      }
     } finally {
       setLoading(false)
     }
@@ -94,18 +105,28 @@ export function ImportScreen() {
   const selectAll = () => setSelected(new Set(catalogs.map((f) => f.name)))
   const selectNone = () => setSelected(new Set())
 
-  const handleImport = async () => {
-    const toImport = catalogs.filter((c) => selected.has(c.name))
+  const importFactions = async (toImport: CatalogFile[]) => {
     if (toImport.length === 0) return
 
     setImporting(true)
     setResult(null)
     const allErrors: string[] = []
     let totalUnits = 0
+    const successfulFactions: string[] = []
+
+    // Initialize statuses for this batch
+    setFactionStatuses((prev) => {
+      const next = { ...prev }
+      for (const file of toImport) {
+        next[file.faction] = 'pending'
+      }
+      return next
+    })
 
     for (let i = 0; i < toImport.length; i++) {
       const file = toImport[i]!
       setProgress({ current: i + 1, total: toImport.length, currentFaction: file.faction })
+      setFactionStatuses((prev) => ({ ...prev, [file.faction]: 'importing' }))
 
       try {
         const xml = await fetchCatalogXml(file)
@@ -115,23 +136,43 @@ export function ImportScreen() {
         }
         totalUnits += units.length
         allErrors.push(...errors)
+        successfulFactions.push(file.faction)
+        setFactionStatuses((prev) => ({ ...prev, [file.faction]: 'success' }))
       } catch (err) {
         allErrors.push(`${file.faction}: ${err instanceof Error ? err.message : String(err)}`)
+        setFactionStatuses((prev) => ({ ...prev, [file.faction]: 'failed' }))
       }
     }
 
-    const factions = toImport.map((f) => f.faction)
-    await setImportMeta({
-      lastImport: Date.now(),
-      factions,
-      totalUnits,
-    })
+    // Only record successfully imported factions in metadata
+    if (successfulFactions.length > 0) {
+      await setImportMeta({
+        lastImport: Date.now(),
+        factions: successfulFactions,
+        totalUnits,
+      })
+    }
 
-    setResult({ totalUnits, factions: factions.length, errors: allErrors })
+    setResult({ totalUnits, factions: successfulFactions.length, errors: allErrors })
     setImporting(false)
     setProgress(null)
     await refreshStoredData()
   }
+
+  const handleImport = () => {
+    const toImport = catalogs.filter((c) => selected.has(c.name))
+    return importFactions(toImport)
+  }
+
+  const handleRetryFailed = () => {
+    const failedFactions = Object.entries(factionStatuses)
+      .filter(([, status]) => status === 'failed')
+      .map(([faction]) => faction)
+    const toRetry = catalogs.filter((c) => failedFactions.includes(c.faction))
+    return importFactions(toRetry)
+  }
+
+  const hasFailedFactions = Object.values(factionStatuses).some((s) => s === 'failed')
 
   const handleClearFaction = async (faction: string) => {
     await clearFaction(faction)
@@ -149,6 +190,19 @@ export function ImportScreen() {
     return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
   }
 
+  const statusIcon = (status: FactionStatus) => {
+    switch (status) {
+      case 'success':
+        return <span className="text-emerald-400">✓</span>
+      case 'failed':
+        return <span className="text-red-400">✕</span>
+      case 'importing':
+        return <span className="text-amber-400 animate-pulse">●</span>
+      default:
+        return null
+    }
+  }
+
   return (
     <div className="min-h-screen bg-slate-950 p-6">
       <div className="mx-auto max-w-3xl">
@@ -160,6 +214,16 @@ export function ImportScreen() {
             Load unit data from BSData into your browser. No server needed.
           </p>
         </header>
+
+        {/* Rate limit warning */}
+        {rateLimit && rateLimit.remaining < 10 && (
+          <div className="mb-4 rounded-lg border border-amber-800 bg-amber-900/20 px-4 py-3 text-sm text-amber-300">
+            GitHub API: {rateLimit.remaining}/{rateLimit.limit} requests remaining.
+            {rateLimit.remaining === 0 && (
+              <> Resets at {rateLimit.resetAt.toLocaleTimeString()}.</>
+            )}
+          </div>
+        )}
 
         {/* Current data state */}
         {storedFactions.length > 0 && (
@@ -264,18 +328,33 @@ export function ImportScreen() {
                     onChange={() => toggleFaction(cat.name)}
                     className="accent-amber-400"
                   />
-                  <span className="flex-1 text-sm text-slate-200">{cat.faction}</span>
+                  <span className="flex-1 text-sm text-slate-200">
+                    {cat.faction}
+                    {factionStatuses[cat.faction] && (
+                      <span className="ml-2">{statusIcon(factionStatuses[cat.faction]!)}</span>
+                    )}
+                  </span>
                   <span className="text-xs text-slate-500">{formatSize(cat.size)}</span>
                 </label>
               ))}
             </div>
-            <button
-              onClick={handleImport}
-              disabled={importing || selected.size === 0}
-              className="mt-4 w-full rounded bg-amber-400 px-4 py-2 text-sm font-medium text-slate-900 hover:bg-amber-300 disabled:opacity-50"
-            >
-              {importing ? 'Importing...' : `Import ${selected.size} Faction${selected.size !== 1 ? 's' : ''}`}
-            </button>
+            <div className="mt-4 flex gap-3">
+              <button
+                onClick={handleImport}
+                disabled={importing || selected.size === 0}
+                className="flex-1 rounded bg-amber-400 px-4 py-2 text-sm font-medium text-slate-900 hover:bg-amber-300 disabled:opacity-50"
+              >
+                {importing ? 'Importing...' : `Import ${selected.size} Faction${selected.size !== 1 ? 's' : ''}`}
+              </button>
+              {hasFailedFactions && !importing && (
+                <button
+                  onClick={handleRetryFailed}
+                  className="rounded border border-amber-400 px-4 py-2 text-sm font-medium text-amber-400 hover:bg-amber-400/10"
+                >
+                  Retry Failed
+                </button>
+              )}
+            </div>
           </section>
         )}
 

@@ -1,3 +1,4 @@
+import { TRPCError } from '@trpc/server'
 import { eq, and } from 'drizzle-orm'
 import { z } from 'zod'
 
@@ -20,8 +21,8 @@ export const playerRouter = router({
         .from(tournaments)
         .where(eq(tournaments.id, input.tournamentId))
         .get()
-      if (!tournament) throw new Error('Tournament not found')
-      if (tournament.status !== 'REGISTRATION') throw new Error('Registration is not open')
+      if (!tournament) throw new TRPCError({ code: 'NOT_FOUND', message: 'Tournament not found' })
+      if (tournament.status !== 'REGISTRATION') throw new TRPCError({ code: 'BAD_REQUEST', message: 'Registration is not open' })
 
       const id = crypto.randomUUID()
       const now = Date.now()
@@ -54,8 +55,8 @@ export const playerRouter = router({
           ),
         )
         .get()
-      if (!player) throw new Error('Not registered')
-      if (player.listLocked) throw new Error('Lists are locked')
+      if (!player) throw new TRPCError({ code: 'NOT_FOUND', message: 'Not registered' })
+      if (player.listLocked) throw new TRPCError({ code: 'BAD_REQUEST', message: 'Lists are locked' })
       await ctx.db
         .update(tournamentPlayers)
         .set({ listText: input.listText })
@@ -76,7 +77,7 @@ export const playerRouter = router({
           ),
         )
         .get()
-      if (!player) throw new Error('Not registered')
+      if (!player) throw new TRPCError({ code: 'NOT_FOUND', message: 'Not registered' })
       await ctx.db
         .update(tournamentPlayers)
         .set({ checkedIn: 1 })
@@ -97,7 +98,7 @@ export const playerRouter = router({
           ),
         )
         .get()
-      if (!player) throw new Error('Not registered')
+      if (!player) throw new TRPCError({ code: 'NOT_FOUND', message: 'Not registered' })
       await ctx.db
         .update(tournamentPlayers)
         .set({ dropped: 1 })
@@ -114,8 +115,8 @@ export const playerRouter = router({
         .from(tournaments)
         .where(eq(tournaments.id, input.tournamentId))
         .get()
-      if (!tournament) throw new Error('Tournament not found')
-      if (tournament.toUserId !== ctx.user.id) throw new Error('Not authorized')
+      if (!tournament) throw new TRPCError({ code: 'NOT_FOUND', message: 'Tournament not found' })
+      if (tournament.toUserId !== ctx.user.id) throw new TRPCError({ code: 'FORBIDDEN', message: 'Not authorized' })
       return ctx.db
         .select()
         .from(tournamentPlayers)
@@ -131,8 +132,8 @@ export const playerRouter = router({
         .from(tournaments)
         .where(eq(tournaments.id, input.tournamentId))
         .get()
-      if (!tournament) throw new Error('Tournament not found')
-      if (tournament.toUserId !== ctx.user.id) throw new Error('Not authorized')
+      if (!tournament) throw new TRPCError({ code: 'NOT_FOUND', message: 'Tournament not found' })
+      if (tournament.toUserId !== ctx.user.id) throw new TRPCError({ code: 'FORBIDDEN', message: 'Not authorized' })
       await ctx.db
         .update(tournamentPlayers)
         .set({ listLocked: 1 })
@@ -148,13 +149,13 @@ export const playerRouter = router({
         .from(tournamentPlayers)
         .where(eq(tournamentPlayers.id, input.playerId))
         .get()
-      if (!player) throw new Error('Player not found')
+      if (!player) throw new TRPCError({ code: 'NOT_FOUND', message: 'Player not found' })
       const tournament = await ctx.db
         .select()
         .from(tournaments)
         .where(eq(tournaments.id, player.tournamentId))
         .get()
-      if (!tournament || tournament.toUserId !== ctx.user.id) throw new Error('Not authorized')
+      if (!tournament || tournament.toUserId !== ctx.user.id) throw new TRPCError({ code: 'FORBIDDEN', message: 'Not authorized' })
       await ctx.db
         .update(tournamentPlayers)
         .set({ dropped: 1 })

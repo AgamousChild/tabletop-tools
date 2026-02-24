@@ -1,28 +1,36 @@
-import { PutObjectCommand, S3Client } from '@aws-sdk/client-s3'
-
-export function createR2Client(): S3Client {
-  return new S3Client({
-    region: 'auto',
-    endpoint: `https://${process.env['CLOUDFLARE_ACCOUNT_ID']}.r2.cloudflarestorage.com`,
-    credentials: {
-      accessKeyId: process.env['R2_ACCESS_KEY_ID'] ?? '',
-      secretAccessKey: process.env['R2_SECRET_ACCESS_KEY'] ?? '',
-    },
-  })
+/**
+ * R2 storage interface for evidence photos.
+ * In production, uses Cloudflare Workers R2 bucket binding.
+ * In dev/test, uses null storage (photos discarded with warning).
+ */
+export interface R2Storage {
+  upload(key: string, data: ArrayBuffer, contentType: string): Promise<string>
 }
 
-export async function uploadToR2(
-  client: S3Client,
-  key: string,
-  data: Buffer,
-  contentType: string,
-): Promise<string> {
-  const bucket = process.env['R2_BUCKET_NAME'] ?? ''
-  const publicUrl = process.env['R2_PUBLIC_URL'] ?? ''
+/**
+ * Create R2 storage backed by a Workers R2 bucket binding.
+ * The bucket is provided by the Worker environment (`env.EVIDENCE_BUCKET`).
+ */
+export function createR2Storage(
+  bucket: { put(key: string, value: ArrayBuffer, options?: { httpMetadata?: { contentType: string } }): Promise<unknown> },
+  publicUrl: string,
+): R2Storage {
+  return {
+    async upload(key, data, contentType) {
+      await bucket.put(key, data, { httpMetadata: { contentType } })
+      return `${publicUrl}/${key}`
+    },
+  }
+}
 
-  await client.send(
-    new PutObjectCommand({ Bucket: bucket, Key: key, Body: data, ContentType: contentType }),
-  )
-
-  return `${publicUrl}/${key}`
+/**
+ * No-op storage for dev/test when R2 is not configured.
+ */
+export function createNullR2Storage(): R2Storage {
+  return {
+    async upload(key) {
+      console.warn(`[R2 null] Evidence photo discarded: ${key}`)
+      return `null://discarded/${key}`
+    },
+  }
 }

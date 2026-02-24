@@ -1,6 +1,6 @@
 import { useState } from 'react'
+import { AuthScreen } from '@tabletop-tools/ui'
 import { authClient } from './lib/auth'
-import { AuthScreen } from './components/AuthScreen'
 import { Dashboard } from './pages/Dashboard'
 import { UsersPage } from './pages/UsersPage'
 import { SessionsPage } from './pages/SessionsPage'
@@ -30,7 +30,7 @@ export default function App() {
   }
 
   if (!session) {
-    return <AuthScreen onAuthenticated={() => refetch()} />
+    return <AuthScreen title="Admin Dashboard" authClient={authClient} onAuthenticated={() => refetch()} />
   }
 
   return (

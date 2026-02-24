@@ -1,6 +1,6 @@
 import { createClient } from '@libsql/client'
 import { createDbFromClient } from '@tabletop-tools/db'
-import { afterAll, beforeAll, describe, expect, it } from 'vitest'
+import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest'
 
 import { createCallerFactory } from '../trpc'
 import { appRouter } from './index'
@@ -57,8 +57,9 @@ afterAll(() => client.close())
 
 const createCaller = createCallerFactory(appRouter)
 const req = new Request('http://localhost')
-const alice = { user: { id: 'user-1', email: 'alice@example.com', name: 'Alice' }, req, db }
-const bob = { user: { id: 'user-2', email: 'bob@example.com', name: 'Bob' }, req, db }
+const nullStorage = { upload: vi.fn().mockResolvedValue('null://discarded') }
+const alice = { user: { id: 'user-1', email: 'alice@example.com', name: 'Alice' }, req, db, storage: nullStorage }
+const bob = { user: { id: 'user-2', email: 'bob@example.com', name: 'Bob' }, req, db, storage: nullStorage }
 
 // ---------------------------------------------------------------------------
 // session.start
@@ -91,7 +92,7 @@ describe('session.start', () => {
   })
 
   it('rejects unauthenticated callers', async () => {
-    const caller = createCaller({ user: null, req, db })
+    const caller = createCaller({ user: null, req, db, storage: nullStorage })
     await expect(caller.session.start({ diceSetId: 'set-1' })).rejects.toMatchObject({
       code: 'UNAUTHORIZED',
     })

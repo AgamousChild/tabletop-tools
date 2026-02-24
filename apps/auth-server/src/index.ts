@@ -30,7 +30,14 @@ const auth = createAuth(
 
 const app = new Hono()
 
-app.use('*', cors({ origin: (origin) => origin ?? '*', credentials: true }))
+app.use(
+  '*',
+  cors({
+    origin: (origin) =>
+      trustedOrigins.includes(origin) ? origin : trustedOrigins[0]!,
+    credentials: true,
+  }),
+)
 
 // All auth routes for the entire platform
 app.on(['GET', 'POST'], '/api/auth/**', (c) => auth.handler(c.req.raw))

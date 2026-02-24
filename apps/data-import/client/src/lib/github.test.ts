@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { listCatalogFiles, fetchCatalogXml } from './github'
+import { listCatalogFiles, fetchCatalogXml, RateLimitError } from './github'
 import type { CatalogFile } from './github'
 
 const mockFetch = vi.fn()
@@ -9,19 +9,27 @@ beforeEach(() => {
   mockFetch.mockReset()
 })
 
+function mockGitHubResponse(items: unknown[], rateLimitHeaders?: Record<string, string>) {
+  const headers = new Map<string, string>(Object.entries(rateLimitHeaders ?? {}))
+  return {
+    ok: true,
+    json: async () => items,
+    headers: { get: (key: string) => headers.get(key) ?? null },
+  }
+}
+
 describe('listCatalogFiles', () => {
   it('fetches and filters .cat files from GitHub API', async () => {
-    mockFetch.mockResolvedValueOnce({
-      ok: true,
-      json: async () => [
+    mockFetch.mockResolvedValueOnce(
+      mockGitHubResponse([
         { name: 'Imperium - Space Marines.cat', size: 500000, download_url: 'https://raw.githubusercontent.com/BSData/wh40k-10e/main/Imperium%20-%20Space%20Marines.cat' },
         { name: 'Orks.cat', size: 200000, download_url: 'https://raw.githubusercontent.com/BSData/wh40k-10e/main/Orks.cat' },
         { name: 'Warhammer 40,000.gst', size: 100000, download_url: 'https://raw.githubusercontent.com/BSData/wh40k-10e/main/Warhammer%2040%2C000.gst' },
         { name: 'README.md', size: 500, download_url: null },
-      ],
-    })
+      ]),
+    )
 
-    const files = await listCatalogFiles()
+    const { files } = await listCatalogFiles()
 
     expect(mockFetch).toHaveBeenCalledWith(
       'https://api.github.com/repos/BSData/wh40k-10e/contents?ref=main',
@@ -33,34 +41,29 @@ describe('listCatalogFiles', () => {
   })
 
   it('derives faction name by stripping .cat extension', async () => {
-    mockFetch.mockResolvedValueOnce({
-      ok: true,
-      json: async () => [
+    mockFetch.mockResolvedValueOnce(
+      mockGitHubResponse([
         { name: 'Chaos - Death Guard.cat', size: 300000, download_url: 'https://example.com/file.cat' },
-      ],
-    })
+      ]),
+    )
 
-    const files = await listCatalogFiles()
+    const { files } = await listCatalogFiles()
     expect(files[0]!.faction).toBe('Chaos - Death Guard')
   })
 
   it('constructs raw.githubusercontent.com download URL', async () => {
-    mockFetch.mockResolvedValueOnce({
-      ok: true,
-      json: async () => [
+    mockFetch.mockResolvedValueOnce(
+      mockGitHubResponse([
         { name: 'Orks.cat', size: 200000, download_url: 'https://raw.githubusercontent.com/BSData/wh40k-10e/main/Orks.cat' },
-      ],
-    })
+      ]),
+    )
 
-    const files = await listCatalogFiles('BSData/wh40k-10e', 'main')
+    const { files } = await listCatalogFiles('BSData/wh40k-10e', 'main')
     expect(files[0]!.downloadUrl).toBe('https://raw.githubusercontent.com/BSData/wh40k-10e/main/Orks.cat')
   })
 
   it('supports custom repo and branch', async () => {
-    mockFetch.mockResolvedValueOnce({
-      ok: true,
-      json: async () => [],
-    })
+    mockFetch.mockResolvedValueOnce(mockGitHubResponse([]))
 
     await listCatalogFiles('MyOrg/my-data', 'dev')
     expect(mockFetch).toHaveBeenCalledWith(
@@ -70,22 +73,74 @@ describe('listCatalogFiles', () => {
   })
 
   it('throws on GitHub API error', async () => {
-    mockFetch.mockResolvedValueOnce({ ok: false, status: 404, statusText: 'Not Found' })
+    mockFetch.mockResolvedValueOnce({
+      ok: false,
+      status: 404,
+      statusText: 'Not Found',
+      headers: { get: () => null },
+    })
     await expect(listCatalogFiles()).rejects.toThrow('GitHub API error: 404 Not Found')
   })
 
   it('sorts files alphabetically by faction name', async () => {
-    mockFetch.mockResolvedValueOnce({
-      ok: true,
-      json: async () => [
+    mockFetch.mockResolvedValueOnce(
+      mockGitHubResponse([
         { name: 'Orks.cat', size: 200000, download_url: 'https://example.com/orks.cat' },
         { name: 'Aeldari.cat', size: 300000, download_url: 'https://example.com/aeldari.cat' },
         { name: 'Chaos - World Eaters.cat', size: 100000, download_url: 'https://example.com/we.cat' },
-      ],
+      ]),
+    )
+
+    const { files } = await listCatalogFiles()
+    expect(files.map((f) => f.faction)).toEqual(['Aeldari', 'Chaos - World Eaters', 'Orks'])
+  })
+
+  it('returns rate limit info from response headers', async () => {
+    mockFetch.mockResolvedValueOnce(
+      mockGitHubResponse(
+        [{ name: 'Orks.cat', size: 200000, download_url: 'https://example.com/orks.cat' }],
+        {
+          'X-RateLimit-Remaining': '42',
+          'X-RateLimit-Limit': '60',
+          'X-RateLimit-Reset': '1700000000',
+        },
+      ),
+    )
+
+    const { rateLimit } = await listCatalogFiles()
+    expect(rateLimit).toEqual({
+      remaining: 42,
+      limit: 60,
+      resetAt: new Date(1700000000 * 1000),
+    })
+  })
+
+  it('returns null rateLimit when headers are missing', async () => {
+    mockFetch.mockResolvedValueOnce(mockGitHubResponse([]))
+    const { rateLimit } = await listCatalogFiles()
+    expect(rateLimit).toBeNull()
+  })
+
+  it('throws RateLimitError on 403 with exhausted limit', async () => {
+    const headers = new Map<string, string>([
+      ['X-RateLimit-Remaining', '0'],
+      ['X-RateLimit-Limit', '60'],
+      ['X-RateLimit-Reset', '1700000000'],
+    ])
+    mockFetch.mockResolvedValueOnce({
+      ok: false,
+      status: 403,
+      statusText: 'Forbidden',
+      headers: { get: (key: string) => headers.get(key) ?? null },
     })
 
-    const files = await listCatalogFiles()
-    expect(files.map((f) => f.faction)).toEqual(['Aeldari', 'Chaos - World Eaters', 'Orks'])
+    try {
+      await listCatalogFiles()
+      expect.fail('Expected RateLimitError to be thrown')
+    } catch (err) {
+      expect(err).toBeInstanceOf(RateLimitError)
+      expect((err as RateLimitError).resetAt).toEqual(new Date(1700000000 * 1000))
+    }
   })
 })
 
