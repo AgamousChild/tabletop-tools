@@ -9,7 +9,7 @@
 | Layer | Status |
 |---|---|
 | DB schema (tournaments, tournament_players, rounds, pairings, player_elo, elo_history) | ✅ in packages/db |
-| Server (Hono + tRPC) | ✅ built + tested (42 tests) |
+| Server (Hono + tRPC) | ✅ built + tested (48 tests) |
 | Client (React + shadcn) | ✅ built + tested (10 tests) |
 | Deployment | ✅ Deployed to tabletop-tools.net/tournament/ via gateway |
 

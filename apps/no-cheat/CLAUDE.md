@@ -20,7 +20,7 @@ no-cheat is the founding app of the Tabletop Tools platform.
 
 | Layer | Status |
 |---|---|
-| Server scaffold (Hono + tRPC) | ✅ done — 50 tests |
+| Server scaffold (Hono + tRPC) | ✅ done — 58 tests |
 | DB schema (dice_sets, sessions, rolls) | ✅ done |
 | Auth (federated via apps/auth-server) | ✅ done — 11 tests |
 | Statistical engine (Z-score, chi-sq) | ✅ done — 17 tests |

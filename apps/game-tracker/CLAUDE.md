@@ -9,7 +9,7 @@
 | Layer | Status |
 |---|---|
 | DB schema (matches, turns) | ✅ in packages/db |
-| Server (Hono + tRPC) | ✅ built + tested (26 tests) |
+| Server (Hono + tRPC) | ✅ built + tested (32 tests) |
 | Client (React + shadcn) | ✅ built + tested (13 tests) |
 | Deployment | ✅ Deployed to tabletop-tools.net/game-tracker/ via gateway |
 

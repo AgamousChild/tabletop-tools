@@ -10,7 +10,7 @@
 |---|---|
 | DB schema (simulations table) | ✅ in packages/db |
 | packages/game-content BSDataAdapter | ✅ built + tested |
-| Server (Hono + tRPC) | ✅ built + tested (57 tests) |
+| Server (Hono + tRPC) | ✅ built + tested (61 tests) |
 | Client (React + shadcn) | ✅ built + tested (23 tests) |
 | Deployment | ✅ Deployed to tabletop-tools.net/versus/ via gateway |
 
