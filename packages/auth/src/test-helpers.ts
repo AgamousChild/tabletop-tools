@@ -75,7 +75,7 @@ export async function setupAuthTables(client: Client) {
 /**
  * Helper to make HTTP requests through a Hono app with optional session cookie.
  */
-export function createRequestHelper(appFactory: () => { fetch: (req: Request) => Promise<Response> }) {
+export function createRequestHelper(appFactory: () => { fetch: (req: Request) => Response | Promise<Response> }) {
   return function makeRequest(path: string, opts: { cookie?: string; method?: string; body?: unknown } = {}) {
     const app = appFactory()
     const headers: Record<string, string> = { 'Content-Type': 'application/json' }

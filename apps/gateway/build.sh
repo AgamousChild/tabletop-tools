@@ -23,4 +23,18 @@ cp "$GATEWAY_DIR/landing/index.html" "$DIST/index.html"
 # Copy SPA redirects
 cp "$GATEWAY_DIR/_redirects" "$DIST/_redirects"
 
-echo "Gateway build complete: $DIST"
+# Validate all outputs exist before declaring success
+echo "Validating build outputs..."
+for app in no-cheat versus list-builder game-tracker tournament new-meta data-import admin; do
+  if [ ! -f "$DIST/$app/index.html" ]; then
+    echo "ERROR: $DIST/$app/index.html missing — build failed for $app"
+    exit 1
+  fi
+done
+
+if [ ! -f "$DIST/index.html" ]; then
+  echo "ERROR: $DIST/index.html missing — landing page not copied"
+  exit 1
+fi
+
+echo "Gateway build complete: $DIST (all 8 apps validated)"

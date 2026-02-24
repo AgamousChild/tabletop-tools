@@ -1,3 +1,4 @@
+import { createWorkerHandler } from '@tabletop-tools/server-core'
 import { createClient } from '@libsql/client/web'
 import { createDbFromClient } from '@tabletop-tools/db'
 import { NullAdapter } from '@tabletop-tools/game-content'
@@ -9,8 +10,8 @@ interface Env {
   TURSO_AUTH_TOKEN: string
 }
 
-export default {
-  async fetch(request: Request, env: Env): Promise<Response> {
+export default createWorkerHandler<Env>({
+  createApp: async (env) => {
     const client = createClient({
       url: env.TURSO_DB_URL,
       authToken: env.TURSO_AUTH_TOKEN,
@@ -18,7 +19,6 @@ export default {
     const db = createDbFromClient(client)
     const gameContent = new NullAdapter()
     await gameContent.load()
-    const app = createServer(db, gameContent)
-    return app.fetch(request)
+    return createServer(db, gameContent)
   },
-}
+})

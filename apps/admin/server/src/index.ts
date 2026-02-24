@@ -1,6 +1,6 @@
 import 'dotenv/config'
 
-import { serve } from '@hono/node-server'
+import { startDevServer } from '@tabletop-tools/server-core'
 import { createDb } from '@tabletop-tools/db'
 
 import { createServer } from './server.js'
@@ -15,8 +15,7 @@ const adminEmails = (process.env['ADMIN_EMAILS'] ?? '')
   .map((e) => e.trim())
   .filter(Boolean)
 
-const app = createServer(db, adminEmails)
-
-serve({ fetch: app.fetch, port: 3007, hostname: '0.0.0.0' }, (info) => {
-  console.log(`admin server running at http://localhost:${info.port}`)
+startDevServer({
+  port: 3007,
+  createApp: async () => createServer(db, adminEmails),
 })

@@ -1,12 +1,18 @@
 import { useState } from 'react'
 
-import { authClient } from '../lib/auth'
-
-type Props = {
-  onAuthenticated: () => void
+type AuthClient = {
+  signIn: { email: (opts: { email: string; password: string }) => Promise<{ error?: { message?: string } | null }> }
+  signUp: { email: (opts: { email: string; password: string; name: string }) => Promise<{ error?: { message?: string } | null }> }
 }
 
-export function AuthScreen({ onAuthenticated }: Props) {
+type AuthScreenProps = {
+  title: string
+  subtitle?: string
+  onAuthenticated: () => void
+  authClient: AuthClient
+}
+
+export function AuthScreen({ title, subtitle, onAuthenticated, authClient }: AuthScreenProps) {
   const [mode, setMode] = useState<'login' | 'register'>('login')
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
@@ -24,17 +30,18 @@ export function AuthScreen({ onAuthenticated }: Props) {
         const result = await authClient.signIn.email({ email, password })
         if (result.error) {
           setError(result.error.message ?? 'Login failed')
-        } else {
-          onAuthenticated()
+          return
         }
       } else {
         const result = await authClient.signUp.email({ email, password, name })
         if (result.error) {
           setError(result.error.message ?? 'Registration failed')
-        } else {
-          onAuthenticated()
+          return
         }
       }
+      onAuthenticated()
+    } catch {
+      setError('Network error — please try again')
     } finally {
       setLoading(false)
     }
@@ -43,8 +50,8 @@ export function AuthScreen({ onAuthenticated }: Props) {
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100 flex items-center justify-center p-4">
       <div className="w-full max-w-sm">
-        <h1 className="text-4xl font-bold text-amber-400 mb-1 text-center">Game Tracker</h1>
-        <p className="text-slate-400 text-center mb-8">40K match companion</p>
+        <h1 className="text-4xl font-bold text-amber-400 mb-1 text-center">{title}</h1>
+        {subtitle && <p className="text-slate-400 text-center mb-8">{subtitle}</p>}
 
         <form onSubmit={handleSubmit} className="space-y-4">
           {mode === 'register' && (
@@ -52,7 +59,7 @@ export function AuthScreen({ onAuthenticated }: Props) {
               type="text"
               value={name}
               onChange={(e) => setName(e.target.value)}
-              placeholder="Your name"
+              placeholder="Name"
               required
               className="w-full px-3 py-2 rounded-lg bg-slate-900 border border-slate-800 text-slate-100 placeholder-slate-500 focus:outline-none focus:border-amber-400"
             />
@@ -81,7 +88,7 @@ export function AuthScreen({ onAuthenticated }: Props) {
             disabled={loading}
             className="w-full py-2 rounded-lg bg-amber-400 text-slate-950 font-semibold hover:bg-amber-300 transition-colors disabled:opacity-50"
           >
-            {loading ? 'Please wait…' : mode === 'login' ? 'Log in' : 'Create account'}
+            {loading ? 'Please wait…' : mode === 'login' ? 'Sign in' : 'Create account'}
           </button>
         </form>
 
@@ -90,10 +97,7 @@ export function AuthScreen({ onAuthenticated }: Props) {
             <>
               No account?{' '}
               <button
-                onClick={() => {
-                  setMode('register')
-                  setError(null)
-                }}
+                onClick={() => { setMode('register'); setError(null) }}
                 className="text-amber-400 hover:underline"
               >
                 Register
@@ -103,13 +107,10 @@ export function AuthScreen({ onAuthenticated }: Props) {
             <>
               Have an account?{' '}
               <button
-                onClick={() => {
-                  setMode('login')
-                  setError(null)
-                }}
+                onClick={() => { setMode('login'); setError(null) }}
                 className="text-amber-400 hover:underline"
               >
-                Log in
+                Sign in
               </button>
             </>
           )}

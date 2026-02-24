@@ -27,6 +27,16 @@ function hexDecode(hex: string): Uint8Array {
   return bytes
 }
 
+/** Constant-time comparison to prevent timing attacks. */
+function timingSafeEqual(a: Uint8Array, b: Uint8Array): boolean {
+  if (a.length !== b.length) return false
+  let diff = 0
+  for (let i = 0; i < a.length; i++) {
+    diff |= a[i]! ^ b[i]!
+  }
+  return diff === 0
+}
+
 async function hashPassword(password: string): Promise<string> {
   const salt = hexEncode(crypto.getRandomValues(new Uint8Array(16)))
   const key = await scryptAsync(password.normalize('NFKC'), salt, {
@@ -49,7 +59,49 @@ async function verifyPassword(data: { hash: string; password: string }): Promise
     dkLen: SCRYPT.dkLen,
     maxmem: 128 * SCRYPT.N * SCRYPT.r * 2,
   })
-  return hexEncode(key) === storedKey
+  // V2: Timing-safe comparison — prevents character-by-character timing attacks
+  const derivedBytes = hexDecode(hexEncode(key))
+  const storedBytes = hexDecode(storedKey)
+  return timingSafeEqual(derivedBytes, storedBytes)
+}
+
+/**
+ * Verify the HMAC-SHA256 signature on a Better Auth signed cookie.
+ * Format: `{token}.{base64_signature}` (44-char Base64, ends with '=')
+ * Returns the raw token if valid, null if invalid.
+ * Uses Web Crypto API for Node.js and Cloudflare Workers compatibility.
+ */
+async function verifySignature(signedValue: string, secret: string): Promise<string | null> {
+  const lastDot = signedValue.lastIndexOf('.')
+  if (lastDot <= 0) return null
+
+  const token = signedValue.substring(0, lastDot)
+  const signature = signedValue.substring(lastDot + 1)
+  if (!token || !signature) return null
+
+  // Better Auth Base64 signatures are always 44 chars (32 bytes HMAC-SHA256)
+  if (signature.length !== 44 || !signature.endsWith('=')) return null
+
+  let sigBytes: Uint8Array
+  try {
+    const bin = atob(signature)
+    sigBytes = new Uint8Array(bin.length)
+    for (let i = 0; i < bin.length; i++) {
+      sigBytes[i] = bin.charCodeAt(i)
+    }
+  } catch {
+    return null // Invalid Base64
+  }
+
+  const encoder = new TextEncoder()
+  const key = await crypto.subtle.importKey(
+    'raw', encoder.encode(secret), { name: 'HMAC', hash: 'SHA-256' }, false, ['sign'],
+  )
+  const expectedBuf = new Uint8Array(await crypto.subtle.sign('HMAC', key, encoder.encode(token)))
+
+  if (!timingSafeEqual(sigBytes, expectedBuf)) return null
+
+  return token
 }
 
 export function createAuth(
@@ -87,10 +139,15 @@ export function createAuth(
 
 export type Auth = ReturnType<typeof createAuth>
 
+/** Canonical User type for all tRPC contexts. */
 export type User = {
   id: string
   email: string
   name: string
+  emailVerified: boolean
+  image: string | null
+  createdAt: Date
+  updatedAt: Date
 }
 
 /**
@@ -101,8 +158,11 @@ export type User = {
  *
  * App servers call this instead of running their own auth instance.
  * The central auth-server (apps/auth-server) handles all auth routes.
+ *
+ * @param secret - AUTH_SECRET for HMAC verification. If omitted, HMAC check
+ *   is skipped (V1 backwards compatibility). Pass this in production.
  */
-export async function validateSession(db: Db, headers: Headers): Promise<User | null> {
+export async function validateSession(db: Db, headers: Headers, secret?: string): Promise<User | null> {
   const cookieHeader = headers.get('cookie') ?? ''
   // Better Auth uses '__Secure-better-auth.session_token' on HTTPS (production)
   // and 'better-auth.session_token' on HTTP (local dev)
@@ -117,16 +177,28 @@ export async function validateSession(db: Db, headers: Headers): Promise<User | 
   const signedToken = decodeURIComponent(tokenEntry.slice(tokenEntry.indexOf('=') + 1))
   if (!signedToken) return null
 
-  // Better Auth signed cookie format: <raw_token>.<hmac_sha256_signature>
-  // The DB stores only the raw token — strip the trailing signature
-  const lastDot = signedToken.lastIndexOf('.')
-  const token = lastDot > 0 ? signedToken.substring(0, lastDot) : signedToken
+  let token: string
+
+  if (secret) {
+    // V2: Verify HMAC signature before accepting the token
+    const verified = await verifySignature(signedToken, secret)
+    if (!verified) return null
+    token = verified
+  } else {
+    // V1 fallback: strip signature without verification
+    const lastDot = signedToken.lastIndexOf('.')
+    token = lastDot > 0 ? signedToken.substring(0, lastDot) : signedToken
+  }
 
   const [row] = await db
     .select({
       id: authUsers.id,
       email: authUsers.email,
       name: authUsers.name,
+      emailVerified: authUsers.emailVerified,
+      image: authUsers.image,
+      createdAt: authUsers.createdAt,
+      updatedAt: authUsers.updatedAt,
     })
     .from(authSessions)
     .innerJoin(authUsers, eq(authSessions.userId, authUsers.id))

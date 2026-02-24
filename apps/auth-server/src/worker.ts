@@ -12,32 +12,45 @@ interface Env {
   TRUSTED_ORIGINS: string
 }
 
+let cachedApp: Hono | null = null
+
 export default {
   async fetch(request: Request, env: Env): Promise<Response> {
-    const client = createClient({
-      url: env.TURSO_DB_URL,
-      authToken: env.TURSO_AUTH_TOKEN,
-    })
-    const db = createDbFromClient(client)
+    if (!cachedApp) {
+      const client = createClient({
+        url: env.TURSO_DB_URL,
+        authToken: env.TURSO_AUTH_TOKEN,
+      })
+      const db = createDbFromClient(client)
 
-    const trustedOrigins = env.TRUSTED_ORIGINS
-      ? env.TRUSTED_ORIGINS.split(',')
-      : []
+      const allowedOrigins = env.TRUSTED_ORIGINS
+        ? env.TRUSTED_ORIGINS.split(',').map((o) => o.trim()).filter(Boolean)
+        : ['https://tabletop-tools.net']
 
-    const auth = createAuth(
-      db,
-      env.AUTH_BASE_URL ?? 'https://tabletop-tools.net',
-      trustedOrigins,
-      env.AUTH_SECRET,
-      '/auth/api/auth',
-    )
+      const auth = createAuth(
+        db,
+        env.AUTH_BASE_URL ?? 'https://tabletop-tools.net',
+        allowedOrigins,
+        env.AUTH_SECRET,
+        '/auth/api/auth',
+      )
 
-    const app = new Hono()
-    app.use('*', cors({ origin: (origin) => origin ?? '*', credentials: true }))
-    app.get('/auth/health', (c) => c.json({ status: 'ok' }))
-    // Workers Route delivers requests at /auth/** — basePath matches directly
-    app.on(['GET', 'POST'], '/auth/api/auth/**', (c) => auth.handler(c.req.raw))
+      const app = new Hono()
+      app.use(
+        '*',
+        cors({
+          origin: (origin) =>
+            allowedOrigins.includes(origin) ? origin : allowedOrigins[0]!,
+          credentials: true,
+        }),
+      )
+      app.get('/auth/health', (c) => c.json({ status: 'ok' }))
+      // Workers Route delivers requests at /auth/** — basePath matches directly
+      app.on(['GET', 'POST'], '/auth/api/auth/**', (c) => auth.handler(c.req.raw))
 
-    return app.fetch(request, env)
+      cachedApp = app
+    }
+
+    return cachedApp.fetch(request, env)
   },
 }

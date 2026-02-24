@@ -1,6 +1,28 @@
-# CLAUDE.md — Tabletop Tools Platform
+# CLAUDE.md — Tabletop Tools Platform (V2)
 
 > Read SOUL.md first. Every decision here flows from it.
+> V1 archive: `v1/CLAUDE.md`
+
+---
+
+## V1 → V2 Changes
+
+V1 shipped 8 apps with 866 passing tests and a working deployment. A 4-agent code review found
+26 issues — the root cause of most was shared code being copy-pasted instead of extracted into
+packages. V2 redesigns the architecture to fix this structurally.
+
+**What changed:**
+- **`packages/server-core` (NEW)** — eliminates 7× duplication of trpc.ts, server.ts, worker.ts, index.ts
+- **`packages/ui` expansion** — eliminates 6× AuthScreen, 7× auth.ts, 7× main.tsx, 8× tailwind.config
+- **Auth security** — HMAC verification, timing-safe comparison, CORS lockdown
+- **DB integrity** — indexes on all FKs, unique constraints, cascading deletes
+- **SQL-first queries** — no more SELECT * → filter in JS
+- **TRPCError everywhere** — proper HTTP status codes from every app
+- **Client resilience** — ErrorBoundary, global tRPC error link, client-side routing
+- **Worker caching** — DB client + Hono app created once per isolate, not per request
+- **Dead code removal** — tfjs dependency, broken R2, non-functional suggestions
+
+**What didn't change:** SOUL.md, the stack choices, the app boundaries, TDD, the data boundary rules.
 
 ---
 
@@ -15,29 +37,32 @@ Each app deploys independently and does exactly one thing. The first app ships, 
 
 ```
 tabletop-tools/
+  v1/                ← archived V1 CLAUDE.md files (read-only reference)
   packages/
-    ui/             ← shared components, dark theme, Geist, shadcn
-    auth/           ← shared Better Auth — one login across all tools
-    db/             ← shared Turso schema and Drizzle client
-    game-content/   ← GameContentAdapter boundary (zero GW content)
-    game-data-store/← shared IndexedDB store for client-side game data + React hooks
+    server-core/     ← NEW: base tRPC, createBaseServer, Worker handler, ID gen
+    ui/              ← EXPANDED: AuthScreen, auth client, tRPC factory, AppShell, ErrorBoundary, Tailwind preset
+    auth/            ← HARDENED: HMAC verification, timing-safe comparison, declared deps
+    db/              ← FIXED: indexes, unique constraints, cascading deletes, timestamp normalization
+    game-content/    ← shared parsers, DRY tournament import, fix nested XML
+    game-data-store/ ← error handling in hooks, efficient IndexedDB operations
   apps/
-    gateway/        ← unified Cloudflare Pages project (landing page + tRPC proxies)
-    data-import/    ← BSData importer (client-only SPA, no server)
-    no-cheat/       ← dice cheat detection        (port 3001)
-    versus/         ← combat simulator             (port 3002)
-    list-builder/   ← meta list builder            (port 3003)
-    game-tracker/   ← match tracker                (port 3004)
-    tournament/     ← tournament manager           (port 3005)
-    new-meta/       ← 40K meta analytics           (port 3006)
-    admin/          ← platform admin dashboard     (port 3007)
-  e2e/              ← Playwright browser tests (all apps, landing, auth flows)
+    auth-server/     ← central auth Worker (CORS lockdown, caching)
+    gateway/         ← unified Cloudflare Pages project (landing + tRPC proxies)
+    data-import/     ← BSData importer (client-only SPA, no server)
+    no-cheat/        ← dice cheat detection        (port 3001)
+    versus/          ← combat simulator             (port 3002)
+    list-builder/    ← meta list builder            (port 3003)
+    game-tracker/    ← match tracker                (port 3004)
+    tournament/      ← tournament manager           (port 3005)
+    new-meta/        ← 40K meta analytics           (port 3006)
+    admin/           ← platform admin dashboard     (port 3007)
+  e2e/               ← Playwright browser tests (all apps, landing, auth flows)
 ```
 
-All apps are served from a single origin: `tabletop-tools.net/<app>/`. The gateway
-project builds all 8 client SPAs into `dist/<app>/` and deploys as one Cloudflare Pages
-project. Pages Functions in the gateway proxy each app's `/trpc` calls to its Worker
-via service bindings. Auth runs on a Workers Route at `tabletop-tools.net/auth/*`.
+All apps are served from a single origin: `tabletop-tools.net/<app>/`. The gateway builds all
+client SPAs into `dist/<app>/` and deploys as one Cloudflare Pages project. Pages Functions
+proxy each app's `/trpc` calls to its Worker via service bindings. Auth runs on a Workers Route
+at `tabletop-tools.net/auth/*`.
 
 ---
 
@@ -45,16 +70,16 @@ via service bindings. Auth runs on a Workers Route at `tabletop-tools.net/auth/*
 
 | App | Port | Tests | Status | Purpose |
 |---|---|---|---|---|
-| no-cheat | 3001 | 202 | Deployed | Detect loaded dice via CV + statistics |
-| versus | 3002 | 84 | Deployed | Simulate 40K combat: hit/wound/save/damage |
-| list-builder | 3003 | 64 | Deployed | Build lists with live meta ratings from GT data |
-| game-tracker | 3004 | 45 | Deployed | Track matches turn-by-turn with photos |
+| no-cheat | 3001 | 203 | Deployed | Detect loaded dice via CV + statistics |
+| versus | 3002 | 80 | Deployed | Simulate 40K combat: hit/wound/save/damage |
+| list-builder | 3003 | 59 | Deployed | Build lists with live meta ratings from GT data |
+| game-tracker | 3004 | 44 | Deployed | Track matches turn-by-turn with photos |
 | tournament | 3005 | 58 | Deployed | Swiss events: pairings, results, standings, ELO |
 | new-meta | 3006 | 128 | Deployed | Meta analytics: win rates, Glicko-2 ratings |
-| data-import | — | 17 | Deployed (client-only, no server) | BSData importer: fetch + parse XML → IndexedDB |
-| admin | 3007 | 45 | Built | Platform dashboard: users, sessions, app stats, BSData, imports |
+| data-import | — | 20 | Deployed (client-only) | BSData importer: fetch + parse XML → IndexedDB |
+| admin | 3007 | 45 | Deployed | Platform dashboard: users, sessions, app stats |
 
-Each app has its own `CLAUDE.md` with full spec, architecture, schema, and implementation detail.
+Each app has its own `CLAUDE.md` with full spec, architecture, and V2 implementation detail.
 
 ---
 
@@ -76,6 +101,120 @@ Each app has its own `CLAUDE.md` with full spec, architecture, schema, and imple
 
 ---
 
+## Shared Packages — API Surface
+
+### `packages/server-core`
+
+Eliminates the 7× copy-paste of trpc.ts, server.ts, worker.ts, and index.ts across app servers.
+
+```typescript
+// Base context — every app extends this
+export type BaseContext = {
+  user: User | null
+  req: Request
+  db: Db
+}
+
+// Base tRPC setup — apps import and extend
+export const t = initTRPC.context<BaseContext>().create()
+export const router = t.router
+export const publicProcedure = t.procedure
+export const protectedProcedure = t.procedure.use(authMiddleware)
+
+// Server factory — handles Hono + CORS + tRPC handler
+export function createBaseServer<TRouter extends AnyRouter>(opts: {
+  router: TRouter
+  createContext: (req: Request) => Promise<BaseContext & Record<string, unknown>>
+}): Hono
+
+// Worker handler — module-scope caching, lazy init
+export function createWorkerHandler<TEnv extends BaseEnv>(opts: {
+  createApp: (env: TEnv) => Promise<Hono>
+}): { fetch(request: Request, env: TEnv, ctx?: unknown): Promise<Response> }
+
+// Dev server factory
+export function startDevServer(opts: {
+  port: number
+  createApp: () => Promise<Hono>
+}): void
+
+// Shared ID generation
+export function generateId(): string  // nanoid, 21 chars
+```
+
+### `packages/ui`
+
+Expanded from 1 component to the full shared client library.
+
+```typescript
+// Components
+export { AuthScreen } from './components/AuthScreen'       // configurable title/subtitle
+export { AppShell } from './components/AppShell'           // header + sign out + content
+export { ErrorBoundary } from './components/ErrorBoundary' // catches render errors
+export { GameContentDisclaimer } from './components/GameContentDisclaimer'
+
+// Auth client factory
+export { createAuthClient } from './lib/auth'              // shared Better Auth client
+
+// tRPC link factory
+export { createTRPCLinks } from './lib/trpc'               // shared httpBatchLink with credentials
+
+// App entry point
+export { renderApp } from './lib/render'                   // StrictMode mount (apps add own providers)
+
+// Tailwind preset
+export { default as tailwindPreset } from './tailwind-preset'  // shared colors, fonts, tokens
+```
+
+### `packages/auth`
+
+Security-hardened session validation and auth factory.
+
+```typescript
+export function createAuth(db, baseURL?, trustedOrigins?, secret?, basePath?): Auth
+export async function validateSession(db, headers, secret?): Promise<User | null>
+//                                                 ^^^^^^^ NEW: verifies HMAC signature
+export type User = { id: string; email: string; name: string }
+
+// Test helpers (for app server tests)
+export { setupAuthTables, createRequestHelper, authCookie, TEST_USER, TEST_TOKEN }
+```
+
+### `packages/db`
+
+Schema with indexes, constraints, and cascading deletes.
+
+```typescript
+export { createDb, createDbFromClient } from './client'
+export type { Db } from './client'
+export * from './schema'  // all 22 tables + indexes + constraints
+```
+
+### `packages/game-content`
+
+Game content adapter boundary + shared parsers.
+
+```typescript
+export type { GameContentAdapter, UnitProfile, WeaponProfile, WeaponAbility }
+export { BSDataAdapter } from './adapters/bsdata'
+export { NullAdapter } from './adapters/null'
+export { parseBSDataXml } from './adapters/bsdata/parser'
+
+// Shared unit router factory (eliminates versus/list-builder duplication)
+export { createUnitRouter } from './routers/unit'  // no args — uses own tRPC instance
+```
+
+### `packages/game-data-store`
+
+Client-side IndexedDB store with error handling.
+
+```typescript
+export { saveUnits, getUnit, searchUnits, listFactions, clearAll, setImportMeta, getImportMeta }
+export { useUnit, useUnitSearch, useFactions, useGameDataAvailable }
+```
+
+---
+
 ## Data Boundary Rules
 
 **No GW (Games Workshop) content is ever committed to this repository.**
@@ -89,14 +228,14 @@ BSData (community-maintained XML). The platform adapts to this data at startup v
 interface GameContentAdapter {
   load(): Promise<void>
   getUnit(id: string): Promise<UnitProfile | null>
-  searchUnits(opts: { faction?: string; query?: string }): Promise<UnitProfile[]>
+  searchUnits(opts: { faction?: string; name?: string }): Promise<UnitProfile[]>
   listFactions(): Promise<string[]>
 }
 
 // At server startup — operator sets BSDATA_DIR env var:
 const gameContent = process.env.BSDATA_DIR
-  ? new BSDataAdapter(process.env.BSDATA_DIR)   // loads BSData XML at startup
-  : new NullAdapter()                            // returns empty responses (dev/test)
+  ? new BSDataAdapter(process.env.BSDATA_DIR)
+  : new NullAdapter()
 await gameContent.load()
 ```
 
@@ -109,46 +248,81 @@ await gameContent.load()
 
 ---
 
-## Shared Server Pattern
+## Shared Server Pattern (V2)
 
-Every app server follows this exact shape:
+Every app server uses `packages/server-core` instead of copy-pasting boilerplate.
 
 ```typescript
-// server/src/trpc.ts
-export type Context = {
-  user: User | null   // null = unauthenticated
-  req: Request
-  db: Db
-  // app-specific additions (storage: R2Storage, gameContent: GameContentAdapter, …)
-}
+// apps/<app>/server/src/routers/index.ts
+import { router } from '@tabletop-tools/server-core'
+import { appSpecificRouter } from './appSpecific'
 
-export const protectedProcedure = t.procedure.use(({ ctx, next }) => {
-  if (!ctx.user) throw new TRPCError({ code: 'UNAUTHORIZED' })
-  return next({ ctx: { ...ctx, user: ctx.user } })
+export const appRouter = router({
+  health: publicProcedure.query(() => ({ status: 'ok' })),
+  ...appSpecificRouter,
 })
+export type AppRouter = typeof appRouter
 
-// server/src/server.ts
-export function createServer(db: Db /*, …app-specific deps */) {
-  const app = new Hono()
-  app.use('*', cors({ origin: (origin) => origin ?? '*', credentials: true }))
-  app.all('/trpc/*', async (c) =>
-    fetchRequestHandler({
-      endpoint: '/trpc',
-      req: c.req.raw,
-      router: appRouter,
-      createContext: async ({ req }) => {
-        const user = await validateSession(db, req.headers)
-        return { user, req, db }
-      },
+// apps/<app>/server/src/server.ts  — 5 lines, not 25
+import { createBaseServer } from '@tabletop-tools/server-core'
+import { appRouter } from './routers'
+
+export const createServer = (db: Db) =>
+  createBaseServer({
+    router: appRouter,
+    createContext: async (req) => ({
+      user: await validateSession(db, req.headers),
+      req, db,
     }),
-  )
-  return app
-}
+  })
+
+// apps/<app>/server/src/worker.ts  — module-scope caching
+import { createWorkerHandler } from '@tabletop-tools/server-core'
+import { createServer } from './server'
+
+export default createWorkerHandler({
+  createApp: async (env) => {
+    const db = createDbFromClient(createClient({
+      url: env.TURSO_DB_URL,
+      authToken: env.TURSO_AUTH_TOKEN,
+    }))
+    return createServer(db)
+  },
+})
 ```
 
-Auth is handled by Better Auth HTTP routes mounted separately (not in tRPC). The tRPC context
-carries the already-validated user. All protected procedures share the `protectedProcedure`
-middleware pattern. Router tests use `createCallerFactory` with an in-memory SQLite database.
+Auth is handled by Better Auth HTTP routes mounted in `apps/auth-server` (not in tRPC).
+The tRPC context carries the already-validated user. All protected procedures share the
+`protectedProcedure` middleware from `server-core`. Router tests use `createCallerFactory`
+with an in-memory SQLite database.
+
+---
+
+## Shared Client Pattern (V2)
+
+Every app client uses `packages/ui` instead of copy-pasting boilerplate.
+
+```typescript
+// apps/<app>/client/src/main.tsx  — 3 lines, not 20
+import { renderApp } from '@tabletop-tools/ui'
+import { App } from './App'
+renderApp(App)
+
+// apps/<app>/client/src/App.tsx
+import { AuthScreen, AppShell, ErrorBoundary } from '@tabletop-tools/ui'
+import { trpc, trpcClient, queryClient } from './lib/trpc'
+
+export function App() {
+  // ... app-specific UI, using shared components
+}
+
+// apps/<app>/client/tailwind.config.ts  — 4 lines, not 28
+import { tailwindPreset } from '@tabletop-tools/ui'
+export default {
+  presets: [tailwindPreset],
+  content: ['./index.html', './src/**/*.{ts,tsx}'],
+}
+```
 
 ---
 
@@ -159,7 +333,7 @@ Built on Radix UI primitives. TypeScript-native, Vite-compatible. Include only w
 
 **Typography:** Geist — clean, modern, readable at small sizes.
 
-**Color tokens (all apps use these):**
+**Color tokens (all apps use these via the shared Tailwind preset):**
 ```
 Background:    slate-950  (#0f172a)  — near black
 Surface:       slate-900  (#0f172a)  — cards, panels
@@ -171,6 +345,19 @@ Accent:        amber-400  (#fbbf24)  — buttons, highlights, active states
 ```
 
 App-specific result colors (defined per app, not here).
+
+---
+
+## Auth Routing (Path-Based)
+
+- **Prod** (`apps/auth-server/src/worker.ts`): Better Auth configured with `basePath: '/auth/api/auth'`.
+  Workers Route delivers requests at `/auth/**`. CORS restricted to `https://tabletop-tools.net`.
+- **Dev** (`apps/auth-server/src/index.ts`): Default basePath `/api/auth`, port 3000.
+- `AUTH_BASE_URL` in wrangler.toml: `https://tabletop-tools.net` (no `/auth` suffix).
+- Client `VITE_AUTH_SERVER_URL=https://tabletop-tools.net/auth/api/auth`.
+- Cookie: `__Secure-better-auth.session_token` on HTTPS, `better-auth.session_token` on HTTP.
+  `validateSession` verifies HMAC signature before accepting the token (V2 fix).
+- Cookie `path: /` — shared across all apps on same origin.
 
 ---
 
@@ -207,65 +394,34 @@ SQLite database — no mocks for the database layer.
 
 The specific test file structure for each app is documented in that app's own CLAUDE.md.
 
-**Platform total: 866 tests, all passing.**
+**Platform total: 838 unit tests, all passing.** Plus 36 Playwright E2E browser tests.
 
 ---
 
 ## E2E Browser Tests (Playwright)
 
-End-to-end tests exercise the full deployed application in a real browser. They catch
-integration bugs (auth routing, CORS, Worker crashes) that unit tests cannot.
-
-**Stack:** Playwright + Chromium. TypeScript-native, auto-waits, multi-browser support.
-
-```
-e2e/
-  playwright.config.ts          ← 3 projects: auth-flow, public, authed
-  global-setup.ts               ← creates test user → auth-state.json
-  fixtures/
-    auth.ts                     ← signUp / logIn / logOut / testEmail helpers
-  specs/
-    landing.spec.ts             ← landing page loads, 7 app cards link correctly
-    auth.spec.ts                ← register, login, logout, session persistence
-    cross-app-auth.spec.ts      ← login in one app → session carries to another
-    no-cheat.spec.ts            ← auth gate → main screen, dice set UI
-    versus.spec.ts              ← auth gate → simulator, faction selectors
-    list-builder.spec.ts        ← auth gate → list builder, faction selector
-    game-tracker.spec.ts        ← auth gate → main screen, new match button
-    tournament.spec.ts          ← auth gate → main screen, create tournament button
-    new-meta.spec.ts            ← NO auth gate → nav tabs, dashboard renders
-    data-import.spec.ts         ← NO auth gate → repo config, load button
-```
-
-### Three Playwright Projects
-
-| Project | Auth | What it tests |
-|---|---|---|
-| `auth-flow` | None (tests auth itself) | Register, login, logout, cross-app session |
-| `public` | None (no auth needed) | Landing page, new-meta, data-import |
-| `authed` | `storageState` from global-setup | All auth-gated apps (no-cheat, versus, list-builder, game-tracker, tournament) |
-
-The `authed` project depends on `auth-flow` — auth-flow creates the session state
-file that authed tests reuse.
-
-### Running E2E Tests
+See `e2e/CLAUDE.md` for full conventions.
 
 ```bash
 # Against production
 cd e2e && BASE_URL=https://tabletop-tools.net pnpm test
 
-# Against local dev (start gateway or app dev servers first)
+# Against local dev
 cd e2e && pnpm test
-
-# Headed mode (see the browser)
-cd e2e && pnpm test:headed
-
-# Playwright UI mode (interactive debugging)
-cd e2e && pnpm test:ui
 ```
 
-### Targeting
+---
 
-- `BASE_URL` env var: defaults to `http://localhost:5173` for local dev
-- Set to `https://tabletop-tools.net` for production
-- Auth tests require a working auth endpoint (register + login)
+## V2 Implementation Status
+
+All 8 phases of the V1 → V2 migration are complete:
+
+1. **DB migration** — 27 indexes, 4 unique constraints, 23 cascading deletes ✅
+2. **`packages/auth` hardening** — HMAC verification, timing-safe comparison, custom scrypt params ✅
+3. **`packages/server-core` creation** — base tRPC, createBaseServer, Worker handler, ID gen (16 tests) ✅
+4. **`packages/ui` expansion** — AuthScreen, AppShell, ErrorBoundary, auth/tRPC factories, Tailwind preset (21 tests) ✅
+5. **App server migration** — all 7 apps use server-core ✅
+6. **App client migration** — all 8 apps use packages/ui ✅
+7. **Per-app fixes** — TRPCError, authorization, SQL-first queries, dead code removal, R2 bindings ✅
+8. **Client routing** — hash-based routing for tournament and new-meta ✅
+9. **Deployment verification** — pending (requires Cloudflare credentials)

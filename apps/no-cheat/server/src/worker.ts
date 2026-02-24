@@ -1,21 +1,32 @@
+import { createWorkerHandler } from '@tabletop-tools/server-core'
 import { createClient } from '@libsql/client/web'
 import { createDbFromClient } from '@tabletop-tools/db'
 
 import { createServer } from './server'
+import { createR2Storage, createNullR2Storage } from './lib/storage/r2'
 
 interface Env {
   TURSO_DB_URL: string
   TURSO_AUTH_TOKEN: string
+  EVIDENCE_BUCKET?: {
+    put(
+      key: string,
+      value: ArrayBuffer,
+      options?: { httpMetadata?: { contentType: string } },
+    ): Promise<unknown>
+  }
 }
 
-export default {
-  async fetch(request: Request, env: Env): Promise<Response> {
+export default createWorkerHandler<Env>({
+  createApp: async (env) => {
     const client = createClient({
       url: env.TURSO_DB_URL,
       authToken: env.TURSO_AUTH_TOKEN,
     })
     const db = createDbFromClient(client)
-    const app = createServer(db)
-    return app.fetch(request)
+    const storage = env.EVIDENCE_BUCKET
+      ? createR2Storage(env.EVIDENCE_BUCKET, 'https://evidence.tabletop-tools.net')
+      : createNullR2Storage()
+    return createServer(db, storage)
   },
-}
+})

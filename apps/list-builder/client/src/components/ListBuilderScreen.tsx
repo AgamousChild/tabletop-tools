@@ -1,7 +1,7 @@
 import { useState } from 'react'
 
 import { authClient } from '../lib/auth'
-import { trpc } from '../lib/trpc'
+import { trpc, trpcClient } from '../lib/trpc'
 import { useUnits, useGameFactions } from '../lib/useGameData'
 import { RatingBadge } from './RatingBadge'
 
@@ -67,30 +67,41 @@ export function ListBuilderScreen({ onSignOut }: Props) {
     },
   })
 
-  const getRating = trpc.rating.get.useQuery(
-    { unitId: '' },
-    { enabled: false },
-  )
-
   async function handleAddUnit(unitId: string, unitName: string, unitPoints: number) {
     if (!activeListId) return
     await addUnit.mutateAsync({ listId: activeListId, unitId })
 
-    // Check for suggestion
-    void (async () => {
-      try {
-        const alts = await getRating.refetch()
-        // Simple suggestion: look for alternatives in a ±20% points range
-        const ptsMin = Math.floor(unitPoints * 0.8)
-        const ptsMax = Math.ceil(unitPoints * 1.2)
-        const alternatives = await trpc.rating.alternatives.useQuery
-        void alternatives
-        // Suppress complexity — suggestion is set via alternatives query below
-      } catch (_e) {
-        // Not critical if suggestion fails
+    // Fetch alternatives in the +/-20% points range
+    try {
+      const ptsMin = Math.floor(unitPoints * 0.8)
+      const ptsMax = Math.ceil(unitPoints * 1.2)
+      const alternatives = await trpcClient.rating.alternatives.query({
+        ptsMin,
+        ptsMax,
+      })
+
+      // Find best alternative that isn't the unit we just added
+      const best = alternatives.find(
+        (alt: { unitContentId: string }) => alt.unitContentId !== unitId,
+      )
+      if (!best) {
+        setSuggestion(null)
+        return
       }
-    })()
-    setSuggestion(null)
+
+      // Fetch the added unit's rating for comparison
+      const addedRating = await trpcClient.rating.get.query({ unitId })
+
+      setSuggestion({
+        addedName: unitName,
+        addedRating: addedRating?.rating ?? null,
+        altName: best.unitContentId,
+        altRating: best.rating,
+        ptsDiff: best.points - unitPoints,
+      })
+    } catch {
+      setSuggestion(null)
+    }
   }
 
   async function handleSignOut() {

@@ -1,6 +1,6 @@
 import { createClient } from '@libsql/client'
 import { createDbFromClient } from '@tabletop-tools/db'
-import { afterAll, beforeAll, describe, expect, it } from 'vitest'
+import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest'
 
 import { createCallerFactory } from '../trpc'
 import { appRouter } from './index'
@@ -39,8 +39,9 @@ afterAll(() => client.close())
 const createCaller = createCallerFactory(appRouter)
 const req = new Request('http://localhost')
 
-const aliceCtx = { user: { id: 'user-1', email: 'alice@example.com', name: 'Alice' }, req, db }
-const bobCtx = { user: { id: 'user-2', email: 'bob@example.com', name: 'Bob' }, req, db }
+const nullStorage = { upload: vi.fn().mockResolvedValue('null://discarded') }
+const aliceCtx = { user: { id: 'user-1', email: 'alice@example.com', name: 'Alice' }, req, db, storage: nullStorage }
+const bobCtx = { user: { id: 'user-2', email: 'bob@example.com', name: 'Bob' }, req, db, storage: nullStorage }
 
 describe('diceSet.create', () => {
   it('creates a dice set for the authenticated user', async () => {
@@ -52,7 +53,7 @@ describe('diceSet.create', () => {
   })
 
   it('rejects unauthenticated callers', async () => {
-    const caller = createCaller({ user: null, req, db })
+    const caller = createCaller({ user: null, req, db, storage: nullStorage })
     await expect(caller.diceSet.create({ name: 'Test' })).rejects.toMatchObject({
       code: 'UNAUTHORIZED',
     })
@@ -79,6 +80,7 @@ describe('diceSet.list', () => {
       user: { id: 'user-3', email: 'carol@example.com', name: 'Carol' },
       req,
       db,
+      storage: nullStorage,
     }
     // Insert user-3 first
     await client.execute(

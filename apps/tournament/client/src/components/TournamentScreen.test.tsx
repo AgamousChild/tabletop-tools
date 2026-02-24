@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { TournamentScreen } from './TournamentScreen'
@@ -164,6 +164,7 @@ vi.mock('../lib/trpc', () => ({
 }))
 
 beforeEach(() => {
+  window.location.hash = ''
   mockCreateTournament.mockReset()
   mockAdvanceStatus.mockReset()
   mockRegisterPlayer.mockReset()
@@ -201,21 +202,33 @@ describe('TournamentScreen', () => {
     expect(screen.getByText('IN PROGRESS')).toBeInTheDocument()
   })
 
-  it('shows + New Tournament button', () => {
+  it('shows + New Tournament link', () => {
     render(<TournamentScreen onSignOut={vi.fn()} />)
-    expect(screen.getByRole('button', { name: /\+ new tournament/i })).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: /\+ new tournament/i })).toBeInTheDocument()
   })
 
-  it('navigates to create tournament form', () => {
+  it('navigates to create tournament form', async () => {
     render(<TournamentScreen onSignOut={vi.fn()} />)
-    fireEvent.click(screen.getByRole('button', { name: /\+ new tournament/i }))
-    expect(screen.getByRole('heading', { name: 'Create Tournament' })).toBeInTheDocument()
+    act(() => {
+      window.location.hash = '#/create'
+      window.dispatchEvent(new HashChangeEvent('hashchange'))
+    })
+    await waitFor(() => {
+      expect(screen.getByRole('heading', { name: 'Create Tournament' })).toBeInTheDocument()
+    })
     expect(screen.getByPlaceholderText(/tournament name/i)).toBeInTheDocument()
   })
 
   it('creates a tournament when form is submitted', async () => {
     render(<TournamentScreen onSignOut={vi.fn()} />)
-    fireEvent.click(screen.getByRole('button', { name: /\+ new tournament/i }))
+    act(() => {
+      window.location.hash = '#/create'
+      window.dispatchEvent(new HashChangeEvent('hashchange'))
+    })
+
+    await waitFor(() => {
+      expect(screen.getByPlaceholderText(/tournament name/i)).toBeInTheDocument()
+    })
 
     fireEvent.change(screen.getByPlaceholderText(/tournament name/i), {
       target: { value: 'Summer GT' },
@@ -229,16 +242,26 @@ describe('TournamentScreen', () => {
     )
   })
 
-  it('navigates to tournament detail on click', () => {
+  it('navigates to tournament detail via hash', async () => {
     render(<TournamentScreen onSignOut={vi.fn()} />)
-    fireEvent.click(screen.getByText('Test GT 2025'))
-    expect(screen.getByText(/2000pts Matched Play/)).toBeInTheDocument()
+    act(() => {
+      window.location.hash = '#/tournament/t1'
+      window.dispatchEvent(new HashChangeEvent('hashchange'))
+    })
+    await waitFor(() => {
+      expect(screen.getByText(/2000pts Matched Play/)).toBeInTheDocument()
+    })
   })
 
-  it('shows standings when on tournament detail', () => {
+  it('shows standings when on tournament detail', async () => {
     render(<TournamentScreen onSignOut={vi.fn()} />)
-    fireEvent.click(screen.getByText('Test GT 2025'))
-    expect(screen.getByText('Bob')).toBeInTheDocument()
+    act(() => {
+      window.location.hash = '#/tournament/t1'
+      window.dispatchEvent(new HashChangeEvent('hashchange'))
+    })
+    await waitFor(() => {
+      expect(screen.getByText('Bob')).toBeInTheDocument()
+    })
     expect(screen.getByText('Carol')).toBeInTheDocument()
   })
 })

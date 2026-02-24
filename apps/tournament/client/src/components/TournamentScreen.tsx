@@ -1,15 +1,10 @@
 import { useState } from 'react'
 import { authClient } from '../lib/auth'
 import { trpc } from '../lib/trpc'
+import { useHashRoute, navigate } from '../lib/router'
+import type { Route } from '../lib/router'
 
 type Props = { onSignOut: () => void }
-
-type View =
-  | 'list'
-  | 'create-tournament'
-  | 'tournament-detail'
-  | 'register-player'
-  | 'round-view'
 
 type Tournament = {
   id: string
@@ -94,10 +89,15 @@ function StandingsTable({ players }: { players: PlayerStanding[] }) {
 export function TournamentScreen({ onSignOut }: Props) {
   const { data: session } = authClient.useSession()
   const userId = session?.user?.id ?? ''
+  const route = useHashRoute()
 
-  const [view, setView] = useState<View>('list')
-  const [selectedTournamentId, setSelectedTournamentId] = useState<string | null>(null)
-  const [selectedRoundId, setSelectedRoundId] = useState<string | null>(null)
+  // Extract IDs from route
+  const selectedTournamentId = route.view === 'tournament' || route.view === 'tournament-standings' || route.view === 'tournament-register'
+    ? route.id
+    : route.view === 'round'
+      ? route.tournamentId
+      : null
+  const selectedRoundId = route.view === 'round' ? route.roundId : null
 
   // Create tournament form
   const [newName, setNewName] = useState('')
@@ -129,10 +129,7 @@ export function TournamentScreen({ onSignOut }: Props) {
   const createTournament = trpc.tournament.create.useMutation({
     onSuccess: (t) => {
       void myTournamentsQuery.refetch()
-      if (t) {
-        setSelectedTournamentId(t.id)
-        setView('tournament-detail')
-      }
+      if (t) navigate(`#/tournament/${t.id}`)
     },
   })
 
@@ -146,20 +143,21 @@ export function TournamentScreen({ onSignOut }: Props) {
   const registerPlayer = trpc.player.register.useMutation({
     onSuccess: () => {
       void myTournamentsQuery.refetch()
-      setView('tournament-detail')
+      if (selectedTournamentId) navigate(`#/tournament/${selectedTournamentId}`)
     },
   })
 
   const checkIn = trpc.player.checkIn.useMutation({
     onSuccess: () => void myTournamentsQuery.refetch(),
   })
+  // Suppress unused var warning — checkIn is used in registration flow
+  void checkIn
 
   const createRound = trpc.round.create.useMutation({
     onSuccess: (round) => {
       void tournamentDetailQuery.refetch()
-      if (round) {
-        setSelectedRoundId(round.id)
-        setView('round-view')
+      if (round && selectedTournamentId) {
+        navigate(`#/tournament/${selectedTournamentId}/round/${round.id}`)
       }
     },
   })
@@ -233,12 +231,12 @@ export function TournamentScreen({ onSignOut }: Props) {
 
   const isTO = tournament?.toUserId === userId
 
-  if (view === 'create-tournament') {
+  if (route.view === 'create') {
     return (
       <div className="min-h-screen bg-slate-950 text-slate-100 p-4 max-w-lg mx-auto">
-        <button onClick={() => setView('list')} className="text-slate-400 hover:text-slate-200 mb-4">
+        <a href="#/" className="text-slate-400 hover:text-slate-200 mb-4 inline-block">
           ← Back
-        </button>
+        </a>
         <h2 className="text-xl font-bold mb-4">Create Tournament</h2>
         <form onSubmit={(e) => void handleCreateTournament(e)} className="space-y-3">
           <input
@@ -285,15 +283,15 @@ export function TournamentScreen({ onSignOut }: Props) {
     )
   }
 
-  if (view === 'register-player' && selectedTournamentId) {
+  if (route.view === 'tournament-register' && selectedTournamentId) {
     return (
       <div className="min-h-screen bg-slate-950 text-slate-100 p-4 max-w-lg mx-auto">
-        <button
-          onClick={() => setView('tournament-detail')}
-          className="text-slate-400 hover:text-slate-200 mb-4"
+        <a
+          href={`#/tournament/${selectedTournamentId}`}
+          className="text-slate-400 hover:text-slate-200 mb-4 inline-block"
         >
           ← Back
-        </button>
+        </a>
         <h2 className="text-xl font-bold mb-4">Register for Tournament</h2>
         <form onSubmit={(e) => void handleRegister(e)} className="space-y-3">
           <input
@@ -328,15 +326,15 @@ export function TournamentScreen({ onSignOut }: Props) {
     )
   }
 
-  if (view === 'round-view' && selectedRoundId) {
+  if (route.view === 'round' && selectedRoundId && selectedTournamentId) {
     return (
       <div className="min-h-screen bg-slate-950 text-slate-100 p-4 max-w-2xl mx-auto">
-        <button
-          onClick={() => setView('tournament-detail')}
-          className="text-slate-400 hover:text-slate-200 mb-4"
+        <a
+          href={`#/tournament/${selectedTournamentId}`}
+          className="text-slate-400 hover:text-slate-200 mb-4 inline-block"
         >
           ← Back to Tournament
-        </button>
+        </a>
 
         <div className="flex justify-between items-center mb-4">
           <h2 className="text-xl font-bold">
@@ -473,12 +471,12 @@ export function TournamentScreen({ onSignOut }: Props) {
     )
   }
 
-  if (view === 'tournament-detail' && selectedTournamentId) {
+  if ((route.view === 'tournament' || route.view === 'tournament-standings') && selectedTournamentId) {
     return (
       <div className="min-h-screen bg-slate-950 text-slate-100 p-4 max-w-2xl mx-auto">
-        <button onClick={() => setView('list')} className="text-slate-400 hover:text-slate-200 mb-4">
+        <a href="#/" className="text-slate-400 hover:text-slate-200 mb-4 inline-block">
           ← All Tournaments
-        </button>
+        </a>
 
         <div className="flex justify-between items-start mb-6">
           <div>
@@ -507,12 +505,12 @@ export function TournamentScreen({ onSignOut }: Props) {
         {/* Actions */}
         <div className="flex gap-2 mb-6 flex-wrap">
           {tournament?.status === 'REGISTRATION' && !isTO && (
-            <button
-              onClick={() => setView('register-player')}
+            <a
+              href={`#/tournament/${selectedTournamentId}/register`}
               className="px-4 py-2 rounded bg-amber-400 text-slate-950 font-semibold text-sm hover:bg-amber-300"
             >
               Register
-            </button>
+            </a>
           )}
           {isTO && tournament?.status === 'IN_PROGRESS' && (
             <button
@@ -523,6 +521,12 @@ export function TournamentScreen({ onSignOut }: Props) {
               + New Round
             </button>
           )}
+          <a
+            href={`#/tournament/${selectedTournamentId}/standings`}
+            className="px-4 py-2 rounded border border-slate-700 text-slate-400 hover:text-slate-200 text-sm"
+          >
+            Standings
+          </a>
         </div>
 
         {/* Standings */}
@@ -550,12 +554,12 @@ export function TournamentScreen({ onSignOut }: Props) {
         <div className="flex justify-between items-center mb-6">
           <h1 className="text-2xl font-bold">Tournament</h1>
           <div className="flex gap-2">
-            <button
-              onClick={() => setView('create-tournament')}
+            <a
+              href="#/create"
               className="px-4 py-2 rounded bg-amber-400 text-slate-950 font-semibold text-sm hover:bg-amber-300"
             >
               + New Tournament
-            </button>
+            </a>
             <button
               onClick={() => {
                 void authClient.signOut().then(() => onSignOut())
@@ -580,13 +584,10 @@ export function TournamentScreen({ onSignOut }: Props) {
 
         <div className="space-y-3">
           {tournaments.map((t: Tournament) => (
-            <button
+            <a
               key={t.id}
-              onClick={() => {
-                setSelectedTournamentId(t.id)
-                setView('tournament-detail')
-              }}
-              className="w-full text-left bg-slate-900 rounded p-4 hover:bg-slate-800 transition-colors"
+              href={`#/tournament/${t.id}`}
+              className="block w-full text-left bg-slate-900 rounded p-4 hover:bg-slate-800 transition-colors"
             >
               <div className="flex justify-between items-start">
                 <div>
@@ -598,7 +599,7 @@ export function TournamentScreen({ onSignOut }: Props) {
                 </div>
                 <StatusBadge status={t.status} />
               </div>
-            </button>
+            </a>
           ))}
         </div>
       </div>

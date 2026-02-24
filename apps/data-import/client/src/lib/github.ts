@@ -8,28 +8,60 @@ export interface CatalogFile {
   size: number
 }
 
+export interface RateLimitInfo {
+  remaining: number
+  limit: number
+  resetAt: Date
+}
+
+export class RateLimitError extends Error {
+  resetAt: Date
+  constructor(resetAt: Date, message?: string) {
+    super(message ?? `GitHub API rate limit exceeded. Try again at ${resetAt.toLocaleTimeString()}.`)
+    this.name = 'RateLimitError'
+    this.resetAt = resetAt
+  }
+}
+
 interface GitHubContentItem {
   name: string
   size: number
   download_url: string | null
 }
 
+function parseRateLimitHeaders(headers: Headers): RateLimitInfo | null {
+  const remaining = headers.get('X-RateLimit-Remaining')
+  const limit = headers.get('X-RateLimit-Limit')
+  const reset = headers.get('X-RateLimit-Reset')
+  if (remaining == null || limit == null || reset == null) return null
+  return {
+    remaining: parseInt(remaining, 10),
+    limit: parseInt(limit, 10),
+    resetAt: new Date(parseInt(reset, 10) * 1000),
+  }
+}
+
 export async function listCatalogFiles(
   repo: string = DEFAULT_REPO,
   branch: string = DEFAULT_BRANCH,
-): Promise<CatalogFile[]> {
+): Promise<{ files: CatalogFile[]; rateLimit: RateLimitInfo | null }> {
   const url = `https://api.github.com/repos/${repo}/contents?ref=${branch}`
   const res = await fetch(url, {
     headers: { Accept: 'application/vnd.github.v3+json' },
   })
 
+  const rateLimit = parseRateLimitHeaders(res.headers)
+
   if (!res.ok) {
+    if (res.status === 403 && rateLimit && rateLimit.remaining === 0) {
+      throw new RateLimitError(rateLimit.resetAt)
+    }
     throw new Error(`GitHub API error: ${res.status} ${res.statusText}`)
   }
 
   const items: GitHubContentItem[] = await res.json()
 
-  return items
+  const files = items
     .filter((item) => item.name.endsWith('.cat') && item.download_url)
     .map((item) => ({
       name: item.name,
@@ -38,6 +70,8 @@ export async function listCatalogFiles(
       size: item.size,
     }))
     .sort((a, b) => a.faction.localeCompare(b.faction))
+
+  return { files, rateLimit }
 }
 
 export async function fetchCatalogXml(file: CatalogFile): Promise<string> {

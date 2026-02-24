@@ -1,4 +1,5 @@
-import { eq, asc } from 'drizzle-orm'
+import { TRPCError } from '@trpc/server'
+import { eq, and, inArray } from 'drizzle-orm'
 import { z } from 'zod'
 
 import { tournaments, tournamentPlayers, rounds, pairings } from '@tabletop-tools/db'
@@ -99,10 +100,10 @@ export const tournamentRouter = router({
       .from(tournaments)
       .where(eq(tournaments.id, input))
       .get()
-    if (!tournament) throw new Error('Tournament not found')
-    if (tournament.toUserId !== ctx.user.id) throw new Error('Not authorized')
+    if (!tournament) throw new TRPCError({ code: 'NOT_FOUND', message: 'Tournament not found' })
+    if (tournament.toUserId !== ctx.user.id) throw new TRPCError({ code: 'FORBIDDEN', message: 'Not authorized' })
     const next = LIFECYCLE[tournament.status]
-    if (!next) throw new Error('Tournament is already complete')
+    if (!next) throw new TRPCError({ code: 'BAD_REQUEST', message: 'Tournament is already complete' })
     await ctx.db.update(tournaments).set({ status: next }).where(eq(tournaments.id, input))
     return ctx.db.select().from(tournaments).where(eq(tournaments.id, input)).get()
   }),
@@ -113,9 +114,9 @@ export const tournamentRouter = router({
       .from(tournaments)
       .where(eq(tournaments.id, input))
       .get()
-    if (!tournament) throw new Error('Tournament not found')
-    if (tournament.toUserId !== ctx.user.id) throw new Error('Not authorized')
-    if (tournament.status !== 'DRAFT') throw new Error('Can only delete DRAFT tournaments')
+    if (!tournament) throw new TRPCError({ code: 'NOT_FOUND', message: 'Tournament not found' })
+    if (tournament.toUserId !== ctx.user.id) throw new TRPCError({ code: 'FORBIDDEN', message: 'Not authorized' })
+    if (tournament.status !== 'DRAFT') throw new TRPCError({ code: 'BAD_REQUEST', message: 'Can only delete DRAFT tournaments' })
     await ctx.db.delete(tournaments).where(eq(tournaments.id, input))
     return { deleted: true }
   }),
@@ -145,11 +146,15 @@ export const tournamentRouter = router({
       }
     }
 
-    // Get all pairings with confirmed results
-    const allPairings = await ctx.db.select().from(pairings).all()
-    const tournamentPairings = allPairings.filter((p) => roundIds.includes(p.roundId) && p.result !== null)
+    // Get pairings for this tournament's rounds only (not all pairings in DB)
+    const tournamentPairings = await ctx.db
+      .select()
+      .from(pairings)
+      .where(inArray(pairings.roundId, roundIds))
+      .all()
+    const confirmedPairings = tournamentPairings.filter((p) => p.result !== null)
 
-    const results = tournamentPairings.map((p) => ({
+    const results = confirmedPairings.map((p) => ({
       player1Id: p.player1Id,
       player2Id: p.player2Id,
       player1Vp: p.player1Vp ?? 0,

@@ -4,6 +4,7 @@ import {
   setupAuthTables,
   createRequestHelper,
   authCookie,
+  TEST_USER,
 } from '@tabletop-tools/auth/src/test-helpers'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 
@@ -68,7 +69,7 @@ beforeAll(async () => {
 
 afterAll(() => client.close())
 
-const makeRequest = createRequestHelper(() => createServer(db))
+const makeRequest = createRequestHelper(() => createServer(db, [TEST_USER.email]))
 
 describe('HTTP integration — admin.linkPlayer via session cookie', () => {
   it('links a player when authenticated', async () => {

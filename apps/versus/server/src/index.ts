@@ -1,10 +1,10 @@
 import 'dotenv/config'
 
-import { serve } from '@hono/node-server'
+import { startDevServer } from '@tabletop-tools/server-core'
 import { createDb } from '@tabletop-tools/db'
 import { BSDataAdapter, NullAdapter } from '@tabletop-tools/game-content'
 
-import { createServer } from './server'
+import { createServer } from './server.js'
 
 const db = createDb({
   url: process.env['TURSO_DB_URL'] ?? 'file:./dev.db',
@@ -17,8 +17,7 @@ const gameContent = process.env['BSDATA_DIR']
 
 await gameContent.load()
 
-const app = createServer(db, gameContent)
-
-serve({ fetch: app.fetch, port: 3002, hostname: '0.0.0.0' }, (info) => {
-  console.log(`versus server running at http://localhost:${info.port}`)
+startDevServer({
+  port: 3002,
+  createApp: async () => createServer(db, gameContent),
 })

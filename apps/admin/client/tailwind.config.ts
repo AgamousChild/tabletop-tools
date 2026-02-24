@@ -1,22 +1,9 @@
 import type { Config } from 'tailwindcss'
+import tailwindPreset from '@tabletop-tools/ui/tailwind-preset'
 
 const config: Config = {
+  presets: [tailwindPreset as Config],
   content: ['./index.html', './src/**/*.{ts,tsx}'],
-  theme: {
-    extend: {
-      fontFamily: {
-        sans: ['Geist', 'system-ui', 'sans-serif'],
-      },
-      colors: {
-        background: '#0f172a',
-        surface: '#0f172a',
-        border: '#1e293b',
-        accent: {
-          DEFAULT: '#fbbf24',
-        },
-      },
-    },
-  },
   plugins: [],
 }
 

@@ -1,4 +1,5 @@
-import { eq, and } from 'drizzle-orm'
+import { TRPCError } from '@trpc/server'
+import { eq, and, inArray } from 'drizzle-orm'
 import { z } from 'zod'
 
 import { tournaments, tournamentPlayers, rounds, pairings } from '@tabletop-tools/db'
@@ -28,9 +29,9 @@ export const roundRouter = router({
         .from(tournaments)
         .where(eq(tournaments.id, input.tournamentId))
         .get()
-      if (!tournament) throw new Error('Tournament not found')
-      if (tournament.toUserId !== ctx.user.id) throw new Error('Not authorized')
-      if (tournament.status !== 'IN_PROGRESS') throw new Error('Tournament is not in progress')
+      if (!tournament) throw new TRPCError({ code: 'NOT_FOUND', message: 'Tournament not found' })
+      if (tournament.toUserId !== ctx.user.id) throw new TRPCError({ code: 'FORBIDDEN', message: 'Not authorized' })
+      if (tournament.status !== 'IN_PROGRESS') throw new TRPCError({ code: 'BAD_REQUEST', message: 'Tournament is not in progress' })
 
       const existingRounds = await ctx.db
         .select()
@@ -58,14 +59,14 @@ export const roundRouter = router({
         .from(rounds)
         .where(eq(rounds.id, input.roundId))
         .get()
-      if (!round) throw new Error('Round not found')
+      if (!round) throw new TRPCError({ code: 'NOT_FOUND', message: 'Round not found' })
 
       const tournament = await ctx.db
         .select()
         .from(tournaments)
         .where(eq(tournaments.id, round.tournamentId))
         .get()
-      if (!tournament || tournament.toUserId !== ctx.user.id) throw new Error('Not authorized')
+      if (!tournament || tournament.toUserId !== ctx.user.id) throw new TRPCError({ code: 'FORBIDDEN', message: 'Not authorized' })
 
       // Get active (non-dropped, checked-in) players
       const allPlayers = await ctx.db
@@ -87,12 +88,13 @@ export const roundRouter = router({
         .all()
       const prevRoundIds = allRounds.filter((r) => r.id !== input.roundId).map((r) => r.id)
 
-      const allPairings = await ctx.db.select().from(pairings).all()
-      const prevPairings = allPairings.filter((p) => prevRoundIds.includes(p.roundId))
+      const prevPairings = prevRoundIds.length > 0
+        ? await ctx.db.select().from(pairings).where(inArray(pairings.roundId, prevRoundIds)).all()
+        : []
 
       // Compute current standings to get player records
-      const confirmedResults = allPairings
-        .filter((p) => prevRoundIds.includes(p.roundId) && p.result !== null)
+      const confirmedResults = prevPairings
+        .filter((p) => p.result !== null)
         .map((p) => ({
           player1Id: p.player1Id,
           player2Id: p.player2Id,
@@ -193,14 +195,14 @@ export const roundRouter = router({
     .input(z.string())
     .mutation(async ({ ctx, input }) => {
       const round = await ctx.db.select().from(rounds).where(eq(rounds.id, input)).get()
-      if (!round) throw new Error('Round not found')
+      if (!round) throw new TRPCError({ code: 'NOT_FOUND', message: 'Round not found' })
 
       const tournament = await ctx.db
         .select()
         .from(tournaments)
         .where(eq(tournaments.id, round.tournamentId))
         .get()
-      if (!tournament || tournament.toUserId !== ctx.user.id) throw new Error('Not authorized')
+      if (!tournament || tournament.toUserId !== ctx.user.id) throw new TRPCError({ code: 'FORBIDDEN', message: 'Not authorized' })
 
       // All non-bye pairings must be confirmed
       const roundPairings = await ctx.db
@@ -211,7 +213,7 @@ export const roundRouter = router({
 
       const unconfirmed = roundPairings.filter((p) => p.result !== 'BYE' && !p.confirmed)
       if (unconfirmed.length > 0) {
-        throw new Error(`${unconfirmed.length} result(s) still pending confirmation`)
+        throw new TRPCError({ code: 'BAD_REQUEST', message: `${unconfirmed.length} result(s) still pending confirmation` })
       }
 
       await ctx.db.update(rounds).set({ status: 'COMPLETE' }).where(eq(rounds.id, input))

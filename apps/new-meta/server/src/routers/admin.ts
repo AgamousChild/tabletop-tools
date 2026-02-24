@@ -1,6 +1,6 @@
 import { z } from 'zod'
 import { eq } from 'drizzle-orm'
-import { router, protectedProcedure } from '../trpc.js'
+import { router, adminProcedure } from '../trpc.js'
 import {
   importedTournamentResults,
   playerGlicko,
@@ -25,7 +25,7 @@ export const adminRouter = router({
    * Import a tournament CSV.
    * Stores raw + parsed data, then computes Glicko-2 updates for all players.
    */
-  import: protectedProcedure
+  import: adminProcedure
     .input(
       z.object({
         csv: z.string().min(1),
@@ -88,7 +88,7 @@ export const adminRouter = router({
     }),
 
   /** Recompute all Glicko-2 ratings from scratch (or from a specific import). */
-  recomputeGlicko: protectedProcedure
+  recomputeGlicko: adminProcedure
     .input(z.object({ fromImportId: z.string().optional() }).optional())
     .mutation(async ({ ctx }) => {
       // Get all imports ordered by event date
@@ -109,7 +109,7 @@ export const adminRouter = router({
     }),
 
   /** Link an anonymous Glicko entry to a platform account. */
-  linkPlayer: protectedProcedure
+  linkPlayer: adminProcedure
     .input(
       z.object({
         glickoId: z.string(),
@@ -153,16 +153,20 @@ async function updateGlickoForImport(
   )
   const uniqueNames = [...new Set(playerNames)]
 
+  // Load all existing Glicko entries once (not per-name)
+  const allGlicko = await db.select().from(playerGlicko).all()
+  type GlickoRow = (typeof allGlicko)[number]
+  const glickoByName = new Map<string, GlickoRow>()
+  for (const g of allGlicko) {
+    glickoByName.set(g.playerName.toLowerCase(), g)
+  }
+
   // Resolve or create Glicko entries
   const nameToGlickoId = new Map<string, string>()
   for (const name of uniqueNames) {
     if (!name) continue
 
-    // Try to find existing entry
-    const existing = await db.select().from(playerGlicko)
-    const match = existing.find(
-      (g: any) => g.playerName.toLowerCase() === name.toLowerCase(),
-    )
+    const match = glickoByName.get(name.toLowerCase())
 
     if (match) {
       nameToGlickoId.set(name, match.id)
@@ -177,6 +181,8 @@ async function updateGlickoForImport(
         updatedAt: Date.now(),
       })
       nameToGlickoId.set(name, newId)
+      // Add to map so subsequent lookups in the same import see it
+      glickoByName.set(name.toLowerCase(), { id: newId, playerName: name, userId, rating: 1500, ratingDeviation: 350, volatility: 0.06, gamesPlayed: 0, lastRatingPeriod: null, updatedAt: Date.now() })
     }
   }
 
@@ -194,12 +200,7 @@ async function updateGlickoForImport(
       const glickoId = nameToGlickoId.get(name)
       if (!glickoId) continue
 
-      const [current] = await db
-        .select()
-        .from(playerGlicko)
-        .where(eq(playerGlicko.id, glickoId))
-        .limit(1)
-
+      const current = glickoByName.get(name.toLowerCase()) as any
       if (!current) continue
 
       // Synthesize game results: wins + losses + draws

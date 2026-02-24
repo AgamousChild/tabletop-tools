@@ -18,6 +18,7 @@ import {
   playerGlicko,
   rolls,
   rounds,
+  simulations,
   tournamentPlayers,
   tournaments,
   turns,
@@ -32,6 +33,9 @@ afterAll(() => {
 })
 
 beforeAll(async () => {
+  // V2: Enable foreign key enforcement (SQLite disables it by default)
+  await client.execute('PRAGMA foreign_keys = ON')
+
   // Auth tables (Better Auth managed)
   await client.execute(`CREATE TABLE "user" (
     id TEXT PRIMARY KEY,
@@ -47,7 +51,7 @@ beforeAll(async () => {
 
   await client.execute(`CREATE TABLE "session" (
     id TEXT PRIMARY KEY,
-    user_id TEXT NOT NULL REFERENCES "user"(id),
+    user_id TEXT NOT NULL REFERENCES "user"(id) ON DELETE CASCADE,
     token TEXT UNIQUE NOT NULL,
     expires_at INTEGER NOT NULL,
     ip_address TEXT,
@@ -58,7 +62,7 @@ beforeAll(async () => {
 
   await client.execute(`CREATE TABLE "account" (
     id TEXT PRIMARY KEY,
-    user_id TEXT NOT NULL REFERENCES "user"(id),
+    user_id TEXT NOT NULL REFERENCES "user"(id) ON DELETE CASCADE,
     account_id TEXT NOT NULL,
     provider_id TEXT NOT NULL,
     access_token TEXT,
@@ -83,15 +87,15 @@ beforeAll(async () => {
   // NoCheat tables
   await client.execute(`CREATE TABLE dice_sets (
     id TEXT PRIMARY KEY,
-    user_id TEXT NOT NULL REFERENCES "user"(id),
+    user_id TEXT NOT NULL REFERENCES "user"(id) ON DELETE CASCADE,
     name TEXT NOT NULL,
     created_at INTEGER NOT NULL
   )`)
 
   await client.execute(`CREATE TABLE sessions (
     id TEXT PRIMARY KEY,
-    user_id TEXT NOT NULL REFERENCES "user"(id),
-    dice_set_id TEXT NOT NULL REFERENCES dice_sets(id),
+    user_id TEXT NOT NULL REFERENCES "user"(id) ON DELETE CASCADE,
+    dice_set_id TEXT NOT NULL REFERENCES dice_sets(id) ON DELETE CASCADE,
     opponent_name TEXT,
     z_score REAL,
     is_loaded INTEGER,
@@ -102,15 +106,27 @@ beforeAll(async () => {
 
   await client.execute(`CREATE TABLE rolls (
     id TEXT PRIMARY KEY,
-    session_id TEXT NOT NULL REFERENCES sessions(id),
+    session_id TEXT NOT NULL REFERENCES sessions(id) ON DELETE CASCADE,
     pip_values TEXT NOT NULL,
+    created_at INTEGER NOT NULL
+  )`)
+
+  // Versus tables
+  await client.execute(`CREATE TABLE simulations (
+    id TEXT PRIMARY KEY,
+    user_id TEXT NOT NULL REFERENCES "user"(id) ON DELETE CASCADE,
+    attacker_content_id TEXT NOT NULL,
+    attacker_name TEXT NOT NULL,
+    defender_content_id TEXT NOT NULL,
+    defender_name TEXT NOT NULL,
+    result TEXT NOT NULL,
     created_at INTEGER NOT NULL
   )`)
 
   // List Builder tables
   await client.execute(`CREATE TABLE lists (
     id TEXT PRIMARY KEY,
-    user_id TEXT NOT NULL REFERENCES "user"(id),
+    user_id TEXT NOT NULL REFERENCES "user"(id) ON DELETE CASCADE,
     faction TEXT NOT NULL,
     name TEXT NOT NULL,
     total_pts INTEGER NOT NULL DEFAULT 0,
@@ -120,7 +136,7 @@ beforeAll(async () => {
 
   await client.execute(`CREATE TABLE list_units (
     id TEXT PRIMARY KEY,
-    list_id TEXT NOT NULL REFERENCES lists(id),
+    list_id TEXT NOT NULL REFERENCES lists(id) ON DELETE CASCADE,
     unit_content_id TEXT NOT NULL,
     unit_name TEXT NOT NULL,
     unit_points INTEGER NOT NULL,
@@ -140,7 +156,7 @@ beforeAll(async () => {
   // Game Tracker tables
   await client.execute(`CREATE TABLE matches (
     id TEXT PRIMARY KEY,
-    user_id TEXT NOT NULL REFERENCES "user"(id),
+    user_id TEXT NOT NULL REFERENCES "user"(id) ON DELETE CASCADE,
     list_id TEXT,
     opponent_faction TEXT NOT NULL,
     mission TEXT NOT NULL,
@@ -154,7 +170,7 @@ beforeAll(async () => {
 
   await client.execute(`CREATE TABLE turns (
     id TEXT PRIMARY KEY,
-    match_id TEXT NOT NULL REFERENCES matches(id),
+    match_id TEXT NOT NULL REFERENCES matches(id) ON DELETE CASCADE,
     turn_number INTEGER NOT NULL,
     photo_url TEXT,
     your_units_lost TEXT NOT NULL DEFAULT '[]',
@@ -169,7 +185,7 @@ beforeAll(async () => {
   // Tournament tables
   await client.execute(`CREATE TABLE tournaments (
     id TEXT PRIMARY KEY,
-    to_user_id TEXT NOT NULL REFERENCES "user"(id),
+    to_user_id TEXT NOT NULL REFERENCES "user"(id) ON DELETE CASCADE,
     name TEXT NOT NULL,
     event_date INTEGER NOT NULL,
     location TEXT,
@@ -181,8 +197,8 @@ beforeAll(async () => {
 
   await client.execute(`CREATE TABLE tournament_players (
     id TEXT PRIMARY KEY,
-    tournament_id TEXT NOT NULL REFERENCES tournaments(id),
-    user_id TEXT NOT NULL REFERENCES "user"(id),
+    tournament_id TEXT NOT NULL REFERENCES tournaments(id) ON DELETE CASCADE,
+    user_id TEXT NOT NULL REFERENCES "user"(id) ON DELETE CASCADE,
     display_name TEXT NOT NULL,
     faction TEXT NOT NULL,
     detachment TEXT,
@@ -195,7 +211,7 @@ beforeAll(async () => {
 
   await client.execute(`CREATE TABLE rounds (
     id TEXT PRIMARY KEY,
-    tournament_id TEXT NOT NULL REFERENCES tournaments(id),
+    tournament_id TEXT NOT NULL REFERENCES tournaments(id) ON DELETE CASCADE,
     round_number INTEGER NOT NULL,
     status TEXT NOT NULL DEFAULT 'PENDING',
     created_at INTEGER NOT NULL
@@ -203,9 +219,9 @@ beforeAll(async () => {
 
   await client.execute(`CREATE TABLE pairings (
     id TEXT PRIMARY KEY,
-    round_id TEXT NOT NULL REFERENCES rounds(id),
+    round_id TEXT NOT NULL REFERENCES rounds(id) ON DELETE CASCADE,
     table_number INTEGER NOT NULL,
-    player1_id TEXT NOT NULL REFERENCES tournament_players(id),
+    player1_id TEXT NOT NULL REFERENCES tournament_players(id) ON DELETE CASCADE,
     player2_id TEXT,
     mission TEXT NOT NULL,
     player1_vp INTEGER,
@@ -220,7 +236,7 @@ beforeAll(async () => {
   // ELO tables
   await client.execute(`CREATE TABLE player_elo (
     id TEXT PRIMARY KEY,
-    user_id TEXT NOT NULL UNIQUE REFERENCES "user"(id),
+    user_id TEXT NOT NULL UNIQUE REFERENCES "user"(id) ON DELETE CASCADE,
     rating INTEGER NOT NULL DEFAULT 1200,
     games_played INTEGER NOT NULL DEFAULT 0,
     updated_at INTEGER NOT NULL
@@ -228,19 +244,19 @@ beforeAll(async () => {
 
   await client.execute(`CREATE TABLE elo_history (
     id TEXT PRIMARY KEY,
-    user_id TEXT NOT NULL REFERENCES "user"(id),
-    pairing_id TEXT NOT NULL REFERENCES pairings(id),
+    user_id TEXT NOT NULL REFERENCES "user"(id) ON DELETE CASCADE,
+    pairing_id TEXT NOT NULL REFERENCES pairings(id) ON DELETE CASCADE,
     rating_before INTEGER NOT NULL,
     rating_after INTEGER NOT NULL,
     delta INTEGER NOT NULL,
-    opponent_id TEXT NOT NULL REFERENCES "user"(id),
+    opponent_id TEXT NOT NULL REFERENCES "user"(id) ON DELETE CASCADE,
     recorded_at INTEGER NOT NULL
   )`)
 
   // Imported tournament results
   await client.execute(`CREATE TABLE imported_tournament_results (
     id TEXT PRIMARY KEY,
-    imported_by TEXT NOT NULL REFERENCES "user"(id),
+    imported_by TEXT NOT NULL REFERENCES "user"(id) ON DELETE CASCADE,
     event_name TEXT NOT NULL,
     event_date INTEGER NOT NULL,
     format TEXT NOT NULL,
@@ -253,7 +269,7 @@ beforeAll(async () => {
   // Glicko-2 tables
   await client.execute(`CREATE TABLE player_glicko (
     id TEXT PRIMARY KEY,
-    user_id TEXT REFERENCES "user"(id),
+    user_id TEXT REFERENCES "user"(id) ON DELETE CASCADE,
     player_name TEXT NOT NULL,
     rating REAL NOT NULL DEFAULT 1500,
     rating_deviation REAL NOT NULL DEFAULT 350,
@@ -265,7 +281,7 @@ beforeAll(async () => {
 
   await client.execute(`CREATE TABLE glicko_history (
     id TEXT PRIMARY KEY,
-    player_id TEXT NOT NULL REFERENCES player_glicko(id),
+    player_id TEXT NOT NULL REFERENCES player_glicko(id) ON DELETE CASCADE,
     rating_period TEXT NOT NULL,
     rating_before REAL NOT NULL,
     rd_before REAL NOT NULL,
@@ -276,6 +292,50 @@ beforeAll(async () => {
     games_in_period INTEGER NOT NULL,
     recorded_at INTEGER NOT NULL
   )`)
+
+  // --- V2: Indexes on FK and query columns ---
+  // Auth
+  await client.execute('CREATE INDEX idx_session_user_id ON "session"(user_id)')
+  await client.execute('CREATE INDEX idx_account_user_id ON "account"(user_id)')
+  await client.execute('CREATE INDEX idx_verification_identifier ON verification(identifier)')
+  // NoCheat
+  await client.execute('CREATE INDEX idx_dice_sets_user_id ON dice_sets(user_id)')
+  await client.execute('CREATE INDEX idx_sessions_user_id ON sessions(user_id)')
+  await client.execute('CREATE INDEX idx_sessions_dice_set_id ON sessions(dice_set_id)')
+  await client.execute('CREATE INDEX idx_rolls_session_id ON rolls(session_id)')
+  // Versus
+  await client.execute('CREATE INDEX idx_simulations_user_id ON simulations(user_id)')
+  // List Builder
+  await client.execute('CREATE INDEX idx_lists_user_id ON lists(user_id)')
+  await client.execute('CREATE INDEX idx_list_units_list_id ON list_units(list_id)')
+  await client.execute('CREATE INDEX idx_unit_ratings_unit_content_id ON unit_ratings(unit_content_id)')
+  await client.execute('CREATE INDEX idx_unit_ratings_meta_window ON unit_ratings(meta_window)')
+  // Game Tracker
+  await client.execute('CREATE INDEX idx_matches_user_id ON matches(user_id)')
+  await client.execute('CREATE INDEX idx_turns_match_id ON turns(match_id)')
+  // Tournament
+  await client.execute('CREATE INDEX idx_tournaments_user_id ON tournaments(to_user_id)')
+  await client.execute('CREATE INDEX idx_tournament_players_tourn_id ON tournament_players(tournament_id)')
+  await client.execute('CREATE INDEX idx_tournament_players_user_id ON tournament_players(user_id)')
+  await client.execute('CREATE INDEX idx_rounds_tournament_id ON rounds(tournament_id)')
+  await client.execute('CREATE INDEX idx_pairings_round_id ON pairings(round_id)')
+  await client.execute('CREATE INDEX idx_pairings_player1_id ON pairings(player1_id)')
+  await client.execute('CREATE INDEX idx_pairings_player2_id ON pairings(player2_id)')
+  // ELO (player_elo.user_id already has unique index)
+  await client.execute('CREATE INDEX idx_elo_history_user_id ON elo_history(user_id)')
+  await client.execute('CREATE INDEX idx_elo_history_pairing_id ON elo_history(pairing_id)')
+  await client.execute('CREATE INDEX idx_elo_history_opponent_id ON elo_history(opponent_id)')
+  // Imported results
+  await client.execute('CREATE INDEX idx_imported_results_imported_by ON imported_tournament_results(imported_by)')
+  // Glicko
+  await client.execute('CREATE INDEX idx_player_glicko_user_id ON player_glicko(user_id)')
+  await client.execute('CREATE INDEX idx_glicko_history_player_id ON glicko_history(player_id)')
+
+  // --- V2: Composite unique constraints ---
+  await client.execute('CREATE UNIQUE INDEX uq_unit_ratings_unit_window ON unit_ratings(unit_content_id, meta_window)')
+  await client.execute('CREATE UNIQUE INDEX uq_tournament_players_tourn_user ON tournament_players(tournament_id, user_id)')
+  await client.execute('CREATE UNIQUE INDEX uq_rounds_tourn_number ON rounds(tournament_id, round_number)')
+  await client.execute('CREATE UNIQUE INDEX uq_turns_match_number ON turns(match_id, turn_number)')
 
   // Seed shared users for FK tests
   await db.insert(authUsers).values({
@@ -290,6 +350,15 @@ beforeAll(async () => {
     id: 'user-2',
     name: 'Opponent User',
     email: 'opponent@example.com',
+    createdAt: new Date(),
+    updatedAt: new Date(),
+  })
+
+  // V2: User for cascade tests
+  await db.insert(authUsers).values({
+    id: 'user-3',
+    name: 'Cascade User',
+    email: 'cascade@example.com',
     createdAt: new Date(),
     updatedAt: new Date(),
   })
@@ -790,10 +859,23 @@ describe('importedTournamentResults', () => {
 // ============================================================
 
 describe('tournamentPlayers detachment', () => {
+  // V2: Use a separate tournament to avoid unique constraint conflict with tp-1/tp-2
+  beforeAll(async () => {
+    await db.insert(tournaments).values({
+      id: 'tourn-2',
+      toUserId: 'user-1',
+      name: 'Detachment Test GT',
+      eventDate: Date.now(),
+      format: '2000pts',
+      totalRounds: 3,
+      createdAt: Date.now(),
+    })
+  })
+
   it('stores detachment as nullable string', async () => {
     await db.insert(tournamentPlayers).values({
       id: 'tp-det-1',
-      tournamentId: 'tourn-1',
+      tournamentId: 'tourn-2',
       userId: 'user-1',
       displayName: 'Alice',
       faction: 'Space Marines',
@@ -815,7 +897,7 @@ describe('tournamentPlayers detachment', () => {
   it('detachment is null when not provided', async () => {
     await db.insert(tournamentPlayers).values({
       id: 'tp-det-2',
-      tournamentId: 'tourn-1',
+      tournamentId: 'tourn-2',
       userId: 'user-2',
       displayName: 'Bob',
       faction: 'Orks',
@@ -904,5 +986,239 @@ describe('glickoHistory', () => {
     expect(result[0]?.ratingPeriod).toBe('import-1')
     expect(result[0]?.delta).toBeCloseTo(187)
     expect(result[0]?.gamesInPeriod).toBe(5)
+  })
+})
+
+// ============================================================
+// V2: Index existence tests
+// ============================================================
+
+describe('V2: Index existence', () => {
+  it('has all required indexes on all tables', async () => {
+    const expectedIndexes: Record<string, string[]> = {
+      session: ['idx_session_user_id'],
+      account: ['idx_account_user_id'],
+      verification: ['idx_verification_identifier'],
+      dice_sets: ['idx_dice_sets_user_id'],
+      sessions: ['idx_sessions_user_id', 'idx_sessions_dice_set_id'],
+      rolls: ['idx_rolls_session_id'],
+      simulations: ['idx_simulations_user_id'],
+      lists: ['idx_lists_user_id'],
+      list_units: ['idx_list_units_list_id'],
+      unit_ratings: ['idx_unit_ratings_unit_content_id', 'idx_unit_ratings_meta_window', 'uq_unit_ratings_unit_window'],
+      matches: ['idx_matches_user_id'],
+      turns: ['idx_turns_match_id', 'uq_turns_match_number'],
+      tournaments: ['idx_tournaments_user_id'],
+      tournament_players: ['idx_tournament_players_tourn_id', 'idx_tournament_players_user_id', 'uq_tournament_players_tourn_user'],
+      rounds: ['idx_rounds_tournament_id', 'uq_rounds_tourn_number'],
+      pairings: ['idx_pairings_round_id', 'idx_pairings_player1_id', 'idx_pairings_player2_id'],
+      elo_history: ['idx_elo_history_user_id', 'idx_elo_history_pairing_id', 'idx_elo_history_opponent_id'],
+      imported_tournament_results: ['idx_imported_results_imported_by'],
+      player_glicko: ['idx_player_glicko_user_id'],
+      glicko_history: ['idx_glicko_history_player_id'],
+    }
+
+    for (const [table, indexes] of Object.entries(expectedIndexes)) {
+      const result = await client.execute(`PRAGMA index_list("${table}")`)
+      const indexNames = result.rows.map((r) => r.name as string)
+      for (const idx of indexes) {
+        expect(indexNames, `Missing index ${idx} on table ${table}`).toContain(idx)
+      }
+    }
+  })
+})
+
+// ============================================================
+// V2: Composite unique constraint enforcement
+// ============================================================
+
+describe('V2: Unique constraints', () => {
+  it('rejects duplicate (unit_content_id, meta_window) in unitRatings', async () => {
+    await expect(
+      db.insert(unitRatings).values({
+        id: 'rating-dupe',
+        unitContentId: 'bsdata-unit-abc123',
+        rating: 'B',
+        winContrib: 0.5,
+        ptsEff: 1.0,
+        metaWindow: '2025-Q2',
+        computedAt: Date.now(),
+      }),
+    ).rejects.toThrow()
+  })
+
+  it('rejects duplicate (tournament_id, user_id) in tournamentPlayers', async () => {
+    await expect(
+      db.insert(tournamentPlayers).values({
+        id: 'tp-dupe',
+        tournamentId: 'tourn-1',
+        userId: 'user-1',
+        displayName: 'Alice Again',
+        faction: 'Test',
+        listLocked: 0,
+        checkedIn: 0,
+        dropped: 0,
+        registeredAt: Date.now(),
+      }),
+    ).rejects.toThrow()
+  })
+
+  it('rejects duplicate (tournament_id, round_number) in rounds', async () => {
+    await expect(
+      db.insert(rounds).values({
+        id: 'round-dupe',
+        tournamentId: 'tourn-1',
+        roundNumber: 1,
+        createdAt: Date.now(),
+      }),
+    ).rejects.toThrow()
+  })
+
+  it('rejects duplicate (match_id, turn_number) in turns', async () => {
+    await expect(
+      db.insert(turns).values({
+        id: 'turn-dupe',
+        matchId: 'match-1',
+        turnNumber: 1,
+        createdAt: Date.now(),
+      }),
+    ).rejects.toThrow()
+  })
+})
+
+// ============================================================
+// V2: Cascading delete tests
+// ============================================================
+
+describe('V2: Cascading deletes', () => {
+  // Set up complete data chains for user-3
+  beforeAll(async () => {
+    // user-3 → diceSets → diceRollingSessions → rolls
+    await db.insert(diceSets).values({
+      id: 'c-set-1', userId: 'user-3', name: 'Cascade Dice', createdAt: Date.now(),
+    })
+    await db.insert(diceRollingSessions).values({
+      id: 'c-sess-1', userId: 'user-3', diceSetId: 'c-set-1', createdAt: Date.now(),
+    })
+    await db.insert(rolls).values({
+      id: 'c-roll-1', sessionId: 'c-sess-1', pipValues: '[1,2,3]', createdAt: Date.now(),
+    })
+
+    // user-3 → simulations
+    await db.insert(simulations).values({
+      id: 'c-sim-1', userId: 'user-3', attackerContentId: 'x', attackerName: 'X',
+      defenderContentId: 'y', defenderName: 'Y', result: '{}', createdAt: Date.now(),
+    })
+
+    // user-3 → matches → turns
+    await db.insert(matches).values({
+      id: 'c-match-1', userId: 'user-3', opponentFaction: 'Test', mission: 'M1', createdAt: Date.now(),
+    })
+    await db.insert(turns).values({
+      id: 'c-turn-1', matchId: 'c-match-1', turnNumber: 1, createdAt: Date.now(),
+    })
+
+    // user-3 → tournaments → tournament_players, rounds → pairings
+    await db.insert(tournaments).values({
+      id: 'c-tourn-1', toUserId: 'user-3', name: 'Cascade GT', eventDate: Date.now(),
+      format: 'GT', totalRounds: 3, createdAt: Date.now(),
+    })
+    await db.insert(tournamentPlayers).values({
+      id: 'c-tp-1', tournamentId: 'c-tourn-1', userId: 'user-3',
+      displayName: 'C', faction: 'X', listLocked: 0, checkedIn: 0, dropped: 0,
+      registeredAt: Date.now(),
+    })
+    await db.insert(tournamentPlayers).values({
+      id: 'c-tp-2', tournamentId: 'c-tourn-1', userId: 'user-2',
+      displayName: 'D', faction: 'Y', listLocked: 0, checkedIn: 0, dropped: 0,
+      registeredAt: Date.now(),
+    })
+    await db.insert(rounds).values({
+      id: 'c-round-1', tournamentId: 'c-tourn-1', roundNumber: 1, createdAt: Date.now(),
+    })
+    await db.insert(pairings).values({
+      id: 'c-pairing-1', roundId: 'c-round-1', tableNumber: 1,
+      player1Id: 'c-tp-1', player2Id: 'c-tp-2', mission: 'M1', createdAt: Date.now(),
+    })
+
+    // user-3 → playerElo
+    await db.insert(playerElo).values({
+      id: 'c-elo-1', userId: 'user-3', updatedAt: Date.now(),
+    })
+
+    // user-3 → importedTournamentResults
+    await db.insert(importedTournamentResults).values({
+      id: 'c-import-1', importedBy: 'user-3', eventName: 'E', eventDate: Date.now(),
+      format: 'GT', metaWindow: '2025-Q3', rawData: 'x', parsedData: '[]', importedAt: Date.now(),
+    })
+
+    // user-3 → playerGlicko → glickoHistory
+    await db.insert(playerGlicko).values({
+      id: 'c-glicko-1', userId: 'user-3', playerName: 'C', updatedAt: Date.now(),
+    })
+    await db.insert(glickoHistory).values({
+      id: 'c-gh-1', playerId: 'c-glicko-1', ratingPeriod: 'p1',
+      ratingBefore: 1500, rdBefore: 350, ratingAfter: 1600, rdAfter: 200,
+      volatilityAfter: 0.06, delta: 100, gamesInPeriod: 3, recordedAt: Date.now(),
+    })
+
+    // Delete user-3 — should cascade through everything
+    await db.delete(authUsers).where(eq(authUsers.id, 'user-3'))
+  })
+
+  it('cascade: user -> diceSets -> diceRollingSessions -> rolls', async () => {
+    const sets = await db.select().from(diceSets).where(eq(diceSets.userId, 'user-3'))
+    expect(sets).toHaveLength(0)
+
+    const sessions = await db.select().from(diceRollingSessions).where(eq(diceRollingSessions.id, 'c-sess-1'))
+    expect(sessions).toHaveLength(0)
+
+    const rollsResult = await db.select().from(rolls).where(eq(rolls.id, 'c-roll-1'))
+    expect(rollsResult).toHaveLength(0)
+  })
+
+  it('cascade: user -> matches -> turns', async () => {
+    const matchesResult = await db.select().from(matches).where(eq(matches.id, 'c-match-1'))
+    expect(matchesResult).toHaveLength(0)
+
+    const turnsResult = await db.select().from(turns).where(eq(turns.id, 'c-turn-1'))
+    expect(turnsResult).toHaveLength(0)
+  })
+
+  it('cascade: user -> tournaments -> rounds -> pairings', async () => {
+    const tournsResult = await db.select().from(tournaments).where(eq(tournaments.id, 'c-tourn-1'))
+    expect(tournsResult).toHaveLength(0)
+
+    const roundsResult = await db.select().from(rounds).where(eq(rounds.id, 'c-round-1'))
+    expect(roundsResult).toHaveLength(0)
+
+    const pairingsResult = await db.select().from(pairings).where(eq(pairings.id, 'c-pairing-1'))
+    expect(pairingsResult).toHaveLength(0)
+  })
+
+  it('cascade: list -> listUnits', async () => {
+    // Create fresh list data to test list -> listUnits cascade in isolation
+    await db.insert(lists).values({
+      id: 'list-cascade', userId: 'user-1', faction: 'T', name: 'CascadeList',
+      totalPts: 100, createdAt: Date.now(), updatedAt: Date.now(),
+    })
+    await db.insert(listUnits).values({
+      id: 'lu-cascade', listId: 'list-cascade', unitContentId: 'u1',
+      unitName: 'U', unitPoints: 50,
+    })
+
+    // Delete the list — units should cascade
+    await db.delete(lists).where(eq(lists.id, 'list-cascade'))
+
+    const unitsResult = await db.select().from(listUnits).where(eq(listUnits.id, 'lu-cascade'))
+    expect(unitsResult).toHaveLength(0)
+  })
+
+  it('non-cascading: deleting a tournament player does NOT delete the user', async () => {
+    // user-2 was a player (c-tp-2) in c-tourn-1 — that got cascade-deleted with user-3.
+    // But user-2 itself should still exist.
+    const userResult = await db.select().from(authUsers).where(eq(authUsers.id, 'user-2'))
+    expect(userResult).toHaveLength(1)
+    expect(userResult[0]?.name).toBe('Opponent User')
   })
 })

@@ -7,9 +7,10 @@ import {
   TEST_TOKEN,
   EXPIRED_TOKEN,
 } from '@tabletop-tools/auth/src/test-helpers'
-import { afterAll, beforeAll, describe, expect, it } from 'vitest'
+import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest'
 
 import { createServer } from './server'
+import { createNullR2Storage } from './lib/storage/r2'
 
 const client = createClient({ url: ':memory:' })
 const db = createDbFromClient(client)
@@ -45,7 +46,7 @@ beforeAll(async () => {
 
 afterAll(() => client.close())
 
-const makeRequest = createRequestHelper(() => createServer(db))
+const makeRequest = createRequestHelper(() => createServer(db, createNullR2Storage()))
 
 describe('HTTP integration — diceSet.create via session cookie', () => {
   it('creates a dice set when a valid session cookie is provided', async () => {
