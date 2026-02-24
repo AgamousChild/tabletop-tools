@@ -2,6 +2,7 @@ import { useState } from 'react'
 
 import { authClient } from '../lib/auth'
 import { trpc } from '../lib/trpc'
+import { useUnits, useGameFactions } from '../lib/useGameData'
 import { RatingBadge } from './RatingBadge'
 
 type Props = {
@@ -28,10 +29,10 @@ export function ListBuilderScreen({ onSignOut }: Props) {
     ptsDiff: number
   } | null>(null)
 
-  const { data: factions = [] } = trpc.unit.listFactions.useQuery()
-  const { data: units = [], isLoading: unitsLoading } = trpc.unit.search.useQuery(
-    { faction: selectedFaction || undefined, query: searchQuery || undefined },
-    { enabled: Boolean(selectedFaction || searchQuery) },
+  const { data: factions = [] } = useGameFactions()
+  const { data: units = [], isLoading: unitsLoading } = useUnits(
+    { faction: selectedFaction || undefined, name: searchQuery || undefined },
+    Boolean(selectedFaction || searchQuery),
   )
   const { data: myLists = [], refetch: refetchLists } = trpc.list.list.useQuery()
   const { data: activeList, refetch: refetchActiveList } = trpc.list.get.useQuery(

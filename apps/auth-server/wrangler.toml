@@ -9,9 +9,9 @@ compatibility_flags = ["nodejs_compat"]
 #   wrangler secret put AUTH_SECRET
 
 [vars]
-AUTH_BASE_URL = "https://auth.tabletop-tools.net"
-TRUSTED_ORIGINS = "https://no-cheat.tabletop-tools.net,https://new-meta.tabletop-tools.net,https://tournament.tabletop-tools.net,https://versus.tabletop-tools.net,https://list-builder.tabletop-tools.net,https://game-tracker.tabletop-tools.net"
+AUTH_BASE_URL = "https://tabletop-tools.net"
+TRUSTED_ORIGINS = "https://tabletop-tools.net"
 
 [[routes]]
-pattern = "auth.tabletop-tools.net/*"
+pattern = "tabletop-tools.net/auth/*"
 zone_name = "tabletop-tools.net"

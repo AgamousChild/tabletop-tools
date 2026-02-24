@@ -9,7 +9,7 @@ export function createTRPCClient() {
   return trpc.createClient({
     links: [
       httpBatchLink({
-        url: '/trpc',
+        url: `${import.meta.env.BASE_URL}trpc`,
       }),
     ],
   })

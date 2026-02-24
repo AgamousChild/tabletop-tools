@@ -10,12 +10,12 @@
 |---|---|
 | DB schema (simulations table) | ✅ in packages/db |
 | packages/game-content BSDataAdapter | ✅ built + tested |
-| Server scaffold | 🔲 not started |
-| Client scaffold | 🔲 not started |
+| Server (Hono + tRPC) | ✅ built + tested (57 tests) |
+| Client (React + shadcn) | ✅ built + tested (23 tests) |
+| Deployment | ✅ Deployed to tabletop-tools.net/versus/ via gateway |
 
 BSData loading and the `GameContentAdapter` interface live in `packages/game-content`.
-When implementation begins: the rules engine goes in `server/src/lib/rules/`, not in
-the game-content package. game-content provides unit profiles; versus provides the math.
+The rules engine is in `server/src/lib/rules/`. game-content provides unit profiles; versus provides the math.
 
 ---
 
@@ -257,3 +257,14 @@ src/
 BSData parsing lives in `packages/game-content` — do not duplicate it here.
 
 The rules engine must be fully unit-tested. Every weapon ability, every modifier interaction — covered before it ships.
+
+### E2E Browser Tests
+
+Playwright E2E tests live in `e2e/specs/versus.spec.ts` (shared across the platform in `e2e/`).
+These run against the deployed app in a real browser and verify:
+- Auth gate works (authenticated → SimulatorScreen)
+- Simulator screen loads with Versus header
+- Attacker and Defender unit selectors present
+- Run Simulation button present
+
+Run: `cd e2e && BASE_URL=https://tabletop-tools.net pnpm test -- --grep versus`

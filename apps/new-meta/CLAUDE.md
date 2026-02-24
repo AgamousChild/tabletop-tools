@@ -25,6 +25,7 @@ full dataset. That's the whole premise.
 | packages/game-content CSV parsers (detachment, playerName) | ✅ built + tested |
 | Server — all routers + lib | ✅ built + tested (51 tests) |
 | Client — pages + components | ✅ built + tested (71 tests) |
+| Deployment | ✅ Deployed to tabletop-tools.net/new-meta/ via gateway |
 
 ---
 
@@ -242,6 +243,18 @@ Total: 51 tests, all passing
 ```
 
 Client has no logic tests yet (scaffold only). Tests will be written as pages are wired.
+
+### E2E Browser Tests
+
+Playwright E2E tests live in `e2e/specs/new-meta.spec.ts` (shared across the platform in `e2e/`).
+These run against the deployed app in a real browser and verify:
+- App loads directly without auth gate (public app)
+- NEW META nav header visible
+- Navigation tabs: Meta, Players, Source Data
+- Can switch between tabs
+- Dashboard renders on Meta tab
+
+Run: `cd e2e && BASE_URL=https://tabletop-tools.net pnpm test -- --grep new-meta`
 
 ---
 

@@ -10,8 +10,9 @@
 |---|---|
 | DB schema (unit_ratings, lists, list_units) | ✅ in packages/db |
 | packages/game-content BSDataAdapter | ✅ built + tested |
-| Server scaffold | 🔲 not started |
-| Client scaffold | 🔲 not started |
+| Server (Hono + tRPC) | ✅ built + tested (45 tests) |
+| Client (React + shadcn) | ✅ built + tested (13 tests) |
+| Deployment | ✅ Deployed to tabletop-tools.net/list-builder/ via gateway |
 
 ---
 
@@ -244,3 +245,14 @@ never makes external network requests to BCP or any other service.
 
 Meta window labels are shared with `apps/new-meta` — the same imported tournament data
 feeds both the rating engine here and the aggregate analytics there.
+
+### E2E Browser Tests
+
+Playwright E2E tests live in `e2e/specs/list-builder.spec.ts` (shared across the platform in `e2e/`).
+These run against the deployed app in a real browser and verify:
+- Auth gate works (authenticated → ListBuilderScreen)
+- List Builder header visible
+- Faction selector present
+- Unit search input present
+
+Run: `cd e2e && BASE_URL=https://tabletop-tools.net pnpm test -- --grep list-builder`

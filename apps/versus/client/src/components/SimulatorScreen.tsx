@@ -2,6 +2,7 @@ import { useState } from 'react'
 
 import { authClient } from '../lib/auth'
 import { trpc } from '../lib/trpc'
+import { useUnits, useGameFactions } from '../lib/useGameData'
 import { SimulationResult } from './SimulationResult'
 import { UnitSelector } from './UnitSelector'
 
@@ -18,17 +19,17 @@ export function SimulatorScreen({ onSignOut }: Props) {
   const [defenderId, setDefenderId] = useState<string | null>(null)
   const [defenderModelCount] = useState(5)
 
-  const { data: factions = [] } = trpc.unit.listFactions.useQuery()
+  const { data: factions = [] } = useGameFactions()
 
-  const { data: attackerUnits = [], isLoading: loadingAttackers } = trpc.unit.search.useQuery(
-    { faction: attackerFaction, query: attackerQuery || undefined },
-    { enabled: !!attackerFaction || !!attackerQuery },
-  )
+  const { data: attackerUnits = [], isLoading: loadingAttackers } = useUnits({
+    faction: attackerFaction,
+    name: attackerQuery || undefined,
+  })
 
-  const { data: defenderUnits = [], isLoading: loadingDefenders } = trpc.unit.search.useQuery(
-    { faction: defenderFaction, query: defenderQuery || undefined },
-    { enabled: !!defenderFaction || !!defenderQuery },
-  )
+  const { data: defenderUnits = [], isLoading: loadingDefenders } = useUnits({
+    faction: defenderFaction,
+    name: defenderQuery || undefined,
+  })
 
   const { data: simResult, isLoading: simLoading } = trpc.simulate.run.useQuery(
     { attackerId: attackerId!, defenderId: defenderId!, defenderModelCount },
