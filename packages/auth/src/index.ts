@@ -8,7 +8,49 @@ import {
 import { betterAuth } from 'better-auth'
 import { drizzleAdapter } from 'better-auth/adapters/drizzle'
 import { username } from 'better-auth/plugins'
+import { scryptAsync } from '@noble/hashes/scrypt.js'
 import { and, eq, gt } from 'drizzle-orm'
+
+// Lighter scrypt params that fit within Cloudflare Workers CPU limits.
+// Default better-auth uses r=16 which exceeds Workers' ~30ms CPU budget.
+const SCRYPT = { N: 16384, r: 8, p: 1, dkLen: 64 } as const
+
+function hexEncode(bytes: Uint8Array): string {
+  return Array.from(bytes, (b) => b.toString(16).padStart(2, '0')).join('')
+}
+
+function hexDecode(hex: string): Uint8Array {
+  const bytes = new Uint8Array(hex.length / 2)
+  for (let i = 0; i < hex.length; i += 2) {
+    bytes[i / 2] = parseInt(hex.slice(i, i + 2), 16)
+  }
+  return bytes
+}
+
+async function hashPassword(password: string): Promise<string> {
+  const salt = hexEncode(crypto.getRandomValues(new Uint8Array(16)))
+  const key = await scryptAsync(password.normalize('NFKC'), salt, {
+    N: SCRYPT.N,
+    r: SCRYPT.r,
+    p: SCRYPT.p,
+    dkLen: SCRYPT.dkLen,
+    maxmem: 128 * SCRYPT.N * SCRYPT.r * 2,
+  })
+  return `${salt}:${hexEncode(key)}`
+}
+
+async function verifyPassword(data: { hash: string; password: string }): Promise<boolean> {
+  const [salt, storedKey] = data.hash.split(':')
+  if (!salt || !storedKey) return false
+  const key = await scryptAsync(data.password.normalize('NFKC'), salt, {
+    N: SCRYPT.N,
+    r: SCRYPT.r,
+    p: SCRYPT.p,
+    dkLen: SCRYPT.dkLen,
+    maxmem: 128 * SCRYPT.N * SCRYPT.r * 2,
+  })
+  return hexEncode(key) === storedKey
+}
 
 export function createAuth(
   db: Db,
@@ -33,6 +75,10 @@ export function createAuth(
     emailAndPassword: {
       enabled: true,
       requireEmailVerification: false,
+      password: {
+        hash: hashPassword,
+        verify: verifyPassword,
+      },
     },
     plugins: [username()],
     secret,
