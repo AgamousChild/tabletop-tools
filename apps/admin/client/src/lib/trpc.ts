@@ -9,6 +9,9 @@ export function createTRPCClient() {
     links: [
       httpBatchLink({
         url: `${import.meta.env.BASE_URL}trpc`,
+        fetch(url, options) {
+          return fetch(url, { ...options, credentials: 'include' })
+        },
       }),
     ],
   })
