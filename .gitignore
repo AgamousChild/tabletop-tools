@@ -26,7 +26,8 @@ certs/
 .claude/
 
 # Game content data — never commit GW IP
-bsdata/
+# Use /bsdata/ (root-anchored) to avoid matching packages/game-content/src/adapters/bsdata/
+/bsdata/
 wahapedia-export/
 game-content-data/
 *.cat

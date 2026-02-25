@@ -130,12 +130,17 @@ cross-instance router composition at runtime.
 ## BSData Parser
 
 The parser (`src/adapters/bsdata/parser.ts`) uses a **stack-based approach** for extracting
-nested `<selectionEntry>` elements:
+`<selectionEntry>` elements:
 
 1. Collects all open (`<selectionEntry`) and close (`</selectionEntry>`) tag positions
 2. Sorts tags by document order
 3. Uses a stack to match pairs -- push on open, pop on close
-4. Only emits top-level entries (depth 1), correctly handling arbitrary nesting
+4. Only emits entries opened at depth 0 (stack empty) -- nested models inside units are excluded
+5. Strips nested `<selectionEntry>` XML from the body before returning, so `extractWeapons()`
+   only finds the outer unit's own weapons (no duplicate weapons from sub-models)
+
+Top-level `type="model"` entries (standalone characters) ARE kept. Only `type="model"` entries
+nested within a `type="unit"` parent are excluded.
 
 Profile and characteristic extraction uses regex (safe since these don't nest).
 
@@ -143,13 +148,13 @@ Profile and characteristic extraction uses regex (safe since these don't nest).
 
 ## Testing
 
-**79 tests** across 6 test files:
+**82 tests** across 6 test files:
 
 | File | Tests | What it covers |
 |---|---|---|
 | `routers/unit.test.ts` | 10 | listFactions, search (by faction/query/both/neither), get (happy/NOT_FOUND/auth) |
-| `adapters/bsdata/parser.test.ts` | 16 | XML parsing: units, weapons, abilities, factions, nested entries, edge cases |
-| `adapters/bsdata/loader.test.ts` | 13 | File discovery, .cat/.gst loading, error handling |
+| `adapters/bsdata/parser.test.ts` | 18 | XML parsing: units, weapons, abilities, nested model exclusion, top-level models, edge cases |
+| `adapters/bsdata/loader.test.ts` | 14 | File discovery, .cat/.gst loading, nested model filtering, error handling |
 | `adapters/tournament-import/bcp-csv/parser.test.ts` | 13 | BCP CSV format parsing |
 | `adapters/tournament-import/tabletop-admiral-csv/parser.test.ts` | 12 | Tabletop Admiral CSV format parsing |
 | `adapters/tournament-import/generic-csv/parser.test.ts` | 15 | Generic CSV format parsing |

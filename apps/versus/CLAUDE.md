@@ -111,7 +111,7 @@ simulate(attacker, defender):
 
 ## Testing
 
-**80 tests** (61 server + 19 client), all passing.
+**85 tests** (61 server + 24 client), all passing.
 
 ```
 server/src/
@@ -120,11 +120,14 @@ server/src/
   routers/
     simulate.test.ts                   <- simulation router integration tests
 server/src/server.test.ts              <- HTTP session integration tests
+client/src/
+  lib/
+    useGameData.test.tsx               <- dual-source hook tests (IndexedDB vs tRPC fallback)
 ```
 
 The rules engine is fully unit-tested. Every weapon ability, every modifier interaction is covered.
 
 ```bash
 cd apps/versus/server && pnpm test   # 61 server tests
-cd apps/versus/client && pnpm test   # 19 client tests
+cd apps/versus/client && pnpm test   # 24 client tests
 ```

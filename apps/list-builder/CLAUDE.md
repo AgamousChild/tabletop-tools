@@ -116,7 +116,7 @@ list.delete(id)
 
 ## Testing
 
-**59 tests** (51 server + 8 client), all passing.
+**64 tests** (51 server + 13 client), all passing.
 
 ```
 server/src/
@@ -126,9 +126,12 @@ server/src/
   lib/ratings/
     score.ts / score.test.ts <- scoring logic: win contribution, points efficiency
 server/src/server.test.ts    <- HTTP session integration tests
+client/src/
+  lib/
+    useGameData.test.tsx     <- dual-source hook tests (IndexedDB vs tRPC fallback)
 ```
 
 ```bash
 cd apps/list-builder/server && pnpm test   # 51 server tests
-cd apps/list-builder/client && pnpm test   # 8 client tests
+cd apps/list-builder/client && pnpm test   # 13 client tests
 ```
