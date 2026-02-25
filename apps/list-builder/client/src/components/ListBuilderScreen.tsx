@@ -1,19 +1,26 @@
 import { useState } from 'react'
 
 import { authClient } from '../lib/auth'
-import { trpc, trpcClient } from '../lib/trpc'
+import { trpcClient } from '../lib/trpc'
 import { useUnits, useGameFactions } from '../lib/useGameData'
+import {
+  createList as createListInDb,
+  addListUnit as addListUnitInDb,
+  removeListUnit as removeListUnitInDb,
+  updateList as updateListInDb,
+  deleteList as deleteListInDb,
+  useLists,
+  useList,
+} from '@tabletop-tools/game-data-store'
+import type { LocalListUnit } from '@tabletop-tools/game-data-store'
 import { RatingBadge } from './RatingBadge'
 
 type Props = {
   onSignOut: () => void
 }
 
-type ListRow = {
-  id: string
-  faction: string
-  name: string
-  totalPts: number
+function generateId(): string {
+  return `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`
 }
 
 export function ListBuilderScreen({ onSignOut }: Props) {
@@ -26,7 +33,7 @@ export function ListBuilderScreen({ onSignOut }: Props) {
     addedRating: string | null
     altName: string
     altRating: string | null
-    ptsDiff: number
+    altUnitContentId: string
   } | null>(null)
 
   const { data: factions = [] } = useGameFactions()
@@ -34,51 +41,47 @@ export function ListBuilderScreen({ onSignOut }: Props) {
     { faction: selectedFaction || undefined, name: searchQuery || undefined },
     Boolean(selectedFaction || searchQuery),
   )
-  const { data: myLists = [], refetch: refetchLists } = trpc.list.list.useQuery()
-  const { data: activeList, refetch: refetchActiveList } = trpc.list.get.useQuery(
-    { id: activeListId! },
-    { enabled: activeListId != null },
-  )
+  const { data: myLists, refetch: refetchLists } = useLists()
+  const { data: activeList, refetch: refetchActiveList } = useList(activeListId)
 
-  const createList = trpc.list.create.useMutation({
-    onSuccess: (list) => {
-      setActiveListId(list.id)
-      setNewListName('')
-      void refetchLists()
-    },
-  })
-
-  const addUnit = trpc.list.addUnit.useMutation({
-    onSuccess: () => {
-      void refetchActiveList()
-    },
-  })
-
-  const removeUnit = trpc.list.removeUnit.useMutation({
-    onSuccess: () => {
-      void refetchActiveList()
-    },
-  })
-
-  const deleteList = trpc.list.delete.useMutation({
-    onSuccess: () => {
-      setActiveListId(null)
-      void refetchLists()
-    },
-  })
+  async function handleCreateList() {
+    if (!newListName.trim() || !selectedFaction) return
+    const id = generateId()
+    const now = Date.now()
+    await createListInDb({
+      id,
+      faction: selectedFaction,
+      name: newListName.trim(),
+      totalPts: 0,
+      createdAt: now,
+      updatedAt: now,
+    })
+    setActiveListId(id)
+    setNewListName('')
+    refetchLists()
+  }
 
   async function handleAddUnit(unitId: string, unitName: string, unitPoints: number) {
-    if (!activeListId) return
-    await addUnit.mutateAsync({ listId: activeListId, unitId })
+    if (!activeListId || !activeList) return
+    const luId = generateId()
+    await addListUnitInDb({
+      id: luId,
+      listId: activeListId,
+      unitContentId: unitId,
+      unitName,
+      unitPoints,
+      count: 1,
+    })
+    await updateListInDb(activeListId, {
+      totalPts: activeList.totalPts + unitPoints,
+      updatedAt: Date.now(),
+    })
+    refetchActiveList()
+    refetchLists()
 
-    // Fetch alternatives in the +/-20% points range
+    // Fetch alternatives and show suggestion
     try {
-      const ptsMin = Math.floor(unitPoints * 0.8)
-      const ptsMax = Math.ceil(unitPoints * 1.2)
-      const alternatives = await trpcClient.rating.alternatives.query({
-        ptsMin,
-        ptsMax,
-      })
+      const alternatives = await trpcClient.rating.alternatives.query({})
 
       // Find best alternative that isn't the unit we just added
       const best = alternatives.find(
@@ -97,11 +100,30 @@ export function ListBuilderScreen({ onSignOut }: Props) {
         addedRating: addedRating?.rating ?? null,
         altName: best.unitContentId,
         altRating: best.rating,
-        ptsDiff: best.points - unitPoints,
+        altUnitContentId: best.unitContentId,
       })
     } catch {
       setSuggestion(null)
     }
+  }
+
+  async function handleRemoveUnit(listUnitId: string, unitPoints: number, count: number) {
+    if (!activeListId || !activeList) return
+    await removeListUnitInDb(listUnitId)
+    await updateListInDb(activeListId, {
+      totalPts: Math.max(0, activeList.totalPts - unitPoints * count),
+      updatedAt: Date.now(),
+    })
+    refetchActiveList()
+    refetchLists()
+  }
+
+  async function handleDeleteList() {
+    if (!activeListId || !activeList) return
+    if (!confirm(`Delete "${activeList.name}"?`)) return
+    await deleteListInDb(activeListId)
+    setActiveListId(null)
+    refetchLists()
   }
 
   async function handleSignOut() {
@@ -133,6 +155,9 @@ export function ListBuilderScreen({ onSignOut }: Props) {
       w?.document.write(`<pre>${text}</pre>`)
     })
   }
+
+  // Build a map of ratings for active list units
+  const unitRatings = new Map<string, { rating: string; winContrib: number } | null>()
 
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100">
@@ -220,7 +245,7 @@ export function ListBuilderScreen({ onSignOut }: Props) {
               aria-label="Select list"
             >
               <option value="">— select a list —</option>
-              {(myLists as ListRow[]).map((l) => (
+              {myLists.map((l) => (
                 <option key={l.id} value={l.id}>
                   {l.name} ({l.faction}) · {l.totalPts}pts
                 </option>
@@ -236,10 +261,7 @@ export function ListBuilderScreen({ onSignOut }: Props) {
                 className="flex-1 px-3 py-2 rounded-lg bg-slate-900 border border-slate-800 text-slate-100 placeholder-slate-500 focus:outline-none focus:border-amber-400"
               />
               <button
-                onClick={() => {
-                  if (!newListName.trim() || !selectedFaction) return
-                  createList.mutate({ faction: selectedFaction, name: newListName.trim() })
-                }}
+                onClick={() => void handleCreateList()}
                 disabled={!newListName.trim() || !selectedFaction}
                 className="px-4 py-2 rounded-lg bg-amber-400 text-slate-950 font-semibold hover:bg-amber-300 disabled:opacity-40 disabled:cursor-not-allowed text-sm"
               >
@@ -267,11 +289,6 @@ export function ListBuilderScreen({ onSignOut }: Props) {
                   <p className="text-slate-400">You added: <span className="text-slate-100">{suggestion.addedName}</span> <RatingBadge rating={suggestion.addedRating} /></p>
                   <p className="text-amber-400 mt-1">
                     Better option: <span className="text-slate-100">{suggestion.altName}</span> <RatingBadge rating={suggestion.altRating} />
-                    {suggestion.ptsDiff !== 0 && (
-                      <span className="text-slate-400 ml-1">
-                        ({suggestion.ptsDiff > 0 ? '+' : ''}{suggestion.ptsDiff}pts)
-                      </span>
-                    )}
                   </p>
                 </div>
               )}
@@ -281,7 +298,7 @@ export function ListBuilderScreen({ onSignOut }: Props) {
                 {activeList.units.length === 0 && (
                   <p className="text-slate-500 text-sm">No units yet. Add units from the left panel.</p>
                 )}
-                {activeList.units.map((unit) => (
+                {activeList.units.map((unit: LocalListUnit) => (
                   <div
                     key={unit.id}
                     className="flex items-center justify-between p-3 rounded-lg bg-slate-900 border border-slate-800"
@@ -289,7 +306,7 @@ export function ListBuilderScreen({ onSignOut }: Props) {
                     <div>
                       <div className="flex items-center gap-2">
                         <span className="font-medium text-slate-100">{unit.unitName}</span>
-                        <RatingBadge rating={unit.rating?.rating ?? null} />
+                        <RatingBadge rating={unitRatings.get(unit.unitContentId)?.rating ?? null} />
                       </div>
                       <div className="text-sm text-slate-400 mt-0.5">
                         {unit.unitPoints * unit.count}pts
@@ -298,10 +315,7 @@ export function ListBuilderScreen({ onSignOut }: Props) {
                     </div>
                     <button
                       onClick={() =>
-                        removeUnit.mutate({
-                          listId: activeList.id,
-                          listUnitId: unit.id,
-                        })
+                        void handleRemoveUnit(unit.id, unit.unitPoints, unit.count)
                       }
                       className="ml-3 px-2 py-1 rounded bg-slate-700 text-slate-400 hover:bg-red-900 hover:text-red-400 text-sm"
                     >
@@ -320,11 +334,7 @@ export function ListBuilderScreen({ onSignOut }: Props) {
                   Export list
                 </button>
                 <button
-                  onClick={() => {
-                    if (confirm(`Delete "${activeList.name}"?`)) {
-                      deleteList.mutate({ id: activeList.id })
-                    }
-                  }}
+                  onClick={() => void handleDeleteList()}
                   className="px-4 py-2 rounded-lg bg-slate-800 text-red-400 hover:bg-red-900 text-sm"
                 >
                   Delete

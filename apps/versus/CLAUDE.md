@@ -21,15 +21,15 @@ you didn't know to ask.
 |  Tier 1: React Client              |
 |  - Unit selector (attacker)        |
 |  - Unit selector (defender)        |
-|  - Simulation result display       |
+|  - Rules engine (modifier pipe)    |
+|  - Simulation computed locally     |
+|  - Unit data from IndexedDB        |
 |  - tRPC client (from packages/ui)  |
 +----------------+-------------------+
                  | tRPC over HTTP
 +----------------v-------------------+
 |  Tier 2: tRPC Server               |
-|  - Unit router (from game-content) |
-|  - Simulate router                 |
-|  - Rules engine (modifier pipe)    |
+|  - Simulate router (save/history)  |
 |  - SQLite via Turso                |
 |  - Base infra from server-core     |
 +------------------------------------+
@@ -37,21 +37,22 @@ you didn't know to ask.
 
 Server uses `@tabletop-tools/server-core` for base tRPC, Hono, and Worker handler.
 Client uses `@tabletop-tools/ui` for AuthScreen, auth client, tRPC links, and Tailwind preset.
-Unit router uses `createUnitRouter()` from `@tabletop-tools/game-content`.
+Unit data loaded from IndexedDB via `@tabletop-tools/game-data-store` hooks.
+Simulation runs client-side — the rules pipeline is pure math with no server dependencies.
 
 ---
 
-## Unit Data: BSData (via GameContentAdapter)
+## Unit Data: IndexedDB (via game-data-store)
 
-Unit profiles come from BSData XML loaded at server startup from the operator's local clone.
-**The platform ships zero GW content.** If `BSDATA_DIR` is not set, `NullAdapter` returns
-empty results.
+Unit profiles come from BSData XML imported via the data-import app and stored client-side in
+IndexedDB. **The platform ships zero GW content.** The server has no access to unit data —
+all unit lookups happen client-side via `useGameUnit()` from `@tabletop-tools/game-data-store`.
 
 ---
 
 ## Database Schema
 
-No `units` table. Unit data lives in memory via `GameContentAdapter`.
+No `units` table. Unit data lives client-side in IndexedDB.
 
 ```typescript
 // simulations  (optional -- saved results)
@@ -70,16 +71,13 @@ created_at            INTEGER NOT NULL
 ## tRPC Routers
 
 ```typescript
-// Units (from createUnitRouter in packages/game-content)
-unit.listFactions()                   -> string[]
-unit.search({ faction?, query? })     -> unit[]
-unit.get(id)                          -> unit
-
-// Simulate
-simulate.run({ attackerId, defenderId, modifiers? })  -> { expectedWounds, expectedModelsRemoved, ... }
+// Simulate (save/history only — simulation runs client-side)
 simulate.save({ attackerId, defenderId, result })      -> simulationId
 simulate.history()                                      -> simulation[]
 ```
+
+Unit selection and simulation computation happen entirely client-side using IndexedDB data
+and the rules pipeline in `client/src/lib/rules/pipeline.ts`.
 
 ---
 
@@ -111,25 +109,27 @@ simulate(attacker, defender):
 
 ## Testing
 
-**87 tests** (61 server + 26 client), all passing.
+**72 tests** (8 server + 64 client), all passing.
 
 ```
-server/src/
-  lib/rules/
-    pipeline.ts / pipeline.test.ts     <- rules engine: every weapon ability, modifier interaction
-  routers/
-    simulate.test.ts                   <- simulation router integration tests
-server/src/server.test.ts              <- HTTP session integration tests
 client/src/
+  lib/rules/
+    pipeline.ts / pipeline.test.ts     <- rules engine: every weapon ability, modifier interaction (39 tests)
   lib/
-    useGameData.test.tsx               <- dual-source hook tests (IndexedDB vs tRPC fallback)
+    useGameData.test.tsx               <- IndexedDB hook tests
   components/
+    SimulatorScreen.test.tsx           <- 6 tests: title, panels, factions, run button, sign out
     SimulationResult.test.tsx          <- 7 tests: names, wounds, models, best/worst, save, survivors
+server/src/
+  routers/
+    simulate.test.ts                   <- save + history router tests
+server/src/server.test.ts              <- HTTP session integration tests
 ```
 
 The rules engine is fully unit-tested. Every weapon ability, every modifier interaction is covered.
+The pipeline runs client-side — moved from server to client as it's pure math with zero Node.js deps.
 
 ```bash
-cd apps/versus/server && pnpm test   # 61 server tests
-cd apps/versus/client && pnpm test   # 26 client tests
+cd apps/versus/server && pnpm test   # 8 server tests
+cd apps/versus/client && pnpm test   # 64 client tests
 ```

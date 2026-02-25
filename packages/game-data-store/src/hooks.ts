@@ -1,6 +1,7 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import type { UnitProfile } from '@tabletop-tools/game-content'
-import { getUnit, searchUnits, listFactions, getImportMeta } from './store.js'
+import { getUnit, searchUnits, listFactions, getImportMeta, getLists, getList, getListUnits } from './store.js'
+import type { LocalList, LocalListUnit } from './store.js'
 
 export function useUnit(id: string): { data: UnitProfile | null; error: string | null; isLoading: boolean } {
   const [data, setData] = useState<UnitProfile | null>(null)
@@ -110,4 +111,55 @@ export function useGameDataAvailable(): boolean {
   }, [])
 
   return available
+}
+
+export function useLists(): { data: LocalList[]; refetch: () => void } {
+  const [data, setData] = useState<LocalList[]>([])
+  const [counter, setCounter] = useState(0)
+
+  const refetch = useCallback(() => setCounter((c) => c + 1), [])
+
+  useEffect(() => {
+    let cancelled = false
+    getLists()
+      .then((result) => {
+        if (!cancelled) setData(result)
+      })
+      .catch(() => {
+        if (!cancelled) setData([])
+      })
+    return () => { cancelled = true }
+  }, [counter])
+
+  return { data, refetch }
+}
+
+export function useList(id: string | null): {
+  data: (LocalList & { units: LocalListUnit[] }) | null
+  refetch: () => void
+} {
+  const [data, setData] = useState<(LocalList & { units: LocalListUnit[] }) | null>(null)
+  const [counter, setCounter] = useState(0)
+
+  const refetch = useCallback(() => setCounter((c) => c + 1), [])
+
+  useEffect(() => {
+    if (!id) {
+      setData(null)
+      return
+    }
+    let cancelled = false
+    Promise.all([getList(id), getListUnits(id)])
+      .then(([list, units]) => {
+        if (!cancelled) {
+          setData(list ? { ...list, units } : null)
+        }
+      })
+      .catch(() => {
+        if (!cancelled) setData(null)
+      })
+    return () => { cancelled = true }
+  }, [id, counter])
+
+  return { data, refetch }
 }

@@ -2,7 +2,6 @@ import 'dotenv/config'
 
 import { startDevServer } from '@tabletop-tools/server-core'
 import { createDb } from '@tabletop-tools/db'
-import { BSDataAdapter, NullAdapter } from '@tabletop-tools/game-content'
 
 import { createServer } from './server'
 
@@ -11,13 +10,7 @@ const db = createDb({
   authToken: process.env['TURSO_AUTH_TOKEN'],
 })
 
-const gameContent = process.env['BSDATA_DIR']
-  ? new BSDataAdapter({ dataDir: process.env['BSDATA_DIR'] })
-  : new NullAdapter()
-
-await gameContent.load()
-
 startDevServer({
   port: 3003,
-  createApp: async () => createServer(db, gameContent, process.env['AUTH_SECRET'] ?? 'dev-secret-change-in-production'),
+  createApp: async () => createServer(db, process.env['AUTH_SECRET'] ?? 'dev-secret-change-in-production'),
 })

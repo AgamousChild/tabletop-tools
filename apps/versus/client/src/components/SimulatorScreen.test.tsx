@@ -3,9 +3,6 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { SimulatorScreen } from './SimulatorScreen'
 
-const mockListFactions = vi.fn()
-const mockSearch = vi.fn()
-const mockRun = vi.fn()
 const mockSave = vi.fn()
 
 vi.mock('../lib/auth', () => ({
@@ -17,38 +14,7 @@ vi.mock('../lib/auth', () => ({
 
 vi.mock('../lib/trpc', () => ({
   trpc: {
-    unit: {
-      listFactions: {
-        useQuery: () => ({ data: ['Space Marines', 'Orks'], isLoading: false }),
-      },
-      search: {
-        useQuery: (_input: unknown, opts: { enabled: boolean }) =>
-          opts.enabled
-            ? {
-                data: [
-                  { id: 'u1', name: 'Intercessor Squad', faction: 'Space Marines', points: 100 },
-                ],
-                isLoading: false,
-              }
-            : { data: [], isLoading: false },
-      },
-    },
     simulate: {
-      run: {
-        useQuery: (_input: unknown, opts: { enabled: boolean }) =>
-          opts.enabled
-            ? {
-                data: {
-                  expectedWounds: 2.5,
-                  expectedModelsRemoved: 1.2,
-                  survivors: 3.8,
-                  worstCase: { wounds: 0, modelsRemoved: 0 },
-                  bestCase: { wounds: 8, modelsRemoved: 4 },
-                },
-                isLoading: false,
-              }
-            : { data: undefined, isLoading: false },
-      },
       save: {
         useMutation: () => ({ mutate: mockSave }),
       },
@@ -56,10 +22,36 @@ vi.mock('../lib/trpc', () => ({
   },
 }))
 
+vi.mock('../lib/useGameData', () => ({
+  useGameFactions: () => ({ data: ['Space Marines', 'Orks'], isLoading: false }),
+  useUnits: () => ({
+    data: [
+      { id: 'u1', name: 'Intercessor Squad', faction: 'Space Marines', points: 100 },
+    ],
+    isLoading: false,
+  }),
+  useGameUnit: (id: string | null) =>
+    id
+      ? {
+          data: {
+            id,
+            name: 'Intercessor Squad',
+            faction: 'Space Marines',
+            toughness: 4,
+            save: 3,
+            wounds: 2,
+            weapons: [
+              { name: 'Bolter', range: 24, attacks: 2, skill: 3, strength: 4, ap: 0, damage: 1, abilities: [] },
+            ],
+            abilities: [],
+            points: 100,
+          },
+          isLoading: false,
+        }
+      : { data: null, isLoading: false },
+}))
+
 beforeEach(() => {
-  mockListFactions.mockReset()
-  mockSearch.mockReset()
-  mockRun.mockReset()
   mockSave.mockReset()
 })
 
@@ -77,7 +69,6 @@ describe('SimulatorScreen', () => {
 
   it('shows faction options from the query', () => {
     render(<SimulatorScreen onSignOut={vi.fn()} />)
-    // Both selectors have the faction dropdown
     const selects = screen.getAllByRole('combobox')
     expect(selects.length).toBeGreaterThanOrEqual(2)
   })

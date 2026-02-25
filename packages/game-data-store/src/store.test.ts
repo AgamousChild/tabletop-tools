@@ -9,7 +9,16 @@ import {
   clearAll,
   getImportMeta,
   setImportMeta,
+  createList,
+  getLists,
+  getList,
+  updateList,
+  deleteList,
+  addListUnit,
+  getListUnits,
+  removeListUnit,
 } from './store'
+import type { LocalList, LocalListUnit } from './store'
 
 function makeUnit(overrides: Partial<UnitProfile> & { id: string; name: string; faction: string }): UnitProfile {
   return {
@@ -184,5 +193,121 @@ describe('importMeta', () => {
     await setImportMeta({ lastImport: 1, factions: ['Orks'], totalUnits: 5, parserVersion: 2 })
     const meta = await getImportMeta()
     expect(meta?.parserVersion).toBe(2)
+  })
+})
+
+// ── List CRUD ────────────────────────────────────────────────────────────────
+
+function makeList(overrides: Partial<LocalList> & { id: string }): LocalList {
+  return {
+    faction: 'Space Marines',
+    name: 'My List',
+    totalPts: 0,
+    createdAt: Date.now(),
+    updatedAt: Date.now(),
+    ...overrides,
+  }
+}
+
+function makeListUnit(overrides: Partial<LocalListUnit> & { id: string; listId: string }): LocalListUnit {
+  return {
+    unitContentId: 'unit-1',
+    unitName: 'Intercessors',
+    unitPoints: 90,
+    count: 1,
+    ...overrides,
+  }
+}
+
+describe('createList + getLists', () => {
+  it('creates and retrieves a list', async () => {
+    const list = makeList({ id: 'l1' })
+    await createList(list)
+    const lists = await getLists()
+    expect(lists).toHaveLength(1)
+    expect(lists[0]!.id).toBe('l1')
+    expect(lists[0]!.name).toBe('My List')
+  })
+
+  it('returns empty when no lists', async () => {
+    const lists = await getLists()
+    expect(lists).toEqual([])
+  })
+})
+
+describe('getList', () => {
+  it('returns a list by id', async () => {
+    await createList(makeList({ id: 'l1', name: 'Test' }))
+    const list = await getList('l1')
+    expect(list).not.toBeNull()
+    expect(list!.name).toBe('Test')
+  })
+
+  it('returns null for unknown id', async () => {
+    const list = await getList('nonexistent')
+    expect(list).toBeNull()
+  })
+})
+
+describe('updateList', () => {
+  it('updates list fields', async () => {
+    await createList(makeList({ id: 'l1', totalPts: 0 }))
+    await updateList('l1', { totalPts: 200, name: 'Updated' })
+    const list = await getList('l1')
+    expect(list!.totalPts).toBe(200)
+    expect(list!.name).toBe('Updated')
+  })
+
+  it('is a no-op for unknown id', async () => {
+    // Should not throw
+    await updateList('nonexistent', { totalPts: 100 })
+    const list = await getList('nonexistent')
+    expect(list).toBeNull()
+  })
+})
+
+describe('deleteList', () => {
+  it('deletes a list and its units', async () => {
+    await createList(makeList({ id: 'l1' }))
+    await addListUnit(makeListUnit({ id: 'lu1', listId: 'l1' }))
+    await deleteList('l1')
+    expect(await getList('l1')).toBeNull()
+    expect(await getListUnits('l1')).toEqual([])
+  })
+})
+
+describe('addListUnit + getListUnits', () => {
+  it('adds and retrieves list units', async () => {
+    await createList(makeList({ id: 'l1' }))
+    await addListUnit(makeListUnit({ id: 'lu1', listId: 'l1', unitName: 'Intercessors' }))
+    await addListUnit(makeListUnit({ id: 'lu2', listId: 'l1', unitName: 'Hellblasters' }))
+    const units = await getListUnits('l1')
+    expect(units).toHaveLength(2)
+  })
+
+  it('returns only units for the specified list', async () => {
+    await createList(makeList({ id: 'l1' }))
+    await createList(makeList({ id: 'l2' }))
+    await addListUnit(makeListUnit({ id: 'lu1', listId: 'l1' }))
+    await addListUnit(makeListUnit({ id: 'lu2', listId: 'l2' }))
+    expect(await getListUnits('l1')).toHaveLength(1)
+    expect(await getListUnits('l2')).toHaveLength(1)
+  })
+
+  it('returns empty for a list with no units', async () => {
+    await createList(makeList({ id: 'l1' }))
+    expect(await getListUnits('l1')).toEqual([])
+  })
+})
+
+describe('removeListUnit', () => {
+  it('removes a specific list unit', async () => {
+    await createList(makeList({ id: 'l1' }))
+    await addListUnit(makeListUnit({ id: 'lu1', listId: 'l1' }))
+    await addListUnit(makeListUnit({ id: 'lu2', listId: 'l1' }))
+    await removeListUnit('lu1')
+    const units = await getListUnits('l1')
+    expect(units).toHaveLength(1)
+    expect(units[0]!.id).toBe('lu2')
   })
 })

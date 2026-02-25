@@ -2,7 +2,7 @@ import { eq, desc, and } from 'drizzle-orm'
 import { z } from 'zod'
 import { unitRatings } from '@tabletop-tools/db'
 
-import { protectedProcedure, router } from '../trpc'
+import { protectedProcedure, router } from '@tabletop-tools/server-core'
 
 export const ratingRouter = router({
   get: protectedProcedure
@@ -20,36 +20,17 @@ export const ratingRouter = router({
   alternatives: protectedProcedure
     .input(
       z.object({
-        ptsMin: z.number().optional(),
-        ptsMax: z.number().optional(),
         metaWindow: z.string().optional(),
       }),
     )
     .query(async ({ ctx, input }) => {
-      // Filter by metaWindow in SQL to reduce result set
       const conditions = []
       if (input.metaWindow) conditions.push(eq(unitRatings.metaWindow, input.metaWindow))
 
-      const allRatings = await ctx.db
+      return ctx.db
         .select()
         .from(unitRatings)
         .where(conditions.length > 0 ? and(...conditions) : undefined)
         .orderBy(desc(unitRatings.winContrib))
-
-      if (allRatings.length === 0) return []
-
-      // For each rated unit, fetch its profile to check points cost
-      // (getUnit is an in-memory lookup via GameContentAdapter, not a DB query)
-      const results: Array<typeof unitRatings.$inferSelect & { points: number }> = []
-
-      for (const r of allRatings) {
-        const unit = await ctx.gameContent.getUnit(r.unitContentId)
-        if (!unit) continue
-        if (input.ptsMin != null && unit.points < input.ptsMin) continue
-        if (input.ptsMax != null && unit.points > input.ptsMax) continue
-        results.push({ ...r, points: unit.points })
-      }
-
-      return results
     }),
 })

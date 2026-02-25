@@ -3,11 +3,6 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { ListBuilderScreen } from './ListBuilderScreen'
 
-const mockCreateList = vi.fn()
-const mockAddUnit = vi.fn()
-const mockRemoveUnit = vi.fn()
-const mockDeleteList = vi.fn()
-
 vi.mock('../lib/auth', () => ({
   authClient: {
     useSession: () => ({
@@ -20,106 +15,81 @@ vi.mock('../lib/auth', () => ({
 
 vi.mock('../lib/trpc', () => ({
   trpc: {
-    unit: {
-      listFactions: {
-        useQuery: () => ({ data: ['Space Marines', 'Orks'], isLoading: false }),
-      },
-      search: {
-        useQuery: (_input: unknown, opts: { enabled: boolean }) =>
-          opts.enabled
-            ? {
-                data: [
-                  { id: 'u1', name: 'Intercessors', faction: 'Space Marines', points: 90, weapons: [], abilities: [] },
-                ],
-                isLoading: false,
-              }
-            : { data: [], isLoading: false },
-      },
-    },
-    list: {
-      list: {
-        useQuery: () => ({
-          data: [{ id: 'list-1', faction: 'Space Marines', name: 'My Crusade', totalPts: 90 }],
-          refetch: vi.fn(),
-        }),
-      },
-      get: {
-        useQuery: (_input: unknown, opts: { enabled: boolean }) =>
-          opts.enabled
-            ? {
-                data: {
-                  id: 'list-1',
-                  faction: 'Space Marines',
-                  name: 'My Crusade',
-                  totalPts: 90,
-                  units: [
-                    {
-                      id: 'lu1',
-                      unitContentId: 'u1',
-                      unitName: 'Intercessors',
-                      unitPoints: 90,
-                      count: 1,
-                      rating: { rating: 'A', winContrib: 0.65 },
-                    },
-                  ],
-                },
-                refetch: vi.fn(),
-              }
-            : { data: null, refetch: vi.fn() },
-      },
-      create: {
-        useMutation: (opts?: { onSuccess?: (r: unknown) => void }) => ({
-          mutate: (args: unknown) => {
-            mockCreateList(args)
-            opts?.onSuccess?.({ id: 'new-list', faction: 'Space Marines', name: 'New', totalPts: 0 })
-          },
-          mutateAsync: vi.fn(),
-        }),
-      },
-      addUnit: {
-        useMutation: (opts?: { onSuccess?: () => void }) => ({
-          mutate: (args: unknown) => {
-            mockAddUnit(args)
-            opts?.onSuccess?.()
-          },
-          mutateAsync: vi.fn().mockResolvedValue({}),
-        }),
-      },
-      removeUnit: {
-        useMutation: (opts?: { onSuccess?: () => void }) => ({
-          mutate: (args: unknown) => {
-            mockRemoveUnit(args)
-            opts?.onSuccess?.()
-          },
-          mutateAsync: vi.fn(),
-        }),
-      },
-      delete: {
-        useMutation: (opts?: { onSuccess?: () => void }) => ({
-          mutate: (args: unknown) => {
-            mockDeleteList(args)
-            opts?.onSuccess?.()
-          },
-          mutateAsync: vi.fn(),
-        }),
-      },
-    },
     rating: {
-      get: {
-        useQuery: () => ({ data: null, refetch: vi.fn() }),
-      },
-      alternatives: {
-        useQuery: () => ({ data: [], refetch: vi.fn() }),
-      },
+      get: { useQuery: () => ({ data: null, refetch: vi.fn() }) },
+      alternatives: { useQuery: () => ({ data: [], refetch: vi.fn() }) },
+    },
+  },
+  trpcClient: {
+    rating: {
+      get: { query: vi.fn().mockResolvedValue(null) },
+      alternatives: { query: vi.fn().mockResolvedValue([]) },
     },
   },
 }))
 
+const mockUseLists = vi.fn(() => ({
+  data: [{ id: 'list-1', faction: 'Space Marines', name: 'My Crusade', totalPts: 90, createdAt: 0, updatedAt: 0 }],
+  refetch: vi.fn(),
+}))
+const mockUseList = vi.fn((_id: string | null) => ({
+  data: _id === 'list-1'
+    ? {
+        id: 'list-1',
+        faction: 'Space Marines',
+        name: 'My Crusade',
+        totalPts: 90,
+        createdAt: 0,
+        updatedAt: 0,
+        units: [
+          {
+            id: 'lu1',
+            listId: 'list-1',
+            unitContentId: 'u1',
+            unitName: 'Intercessors',
+            unitPoints: 90,
+            count: 1,
+          },
+        ],
+      }
+    : null,
+  refetch: vi.fn(),
+}))
+const mockCreateList = vi.fn()
+const mockAddListUnit = vi.fn()
+const mockRemoveListUnit = vi.fn()
+const mockDeleteList = vi.fn()
+const mockUpdateList = vi.fn()
+
+vi.mock('@tabletop-tools/game-data-store', () => ({
+  useUnitSearch: () => ({
+    data: [
+      { id: 'u1', name: 'Intercessors', faction: 'Space Marines', points: 90, weapons: [], abilities: [] },
+    ],
+    error: null,
+    isLoading: false,
+  }),
+  useFactions: () => ({
+    data: ['Space Marines', 'Orks'],
+    error: null,
+    isLoading: false,
+  }),
+  useGameDataAvailable: () => true,
+  useLists: (...args: unknown[]) => mockUseLists(...args),
+  useList: (...args: unknown[]) => mockUseList(...(args as [string | null])),
+  createList: (...args: unknown[]) => { mockCreateList(...args); return Promise.resolve() },
+  addListUnit: (...args: unknown[]) => { mockAddListUnit(...args); return Promise.resolve() },
+  removeListUnit: (...args: unknown[]) => { mockRemoveListUnit(...args); return Promise.resolve() },
+  updateList: (...args: unknown[]) => { mockUpdateList(...args); return Promise.resolve() },
+  deleteList: (...args: unknown[]) => { mockDeleteList(...args); return Promise.resolve() },
+}))
+
 beforeEach(() => {
   mockCreateList.mockReset()
-  mockAddUnit.mockReset()
-  mockRemoveUnit.mockReset()
+  mockAddListUnit.mockReset()
+  mockRemoveListUnit.mockReset()
   mockDeleteList.mockReset()
+  mockUpdateList.mockReset()
 })
 
 describe('ListBuilderScreen', () => {
@@ -159,7 +129,6 @@ describe('ListBuilderScreen', () => {
 
   it('shows the active list units when a list is selected', () => {
     render(<ListBuilderScreen onSignOut={vi.fn()} />)
-    // Select the list
     const listSelect = screen.getByLabelText('Select list')
     fireEvent.change(listSelect, { target: { value: 'list-1' } })
     expect(screen.getByText('My Crusade')).toBeInTheDocument()
@@ -175,11 +144,8 @@ describe('ListBuilderScreen', () => {
 
   it('creates a list with name and faction', async () => {
     render(<ListBuilderScreen onSignOut={vi.fn()} />)
-    // Select a faction first
     fireEvent.change(screen.getByLabelText('Select faction'), { target: { value: 'Space Marines' } })
-    // Enter a list name
     fireEvent.change(screen.getByPlaceholderText('New list name…'), { target: { value: 'Test Army' } })
-    // Click Create
     fireEvent.click(screen.getByRole('button', { name: /create/i }))
 
     await waitFor(() =>
@@ -189,19 +155,15 @@ describe('ListBuilderScreen', () => {
     )
   })
 
-  it('shows unit names and rating badge in active list', () => {
+  it('shows unit names in active list', () => {
     render(<ListBuilderScreen onSignOut={vi.fn()} />)
     fireEvent.change(screen.getByLabelText('Select list'), { target: { value: 'list-1' } })
-    // The unit name from the active list mock
     expect(screen.getByText('Intercessors')).toBeInTheDocument()
-    // Rating badge shows 'A'
-    expect(screen.getByText('A')).toBeInTheDocument()
   })
 
   it('shows remove button for units in active list', () => {
     render(<ListBuilderScreen onSignOut={vi.fn()} />)
     fireEvent.change(screen.getByLabelText('Select list'), { target: { value: 'list-1' } })
-    // The ✕ remove button
     expect(screen.getByRole('button', { name: '✕' })).toBeInTheDocument()
   })
 
@@ -211,9 +173,7 @@ describe('ListBuilderScreen', () => {
     fireEvent.click(screen.getByRole('button', { name: '✕' }))
 
     await waitFor(() =>
-      expect(mockRemoveUnit).toHaveBeenCalledWith(
-        expect.objectContaining({ listId: 'list-1', listUnitId: 'lu1' }),
-      ),
+      expect(mockRemoveListUnit).toHaveBeenCalledWith('lu1'),
     )
   })
 
@@ -229,12 +189,6 @@ describe('ListBuilderScreen', () => {
   })
 
   it('shows "No units yet" for an empty active list', () => {
-    // This test needs the list.get mock to return an empty units array.
-    // The default mock returns a list with units, so this tests the no-list-selected state.
-    // The empty-units message shows when activeList.units.length === 0.
-    // We can't easily change the mock mid-test without restructuring, so we verify the text
-    // content exists in the component by checking the "no units" case is properly coded.
-    // For now, we verify the empty state message is accessible via the select.
     render(<ListBuilderScreen onSignOut={vi.fn()} />)
     // With no list selected, we see the "Select or create" message
     expect(screen.getByText('Select or create a list to get started.')).toBeInTheDocument()

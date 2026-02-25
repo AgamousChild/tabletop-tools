@@ -71,8 +71,8 @@ at `tabletop-tools.net/auth/*`.
 | App | Port | Tests | Status | Purpose |
 |---|---|---|---|---|
 | no-cheat | 3001 | 216 | Deployed | Detect loaded dice via CV + statistics |
-| versus | 3002 | 87 | Deployed | Simulate 40K combat: hit/wound/save/damage |
-| list-builder | 3003 | 76 | Deployed | Build lists with live meta ratings from GT data |
+| versus | 3002 | 72 | Deployed | Simulate 40K combat: hit/wound/save/damage |
+| list-builder | 3003 | 48 | Deployed | Build lists with live meta ratings from GT data |
 | game-tracker | 3004 | 54 | Deployed | Track matches turn-by-turn with photos |
 | tournament | 3005 | 73 | Deployed | Swiss events: pairings, results, standings, ELO |
 | new-meta | 3006 | 128 | Deployed | Meta analytics: win rates, Glicko-2 ratings |
@@ -269,15 +269,15 @@ export type AppRouter = typeof appRouter
 import { createBaseServer } from '@tabletop-tools/server-core'
 import { appRouter } from './routers'
 
-// Simple apps (tournament, new-meta) — no extra context needed
+// Simple apps (tournament, new-meta, versus, list-builder) — no extra context needed
 export const createServer = (db: Db, secret: string) =>
   createBaseServer({ router: appRouter, db, secret })
 
-// Apps with extra context (versus, admin, no-cheat, etc.)
-export const createServer = (db: Db, gameContent: GameContentAdapter, secret: string) =>
+// Apps with extra context (admin, no-cheat, game-tracker)
+export const createServer = (db: Db, storage: R2Storage, secret: string) =>
   createBaseServer({
     router: appRouter, db, secret,
-    extendContext: (ctx) => ({ ...ctx, gameContent }),
+    extendContext: (ctx) => ({ ...ctx, storage }),
   })
 
 // apps/<app>/server/src/worker.ts  — module-scope caching
@@ -383,7 +383,7 @@ from `packages/auth` directly.
 
 - `createBaseServer` accepts `db` and `secret`, calls `validateSession` internally
 - Apps opt into auth by using `protectedProcedure` — that's the entire auth surface area
-- Apps that need extra context (storage, gameContent, adminEmails) use `extendContext`
+- Apps that need extra context (storage, adminEmails) use `extendContext`
 - One implementation, one place to audit, tested once in `server-core`
 
 **Why middleware, not utility function:** If Express, Rails, Django, and ASP.NET all handle
@@ -416,7 +416,7 @@ SQLite database — no mocks for the database layer.
 
 The specific test file structure for each app is documented in that app's own CLAUDE.md.
 
-**Platform total: 951 unit tests, all passing.** Plus 36 Playwright E2E browser tests.
+**Platform total: 925 unit tests, all passing.** Plus 36 Playwright E2E browser tests.
 
 ---
 
