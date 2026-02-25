@@ -1,25 +1,24 @@
 import { createClient } from '@libsql/client'
-import { createDb, type Db } from '@tabletop-tools/db'
+import { createDbFromClient, type Db } from '@tabletop-tools/db'
+import {
+  setupAuthTables,
+  authCookie,
+  TEST_SECRET,
+} from '@tabletop-tools/auth/src/test-helpers'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 
-import { router, publicProcedure, protectedProcedure, type BaseContext, type User } from './trpc'
+import { router, publicProcedure, protectedProcedure, type BaseContext } from './trpc'
 import { createBaseServer } from './server'
 
-const TEST_DB = `test-server-core-server-${Date.now()}.db`
+const client = createClient({ url: ':memory:' })
 let db: Db
 
-beforeAll(() => {
-  db = createDb({ url: `file:./${TEST_DB}` })
+beforeAll(async () => {
+  db = createDbFromClient(client)
+  await setupAuthTables(client)
 })
 
-afterAll(async () => {
-  const { existsSync, unlinkSync } = await import('fs')
-  try {
-    if (existsSync(TEST_DB)) unlinkSync(TEST_DB)
-  } catch {
-    // May be locked on Windows
-  }
-})
+afterAll(() => client.close())
 
 // Test router
 const testRouter = router({
@@ -27,14 +26,11 @@ const testRouter = router({
   whoami: protectedProcedure.query(({ ctx }) => ({ name: ctx.user.name })),
 })
 
-function makeApp(user: User | null = null) {
+function makeApp() {
   return createBaseServer({
     router: testRouter,
-    createContext: async (req) => ({
-      user,
-      req,
-      db,
-    }),
+    db,
+    secret: TEST_SECRET,
   })
 }
 
@@ -78,18 +74,20 @@ describe('createBaseServer', () => {
   })
 
   it('passes context with authenticated user to protected procedures', async () => {
-    const user: User = { id: 'u1', email: 'test@x.com', name: 'Tester' }
-    const app = makeApp(user)
+    const app = makeApp()
     const res = await app.fetch(
-      new Request('http://localhost/trpc/whoami', { method: 'GET' }),
+      new Request('http://localhost/trpc/whoami', {
+        method: 'GET',
+        headers: { Cookie: await authCookie() },
+      }),
     )
     expect(res.status).toBe(200)
     const body = await res.json()
-    expect(body.result.data).toEqual({ name: 'Tester' })
+    expect(body.result.data).toEqual({ name: 'Alice' })
   })
 
   it('returns 401 for protected procedures without auth', async () => {
-    const app = makeApp(null)
+    const app = makeApp()
     const res = await app.fetch(
       new Request('http://localhost/trpc/whoami', { method: 'GET' }),
     )
@@ -102,5 +100,31 @@ describe('createBaseServer', () => {
       new Request('http://localhost/not-trpc', { method: 'GET' }),
     )
     expect(res.status).toBe(404)
+  })
+
+  it('supports extendContext for app-specific fields', async () => {
+    type ExtendedContext = BaseContext & { custom: string }
+    const extendedRouter = router({
+      custom: protectedProcedure.query(({ ctx }) => ({
+        custom: (ctx as ExtendedContext).custom,
+      })),
+    })
+
+    const app = createBaseServer<ExtendedContext>({
+      router: extendedRouter,
+      db,
+      secret: TEST_SECRET,
+      extendContext: (baseCtx) => ({ ...baseCtx, custom: 'hello' }),
+    })
+
+    const res = await app.fetch(
+      new Request('http://localhost/trpc/custom', {
+        method: 'GET',
+        headers: { Cookie: await authCookie() },
+      }),
+    )
+    expect(res.status).toBe(200)
+    const body = await res.json()
+    expect(body.result.data).toEqual({ custom: 'hello' })
   })
 })
