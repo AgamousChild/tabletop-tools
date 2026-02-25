@@ -3,6 +3,7 @@ import type { Hono } from 'hono'
 export interface BaseEnv {
   TURSO_DB_URL: string
   TURSO_AUTH_TOKEN: string
+  AUTH_SECRET: string
 }
 
 export function createWorkerHandler<TEnv extends BaseEnv>(opts: {

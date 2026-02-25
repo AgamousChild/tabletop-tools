@@ -4,6 +4,7 @@ import {
   setupAuthTables,
   createRequestHelper,
   authCookie,
+  TEST_SECRET,
 } from '@tabletop-tools/auth/src/test-helpers'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 
@@ -48,13 +49,13 @@ beforeAll(async () => {
 
 afterAll(() => client.close())
 
-const makeRequest = createRequestHelper(() => createServer(db, storage))
+const makeRequest = createRequestHelper(() => createServer(db, storage, TEST_SECRET))
 
 describe('HTTP integration — match.start via session cookie', () => {
   it('starts a match when authenticated', async () => {
     const res = await makeRequest('/trpc/match.start', {
       method: 'POST',
-      cookie: authCookie(),
+      cookie: await authCookie(),
       body: { opponentFaction: 'Orks', mission: 'Scorched Earth' },
     })
 
@@ -79,7 +80,7 @@ describe('HTTP integration — match.start via session cookie', () => {
 describe('HTTP integration — match.list via session cookie', () => {
   it('lists matches when authenticated', async () => {
     const res = await makeRequest('/trpc/match.list', {
-      cookie: authCookie(),
+      cookie: await authCookie(),
     })
 
     expect(res.status).toBe(200)
@@ -99,7 +100,7 @@ describe('HTTP integration — match.close via session cookie', () => {
   it('closes a match when authenticated', async () => {
     const createRes = await makeRequest('/trpc/match.start', {
       method: 'POST',
-      cookie: authCookie(),
+      cookie: await authCookie(),
       body: { opponentFaction: 'Necrons', mission: 'Supply Drop' },
     })
     const createJson = (await createRes.json()) as any
@@ -107,7 +108,7 @@ describe('HTTP integration — match.close via session cookie', () => {
 
     const res = await makeRequest('/trpc/match.close', {
       method: 'POST',
-      cookie: authCookie(),
+      cookie: await authCookie(),
       body: { matchId, yourScore: 72, theirScore: 45 },
     })
 

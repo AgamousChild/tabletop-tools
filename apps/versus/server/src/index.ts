@@ -19,5 +19,5 @@ await gameContent.load()
 
 startDevServer({
   port: 3002,
-  createApp: async () => createServer(db, gameContent),
+  createApp: async () => createServer(db, gameContent, process.env['AUTH_SECRET'] ?? 'dev-secret-change-in-production'),
 })

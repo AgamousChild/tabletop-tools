@@ -7,6 +7,7 @@ import { createServer } from './server'
 interface Env {
   TURSO_DB_URL: string
   TURSO_AUTH_TOKEN: string
+  AUTH_SECRET: string
 }
 
 export default createWorkerHandler<Env>({
@@ -16,6 +17,6 @@ export default createWorkerHandler<Env>({
       authToken: env.TURSO_AUTH_TOKEN,
     })
     const db = createDbFromClient(client)
-    return createServer(db)
+    return createServer(db, env.AUTH_SECRET)
   },
 })

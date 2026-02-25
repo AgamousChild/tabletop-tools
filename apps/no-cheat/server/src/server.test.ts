@@ -6,6 +6,7 @@ import {
   authCookie,
   TEST_TOKEN,
   EXPIRED_TOKEN,
+  TEST_SECRET,
 } from '@tabletop-tools/auth/src/test-helpers'
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest'
 
@@ -46,13 +47,13 @@ beforeAll(async () => {
 
 afterAll(() => client.close())
 
-const makeRequest = createRequestHelper(() => createServer(db, createNullR2Storage()))
+const makeRequest = createRequestHelper(() => createServer(db, createNullR2Storage(), TEST_SECRET))
 
 describe('HTTP integration — diceSet.create via session cookie', () => {
   it('creates a dice set when a valid session cookie is provided', async () => {
     const res = await makeRequest('/trpc/diceSet.create', {
       method: 'POST',
-      cookie: authCookie(),
+      cookie: await authCookie(),
       body: { name: 'Integration Test Dice' },
     })
 
@@ -75,7 +76,7 @@ describe('HTTP integration — diceSet.create via session cookie', () => {
   it('returns UNAUTHORIZED when session token is expired', async () => {
     const res = await makeRequest('/trpc/diceSet.create', {
       method: 'POST',
-      cookie: authCookie(EXPIRED_TOKEN),
+      cookie: await authCookie(EXPIRED_TOKEN),
       body: { name: 'Should Fail' },
     })
 
@@ -86,7 +87,7 @@ describe('HTTP integration — diceSet.create via session cookie', () => {
   it('returns UNAUTHORIZED with an invalid/unknown token', async () => {
     const res = await makeRequest('/trpc/diceSet.create', {
       method: 'POST',
-      cookie: authCookie('nonexistent-token'),
+      cookie: await authCookie('nonexistent-token'),
       body: { name: 'Should Fail' },
     })
 
@@ -95,9 +96,11 @@ describe('HTTP integration — diceSet.create via session cookie', () => {
   })
 
   it('works with __Secure- prefixed cookie (production HTTPS)', async () => {
+    const cookie = await authCookie()
+    const secureCookie = cookie.replace('better-auth.session_token=', '__Secure-better-auth.session_token=')
     const res = await makeRequest('/trpc/diceSet.create', {
       method: 'POST',
-      cookie: `__Secure-better-auth.session_token=${TEST_TOKEN}`,
+      cookie: secureCookie,
       body: { name: 'Secure Cookie Dice' },
     })
 
@@ -106,23 +109,22 @@ describe('HTTP integration — diceSet.create via session cookie', () => {
     expect(json.result?.data?.name).toBe('Secure Cookie Dice')
   })
 
-  it('works with signed cookie format (token.signature)', async () => {
+  it('rejects a cookie with invalid HMAC signature', async () => {
     const res = await makeRequest('/trpc/diceSet.create', {
       method: 'POST',
-      cookie: authCookie(`${TEST_TOKEN}.fakesignature123`),
-      body: { name: 'Signed Cookie Dice' },
+      cookie: `better-auth.session_token=${TEST_TOKEN}.fakesignature123`,
+      body: { name: 'Should Fail' },
     })
 
-    expect(res.status).toBe(200)
     const json = (await res.json()) as any
-    expect(json.result?.data?.name).toBe('Signed Cookie Dice')
+    expect(json.error?.data?.code).toBe('UNAUTHORIZED')
   })
 })
 
 describe('HTTP integration — diceSet.list via session cookie', () => {
   it('lists dice sets for the authenticated user', async () => {
     const res = await makeRequest('/trpc/diceSet.list', {
-      cookie: authCookie(),
+      cookie: await authCookie(),
     })
 
     expect(res.status).toBe(200)

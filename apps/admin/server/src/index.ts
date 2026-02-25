@@ -17,5 +17,5 @@ const adminEmails = (process.env['ADMIN_EMAILS'] ?? '')
 
 startDevServer({
   port: 3007,
-  createApp: async () => createServer(db, adminEmails),
+  createApp: async () => createServer(db, adminEmails, process.env['AUTH_SECRET'] ?? 'dev-secret-change-in-production'),
 })

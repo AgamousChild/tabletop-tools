@@ -8,6 +8,7 @@ import { createR2Storage, createNullR2Storage } from './lib/storage/r2'
 interface Env {
   TURSO_DB_URL: string
   TURSO_AUTH_TOKEN: string
+  AUTH_SECRET: string
   PHOTOS_BUCKET?: { put(key: string, value: ArrayBuffer, options?: { httpMetadata?: { contentType: string } }): Promise<unknown> }
 }
 
@@ -21,6 +22,6 @@ export default createWorkerHandler<Env>({
     const storage = env.PHOTOS_BUCKET
       ? createR2Storage(env.PHOTOS_BUCKET, 'https://photos.tabletop-tools.net')
       : createNullR2Storage()
-    return createServer(db, storage)
+    return createServer(db, storage, env.AUTH_SECRET)
   },
 })
