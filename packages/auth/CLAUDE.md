@@ -54,11 +54,9 @@ adequate security for a hobby platform.
 
 ### Security Features
 
-**HMAC signature verification:** When `secret` parameter is provided to `validateSession`,
-the HMAC signature is verified using the Web Crypto API (`crypto.subtle.sign` with HMAC-SHA256)
+**HMAC signature verification:** `validateSession` requires a `secret` parameter and always
+verifies the HMAC signature using the Web Crypto API (`crypto.subtle.sign` with HMAC-SHA256)
 before the DB lookup. Uses a custom `timingSafeEqual` function for constant-time comparison.
-If `secret` is omitted, falls back to stripping the signature without verification (backwards
-compatible during migration).
 
 **Timing-safe password comparison:** The custom scrypt `verifyPassword` function uses
 `timingSafeEqual` (bitwise OR accumulator, no early exit) instead of `===` for comparing
