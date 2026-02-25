@@ -169,4 +169,51 @@ describe('ImportScreen', () => {
       expect(screen.getByText(/older parser version/)).toBeInTheDocument()
     })
   })
+
+  it('toggles individual faction checkbox', async () => {
+    mockListCatalogFiles.mockResolvedValueOnce(
+      catalogResult([
+        { name: 'Orks.cat', faction: 'Orks', downloadUrl: 'https://example.com/orks.cat', size: 200000 },
+        { name: 'Aeldari.cat', faction: 'Aeldari', downloadUrl: 'https://example.com/aeldari.cat', size: 150000 },
+      ]),
+    )
+
+    render(<ImportScreen />)
+    fireEvent.click(screen.getByText('Load Catalog List'))
+
+    await waitFor(() => {
+      expect(screen.getByText('Select Factions (2/2)')).toBeInTheDocument()
+    })
+
+    // Find the checkbox inputs and uncheck the first one
+    const checkboxes = screen.getAllByRole('checkbox')
+    fireEvent.click(checkboxes[0])
+    expect(screen.getByText('Select Factions (1/2)')).toBeInTheDocument()
+  })
+
+  it('shows previously imported data info', async () => {
+    mockGetImportMeta.mockResolvedValue({ lastImport: 1700000000000, factions: ['Orks', 'Aeldari'], totalUnits: 42, parserVersion: 999 })
+    mockListStoredFactions.mockResolvedValue(['Orks', 'Aeldari'])
+    mockSearchUnits.mockResolvedValue([])
+
+    render(<ImportScreen />)
+
+    await waitFor(() => {
+      expect(screen.getByText(/42 units/)).toBeInTheDocument()
+    })
+  })
+
+  it('shows rate limit info when returned', async () => {
+    mockListCatalogFiles.mockResolvedValueOnce({
+      files: [{ name: 'Orks.cat', faction: 'Orks', downloadUrl: 'https://example.com/orks.cat', size: 200000 }],
+      rateLimit: { remaining: 5, limit: 60, resetAt: new Date(Date.now() + 3600000) },
+    })
+
+    render(<ImportScreen />)
+    fireEvent.click(screen.getByText('Load Catalog List'))
+
+    await waitFor(() => {
+      expect(screen.getByText(/5.*remaining/i)).toBeInTheDocument()
+    })
+  })
 })

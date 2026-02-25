@@ -127,13 +127,14 @@ import { tailwindPreset } from '@tabletop-tools/ui'
 
 ## Testing
 
-**21 tests** across 5 test files:
+**24 tests** across 6 test files:
 
 - `AuthScreen.test.tsx` (7): renders login form, switches to register mode with name field,
   handles successful login/registration, shows auth errors, catches network errors
 - `AppShell.test.tsx` (4): renders title, renders children, shows sign-out button, calls onSignOut
 - `ErrorBoundary.test.tsx` (3): renders children normally, shows default fallback on error,
   supports custom fallback
+- `GameContentDisclaimer.test.tsx` (3): BSData link, GW copyright, not-affiliated disclaimer
 - `auth.test.ts` (2): creates client with custom baseURL, falls back to default baseURL
 - `trpc.test.ts` (3): returns link array, includes httpBatchLink, accepts custom URL
 

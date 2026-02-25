@@ -264,4 +264,116 @@ describe('TournamentScreen', () => {
     })
     expect(screen.getByText('Carol')).toBeInTheDocument()
   })
+
+  // ─── Registration ───────────────────────────────────────────────
+
+  it('navigates to registration form', async () => {
+    render(<TournamentScreen onSignOut={vi.fn()} />)
+    act(() => {
+      window.location.hash = '#/tournament/t1/register'
+      window.dispatchEvent(new HashChangeEvent('hashchange'))
+    })
+    await waitFor(() => {
+      expect(screen.getByText('Register for Tournament')).toBeInTheDocument()
+    })
+    expect(screen.getByPlaceholderText(/display name/i)).toBeInTheDocument()
+    expect(screen.getByPlaceholderText(/faction/i)).toBeInTheDocument()
+  })
+
+  it('submits registration with name and faction', async () => {
+    render(<TournamentScreen onSignOut={vi.fn()} />)
+    act(() => {
+      window.location.hash = '#/tournament/t1/register'
+      window.dispatchEvent(new HashChangeEvent('hashchange'))
+    })
+    await waitFor(() => {
+      expect(screen.getByPlaceholderText(/display name/i)).toBeInTheDocument()
+    })
+
+    fireEvent.change(screen.getByPlaceholderText(/display name/i), {
+      target: { value: 'Bob' },
+    })
+    fireEvent.change(screen.getByPlaceholderText(/faction/i), {
+      target: { value: 'Orks' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: /register/i }))
+
+    await waitFor(() =>
+      expect(mockRegisterPlayer).toHaveBeenCalledWith(
+        expect.objectContaining({ tournamentId: 't1', displayName: 'Bob', faction: 'Orks' }),
+      ),
+    )
+  })
+
+  // ─── Tournament Detail ──────────────────────────────────────────
+
+  it('shows Advance button for TO when status is not COMPLETE', async () => {
+    render(<TournamentScreen onSignOut={vi.fn()} />)
+    act(() => {
+      window.location.hash = '#/tournament/t1'
+      window.dispatchEvent(new HashChangeEvent('hashchange'))
+    })
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: /advance/i })).toBeInTheDocument()
+    })
+  })
+
+  it('advances status when Advance button is clicked', async () => {
+    render(<TournamentScreen onSignOut={vi.fn()} />)
+    act(() => {
+      window.location.hash = '#/tournament/t1'
+      window.dispatchEvent(new HashChangeEvent('hashchange'))
+    })
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: /advance/i })).toBeInTheDocument()
+    })
+    fireEvent.click(screen.getByRole('button', { name: /advance/i }))
+    expect(mockAdvanceStatus).toHaveBeenCalledWith('t1')
+  })
+
+  it('shows player count on tournament detail', async () => {
+    render(<TournamentScreen onSignOut={vi.fn()} />)
+    act(() => {
+      window.location.hash = '#/tournament/t1'
+      window.dispatchEvent(new HashChangeEvent('hashchange'))
+    })
+    await waitFor(() => {
+      expect(screen.getByText(/12 players registered/)).toBeInTheDocument()
+    })
+  })
+
+  it('shows Standings link on tournament detail', async () => {
+    render(<TournamentScreen onSignOut={vi.fn()} />)
+    act(() => {
+      window.location.hash = '#/tournament/t1'
+      window.dispatchEvent(new HashChangeEvent('hashchange'))
+    })
+    await waitFor(() => {
+      expect(screen.getByRole('link', { name: /standings/i })).toBeInTheDocument()
+    })
+  })
+
+  // ─── Round View ─────────────────────────────────────────────────
+
+  it('navigates to round view', async () => {
+    render(<TournamentScreen onSignOut={vi.fn()} />)
+    act(() => {
+      window.location.hash = '#/tournament/t1/round/round-1'
+      window.dispatchEvent(new HashChangeEvent('hashchange'))
+    })
+    await waitFor(() => {
+      expect(screen.getByText(/Round 1/)).toBeInTheDocument()
+    })
+  })
+
+  it('shows no pairings message on empty round', async () => {
+    render(<TournamentScreen onSignOut={vi.fn()} />)
+    act(() => {
+      window.location.hash = '#/tournament/t1/round/round-1'
+      window.dispatchEvent(new HashChangeEvent('hashchange'))
+    })
+    await waitFor(() => {
+      expect(screen.getByText(/no pairings yet/i)).toBeInTheDocument()
+    })
+  })
 })
