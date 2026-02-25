@@ -121,10 +121,12 @@ export const router = t.router
 export const publicProcedure = t.procedure
 export const protectedProcedure = t.procedure.use(authMiddleware)
 
-// Server factory — handles Hono + CORS + tRPC handler
-export function createBaseServer<TRouter extends AnyRouter>(opts: {
-  router: TRouter
-  createContext: (req: Request) => Promise<BaseContext & Record<string, unknown>>
+// Server factory — handles Hono + CORS + tRPC handler + auth
+export function createBaseServer<TContext extends BaseContext>(opts: {
+  router: AnyRouter
+  db: Db
+  secret: string
+  extendContext?: (baseCtx: BaseContext) => TContext | Promise<TContext>
 }): Hono
 
 // Worker handler — module-scope caching, lazy init
@@ -263,17 +265,19 @@ export const appRouter = router({
 })
 export type AppRouter = typeof appRouter
 
-// apps/<app>/server/src/server.ts  — 5 lines, not 25
+// apps/<app>/server/src/server.ts  — no auth imports, no validateSession
 import { createBaseServer } from '@tabletop-tools/server-core'
 import { appRouter } from './routers'
 
-export const createServer = (db: Db) =>
+// Simple apps (tournament, new-meta) — no extra context needed
+export const createServer = (db: Db, secret: string) =>
+  createBaseServer({ router: appRouter, db, secret })
+
+// Apps with extra context (versus, admin, no-cheat, etc.)
+export const createServer = (db: Db, gameContent: GameContentAdapter, secret: string) =>
   createBaseServer({
-    router: appRouter,
-    createContext: async (req) => ({
-      user: await validateSession(db, req.headers),
-      req, db,
-    }),
+    router: appRouter, db, secret,
+    extendContext: (ctx) => ({ ...ctx, gameContent }),
   })
 
 // apps/<app>/server/src/worker.ts  — module-scope caching
@@ -286,15 +290,15 @@ export default createWorkerHandler({
       url: env.TURSO_DB_URL,
       authToken: env.TURSO_AUTH_TOKEN,
     }))
-    return createServer(db)
+    return createServer(db, env.AUTH_SECRET)
   },
 })
 ```
 
-Auth is handled by Better Auth HTTP routes mounted in `apps/auth-server` (not in tRPC).
-The tRPC context carries the already-validated user. All protected procedures share the
-`protectedProcedure` middleware from `server-core`. Router tests use `createCallerFactory`
-with an in-memory SQLite database.
+Auth is middleware inside `server-core` — `createBaseServer` calls `validateSession` internally.
+Apps never import from `packages/auth` directly. The tRPC context carries the already-validated
+user. All protected procedures share the `protectedProcedure` middleware from `server-core`.
+Router tests use `createCallerFactory` with an in-memory SQLite database.
 
 ---
 
@@ -368,6 +372,24 @@ App-specific result colors (defined per app, not here).
 - Validate statistically before claiming anything.
 - Keep the stack shallow. Don't add layers.
 - Stop when it works. Don't polish what doesn't need polishing.
+
+---
+
+## Security & Authentication
+
+**Auth is middleware, not application code.** Session validation runs inside `server-core`
+before any app code sees the request. Apps receive `ctx.user` pre-populated and never import
+from `packages/auth` directly.
+
+- `createBaseServer` accepts `db` and `secret`, calls `validateSession` internally
+- Apps opt into auth by using `protectedProcedure` — that's the entire auth surface area
+- Apps that need extra context (storage, gameContent, adminEmails) use `extendContext`
+- One implementation, one place to audit, tested once in `server-core`
+
+**Why middleware, not utility function:** If Express, Rails, Django, and ASP.NET all handle
+auth as built-in middleware, so should we. Don't follow tRPC tutorial patterns that inline
+auth in `createContext` — follow 30 years of web application architecture. Security-critical
+code should never be scattered across 7 app boundaries.
 
 ---
 

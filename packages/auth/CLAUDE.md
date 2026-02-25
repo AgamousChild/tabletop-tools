@@ -11,8 +11,8 @@ across all apps. Provides:
 
 - `createAuth(db, baseURL?, trustedOrigins?, secret?, basePath?)` — Better Auth instance
   factory for the auth Worker
-- `validateSession(db, headers, secret?)` — session validation for all app Workers
-  (reads cookie, verifies HMAC, checks DB)
+- `validateSession(db, headers, secret?)` — session validation, called by `server-core`
+  middleware (reads cookie, verifies HMAC, checks DB). Apps never call this directly.
 - `User` type — canonical user type for all tRPC contexts
 - Test helpers — shared HTTP request mocks for app integration tests
 
@@ -26,7 +26,7 @@ never run Better Auth themselves — they only call `validateSession` to check t
 ### How Auth Flows
 
 ```
-Browser ──cookie──> App Worker ──validateSession()──> Turso DB
+Browser ──cookie──> App Worker ──server-core──validateSession()──> Turso DB
                                     │
                                     ├─ 1. Extract cookie (check __Secure- and plain prefixes)
                                     ├─ 2. Split token.signature (verify HMAC if secret provided)
@@ -83,7 +83,7 @@ packages/auth/
 | Export | Used By | Purpose |
 |---|---|---|
 | `createAuth()` | Auth Worker only | Creates Better Auth instance with Drizzle adapter |
-| `validateSession()` | All 7 app Workers | Cookie -> User resolution (with optional HMAC) |
+| `validateSession()` | `server-core` only | Cookie -> User resolution (with optional HMAC) |
 | `User` type | All app `trpc.ts` files | Canonical user type for tRPC context |
 | `setupAuthTables()` | All app `server.test.ts` | Creates auth tables + test users in test SQLite DB |
 | `createRequestHelper()` | All app `server.test.ts` | Builds mock HTTP requests for Hono apps |
