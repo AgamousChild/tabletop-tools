@@ -5,6 +5,7 @@ import {
   createRequestHelper,
   authCookie,
   TEST_USER,
+  TEST_SECRET,
 } from '@tabletop-tools/auth/src/test-helpers'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 
@@ -83,12 +84,12 @@ beforeAll(async () => {
 
 afterAll(() => client.close())
 
-const makeRequest = createRequestHelper(() => createServer(db, ADMIN_EMAILS))
+const makeRequest = createRequestHelper(() => createServer(db, ADMIN_EMAILS, TEST_SECRET))
 
 describe('HTTP integration — stats.overview via session cookie', () => {
   it('returns overview when admin authenticated', async () => {
     const res = await makeRequest('/trpc/stats.overview', {
-      cookie: authCookie(),
+      cookie: await authCookie(),
     })
 
     expect(res.status).toBe(200)
@@ -105,7 +106,7 @@ describe('HTTP integration — stats.overview via session cookie', () => {
 
   it('returns FORBIDDEN for non-admin user', async () => {
     const res = await makeRequest('/trpc/stats.overview', {
-      cookie: authCookie('bob-token'),
+      cookie: await authCookie('bob-token'),
     })
     const json = (await res.json()) as any
     expect(json.error?.data?.code).toBe('FORBIDDEN')
@@ -115,7 +116,7 @@ describe('HTTP integration — stats.overview via session cookie', () => {
 describe('HTTP integration — stats.recentUsers via session cookie', () => {
   it('returns recent users when admin authenticated', async () => {
     const res = await makeRequest('/trpc/stats.recentUsers', {
-      cookie: authCookie(),
+      cookie: await authCookie(),
     })
 
     expect(res.status).toBe(200)

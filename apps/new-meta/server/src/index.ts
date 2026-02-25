@@ -12,5 +12,5 @@ const db = createDb({
 
 startDevServer({
   port: 3006,
-  createApp: async () => createServer(db),
+  createApp: async () => createServer(db, [], process.env['AUTH_SECRET'] ?? 'dev-secret-change-in-production'),
 })

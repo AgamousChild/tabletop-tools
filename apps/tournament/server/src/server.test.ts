@@ -4,6 +4,7 @@ import {
   setupAuthTables,
   createRequestHelper,
   authCookie,
+  TEST_SECRET,
 } from '@tabletop-tools/auth/src/test-helpers'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 
@@ -83,13 +84,13 @@ beforeAll(async () => {
 
 afterAll(() => client.close())
 
-const makeRequest = createRequestHelper(() => createServer(db))
+const makeRequest = createRequestHelper(() => createServer(db, TEST_SECRET))
 
 describe('HTTP integration — tournament.create via session cookie', () => {
   it('creates a tournament when authenticated', async () => {
     const res = await makeRequest('/trpc/tournament.create', {
       method: 'POST',
-      cookie: authCookie(),
+      cookie: await authCookie(),
       body: {
         name: 'GT Finals London',
         eventDate: Date.now(),
@@ -124,7 +125,7 @@ describe('HTTP integration — tournament.create via session cookie', () => {
 describe('HTTP integration — tournament.listMine via session cookie', () => {
   it('lists tournaments when authenticated', async () => {
     const res = await makeRequest('/trpc/tournament.listMine', {
-      cookie: authCookie(),
+      cookie: await authCookie(),
     })
 
     expect(res.status).toBe(200)
@@ -144,7 +145,7 @@ describe('HTTP integration — tournament.delete via session cookie', () => {
   it('deletes a DRAFT tournament when authenticated', async () => {
     const createRes = await makeRequest('/trpc/tournament.create', {
       method: 'POST',
-      cookie: authCookie(),
+      cookie: await authCookie(),
       body: {
         name: 'Deletable Event',
         eventDate: Date.now(),
@@ -157,7 +158,7 @@ describe('HTTP integration — tournament.delete via session cookie', () => {
 
     const res = await makeRequest('/trpc/tournament.delete', {
       method: 'POST',
-      cookie: authCookie(),
+      cookie: await authCookie(),
       body: id,
     })
 

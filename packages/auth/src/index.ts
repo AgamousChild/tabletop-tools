@@ -159,10 +159,9 @@ export type User = {
  * App servers call this instead of running their own auth instance.
  * The central auth-server (apps/auth-server) handles all auth routes.
  *
- * @param secret - AUTH_SECRET for HMAC verification. If omitted, HMAC check
- *   is skipped (V1 backwards compatibility). Pass this in production.
+ * @param secret - AUTH_SECRET for HMAC verification (required).
  */
-export async function validateSession(db: Db, headers: Headers, secret?: string): Promise<User | null> {
+export async function validateSession(db: Db, headers: Headers, secret: string): Promise<User | null> {
   const cookieHeader = headers.get('cookie') ?? ''
   // Better Auth uses '__Secure-better-auth.session_token' on HTTPS (production)
   // and 'better-auth.session_token' on HTTP (local dev)
@@ -177,18 +176,8 @@ export async function validateSession(db: Db, headers: Headers, secret?: string)
   const signedToken = decodeURIComponent(tokenEntry.slice(tokenEntry.indexOf('=') + 1))
   if (!signedToken) return null
 
-  let token: string
-
-  if (secret) {
-    // V2: Verify HMAC signature before accepting the token
-    const verified = await verifySignature(signedToken, secret)
-    if (!verified) return null
-    token = verified
-  } else {
-    // V1 fallback: strip signature without verification
-    const lastDot = signedToken.lastIndexOf('.')
-    token = lastDot > 0 ? signedToken.substring(0, lastDot) : signedToken
-  }
+  const token = await verifySignature(signedToken, secret)
+  if (!token) return null
 
   const [row] = await db
     .select({

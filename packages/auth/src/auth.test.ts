@@ -170,7 +170,7 @@ describe('getSession', () => {
 describe('validateSession', () => {
   it('returns the user for a valid session cookie', async () => {
     const { cookie } = await signIn('test@example.com', 'password123')
-    const user = await validateSession(db, new Headers({ cookie }))
+    const user = await validateSession(db, new Headers({ cookie }), AUTH_SECRET)
 
     expect(user).not.toBeNull()
     expect(user?.email).toBe('test@example.com')
@@ -182,12 +182,13 @@ describe('validateSession', () => {
     const user = await validateSession(
       db,
       new Headers({ cookie: 'better-auth.session_token=invalid-xyz' }),
+      AUTH_SECRET,
     )
     expect(user).toBeNull()
   })
 
   it('returns null when no cookie is present', async () => {
-    const user = await validateSession(db, new Headers())
+    const user = await validateSession(db, new Headers(), AUTH_SECRET)
     expect(user).toBeNull()
   })
 })
@@ -247,14 +248,6 @@ describe('validateSession with HMAC verification', () => {
     expect(user).toBeNull()
   })
 
-  it('falls back to V1 behavior when no secret is provided', async () => {
-    const { cookie } = await signIn('test@example.com', 'password123')
-    // No secret param — should strip signature and accept (V1 backwards compat)
-    const user = await validateSession(db, new Headers({ cookie }))
-
-    expect(user).not.toBeNull()
-    expect(user?.email).toBe('test@example.com')
-  })
 })
 
 // ============================================================
@@ -264,7 +257,7 @@ describe('validateSession with HMAC verification', () => {
 describe('validateSession returns expanded User', () => {
   it('includes all canonical User fields', async () => {
     const { cookie } = await signIn('test@example.com', 'password123')
-    const user = await validateSession(db, new Headers({ cookie }))
+    const user = await validateSession(db, new Headers({ cookie }), AUTH_SECRET)
 
     expect(user).not.toBeNull()
     expect(user?.id).toBeTypeOf('string')

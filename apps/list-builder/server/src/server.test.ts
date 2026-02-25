@@ -5,6 +5,7 @@ import {
   setupAuthTables,
   createRequestHelper,
   authCookie,
+  TEST_SECRET,
 } from '@tabletop-tools/auth/src/test-helpers'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 
@@ -54,13 +55,13 @@ beforeAll(async () => {
 
 afterAll(() => client.close())
 
-const makeRequest = createRequestHelper(() => createServer(db, nullGameContent))
+const makeRequest = createRequestHelper(() => createServer(db, nullGameContent, TEST_SECRET))
 
 describe('HTTP integration — list.create via session cookie', () => {
   it('creates a list when authenticated', async () => {
     const res = await makeRequest('/trpc/list.create', {
       method: 'POST',
-      cookie: authCookie(),
+      cookie: await authCookie(),
       body: { faction: 'Space Marines', name: 'My List' },
     })
 
@@ -85,7 +86,7 @@ describe('HTTP integration — list.create via session cookie', () => {
 describe('HTTP integration — list.list via session cookie', () => {
   it('lists user lists when authenticated', async () => {
     const res = await makeRequest('/trpc/list.list', {
-      cookie: authCookie(),
+      cookie: await authCookie(),
     })
 
     expect(res.status).toBe(200)
@@ -105,7 +106,7 @@ describe('HTTP integration — list.delete via session cookie', () => {
   it('deletes a list when authenticated', async () => {
     const createRes = await makeRequest('/trpc/list.create', {
       method: 'POST',
-      cookie: authCookie(),
+      cookie: await authCookie(),
       body: { faction: 'Orks', name: 'Deletable List' },
     })
     const createJson = (await createRes.json()) as any
@@ -113,7 +114,7 @@ describe('HTTP integration — list.delete via session cookie', () => {
 
     const res = await makeRequest('/trpc/list.delete', {
       method: 'POST',
-      cookie: authCookie(),
+      cookie: await authCookie(),
       body: { id: listId },
     })
 

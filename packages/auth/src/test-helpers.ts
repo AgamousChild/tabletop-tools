@@ -16,6 +16,7 @@
  */
 import type { Client } from '@libsql/client'
 
+export const TEST_SECRET = 'test-secret-for-hmac-verification'
 export const TEST_TOKEN = 'test-session-token-abc123'
 export const EXPIRED_TOKEN = 'expired-session-token-xyz'
 export const TEST_USER = { id: 'user-1', name: 'Alice', email: 'alice@example.com' } as const
@@ -91,7 +92,19 @@ export function createRequestHelper(appFactory: () => { fetch: (req: Request) =>
   }
 }
 
-/** Cookie string for authenticated requests */
-export function authCookie(token: string = TEST_TOKEN): string {
-  return `better-auth.session_token=${token}`
+/** Sign a token with HMAC-SHA256 (same format as Better Auth) */
+async function signToken(token: string, secret: string): Promise<string> {
+  const encoder = new TextEncoder()
+  const key = await crypto.subtle.importKey(
+    'raw', encoder.encode(secret), { name: 'HMAC', hash: 'SHA-256' }, false, ['sign'],
+  )
+  const sig = new Uint8Array(await crypto.subtle.sign('HMAC', key, encoder.encode(token)))
+  const b64 = btoa(String.fromCharCode(...sig))
+  return `${token}.${b64}`
+}
+
+/** Cookie string for authenticated requests (HMAC-signed) */
+export async function authCookie(token: string = TEST_TOKEN, secret: string = TEST_SECRET): Promise<string> {
+  const signed = await signToken(token, secret)
+  return `better-auth.session_token=${signed}`
 }

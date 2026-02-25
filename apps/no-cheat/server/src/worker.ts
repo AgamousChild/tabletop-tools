@@ -8,6 +8,7 @@ import { createR2Storage, createNullR2Storage } from './lib/storage/r2'
 interface Env {
   TURSO_DB_URL: string
   TURSO_AUTH_TOKEN: string
+  AUTH_SECRET: string
   EVIDENCE_BUCKET?: {
     put(
       key: string,
@@ -27,6 +28,6 @@ export default createWorkerHandler<Env>({
     const storage = env.EVIDENCE_BUCKET
       ? createR2Storage(env.EVIDENCE_BUCKET, 'https://evidence.tabletop-tools.net')
       : createNullR2Storage()
-    return createServer(db, storage)
+    return createServer(db, storage, env.AUTH_SECRET)
   },
 })

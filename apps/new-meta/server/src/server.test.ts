@@ -5,6 +5,7 @@ import {
   createRequestHelper,
   authCookie,
   TEST_USER,
+  TEST_SECRET,
 } from '@tabletop-tools/auth/src/test-helpers'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 
@@ -69,7 +70,7 @@ beforeAll(async () => {
 
 afterAll(() => client.close())
 
-const makeRequest = createRequestHelper(() => createServer(db, [TEST_USER.email]))
+const makeRequest = createRequestHelper(() => createServer(db, [TEST_USER.email], TEST_SECRET))
 
 describe('HTTP integration — admin.linkPlayer via session cookie', () => {
   it('links a player when authenticated', async () => {
@@ -80,7 +81,7 @@ describe('HTTP integration — admin.linkPlayer via session cookie', () => {
 
     const res = await makeRequest('/trpc/admin.linkPlayer', {
       method: 'POST',
-      cookie: authCookie(),
+      cookie: await authCookie(),
       body: { glickoId: 'glicko-1', userId: 'user-1' },
     })
 
@@ -105,7 +106,7 @@ describe('HTTP integration — admin.recomputeGlicko via session cookie', () => 
   it('recomputes glicko when authenticated', async () => {
     const res = await makeRequest('/trpc/admin.recomputeGlicko', {
       method: 'POST',
-      cookie: authCookie(),
+      cookie: await authCookie(),
       body: {},
     })
 

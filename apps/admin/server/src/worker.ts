@@ -7,6 +7,7 @@ import { createServer } from './server'
 interface Env {
   TURSO_DB_URL: string
   TURSO_AUTH_TOKEN: string
+  AUTH_SECRET: string
   ADMIN_EMAILS: string
 }
 
@@ -21,6 +22,6 @@ export default createWorkerHandler<Env>({
       .split(',')
       .map((e) => e.trim())
       .filter(Boolean)
-    return createServer(db, adminEmails)
+    return createServer(db, adminEmails, env.AUTH_SECRET)
   },
 })

@@ -5,6 +5,7 @@ import {
   setupAuthTables,
   createRequestHelper,
   authCookie,
+  TEST_SECRET,
 } from '@tabletop-tools/auth/src/test-helpers'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 
@@ -38,7 +39,7 @@ beforeAll(async () => {
 
 afterAll(() => client.close())
 
-const makeRequest = createRequestHelper(() => createServer(db, nullGameContent))
+const makeRequest = createRequestHelper(() => createServer(db, nullGameContent, TEST_SECRET))
 
 describe('HTTP integration — simulate.save via session cookie', () => {
   const simBody = {
@@ -58,7 +59,7 @@ describe('HTTP integration — simulate.save via session cookie', () => {
   it('saves a simulation when authenticated', async () => {
     const res = await makeRequest('/trpc/simulate.save', {
       method: 'POST',
-      cookie: authCookie(),
+      cookie: await authCookie(),
       body: simBody,
     })
 
@@ -81,7 +82,7 @@ describe('HTTP integration — simulate.save via session cookie', () => {
 describe('HTTP integration — simulate.history via session cookie', () => {
   it('lists simulation history when authenticated', async () => {
     const res = await makeRequest('/trpc/simulate.history', {
-      cookie: authCookie(),
+      cookie: await authCookie(),
     })
 
     expect(res.status).toBe(200)
