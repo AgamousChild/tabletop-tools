@@ -25,6 +25,9 @@ certs/
 # Claude session files
 .claude/
 
+# Local sync tool output
+.local/
+
 # Game content data — never commit GW IP
 # Use /bsdata/ (root-anchored) to avoid matching packages/game-content/src/adapters/bsdata/
 /bsdata/
