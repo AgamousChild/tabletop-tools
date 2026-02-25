@@ -19,7 +19,9 @@
     "deploy:game-tracker": "pnpm --filter game-tracker-server wrangler deploy && pnpm --filter game-tracker-client wrangler pages deploy dist",
     "deploy:tournament": "pnpm --filter tournament-server wrangler deploy && pnpm --filter tournament-client wrangler pages deploy dist",
     "deploy:new-meta": "pnpm --filter new-meta-server wrangler deploy && pnpm --filter new-meta-client wrangler pages deploy dist",
-    "dev:admin": "pnpm --parallel --filter admin-server --filter admin-client dev"
+    "dev:admin": "pnpm --parallel --filter admin-server --filter admin-client dev",
+    "sync:wahapedia": "pnpm --filter wahapedia-sync start",
+    "sync:gw": "pnpm --filter gw-sync start"
   },
   "devDependencies": {
     "@typescript-eslint/eslint-plugin": "^7.0.0",
@@ -39,7 +41,8 @@
   },
   "pnpm": {
     "onlyBuiltDependencies": [
-      "esbuild"
+      "esbuild",
+      "better-sqlite3"
     ]
   }
 }

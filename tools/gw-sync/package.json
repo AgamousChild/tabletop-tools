@@ -1,0 +1,19 @@
+{
+  "name": "gw-sync",
+  "version": "0.0.1",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "start": "tsx src/index.ts",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "playwright": "^1.49.0",
+    "unpdf": "^0.12.0"
+  },
+  "devDependencies": {
+    "tsx": "^4.0.0",
+    "vitest": "^2.0.0",
+    "typescript": "^5.4.0"
+  }
+}
