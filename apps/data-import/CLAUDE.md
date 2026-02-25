@@ -60,7 +60,7 @@ catalog data, and throws `RateLimitError` on 403. UI shows warnings when approac
 
 ## Testing
 
-**20 tests**, all passing.
+**21 tests**, all passing.
 
 ```bash
 cd apps/data-import/client && pnpm test

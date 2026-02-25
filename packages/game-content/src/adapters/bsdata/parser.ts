@@ -1,5 +1,8 @@
 import type { UnitProfile, WeaponAbility, WeaponProfile } from '../../types.js'
 
+/** Bump when parser output changes in a way that invalidates previously-imported data. */
+export const PARSER_VERSION = 2
+
 // ============================================================
 // BSData XML → UnitProfile parser
 //

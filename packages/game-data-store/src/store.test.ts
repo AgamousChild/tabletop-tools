@@ -179,4 +179,10 @@ describe('importMeta', () => {
     expect(meta?.lastImport).toBe(2)
     expect(meta?.totalUnits).toBe(10)
   })
+
+  it('round-trips parserVersion', async () => {
+    await setImportMeta({ lastImport: 1, factions: ['Orks'], totalUnits: 5, parserVersion: 2 })
+    const meta = await getImportMeta()
+    expect(meta?.parserVersion).toBe(2)
+  })
 })
