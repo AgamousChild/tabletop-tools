@@ -8,7 +8,7 @@ export type Route =
   | { view: 'tournament-register'; id: string }
   | { view: 'round'; tournamentId: string; roundId: string }
 
-function parseHash(hash: string): Route {
+export function parseHash(hash: string): Route {
   if (hash === '#/create') return { view: 'create' }
 
   const tournamentMatch = hash.match(/^#\/tournament\/([^/]+)(?:\/(.+))?$/)

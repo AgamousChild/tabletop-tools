@@ -93,7 +93,7 @@ turn.update({ turnId, ...fields })
 
 ## Testing
 
-**44 tests** (36 server + 8 client), all passing.
+**54 tests** (36 server + 18 client), all passing.
 
 ```
 server/src/
@@ -102,9 +102,12 @@ server/src/
     storage/r2.ts / r2.test.ts
   routers/                                 <- router integration tests
 server/src/server.test.ts                  <- HTTP session integration tests
+
+client/src/components/
+  GameTrackerScreen.test.tsx               <- 18 tests: list, create, active match, turns, scores, summary
 ```
 
 ```bash
 cd apps/game-tracker/server && pnpm test   # 36 server tests
-cd apps/game-tracker/client && pnpm test   # 8 client tests
+cd apps/game-tracker/client && pnpm test   # 18 client tests
 ```

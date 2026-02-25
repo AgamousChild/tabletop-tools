@@ -101,16 +101,22 @@ wrangler deploy
 
 ## Testing
 
-**45 tests** (38 server + 7 client), all passing.
+**85 tests** (38 server + 47 client), all passing.
 
 ```
 server/src/routers/stats.test.ts    32 tests -- access control, empty DB, data counts, users, sessions, etc.
 server/src/server.test.ts            6 tests -- HTTP session integration
 client/src/components/StatCard.test.tsx  4 tests
-client/src/App.test.tsx             3 tests
+client/src/App.test.tsx              8 tests -- auth states, nav to each page
+client/src/pages/
+  Dashboard.test.tsx                10 tests -- loading, error, stat cards, sections
+  UsersPage.test.tsx                 5 tests -- loading, error, empty, table rows
+  SessionsPage.test.tsx              6 tests -- loading, error, empty, table, count
+  ActivityPage.test.tsx              6 tests -- loading, error, app labels, progress bars
+  ImportsPage.test.tsx               8 tests -- loading, error, empty, table, formats
 ```
 
 ```bash
 cd apps/admin/server && pnpm test   # 38 server tests
-cd apps/admin/client && pnpm test   # 7 client tests
+cd apps/admin/client && pnpm test   # 47 client tests
 ```

@@ -146,7 +146,7 @@ ELO updates when the TO closes a round -- all results committed together.
 
 ## Testing
 
-**58 tests** (48 server + 10 client), all passing.
+**73 tests** (48 server + 25 client), all passing.
 
 ```
 server/src/
@@ -157,11 +157,14 @@ server/src/
   routers/                               <- router integration tests with TRPCError codes
 server/src/server.test.ts                <- HTTP session integration tests
 
-client/src/components/
-  TournamentScreen.test.tsx              <- 10 tests: list, create, detail, standings, hash navigation
+client/src/
+  components/
+    TournamentScreen.test.tsx            <- 18 tests: list, create, detail, standings, registration, rounds
+  lib/
+    router.test.ts                       <- 7 tests: parseHash for all hash routes
 ```
 
 ```bash
 cd apps/tournament/server && pnpm test   # 48 server tests
-cd apps/tournament/client && pnpm test   # 10 client tests
+cd apps/tournament/client && pnpm test   # 25 client tests
 ```

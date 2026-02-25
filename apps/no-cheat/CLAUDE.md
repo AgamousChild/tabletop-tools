@@ -128,7 +128,7 @@ and again on `close` (final verdict).
 
 ## Testing
 
-**203 tests** (59 server + 144 client), all passing.
+**216 tests** (59 server + 157 client), all passing.
 
 ```
 server/src/lib/
@@ -145,9 +145,12 @@ client/src/lib/
                                             pipReader, pipeline)
   store/
     exemplarStore.ts / .test.ts          <- IndexedDB exemplar tests
+client/src/components/
+  RollEntry.test.tsx                     <- 8 tests: pip buttons, undo, record, disabled states
+  ActiveSessionScreen.test.tsx           <- 5 tests: start phase, dice set name, done disabled, error, camera
 ```
 
 ```bash
 cd apps/no-cheat/server && pnpm test   # 59 server tests
-cd apps/no-cheat/client && pnpm test   # 144 client tests
+cd apps/no-cheat/client && pnpm test   # 157 client tests
 ```

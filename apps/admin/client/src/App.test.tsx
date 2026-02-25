@@ -1,5 +1,5 @@
-import { describe, it, expect, vi } from 'vitest'
-import { render, screen } from '@testing-library/react'
+import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { fireEvent, render, screen } from '@testing-library/react'
 
 // Mock auth client before importing App
 vi.mock('./lib/auth', () => ({
@@ -73,5 +73,66 @@ describe('App', () => {
     expect(screen.getByText('Imports')).toBeInTheDocument()
     expect(screen.getByText('Micah')).toBeInTheDocument()
     expect(screen.getByText('Sign out')).toBeInTheDocument()
+  })
+
+  it('clicking Users nav renders UsersPage', () => {
+    vi.mocked(authClient.useSession).mockReturnValue({
+      data: { user: { id: '1', name: 'Micah', email: 'micah@test.com' }, session: {} },
+      isPending: false,
+      refetch: vi.fn(),
+    } as any)
+
+    render(<App />)
+    fireEvent.click(screen.getByText('Users'))
+    // UsersPage shows "Loading users..." because tRPC mock returns isLoading: true
+    expect(screen.getByText('Loading users...')).toBeInTheDocument()
+  })
+
+  it('clicking Sessions nav renders SessionsPage', () => {
+    vi.mocked(authClient.useSession).mockReturnValue({
+      data: { user: { id: '1', name: 'Micah', email: 'micah@test.com' }, session: {} },
+      isPending: false,
+      refetch: vi.fn(),
+    } as any)
+
+    render(<App />)
+    fireEvent.click(screen.getByText('Sessions'))
+    expect(screen.getByText('Loading sessions...')).toBeInTheDocument()
+  })
+
+  it('clicking Activity nav renders ActivityPage', () => {
+    vi.mocked(authClient.useSession).mockReturnValue({
+      data: { user: { id: '1', name: 'Micah', email: 'micah@test.com' }, session: {} },
+      isPending: false,
+      refetch: vi.fn(),
+    } as any)
+
+    render(<App />)
+    fireEvent.click(screen.getByText('Activity'))
+    expect(screen.getByText('Loading activity...')).toBeInTheDocument()
+  })
+
+  it('clicking Imports nav renders ImportsPage', () => {
+    vi.mocked(authClient.useSession).mockReturnValue({
+      data: { user: { id: '1', name: 'Micah', email: 'micah@test.com' }, session: {} },
+      isPending: false,
+      refetch: vi.fn(),
+    } as any)
+
+    render(<App />)
+    fireEvent.click(screen.getByText('Imports'))
+    expect(screen.getByText('Loading imports...')).toBeInTheDocument()
+  })
+
+  it('defaults to Overview (Dashboard) page', () => {
+    vi.mocked(authClient.useSession).mockReturnValue({
+      data: { user: { id: '1', name: 'Micah', email: 'micah@test.com' }, session: {} },
+      isPending: false,
+      refetch: vi.fn(),
+    } as any)
+
+    render(<App />)
+    // Dashboard shows "Loading stats..." because tRPC mock returns isLoading: true
+    expect(screen.getByText('Loading stats...')).toBeInTheDocument()
   })
 })
