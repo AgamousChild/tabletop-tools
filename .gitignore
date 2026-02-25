@@ -3,6 +3,7 @@ dist
 .env
 .env.local
 *.local
+SECRET_MANAGEMENT.md
 .turbo
 .wrangler
 
