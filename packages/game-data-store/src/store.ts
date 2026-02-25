@@ -9,6 +9,7 @@ export interface ImportMeta {
   lastImport: number
   factions: string[]
   totalUnits: number
+  parserVersion?: number
 }
 
 function openDb(): Promise<IDBDatabase> {

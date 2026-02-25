@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react'
-import { parseBSDataXml } from '@tabletop-tools/game-content/src/adapters/bsdata/parser'
+import { parseBSDataXml, PARSER_VERSION } from '@tabletop-tools/game-content/src/adapters/bsdata/parser'
 import {
   saveUnits,
   setImportMeta,
@@ -150,6 +150,7 @@ export function ImportScreen() {
         lastImport: Date.now(),
         factions: successfulFactions,
         totalUnits,
+        parserVersion: PARSER_VERSION,
       })
     }
 
@@ -237,6 +238,11 @@ export function ImportScreen() {
                 Clear All
               </button>
             </div>
+            {(currentMeta?.parserVersion ?? 0) < PARSER_VERSION && (
+              <div className="mb-3 rounded-lg border border-amber-800 bg-amber-900/20 px-4 py-3 text-sm text-amber-300">
+                Your stored data was imported with an older parser version. Re-import your factions to get the latest fixes.
+              </div>
+            )}
             {currentMeta && (
               <p className="mb-3 text-sm text-slate-400">
                 Last import: {new Date(currentMeta.lastImport).toLocaleDateString()} —{' '}

@@ -98,11 +98,11 @@ IndexedDB is unavailable, hooks return empty results with an error message.
 
 ## Testing
 
-**26 tests** across 2 test files:
+**27 tests** across 2 test files:
 
 | File | Tests | What it covers |
 |---|---|---|
-| `store.test.ts` | 17 | openDb, saveUnits (batch), getUnit, searchUnits, listFactions, clearFaction, clearAll, setImportMeta/getImportMeta |
+| `store.test.ts` | 18 | openDb, saveUnits (batch), getUnit, searchUnits, listFactions, clearFaction, clearAll, setImportMeta/getImportMeta, parserVersion round-trip |
 | `hooks.test.ts` | 9 | useUnit data/loading, useUnitSearch filters, useFactions, useGameDataAvailable, error handling |
 
 Tests use `fake-indexeddb/auto` for in-memory IndexedDB. Consumer apps (versus, list-builder)

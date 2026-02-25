@@ -2,6 +2,22 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, screen, waitFor, fireEvent } from '@testing-library/react'
 import { ImportScreen } from './ImportScreen'
 
+// Mock the game-data-store module partially
+vi.mock('@tabletop-tools/game-data-store', async () => {
+  const actual = await vi.importActual<typeof import('@tabletop-tools/game-data-store')>('@tabletop-tools/game-data-store')
+  return {
+    ...actual,
+    getImportMeta: vi.fn(actual.getImportMeta),
+    listFactions: vi.fn(actual.listFactions),
+    searchUnits: vi.fn(actual.searchUnits),
+  }
+})
+
+import { getImportMeta, listFactions as listStoredFactions, searchUnits } from '@tabletop-tools/game-data-store'
+const mockGetImportMeta = vi.mocked(getImportMeta)
+const mockListStoredFactions = vi.mocked(listStoredFactions)
+const mockSearchUnits = vi.mocked(searchUnits)
+
 // Mock the github module
 vi.mock('../lib/github', () => ({
   listCatalogFiles: vi.fn(),
@@ -140,5 +156,17 @@ describe('ImportScreen', () => {
     expect(
       screen.getByText(/Data sourced from BSData.*Not affiliated with Games Workshop/),
     ).toBeInTheDocument()
+  })
+
+  it('shows outdated data banner when parserVersion is stale', async () => {
+    mockGetImportMeta.mockResolvedValue({ lastImport: 1700000000000, factions: ['Orks'], totalUnits: 10, parserVersion: 1 })
+    mockListStoredFactions.mockResolvedValue(['Orks'])
+    mockSearchUnits.mockResolvedValue([])
+
+    render(<ImportScreen />)
+
+    await waitFor(() => {
+      expect(screen.getByText(/older parser version/)).toBeInTheDocument()
+    })
   })
 })
