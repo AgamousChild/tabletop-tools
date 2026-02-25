@@ -1,6 +1,5 @@
 import { createClient } from '@libsql/client'
 import { createDbFromClient } from '@tabletop-tools/db'
-import type { GameContentAdapter } from '@tabletop-tools/game-content'
 import {
   setupAuthTables,
   createRequestHelper,
@@ -13,13 +12,6 @@ import { createServer } from './server'
 
 const client = createClient({ url: ':memory:' })
 const db = createDbFromClient(client)
-
-const nullGameContent: GameContentAdapter = {
-  load: async () => {},
-  getUnit: async () => null,
-  searchUnits: async () => [],
-  listFactions: async () => [],
-}
 
 beforeAll(async () => {
   await setupAuthTables(client)
@@ -39,7 +31,7 @@ beforeAll(async () => {
 
 afterAll(() => client.close())
 
-const makeRequest = createRequestHelper(() => createServer(db, nullGameContent, TEST_SECRET))
+const makeRequest = createRequestHelper(() => createServer(db, TEST_SECRET))
 
 describe('HTTP integration — simulate.save via session cookie', () => {
   const simBody = {

@@ -1,10 +1,8 @@
-import { publicProcedure, router } from '../trpc'
+import { publicProcedure, router } from '@tabletop-tools/server-core'
 import { simulateRouter } from './simulate'
-import { unitRouter } from './unit'
 
 export const appRouter = router({
   health: publicProcedure.query(() => ({ status: 'ok' as const })),
-  unit: unitRouter,
   simulate: simulateRouter,
 })
 

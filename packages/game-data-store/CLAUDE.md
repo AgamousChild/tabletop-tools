@@ -12,11 +12,11 @@ without re-downloading.
 
 **Consumers:**
 - **data-import** -- writes: fetches BSData XML from GitHub, parses it, saves UnitProfile[] via `saveUnits`
-- **versus** -- reads: loads units/factions from IndexedDB via dual-source hooks (IndexedDB first, tRPC fallback)
-- **list-builder** -- reads: same dual-source pattern as versus
+- **versus** -- reads: loads units/factions from IndexedDB via hooks (IndexedDB only, no tRPC fallback)
+- **list-builder** -- reads: loads units/factions from IndexedDB + stores army lists in IndexedDB
 
-The dual-source hooks live in each consumer app (`src/lib/useGameData.ts`), not in this package.
-This package provides the raw IndexedDB operations and simple React hooks.
+Consumer apps have thin wrappers in `src/lib/useGameData.ts` that delegate to this package's hooks.
+This package provides the raw IndexedDB operations, React hooks, and list storage.
 
 ---
 
@@ -40,19 +40,26 @@ packages/game-data-store/
 ## Exports
 
 ```typescript
-// Store functions
+// Store functions — units
 export { saveUnits, getUnit, searchUnits, listFactions, clearFaction, clearAll, getImportMeta, setImportMeta }
 export type { ImportMeta }
 
-// React hooks
+// Store functions — lists
+export { createList, getLists, getList, updateList, deleteList, addListUnit, getListUnits, removeListUnit }
+export type { LocalList, LocalListUnit }
+
+// React hooks — units
 export { useUnit, useUnitSearch, useFactions, useGameDataAvailable }
+
+// React hooks — lists
+export { useLists, useList }
 ```
 
 ### IndexedDB Schema
 
 ```
 Database: 'tabletop-tools-game-data'
-Version:  1
+Version:  2
 
 Object stores:
   units
@@ -61,12 +68,19 @@ Object stores:
 
   meta
     keyPath: 'key'             <- stores metadata (last import timestamp, etc.)
+
+  lists
+    keyPath: 'id'              <- army lists (faction, name, totalPts, timestamps)
+
+  list_units
+    keyPath: 'id'
+    indexes: ['listId']        <- units within a list (unitContentId, unitName, unitPoints, count)
 ```
 
 BSData IDs are stable hex GUIDs. Re-importing the same catalogue overwrites the same
 IndexedDB keys -- in-place update by design, not a duplicate.
 
-### Store API
+### Store API — Units
 
 ```typescript
 saveUnits(units: UnitProfile[]): Promise<void>          // batched single transaction
@@ -82,7 +96,20 @@ getImportMeta(): Promise<ImportMeta | undefined>
 `saveUnits` uses a single `readwrite` transaction for batch efficiency -- all `put()` calls
 are queued synchronously within the transaction and committed atomically.
 
-### Hooks API
+### Store API — Lists
+
+```typescript
+createList(list: LocalList): Promise<void>
+getLists(): Promise<LocalList[]>
+getList(id: string): Promise<LocalList | undefined>
+updateList(id: string, updates: Partial<Pick<LocalList, 'name' | 'faction' | 'totalPts' | 'updatedAt'>>): Promise<void>
+deleteList(id: string): Promise<void>                   // cascading: also deletes list_units
+addListUnit(unit: LocalListUnit): Promise<void>
+getListUnits(listId: string): Promise<LocalListUnit[]>
+removeListUnit(id: string): Promise<void>
+```
+
+### Hooks API — Units
 
 ```typescript
 useUnit(id: string): { data: UnitProfile | null; error: string | null; isLoading: boolean }
@@ -91,19 +118,26 @@ useFactions(): { data: string[]; error: string | null; isLoading: boolean }
 useGameDataAvailable(): boolean    // simple boolean -- true if any units exist in IndexedDB
 ```
 
-Hooks return `{ data, error, isLoading }` -- they never throw on IndexedDB failure. When
-IndexedDB is unavailable, hooks return empty results with an error message.
+### Hooks API — Lists
+
+```typescript
+useLists(): { data: LocalList[]; refetch: () => void }
+useList(id: string | null): { data: (LocalList & { units: LocalListUnit[] }) | null; refetch: () => void }
+```
+
+All hooks return data and never throw on IndexedDB failure. Unit hooks include `{ data, error, isLoading }`.
+List hooks use a `refetch()` callback pattern for manual cache invalidation after mutations.
 
 ---
 
 ## Testing
 
-**27 tests** across 2 test files:
+**44 tests** across 2 test files:
 
 | File | Tests | What it covers |
 |---|---|---|
-| `store.test.ts` | 18 | openDb, saveUnits (batch), getUnit, searchUnits, listFactions, clearFaction, clearAll, setImportMeta/getImportMeta, parserVersion round-trip |
-| `hooks.test.ts` | 9 | useUnit data/loading, useUnitSearch filters, useFactions, useGameDataAvailable, error handling |
+| `store.test.ts` | 29 | openDb, saveUnits (batch), getUnit, searchUnits, listFactions, clearFaction, clearAll, setImportMeta/getImportMeta, parserVersion round-trip, createList, getLists, getList, updateList, deleteList (cascade), addListUnit, getListUnits, removeListUnit |
+| `hooks.test.ts` | 15 | useUnit data/loading, useUnitSearch filters, useFactions, useGameDataAvailable, error handling, useLists, useList (with units), useList refetch, useList null id |
 
 Tests use `fake-indexeddb/auto` for in-memory IndexedDB. Consumer apps (versus, list-builder)
 must add `fake-indexeddb` to their `devDependencies` and import the auto polyfill in their test setup.

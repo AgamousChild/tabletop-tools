@@ -15,7 +15,6 @@
     "@hono/node-server": "^1.13.0",
     "@tabletop-tools/auth": "workspace:*",
     "@tabletop-tools/db": "workspace:*",
-    "@tabletop-tools/game-content": "workspace:*",
     "@tabletop-tools/server-core": "workspace:*",
     "@trpc/server": "^11.0.0",
     "dotenv": "^17.3.1",

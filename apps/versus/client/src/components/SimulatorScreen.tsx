@@ -1,8 +1,10 @@
-import { useState } from 'react'
+import { useState, useMemo } from 'react'
 
 import { authClient } from '../lib/auth'
 import { trpc } from '../lib/trpc'
-import { useUnits, useGameFactions } from '../lib/useGameData'
+import { useUnits, useGameFactions, useGameUnit } from '../lib/useGameData'
+import { simulateWeapon } from '../lib/rules/pipeline'
+import type { SimResult } from '../lib/rules/pipeline'
 import { SimulationResult } from './SimulationResult'
 import { UnitSelector } from './UnitSelector'
 
@@ -31,17 +33,64 @@ export function SimulatorScreen({ onSignOut }: Props) {
     name: defenderQuery || undefined,
   })
 
-  const { data: simResult, isLoading: simLoading } = trpc.simulate.run.useQuery(
-    { attackerId: attackerId!, defenderId: defenderId!, defenderModelCount },
-    { enabled: !!attackerId && !!defenderId },
-  )
+  const { data: attacker } = useGameUnit(attackerId)
+  const { data: defender } = useGameUnit(defenderId)
+
+  // Compute simulation locally
+  const simResult = useMemo((): SimResult | null => {
+    if (!attacker || !defender) return null
+
+    if (attacker.weapons.length === 0) {
+      return {
+        expectedWounds: 0,
+        expectedModelsRemoved: 0,
+        survivors: defenderModelCount,
+        worstCase: { wounds: 0, modelsRemoved: 0 },
+        bestCase: { wounds: 0, modelsRemoved: 0 },
+      }
+    }
+
+    let totalExpectedWounds = 0
+    let totalExpectedModelsRemoved = 0
+    let bestCaseWounds = 0
+
+    for (const weapon of attacker.weapons) {
+      const r = simulateWeapon(
+        weapon,
+        defender.toughness,
+        defender.save,
+        defender.wounds,
+        defenderModelCount,
+      )
+      totalExpectedWounds += r.expectedWounds
+      totalExpectedModelsRemoved += r.expectedModelsRemoved
+      bestCaseWounds += r.bestCase.wounds
+    }
+
+    totalExpectedModelsRemoved = Math.min(
+      defenderModelCount,
+      totalExpectedModelsRemoved,
+    )
+    const survivors = Math.max(0, defenderModelCount - totalExpectedModelsRemoved)
+
+    return {
+      expectedWounds: parseFloat(totalExpectedWounds.toFixed(4)),
+      expectedModelsRemoved: parseFloat(totalExpectedModelsRemoved.toFixed(4)),
+      survivors: parseFloat(survivors.toFixed(4)),
+      worstCase: { wounds: 0, modelsRemoved: 0 },
+      bestCase: {
+        wounds: bestCaseWounds,
+        modelsRemoved: Math.floor(bestCaseWounds / defender.wounds),
+      },
+    }
+  }, [attacker, defender, defenderModelCount])
 
   const saveMutation = trpc.simulate.save.useMutation()
 
   const attackerName =
-    attackerUnits.find((u) => u.id === attackerId)?.name ?? attackerId ?? ''
+    attackerUnits.find((u) => u.id === attackerId)?.name ?? attacker?.name ?? attackerId ?? ''
   const defenderName =
-    defenderUnits.find((u) => u.id === defenderId)?.name ?? defenderId ?? ''
+    defenderUnits.find((u) => u.id === defenderId)?.name ?? defender?.name ?? defenderId ?? ''
 
   async function handleSignOut() {
     await authClient.signOut()
@@ -99,10 +148,10 @@ export function SimulatorScreen({ onSignOut }: Props) {
 
         {/* Run button */}
         <button
-          disabled={!attackerId || !defenderId || simLoading}
+          disabled={!attackerId || !defenderId}
           className="w-full py-3 rounded-lg bg-amber-400 text-slate-950 font-semibold hover:bg-amber-300 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
         >
-          {simLoading ? 'Calculating…' : 'Run Simulation'}
+          {!simResult && attackerId && defenderId ? 'Calculating…' : 'Run Simulation'}
         </button>
 
         {/* Result */}

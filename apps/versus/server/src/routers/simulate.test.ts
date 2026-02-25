@@ -1,52 +1,12 @@
 import { createClient } from '@libsql/client'
 import { createDbFromClient } from '@tabletop-tools/db'
-import type { GameContentAdapter, UnitProfile, WeaponProfile } from '@tabletop-tools/game-content'
-import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest'
+import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 
-import { createCallerFactory } from '../trpc'
+import { createCallerFactory } from '@tabletop-tools/server-core'
 import { appRouter } from './index'
 
 const client = createClient({ url: ':memory:' })
 const db = createDbFromClient(client)
-
-function makeWeapon(overrides: Partial<WeaponProfile> = {}): WeaponProfile {
-  return {
-    name: 'Bolter',
-    range: 24,
-    attacks: 2,
-    skill: 3,
-    strength: 4,
-    ap: 0,
-    damage: 1,
-    abilities: [],
-    ...overrides,
-  }
-}
-
-function makeUnit(id: string, overrides: Partial<UnitProfile> = {}): UnitProfile {
-  return {
-    id,
-    faction: 'Space Marines',
-    name: 'Test Unit',
-    move: 6,
-    toughness: 4,
-    save: 3,
-    wounds: 2,
-    leadership: 6,
-    oc: 1,
-    weapons: [makeWeapon()],
-    abilities: [],
-    points: 100,
-    ...overrides,
-  }
-}
-
-const mockAdapter: GameContentAdapter = {
-  load: vi.fn().mockResolvedValue(undefined),
-  getUnit: vi.fn(),
-  searchUnits: vi.fn(),
-  listFactions: vi.fn(),
-}
 
 beforeAll(async () => {
   await client.executeMultiple(`
@@ -84,97 +44,26 @@ const ctx = {
   user: { id: 'user-1', email: 'alice@example.com', name: 'Alice' },
   req,
   db,
-  gameContent: mockAdapter,
 }
-const unauthCtx = { user: null, req, db, gameContent: mockAdapter }
+const unauthCtx = { user: null, req, db }
 
-describe('simulate.run', () => {
-  it('returns simulation result for two known units', async () => {
-    const attacker = makeUnit('a1', {
-      weapons: [makeWeapon({ attacks: 4, skill: 3, strength: 4, ap: 0, damage: 1 })],
-    })
-    const defender = makeUnit('d1', { toughness: 4, save: 3, wounds: 2 })
-    vi.mocked(mockAdapter.getUnit)
-      .mockResolvedValueOnce(attacker)
-      .mockResolvedValueOnce(defender)
-
-    const caller = createCaller(ctx)
-    const result = await caller.simulate.run({
-      attackerId: 'a1',
-      defenderId: 'd1',
-      defenderModelCount: 5,
-    })
-
-    expect(result.expectedWounds).toBeGreaterThanOrEqual(0)
-    expect(result.expectedModelsRemoved).toBeGreaterThanOrEqual(0)
-    expect(result.expectedModelsRemoved).toBeLessThanOrEqual(5)
-    expect(result.survivors).toBeGreaterThanOrEqual(0)
-    expect(result.bestCase).toBeDefined()
-    expect(result.worstCase).toBeDefined()
-  })
-
-  it('throws NOT_FOUND if attacker does not exist', async () => {
-    vi.mocked(mockAdapter.getUnit).mockResolvedValueOnce(null)
-    const caller = createCaller(ctx)
-    await expect(
-      caller.simulate.run({ attackerId: 'bad', defenderId: 'd1', defenderModelCount: 1 }),
-    ).rejects.toMatchObject({ code: 'NOT_FOUND' })
-  })
-
-  it('throws NOT_FOUND if defender does not exist', async () => {
-    vi.mocked(mockAdapter.getUnit)
-      .mockResolvedValueOnce(makeUnit('a1'))
-      .mockResolvedValueOnce(null)
-    const caller = createCaller(ctx)
-    await expect(
-      caller.simulate.run({ attackerId: 'a1', defenderId: 'bad', defenderModelCount: 1 }),
-    ).rejects.toMatchObject({ code: 'NOT_FOUND' })
-  })
-
-  it('rejects unauthenticated callers', async () => {
-    const caller = createCaller(unauthCtx)
-    await expect(
-      caller.simulate.run({ attackerId: 'a1', defenderId: 'd1', defenderModelCount: 1 }),
-    ).rejects.toMatchObject({ code: 'UNAUTHORIZED' })
-  })
-
-  it('attacker with no weapons returns zero wounds', async () => {
-    const attacker = makeUnit('a1', { weapons: [] })
-    const defender = makeUnit('d1')
-    vi.mocked(mockAdapter.getUnit)
-      .mockResolvedValueOnce(attacker)
-      .mockResolvedValueOnce(defender)
-    const caller = createCaller(ctx)
-    const result = await caller.simulate.run({
-      attackerId: 'a1',
-      defenderId: 'd1',
-      defenderModelCount: 1,
-    })
-    expect(result.expectedWounds).toBe(0)
-    expect(result.expectedModelsRemoved).toBe(0)
-  })
-})
+const sampleResult = {
+  expectedWounds: 2.5,
+  expectedModelsRemoved: 1.2,
+  survivors: 3.8,
+  worstCase: { wounds: 0, modelsRemoved: 0 },
+  bestCase: { wounds: 8, modelsRemoved: 4 },
+}
 
 describe('simulate.save', () => {
   it('saves a simulation result and returns an id', async () => {
-    const attacker = makeUnit('a1')
-    const defender = makeUnit('d1')
-    vi.mocked(mockAdapter.getUnit)
-      .mockResolvedValueOnce(attacker)
-      .mockResolvedValueOnce(defender)
-
     const caller = createCaller(ctx)
-    const runResult = await caller.simulate.run({
-      attackerId: 'a1',
-      defenderId: 'd1',
-      defenderModelCount: 5,
-    })
     const saved = await caller.simulate.save({
       attackerId: 'a1',
       attackerName: 'Test Attacker',
       defenderId: 'd1',
       defenderName: 'Test Defender',
-      result: runResult,
+      result: sampleResult,
     })
     expect(saved.id).toBeTruthy()
   })
@@ -187,7 +76,7 @@ describe('simulate.save', () => {
         attackerName: 'A',
         defenderId: 'd1',
         defenderName: 'D',
-        result: { expectedWounds: 0, expectedModelsRemoved: 0, survivors: 1, worstCase: { wounds: 0, modelsRemoved: 0 }, bestCase: { wounds: 0, modelsRemoved: 0 } },
+        result: sampleResult,
       }),
     ).rejects.toMatchObject({ code: 'UNAUTHORIZED' })
   })
@@ -198,7 +87,6 @@ describe('simulate.history', () => {
     const caller = createCaller(ctx)
     const history = await caller.simulate.history()
     expect(Array.isArray(history)).toBe(true)
-    // At least one from the save test
     expect(history.length).toBeGreaterThan(0)
   })
 

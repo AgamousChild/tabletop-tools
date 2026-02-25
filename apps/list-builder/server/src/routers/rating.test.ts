@@ -1,35 +1,12 @@
 import { createClient } from '@libsql/client'
 import { createDbFromClient } from '@tabletop-tools/db'
-import type { GameContentAdapter, UnitProfile } from '@tabletop-tools/game-content'
-import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest'
+import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 
-import { createCallerFactory } from '../trpc'
+import { createCallerFactory } from '@tabletop-tools/server-core'
 import { appRouter } from './index'
 
 const client = createClient({ url: ':memory:' })
 const db = createDbFromClient(client)
-
-const makeUnit = (id: string, points = 100): UnitProfile => ({
-  id,
-  faction: 'Space Marines',
-  name: `Unit ${id}`,
-  move: 6,
-  toughness: 4,
-  save: 3,
-  wounds: 3,
-  leadership: 6,
-  oc: 1,
-  weapons: [],
-  abilities: [],
-  points,
-})
-
-const mockAdapter: GameContentAdapter = {
-  load: vi.fn().mockResolvedValue(undefined),
-  getUnit: vi.fn(),
-  searchUnits: vi.fn(),
-  listFactions: vi.fn(),
-}
 
 beforeAll(async () => {
   await client.executeMultiple(`
@@ -72,9 +49,8 @@ const ctx = {
   user: { id: 'user-1', email: 'alice@example.com', name: 'Alice' },
   req,
   db,
-  gameContent: mockAdapter,
 }
-const unauthCtx = { user: null, req, db, gameContent: mockAdapter }
+const unauthCtx = { user: null, req, db }
 
 describe('rating.get', () => {
   it('returns the rating for a known unit', async () => {
@@ -100,33 +76,34 @@ describe('rating.get', () => {
 })
 
 describe('rating.alternatives', () => {
-  it('returns units with ratings when queried by points range', async () => {
-    // The impl calls getUnit for each rated unit to check points cost
-    vi.mocked(mockAdapter.getUnit)
-      .mockResolvedValueOnce(makeUnit('unit-A', 100))
-      .mockResolvedValueOnce(makeUnit('unit-B', 100))
+  it('returns all ratings ordered by win_contrib descending', async () => {
     const caller = createCaller(ctx)
-    const result = await caller.rating.alternatives({ ptsMin: 80, ptsMax: 120 })
+    const result = await caller.rating.alternatives({})
     expect(Array.isArray(result)).toBe(true)
     expect(result.length).toBeGreaterThan(0)
-  })
-
-  it('returns results sorted by win_contrib descending', async () => {
-    vi.mocked(mockAdapter.getUnit)
-      .mockResolvedValueOnce(makeUnit('unit-A', 100))
-      .mockResolvedValueOnce(makeUnit('unit-B', 100))
-    const caller = createCaller(ctx)
-    const result = await caller.rating.alternatives({ ptsMin: 80, ptsMax: 120 })
     // unit-A has higher winContrib (0.65) than unit-B (0.50)
     if (result.length >= 2) {
       expect(result[0]!.winContrib).toBeGreaterThanOrEqual(result[1]!.winContrib)
     }
   })
 
+  it('filters by metaWindow', async () => {
+    const caller = createCaller(ctx)
+    const result = await caller.rating.alternatives({ metaWindow: '2025-Q2' })
+    expect(result.length).toBeGreaterThan(0)
+    expect(result.every((r) => r.metaWindow === '2025-Q2')).toBe(true)
+  })
+
+  it('returns empty for non-matching metaWindow', async () => {
+    const caller = createCaller(ctx)
+    const result = await caller.rating.alternatives({ metaWindow: '2099-Q1' })
+    expect(result).toEqual([])
+  })
+
   it('rejects unauthenticated callers', async () => {
     const caller = createCaller(unauthCtx)
     await expect(
-      caller.rating.alternatives({ ptsMin: 50, ptsMax: 150 }),
+      caller.rating.alternatives({}),
     ).rejects.toMatchObject({ code: 'UNAUTHORIZED' })
   })
 })

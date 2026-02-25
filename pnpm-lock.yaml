@@ -432,9 +432,6 @@ importers:
       '@tabletop-tools/db':
         specifier: workspace:*
         version: link:../../../packages/db
-      '@tabletop-tools/game-content':
-        specifier: workspace:*
-        version: link:../../../packages/game-content
       '@tabletop-tools/server-core':
         specifier: workspace:*
         version: link:../../../packages/server-core
@@ -808,6 +805,9 @@ importers:
 
   apps/versus/client:
     dependencies:
+      '@tabletop-tools/game-content':
+        specifier: workspace:*
+        version: link:../../../packages/game-content
       '@tabletop-tools/game-data-store':
         specifier: workspace:*
         version: link:../../../packages/game-data-store
@@ -890,9 +890,6 @@ importers:
       '@tabletop-tools/db':
         specifier: workspace:*
         version: link:../../../packages/db
-      '@tabletop-tools/game-content':
-        specifier: workspace:*
-        version: link:../../../packages/game-content
       '@tabletop-tools/server-core':
         specifier: workspace:*
         version: link:../../../packages/server-core
