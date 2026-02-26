@@ -1,7 +1,7 @@
-import { useState } from 'react'
+import { useState, useCallback, useRef, useEffect } from 'react'
 
 import { trpcClient } from '../lib/trpc'
-import { useUnits } from '../lib/useGameData'
+import { useUnits, useUnitModelOptions } from '../lib/useGameData'
 import {
   addListUnit as addListUnitInDb,
   removeListUnit as removeListUnitInDb,
@@ -13,6 +13,8 @@ import type { LocalListUnit } from '@tabletop-tools/game-data-store'
 import { RatingBadge } from './RatingBadge'
 import { validateArmy } from '../lib/armyRules'
 import type { BattleSize, ValidationError } from '../lib/armyRules'
+import { syncListToServer, deleteListFromServer } from '../lib/sync'
+import type { ModelOption } from '../lib/modelOptions'
 
 type Props = {
   listId: string
@@ -27,6 +29,47 @@ function generateId(): string {
   return `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`
 }
 
+function ModelCountPicker({ unitId, unitName, defaultPoints, remaining, onSelect }: {
+  unitId: string
+  unitName: string
+  defaultPoints: number
+  remaining: number
+  onSelect: (unitId: string, unitName: string, unitPoints: number, modelCount?: number) => void
+}) {
+  const options = useUnitModelOptions(unitId)
+
+  if (options.length <= 1) {
+    // Single or no options — add immediately at default/first cost
+    const pts = options.length === 1 ? options[0]!.points : defaultPoints
+    const mc = options.length === 1 ? options[0]!.modelCount : undefined
+    return (
+      <button
+        onClick={() => onSelect(unitId, unitName, pts, mc)}
+        disabled={pts > remaining}
+        className="ml-3 px-3 py-1 rounded bg-amber-400 text-slate-950 text-sm font-semibold hover:bg-amber-300 disabled:opacity-40 disabled:cursor-not-allowed"
+      >
+        Add
+      </button>
+    )
+  }
+
+  return (
+    <div className="ml-3 flex gap-1 flex-wrap">
+      {options.map((opt) => (
+        <button
+          key={opt.modelCount}
+          onClick={() => onSelect(unitId, unitName, opt.points, opt.modelCount)}
+          disabled={opt.points > remaining}
+          className="px-2 py-1 rounded bg-amber-400 text-slate-950 text-xs font-semibold hover:bg-amber-300 disabled:opacity-40 disabled:cursor-not-allowed"
+          title={opt.description}
+        >
+          {opt.modelCount}m/{opt.points}pts
+        </button>
+      ))}
+    </div>
+  )
+}
+
 export function UnitSelectionScreen({ listId, faction, detachment, battleSize, onDone, onBack }: Props) {
   const [searchQuery, setSearchQuery] = useState('')
   const [suggestion, setSuggestion] = useState<{
@@ -36,11 +79,27 @@ export function UnitSelectionScreen({ listId, faction, detachment, battleSize, o
     altRating: string | null
   } | null>(null)
 
+  // Name/description editing
+  const [editingName, setEditingName] = useState(false)
+  const [editingDesc, setEditingDesc] = useState(false)
+  const [nameValue, setNameValue] = useState('')
+  const [descValue, setDescValue] = useState('')
+  const nameInitialized = useRef(false)
+
   const { data: units = [], isLoading: unitsLoading } = useUnits(
     { faction, name: searchQuery || undefined },
     true,
   )
   const { data: activeList, refetch: refetchList } = useList(listId)
+
+  // Initialize name/desc from loaded list data
+  useEffect(() => {
+    if (activeList && !nameInitialized.current) {
+      setNameValue(activeList.name)
+      setDescValue(activeList.description ?? '')
+      nameInitialized.current = true
+    }
+  }, [activeList])
 
   const listUnits = activeList?.units ?? []
   const totalPts = listUnits.reduce((sum, u) => sum + u.unitPoints * u.count, 0)
@@ -58,7 +117,7 @@ export function UnitSelectionScreen({ listId, faction, detachment, battleSize, o
       )
     : []
 
-  async function handleAddUnit(unitId: string, unitName: string, unitPoints: number) {
+  async function handleAddUnit(unitId: string, unitName: string, unitPoints: number, modelCount?: number) {
     if (!activeList) return
     const luId = generateId()
     await addListUnitInDb({
@@ -67,6 +126,7 @@ export function UnitSelectionScreen({ listId, faction, detachment, battleSize, o
       unitContentId: unitId,
       unitName,
       unitPoints,
+      modelCount,
       count: 1,
     })
     await updateListInDb(listId, {
@@ -74,6 +134,7 @@ export function UnitSelectionScreen({ listId, faction, detachment, battleSize, o
       updatedAt: Date.now(),
     })
     refetchList()
+    syncListToServer(listId)
 
     // Fetch alternatives and show suggestion
     try {
@@ -105,13 +166,31 @@ export function UnitSelectionScreen({ listId, faction, detachment, battleSize, o
       updatedAt: Date.now(),
     })
     refetchList()
+    syncListToServer(listId)
   }
 
   async function handleDeleteList() {
     if (!activeList) return
     if (!confirm(`Delete "${activeList.name}"?`)) return
     await deleteListInDb(listId)
+    deleteListFromServer(listId)
     onBack()
+  }
+
+  async function handleSaveName() {
+    setEditingName(false)
+    if (!activeList || nameValue === activeList.name) return
+    await updateListInDb(listId, { name: nameValue, updatedAt: Date.now() })
+    refetchList()
+    syncListToServer(listId)
+  }
+
+  async function handleSaveDescription() {
+    setEditingDesc(false)
+    if (!activeList) return
+    await updateListInDb(listId, { description: descValue || undefined, updatedAt: Date.now() })
+    refetchList()
+    syncListToServer(listId)
   }
 
   function exportList(): string {
@@ -145,7 +224,24 @@ export function UnitSelectionScreen({ listId, faction, detachment, battleSize, o
         <div className="flex items-center gap-3">
           <button onClick={onBack} className="text-slate-400 hover:text-slate-200 text-sm">Back</button>
           <div>
-            <h2 className="font-semibold text-slate-100">{activeList?.name ?? 'List'}</h2>
+            {editingName ? (
+              <input
+                autoFocus
+                value={nameValue}
+                onChange={(e) => setNameValue(e.target.value)}
+                onBlur={() => void handleSaveName()}
+                onKeyDown={(e) => { if (e.key === 'Enter') void handleSaveName() }}
+                className="bg-slate-900 border border-amber-400 rounded px-2 py-0.5 text-slate-100 font-semibold focus:outline-none"
+              />
+            ) : (
+              <h2
+                className="font-semibold text-slate-100 cursor-pointer hover:text-amber-400"
+                onClick={() => setEditingName(true)}
+                title="Click to rename"
+              >
+                {activeList?.name ?? 'List'}
+              </h2>
+            )}
             <p className="text-xs text-slate-400">{faction} — {detachment}</p>
           </div>
         </div>
@@ -154,6 +250,26 @@ export function UnitSelectionScreen({ listId, faction, detachment, battleSize, o
           <p className="text-xs text-slate-400">{remaining}pts remaining</p>
         </div>
       </div>
+
+      {/* Description */}
+      {editingDesc ? (
+        <textarea
+          autoFocus
+          value={descValue}
+          onChange={(e) => setDescValue(e.target.value)}
+          onBlur={() => void handleSaveDescription()}
+          placeholder="Add notes about this list..."
+          className="w-full px-3 py-2 rounded-lg bg-slate-900 border border-amber-400 text-slate-100 placeholder-slate-500 focus:outline-none text-sm resize-none"
+          rows={2}
+        />
+      ) : (
+        <button
+          onClick={() => setEditingDesc(true)}
+          className="text-left w-full text-sm text-slate-500 hover:text-slate-300 py-1"
+        >
+          {descValue || 'Add notes about this list...'}
+        </button>
+      )}
 
       {/* Validation errors */}
       {errors.filter((e) => e.type !== 'NO_WARLORD').map((err, i) => (
@@ -179,30 +295,27 @@ export function UnitSelectionScreen({ listId, faction, detachment, battleSize, o
             {!unitsLoading && units.length === 0 && (
               <p className="text-slate-500 text-sm">No units found.</p>
             )}
-            {units.map((unit) => {
-              const overBudget = unit.points > remaining
-              return (
-                <div
-                  key={unit.id}
-                  className={`flex items-center justify-between p-3 rounded-lg bg-slate-900 border border-slate-800 ${overBudget ? 'opacity-50' : ''}`}
-                >
-                  <div>
-                    <div className="flex items-center gap-2">
-                      <span className="font-medium text-slate-100">{unit.name}</span>
-                      <RatingBadge rating={null} />
-                    </div>
-                    <p className="text-sm text-slate-400 mt-0.5">{unit.points}pts</p>
+            {units.map((unit) => (
+              <div
+                key={unit.id}
+                className="flex items-center justify-between p-3 rounded-lg bg-slate-900 border border-slate-800"
+              >
+                <div>
+                  <div className="flex items-center gap-2">
+                    <span className="font-medium text-slate-100">{unit.name}</span>
+                    <RatingBadge rating={null} />
                   </div>
-                  <button
-                    onClick={() => void handleAddUnit(unit.id, unit.name, unit.points)}
-                    disabled={overBudget}
-                    className="ml-3 px-3 py-1 rounded bg-amber-400 text-slate-950 text-sm font-semibold hover:bg-amber-300 disabled:opacity-40 disabled:cursor-not-allowed"
-                  >
-                    Add
-                  </button>
+                  <p className="text-sm text-slate-400 mt-0.5">{unit.points}pts</p>
                 </div>
-              )
-            })}
+                <ModelCountPicker
+                  unitId={unit.id}
+                  unitName={unit.name}
+                  defaultPoints={unit.points}
+                  remaining={remaining}
+                  onSelect={(id, name, pts, mc) => void handleAddUnit(id, name, pts, mc)}
+                />
+              </div>
+            ))}
           </div>
         </div>
 
@@ -232,6 +345,7 @@ export function UnitSelectionScreen({ listId, faction, detachment, battleSize, o
                   <p className="text-sm text-slate-400 mt-0.5">
                     {unit.unitPoints * unit.count}pts
                     {unit.count > 1 && ` (${unit.count}x${unit.unitPoints})`}
+                    {unit.modelCount && ` · ${unit.modelCount} models`}
                   </p>
                 </div>
                 <button

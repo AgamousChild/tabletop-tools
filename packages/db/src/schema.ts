@@ -166,6 +166,7 @@ export const listUnits = sqliteTable('list_units', {
   unitName: text('unit_name').notNull(),
   unitPoints: integer('unit_points').notNull(),
   count: integer('count').notNull().default(1),
+  modelCount: integer('model_count'),
   // V3 additions
   isWarlord: integer('is_warlord').notNull().default(0),
   enhancementId: text('enhancement_id'),

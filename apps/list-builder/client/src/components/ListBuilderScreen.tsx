@@ -11,6 +11,7 @@ import { BattleSizeScreen } from './BattleSizeScreen'
 import { FactionDetachmentScreen } from './FactionDetachmentScreen'
 import { UnitSelectionScreen } from './UnitSelectionScreen'
 import type { BattleSize } from '../lib/armyRules'
+import { syncListToServer, syncAllToServer, restoreFromServer } from '../lib/sync'
 
 type Screen =
   | { type: 'my-lists' }
@@ -29,6 +30,7 @@ function generateId(): string {
 export function ListBuilderScreen({ onSignOut }: Props) {
   const [screen, setScreen] = useState<Screen>({ type: 'my-lists' })
   const { refetch: refetchLists } = useLists()
+  const [syncStatus, setSyncStatus] = useState<string | null>(null)
 
   async function handleSignOut() {
     await authClient.signOut()
@@ -40,13 +42,20 @@ export function ListBuilderScreen({ onSignOut }: Props) {
   }, [])
 
   const handleSelectList = useCallback((list: LocalList) => {
-    // Open existing list directly in unit selection
+    // Reconstruct battleSize from stored points or default
+    const pts = list.battleSize ?? 2000
+    const sizeMap: Record<number, BattleSize> = {
+      500: { name: 'Incursion', points: 500, maxDuplicates: 1, description: '' },
+      1000: { name: 'Strike Force', points: 1000, maxDuplicates: 2, description: '' },
+      2000: { name: 'Strike Force', points: 2000, maxDuplicates: 3, description: '' },
+      3000: { name: 'Onslaught', points: 3000, maxDuplicates: 3, description: '' },
+    }
     setScreen({
       type: 'unit-selection',
       listId: list.id,
       faction: list.faction,
-      detachment: '',
-      battleSize: { name: 'Strike Force', points: 2000, maxDuplicates: 3, description: '' },
+      detachment: list.detachment ?? '',
+      battleSize: sizeMap[pts] ?? { name: 'Strike Force', points: pts, maxDuplicates: 3, description: '' },
     })
   }, [])
 
@@ -64,11 +73,14 @@ export function ListBuilderScreen({ onSignOut }: Props) {
       id,
       faction,
       name: `${faction} ${bs.points}pts`,
+      detachment,
+      battleSize: bs.points,
       totalPts: 0,
       createdAt: now,
       updatedAt: now,
     })
     refetchLists()
+    syncListToServer(id)
 
     setScreen({
       type: 'unit-selection',
@@ -89,12 +101,43 @@ export function ListBuilderScreen({ onSignOut }: Props) {
       {/* Header */}
       <header className="border-b border-slate-800 px-6 py-4 flex items-center justify-between">
         <h1 className="text-2xl font-bold text-amber-400">List Builder</h1>
-        <button
-          onClick={() => void handleSignOut()}
-          className="text-slate-400 hover:text-slate-100 text-sm"
-        >
-          Sign out
-        </button>
+        <div className="flex items-center gap-3">
+          {syncStatus && <span className="text-xs text-green-400">{syncStatus}</span>}
+          <button
+            onClick={() => {
+              syncAllToServer()
+              setSyncStatus('Synced!')
+              setTimeout(() => setSyncStatus(null), 2000)
+            }}
+            className="text-slate-400 hover:text-amber-400 text-sm"
+          >
+            Sync
+          </button>
+          <button
+            onClick={() => {
+              void (async () => {
+                try {
+                  const count = await restoreFromServer()
+                  refetchLists()
+                  setSyncStatus(`Restored ${count} list${count !== 1 ? 's' : ''}`)
+                  setTimeout(() => setSyncStatus(null), 3000)
+                } catch {
+                  setSyncStatus('Restore failed')
+                  setTimeout(() => setSyncStatus(null), 3000)
+                }
+              })()
+            }}
+            className="text-slate-400 hover:text-amber-400 text-sm"
+          >
+            Restore
+          </button>
+          <button
+            onClick={() => void handleSignOut()}
+            className="text-slate-400 hover:text-slate-100 text-sm"
+          >
+            Sign out
+          </button>
+        </div>
       </header>
 
       <div className="max-w-4xl mx-auto p-6">

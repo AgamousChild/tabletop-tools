@@ -152,6 +152,7 @@ beforeAll(async () => {
     unit_name TEXT NOT NULL,
     unit_points INTEGER NOT NULL,
     count INTEGER NOT NULL DEFAULT 1,
+    model_count INTEGER,
     is_warlord INTEGER NOT NULL DEFAULT 0,
     enhancement_id TEXT,
     enhancement_name TEXT,
