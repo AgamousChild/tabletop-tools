@@ -1,4 +1,4 @@
-import { useState, useMemo, useCallback, useEffect, useRef } from 'react'
+import { useState, useMemo, useCallback, useRef } from 'react'
 import type { WeaponAbility, WeaponProfile } from '@tabletop-tools/game-content'
 import { useGameDataAvailable } from '@tabletop-tools/game-data-store'
 
@@ -30,7 +30,7 @@ export function SimulatorScreen({ onSignOut }: Props) {
   const [defenderModelCount, setDefenderModelCount] = useState(5)
   const [invulnSave, setInvulnSave] = useState<number | undefined>()
   const [attackType, setAttackType] = useState<AttackType>('ranged')
-  const [selectedWeapons, setSelectedWeapons] = useState<Set<number>>(new Set())
+  const [weaponOverrides, setWeaponOverrides] = useState<Map<number, boolean>>(new Map())
   const [specialRules, setSpecialRules] = useState<WeaponAbility[]>([])
 
   const gameDataAvailable = useGameDataAvailable()
@@ -49,10 +49,10 @@ export function SimulatorScreen({ onSignOut }: Props) {
   const { data: attacker } = useGameUnit(attackerId)
   const { data: defender } = useGameUnit(defenderId)
 
-  // When attacker changes, select all weapons of the current attack type
+  // When attacker changes, clear overrides so defaults kick in from data
   const handleAttackerSelect = useCallback((id: string) => {
     setAttackerId(id)
-    setSelectedWeapons(new Set())
+    setWeaponOverrides(new Map())
     setSpecialRules([])
   }, [])
 
@@ -62,35 +62,33 @@ export function SimulatorScreen({ onSignOut }: Props) {
     setInvulnSave(undefined)
   }, [])
 
-  // Auto-select weapons when attacker data loads or attack type changes.
-  // Key fix: depend on attacker?.id (stable string from IndexedDB), not attackerId
-  // (set immediately on click before data loads). This way the effect only runs
-  // once the unit data has actually loaded from IndexedDB.
-  useEffect(() => {
-    if (!attacker) return
-
-    const weapons = attacker.weapons
+  // Derive selected weapons from loaded data — no useEffect.
+  // When attacker data loads from IndexedDB, weapons auto-select by attack type.
+  // User can override individual toggles; overrides clear on unit change.
+  const selectedWeapons = useMemo(() => {
+    if (!attacker) return new Set<number>()
     const indices = new Set<number>()
-    weapons.forEach((w, i) => {
+    attacker.weapons.forEach((w, i) => {
       const isRanged = w.range !== 'melee'
-      if ((attackType === 'ranged' && isRanged) || (attackType === 'melee' && !isRanged)) {
+      const defaultSelected =
+        (attackType === 'ranged' && isRanged) || (attackType === 'melee' && !isRanged)
+      const override = weaponOverrides.get(i)
+      if (override !== undefined ? override : defaultSelected) {
         indices.add(i)
       }
     })
-    setSelectedWeapons(indices)
-  }, [attacker?.id, attackType]) // eslint-disable-line react-hooks/exhaustive-deps
+    return indices
+  }, [attacker, attackType, weaponOverrides])
 
   const handleToggleWeapon = useCallback((index: number) => {
-    setSelectedWeapons((prev) => {
-      const next = new Set(prev)
-      if (next.has(index)) {
-        next.delete(index)
-      } else {
-        next.add(index)
-      }
+    setWeaponOverrides((prev) => {
+      const next = new Map(prev)
+      // If already overridden, flip the override; otherwise set to opposite of current selection
+      const isCurrentlySelected = selectedWeapons.has(index)
+      next.set(index, !isCurrentlySelected)
       return next
     })
-  }, [])
+  }, [selectedWeapons])
 
   // Get selected weapon profiles with merged special rules
   const getSelectedWeapons = useCallback((): WeaponProfile[] => {
