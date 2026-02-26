@@ -23,13 +23,41 @@ vi.mock('../lib/trpc', () => ({
 }))
 
 vi.mock('@tabletop-tools/game-data-store', () => ({
-  useGameDataAvailable: () => false,
+  useGameDataAvailable: () => true,
 }))
 
 vi.mock('../lib/useGameData', () => ({
-  useGameFactions: () => ({ data: [], isLoading: false }),
-  useUnits: () => ({ data: [], isLoading: false }),
-  useGameUnit: () => ({ data: null, isLoading: false }),
+  useGameFactions: () => ({ data: ['Space Marines', 'Orks'], isLoading: false }),
+  useUnits: () => ({
+    data: [
+      { id: 'u1', name: 'Intercessor Squad', faction: 'Space Marines', points: 100 },
+    ],
+    isLoading: false,
+  }),
+  useGameUnit: (id: string | null) =>
+    id
+      ? {
+          data: {
+            id,
+            name: 'Intercessor Squad',
+            faction: 'Space Marines',
+            move: 6,
+            toughness: 4,
+            save: 3,
+            wounds: 2,
+            leadership: 6,
+            oc: 2,
+            weapons: [
+              { name: 'Bolt Rifle', range: 30, attacks: 2, skill: 3, strength: 4, ap: -1, damage: 1, abilities: [] },
+              { name: 'Bolt Pistol', range: 12, attacks: 1, skill: 3, strength: 4, ap: 0, damage: 1, abilities: [] },
+              { name: 'Close Combat Weapon', range: 'melee', attacks: 3, skill: 3, strength: 4, ap: 0, damage: 1, abilities: [] },
+            ],
+            abilities: [],
+            points: 100,
+          },
+          isLoading: false,
+        }
+      : { data: null, isLoading: false },
 }))
 
 beforeEach(() => {
@@ -42,56 +70,22 @@ describe('SimulatorScreen', () => {
     expect(screen.getByText('Versus')).toBeInTheDocument()
   })
 
-  it('shows attacker and defender sections', () => {
+  it('shows attacker and defender selector panels', () => {
     render(<SimulatorScreen onSignOut={vi.fn()} />)
-    expect(screen.getByText(/Attacker/)).toBeInTheDocument()
-    expect(screen.getByText(/Defender/)).toBeInTheDocument()
+    expect(screen.getByText('Attacker')).toBeInTheDocument()
+    expect(screen.getByText('Defender')).toBeInTheDocument()
   })
 
-  it('shows Add Weapon form', () => {
+  it('shows faction dropdowns', () => {
     render(<SimulatorScreen onSignOut={vi.fn()} />)
-    expect(screen.getByText('Add Weapon')).toBeInTheDocument()
-    expect(screen.getByText('+ Add Weapon')).toBeInTheDocument()
+    const selects = screen.getAllByRole('combobox')
+    expect(selects.length).toBeGreaterThanOrEqual(2)
   })
 
-  it('shows defender stat fields', () => {
+  it('shows Run Simulation button disabled when no units selected', () => {
     render(<SimulatorScreen onSignOut={vi.fn()} />)
-    expect(screen.getByText('Toughness')).toBeInTheDocument()
-    expect(screen.getByText('Save')).toBeInTheDocument()
-    expect(screen.getByText('Wounds')).toBeInTheDocument()
-    expect(screen.getByText('Models')).toBeInTheDocument()
-  })
-
-  it('button disabled when no weapons added', () => {
-    render(<SimulatorScreen onSignOut={vi.fn()} />)
-    const btn = screen.getByRole('button', { name: /add a weapon to simulate/i })
+    const btn = screen.getByRole('button', { name: /select attacker and defender/i })
     expect(btn).toBeDisabled()
-  })
-
-  it('button enables after adding a weapon', () => {
-    render(<SimulatorScreen onSignOut={vi.fn()} />)
-    // Add a weapon
-    fireEvent.click(screen.getByText('+ Add Weapon'))
-    // Button should now be enabled
-    const btn = screen.getByRole('button', { name: /run simulation/i })
-    expect(btn).not.toBeDisabled()
-  })
-
-  it('shows simulation results after adding a weapon', () => {
-    render(<SimulatorScreen onSignOut={vi.fn()} />)
-    fireEvent.click(screen.getByText('+ Add Weapon'))
-    // Results should appear reactively
-    expect(screen.getByText(/Expected Wounds/i)).toBeInTheDocument()
-  })
-
-  it('can remove a weapon', () => {
-    render(<SimulatorScreen onSignOut={vi.fn()} />)
-    fireEvent.click(screen.getByText('+ Add Weapon'))
-    // Should show the weapon
-    expect(screen.getByText('Weapon 1')).toBeInTheDocument()
-    // Remove it
-    fireEvent.click(screen.getByText('X'))
-    expect(screen.queryByText('Weapon 1')).not.toBeInTheDocument()
   })
 
   it('shows sign out button', () => {
@@ -111,8 +105,34 @@ describe('SimulatorScreen', () => {
     expect(screen.getByText('Special Rules')).toBeInTheDocument()
   })
 
-  it('does not show unit picker when no game data', () => {
+  it('shows weapon selector after selecting attacker unit', () => {
     render(<SimulatorScreen onSignOut={vi.fn()} />)
-    expect(screen.queryByText('Load from imported data')).not.toBeInTheDocument()
+    // Click the first unit button to select it as attacker
+    const unitButtons = screen.getAllByRole('button', { name: /intercessor squad/i })
+    fireEvent.click(unitButtons[0])
+    // Should show ranged/melee toggle and weapon list
+    expect(screen.getByRole('button', { name: /ranged/i })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /melee/i })).toBeInTheDocument()
+  })
+
+  it('Run Simulation button enables when both units selected', () => {
+    render(<SimulatorScreen onSignOut={vi.fn()} />)
+    // Select attacker and defender
+    const unitButtons = screen.getAllByRole('button', { name: /intercessor squad/i })
+    fireEvent.click(unitButtons[0]) // attacker
+    fireEvent.click(unitButtons[1]) // defender
+    const btn = screen.getByRole('button', { name: /run simulation/i })
+    expect(btn).not.toBeDisabled()
+    // Should not throw when clicked
+    fireEvent.click(btn)
+  })
+
+  it('shows unit profile card after selecting a unit', () => {
+    render(<SimulatorScreen onSignOut={vi.fn()} />)
+    const unitButtons = screen.getAllByRole('button', { name: /intercessor squad/i })
+    fireEvent.click(unitButtons[0])
+    // UnitProfileCard shows stat labels
+    expect(screen.getAllByText('T').length).toBeGreaterThanOrEqual(1)
+    expect(screen.getAllByText('Sv').length).toBeGreaterThanOrEqual(1)
   })
 })
