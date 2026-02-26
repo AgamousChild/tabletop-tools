@@ -226,6 +226,19 @@ export function SimulatorScreen({ onSignOut }: Props) {
       </header>
 
       <div className="max-w-2xl mx-auto p-4 space-y-6">
+        {/* Debug — temporary */}
+        <div className="bg-slate-900 border border-slate-700 rounded p-2 text-xs font-mono text-slate-400">
+          <p>gameDataAvailable: {String(gameDataAvailable)}</p>
+          <p>attackerId: {attackerId ?? 'null'}</p>
+          <p>attacker loaded: {String(!!attacker)}</p>
+          <p>attacker weapons: {attacker?.weapons?.length ?? 'n/a'}</p>
+          <p>defenderId: {defenderId ?? 'null'}</p>
+          <p>defender loaded: {String(!!defender)}</p>
+          <p>selectedWeapons: {selectedWeapons.size}</p>
+          <p>factions: {factions.length}</p>
+          <p>attackerUnits: {attackerUnits.length}</p>
+        </div>
+
         {/* No data warning */}
         {!gameDataAvailable && (
           <div className="bg-slate-900 border border-amber-400/30 rounded-lg p-4 text-center">
