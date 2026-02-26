@@ -1,4 +1,4 @@
-import { useState, useMemo, useCallback, useEffect, useRef } from 'react'
+import { useState, useMemo, useCallback, useRef } from 'react'
 import type { WeaponAbility, WeaponProfile } from '@tabletop-tools/game-content'
 import { useGameDataAvailable } from '@tabletop-tools/game-data-store'
 
@@ -30,7 +30,7 @@ export function SimulatorScreen({ onSignOut }: Props) {
   const [defenderModelCount, setDefenderModelCount] = useState(5)
   const [invulnSave, setInvulnSave] = useState<number | undefined>()
   const [attackType, setAttackType] = useState<AttackType>('ranged')
-  const [selectedWeapons, setSelectedWeapons] = useState<Set<number>>(new Set())
+  const [weaponToggles, setWeaponToggles] = useState<Record<string, boolean>>({})
   const [specialRules, setSpecialRules] = useState<WeaponAbility[]>([])
 
   const gameDataAvailable = useGameDataAvailable()
@@ -49,10 +49,9 @@ export function SimulatorScreen({ onSignOut }: Props) {
   const { data: attacker } = useGameUnit(attackerId)
   const { data: defender } = useGameUnit(defenderId)
 
-  // When attacker changes, select all weapons of the current attack type
   const handleAttackerSelect = useCallback((id: string) => {
     setAttackerId(id)
-    setSelectedWeapons(new Set())
+    setWeaponToggles({})
     setSpecialRules([])
   }, [])
 
@@ -62,34 +61,32 @@ export function SimulatorScreen({ onSignOut }: Props) {
     setInvulnSave(undefined)
   }, [])
 
-  // Auto-select all weapons when attack type or attacker changes
-  useEffect(() => {
+  const handleAttackTypeChange = useCallback((type: AttackType) => {
+    setAttackType(type)
+    setWeaponToggles({})
+  }, [])
+
+  // Derive selected weapons from data — recomputes when attacker data loads
+  const selectedWeapons = useMemo(() => {
     const weapons = attacker?.weapons ?? []
-    if (weapons.length === 0) {
-      setSelectedWeapons(new Set())
-      return
-    }
     const indices = new Set<number>()
     weapons.forEach((w, i) => {
       const isRanged = w.range !== 'melee'
-      if ((attackType === 'ranged' && isRanged) || (attackType === 'melee' && !isRanged)) {
+      const defaultSelected = (attackType === 'ranged' && isRanged) || (attackType === 'melee' && !isRanged)
+      const override = weaponToggles[String(i)]
+      if (override !== undefined ? override : defaultSelected) {
         indices.add(i)
       }
     })
-    setSelectedWeapons(indices)
-  }, [attackerId, attackType, attacker?.id]) // eslint-disable-line react-hooks/exhaustive-deps
+    return indices
+  }, [attacker?.weapons, attackType, weaponToggles])
 
   const handleToggleWeapon = useCallback((index: number) => {
-    setSelectedWeapons((prev) => {
-      const next = new Set(prev)
-      if (next.has(index)) {
-        next.delete(index)
-      } else {
-        next.add(index)
-      }
-      return next
-    })
-  }, [])
+    setWeaponToggles((prev) => ({
+      ...prev,
+      [String(index)]: !selectedWeapons.has(index),
+    }))
+  }, [selectedWeapons])
 
   // Get selected weapon profiles with merged special rules
   const getSelectedWeapons = useCallback((): WeaponProfile[] => {
@@ -309,7 +306,7 @@ export function SimulatorScreen({ onSignOut }: Props) {
             attackType={attackType}
             selectedWeapons={selectedWeapons}
             onToggleWeapon={handleToggleWeapon}
-            onAttackTypeChange={setAttackType}
+            onAttackTypeChange={handleAttackTypeChange}
           />
         )}
 
