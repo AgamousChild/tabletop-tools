@@ -1,4 +1,4 @@
-import { useState, useMemo, useCallback, useEffect } from 'react'
+import { useState, useMemo, useCallback, useEffect, useRef } from 'react'
 import type { WeaponAbility, WeaponProfile } from '@tabletop-tools/game-content'
 import { useGameDataAvailable } from '@tabletop-tools/game-data-store'
 
@@ -182,6 +182,14 @@ export function SimulatorScreen({ onSignOut }: Props) {
     }
   }, [attacker, defender, defenderModelCount, invulnSave, getSelectedWeapons])
 
+  const resultsRef = useRef<HTMLDivElement>(null)
+
+  const handleRunClick = useCallback(() => {
+    if (resultsRef.current && typeof resultsRef.current.scrollIntoView === 'function') {
+      resultsRef.current.scrollIntoView({ behavior: 'smooth' })
+    }
+  }, [])
+
   const saveMutation = trpc.simulate.save.useMutation()
 
   const attackerName =
@@ -315,6 +323,7 @@ export function SimulatorScreen({ onSignOut }: Props) {
         {/* Run button */}
         <button
           disabled={!attackerId || !defenderId || selectedWeapons.size === 0}
+          onClick={handleRunClick}
           className="w-full py-3 rounded-lg bg-amber-400 text-slate-950 font-semibold hover:bg-amber-300 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
         >
           {!simData && attackerId && defenderId ? 'Calculating...' : 'Run Simulation'}
@@ -322,13 +331,15 @@ export function SimulatorScreen({ onSignOut }: Props) {
 
         {/* Result */}
         {simData && (
-          <SimulationResult
-            attackerName={attackerName}
-            defenderName={defenderName}
-            result={simData.result}
-            weaponBreakdowns={simData.breakdowns}
-            onSave={handleSave}
-          />
+          <div ref={resultsRef}>
+            <SimulationResult
+              attackerName={attackerName}
+              defenderName={defenderName}
+              result={simData.result}
+              weaponBreakdowns={simData.breakdowns}
+              onSave={handleSave}
+            />
+          </div>
         )}
       </div>
     </div>

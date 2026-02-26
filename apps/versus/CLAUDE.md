@@ -110,6 +110,8 @@ type WeaponAbility =
   | { type: 'REROLL_WOUNDS' }
   | { type: 'HIT_MOD'; value: number }
   | { type: 'WOUND_MOD'; value: number }
+  | { type: 'STRENGTH_MOD'; value: number }
+  | { type: 'ATTACKS_MOD'; value: number }
 
 simulate(attacker, defender):
   -> resolveAttacks()   // flat or dice average
@@ -123,16 +125,16 @@ simulate(attacker, defender):
 
 ## Testing
 
-**72 tests** (8 server + 64 client), all passing.
+**119 tests** (8 server + 111 client), all passing.
 
 ```
 client/src/
   lib/rules/
-    pipeline.ts / pipeline.test.ts     <- rules engine: every weapon ability, modifier interaction (39 tests)
+    pipeline.ts / pipeline.test.ts     <- rules engine: every weapon ability, modifier interaction (45 tests)
   lib/
     useGameData.test.tsx               <- IndexedDB hook tests
   components/
-    SimulatorScreen.test.tsx           <- 6 tests: title, panels, factions, run button, sign out
+    SimulatorScreen.test.tsx           <- 10 tests: title, panels, factions, run button, sign out, weapon/profile selection
     SimulationResult.test.tsx          <- 7 tests: names, wounds, models, best/worst, save, survivors
 server/src/
   routers/

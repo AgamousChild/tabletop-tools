@@ -266,11 +266,25 @@ export function simulateWeapon(
     attackCount = Math.max(attackCount, 3)
   }
 
+  // ATTACKS_MOD: +/- to attack count (minimum 1)
+  const attacksMod = weapon.abilities
+    .filter((a): a is { type: 'ATTACKS_MOD'; value: number } => a.type === 'ATTACKS_MOD')
+    .reduce((sum, a) => sum + a.value, 0)
+  if (attacksMod !== 0) {
+    attackCount = Math.max(1, attackCount + attacksMod)
+  }
+
+  // STRENGTH_MOD: +/- to weapon strength
+  const strengthMod = weapon.abilities
+    .filter((a): a is { type: 'STRENGTH_MOD'; value: number } => a.type === 'STRENGTH_MOD')
+    .reduce((sum, a) => sum + a.value, 0)
+  const effectiveStrength = weapon.strength + strengthMod
+
   const { normalHits, lethalHits } = resolveHits(attackCount, weapon.skill, weapon.abilities)
   const { wounds, mortals } = resolveWounds(
     normalHits,
     lethalHits,
-    weapon.strength,
+    effectiveStrength,
     defenderToughness,
     weapon.abilities,
   )

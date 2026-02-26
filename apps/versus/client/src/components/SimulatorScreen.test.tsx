@@ -115,6 +115,18 @@ describe('SimulatorScreen', () => {
     expect(screen.getByRole('button', { name: /melee/i })).toBeInTheDocument()
   })
 
+  it('Run Simulation button has onClick when enabled', () => {
+    render(<SimulatorScreen onSignOut={vi.fn()} />)
+    // Select attacker and defender
+    const unitButtons = screen.getAllByRole('button', { name: /intercessor squad/i })
+    fireEvent.click(unitButtons[0]) // attacker
+    fireEvent.click(unitButtons[1]) // defender
+    const btn = screen.getByRole('button', { name: /run simulation/i })
+    expect(btn).not.toBeDisabled()
+    // Should not throw when clicked
+    fireEvent.click(btn)
+  })
+
   it('shows unit profile card after selecting a unit', () => {
     render(<SimulatorScreen onSignOut={vi.fn()} />)
     const unitButtons = screen.getAllByRole('button', { name: /intercessor squad/i })
