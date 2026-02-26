@@ -64,36 +64,61 @@ List Screen → Match Setup → Mission Setup → Pre-Game → Battle → End Ga
 
 ---
 
-## Features required to be considered functional
+## Features
 
-1. This integrates with the tournament tracker. Whatever we do here, this is the SAME interface for recording matches in a tournament.
-2. If not supplied by the tournament tracker, these are the required inputs at the start of the game:
-    a. Date (Auto, but can be edited  if not a part of a tournament)
-    b. Location (Auto from tournament data, but optional  if not a part of a tournament)
-    c. Tournament Name (Auto from tournament data, but optional if not a part of a tournament)
-    d. These extra fields are only shown if in a tournament, set automatically (current round, current place for each player, current record for each player)
-    e. Opponent Name (Auto from tournament)
-    f. Your name is set from login.
-    g. Opponent faction (Auto from tournament)
-    f. Opponent detachment (Auto from tournament)
-    g. Opponent list (Auto from tournament, but optional if not a part of a tournament)
-    h. Show Current selected list from list builder, and if not a part of a tournament, allow for a change to pick a different list.
-3. The second screen should be the following.
-    a. Dropdown for mission selection (Auto from tournament, otherwise allow selection)
-    b. Dropdown for Terrain layout (Auto from tournament, otherwise allow selection)
-    c. Checkboxes for the following: Include Twists, Include Challenger Cards (Auto selected if a part of a tournament from tournament data)
-    d. Require photos (Auto from Tournament)
-4. The next screen should include two selectors, one for Attacker/Defender and another for Who goes first.
-5. The next screen should be a total ripoff of TableTop Battles
-except ours will work.
-    a. CP tracking will use the standard rule (each player gets one at the start of each half turn, and allow for special rule additions, when a player adds a CP, the unit or rule used should be selected based opun their faction,detachment,units in their list, or this can be ignored)
-    b. When a user uses a CP, the list of strategems is presented, and the user can select one or ignore.
-    c. The user can select their secondaries randomly, or choose which is active for the round.
-    d. Special mission rules for primary, twists, or other modifying rules are all shown based upon the selected items, and modify primary score.
-    e. Secondary scoring is done from each secondary chosen.
-    f. Score can be modified by hand.
-    g. Each half round requires photos of the board if required, and each round has it's own set of data.
-6. The result at the end needs to be verified in the tournament tracker by the opponent if in a tournament.
+### Match Setup (Screen 1: MatchSetupScreen)
+- Date, location, your faction/detachment/list, opponent info
+- Tournament toggle: auto-populates from tournament data when enabled
+- `match.startFromPairing` for tournament integration
+
+### Mission Setup (Screen 2: MissionSetupScreen)
+- Mission, deployment zone, terrain layout dropdowns
+- **Twist cards checkbox** + selection (auto from tournament if applicable)
+- **Challenger cards checkbox** + selection (auto from tournament if applicable)
+- **Require photos checkbox** (auto from tournament if applicable)
+
+### Pre-Game (Screen 3: PregameScreen)
+- Attacker/defender selection
+- Who goes first selection
+
+### Battle (Screen 4: BattleScreen)
+Per-turn phase-based tracking. Each round has 2 turns (one per player):
+
+**Command Phase** per turn:
+- CP gain (+1 auto, override for special rules)
+- Primary VP scoring (stepper)
+- Secondary mission picker + VP per round
+- Stratagem picker (from IndexedDB faction data, or free-text)
+
+**Action Phase** per turn:
+- Unit destruction picker (from army list in IndexedDB)
+- Stratagem picker
+- Notes
+
+**Photo** per turn (if require photos is enabled):
+- Camera/file upload, preview, skip option
+
+**Round flow:**
+```
+Round N
+  ├─ Your turn: Command Phase → Action Phase → Photo
+  ├─ Their turn: Command Phase → Action Phase → Photo
+  └─ Round Summary → Confirm & Save
+```
+
+**Scoreboard** — persistent header showing your VP vs their VP, CP for both, round number.
+CP carries forward across rounds: `start + gained - spent`.
+
+### End Game (Screen 5: EndGameScreen)
+- Per-player VP/CP breakdown
+- Secondary mission summary (which secondaries, VP per round)
+- Stratagem usage summary
+- Photos per round (if captured)
+- Result card (WIN/LOSS/DRAW)
+
+### Tournament Integration
+- Same UI for tournament and casual matches
+- Tournament result verified by opponent in tournament tracker
 
 ## Database Schema
 
@@ -110,31 +135,62 @@ their_final_score   INTEGER
 is_tournament       INTEGER NOT NULL DEFAULT 0
 created_at          INTEGER NOT NULL
 closed_at           INTEGER
-opponent_name       TEXT              -- opponent display name
-opponent_detachment TEXT              -- opponent detachment name
-your_faction        TEXT              -- your faction
-your_detachment     TEXT              -- your detachment
-terrain_layout      TEXT              -- terrain layout name
-deployment_zone     TEXT              -- deployment zone name
+opponent_name       TEXT
+opponent_detachment TEXT
+your_faction        TEXT
+your_detachment     TEXT
+terrain_layout      TEXT
+deployment_zone     TEXT
+twist_cards         TEXT              -- JSON (V3)
+challenger_cards    TEXT              -- JSON (V3)
+require_photos      INTEGER DEFAULT 0 -- V3
 attacker_defender   TEXT              -- YOU_ATTACK | YOU_DEFEND
 who_goes_first      TEXT              -- YOU | THEM
-date                INTEGER           -- match date (epoch)
-location            TEXT              -- location string
-tournament_name     TEXT              -- tournament name (denormalized)
-tournament_id       TEXT              -- FK to tournaments (optional)
+date                INTEGER
+location            TEXT
+tournament_name     TEXT
+tournament_id       TEXT
 
-// turns
-id                TEXT PRIMARY KEY
-match_id          TEXT NOT NULL     -- references matches.id
-turn_number       INTEGER NOT NULL
-photo_url         TEXT              -- Cloudflare R2
-your_units_lost   TEXT NOT NULL     -- JSON: [{ contentId, name }]
-their_units_lost  TEXT NOT NULL     -- JSON: [{ contentId, name }]
-primary_scored    INTEGER NOT NULL
-secondary_scored  INTEGER NOT NULL
-cp_spent          INTEGER NOT NULL
-notes             TEXT
-created_at        INTEGER NOT NULL
+// turns (one row per round — V3 per-player columns)
+id                    TEXT PRIMARY KEY
+match_id              TEXT NOT NULL
+turn_number           INTEGER NOT NULL
+photo_url             TEXT              -- legacy
+your_units_lost       TEXT DEFAULT '[]' -- legacy JSON
+their_units_lost      TEXT DEFAULT '[]' -- legacy JSON
+primary_scored        INTEGER DEFAULT 0 -- legacy (= yourPrimary)
+secondary_scored      INTEGER DEFAULT 0 -- legacy (= yourSecondary)
+cp_spent              INTEGER DEFAULT 0 -- legacy (= yourCpSpent)
+notes                 TEXT
+your_cp_start         INTEGER DEFAULT 0
+your_cp_gained        INTEGER DEFAULT 1
+your_cp_spent         INTEGER DEFAULT 0
+their_cp_start        INTEGER DEFAULT 0
+their_cp_gained       INTEGER DEFAULT 1
+their_cp_spent        INTEGER DEFAULT 0
+your_primary          INTEGER DEFAULT 0
+their_primary         INTEGER DEFAULT 0
+your_secondary        INTEGER DEFAULT 0
+their_secondary       INTEGER DEFAULT 0
+your_photo_url        TEXT
+their_photo_url       TEXT
+your_units_destroyed  TEXT DEFAULT '[]' -- JSON
+their_units_destroyed TEXT DEFAULT '[]' -- JSON
+created_at            INTEGER NOT NULL
+
+// match_secondaries (V3)
+id              TEXT PRIMARY KEY
+match_id        TEXT NOT NULL      -- references matches.id
+player          TEXT NOT NULL      -- YOUR | THEIRS
+secondary_name  TEXT NOT NULL
+vp_per_round    TEXT DEFAULT '[]'  -- JSON: [r1, r2, r3, r4, r5]
+
+// stratagem_log (V3)
+id              TEXT PRIMARY KEY
+turn_id         TEXT NOT NULL      -- references turns.id
+player          TEXT NOT NULL      -- YOUR | THEIRS
+stratagem_name  TEXT NOT NULL
+cp_cost         INTEGER DEFAULT 1
 ```
 
 ---
@@ -148,43 +204,75 @@ match.start({
   isTournament?, opponentName?, opponentDetachment?,
   yourFaction?, yourDetachment?,
   terrainLayout?, deploymentZone?,
+  twistCards?, challengerCards?, requirePhotos?,
   attackerDefender?, whoGoesFirst?,
   date?, location?, tournamentName?, tournamentId?
 })                                                -> match
-match.get(id)                                     -> match + all turns
+match.get(id)                                     -> match + turns + secondaries
 match.list()                                      -> match[]
 match.close({ matchId, yourScore, theirScore })   -> { result, yourScore, theirScore }
 match.startFromPairing({ pairingId })             -> match (auto-populated from tournament pairing)
 
-// Turns
-turn.add({ matchId, turnNumber, yourUnitsLost, theirUnitsLost, primaryScored, secondaryScored, cpSpent, notes?, photoDataUrl })
+// Turns (V3 — per-player fields)
+turn.add({
+  matchId, turnNumber,
+  yourUnitsLost, theirUnitsLost, primaryScored, secondaryScored, cpSpent,  // legacy
+  yourCpStart?, yourCpGained?, yourCpSpent?,
+  theirCpStart?, theirCpGained?, theirCpSpent?,
+  yourPrimary?, theirPrimary?, yourSecondary?, theirSecondary?,
+  yourPhotoDataUrl?, theirPhotoDataUrl?,
+  yourUnitsDestroyed?, theirUnitsDestroyed?,
+  stratagems?: [{ player, stratagemName, cpCost }],
+  notes?, photoDataUrl?
+})
 turn.update({ turnId, ...fields })
+
+// Secondaries (V3)
+secondary.set({ matchId, player, secondaryName })   -> matchSecondary
+secondary.score({ secondaryId, roundNumber, vp })    -> matchSecondary
+secondary.list({ matchId })                          -> matchSecondary[]
+secondary.remove({ secondaryId })                    -> void
 ```
 
 ---
 
 ## Testing
 
-**97 tests** (40 server + 57 client), all passing.
+**196 tests** (58 server + 138 client), all passing.
 
 ```
 server/src/
   lib/
-    scoring/result.ts / result.test.ts
-    storage/r2.ts / r2.test.ts
-  routers/                                 <- router integration tests
-server/src/server.test.ts                  <- HTTP session integration tests
+    scoring/result.ts / result.test.ts              <- 3 tests
+    storage/r2.ts / r2.test.ts                       <- 6 tests
+  routers/
+    match.test.ts                                    <- 20 tests: start, list, get, close, startFromPairing
+    turn.test.ts                                     <- 9 tests: add (with V3 fields + stratagems), update
+    secondary.test.ts                                <- 14 tests: set, score, list, remove
+  server.test.ts                                     <- 6 tests: HTTP session integration
 
 client/src/components/
   GameTrackerScreen.test.tsx               <- 13 tests: screen router, wizard flow, navigation
   MatchSetupScreen.test.tsx                <- 10 tests: fields, validation, tournament toggle
-  MissionSetupScreen.test.tsx              <- 7 tests: mission/deployment/terrain selectors
+  MissionSetupScreen.test.tsx              <- 11 tests: mission/deployment/terrain, twist/challenger/photos
   PregameScreen.test.tsx                   <- 7 tests: attacker/defender, who goes first
-  BattleScreen.test.tsx                    <- 9 tests: round tracking, VP/CP, end game
-  EndGameScreen.test.tsx                   <- 11 tests: result, scores, stats, round breakdown
+  BattleScreen.test.tsx                    <- 9 tests: scoreboard, round wizard, end game
+  EndGameScreen.test.tsx                   <- 13 tests: result, per-player stats, secondaries, rounds
+  battle/
+    VpStepper.test.tsx                     <- 6 tests: increment/decrement, min/max
+    Scoreboard.test.tsx                    <- 4 tests: round number, VP, CP, opponent
+    StratagemPicker.test.tsx               <- 7 tests: add/remove, input validation
+    UnitPicker.test.tsx                    <- 7 tests: add/remove, custom label
+    SecondaryPicker.test.tsx               <- 8 tests: add/remove/score, VP display
+    PhotoCaptureScreen.test.tsx            <- 6 tests: capture, skip, required
+    CommandPhaseScreen.test.tsx            <- 9 tests: CP, VP, secondaries, stratagems
+    ActionPhaseScreen.test.tsx             <- 8 tests: units, stratagems, notes
+    TurnFlow.test.tsx                      <- 5 tests: phase transitions, photo flow
+    RoundSummary.test.tsx                  <- 8 tests: per-player data, confirm/back
+    RoundWizard.test.tsx                   <- 7 tests: turn order, save, back
 ```
 
 ```bash
-cd apps/game-tracker/server && pnpm test   # 40 server tests
-cd apps/game-tracker/client && pnpm test   # 57 client tests
+cd apps/game-tracker/server && pnpm test   # 58 server tests
+cd apps/game-tracker/client && pnpm test   # 138 client tests
 ```

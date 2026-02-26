@@ -34,6 +34,9 @@ type MissionSetupData = {
   mission: string
   deploymentZone: string
   terrainLayout: string
+  includeTwists: boolean
+  includeChallenger: boolean
+  requirePhotos: boolean
 }
 
 type Props = {
@@ -47,6 +50,9 @@ export function MissionSetupScreen({ onNext, onBack }: Props) {
   const [mission, setMission] = useState('')
   const [deploymentZone, setDeploymentZone] = useState('')
   const [terrainLayout, setTerrainLayout] = useState('')
+  const [includeTwists, setIncludeTwists] = useState(false)
+  const [includeChallenger, setIncludeChallenger] = useState(false)
+  const [requirePhotos, setRequirePhotos] = useState(false)
 
   const canProceed = mission !== ''
 
@@ -105,6 +111,41 @@ export function MissionSetupScreen({ onNext, onBack }: Props) {
           </select>
         </div>
 
+        <div className="space-y-3">
+          <label className="flex items-center gap-3 cursor-pointer">
+            <input
+              type="checkbox"
+              checked={includeTwists}
+              onChange={(e) => setIncludeTwists(e.target.checked)}
+              aria-label="Include Twist Cards"
+              className="w-5 h-5 rounded border-slate-800 bg-slate-900 text-amber-400 focus:ring-amber-400"
+            />
+            <span className="text-slate-100">Include Twist Cards</span>
+          </label>
+
+          <label className="flex items-center gap-3 cursor-pointer">
+            <input
+              type="checkbox"
+              checked={includeChallenger}
+              onChange={(e) => setIncludeChallenger(e.target.checked)}
+              aria-label="Include Challenger Cards"
+              className="w-5 h-5 rounded border-slate-800 bg-slate-900 text-amber-400 focus:ring-amber-400"
+            />
+            <span className="text-slate-100">Include Challenger Cards</span>
+          </label>
+
+          <label className="flex items-center gap-3 cursor-pointer">
+            <input
+              type="checkbox"
+              checked={requirePhotos}
+              onChange={(e) => setRequirePhotos(e.target.checked)}
+              aria-label="Require Photos"
+              className="w-5 h-5 rounded border-slate-800 bg-slate-900 text-amber-400 focus:ring-amber-400"
+            />
+            <span className="text-slate-100">Require Photos</span>
+          </label>
+        </div>
+
         <button
           onClick={() => {
             if (!canProceed) return
@@ -112,6 +153,9 @@ export function MissionSetupScreen({ onNext, onBack }: Props) {
               mission,
               deploymentZone,
               terrainLayout,
+              includeTwists,
+              includeChallenger,
+              requirePhotos,
             })
           }}
           disabled={!canProceed}

@@ -43,6 +43,42 @@ describe('MissionSetupScreen', () => {
     )
   })
 
+  it('shows twist cards checkbox', () => {
+    render(<MissionSetupScreen onNext={vi.fn()} onBack={vi.fn()} />)
+    expect(screen.getByLabelText('Include Twist Cards')).toBeInTheDocument()
+  })
+
+  it('shows challenger cards checkbox', () => {
+    render(<MissionSetupScreen onNext={vi.fn()} onBack={vi.fn()} />)
+    expect(screen.getByLabelText('Include Challenger Cards')).toBeInTheDocument()
+  })
+
+  it('shows require photos checkbox', () => {
+    render(<MissionSetupScreen onNext={vi.fn()} onBack={vi.fn()} />)
+    expect(screen.getByLabelText('Require Photos')).toBeInTheDocument()
+  })
+
+  it('includes checkbox state in onNext data', () => {
+    const onNext = vi.fn()
+    render(<MissionSetupScreen onNext={onNext} onBack={vi.fn()} />)
+
+    fireEvent.change(screen.getByLabelText('Select mission'), {
+      target: { value: 'Take and Hold' },
+    })
+    fireEvent.click(screen.getByLabelText('Include Twist Cards'))
+    fireEvent.click(screen.getByLabelText('Require Photos'))
+    fireEvent.click(screen.getByRole('button', { name: /next/i }))
+
+    expect(onNext).toHaveBeenCalledWith(
+      expect.objectContaining({
+        mission: 'Take and Hold',
+        includeTwists: true,
+        includeChallenger: false,
+        requirePhotos: true,
+      }),
+    )
+  })
+
   it('calls onBack when back is clicked', () => {
     const onBack = vi.fn()
     render(<MissionSetupScreen onNext={vi.fn()} onBack={onBack} />)

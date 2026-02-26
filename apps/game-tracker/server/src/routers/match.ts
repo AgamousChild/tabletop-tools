@@ -1,7 +1,7 @@
 import { TRPCError } from '@trpc/server'
 import { and, eq } from 'drizzle-orm'
 import { z } from 'zod'
-import { matches, turns, tournaments, tournamentPlayers, pairings, rounds } from '@tabletop-tools/db'
+import { matches, turns, matchSecondaries, tournaments, tournamentPlayers, pairings, rounds } from '@tabletop-tools/db'
 
 import { protectedProcedure, router } from '../trpc'
 import { deriveResult } from '../lib/scoring/result'
@@ -24,6 +24,9 @@ export const matchRouter = router({
         yourDetachment: z.string().optional(),
         terrainLayout: z.string().optional(),
         deploymentZone: z.string().optional(),
+        twistCards: z.string().optional(),
+        challengerCards: z.string().optional(),
+        requirePhotos: z.boolean().default(false),
         attackerDefender: z.string().optional(),
         whoGoesFirst: z.string().optional(),
         date: z.number().int().optional(),
@@ -53,6 +56,9 @@ export const matchRouter = router({
         yourDetachment: input.yourDetachment ?? null,
         terrainLayout: input.terrainLayout ?? null,
         deploymentZone: input.deploymentZone ?? null,
+        twistCards: input.twistCards ?? null,
+        challengerCards: input.challengerCards ?? null,
+        requirePhotos: input.requirePhotos ? 1 : 0,
         attackerDefender: input.attackerDefender ?? null,
         whoGoesFirst: input.whoGoesFirst ?? null,
         date: input.date ?? null,
@@ -161,7 +167,11 @@ export const matchRouter = router({
         .select()
         .from(turns)
         .where(eq(turns.matchId, input.id))
-      return { ...match, turns: matchTurns }
+      const secondaries = await ctx.db
+        .select()
+        .from(matchSecondaries)
+        .where(eq(matchSecondaries.matchId, input.id))
+      return { ...match, turns: matchTurns, secondaries }
     }),
 
   close: protectedProcedure

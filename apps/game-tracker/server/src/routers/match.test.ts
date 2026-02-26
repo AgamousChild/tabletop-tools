@@ -136,6 +136,20 @@ beforeAll(async () => {
       to_override INTEGER NOT NULL DEFAULT 0,
       created_at INTEGER NOT NULL
     );
+    CREATE TABLE IF NOT EXISTS match_secondaries (
+      id TEXT PRIMARY KEY,
+      match_id TEXT NOT NULL REFERENCES matches(id) ON DELETE CASCADE,
+      player TEXT NOT NULL,
+      secondary_name TEXT NOT NULL,
+      vp_per_round TEXT NOT NULL DEFAULT '[]'
+    );
+    CREATE TABLE IF NOT EXISTS stratagem_log (
+      id TEXT PRIMARY KEY,
+      turn_id TEXT NOT NULL REFERENCES turns(id) ON DELETE CASCADE,
+      player TEXT NOT NULL,
+      stratagem_name TEXT NOT NULL,
+      cp_cost INTEGER NOT NULL DEFAULT 1
+    );
     INSERT INTO "user" (id, name, email, email_verified, created_at, updated_at)
     VALUES ('user-1', 'Alice', 'alice@example.com', 0, 0, 0);
     INSERT INTO "user" (id, name, email, email_verified, created_at, updated_at)
@@ -185,6 +199,29 @@ describe('match.start', () => {
     expect(match.isTournament).toBe(1)
   })
 
+  it('stores twistCards, challengerCards, and requirePhotos', async () => {
+    const caller = createCaller(ctx)
+    const match = await caller.match.start({
+      opponentFaction: 'Drukhari',
+      mission: 'Sites of Power',
+      twistCards: '["Chilling Rain"]',
+      challengerCards: '["Rise to the Challenge"]',
+      requirePhotos: true,
+    })
+    expect(match.twistCards).toBe('["Chilling Rain"]')
+    expect(match.challengerCards).toBe('["Rise to the Challenge"]')
+    expect(match.requirePhotos).toBe(1)
+  })
+
+  it('defaults requirePhotos to 0', async () => {
+    const caller = createCaller(ctx)
+    const match = await caller.match.start({
+      opponentFaction: 'Tau',
+      mission: 'Purge the Foe',
+    })
+    expect(match.requirePhotos).toBe(0)
+  })
+
   it('rejects unauthenticated callers', async () => {
     const caller = createCaller(unauthCtx)
     await expect(
@@ -208,7 +245,7 @@ describe('match.list', () => {
 })
 
 describe('match.get', () => {
-  it('returns a match with its turns', async () => {
+  it('returns a match with its turns and secondaries', async () => {
     const caller = createCaller(ctx)
     const created = await caller.match.start({ opponentFaction: 'Tau', mission: 'Capture' })
 
@@ -216,6 +253,8 @@ describe('match.get', () => {
     expect(fetched.id).toBe(created.id)
     expect(Array.isArray(fetched.turns)).toBe(true)
     expect(fetched.turns).toHaveLength(0)
+    expect(Array.isArray(fetched.secondaries)).toBe(true)
+    expect(fetched.secondaries).toHaveLength(0)
   })
 
   it('throws NOT_FOUND for unknown id', async () => {
