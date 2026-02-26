@@ -29,6 +29,8 @@ beforeAll(async () => {
       defender_content_id TEXT NOT NULL,
       defender_name TEXT NOT NULL,
       result TEXT NOT NULL,
+      config_hash TEXT,
+      weapon_config TEXT,
       created_at INTEGER NOT NULL
     );
     INSERT INTO "user" (id, name, email, email_verified, created_at, updated_at)

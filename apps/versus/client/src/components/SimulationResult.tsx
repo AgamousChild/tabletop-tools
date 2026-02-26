@@ -1,4 +1,4 @@
-type Result = {
+export type Result = {
   expectedWounds: number
   expectedModelsRemoved: number
   survivors: number
@@ -6,14 +6,21 @@ type Result = {
   bestCase: { wounds: number; modelsRemoved: number }
 }
 
+export type WeaponBreakdown = {
+  weaponName: string
+  expectedWounds: number
+  expectedModelsRemoved: number
+}
+
 type Props = {
   attackerName: string
   defenderName: string
   result: Result
+  weaponBreakdowns?: WeaponBreakdown[]
   onSave: () => void
 }
 
-export function SimulationResult({ attackerName, defenderName, result, onSave }: Props) {
+export function SimulationResult({ attackerName, defenderName, result, weaponBreakdowns, onSave }: Props) {
   return (
     <div className="rounded-xl bg-slate-900 border border-slate-800 p-6 space-y-5">
       {/* Matchup header */}
@@ -60,6 +67,21 @@ export function SimulationResult({ attackerName, defenderName, result, onSave }:
           </p>
         </div>
       </div>
+
+      {/* Per-weapon breakdown */}
+      {weaponBreakdowns && weaponBreakdowns.length > 1 && (
+        <div className="space-y-1.5">
+          <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Per-weapon breakdown</p>
+          {weaponBreakdowns.map((wb, i) => (
+            <div key={i} className="flex justify-between items-center text-sm">
+              <span className="text-slate-400 truncate mr-2">{wb.weaponName}</span>
+              <span className="text-slate-300 tabular-nums whitespace-nowrap">
+                {wb.expectedWounds.toFixed(1)} wounds ({wb.expectedModelsRemoved.toFixed(1)} models)
+              </span>
+            </div>
+          ))}
+        </div>
+      )}
 
       {/* Save */}
       <button

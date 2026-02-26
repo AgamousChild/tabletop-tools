@@ -4,6 +4,8 @@ import { playerRouter } from './player'
 import { roundRouter } from './round'
 import { resultRouter } from './result'
 import { eloRouter } from './elo'
+import { cardRouter } from './card'
+import { awardRouter } from './award'
 
 export const appRouter = router({
   health: publicProcedure.query(() => ({ status: 'ok' as const })),
@@ -12,6 +14,8 @@ export const appRouter = router({
   round: roundRouter,
   result: resultRouter,
   elo: eloRouter,
+  card: cardRouter,
+  award: awardRouter,
 })
 
 export type AppRouter = typeof appRouter

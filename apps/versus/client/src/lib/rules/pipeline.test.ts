@@ -3,6 +3,8 @@ import { describe, expect, it } from 'vitest'
 import {
   effectiveSave,
   resolveAttacks,
+  resolveMin,
+  resolveMax,
   resolveHits,
   resolveSaves,
   resolveWounds,
@@ -33,6 +35,46 @@ describe('resolveAttacks', () => {
   })
   it('D3+2 = 4', () => {
     expect(resolveAttacks('D3+2')).toBeCloseTo(4)
+  })
+})
+
+// ── resolveMin ──────────────────────────────────────────────────────────────
+
+describe('resolveMin', () => {
+  it('returns a flat number as-is', () => {
+    expect(resolveMin(3)).toBe(3)
+  })
+  it('D6 min = 1', () => {
+    expect(resolveMin('D6')).toBe(1)
+  })
+  it('2D6 min = 2', () => {
+    expect(resolveMin('2D6')).toBe(2)
+  })
+  it('D6+1 min = 2', () => {
+    expect(resolveMin('D6+1')).toBe(2)
+  })
+  it('D3 min = 1', () => {
+    expect(resolveMin('D3')).toBe(1)
+  })
+})
+
+// ── resolveMax ──────────────────────────────────────────────────────────────
+
+describe('resolveMax', () => {
+  it('returns a flat number as-is', () => {
+    expect(resolveMax(3)).toBe(3)
+  })
+  it('D6 max = 6', () => {
+    expect(resolveMax('D6')).toBe(6)
+  })
+  it('2D6 max = 12', () => {
+    expect(resolveMax('2D6')).toBe(12)
+  })
+  it('D3+1 max = 4', () => {
+    expect(resolveMax('D3+1')).toBe(4)
+  })
+  it('D6+2 max = 8', () => {
+    expect(resolveMax('D6+2')).toBe(8)
   })
 })
 
@@ -271,5 +313,47 @@ describe('simulateWeapon', () => {
       4, 4, 1, 5,  // < 6 models, no BLAST bonus
     )
     expect(r.expectedWounds).toBeGreaterThan(rNoBlast.expectedWounds)
+  })
+
+  it('worstCase is 1 minimum damage for flat damage weapons', () => {
+    const r = simulateWeapon(
+      { name: 'Bolter', range: 24, attacks: 2, skill: 3, strength: 4, ap: 0, damage: 1, abilities: [] },
+      4, 3, 2, 5,
+    )
+    expect(r.worstCase.wounds).toBe(1)
+    expect(r.worstCase.modelsRemoved).toBe(0) // 1 wound < 2 wounds per model
+  })
+
+  it('worstCase uses minimum dice roll for variable damage', () => {
+    const r = simulateWeapon(
+      { name: 'Melta', range: 12, attacks: 1, skill: 4, strength: 9, ap: -4, damage: 'D6', abilities: [] },
+      4, 3, 2, 5,
+    )
+    // D6 min = 1
+    expect(r.worstCase.wounds).toBe(1)
+  })
+
+  it('bestCase uses maximum dice roll for variable damage', () => {
+    // 2 attacks, D6 damage each, vs T4 Sv3+ 2W 5 models
+    const r = simulateWeapon(
+      { name: 'Melta', range: 12, attacks: 2, skill: 4, strength: 9, ap: -4, damage: 'D6', abilities: [] },
+      4, 3, 2, 5,
+    )
+    // Best: 2 attacks × 6 max damage = 12, capped at 5 models × 2 wounds = 10
+    expect(r.bestCase.wounds).toBe(10)
+    expect(r.bestCase.modelsRemoved).toBe(5)
+  })
+
+  it('invuln save is passed through to resolveSaves', () => {
+    const noInvuln = simulateWeapon(
+      { name: 'Bolter', range: 24, attacks: 10, skill: 3, strength: 4, ap: -2, damage: 1, abilities: [] },
+      4, 3, 2, 10,
+    )
+    const withInvuln = simulateWeapon(
+      { name: 'Bolter', range: 24, attacks: 10, skill: 3, strength: 4, ap: -2, damage: 1, abilities: [] },
+      4, 3, 2, 10, 4,
+    )
+    // Invuln 4+ is better than 3+ armor with AP-2 (which becomes 5+)
+    expect(withInvuln.expectedWounds).toBeLessThan(noInvuln.expectedWounds)
   })
 })

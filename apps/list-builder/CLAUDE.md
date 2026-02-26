@@ -43,6 +43,19 @@ Server only provides rating data — all list CRUD and unit lookups happen clien
 
 ---
 
+## Features required to be considered functional 
+  
+1. More than one screen, create a screen with the names of the lists chosen. and the ability to add lists.
+2. After creating a list, the next screen should be the size of the army, with the associated battle size name 500, 1000, 2000, 3000 pts
+3. Then the faction should be chosen on the next screen, with the detachment then chosen.
+4. In the unit selector, only legal choices should be shown, we can worry about legends later.
+5. There are rules in army creation, limited choices for 500 pt games, 2 of any in 1000 pt games, and 3 of any in 2000 pt games, plus warlords must be chosen. And the user cant choose more than the allotted number of points.
+6. Some detachments have unit choice limitations, use them if they exist.
+7. During unit selection, after each unit is chosen, show the statistical information about that unit, and in a popup, show units that have the same or fewer points in the same role that have higher win rates.
+8. There should be a done button, and then the list selections should be saved back to the server, associated with the user and the list name, it should just be user_id, faction_id, detachment_id, unit_id(S) for that list. This is the same as saved locally, except that the user can a list name, and a description to the list.
+9. The export should export in full text format, and the user can then edit that text before saving off, it should be stored in the clipboard, and the user should see a note.
+10. The user should be able to select a list and then a button should be available that says use list in tournament tracker. that list is then used when the user registers for a tournament.
+
 ## Data Sources
 
 ### Unit Profiles: IndexedDB (via game-data-store)

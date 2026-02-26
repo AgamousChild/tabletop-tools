@@ -1,17 +1,60 @@
 import type { UnitProfile } from '@tabletop-tools/game-content'
 
 const DB_NAME = 'tabletop-tools-game-data'
-const DB_VERSION = 2
+const DB_VERSION = 3
 const UNITS_STORE = 'units'
 const META_STORE = 'meta'
 const LISTS_STORE = 'lists'
 const LIST_UNITS_STORE = 'list_units'
+const DETACHMENTS_STORE = 'detachments'
+const DETACHMENT_ABILITIES_STORE = 'detachment_abilities'
+const STRATAGEMS_STORE = 'stratagems'
+const ENHANCEMENTS_STORE = 'enhancements'
+const LEADER_ATTACHMENTS_STORE = 'leader_attachments'
+const UNIT_COMPOSITIONS_STORE = 'unit_compositions'
+const UNIT_COSTS_STORE = 'unit_costs'
+const WARGEAR_OPTIONS_STORE = 'wargear_options'
+const UNIT_KEYWORDS_STORE = 'unit_keywords'
+const UNIT_ABILITIES_STORE = 'unit_abilities'
+const MISSIONS_STORE = 'missions'
+
+const ALL_STORES = [
+  UNITS_STORE, META_STORE, LISTS_STORE, LIST_UNITS_STORE,
+  DETACHMENTS_STORE, DETACHMENT_ABILITIES_STORE, STRATAGEMS_STORE,
+  ENHANCEMENTS_STORE, LEADER_ATTACHMENTS_STORE, UNIT_COMPOSITIONS_STORE,
+  UNIT_COSTS_STORE, WARGEAR_OPTIONS_STORE, UNIT_KEYWORDS_STORE,
+  UNIT_ABILITIES_STORE, MISSIONS_STORE,
+]
+
+const GAME_RULES_STORES = [
+  DETACHMENTS_STORE, DETACHMENT_ABILITIES_STORE, STRATAGEMS_STORE,
+  ENHANCEMENTS_STORE, LEADER_ATTACHMENTS_STORE, UNIT_COMPOSITIONS_STORE,
+  UNIT_COSTS_STORE, WARGEAR_OPTIONS_STORE, UNIT_KEYWORDS_STORE,
+  UNIT_ABILITIES_STORE, MISSIONS_STORE,
+]
+
+// ── Types ────────────────────────────────────────────────────────────────────
 
 export interface ImportMeta {
   lastImport: number
   factions: string[]
   totalUnits: number
   parserVersion?: number
+}
+
+export interface RulesImportMeta {
+  lastImport: number
+  counts: {
+    detachments: number
+    stratagems: number
+    enhancements: number
+    leaderAttachments: number
+    unitCompositions: number
+    unitCosts: number
+    wargearOptions: number
+    unitKeywords: number
+    unitAbilities: number
+  }
 }
 
 export interface LocalList {
@@ -32,11 +75,104 @@ export interface LocalListUnit {
   count: number
 }
 
+export interface Detachment {
+  id: string
+  factionId: string
+  name: string
+  legend: string
+  type: string
+}
+
+export interface DetachmentAbility {
+  id: string
+  detachmentId: string
+  factionId: string
+  name: string
+  legend: string
+  description: string
+}
+
+export interface Stratagem {
+  id: string
+  factionId: string
+  detachmentId: string
+  name: string
+  type: string
+  cpCost: string
+  turn: string
+  phase: string
+  legend: string
+  description: string
+}
+
+export interface Enhancement {
+  id: string
+  factionId: string
+  detachmentId: string
+  name: string
+  legend: string
+  description: string
+  cost: string
+}
+
+export interface LeaderAttachment {
+  id: string
+  leaderId: string
+  attachedId: string
+}
+
+export interface UnitComposition {
+  id: string
+  datasheetId: string
+  line: string
+  description: string
+}
+
+export interface UnitCost {
+  id: string
+  datasheetId: string
+  line: string
+  description: string
+  cost: string
+}
+
+export interface WargearOption {
+  id: string
+  datasheetId: string
+  line: string
+  description: string
+}
+
+export interface UnitKeyword {
+  id: string
+  datasheetId: string
+  keyword: string
+  isFactionKeyword: boolean
+}
+
+export interface UnitAbility {
+  id: string
+  datasheetId: string
+  name: string
+  description: string
+  type: string
+}
+
+export interface Mission {
+  id: string
+  name: string
+  type: string
+  description: string
+}
+
+// ── Database ─────────────────────────────────────────────────────────────────
+
 function openDb(): Promise<IDBDatabase> {
   return new Promise((resolve, reject) => {
     const req = indexedDB.open(DB_NAME, DB_VERSION)
     req.onupgradeneeded = () => {
       const db = req.result
+      // V1 stores
       if (!db.objectStoreNames.contains(UNITS_STORE)) {
         const store = db.createObjectStore(UNITS_STORE, { keyPath: 'id' })
         store.createIndex('faction', 'faction', { unique: false })
@@ -44,6 +180,7 @@ function openDb(): Promise<IDBDatabase> {
       if (!db.objectStoreNames.contains(META_STORE)) {
         db.createObjectStore(META_STORE)
       }
+      // V2 stores
       if (!db.objectStoreNames.contains(LISTS_STORE)) {
         db.createObjectStore(LISTS_STORE, { keyPath: 'id' })
       }
@@ -51,11 +188,105 @@ function openDb(): Promise<IDBDatabase> {
         const luStore = db.createObjectStore(LIST_UNITS_STORE, { keyPath: 'id' })
         luStore.createIndex('listId', 'listId', { unique: false })
       }
+      // V3 stores — game rules data
+      if (!db.objectStoreNames.contains(DETACHMENTS_STORE)) {
+        const s = db.createObjectStore(DETACHMENTS_STORE, { keyPath: 'id' })
+        s.createIndex('factionId', 'factionId', { unique: false })
+      }
+      if (!db.objectStoreNames.contains(DETACHMENT_ABILITIES_STORE)) {
+        const s = db.createObjectStore(DETACHMENT_ABILITIES_STORE, { keyPath: 'id' })
+        s.createIndex('detachmentId', 'detachmentId', { unique: false })
+      }
+      if (!db.objectStoreNames.contains(STRATAGEMS_STORE)) {
+        const s = db.createObjectStore(STRATAGEMS_STORE, { keyPath: 'id' })
+        s.createIndex('factionId', 'factionId', { unique: false })
+        s.createIndex('detachmentId', 'detachmentId', { unique: false })
+      }
+      if (!db.objectStoreNames.contains(ENHANCEMENTS_STORE)) {
+        const s = db.createObjectStore(ENHANCEMENTS_STORE, { keyPath: 'id' })
+        s.createIndex('detachmentId', 'detachmentId', { unique: false })
+      }
+      if (!db.objectStoreNames.contains(LEADER_ATTACHMENTS_STORE)) {
+        const s = db.createObjectStore(LEADER_ATTACHMENTS_STORE, { keyPath: 'id' })
+        s.createIndex('leaderId', 'leaderId', { unique: false })
+      }
+      if (!db.objectStoreNames.contains(UNIT_COMPOSITIONS_STORE)) {
+        const s = db.createObjectStore(UNIT_COMPOSITIONS_STORE, { keyPath: 'id' })
+        s.createIndex('datasheetId', 'datasheetId', { unique: false })
+      }
+      if (!db.objectStoreNames.contains(UNIT_COSTS_STORE)) {
+        const s = db.createObjectStore(UNIT_COSTS_STORE, { keyPath: 'id' })
+        s.createIndex('datasheetId', 'datasheetId', { unique: false })
+      }
+      if (!db.objectStoreNames.contains(WARGEAR_OPTIONS_STORE)) {
+        const s = db.createObjectStore(WARGEAR_OPTIONS_STORE, { keyPath: 'id' })
+        s.createIndex('datasheetId', 'datasheetId', { unique: false })
+      }
+      if (!db.objectStoreNames.contains(UNIT_KEYWORDS_STORE)) {
+        const s = db.createObjectStore(UNIT_KEYWORDS_STORE, { keyPath: 'id' })
+        s.createIndex('datasheetId', 'datasheetId', { unique: false })
+      }
+      if (!db.objectStoreNames.contains(UNIT_ABILITIES_STORE)) {
+        const s = db.createObjectStore(UNIT_ABILITIES_STORE, { keyPath: 'id' })
+        s.createIndex('datasheetId', 'datasheetId', { unique: false })
+      }
+      if (!db.objectStoreNames.contains(MISSIONS_STORE)) {
+        db.createObjectStore(MISSIONS_STORE, { keyPath: 'id' })
+      }
     }
     req.onsuccess = () => resolve(req.result)
     req.onerror = () => reject(req.error)
   })
 }
+
+// ── Internal helpers ─────────────────────────────────────────────────────────
+
+async function batchSave<T>(storeName: string, items: T[]): Promise<void> {
+  const db = await openDb()
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(storeName, 'readwrite')
+    const store = tx.objectStore(storeName)
+    for (const item of items) store.put(item)
+    tx.oncomplete = () => { db.close(); resolve() }
+    tx.onerror = () => { db.close(); reject(tx.error) }
+  })
+}
+
+async function getAllFromStore<T>(storeName: string): Promise<T[]> {
+  const db = await openDb()
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(storeName, 'readonly')
+    const req = tx.objectStore(storeName).getAll()
+    req.onsuccess = () => resolve(req.result as T[])
+    req.onerror = () => reject(req.error)
+    tx.oncomplete = () => db.close()
+  })
+}
+
+async function getByIndex<T>(storeName: string, indexName: string, key: string): Promise<T[]> {
+  const db = await openDb()
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(storeName, 'readonly')
+    const index = tx.objectStore(storeName).index(indexName)
+    const req = index.getAll(IDBKeyRange.only(key))
+    req.onsuccess = () => resolve(req.result as T[])
+    req.onerror = () => reject(req.error)
+    tx.oncomplete = () => db.close()
+  })
+}
+
+async function getOne<T>(storeName: string, id: string): Promise<T | null> {
+  const db = await openDb()
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(storeName, 'readonly')
+    const req = tx.objectStore(storeName).get(id)
+    req.onsuccess = () => resolve((req.result as T | undefined) ?? null)
+    req.onerror = () => reject(req.error)
+    tx.oncomplete = () => db.close()
+  })
+}
+
+// ── Unit store ───────────────────────────────────────────────────────────────
 
 export async function saveUnits(units: UnitProfile[]): Promise<void> {
   const db = await openDb()
@@ -181,11 +412,10 @@ export async function clearFaction(faction: string): Promise<void> {
 export async function clearAll(): Promise<void> {
   const db = await openDb()
   return new Promise((resolve, reject) => {
-    const tx = db.transaction([UNITS_STORE, META_STORE, LISTS_STORE, LIST_UNITS_STORE], 'readwrite')
-    tx.objectStore(UNITS_STORE).clear()
-    tx.objectStore(META_STORE).clear()
-    tx.objectStore(LISTS_STORE).clear()
-    tx.objectStore(LIST_UNITS_STORE).clear()
+    const tx = db.transaction(ALL_STORES, 'readwrite')
+    for (const name of ALL_STORES) {
+      tx.objectStore(name).clear()
+    }
     tx.oncomplete = () => {
       db.close()
       resolve()
@@ -196,6 +426,26 @@ export async function clearAll(): Promise<void> {
     }
   })
 }
+
+export async function clearGameRules(): Promise<void> {
+  const db = await openDb()
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(GAME_RULES_STORES, 'readwrite')
+    for (const name of GAME_RULES_STORES) {
+      tx.objectStore(name).clear()
+    }
+    tx.oncomplete = () => {
+      db.close()
+      resolve()
+    }
+    tx.onerror = () => {
+      db.close()
+      reject(tx.error)
+    }
+  })
+}
+
+// ── Import meta ──────────────────────────────────────────────────────────────
 
 export async function getImportMeta(): Promise<ImportMeta | null> {
   const db = await openDb()
@@ -213,6 +463,33 @@ export async function setImportMeta(meta: ImportMeta): Promise<void> {
   return new Promise((resolve, reject) => {
     const tx = db.transaction(META_STORE, 'readwrite')
     tx.objectStore(META_STORE).put(meta, 'importMeta')
+    tx.oncomplete = () => {
+      db.close()
+      resolve()
+    }
+    tx.onerror = () => {
+      db.close()
+      reject(tx.error)
+    }
+  })
+}
+
+export async function getRulesImportMeta(): Promise<RulesImportMeta | null> {
+  const db = await openDb()
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(META_STORE, 'readonly')
+    const req = tx.objectStore(META_STORE).get('rulesImportMeta')
+    req.onsuccess = () => resolve((req.result as RulesImportMeta | undefined) ?? null)
+    req.onerror = () => reject(req.error)
+    tx.oncomplete = () => db.close()
+  })
+}
+
+export async function setRulesImportMeta(meta: RulesImportMeta): Promise<void> {
+  const db = await openDb()
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(META_STORE, 'readwrite')
+    tx.objectStore(META_STORE).put(meta, 'rulesImportMeta')
     tx.oncomplete = () => {
       db.close()
       resolve()
@@ -329,3 +606,66 @@ export async function removeListUnit(id: string): Promise<void> {
     tx.onerror = () => { db.close(); reject(tx.error) }
   })
 }
+
+// ── Detachments ──────────────────────────────────────────────────────────────
+
+export const saveDetachments = (items: Detachment[]) => batchSave(DETACHMENTS_STORE, items)
+export const getDetachmentsByFaction = (factionId: string) => getByIndex<Detachment>(DETACHMENTS_STORE, 'factionId', factionId)
+export const getDetachment = (id: string) => getOne<Detachment>(DETACHMENTS_STORE, id)
+
+// ── Detachment Abilities ─────────────────────────────────────────────────────
+
+export const saveDetachmentAbilities = (items: DetachmentAbility[]) => batchSave(DETACHMENT_ABILITIES_STORE, items)
+export const getDetachmentAbilities = (detachmentId: string) => getByIndex<DetachmentAbility>(DETACHMENT_ABILITIES_STORE, 'detachmentId', detachmentId)
+
+// ── Stratagems ───────────────────────────────────────────────────────────────
+
+export const saveStratagems = (items: Stratagem[]) => batchSave(STRATAGEMS_STORE, items)
+
+export async function getStratagems(filter: { factionId: string; detachmentId?: string }): Promise<Stratagem[]> {
+  const results = await getByIndex<Stratagem>(STRATAGEMS_STORE, 'factionId', filter.factionId)
+  if (filter.detachmentId) {
+    return results.filter(s => s.detachmentId === filter.detachmentId)
+  }
+  return results
+}
+
+// ── Enhancements ─────────────────────────────────────────────────────────────
+
+export const saveEnhancements = (items: Enhancement[]) => batchSave(ENHANCEMENTS_STORE, items)
+export const getEnhancements = (detachmentId: string) => getByIndex<Enhancement>(ENHANCEMENTS_STORE, 'detachmentId', detachmentId)
+
+// ── Leader Attachments ───────────────────────────────────────────────────────
+
+export const saveLeaderAttachments = (items: LeaderAttachment[]) => batchSave(LEADER_ATTACHMENTS_STORE, items)
+export const getLeaderAttachments = (leaderId: string) => getByIndex<LeaderAttachment>(LEADER_ATTACHMENTS_STORE, 'leaderId', leaderId)
+
+// ── Unit Compositions ────────────────────────────────────────────────────────
+
+export const saveUnitCompositions = (items: UnitComposition[]) => batchSave(UNIT_COMPOSITIONS_STORE, items)
+export const getUnitCompositions = (datasheetId: string) => getByIndex<UnitComposition>(UNIT_COMPOSITIONS_STORE, 'datasheetId', datasheetId)
+
+// ── Unit Costs ───────────────────────────────────────────────────────────────
+
+export const saveUnitCosts = (items: UnitCost[]) => batchSave(UNIT_COSTS_STORE, items)
+export const getUnitCosts = (datasheetId: string) => getByIndex<UnitCost>(UNIT_COSTS_STORE, 'datasheetId', datasheetId)
+
+// ── Wargear Options ──────────────────────────────────────────────────────────
+
+export const saveWargearOptions = (items: WargearOption[]) => batchSave(WARGEAR_OPTIONS_STORE, items)
+export const getWargearOptions = (datasheetId: string) => getByIndex<WargearOption>(WARGEAR_OPTIONS_STORE, 'datasheetId', datasheetId)
+
+// ── Unit Keywords ────────────────────────────────────────────────────────────
+
+export const saveUnitKeywords = (items: UnitKeyword[]) => batchSave(UNIT_KEYWORDS_STORE, items)
+export const getUnitKeywords = (datasheetId: string) => getByIndex<UnitKeyword>(UNIT_KEYWORDS_STORE, 'datasheetId', datasheetId)
+
+// ── Unit Abilities ───────────────────────────────────────────────────────────
+
+export const saveUnitAbilities = (items: UnitAbility[]) => batchSave(UNIT_ABILITIES_STORE, items)
+export const getUnitAbilities = (datasheetId: string) => getByIndex<UnitAbility>(UNIT_ABILITIES_STORE, 'datasheetId', datasheetId)
+
+// ── Missions ─────────────────────────────────────────────────────────────────
+
+export const saveMissions = (items: Mission[]) => batchSave(MISSIONS_STORE, items)
+export const getMissions = () => getAllFromStore<Mission>(MISSIONS_STORE)

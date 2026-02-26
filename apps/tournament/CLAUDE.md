@@ -48,6 +48,27 @@ Client uses `@tabletop-tools/ui` for AuthScreen, auth client, tRPC links, and Ta
 
 ---
 
+## Features required to be considered functional 
+
+1. TO can register for event.
+2. Add Geocoding to event location
+3. Give an area for description using markdown, add image upload for tournament, add external link, add location, add number of rounds.
+4. Add Date and start time as data fields, image storage, link
+5. Add TO information, location, description, image, link, number registered to the Tournament display
+6. Add registered player management to the TO display - Add players, remove, reinstate. Yellow Card, Red Card, Ban
+7. Show previous Card status of each player to the TO.
+8. In TO tools, add special award location where the TO can add awards like Best Painted, Most sportsmanlike, etc. All customizable per tournament.
+9. In round management, allow TO to enter score results if players do not use Game-tracker to score the match.
+10. Add a clock to each round. (Optional)
+11. Add a start time to each round.
+12. Close Tournament should export data to the new-meta data.
+13. Add a new selection interface to the main page of the app called Play, where users are presented with a search interface to find tournaments in their area. allow them to favorite and unfavorite them, and register.
+14. After a tournament is closed out, show the view results button instead of the registration button.
+15. Store tournament data back to a user record, and make a new selection interface to the main page called My Info, that shows list names, tournaments played in, ELO, GLICKO, rank, and overall record, include Card data and Ban data.
+16. Add a list search tool for lists used in tournaments by faction.
+17. Add a player search tool that shows tournaments played in, card status, lists used.
+
+
 ## Client-Side Hash Routing
 
 Bookmarkable, shareable URLs for key views:
@@ -101,14 +122,24 @@ id, user_id, pairing_id, rating_before, rating_after, delta, opponent_id, record
 
 ```typescript
 // Tournaments
-tournament.create({ name, eventDate, location?, format, totalRounds }) -> tournament
+tournament.create({ name, eventDate, location?, format, totalRounds, description?, externalLink?, startTime?, maxPlayers?, missionPool?, requirePhotos?, includeTwists?, includeChallenger? }) -> tournament
 tournament.get(id), tournament.listOpen(), tournament.listMine()
 tournament.advanceStatus(id), tournament.delete(id)
 tournament.standings(id)  -> { round, players[] with rank/wins/losses/draws/VP/margin/SOS }
 
 // Players
 player.register(), player.updateList(), player.checkIn(), player.drop()
-player.list(), player.lockLists(), player.removePlayer()
+player.list(), player.lockLists(), player.removePlayer(), player.reinstate()
+
+// Cards (Yellow/Red)
+card.issue({ tournamentId, playerId, cardType, reason })
+card.listForTournament({ tournamentId })
+card.playerHistory({ userId })
+
+// Awards
+award.create({ tournamentId, name, description? })
+award.assign({ awardId, recipientId })
+award.list({ tournamentId })
 
 // Rounds
 round.create(), round.generatePairings(), round.get(), round.close()
@@ -146,7 +177,7 @@ ELO updates when the TO closes a round -- all results committed together.
 
 ## Testing
 
-**73 tests** (48 server + 25 client), all passing.
+**98 tests** (60 server + 38 client), all passing.
 
 ```
 server/src/
@@ -154,17 +185,21 @@ server/src/
     swiss/pairings.ts / .test.ts         <- Swiss algorithm: round 1, mid-event, odd players, rematches, byes
     standings/compute.ts / .test.ts      <- tiebreaker ordering, SOS calculation
     result/derive.ts / .test.ts          <- result derivation from VP
-  routers/                               <- router integration tests with TRPCError codes
-server/src/server.test.ts                <- HTTP session integration tests
+  routers/
+    tournament.test.ts                   <- 11 tests: CRUD, status, standings
+    card.test.ts                         <- 5 tests: issue, list, history, auth
+    award.test.ts                        <- 5 tests: create, assign, list, auth
+  server.test.ts                         <- 6 tests: HTTP session integration
 
 client/src/
   components/
     TournamentScreen.test.tsx            <- 18 tests: list, create, detail, standings, registration, rounds
+    ManageTournament.test.tsx            <- 12 tests: tabs, players, cards, awards, reinstate
   lib/
-    router.test.ts                       <- 7 tests: parseHash for all hash routes
+    router.test.ts                       <- 8 tests: parseHash for all hash routes
 ```
 
 ```bash
-cd apps/tournament/server && pnpm test   # 48 server tests
-cd apps/tournament/client && pnpm test   # 25 client tests
+cd apps/tournament/server && pnpm test   # 60 server tests
+cd apps/tournament/client && pnpm test   # 38 client tests
 ```

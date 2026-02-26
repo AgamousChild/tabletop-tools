@@ -36,3 +36,4 @@ wahapedia-export/
 game-content-data/
 *.cat
 *.gst
+apps/data-import/client/public/wahapedia/

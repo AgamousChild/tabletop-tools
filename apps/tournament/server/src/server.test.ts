@@ -25,6 +25,17 @@ beforeAll(async () => {
       format TEXT NOT NULL,
       total_rounds INTEGER NOT NULL,
       status TEXT NOT NULL DEFAULT 'DRAFT',
+      description TEXT,
+      image_url TEXT,
+      external_link TEXT,
+      start_time TEXT,
+      latitude REAL,
+      longitude REAL,
+      mission_pool TEXT,
+      require_photos INTEGER NOT NULL DEFAULT 0,
+      include_twists INTEGER NOT NULL DEFAULT 0,
+      include_challenger INTEGER NOT NULL DEFAULT 0,
+      max_players INTEGER,
       created_at INTEGER NOT NULL
     );
     CREATE TABLE IF NOT EXISTS tournament_players (
@@ -35,6 +46,7 @@ beforeAll(async () => {
       faction TEXT NOT NULL,
       detachment TEXT,
       list_text TEXT,
+      list_id TEXT,
       list_locked INTEGER NOT NULL DEFAULT 0,
       checked_in INTEGER NOT NULL DEFAULT 0,
       dropped INTEGER NOT NULL DEFAULT 0,

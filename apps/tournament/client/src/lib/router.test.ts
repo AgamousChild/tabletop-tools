@@ -26,6 +26,10 @@ describe('parseHash', () => {
     expect(parseHash('#/tournament/abc/register')).toEqual({ view: 'tournament-register', id: 'abc' })
   })
 
+  it('returns tournament-manage view', () => {
+    expect(parseHash('#/tournament/abc/manage')).toEqual({ view: 'tournament-manage', id: 'abc' })
+  })
+
   it('returns round view with both IDs', () => {
     expect(parseHash('#/tournament/abc/round/r1')).toEqual({
       view: 'round',

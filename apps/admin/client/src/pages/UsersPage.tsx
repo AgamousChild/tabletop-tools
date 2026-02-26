@@ -1,7 +1,11 @@
+import { useState } from 'react'
 import { trpc } from '../lib/trpc'
 
 export function UsersPage() {
-  const { data, isLoading, error } = trpc.stats.recentUsers.useQuery({ limit: 50 })
+  const { data, isLoading, error, refetch } = trpc.stats.recentUsers.useQuery({ limit: 50 })
+  const deleteUser = trpc.stats.deleteUser.useMutation({ onSuccess: () => void refetch() })
+  const revokeAll = trpc.stats.revokeAllSessions.useMutation()
+  const [confirmId, setConfirmId] = useState<string | null>(null)
 
   if (isLoading) {
     return <p className="text-slate-400">Loading users...</p>
@@ -29,6 +33,7 @@ export function UsersPage() {
               <th className="text-left px-4 py-3 text-slate-400 font-medium">Name</th>
               <th className="text-left px-4 py-3 text-slate-400 font-medium">Email</th>
               <th className="text-left px-4 py-3 text-slate-400 font-medium">Joined</th>
+              <th className="text-right px-4 py-3 text-slate-400 font-medium">Actions</th>
             </tr>
           </thead>
           <tbody>
@@ -38,6 +43,43 @@ export function UsersPage() {
                 <td className="px-4 py-3 text-slate-300">{user.email}</td>
                 <td className="px-4 py-3 text-slate-400">
                   {user.createdAt ? formatDate(user.createdAt) : '—'}
+                </td>
+                <td className="px-4 py-3 text-right">
+                  {confirmId === user.id ? (
+                    <span className="flex gap-2 justify-end items-center">
+                      <span className="text-red-400 text-xs">Confirm?</span>
+                      <button
+                        onClick={() => {
+                          deleteUser.mutate({ userId: user.id })
+                          setConfirmId(null)
+                        }}
+                        className="text-xs px-2 py-1 rounded bg-red-400/20 text-red-400 hover:bg-red-400/30"
+                      >
+                        Yes
+                      </button>
+                      <button
+                        onClick={() => setConfirmId(null)}
+                        className="text-xs px-2 py-1 text-slate-400"
+                      >
+                        No
+                      </button>
+                    </span>
+                  ) : (
+                    <span className="flex gap-2 justify-end">
+                      <button
+                        onClick={() => revokeAll.mutate({ userId: user.id })}
+                        className="text-xs px-2 py-1 rounded bg-amber-400/20 text-amber-400 hover:bg-amber-400/30"
+                      >
+                        Revoke Sessions
+                      </button>
+                      <button
+                        onClick={() => setConfirmId(user.id)}
+                        className="text-xs px-2 py-1 rounded bg-red-400/20 text-red-400 hover:bg-red-400/30"
+                      >
+                        Delete
+                      </button>
+                    </span>
+                  )}
                 </td>
               </tr>
             ))}

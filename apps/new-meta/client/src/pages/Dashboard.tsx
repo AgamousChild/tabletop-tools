@@ -30,6 +30,8 @@ export function Dashboard({ onFactionSelect }: Props) {
         <h2 className="text-lg font-medium text-slate-200 mb-4">Faction Win Rates</h2>
         {loadingFactions ? (
           <p className="text-slate-400 text-sm">Loading…</p>
+        ) : factions.length === 0 ? (
+          <p className="text-slate-500 text-sm">No tournament data yet. Import CSV data or close a tournament to see analytics.</p>
         ) : (
           <FactionTable stats={factions} onSelect={onFactionSelect} />
         )}
@@ -37,7 +39,11 @@ export function Dashboard({ onFactionSelect }: Props) {
 
       <section>
         <h2 className="text-lg font-medium text-slate-200 mb-4">Matchup Matrix</h2>
-        <MatchupMatrix cells={matchups} />
+        {matchups.length === 0 && !loadingFactions ? (
+          <p className="text-slate-500 text-sm">No matchup data available.</p>
+        ) : (
+          <MatchupMatrix cells={matchups} />
+        )}
       </section>
     </div>
   )

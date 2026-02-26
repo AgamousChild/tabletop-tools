@@ -12,7 +12,9 @@ export const playerRouter = router({
         tournamentId: z.string(),
         displayName: z.string().min(1),
         faction: z.string().min(1),
+        detachment: z.string().optional(),
         listText: z.string().optional(),
+        listId: z.string().optional(),
       }),
     )
     .mutation(async ({ ctx, input }) => {
@@ -32,8 +34,9 @@ export const playerRouter = router({
         userId: ctx.user.id,
         displayName: input.displayName,
         faction: input.faction,
-        detachment: null,
+        detachment: input.detachment ?? null,
         listText: input.listText ?? null,
+        listId: input.listId ?? null,
         listLocked: 0,
         checkedIn: 0,
         dropped: 0,
@@ -139,6 +142,31 @@ export const playerRouter = router({
         .set({ listLocked: 1 })
         .where(eq(tournamentPlayers.tournamentId, input.tournamentId))
       return { locked: true }
+    }),
+
+  reinstate: protectedProcedure
+    .input(z.object({ playerId: z.string() }))
+    .mutation(async ({ ctx, input }) => {
+      const player = await ctx.db
+        .select()
+        .from(tournamentPlayers)
+        .where(eq(tournamentPlayers.id, input.playerId))
+        .get()
+      if (!player) throw new TRPCError({ code: 'NOT_FOUND', message: 'Player not found' })
+      const tournament = await ctx.db
+        .select()
+        .from(tournaments)
+        .where(eq(tournaments.id, player.tournamentId))
+        .get()
+      if (!tournament || tournament.toUserId !== ctx.user.id)
+        throw new TRPCError({ code: 'FORBIDDEN', message: 'Not authorized' })
+      if (!player.dropped)
+        throw new TRPCError({ code: 'BAD_REQUEST', message: 'Player is not dropped' })
+      await ctx.db
+        .update(tournamentPlayers)
+        .set({ dropped: 0 })
+        .where(eq(tournamentPlayers.id, input.playerId))
+      return { reinstated: true }
     }),
 
   removePlayer: protectedProcedure

@@ -695,4 +695,82 @@ describe('stats router', () => {
       expect(result.total).toBe(4)
     })
   })
+
+  describe('stats.revokeSession', () => {
+    beforeEach(async () => {
+      await clearAllData()
+      const now = Math.floor(Date.now() / 1000)
+      const futureTs = now + 86400
+      await client.executeMultiple(`
+        INSERT INTO "user" (id, name, email, email_verified, created_at, updated_at) VALUES ('u1', 'Alice', 'alice@test.com', 0, ${now}, ${now});
+        INSERT INTO "session" (id, user_id, token, expires_at, created_at, updated_at) VALUES ('s1', 'u1', 'tok1', ${futureTs}, ${now}, ${now});
+      `)
+    })
+
+    it('revokes an active session', async () => {
+      const caller = createCaller(adminCtx)
+      const result = await caller.stats.revokeSession({ sessionId: 's1' })
+      expect(result.revoked).toBe(true)
+    })
+
+    it('throws NOT_FOUND for unknown session', async () => {
+      const caller = createCaller(adminCtx)
+      await expect(caller.stats.revokeSession({ sessionId: 'no-such' })).rejects.toMatchObject({ code: 'NOT_FOUND' })
+    })
+
+    it('rejects non-admin', async () => {
+      const caller = createCaller(nonAdminCtx)
+      await expect(caller.stats.revokeSession({ sessionId: 's1' })).rejects.toMatchObject({ code: 'FORBIDDEN' })
+    })
+  })
+
+  describe('stats.revokeAllSessions', () => {
+    beforeEach(async () => {
+      await clearAllData()
+      const now = Math.floor(Date.now() / 1000)
+      const futureTs = now + 86400
+      await client.executeMultiple(`
+        INSERT INTO "user" (id, name, email, email_verified, created_at, updated_at) VALUES ('u1', 'Alice', 'alice@test.com', 0, ${now}, ${now});
+        INSERT INTO "session" (id, user_id, token, expires_at, created_at, updated_at) VALUES ('s1', 'u1', 'tok1', ${futureTs}, ${now}, ${now});
+        INSERT INTO "session" (id, user_id, token, expires_at, created_at, updated_at) VALUES ('s2', 'u1', 'tok2', ${futureTs}, ${now}, ${now});
+      `)
+    })
+
+    it('revokes all sessions for a user', async () => {
+      const caller = createCaller(adminCtx)
+      const result = await caller.stats.revokeAllSessions({ userId: 'u1' })
+      expect(result.revoked).toBe(true)
+    })
+
+    it('throws NOT_FOUND for unknown user', async () => {
+      const caller = createCaller(adminCtx)
+      await expect(caller.stats.revokeAllSessions({ userId: 'no-such' })).rejects.toMatchObject({ code: 'NOT_FOUND' })
+    })
+  })
+
+  describe('stats.deleteUser', () => {
+    beforeEach(async () => {
+      await clearAllData()
+      const now = Math.floor(Date.now() / 1000)
+      await client.executeMultiple(`
+        INSERT INTO "user" (id, name, email, email_verified, created_at, updated_at) VALUES ('u1', 'Alice', 'alice@test.com', 0, ${now}, ${now});
+      `)
+    })
+
+    it('deletes a user', async () => {
+      const caller = createCaller(adminCtx)
+      const result = await caller.stats.deleteUser({ userId: 'u1' })
+      expect(result.deleted).toBe(true)
+    })
+
+    it('throws NOT_FOUND for unknown user', async () => {
+      const caller = createCaller(adminCtx)
+      await expect(caller.stats.deleteUser({ userId: 'no-such' })).rejects.toMatchObject({ code: 'NOT_FOUND' })
+    })
+
+    it('rejects non-admin', async () => {
+      const caller = createCaller(nonAdminCtx)
+      await expect(caller.stats.deleteUser({ userId: 'u1' })).rejects.toMatchObject({ code: 'FORBIDDEN' })
+    })
+  })
 })

@@ -3,6 +3,7 @@ import { authClient } from '../lib/auth'
 import { trpc } from '../lib/trpc'
 import { useHashRoute, navigate } from '../lib/router'
 import type { Route } from '../lib/router'
+import { ManageTournament } from './ManageTournament'
 
 type Props = { onSignOut: () => void }
 
@@ -92,7 +93,7 @@ export function TournamentScreen({ onSignOut }: Props) {
   const route = useHashRoute()
 
   // Extract IDs from route
-  const selectedTournamentId = route.view === 'tournament' || route.view === 'tournament-standings' || route.view === 'tournament-register'
+  const selectedTournamentId = route.view === 'tournament' || route.view === 'tournament-standings' || route.view === 'tournament-register' || route.view === 'tournament-manage'
     ? route.id
     : route.view === 'round'
       ? route.tournamentId
@@ -104,6 +105,13 @@ export function TournamentScreen({ onSignOut }: Props) {
   const [newFormat, setNewFormat] = useState('2000pts Matched Play')
   const [newRounds, setNewRounds] = useState('5')
   const [newLocation, setNewLocation] = useState('')
+  const [newDescription, setNewDescription] = useState('')
+  const [newStartTime, setNewStartTime] = useState('')
+  const [newMaxPlayers, setNewMaxPlayers] = useState('')
+  const [newExternalLink, setNewExternalLink] = useState('')
+  const [newRequirePhotos, setNewRequirePhotos] = useState(false)
+  const [newIncludeTwists, setNewIncludeTwists] = useState(false)
+  const [newIncludeChallenger, setNewIncludeChallenger] = useState(false)
 
   // Register form
   const [regName, setRegName] = useState('')
@@ -194,9 +202,23 @@ export function TournamentScreen({ onSignOut }: Props) {
       location: newLocation || undefined,
       format: newFormat,
       totalRounds: parseInt(newRounds, 10),
+      description: newDescription || undefined,
+      startTime: newStartTime || undefined,
+      maxPlayers: newMaxPlayers ? parseInt(newMaxPlayers, 10) : undefined,
+      externalLink: newExternalLink || undefined,
+      requirePhotos: newRequirePhotos,
+      includeTwists: newIncludeTwists,
+      includeChallenger: newIncludeChallenger,
     })
     setNewName('')
     setNewLocation('')
+    setNewDescription('')
+    setNewStartTime('')
+    setNewMaxPlayers('')
+    setNewExternalLink('')
+    setNewRequirePhotos(false)
+    setNewIncludeTwists(false)
+    setNewIncludeChallenger(false)
   }
 
   function handleRegister(e: React.FormEvent) {
@@ -259,17 +281,63 @@ export function TournamentScreen({ onSignOut }: Props) {
             value={newLocation}
             onChange={(e) => setNewLocation(e.target.value)}
           />
-          <div className="flex gap-2 items-center">
-            <label className="text-slate-400 text-sm">Rounds:</label>
-            <input
-              type="number"
-              min={1}
-              max={10}
-              className="w-20 px-3 py-2 rounded bg-slate-800 border border-slate-700 text-slate-100"
-              value={newRounds}
-              onChange={(e) => setNewRounds(e.target.value)}
-              required
-            />
+          <div className="flex gap-4 items-center">
+            <div className="flex gap-2 items-center">
+              <label className="text-slate-400 text-sm">Rounds:</label>
+              <input
+                type="number"
+                min={1}
+                max={10}
+                className="w-20 px-3 py-2 rounded bg-slate-800 border border-slate-700 text-slate-100"
+                value={newRounds}
+                onChange={(e) => setNewRounds(e.target.value)}
+                required
+              />
+            </div>
+            <div className="flex gap-2 items-center">
+              <label className="text-slate-400 text-sm">Max players:</label>
+              <input
+                type="number"
+                min={2}
+                className="w-20 px-3 py-2 rounded bg-slate-800 border border-slate-700 text-slate-100"
+                value={newMaxPlayers}
+                onChange={(e) => setNewMaxPlayers(e.target.value)}
+                placeholder="--"
+              />
+            </div>
+          </div>
+          <input
+            className="w-full px-3 py-2 rounded bg-slate-800 border border-slate-700 text-slate-100"
+            placeholder="Start time (e.g. 10:00 AM)"
+            value={newStartTime}
+            onChange={(e) => setNewStartTime(e.target.value)}
+          />
+          <textarea
+            className="w-full px-3 py-2 rounded bg-slate-800 border border-slate-700 text-slate-100 h-24"
+            placeholder="Description (optional, supports markdown)"
+            value={newDescription}
+            onChange={(e) => setNewDescription(e.target.value)}
+          />
+          <input
+            className="w-full px-3 py-2 rounded bg-slate-800 border border-slate-700 text-slate-100"
+            placeholder="External link (optional)"
+            value={newExternalLink}
+            onChange={(e) => setNewExternalLink(e.target.value)}
+          />
+          <div className="space-y-2">
+            <p className="text-slate-400 text-sm font-medium">Mission settings</p>
+            <label className="flex items-center gap-2 cursor-pointer">
+              <input type="checkbox" checked={newRequirePhotos} onChange={(e) => setNewRequirePhotos(e.target.checked)} className="w-4 h-4 accent-amber-400" />
+              <span className="text-sm text-slate-300">Require photos</span>
+            </label>
+            <label className="flex items-center gap-2 cursor-pointer">
+              <input type="checkbox" checked={newIncludeTwists} onChange={(e) => setNewIncludeTwists(e.target.checked)} className="w-4 h-4 accent-amber-400" />
+              <span className="text-sm text-slate-300">Include twist cards</span>
+            </label>
+            <label className="flex items-center gap-2 cursor-pointer">
+              <input type="checkbox" checked={newIncludeChallenger} onChange={(e) => setNewIncludeChallenger(e.target.checked)} className="w-4 h-4 accent-amber-400" />
+              <span className="text-sm text-slate-300">Include challenger cards</span>
+            </label>
           </div>
           <button
             type="submit"
@@ -471,6 +539,15 @@ export function TournamentScreen({ onSignOut }: Props) {
     )
   }
 
+  if (route.view === 'tournament-manage' && selectedTournamentId) {
+    return (
+      <ManageTournament
+        tournamentId={selectedTournamentId}
+        onBack={() => navigate(`#/tournament/${selectedTournamentId}`)}
+      />
+    )
+  }
+
   if ((route.view === 'tournament' || route.view === 'tournament-standings') && selectedTournamentId) {
     return (
       <div className="min-h-screen bg-slate-950 text-slate-100 p-4 max-w-2xl mx-auto">
@@ -487,6 +564,9 @@ export function TournamentScreen({ onSignOut }: Props) {
             {tournament?.location && (
               <p className="text-slate-500 text-sm">{tournament.location}</p>
             )}
+            {tournament?.startTime && (
+              <p className="text-slate-500 text-sm">Start: {tournament.startTime}</p>
+            )}
           </div>
           <div className="flex flex-col items-end gap-2">
             {tournament && <StatusBadge status={tournament.status} />}
@@ -501,6 +581,13 @@ export function TournamentScreen({ onSignOut }: Props) {
             )}
           </div>
         </div>
+
+        {/* Description */}
+        {tournament?.description && (
+          <div className="mb-4 p-4 rounded-lg bg-slate-900 border border-slate-800">
+            <p className="text-slate-300 text-sm whitespace-pre-wrap">{tournament.description}</p>
+          </div>
+        )}
 
         {/* Actions */}
         <div className="flex gap-2 mb-6 flex-wrap">
@@ -520,6 +607,14 @@ export function TournamentScreen({ onSignOut }: Props) {
             >
               + New Round
             </button>
+          )}
+          {isTO && (
+            <a
+              href={`#/tournament/${selectedTournamentId}/manage`}
+              className="px-4 py-2 rounded border border-amber-400/30 text-amber-400 hover:bg-amber-400/10 text-sm"
+            >
+              Manage
+            </a>
           )}
           <a
             href={`#/tournament/${selectedTournamentId}/standings`}

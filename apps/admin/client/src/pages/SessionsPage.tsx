@@ -1,7 +1,8 @@
 import { trpc } from '../lib/trpc'
 
 export function SessionsPage() {
-  const { data, isLoading, error } = trpc.stats.activeSessions.useQuery()
+  const { data, isLoading, error, refetch } = trpc.stats.activeSessions.useQuery()
+  const revokeSession = trpc.stats.revokeSession.useMutation({ onSuccess: () => void refetch() })
 
   if (isLoading) {
     return <p className="text-slate-400">Loading sessions...</p>
@@ -37,6 +38,7 @@ export function SessionsPage() {
               <th className="text-left px-4 py-3 text-slate-400 font-medium">Email</th>
               <th className="text-left px-4 py-3 text-slate-400 font-medium">IP</th>
               <th className="text-left px-4 py-3 text-slate-400 font-medium">Expires</th>
+              <th className="text-right px-4 py-3 text-slate-400 font-medium">Actions</th>
             </tr>
           </thead>
           <tbody>
@@ -47,6 +49,15 @@ export function SessionsPage() {
                 <td className="px-4 py-3 text-slate-400 font-mono text-xs">{s.ipAddress ?? '—'}</td>
                 <td className="px-4 py-3 text-slate-400">
                   {s.expiresAt ? formatDate(s.expiresAt) : '—'}
+                </td>
+                <td className="px-4 py-3 text-right">
+                  <button
+                    onClick={() => revokeSession.mutate({ sessionId: s.id })}
+                    disabled={revokeSession.isPending}
+                    className="text-xs px-2 py-1 rounded bg-red-400/20 text-red-400 hover:bg-red-400/30 disabled:opacity-50"
+                  >
+                    Revoke
+                  </button>
                 </td>
               </tr>
             ))}

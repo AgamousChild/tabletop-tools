@@ -65,6 +65,19 @@ Client uses `@tabletop-tools/ui` for AuthScreen, auth client, tRPC links, and Ta
 
 ---
 
+## Features required to be considered functional
+
+1. ✅ Calibration workflow needs to be clearer in the app. List out the steps on buttons for each step.
+   → `CalibrationWizard.tsx`: 4-step wizard (Background → Place Dice → Label Faces → Test Roll) with numbered step indicators.
+2. ✅ When the calibration is complete, it should ask for a test roll to show that it can accurately see the dice faces.
+   → Step 4 (Test Roll) captures a frame, shows detected dice with bounding boxes and pip values, and asks "Does this look correct?" with Recalibrate/Retest/Start Recording buttons.
+3. ✅ It should show squares around each face it captures, with the number of each dice captured in that square in the video, using an overlay.
+   → Canvas overlay in recording phase draws emerald bounding boxes with pip labels for each detected die face. CalibrationWizard step 4 also shows bounding boxes.
+4. ✅ You should not have to click a button to capture the rolls from that point forward.
+   → Hands-free auto-capture in recording phase: continuous requestAnimationFrame loop detects dice, waits for stability (~0.7s), auto-submits, then waits for dice removal before next detection.
+5. ✅ The Z score calculation and Chi squared values should show up in the video as an overlay, and the analysis should be in real time, and not a result after clicking complete.
+   → `StatsOverlay.tsx` displays real-time Z-score, χ², and verdict (FAIR/SUSPECT/LOADED) below the video feed. `DistributionChart.tsx` shows per-pip distribution with color-coded bars.
+
 ## Database Schema
 
 ```typescript
@@ -128,7 +141,7 @@ and again on `close` (final verdict).
 
 ## Testing
 
-**216 tests** (59 server + 157 client), all passing.
+**236 tests** (59 server + 177 client), all passing.
 
 ```
 server/src/lib/
@@ -147,10 +160,13 @@ client/src/lib/
     exemplarStore.ts / .test.ts          <- IndexedDB exemplar tests
 client/src/components/
   RollEntry.test.tsx                     <- 8 tests: pip buttons, undo, record, disabled states
-  ActiveSessionScreen.test.tsx           <- 5 tests: start phase, dice set name, done disabled, error, camera
+  ActiveSessionScreen.test.tsx           <- 5 tests: start, calibration, recording, error, dice set name
+  CalibrationWizard.test.tsx             <- 10 tests: 4-step wizard flow, recalibrate, camera error, IDB save
+  StatsOverlay.test.tsx                  <- 5 tests: verdict display (FAIR/SUSPECT/LOADED), formatting
+  DistributionChart.test.tsx             <- 4 tests: pip labels, counts, percentages, empty state
 ```
 
 ```bash
 cd apps/no-cheat/server && pnpm test   # 59 server tests
-cd apps/no-cheat/client && pnpm test   # 157 client tests
+cd apps/no-cheat/client && pnpm test   # 177 client tests
 ```

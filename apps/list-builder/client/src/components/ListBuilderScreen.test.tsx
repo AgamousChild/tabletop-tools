@@ -74,6 +74,21 @@ vi.mock('@tabletop-tools/game-data-store', () => ({
     error: null,
     isLoading: false,
   }),
+  useDetachments: () => ({
+    data: [],
+    error: null,
+    isLoading: false,
+  }),
+  useEnhancements: () => ({
+    data: [],
+    error: null,
+    isLoading: false,
+  }),
+  useUnitKeywords: () => ({
+    data: [],
+    error: null,
+    isLoading: false,
+  }),
   useGameDataAvailable: () => true,
   useLists: (...args: unknown[]) => mockUseLists(...args),
   useList: (...args: unknown[]) => mockUseList(...(args as [string | null])),
@@ -110,87 +125,59 @@ describe('ListBuilderScreen', () => {
     await waitFor(() => expect(onSignOut).toHaveBeenCalled())
   })
 
-  it('shows faction selector', () => {
+  it('shows My Army Lists screen initially', () => {
     render(<ListBuilderScreen onSignOut={vi.fn()} />)
+    expect(screen.getByText('My Army Lists')).toBeInTheDocument()
+  })
+
+  it('shows existing lists', () => {
+    render(<ListBuilderScreen onSignOut={vi.fn()} />)
+    expect(screen.getByText('My Crusade')).toBeInTheDocument()
+    expect(screen.getByText('Space Marines')).toBeInTheDocument()
+  })
+
+  it('shows + New List button', () => {
+    render(<ListBuilderScreen onSignOut={vi.fn()} />)
+    expect(screen.getByRole('button', { name: /new list/i })).toBeInTheDocument()
+  })
+
+  it('navigates to battle size screen when + New List is clicked', () => {
+    render(<ListBuilderScreen onSignOut={vi.fn()} />)
+    fireEvent.click(screen.getByRole('button', { name: /new list/i }))
+    expect(screen.getByText('Select Battle Size')).toBeInTheDocument()
+  })
+
+  it('shows battle size options', () => {
+    render(<ListBuilderScreen onSignOut={vi.fn()} />)
+    fireEvent.click(screen.getByRole('button', { name: /new list/i }))
+    expect(screen.getByText('500pts')).toBeInTheDocument()
+    expect(screen.getByText('2000pts')).toBeInTheDocument()
+    expect(screen.getByText('3000pts')).toBeInTheDocument()
+  })
+
+  it('navigates to faction screen after selecting battle size', () => {
+    render(<ListBuilderScreen onSignOut={vi.fn()} />)
+    fireEvent.click(screen.getByRole('button', { name: /new list/i }))
+    // Click the 2000pts option
+    fireEvent.click(screen.getByText('2000pts'))
+    expect(screen.getByText('2000pts Strike Force')).toBeInTheDocument()
     expect(screen.getByLabelText('Select faction')).toBeInTheDocument()
   })
 
-  it('shows existing lists in the list selector', () => {
+  it('opens existing list in unit selection screen', () => {
     render(<ListBuilderScreen onSignOut={vi.fn()} />)
-    expect(screen.getByText(/My Crusade/)).toBeInTheDocument()
+    fireEvent.click(screen.getByText('My Crusade'))
+    // Should show unit selection with the list loaded (appears in both browser and list panels)
+    expect(screen.getAllByText('Intercessors').length).toBeGreaterThanOrEqual(1)
+    // Should show Done button (unit selection screen has it)
+    expect(screen.getByRole('button', { name: /done/i })).toBeInTheDocument()
   })
 
-  it('shows units when faction is selected', () => {
+  it('back button returns to previous screen', () => {
     render(<ListBuilderScreen onSignOut={vi.fn()} />)
-    const factionSelect = screen.getByLabelText('Select faction')
-    fireEvent.change(factionSelect, { target: { value: 'Space Marines' } })
-    expect(screen.getByText('Intercessors')).toBeInTheDocument()
-  })
-
-  it('shows the active list units when a list is selected', () => {
-    render(<ListBuilderScreen onSignOut={vi.fn()} />)
-    const listSelect = screen.getByLabelText('Select list')
-    fireEvent.change(listSelect, { target: { value: 'list-1' } })
-    expect(screen.getByText('My Crusade')).toBeInTheDocument()
-    const ptElements = screen.getAllByText('90pts')
-    expect(ptElements.length).toBeGreaterThanOrEqual(1)
-  })
-
-  it('shows Create button disabled when no name or faction', () => {
-    render(<ListBuilderScreen onSignOut={vi.fn()} />)
-    const createBtn = screen.getByRole('button', { name: /create/i })
-    expect(createBtn).toBeDisabled()
-  })
-
-  it('creates a list with name and faction', async () => {
-    render(<ListBuilderScreen onSignOut={vi.fn()} />)
-    fireEvent.change(screen.getByLabelText('Select faction'), { target: { value: 'Space Marines' } })
-    fireEvent.change(screen.getByPlaceholderText('New list name…'), { target: { value: 'Test Army' } })
-    fireEvent.click(screen.getByRole('button', { name: /create/i }))
-
-    await waitFor(() =>
-      expect(mockCreateList).toHaveBeenCalledWith(
-        expect.objectContaining({ faction: 'Space Marines', name: 'Test Army' }),
-      ),
-    )
-  })
-
-  it('shows unit names in active list', () => {
-    render(<ListBuilderScreen onSignOut={vi.fn()} />)
-    fireEvent.change(screen.getByLabelText('Select list'), { target: { value: 'list-1' } })
-    expect(screen.getByText('Intercessors')).toBeInTheDocument()
-  })
-
-  it('shows remove button for units in active list', () => {
-    render(<ListBuilderScreen onSignOut={vi.fn()} />)
-    fireEvent.change(screen.getByLabelText('Select list'), { target: { value: 'list-1' } })
-    expect(screen.getByRole('button', { name: '✕' })).toBeInTheDocument()
-  })
-
-  it('removes a unit when remove button is clicked', async () => {
-    render(<ListBuilderScreen onSignOut={vi.fn()} />)
-    fireEvent.change(screen.getByLabelText('Select list'), { target: { value: 'list-1' } })
-    fireEvent.click(screen.getByRole('button', { name: '✕' }))
-
-    await waitFor(() =>
-      expect(mockRemoveListUnit).toHaveBeenCalledWith('lu1'),
-    )
-  })
-
-  it('shows Export list button when a list is active', () => {
-    render(<ListBuilderScreen onSignOut={vi.fn()} />)
-    fireEvent.change(screen.getByLabelText('Select list'), { target: { value: 'list-1' } })
-    expect(screen.getByRole('button', { name: /export list/i })).toBeInTheDocument()
-  })
-
-  it('shows placeholder when no list is active', () => {
-    render(<ListBuilderScreen onSignOut={vi.fn()} />)
-    expect(screen.getByText('Select or create a list to get started.')).toBeInTheDocument()
-  })
-
-  it('shows "No units yet" for an empty active list', () => {
-    render(<ListBuilderScreen onSignOut={vi.fn()} />)
-    // With no list selected, we see the "Select or create" message
-    expect(screen.getByText('Select or create a list to get started.')).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: /new list/i }))
+    expect(screen.getByText('Select Battle Size')).toBeInTheDocument()
+    fireEvent.click(screen.getByText('Back'))
+    expect(screen.getByText('My Army Lists')).toBeInTheDocument()
   })
 })
