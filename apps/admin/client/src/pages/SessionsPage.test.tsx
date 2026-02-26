@@ -3,10 +3,18 @@ import { render, screen } from '@testing-library/react'
 
 let queryReturn: any
 
+const mockRevokeSession = vi.fn()
+
 vi.mock('../lib/trpc', () => ({
   trpc: {
     stats: {
       activeSessions: { useQuery: vi.fn(() => queryReturn) },
+      revokeSession: {
+        useMutation: (opts?: { onSuccess?: () => void }) => ({
+          mutate: (args: unknown) => { mockRevokeSession(args); opts?.onSuccess?.() },
+          isPending: false,
+        }),
+      },
     },
   },
 }))

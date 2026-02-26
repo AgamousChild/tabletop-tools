@@ -6,6 +6,7 @@ export type Route =
   | { view: 'tournament'; id: string }
   | { view: 'tournament-standings'; id: string }
   | { view: 'tournament-register'; id: string }
+  | { view: 'tournament-manage'; id: string }
   | { view: 'round'; tournamentId: string; roundId: string }
 
 export function parseHash(hash: string): Route {
@@ -17,6 +18,7 @@ export function parseHash(hash: string): Route {
     const sub = tournamentMatch[2]
     if (sub === 'standings') return { view: 'tournament-standings', id }
     if (sub === 'register') return { view: 'tournament-register', id }
+    if (sub === 'manage') return { view: 'tournament-manage', id }
     if (sub?.startsWith('round/')) {
       return { view: 'round', tournamentId: id, roundId: sub.slice('round/'.length) }
     }

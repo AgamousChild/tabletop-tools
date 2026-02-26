@@ -16,6 +16,33 @@ export function resolveAttacks(attacks: number | string): number {
   return count * (1 + sides) / 2 + mod
 }
 
+/**
+ * Returns the minimum possible value for a dice notation or flat number.
+ * D6 → 1, 2D6 → 2, D6+1 → 2, flat 3 → 3.
+ */
+export function resolveMin(value: number | string): number {
+  if (typeof value === 'number') return value
+  const m = /^(\d*)D(\d+)([+-]\d+)?$/i.exec(String(value))
+  if (!m) return 0
+  const count = m[1] ? parseInt(m[1]) : 1
+  const mod = m[3] ? parseInt(m[3]) : 0
+  return Math.max(1, count + mod)
+}
+
+/**
+ * Returns the maximum possible value for a dice notation or flat number.
+ * D6 → 6, 2D6 → 12, D3+1 → 4, flat 3 → 3.
+ */
+export function resolveMax(value: number | string): number {
+  if (typeof value === 'number') return value
+  const m = /^(\d*)D(\d+)([+-]\d+)?$/i.exec(String(value))
+  if (!m) return 0
+  const count = m[1] ? parseInt(m[1]) : 1
+  const sides = parseInt(m[2]!)
+  const mod = m[3] ? parseInt(m[3]) : 0
+  return count * sides + mod
+}
+
 // ── Wound target table ────────────────────────────────────────────────────────
 
 /**
@@ -264,10 +291,18 @@ export function simulateWeapon(
   )
   const survivors = Math.max(0, defenderModelCount - expectedModelsRemoved)
 
-  // Best case: all attacks hit, wound, fail saves
-  const bestDamage = attackCount * damagePerUnsaved
+  // Best case: all attacks hit, wound, fail saves, max damage per attack
+  const maxDamagePerAttack = resolveMax(weapon.damage)
+  const bestDamage = attackCount * maxDamagePerAttack
   const bestWounds = Math.min(
     bestDamage,
+    defenderModelCount * defenderWoundsPerModel,
+  )
+
+  // Worst case: 1 attack gets through at minimum damage
+  const minDamagePerAttack = resolveMin(weapon.damage)
+  const worstWounds = Math.min(
+    minDamagePerAttack,
     defenderModelCount * defenderWoundsPerModel,
   )
 
@@ -275,7 +310,10 @@ export function simulateWeapon(
     expectedWounds: parseFloat(expectedTotalDamage.toFixed(4)),
     expectedModelsRemoved: parseFloat(expectedModelsRemoved.toFixed(4)),
     survivors: parseFloat(survivors.toFixed(4)),
-    worstCase: { wounds: 0, modelsRemoved: 0 },
+    worstCase: {
+      wounds: worstWounds,
+      modelsRemoved: Math.floor(worstWounds / defenderWoundsPerModel),
+    },
     bestCase: {
       wounds: bestWounds,
       modelsRemoved: Math.floor(bestWounds / defenderWoundsPerModel),

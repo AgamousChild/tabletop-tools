@@ -2,6 +2,10 @@ import {
   useUnitSearch,
   useFactions,
   useUnit,
+  useLeaderAttachments,
+  useUnitAbilities,
+  useUnitCompositions,
+  useWargearOptions,
 } from '@tabletop-tools/game-data-store'
 
 export function useUnits(query: { faction?: string; name?: string }) {
@@ -20,4 +24,28 @@ export function useGameUnit(id: string | null) {
     return { data: null, isLoading: false }
   }
   return { data: localResult.data, isLoading: localResult.isLoading }
+}
+
+export function useGameLeaderAttachments(leaderId: string | null) {
+  const result = useLeaderAttachments(leaderId ?? '')
+  if (!leaderId) return { data: [], isLoading: false }
+  return { data: result.data, isLoading: result.isLoading }
+}
+
+export function useGameUnitAbilities(datasheetId: string | null) {
+  const result = useUnitAbilities(datasheetId ?? '')
+  if (!datasheetId) return { data: [], isLoading: false }
+  return { data: result.data, isLoading: result.isLoading }
+}
+
+export function useGameUnitCompositions(datasheetId: string | null) {
+  const result = useUnitCompositions(datasheetId ?? '')
+  if (!datasheetId) return { data: [], isLoading: false }
+  return { data: result.data, isLoading: result.isLoading }
+}
+
+export function useGameWargearOptions(datasheetId: string | null) {
+  const result = useWargearOptions(datasheetId ?? '')
+  if (!datasheetId) return { data: [], isLoading: false }
+  return { data: result.data, isLoading: result.isLoading }
 }

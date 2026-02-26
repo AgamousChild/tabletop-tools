@@ -240,6 +240,9 @@ importers:
 
   apps/game-tracker/client:
     dependencies:
+      '@tabletop-tools/game-data-store':
+        specifier: workspace:*
+        version: link:../../../packages/game-data-store
       '@tabletop-tools/ui':
         specifier: workspace:*
         version: link:../../../packages/ui
@@ -283,6 +286,9 @@ importers:
       autoprefixer:
         specifier: ^10.4.20
         version: 10.4.24(postcss@8.5.6)
+      fake-indexeddb:
+        specifier: ^6.0.0
+        version: 6.2.5
       jsdom:
         specifier: ^28.1.0
         version: 28.1.0(@noble/hashes@2.0.1)

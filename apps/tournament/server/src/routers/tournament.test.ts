@@ -30,6 +30,17 @@ beforeAll(async () => {
       format TEXT NOT NULL,
       total_rounds INTEGER NOT NULL,
       status TEXT NOT NULL DEFAULT 'DRAFT',
+      description TEXT,
+      image_url TEXT,
+      external_link TEXT,
+      start_time TEXT,
+      latitude REAL,
+      longitude REAL,
+      mission_pool TEXT,
+      require_photos INTEGER NOT NULL DEFAULT 0,
+      include_twists INTEGER NOT NULL DEFAULT 0,
+      include_challenger INTEGER NOT NULL DEFAULT 0,
+      max_players INTEGER,
       created_at INTEGER NOT NULL
     );
     CREATE TABLE IF NOT EXISTS tournament_players (
@@ -40,6 +51,7 @@ beforeAll(async () => {
       faction TEXT NOT NULL,
       detachment TEXT,
       list_text TEXT,
+      list_id TEXT,
       list_locked INTEGER NOT NULL DEFAULT 0,
       checked_in INTEGER NOT NULL DEFAULT 0,
       dropped INTEGER NOT NULL DEFAULT 0,
@@ -83,6 +95,17 @@ beforeAll(async () => {
       delta INTEGER NOT NULL,
       opponent_id TEXT NOT NULL REFERENCES "user"(id),
       recorded_at INTEGER NOT NULL
+    );
+    CREATE TABLE IF NOT EXISTS imported_tournament_results (
+      id TEXT PRIMARY KEY,
+      imported_by TEXT NOT NULL,
+      event_name TEXT NOT NULL,
+      event_date INTEGER NOT NULL,
+      format TEXT NOT NULL,
+      meta_window TEXT NOT NULL,
+      raw_data TEXT NOT NULL,
+      parsed_data TEXT NOT NULL,
+      imported_at INTEGER NOT NULL
     );
     INSERT INTO "user" (id, name, email, email_verified, created_at, updated_at)
     VALUES ('to-1', 'Alice', 'alice@example.com', 0, 0, 0);
@@ -274,6 +297,82 @@ describe('elo.get', () => {
     const result = await caller.elo.get('to-1')
     expect(result.rating).toBe(1200)
     expect(result.gamesPlayed).toBe(0)
+  })
+})
+
+describe('tournament export to new-meta on COMPLETE', () => {
+  it('exports results to imported_tournament_results when advancing to COMPLETE', async () => {
+    const toCaller = createCaller(toCtx)
+    const t = await toCaller.tournament.create({
+      name: 'Export Test GT',
+      eventDate: 1700000000,
+      format: '2000pts',
+      totalRounds: 1,
+    })
+    // Advance through lifecycle
+    await toCaller.tournament.advanceStatus(t!.id) // → REGISTRATION
+
+    const p1Caller = createCaller(p1Ctx)
+    const p2Caller = createCaller(p2Ctx)
+    await p1Caller.player.register({ tournamentId: t!.id, displayName: 'Bob', faction: 'Orks' })
+    await p2Caller.player.register({ tournamentId: t!.id, displayName: 'Carol', faction: 'Necrons' })
+
+    await toCaller.tournament.advanceStatus(t!.id) // → CHECK_IN
+    await toCaller.tournament.advanceStatus(t!.id) // → IN_PROGRESS
+
+    // Create round and pairing with result
+    const round = await toCaller.round.create({ tournamentId: t!.id })
+    const players = await toCaller.player.list({ tournamentId: t!.id })
+    const tp1 = players.find((p) => p.displayName === 'Bob')!
+    const tp2 = players.find((p) => p.displayName === 'Carol')!
+
+    await client.execute({
+      sql: `INSERT INTO pairings (id, round_id, table_number, player1_id, player2_id, mission, player1_vp, player2_vp, result, confirmed, to_override, created_at)
+            VALUES ('export-pair', ?, 1, ?, ?, 'Take and Hold', 85, 60, 'P1_WIN', 1, 0, ?)`,
+      args: [round!.id, tp1.id, tp2.id, Date.now()],
+    })
+
+    // Advance to COMPLETE — should export
+    await toCaller.tournament.advanceStatus(t!.id) // → COMPLETE
+
+    // Verify export was written
+    const rows = await client.execute({ sql: 'SELECT * FROM imported_tournament_results WHERE event_name = ?', args: ['Export Test GT'] })
+    expect(rows.rows).toHaveLength(1)
+    const row = rows.rows[0]!
+    expect(row['format']).toBe('2000pts')
+    const parsed = JSON.parse(row['parsed_data'] as string)
+    expect(parsed).toHaveLength(1)
+    expect(parsed[0].players).toHaveLength(2)
+    // Bob won, so should be first
+    expect(parsed[0].players[0].playerName).toBe('Bob')
+    expect(parsed[0].players[0].wins).toBe(1)
+    expect(parsed[0].players[0].points).toBe(85)
+    expect(parsed[0].players[1].playerName).toBe('Carol')
+    expect(parsed[0].players[1].losses).toBe(1)
+  })
+})
+
+describe('player.register with listId and detachment', () => {
+  it('registers with detachment and listId', async () => {
+    const toCaller = createCaller(toCtx)
+    const t = await toCaller.tournament.create({
+      name: 'List Integration Test',
+      eventDate: 1700000000,
+      format: '2000pts',
+      totalRounds: 3,
+    })
+    await toCaller.tournament.advanceStatus(t!.id) // → REGISTRATION
+
+    const p1Caller = createCaller(p1Ctx)
+    const player = await p1Caller.player.register({
+      tournamentId: t!.id,
+      displayName: 'Bob',
+      faction: 'Space Marines',
+      detachment: 'Gladius Task Force',
+      listId: 'list-123',
+    })
+    expect(player?.detachment).toBe('Gladius Task Force')
+    expect(player?.listId).toBe('list-123')
   })
 })
 

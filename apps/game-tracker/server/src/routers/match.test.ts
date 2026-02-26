@@ -1,6 +1,6 @@
 import { createClient } from '@libsql/client'
 import { createDbFromClient } from '@tabletop-tools/db'
-import { afterAll, beforeAll, describe, expect, it } from 'vitest'
+import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest'
 
 import { createNullR2Storage } from '../lib/storage/r2'
 import { createCallerFactory } from '../trpc'
@@ -33,6 +33,21 @@ beforeAll(async () => {
       your_final_score INTEGER,
       their_final_score INTEGER,
       is_tournament INTEGER NOT NULL DEFAULT 0,
+      opponent_name TEXT,
+      opponent_detachment TEXT,
+      your_faction TEXT,
+      your_detachment TEXT,
+      terrain_layout TEXT,
+      deployment_zone TEXT,
+      twist_cards TEXT,
+      challenger_cards TEXT,
+      require_photos INTEGER NOT NULL DEFAULT 0,
+      attacker_defender TEXT,
+      who_goes_first TEXT,
+      date INTEGER,
+      location TEXT,
+      tournament_name TEXT,
+      tournament_id TEXT,
       created_at INTEGER NOT NULL,
       closed_at INTEGER
     );
@@ -47,6 +62,78 @@ beforeAll(async () => {
       secondary_scored INTEGER NOT NULL DEFAULT 0,
       cp_spent INTEGER NOT NULL DEFAULT 0,
       notes TEXT,
+      your_cp_start INTEGER NOT NULL DEFAULT 0,
+      your_cp_gained INTEGER NOT NULL DEFAULT 1,
+      your_cp_spent INTEGER NOT NULL DEFAULT 0,
+      their_cp_start INTEGER NOT NULL DEFAULT 0,
+      their_cp_gained INTEGER NOT NULL DEFAULT 1,
+      their_cp_spent INTEGER NOT NULL DEFAULT 0,
+      your_primary INTEGER NOT NULL DEFAULT 0,
+      their_primary INTEGER NOT NULL DEFAULT 0,
+      your_secondary INTEGER NOT NULL DEFAULT 0,
+      their_secondary INTEGER NOT NULL DEFAULT 0,
+      your_photo_url TEXT,
+      their_photo_url TEXT,
+      your_units_destroyed TEXT NOT NULL DEFAULT '[]',
+      their_units_destroyed TEXT NOT NULL DEFAULT '[]',
+      created_at INTEGER NOT NULL
+    );
+    CREATE TABLE IF NOT EXISTS tournaments (
+      id TEXT PRIMARY KEY,
+      to_user_id TEXT NOT NULL,
+      name TEXT NOT NULL,
+      event_date INTEGER NOT NULL,
+      location TEXT,
+      format TEXT NOT NULL,
+      total_rounds INTEGER NOT NULL,
+      status TEXT NOT NULL DEFAULT 'DRAFT',
+      description TEXT,
+      image_url TEXT,
+      external_link TEXT,
+      start_time TEXT,
+      latitude REAL,
+      longitude REAL,
+      mission_pool TEXT,
+      require_photos INTEGER NOT NULL DEFAULT 0,
+      include_twists INTEGER NOT NULL DEFAULT 0,
+      include_challenger INTEGER NOT NULL DEFAULT 0,
+      max_players INTEGER,
+      created_at INTEGER NOT NULL
+    );
+    CREATE TABLE IF NOT EXISTS tournament_players (
+      id TEXT PRIMARY KEY,
+      tournament_id TEXT NOT NULL,
+      user_id TEXT NOT NULL,
+      display_name TEXT NOT NULL,
+      faction TEXT NOT NULL,
+      detachment TEXT,
+      list_text TEXT,
+      list_id TEXT,
+      list_locked INTEGER NOT NULL DEFAULT 0,
+      checked_in INTEGER NOT NULL DEFAULT 0,
+      dropped INTEGER NOT NULL DEFAULT 0,
+      registered_at INTEGER NOT NULL
+    );
+    CREATE TABLE IF NOT EXISTS rounds (
+      id TEXT PRIMARY KEY,
+      tournament_id TEXT NOT NULL,
+      round_number INTEGER NOT NULL,
+      status TEXT NOT NULL DEFAULT 'PENDING',
+      created_at INTEGER NOT NULL
+    );
+    CREATE TABLE IF NOT EXISTS pairings (
+      id TEXT PRIMARY KEY,
+      round_id TEXT NOT NULL,
+      table_number INTEGER NOT NULL,
+      player1_id TEXT NOT NULL,
+      player2_id TEXT,
+      mission TEXT NOT NULL,
+      player1_vp INTEGER,
+      player2_vp INTEGER,
+      result TEXT,
+      reported_by TEXT,
+      confirmed INTEGER NOT NULL DEFAULT 0,
+      to_override INTEGER NOT NULL DEFAULT 0,
       created_at INTEGER NOT NULL
     );
     INSERT INTO "user" (id, name, email, email_verified, created_at, updated_at)
@@ -207,5 +294,69 @@ describe('match.close', () => {
     await expect(
       caller.match.close({ matchId: 'any', yourScore: 50, theirScore: 50 }),
     ).rejects.toMatchObject({ code: 'UNAUTHORIZED' })
+  })
+})
+
+describe('match.startFromPairing', () => {
+  const tournamentId = 'tourn-1'
+  const roundId = 'round-1'
+  const pairingId = 'pair-1'
+
+  beforeAll(async () => {
+    await client.executeMultiple(`
+      INSERT INTO tournaments (id, to_user_id, name, event_date, location, format, total_rounds, status, created_at)
+      VALUES ('${tournamentId}', 'user-1', 'Test GT', ${Date.now()}, 'Game Store', '2000pts', 5, 'IN_PROGRESS', ${Date.now()});
+      INSERT INTO tournament_players (id, tournament_id, user_id, display_name, faction, detachment, registered_at)
+      VALUES ('tp-1', '${tournamentId}', 'user-1', 'Alice', 'Space Marines', 'Gladius Task Force', ${Date.now()});
+      INSERT INTO tournament_players (id, tournament_id, user_id, display_name, faction, detachment, registered_at)
+      VALUES ('tp-2', '${tournamentId}', 'user-2', 'Bob', 'Orks', 'Waaagh! Tribe', ${Date.now()});
+      INSERT INTO rounds (id, tournament_id, round_number, status, created_at)
+      VALUES ('${roundId}', '${tournamentId}', 1, 'ACTIVE', ${Date.now()});
+      INSERT INTO pairings (id, round_id, table_number, player1_id, player2_id, mission, created_at)
+      VALUES ('${pairingId}', '${roundId}', 1, 'tp-1', 'tp-2', 'Take and Hold', ${Date.now()});
+    `)
+  })
+
+  it('creates a match from pairing data for player 1', async () => {
+    const caller = createCaller(ctx)
+    const match = await caller.match.startFromPairing({ pairingId })
+    expect(match.isTournament).toBe(1)
+    expect(match.opponentFaction).toBe('Orks')
+    expect(match.opponentName).toBe('Bob')
+    expect(match.opponentDetachment).toBe('Waaagh! Tribe')
+    expect(match.yourFaction).toBe('Space Marines')
+    expect(match.yourDetachment).toBe('Gladius Task Force')
+    expect(match.mission).toBe('Take and Hold')
+    expect(match.tournamentName).toBe('Test GT')
+    expect(match.tournamentId).toBe(tournamentId)
+    expect(match.location).toBe('Game Store')
+  })
+
+  it('creates a match from pairing data for player 2', async () => {
+    const caller = createCaller(ctx2)
+    const match = await caller.match.startFromPairing({ pairingId })
+    expect(match.opponentFaction).toBe('Space Marines')
+    expect(match.opponentName).toBe('Alice')
+    expect(match.yourFaction).toBe('Orks')
+  })
+
+  it('rejects non-participant', async () => {
+    const ctx3 = {
+      user: { id: 'user-3', email: 'charlie@example.com', name: 'Charlie' },
+      req,
+      db,
+      storage,
+    }
+    const caller = createCaller(ctx3)
+    await expect(caller.match.startFromPairing({ pairingId })).rejects.toMatchObject({
+      code: 'FORBIDDEN',
+    })
+  })
+
+  it('rejects unknown pairing', async () => {
+    const caller = createCaller(ctx)
+    await expect(caller.match.startFromPairing({ pairingId: 'no-such' })).rejects.toMatchObject({
+      code: 'NOT_FOUND',
+    })
   })
 })

@@ -1,5 +1,6 @@
 import { z } from 'zod'
 import { sql, gt, desc, eq } from 'drizzle-orm'
+import { TRPCError } from '@trpc/server'
 import { router, adminProcedure, publicProcedure } from '../trpc.js'
 import {
   authUsers,
@@ -275,6 +276,50 @@ export const statsRouter = router({
       total: total.count,
     }
   }),
+
+  revokeSession: adminProcedure
+    .input(z.object({ sessionId: z.string() }))
+    .mutation(async ({ ctx, input }) => {
+      const [session] = await ctx.db
+        .select()
+        .from(authSessions)
+        .where(eq(authSessions.id, input.sessionId))
+      if (!session) throw new TRPCError({ code: 'NOT_FOUND', message: 'Session not found' })
+      // Expire the session immediately by setting expiresAt to now
+      await ctx.db
+        .update(authSessions)
+        .set({ expiresAt: new Date() })
+        .where(eq(authSessions.id, input.sessionId))
+      return { revoked: true }
+    }),
+
+  revokeAllSessions: adminProcedure
+    .input(z.object({ userId: z.string() }))
+    .mutation(async ({ ctx, input }) => {
+      const [user] = await ctx.db
+        .select()
+        .from(authUsers)
+        .where(eq(authUsers.id, input.userId))
+      if (!user) throw new TRPCError({ code: 'NOT_FOUND', message: 'User not found' })
+      await ctx.db
+        .update(authSessions)
+        .set({ expiresAt: new Date() })
+        .where(eq(authSessions.userId, input.userId))
+      return { revoked: true }
+    }),
+
+  deleteUser: adminProcedure
+    .input(z.object({ userId: z.string() }))
+    .mutation(async ({ ctx, input }) => {
+      const [user] = await ctx.db
+        .select()
+        .from(authUsers)
+        .where(eq(authUsers.id, input.userId))
+      if (!user) throw new TRPCError({ code: 'NOT_FOUND', message: 'User not found' })
+      // Cascading deletes handle related data (sessions, tournament_players, etc.)
+      await ctx.db.delete(authUsers).where(eq(authUsers.id, input.userId))
+      return { deleted: true }
+    }),
 
   bsdataVersion: publicProcedure.query(async () => {
     try {

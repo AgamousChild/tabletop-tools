@@ -2,7 +2,7 @@ import { TRPCError } from '@trpc/server'
 import { eq, and, inArray } from 'drizzle-orm'
 import { z } from 'zod'
 
-import { tournaments, tournamentPlayers, rounds, pairings } from '@tabletop-tools/db'
+import { tournaments, tournamentPlayers, rounds, pairings, importedTournamentResults } from '@tabletop-tools/db'
 import { computeStandings } from '../lib/standings/compute'
 import { router, protectedProcedure } from '../trpc'
 
@@ -22,6 +22,14 @@ export const tournamentRouter = router({
         location: z.string().optional(),
         format: z.string().min(1),
         totalRounds: z.number().int().min(1),
+        description: z.string().optional(),
+        externalLink: z.string().optional(),
+        startTime: z.string().optional(),
+        maxPlayers: z.number().int().min(1).optional(),
+        missionPool: z.string().optional(),
+        requirePhotos: z.boolean().default(false),
+        includeTwists: z.boolean().default(false),
+        includeChallenger: z.boolean().default(false),
       }),
     )
     .mutation(async ({ ctx, input }) => {
@@ -38,6 +46,14 @@ export const tournamentRouter = router({
           format: input.format,
           totalRounds: input.totalRounds,
           status: 'DRAFT',
+          description: input.description ?? null,
+          externalLink: input.externalLink ?? null,
+          startTime: input.startTime ?? null,
+          maxPlayers: input.maxPlayers ?? null,
+          missionPool: input.missionPool ?? null,
+          requirePhotos: input.requirePhotos ? 1 : 0,
+          includeTwists: input.includeTwists ? 1 : 0,
+          includeChallenger: input.includeChallenger ? 1 : 0,
           createdAt: now,
         })
       return ctx.db.select().from(tournaments).where(eq(tournaments.id, id)).get()
@@ -105,6 +121,12 @@ export const tournamentRouter = router({
     const next = LIFECYCLE[tournament.status]
     if (!next) throw new TRPCError({ code: 'BAD_REQUEST', message: 'Tournament is already complete' })
     await ctx.db.update(tournaments).set({ status: next }).where(eq(tournaments.id, input))
+
+    // When completing a tournament, export results to new-meta
+    if (next === 'COMPLETE') {
+      await exportToNewMeta(ctx.db, tournament, ctx.user.id)
+    }
+
     return ctx.db.select().from(tournaments).where(eq(tournaments.id, input)).get()
   }),
 
@@ -176,3 +198,113 @@ export const tournamentRouter = router({
     }
   }),
 })
+
+// ---- Internal helpers ----
+
+function generateId(): string {
+  return `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`
+}
+
+/**
+ * Export completed tournament results to imported_tournament_results (new-meta pipeline).
+ * Compiles standings into TournamentRecord format and inserts as a new import.
+ */
+async function exportToNewMeta(
+  db: any,
+  tournament: { id: string; name: string; eventDate: number; format: string },
+  userId: string,
+) {
+  // Get all players
+  const players = await db
+    .select()
+    .from(tournamentPlayers)
+    .where(eq(tournamentPlayers.tournamentId, tournament.id))
+    .all()
+
+  // Get all rounds and pairings
+  const allRounds = await db
+    .select()
+    .from(rounds)
+    .where(eq(rounds.tournamentId, tournament.id))
+    .all()
+
+  const roundIds = allRounds.map((r: any) => r.id)
+  if (roundIds.length === 0) return
+
+  const allPairings = await db
+    .select()
+    .from(pairings)
+    .where(inArray(pairings.roundId, roundIds))
+    .all()
+
+  // Compute W/L/D and VP for each player
+  const playerStats = new Map<string, { wins: number; losses: number; draws: number; vp: number }>()
+  for (const p of players) {
+    playerStats.set(p.id, { wins: 0, losses: 0, draws: 0, vp: 0 })
+  }
+
+  for (const pair of allPairings) {
+    if (!pair.result) continue
+    const s1 = playerStats.get(pair.player1Id)
+    const s2 = pair.player2Id ? playerStats.get(pair.player2Id) : null
+
+    if (pair.result === 'P1_WIN') {
+      if (s1) { s1.wins++; s1.vp += pair.player1Vp ?? 0 }
+      if (s2) { s2.losses++; s2.vp += pair.player2Vp ?? 0 }
+    } else if (pair.result === 'P2_WIN') {
+      if (s1) { s1.losses++; s1.vp += pair.player1Vp ?? 0 }
+      if (s2) { s2.wins++; s2.vp += pair.player2Vp ?? 0 }
+    } else if (pair.result === 'DRAW') {
+      if (s1) { s1.draws++; s1.vp += pair.player1Vp ?? 0 }
+      if (s2) { s2.draws++; s2.vp += pair.player2Vp ?? 0 }
+    } else if (pair.result === 'BYE') {
+      if (s1) { s1.wins++; s1.vp += pair.player1Vp ?? 0 }
+    }
+  }
+
+  // Sort players by record (wins desc, then VP desc) for placement
+  const sorted = [...players].sort((a, b) => {
+    const sa = playerStats.get(a.id)!
+    const sb = playerStats.get(b.id)!
+    if (sb.wins !== sa.wins) return sb.wins - sa.wins
+    return sb.vp - sa.vp
+  })
+
+  const eventDateIso = new Date(tournament.eventDate).toISOString().split('T')[0]!
+  const year = new Date(tournament.eventDate).getFullYear()
+  const quarter = Math.ceil((new Date(tournament.eventDate).getMonth() + 1) / 3)
+  const metaWindow = `${year}-Q${quarter}`
+
+  const tournamentRecord = {
+    eventName: tournament.name,
+    eventDate: eventDateIso,
+    format: tournament.format,
+    players: sorted.map((p, idx) => {
+      const stats = playerStats.get(p.id)!
+      return {
+        placement: idx + 1,
+        playerName: p.displayName,
+        faction: p.faction,
+        detachment: p.detachment ?? undefined,
+        listText: p.listText ?? undefined,
+        wins: stats.wins,
+        losses: stats.losses,
+        draws: stats.draws,
+        points: stats.vp,
+      }
+    }),
+  }
+
+  const importId = generateId()
+  await db.insert(importedTournamentResults).values({
+    id: importId,
+    importedBy: userId,
+    eventName: tournament.name,
+    eventDate: tournament.eventDate,
+    format: tournament.format,
+    metaWindow,
+    rawData: JSON.stringify(tournamentRecord),
+    parsedData: JSON.stringify([tournamentRecord]),
+    importedAt: Date.now(),
+  })
+}

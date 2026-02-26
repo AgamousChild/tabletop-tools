@@ -42,6 +42,20 @@ Simulation runs client-side — the rules pipeline is pure math with no server d
 
 ---
 
+## Features required to be considered functional
+
+1. When a unit is loaded, the weapon profiles and the defense profile is shown.
+2. Melee or Ranged as a type of attack is chosen.
+3. The correct number of weapons is calculated.
+4. All Ranged weapons are allowed to be used unless the unit has ranged options.
+5. Only one melee profile is allowed, unless there are weapon profiles labelled extra attacks.
+6. The special rules need to be addressed, allow for an array of special rules be put in place for each unit.
+7. If you can use the unit information stored in the database to show those special rules, do so, but also allow the user to add them.
+8. Apply the special rules correctly.
+9. The data stored should include the units included, the special rules applied, and the results.
+10. When saving the data, the results can be sent to the server. They are not GW IP. We can then use the unit ids and applied special rules to cache results and send them back and compare to the calculated results, or show them more quickly.
+11. Allow for Leader additions to make a unit comparison more meaningful, so you can add a leader in to those units that allow leaders, mostly infantry.
+
 ## Unit Data: IndexedDB (via game-data-store)
 
 Unit profiles come from BSData XML imported via the data-import app and stored client-side in

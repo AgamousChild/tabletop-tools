@@ -119,6 +119,10 @@ export const simulations = sqliteTable('simulations', {
   defenderContentId: text('defender_content_id').notNull(),
   defenderName: text('defender_name').notNull(),
   result: text('result').notNull(),  // JSON — full simulation output
+  // V3: hash of (weapons, rules, modelCounts, leader) for cache lookup
+  configHash: text('config_hash'),
+  // V3: JSON — selected weapons + rules configuration
+  weaponConfig: text('weapon_config'),
   createdAt: integer('created_at').notNull(),
 }, (table) => [
   index('idx_simulations_user_id').on(table.userId),
@@ -140,6 +144,11 @@ export const lists = sqliteTable('lists', {
   faction: text('faction').notNull(),
   name: text('name').notNull(),
   totalPts: integer('total_pts').notNull().default(0),
+  // V3 additions
+  detachment: text('detachment'),
+  description: text('description'),
+  battleSize: integer('battle_size'),  // 500/1000/2000/3000
+  syncedAt: integer('synced_at'),
   createdAt: integer('created_at').notNull(),
   updatedAt: integer('updated_at').notNull(),
 }, (table) => [
@@ -157,6 +166,11 @@ export const listUnits = sqliteTable('list_units', {
   unitName: text('unit_name').notNull(),
   unitPoints: integer('unit_points').notNull(),
   count: integer('count').notNull().default(1),
+  // V3 additions
+  isWarlord: integer('is_warlord').notNull().default(0),
+  enhancementId: text('enhancement_id'),
+  enhancementName: text('enhancement_name'),
+  enhancementCost: integer('enhancement_cost'),
 }, (table) => [
   index('idx_list_units_list_id').on(table.listId),
 ])
@@ -198,6 +212,22 @@ export const matches = sqliteTable('matches', {
   theirFinalScore: integer('their_final_score'),
   // whether this match should feed into the tournament rating engine
   isTournament: integer('is_tournament').notNull().default(0),
+  // V3 additions
+  opponentName: text('opponent_name'),
+  opponentDetachment: text('opponent_detachment'),
+  yourFaction: text('your_faction'),
+  yourDetachment: text('your_detachment'),
+  terrainLayout: text('terrain_layout'),
+  deploymentZone: text('deployment_zone'),
+  twistCards: text('twist_cards'),           // JSON
+  challengerCards: text('challenger_cards'),  // JSON
+  requirePhotos: integer('require_photos').notNull().default(0),
+  attackerDefender: text('attacker_defender'),  // YOU_ATTACK | YOU_DEFEND
+  whoGoesFirst: text('who_goes_first'),        // YOU | THEM
+  date: integer('date'),
+  location: text('location'),
+  tournamentName: text('tournament_name'),
+  tournamentId: text('tournament_id'),
   createdAt: integer('created_at').notNull(),
   closedAt: integer('closed_at'),
 }, (table) => [
@@ -219,6 +249,21 @@ export const turns = sqliteTable('turns', {
   secondaryScored: integer('secondary_scored').notNull().default(0),
   cpSpent: integer('cp_spent').notNull().default(0),
   notes: text('notes'),
+  // V3 additions — per-player scoring
+  yourCpStart: integer('your_cp_start').notNull().default(0),
+  yourCpGained: integer('your_cp_gained').notNull().default(1),
+  yourCpSpent: integer('your_cp_spent').notNull().default(0),
+  theirCpStart: integer('their_cp_start').notNull().default(0),
+  theirCpGained: integer('their_cp_gained').notNull().default(1),
+  theirCpSpent: integer('their_cp_spent').notNull().default(0),
+  yourPrimary: integer('your_primary').notNull().default(0),
+  theirPrimary: integer('their_primary').notNull().default(0),
+  yourSecondary: integer('your_secondary').notNull().default(0),
+  theirSecondary: integer('their_secondary').notNull().default(0),
+  yourPhotoUrl: text('your_photo_url'),
+  theirPhotoUrl: text('their_photo_url'),
+  yourUnitsDestroyed: text('your_units_destroyed').notNull().default('[]'),
+  theirUnitsDestroyed: text('their_units_destroyed').notNull().default('[]'),
   createdAt: integer('created_at').notNull(),
 }, (table) => [
   index('idx_turns_match_id').on(table.matchId),
@@ -242,6 +287,18 @@ export const tournaments = sqliteTable('tournaments', {
   totalRounds: integer('total_rounds').notNull(),
   // DRAFT | REGISTRATION | CHECK_IN | IN_PROGRESS | COMPLETE
   status: text('status').notNull().default('DRAFT'),
+  // V3 additions
+  description: text('description'),
+  imageUrl: text('image_url'),
+  externalLink: text('external_link'),
+  startTime: text('start_time'),         // HH:MM format
+  latitude: real('latitude'),
+  longitude: real('longitude'),
+  missionPool: text('mission_pool'),     // JSON: per-round mission assignments
+  requirePhotos: integer('require_photos').notNull().default(0),
+  includeTwists: integer('include_twists').notNull().default(0),
+  includeChallenger: integer('include_challenger').notNull().default(0),
+  maxPlayers: integer('max_players'),
   createdAt: integer('created_at').notNull(),
 }, (table) => [
   index('idx_tournaments_user_id').on(table.toUserId),
@@ -262,6 +319,8 @@ export const tournamentPlayers = sqliteTable('tournament_players', {
   detachment: text('detachment'),
   // army list pasted as raw text — stored verbatim, never parsed for GW content
   listText: text('list_text'),
+  // V3: FK to lists table (optional — from list-builder sync)
+  listId: text('list_id'),
   listLocked: integer('list_locked').notNull().default(0),
   checkedIn: integer('checked_in').notNull().default(0),
   dropped: integer('dropped').notNull().default(0),
@@ -368,6 +427,85 @@ export const importedTournamentResults = sqliteTable('imported_tournament_result
   importedAt: integer('imported_at').notNull(),
 }, (table) => [
   index('idx_imported_results_imported_by').on(table.importedBy),
+])
+
+// === Tournament management tables (V3) ===
+
+export const tournamentCards = sqliteTable('tournament_cards', {
+  id: text('id').primaryKey(),
+  tournamentId: text('tournament_id')
+    .notNull()
+    .references(() => tournaments.id, { onDelete: 'cascade' }),
+  playerId: text('player_id')
+    .notNull()
+    .references(() => tournamentPlayers.id, { onDelete: 'cascade' }),
+  issuedBy: text('issued_by')
+    .notNull()
+    .references(() => authUsers.id, { onDelete: 'cascade' }),
+  cardType: text('card_type').notNull(),  // YELLOW | RED
+  reason: text('reason').notNull(),
+  issuedAt: integer('issued_at').notNull(),
+}, (table) => [
+  index('idx_tournament_cards_tournament_id').on(table.tournamentId),
+  index('idx_tournament_cards_player_id').on(table.playerId),
+])
+
+export const tournamentAwards = sqliteTable('tournament_awards', {
+  id: text('id').primaryKey(),
+  tournamentId: text('tournament_id')
+    .notNull()
+    .references(() => tournaments.id, { onDelete: 'cascade' }),
+  name: text('name').notNull(),
+  description: text('description'),
+  recipientId: text('recipient_id')
+    .references(() => tournamentPlayers.id, { onDelete: 'set null' }),
+  createdAt: integer('created_at').notNull(),
+}, (table) => [
+  index('idx_tournament_awards_tournament_id').on(table.tournamentId),
+])
+
+// === Match detail tables (V3 — game-tracker) ===
+
+export const matchSecondaries = sqliteTable('match_secondaries', {
+  id: text('id').primaryKey(),
+  matchId: text('match_id')
+    .notNull()
+    .references(() => matches.id, { onDelete: 'cascade' }),
+  player: text('player').notNull(),  // YOUR | THEIRS
+  secondaryName: text('secondary_name').notNull(),
+  // JSON: VP scored per round [r1, r2, r3, r4, r5]
+  vpPerRound: text('vp_per_round').notNull().default('[]'),
+}, (table) => [
+  index('idx_match_secondaries_match_id').on(table.matchId),
+])
+
+export const stratagemLog = sqliteTable('stratagem_log', {
+  id: text('id').primaryKey(),
+  turnId: text('turn_id')
+    .notNull()
+    .references(() => turns.id, { onDelete: 'cascade' }),
+  player: text('player').notNull(),  // YOUR | THEIRS
+  stratagemName: text('stratagem_name').notNull(),
+  cpCost: integer('cp_cost').notNull().default(1),
+}, (table) => [
+  index('idx_stratagem_log_turn_id').on(table.turnId),
+])
+
+// === User management tables (V3 — admin) ===
+
+export const userBans = sqliteTable('user_bans', {
+  id: text('id').primaryKey(),
+  userId: text('user_id')
+    .notNull()
+    .references(() => authUsers.id, { onDelete: 'cascade' }),
+  reason: text('reason').notNull(),
+  bannedBy: text('banned_by')
+    .notNull()
+    .references(() => authUsers.id),
+  bannedAt: integer('banned_at').notNull(),
+  liftedAt: integer('lifted_at'),
+}, (table) => [
+  index('idx_user_bans_user_id').on(table.userId),
 ])
 
 // === Glicko-2 tables (new-meta app) ===

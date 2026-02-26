@@ -3,10 +3,25 @@ import { render, screen } from '@testing-library/react'
 
 let queryReturn: any
 
+const mockDeleteUser = vi.fn()
+const mockRevokeAll = vi.fn()
+
 vi.mock('../lib/trpc', () => ({
   trpc: {
     stats: {
       recentUsers: { useQuery: vi.fn(() => queryReturn) },
+      deleteUser: {
+        useMutation: (opts?: { onSuccess?: () => void }) => ({
+          mutate: (args: unknown) => { mockDeleteUser(args); opts?.onSuccess?.() },
+          isPending: false,
+        }),
+      },
+      revokeAllSessions: {
+        useMutation: () => ({
+          mutate: mockRevokeAll,
+          isPending: false,
+        }),
+      },
     },
   },
 }))

@@ -1,7 +1,57 @@
 import { useState, useEffect, useCallback } from 'react'
 import type { UnitProfile } from '@tabletop-tools/game-content'
-import { getUnit, searchUnits, listFactions, getImportMeta, getLists, getList, getListUnits } from './store.js'
-import type { LocalList, LocalListUnit } from './store.js'
+import {
+  getUnit, searchUnits, listFactions, getImportMeta, getLists, getList, getListUnits,
+  getDetachmentsByFaction, getDetachment, getDetachmentAbilities,
+  getStratagems, getEnhancements, getLeaderAttachments,
+  getUnitCompositions, getUnitCosts, getWargearOptions,
+  getUnitKeywords, getUnitAbilities, getMissions,
+  getRulesImportMeta,
+} from './store.js'
+import type {
+  LocalList, LocalListUnit, Detachment, DetachmentAbility,
+  Stratagem, Enhancement, LeaderAttachment, UnitComposition,
+  UnitCost, WargearOption, UnitKeyword, UnitAbility, Mission,
+  RulesImportMeta,
+} from './store.js'
+
+// ── Internal helper ──────────────────────────────────────────────────────────
+
+function useStoreQuery<T>(
+  fetcher: () => Promise<T>,
+  deps: unknown[],
+  defaultValue: T,
+): { data: T; error: string | null; isLoading: boolean } {
+  const [data, setData] = useState<T>(defaultValue)
+  const [error, setError] = useState<string | null>(null)
+  const [isLoading, setIsLoading] = useState(true)
+
+  useEffect(() => {
+    let cancelled = false
+    setIsLoading(true)
+    setError(null)
+    fetcher()
+      .then((result) => {
+        if (!cancelled) {
+          setData(result)
+          setIsLoading(false)
+        }
+      })
+      .catch((err) => {
+        if (!cancelled) {
+          setError(err instanceof Error ? err.message : 'IndexedDB unavailable')
+          setData(defaultValue)
+          setIsLoading(false)
+        }
+      })
+    return () => { cancelled = true }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, deps)
+
+  return { data, error, isLoading }
+}
+
+// ── Unit hooks (existing) ────────────────────────────────────────────────────
 
 export function useUnit(id: string): { data: UnitProfile | null; error: string | null; isLoading: boolean } {
   const [data, setData] = useState<UnitProfile | null>(null)
@@ -113,6 +163,8 @@ export function useGameDataAvailable(): boolean {
   return available
 }
 
+// ── List hooks (existing) ────────────────────────────────────────────────────
+
 export function useLists(): { data: LocalList[]; refetch: () => void } {
   const [data, setData] = useState<LocalList[]>([])
   const [counter, setCounter] = useState(0)
@@ -162,4 +214,74 @@ export function useList(id: string | null): {
   }, [id, counter])
 
   return { data, refetch }
+}
+
+// ── Detachment hooks ─────────────────────────────────────────────────────────
+
+export function useDetachments(factionId: string) {
+  return useStoreQuery(() => getDetachmentsByFaction(factionId), [factionId], [] as Detachment[])
+}
+
+export function useDetachment(id: string) {
+  return useStoreQuery(() => getDetachment(id), [id], null as Detachment | null)
+}
+
+export function useDetachmentAbilities(detachmentId: string) {
+  return useStoreQuery(() => getDetachmentAbilities(detachmentId), [detachmentId], [] as DetachmentAbility[])
+}
+
+// ── Stratagem hooks ──────────────────────────────────────────────────────────
+
+export function useStratagems(filter: { factionId: string; detachmentId?: string }) {
+  return useStoreQuery(
+    () => getStratagems(filter),
+    [filter.factionId, filter.detachmentId],
+    [] as Stratagem[],
+  )
+}
+
+// ── Enhancement hooks ────────────────────────────────────────────────────────
+
+export function useEnhancements(detachmentId: string) {
+  return useStoreQuery(() => getEnhancements(detachmentId), [detachmentId], [] as Enhancement[])
+}
+
+// ── Leader attachment hooks ──────────────────────────────────────────────────
+
+export function useLeaderAttachments(leaderId: string) {
+  return useStoreQuery(() => getLeaderAttachments(leaderId), [leaderId], [] as LeaderAttachment[])
+}
+
+// ── Unit detail hooks ────────────────────────────────────────────────────────
+
+export function useUnitCompositions(datasheetId: string) {
+  return useStoreQuery(() => getUnitCompositions(datasheetId), [datasheetId], [] as UnitComposition[])
+}
+
+export function useUnitCosts(datasheetId: string) {
+  return useStoreQuery(() => getUnitCosts(datasheetId), [datasheetId], [] as UnitCost[])
+}
+
+export function useWargearOptions(datasheetId: string) {
+  return useStoreQuery(() => getWargearOptions(datasheetId), [datasheetId], [] as WargearOption[])
+}
+
+export function useUnitKeywords(datasheetId: string) {
+  return useStoreQuery(() => getUnitKeywords(datasheetId), [datasheetId], [] as UnitKeyword[])
+}
+
+export function useUnitAbilities(datasheetId: string) {
+  return useStoreQuery(() => getUnitAbilities(datasheetId), [datasheetId], [] as UnitAbility[])
+}
+
+// ── Mission hooks ────────────────────────────────────────────────────────────
+
+export function useMissions() {
+  return useStoreQuery(() => getMissions(), [], [] as Mission[])
+}
+
+// ── Rules import meta hook ───────────────────────────────────────────────────
+
+export function useRulesImportMeta() {
+  return useStoreQuery(() => getRulesImportMeta(), [], null as RulesImportMeta | null)
 }

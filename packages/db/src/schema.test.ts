@@ -12,6 +12,7 @@ import {
   importedTournamentResults,
   listUnits,
   lists,
+  matchSecondaries,
   matches,
   pairings,
   playerElo,
@@ -19,10 +20,14 @@ import {
   rolls,
   rounds,
   simulations,
+  stratagemLog,
+  tournamentAwards,
+  tournamentCards,
   tournamentPlayers,
   tournaments,
   turns,
   unitRatings,
+  userBans,
 } from './schema'
 
 const client = createClient({ url: ':memory:' })
@@ -120,6 +125,8 @@ beforeAll(async () => {
     defender_content_id TEXT NOT NULL,
     defender_name TEXT NOT NULL,
     result TEXT NOT NULL,
+    config_hash TEXT,
+    weapon_config TEXT,
     created_at INTEGER NOT NULL
   )`)
 
@@ -130,6 +137,10 @@ beforeAll(async () => {
     faction TEXT NOT NULL,
     name TEXT NOT NULL,
     total_pts INTEGER NOT NULL DEFAULT 0,
+    detachment TEXT,
+    description TEXT,
+    battle_size INTEGER,
+    synced_at INTEGER,
     created_at INTEGER NOT NULL,
     updated_at INTEGER NOT NULL
   )`)
@@ -140,7 +151,11 @@ beforeAll(async () => {
     unit_content_id TEXT NOT NULL,
     unit_name TEXT NOT NULL,
     unit_points INTEGER NOT NULL,
-    count INTEGER NOT NULL DEFAULT 1
+    count INTEGER NOT NULL DEFAULT 1,
+    is_warlord INTEGER NOT NULL DEFAULT 0,
+    enhancement_id TEXT,
+    enhancement_name TEXT,
+    enhancement_cost INTEGER
   )`)
 
   await client.execute(`CREATE TABLE unit_ratings (
@@ -164,6 +179,21 @@ beforeAll(async () => {
     your_final_score INTEGER,
     their_final_score INTEGER,
     is_tournament INTEGER NOT NULL DEFAULT 0,
+    opponent_name TEXT,
+    opponent_detachment TEXT,
+    your_faction TEXT,
+    your_detachment TEXT,
+    terrain_layout TEXT,
+    deployment_zone TEXT,
+    twist_cards TEXT,
+    challenger_cards TEXT,
+    require_photos INTEGER NOT NULL DEFAULT 0,
+    attacker_defender TEXT,
+    who_goes_first TEXT,
+    date INTEGER,
+    location TEXT,
+    tournament_name TEXT,
+    tournament_id TEXT,
     created_at INTEGER NOT NULL,
     closed_at INTEGER
   )`)
@@ -179,6 +209,20 @@ beforeAll(async () => {
     secondary_scored INTEGER NOT NULL DEFAULT 0,
     cp_spent INTEGER NOT NULL DEFAULT 0,
     notes TEXT,
+    your_cp_start INTEGER NOT NULL DEFAULT 0,
+    your_cp_gained INTEGER NOT NULL DEFAULT 1,
+    your_cp_spent INTEGER NOT NULL DEFAULT 0,
+    their_cp_start INTEGER NOT NULL DEFAULT 0,
+    their_cp_gained INTEGER NOT NULL DEFAULT 1,
+    their_cp_spent INTEGER NOT NULL DEFAULT 0,
+    your_primary INTEGER NOT NULL DEFAULT 0,
+    their_primary INTEGER NOT NULL DEFAULT 0,
+    your_secondary INTEGER NOT NULL DEFAULT 0,
+    their_secondary INTEGER NOT NULL DEFAULT 0,
+    your_photo_url TEXT,
+    their_photo_url TEXT,
+    your_units_destroyed TEXT NOT NULL DEFAULT '[]',
+    their_units_destroyed TEXT NOT NULL DEFAULT '[]',
     created_at INTEGER NOT NULL
   )`)
 
@@ -192,6 +236,17 @@ beforeAll(async () => {
     format TEXT NOT NULL,
     total_rounds INTEGER NOT NULL,
     status TEXT NOT NULL DEFAULT 'DRAFT',
+    description TEXT,
+    image_url TEXT,
+    external_link TEXT,
+    start_time TEXT,
+    latitude REAL,
+    longitude REAL,
+    mission_pool TEXT,
+    require_photos INTEGER NOT NULL DEFAULT 0,
+    include_twists INTEGER NOT NULL DEFAULT 0,
+    include_challenger INTEGER NOT NULL DEFAULT 0,
+    max_players INTEGER,
     created_at INTEGER NOT NULL
   )`)
 
@@ -203,6 +258,7 @@ beforeAll(async () => {
     faction TEXT NOT NULL,
     detachment TEXT,
     list_text TEXT,
+    list_id TEXT,
     list_locked INTEGER NOT NULL DEFAULT 0,
     checked_in INTEGER NOT NULL DEFAULT 0,
     dropped INTEGER NOT NULL DEFAULT 0,
@@ -330,6 +386,65 @@ beforeAll(async () => {
   // Glicko
   await client.execute('CREATE INDEX idx_player_glicko_user_id ON player_glicko(user_id)')
   await client.execute('CREATE INDEX idx_glicko_history_player_id ON glicko_history(player_id)')
+
+  // --- V3: New tables ---
+
+  // Tournament cards (Yellow/Red)
+  await client.execute(`CREATE TABLE tournament_cards (
+    id TEXT PRIMARY KEY,
+    tournament_id TEXT NOT NULL REFERENCES tournaments(id) ON DELETE CASCADE,
+    player_id TEXT NOT NULL REFERENCES tournament_players(id) ON DELETE CASCADE,
+    issued_by TEXT NOT NULL REFERENCES "user"(id) ON DELETE CASCADE,
+    card_type TEXT NOT NULL,
+    reason TEXT NOT NULL,
+    issued_at INTEGER NOT NULL
+  )`)
+
+  // Tournament awards
+  await client.execute(`CREATE TABLE tournament_awards (
+    id TEXT PRIMARY KEY,
+    tournament_id TEXT NOT NULL REFERENCES tournaments(id) ON DELETE CASCADE,
+    name TEXT NOT NULL,
+    description TEXT,
+    recipient_id TEXT REFERENCES tournament_players(id) ON DELETE SET NULL,
+    created_at INTEGER NOT NULL
+  )`)
+
+  // Match secondaries (game-tracker)
+  await client.execute(`CREATE TABLE match_secondaries (
+    id TEXT PRIMARY KEY,
+    match_id TEXT NOT NULL REFERENCES matches(id) ON DELETE CASCADE,
+    player TEXT NOT NULL,
+    secondary_name TEXT NOT NULL,
+    vp_per_round TEXT NOT NULL DEFAULT '[]'
+  )`)
+
+  // Stratagem usage log (game-tracker)
+  await client.execute(`CREATE TABLE stratagem_log (
+    id TEXT PRIMARY KEY,
+    turn_id TEXT NOT NULL REFERENCES turns(id) ON DELETE CASCADE,
+    player TEXT NOT NULL,
+    stratagem_name TEXT NOT NULL,
+    cp_cost INTEGER NOT NULL DEFAULT 1
+  )`)
+
+  // User bans (admin)
+  await client.execute(`CREATE TABLE user_bans (
+    id TEXT PRIMARY KEY,
+    user_id TEXT NOT NULL REFERENCES "user"(id) ON DELETE CASCADE,
+    reason TEXT NOT NULL,
+    banned_by TEXT NOT NULL REFERENCES "user"(id),
+    banned_at INTEGER NOT NULL,
+    lifted_at INTEGER
+  )`)
+
+  // V3 indexes on new tables
+  await client.execute('CREATE INDEX idx_tournament_cards_tournament_id ON tournament_cards(tournament_id)')
+  await client.execute('CREATE INDEX idx_tournament_cards_player_id ON tournament_cards(player_id)')
+  await client.execute('CREATE INDEX idx_tournament_awards_tournament_id ON tournament_awards(tournament_id)')
+  await client.execute('CREATE INDEX idx_match_secondaries_match_id ON match_secondaries(match_id)')
+  await client.execute('CREATE INDEX idx_stratagem_log_turn_id ON stratagem_log(turn_id)')
+  await client.execute('CREATE INDEX idx_user_bans_user_id ON user_bans(user_id)')
 
   // --- V2: Composite unique constraints ---
   await client.execute('CREATE UNIQUE INDEX uq_unit_ratings_unit_window ON unit_ratings(unit_content_id, meta_window)')
@@ -1016,6 +1131,11 @@ describe('V2: Index existence', () => {
       imported_tournament_results: ['idx_imported_results_imported_by'],
       player_glicko: ['idx_player_glicko_user_id'],
       glicko_history: ['idx_glicko_history_player_id'],
+      tournament_cards: ['idx_tournament_cards_tournament_id', 'idx_tournament_cards_player_id'],
+      tournament_awards: ['idx_tournament_awards_tournament_id'],
+      match_secondaries: ['idx_match_secondaries_match_id'],
+      stratagem_log: ['idx_stratagem_log_turn_id'],
+      user_bans: ['idx_user_bans_user_id'],
     }
 
     for (const [table, indexes] of Object.entries(expectedIndexes)) {
@@ -1083,6 +1203,324 @@ describe('V2: Unique constraints', () => {
         createdAt: Date.now(),
       }),
     ).rejects.toThrow()
+  })
+})
+
+// ============================================================
+// V3: New table tests
+// ============================================================
+
+describe('tournamentCards', () => {
+  it('issues a yellow card to a player', async () => {
+    await db.insert(tournamentCards).values({
+      id: 'card-1',
+      tournamentId: 'tourn-1',
+      playerId: 'tp-1',
+      issuedBy: 'user-1',
+      cardType: 'YELLOW',
+      reason: 'Slow play',
+      issuedAt: Date.now(),
+    })
+
+    const result = await db.select().from(tournamentCards).where(eq(tournamentCards.id, 'card-1'))
+    expect(result).toHaveLength(1)
+    expect(result[0]?.cardType).toBe('YELLOW')
+    expect(result[0]?.reason).toBe('Slow play')
+  })
+
+  it('issues a red card', async () => {
+    await db.insert(tournamentCards).values({
+      id: 'card-2',
+      tournamentId: 'tourn-1',
+      playerId: 'tp-2',
+      issuedBy: 'user-1',
+      cardType: 'RED',
+      reason: 'Unsportsmanlike conduct',
+      issuedAt: Date.now(),
+    })
+
+    const result = await db.select().from(tournamentCards).where(eq(tournamentCards.tournamentId, 'tourn-1'))
+    expect(result).toHaveLength(2)
+  })
+})
+
+describe('tournamentAwards', () => {
+  it('creates an award without a recipient', async () => {
+    await db.insert(tournamentAwards).values({
+      id: 'award-1',
+      tournamentId: 'tourn-1',
+      name: 'Best Painted',
+      description: 'Most impressive paint job',
+      createdAt: Date.now(),
+    })
+
+    const result = await db.select().from(tournamentAwards).where(eq(tournamentAwards.id, 'award-1'))
+    expect(result).toHaveLength(1)
+    expect(result[0]?.name).toBe('Best Painted')
+    expect(result[0]?.recipientId).toBeNull()
+  })
+
+  it('assigns a recipient to an award', async () => {
+    await db.update(tournamentAwards)
+      .set({ recipientId: 'tp-1' })
+      .where(eq(tournamentAwards.id, 'award-1'))
+
+    const result = await db.select().from(tournamentAwards).where(eq(tournamentAwards.id, 'award-1'))
+    expect(result[0]?.recipientId).toBe('tp-1')
+  })
+})
+
+describe('matchSecondaries', () => {
+  it('tracks a secondary objective with per-round VP', async () => {
+    const vpPerRound = [0, 4, 3, 4, 2]
+    await db.insert(matchSecondaries).values({
+      id: 'sec-1',
+      matchId: 'match-1',
+      player: 'YOUR',
+      secondaryName: 'Assassination',
+      vpPerRound: JSON.stringify(vpPerRound),
+    })
+
+    const result = await db.select().from(matchSecondaries).where(eq(matchSecondaries.matchId, 'match-1'))
+    expect(result).toHaveLength(1)
+    expect(result[0]?.secondaryName).toBe('Assassination')
+    expect(JSON.parse(result[0]?.vpPerRound ?? '[]')).toEqual(vpPerRound)
+  })
+})
+
+describe('stratagemLog', () => {
+  it('logs a stratagem usage in a turn', async () => {
+    await db.insert(stratagemLog).values({
+      id: 'strat-1',
+      turnId: 'turn-1',
+      player: 'YOUR',
+      stratagemName: 'Fire Discipline',
+      cpCost: 1,
+    })
+
+    const result = await db.select().from(stratagemLog).where(eq(stratagemLog.turnId, 'turn-1'))
+    expect(result).toHaveLength(1)
+    expect(result[0]?.stratagemName).toBe('Fire Discipline')
+    expect(result[0]?.cpCost).toBe(1)
+  })
+
+  it('logs multiple stratagems in the same turn', async () => {
+    await db.insert(stratagemLog).values({
+      id: 'strat-2',
+      turnId: 'turn-1',
+      player: 'THEIRS',
+      stratagemName: 'Armour of Contempt',
+      cpCost: 1,
+    })
+
+    const result = await db.select().from(stratagemLog).where(eq(stratagemLog.turnId, 'turn-1'))
+    expect(result).toHaveLength(2)
+  })
+})
+
+describe('userBans', () => {
+  it('creates a user ban', async () => {
+    await db.insert(userBans).values({
+      id: 'ban-1',
+      userId: 'user-2',
+      reason: 'Repeated violations',
+      bannedBy: 'user-1',
+      bannedAt: Date.now(),
+    })
+
+    const result = await db.select().from(userBans).where(eq(userBans.id, 'ban-1'))
+    expect(result).toHaveLength(1)
+    expect(result[0]?.reason).toBe('Repeated violations')
+    expect(result[0]?.liftedAt).toBeNull()
+  })
+
+  it('lifts a ban', async () => {
+    await db.update(userBans)
+      .set({ liftedAt: Date.now() })
+      .where(eq(userBans.id, 'ban-1'))
+
+    const result = await db.select().from(userBans).where(eq(userBans.id, 'ban-1'))
+    expect(result[0]?.liftedAt).not.toBeNull()
+  })
+})
+
+// ============================================================
+// V3: New column tests
+// ============================================================
+
+describe('V3: simulations new columns', () => {
+  it('stores configHash and weaponConfig', async () => {
+    const weaponConfig = JSON.stringify({ weapons: ['bolt_rifle'], rules: ['sustained_1'] })
+    await db.insert(simulations).values({
+      id: 'sim-v3',
+      userId: 'user-1',
+      attackerContentId: 'a1',
+      attackerName: 'Attacker',
+      defenderContentId: 'd1',
+      defenderName: 'Defender',
+      result: '{}',
+      configHash: 'abc123hash',
+      weaponConfig,
+      createdAt: Date.now(),
+    })
+
+    const result = await db.select().from(simulations).where(eq(simulations.id, 'sim-v3'))
+    expect(result[0]?.configHash).toBe('abc123hash')
+    expect(result[0]?.weaponConfig).toBe(weaponConfig)
+  })
+})
+
+describe('V3: lists new columns', () => {
+  it('stores detachment, description, battleSize, syncedAt', async () => {
+    await db.insert(lists).values({
+      id: 'list-v3',
+      userId: 'user-1',
+      faction: 'Space Marines',
+      name: 'Blood Angels List',
+      totalPts: 2000,
+      detachment: 'Gladius Task Force',
+      description: 'My GT list',
+      battleSize: 2000,
+      syncedAt: Date.now(),
+      createdAt: Date.now(),
+      updatedAt: Date.now(),
+    })
+
+    const result = await db.select().from(lists).where(eq(lists.id, 'list-v3'))
+    expect(result[0]?.detachment).toBe('Gladius Task Force')
+    expect(result[0]?.description).toBe('My GT list')
+    expect(result[0]?.battleSize).toBe(2000)
+    expect(result[0]?.syncedAt).not.toBeNull()
+  })
+})
+
+describe('V3: listUnits new columns', () => {
+  it('stores warlord flag and enhancement fields', async () => {
+    await db.insert(listUnits).values({
+      id: 'lu-v3',
+      listId: 'list-v3',
+      unitContentId: 'captain-1',
+      unitName: 'Captain',
+      unitPoints: 100,
+      count: 1,
+      isWarlord: 1,
+      enhancementId: 'enh-1',
+      enhancementName: 'Artificer Armour',
+      enhancementCost: 25,
+    })
+
+    const result = await db.select().from(listUnits).where(eq(listUnits.id, 'lu-v3'))
+    expect(result[0]?.isWarlord).toBe(1)
+    expect(result[0]?.enhancementId).toBe('enh-1')
+    expect(result[0]?.enhancementName).toBe('Artificer Armour')
+    expect(result[0]?.enhancementCost).toBe(25)
+  })
+})
+
+describe('V3: matches new columns', () => {
+  it('stores extended match setup data', async () => {
+    await db.insert(matches).values({
+      id: 'match-v3',
+      userId: 'user-1',
+      opponentFaction: 'Orks',
+      mission: 'Take and Hold',
+      opponentName: 'Bob',
+      opponentDetachment: 'Waaagh! Tribe',
+      yourFaction: 'Space Marines',
+      yourDetachment: 'Gladius Task Force',
+      terrainLayout: 'Layout 3',
+      deploymentZone: 'Tipping Point',
+      attackerDefender: 'YOU_ATTACK',
+      whoGoesFirst: 'YOU',
+      date: Date.now(),
+      location: 'Local Game Store',
+      tournamentName: 'Monthly RTT',
+      createdAt: Date.now(),
+    })
+
+    const result = await db.select().from(matches).where(eq(matches.id, 'match-v3'))
+    expect(result[0]?.opponentName).toBe('Bob')
+    expect(result[0]?.yourDetachment).toBe('Gladius Task Force')
+    expect(result[0]?.attackerDefender).toBe('YOU_ATTACK')
+    expect(result[0]?.location).toBe('Local Game Store')
+  })
+})
+
+describe('V3: turns new columns', () => {
+  it('stores per-player CP and scoring data', async () => {
+    await db.insert(turns).values({
+      id: 'turn-v3',
+      matchId: 'match-v3',
+      turnNumber: 1,
+      yourCpStart: 0,
+      yourCpGained: 1,
+      yourCpSpent: 1,
+      theirCpStart: 0,
+      theirCpGained: 1,
+      theirCpSpent: 0,
+      yourPrimary: 4,
+      theirPrimary: 4,
+      yourSecondary: 3,
+      theirSecondary: 2,
+      yourUnitsDestroyed: JSON.stringify(['Intercessor Squad']),
+      theirUnitsDestroyed: JSON.stringify(['Boyz']),
+      createdAt: Date.now(),
+    })
+
+    const result = await db.select().from(turns).where(eq(turns.id, 'turn-v3'))
+    expect(result[0]?.yourCpGained).toBe(1)
+    expect(result[0]?.yourPrimary).toBe(4)
+    expect(result[0]?.theirSecondary).toBe(2)
+    expect(JSON.parse(result[0]?.yourUnitsDestroyed ?? '[]')).toEqual(['Intercessor Squad'])
+  })
+})
+
+describe('V3: tournaments new columns', () => {
+  it('stores rich event metadata', async () => {
+    await db.insert(tournaments).values({
+      id: 'tourn-v3',
+      toUserId: 'user-1',
+      name: 'Regional GT',
+      eventDate: Date.now(),
+      format: '2000pts',
+      totalRounds: 5,
+      description: 'A great tournament',
+      startTime: '10:00',
+      latitude: 40.7128,
+      longitude: -74.0060,
+      missionPool: JSON.stringify(['Take and Hold', 'Supply Drop']),
+      requirePhotos: 1,
+      includeTwists: 0,
+      includeChallenger: 1,
+      maxPlayers: 32,
+      createdAt: Date.now(),
+    })
+
+    const result = await db.select().from(tournaments).where(eq(tournaments.id, 'tourn-v3'))
+    expect(result[0]?.description).toBe('A great tournament')
+    expect(result[0]?.latitude).toBeCloseTo(40.7128)
+    expect(result[0]?.maxPlayers).toBe(32)
+    expect(result[0]?.requirePhotos).toBe(1)
+  })
+})
+
+describe('V3: tournamentPlayers listId', () => {
+  it('stores listId reference', async () => {
+    await db.insert(tournamentPlayers).values({
+      id: 'tp-v3',
+      tournamentId: 'tourn-v3',
+      userId: 'user-1',
+      displayName: 'Alice',
+      faction: 'Space Marines',
+      listId: 'list-v3',
+      listLocked: 1,
+      checkedIn: 1,
+      dropped: 0,
+      registeredAt: Date.now(),
+    })
+
+    const result = await db.select().from(tournamentPlayers).where(eq(tournamentPlayers.id, 'tp-v3'))
+    expect(result[0]?.listId).toBe('list-v3')
   })
 })
 
@@ -1212,6 +1650,65 @@ describe('V2: Cascading deletes', () => {
 
     const unitsResult = await db.select().from(listUnits).where(eq(listUnits.id, 'lu-cascade'))
     expect(unitsResult).toHaveLength(0)
+  })
+
+  it('cascade: match -> matchSecondaries', async () => {
+    // match-1 was deleted via user-3 cascade is gone, but match-2 exists (user-1)
+    // Let's create a fresh match with secondaries to test
+    await db.insert(matches).values({
+      id: 'c-match-sec', userId: 'user-1', opponentFaction: 'T', mission: 'M', createdAt: Date.now(),
+    })
+    await db.insert(matchSecondaries).values({
+      id: 'c-sec-1', matchId: 'c-match-sec', player: 'YOUR', secondaryName: 'Assassination',
+    })
+    await db.delete(matches).where(eq(matches.id, 'c-match-sec'))
+
+    const result = await db.select().from(matchSecondaries).where(eq(matchSecondaries.id, 'c-sec-1'))
+    expect(result).toHaveLength(0)
+  })
+
+  it('cascade: turn -> stratagemLog', async () => {
+    await db.insert(matches).values({
+      id: 'c-match-strat', userId: 'user-1', opponentFaction: 'T', mission: 'M', createdAt: Date.now(),
+    })
+    await db.insert(turns).values({
+      id: 'c-turn-strat', matchId: 'c-match-strat', turnNumber: 1, createdAt: Date.now(),
+    })
+    await db.insert(stratagemLog).values({
+      id: 'c-strat-1', turnId: 'c-turn-strat', player: 'YOUR', stratagemName: 'Fire Discipline', cpCost: 1,
+    })
+    await db.delete(matches).where(eq(matches.id, 'c-match-strat'))
+
+    const result = await db.select().from(stratagemLog).where(eq(stratagemLog.id, 'c-strat-1'))
+    expect(result).toHaveLength(0)
+  })
+
+  it('cascade: tournament -> tournamentCards and tournamentAwards', async () => {
+    await db.insert(tournaments).values({
+      id: 'c-tourn-cards', toUserId: 'user-1', name: 'CascadeCards', eventDate: Date.now(),
+      format: 'GT', totalRounds: 3, createdAt: Date.now(),
+    })
+    await db.insert(tournamentPlayers).values({
+      id: 'c-tp-cards', tournamentId: 'c-tourn-cards', userId: 'user-1',
+      displayName: 'X', faction: 'Y', listLocked: 0, checkedIn: 0, dropped: 0,
+      registeredAt: Date.now(),
+    })
+    await db.insert(tournamentCards).values({
+      id: 'c-card-1', tournamentId: 'c-tourn-cards', playerId: 'c-tp-cards',
+      issuedBy: 'user-1', cardType: 'YELLOW', reason: 'Test', issuedAt: Date.now(),
+    })
+    await db.insert(tournamentAwards).values({
+      id: 'c-award-1', tournamentId: 'c-tourn-cards', name: 'Best Painted',
+      recipientId: 'c-tp-cards', createdAt: Date.now(),
+    })
+
+    await db.delete(tournaments).where(eq(tournaments.id, 'c-tourn-cards'))
+
+    const cards = await db.select().from(tournamentCards).where(eq(tournamentCards.id, 'c-card-1'))
+    expect(cards).toHaveLength(0)
+
+    const awards = await db.select().from(tournamentAwards).where(eq(tournamentAwards.id, 'c-award-1'))
+    expect(awards).toHaveLength(0)
   })
 
   it('non-cascading: deleting a tournament player does NOT delete the user', async () => {

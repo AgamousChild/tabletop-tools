@@ -7,7 +7,7 @@ const baseResult = {
   expectedWounds: 2.5,
   expectedModelsRemoved: 1.2,
   survivors: 3.8,
-  worstCase: { wounds: 0, modelsRemoved: 0 },
+  worstCase: { wounds: 1, modelsRemoved: 0 },
   bestCase: { wounds: 8, modelsRemoved: 4 },
 }
 
@@ -98,5 +98,38 @@ describe('SimulationResult', () => {
       />,
     )
     expect(screen.getByText('3.80')).toBeInTheDocument()
+  })
+
+  it('shows per-weapon breakdown when multiple weapons', () => {
+    render(
+      <SimulationResult
+        attackerName="A"
+        defenderName="D"
+        result={baseResult}
+        weaponBreakdowns={[
+          { weaponName: 'Bolt Rifle', expectedWounds: 1.5, expectedModelsRemoved: 0.7 },
+          { weaponName: 'Bolt Pistol', expectedWounds: 1.0, expectedModelsRemoved: 0.5 },
+        ]}
+        onSave={vi.fn()}
+      />,
+    )
+    expect(screen.getByText('Per-weapon breakdown')).toBeInTheDocument()
+    expect(screen.getByText('Bolt Rifle')).toBeInTheDocument()
+    expect(screen.getByText('Bolt Pistol')).toBeInTheDocument()
+  })
+
+  it('hides per-weapon breakdown with single weapon', () => {
+    render(
+      <SimulationResult
+        attackerName="A"
+        defenderName="D"
+        result={baseResult}
+        weaponBreakdowns={[
+          { weaponName: 'Bolt Rifle', expectedWounds: 2.5, expectedModelsRemoved: 1.2 },
+        ]}
+        onSave={vi.fn()}
+      />,
+    )
+    expect(screen.queryByText('Per-weapon breakdown')).not.toBeInTheDocument()
   })
 })
