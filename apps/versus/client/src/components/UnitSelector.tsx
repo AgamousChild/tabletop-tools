@@ -55,6 +55,12 @@ export function UnitSelector({
       <div className="space-y-1 max-h-64 overflow-y-auto">
         {isLoadingUnits ? (
           <p className="text-slate-400 text-sm py-2">Loading units…</p>
+        ) : units.length === 0 ? (
+          <p className="text-slate-500 text-sm py-2 italic">
+            No units found. Import unit profiles from{' '}
+            <a href="/data-import/" className="text-amber-400 hover:underline">Data Import</a>{' '}
+            (Unit Profiles tab) first.
+          </p>
         ) : (
           units.map((unit) => (
             <button
