@@ -37,7 +37,7 @@ export function parseBSDataXml(xml: string, faction: string): ParseResult {
     if (!id || !name) continue
 
     try {
-      const unit = parseUnitEntry(id, name, faction, entry.body)
+      const unit = parseUnitEntry(id, name, faction, entry.body, entry.fullBody)
       units.push(unit)
     } catch (err) {
       errors.push(`Failed to parse unit "${name}" (${id}): ${String(err)}`)
@@ -54,8 +54,8 @@ export function parseBSDataXml(xml: string, faction: string): ParseResult {
  * Nested <selectionEntry> blocks are stripped from the body so that
  * extractWeapons() only finds the outer unit's own weapons.
  */
-function extractSelectionEntries(xml: string): Array<{ attrs: string; body: string }> {
-  const results: Array<{ attrs: string; body: string }> = []
+function extractSelectionEntries(xml: string): Array<{ attrs: string; body: string; fullBody: string }> {
+  const results: Array<{ attrs: string; body: string; fullBody: string }> = []
   const openTag = /<selectionEntry\b([^>]*)>/g
   const closeTag = /<\/selectionEntry>/g
 
@@ -87,10 +87,11 @@ function extractSelectionEntries(xml: string): Array<{ attrs: string; body: stri
     } else if (tag.type === 'close' && stack.length > 0) {
       const entry = stack.pop()!
       if (entry.depth === 0) {
-        const body = xml.slice(entry.bodyStart, tag.index)
+        const fullBody = xml.slice(entry.bodyStart, tag.index)
         results.push({
           attrs: entry.attrs,
-          body: stripNestedSelectionEntries(body),
+          body: stripNestedSelectionEntries(fullBody),
+          fullBody,
         })
       }
     }
@@ -157,9 +158,20 @@ function parseUnitEntry(
   name: string,
   faction: string,
   body: string,
+  fullBody: string,
 ): UnitProfile {
   const stats = extractCharacteristics(body)
-  const weapons = extractWeapons(body)
+  // Extract weapons from fullBody (includes nested model entries) and deduplicate by name.
+  // Real BSData XML puts weapons inside nested <selectionEntry type="model"> blocks.
+  const allWeapons = extractWeapons(fullBody)
+  const seen = new Set<string>()
+  const weapons: WeaponProfile[] = []
+  for (const w of allWeapons) {
+    if (!seen.has(w.name)) {
+      seen.add(w.name)
+      weapons.push(w)
+    }
+  }
   const abilities = extractAbilityNames(body)
   const points = extractPoints(body)
 

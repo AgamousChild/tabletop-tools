@@ -267,12 +267,69 @@ describe('parseBSDataXml — nested selectionEntry', () => {
     expect(outer.points).toBe(90)
   })
 
-  it('outer unit weapons do not include nested model weapons', () => {
+  it('outer unit weapons include nested model weapons', () => {
     const { units } = parseBSDataXml(NESTED_XML, 'Test Faction')
     const outer = units[0]!
     const weaponNames = outer.weapons.map((w) => w.name)
     expect(weaponNames).toContain('Outer Rifle')
-    expect(weaponNames).not.toContain('Inner Pistol')
+    expect(weaponNames).toContain('Inner Pistol')
+  })
+
+  it('deduplicates weapons by name across nested models', () => {
+    const xml = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<gameSystem id="test-sys" name="TestGame">
+  <selectionEntries>
+    <selectionEntry id="unit-dup" name="Dup Squad" type="unit">
+      <profiles>
+        <profile id="p-dup" name="Dup Squad" typeName="Unit Characteristics">
+          <characteristics>
+            <characteristic name="M">6</characteristic>
+            <characteristic name="T">4</characteristic>
+            <characteristic name="Sv">3+</characteristic>
+            <characteristic name="W">2</characteristic>
+            <characteristic name="Ld">6</characteristic>
+            <characteristic name="OC">1</characteristic>
+          </characteristics>
+        </profile>
+      </profiles>
+      <selectionEntries>
+        <selectionEntry id="m1" name="Marine A" type="model">
+          <profiles>
+            <profile id="w-a" name="Bolt Rifle" typeName="Ranged Weapons">
+              <characteristics>
+                <characteristic name="Range">24</characteristic>
+                <characteristic name="A">2</characteristic>
+                <characteristic name="BS">3+</characteristic>
+                <characteristic name="S">4</characteristic>
+                <characteristic name="AP">-1</characteristic>
+                <characteristic name="D">1</characteristic>
+                <characteristic name="Abilities">-</characteristic>
+              </characteristics>
+            </profile>
+          </profiles>
+        </selectionEntry>
+        <selectionEntry id="m2" name="Marine B" type="model">
+          <profiles>
+            <profile id="w-b" name="Bolt Rifle" typeName="Ranged Weapons">
+              <characteristics>
+                <characteristic name="Range">24</characteristic>
+                <characteristic name="A">2</characteristic>
+                <characteristic name="BS">3+</characteristic>
+                <characteristic name="S">4</characteristic>
+                <characteristic name="AP">-1</characteristic>
+                <characteristic name="D">1</characteristic>
+                <characteristic name="Abilities">-</characteristic>
+              </characteristics>
+            </profile>
+          </profiles>
+        </selectionEntry>
+      </selectionEntries>
+    </selectionEntry>
+  </selectionEntries>
+</gameSystem>`
+    const { units } = parseBSDataXml(xml, 'Test Faction')
+    const weaponNames = units[0]!.weapons.map((w) => w.name)
+    expect(weaponNames).toEqual(['Bolt Rifle']) // deduplicated
   })
 
   it('keeps a top-level type="model" as a standalone unit', () => {
