@@ -9,115 +9,108 @@ import { simulateWeapon } from '../lib/rules/pipeline'
 import type { SimResult } from '../lib/rules/pipeline'
 import { SimulationResult } from './SimulationResult'
 import type { WeaponBreakdown } from './SimulationResult'
-import { UnitSelector } from './UnitSelector'
-import { UnitProfileCard } from './UnitProfileCard'
-import { WeaponSelector } from './WeaponSelector'
 import { SpecialRulesEditor } from './SpecialRulesEditor'
 
-type AttackType = 'ranged' | 'melee'
+const inputClass = 'w-full px-3 py-1.5 rounded-lg bg-slate-900 border border-slate-800 text-slate-100 text-sm focus:outline-none focus:border-amber-400'
 
 type Props = {
   onSignOut: () => void
 }
 
 export function SimulatorScreen({ onSignOut }: Props) {
-  const [attackerFaction, setAttackerFaction] = useState<string | undefined>()
-  const [defenderFaction, setDefenderFaction] = useState<string | undefined>()
-  const [attackerQuery, setAttackerQuery] = useState('')
-  const [defenderQuery, setDefenderQuery] = useState('')
-  const [attackerId, setAttackerId] = useState<string | null>(null)
-  const [defenderId, setDefenderId] = useState<string | null>(null)
-  const [defenderModelCount, setDefenderModelCount] = useState(5)
-  const [invulnSave, setInvulnSave] = useState<number | undefined>()
-  const [attackType, setAttackType] = useState<AttackType>('ranged')
-  const [weaponToggles, setWeaponToggles] = useState<Record<string, boolean>>({})
+  // Defender stats (manual entry, or populated from unit selector)
+  const [defToughness, setDefToughness] = useState(4)
+  const [defSave, setDefSave] = useState(3)
+  const [defWounds, setDefWounds] = useState(2)
+  const [defModels, setDefModels] = useState(5)
+  const [defInvuln, setDefInvuln] = useState<number | undefined>()
+  const [defFnp, setDefFnp] = useState<number | undefined>()
+  const [defenderName, setDefenderName] = useState('Defender')
+
+  // Weapons (manual entry + from unit selector)
+  const [weapons, setWeapons] = useState<WeaponProfile[]>([])
+  const [attackerName, setAttackerName] = useState('Attacker')
+
+  // Manual weapon form
+  const [wepName, setWepName] = useState('')
+  const [wepAttacks, setWepAttacks] = useState('2')
+  const [wepSkill, setWepSkill] = useState(3)
+  const [wepStrength, setWepStrength] = useState(4)
+  const [wepAp, setWepAp] = useState(0)
+  const [wepDamage, setWepDamage] = useState('1')
+
+  // Special rules
   const [specialRules, setSpecialRules] = useState<WeaponAbility[]>([])
+
+  // Unit selector (optional, collapsible)
+  const [showUnitPicker, setShowUnitPicker] = useState(false)
+  const [pickerFaction, setPickerFaction] = useState<string | undefined>()
+  const [pickerQuery, setPickerQuery] = useState('')
+  const [pickerUnitId, setPickerUnitId] = useState<string | null>(null)
+  const [pickerTarget, setPickerTarget] = useState<'attacker' | 'defender'>('attacker')
 
   const gameDataAvailable = useGameDataAvailable()
   const { data: factions = [] } = useGameFactions()
-
-  const { data: attackerUnits = [], isLoading: loadingAttackers } = useUnits({
-    faction: attackerFaction,
-    name: attackerQuery || undefined,
+  const { data: pickerUnits = [], isLoading: loadingUnits } = useUnits({
+    faction: pickerFaction,
+    name: pickerQuery || undefined,
   })
+  const { data: pickerUnit } = useGameUnit(pickerUnitId)
 
-  const { data: defenderUnits = [], isLoading: loadingDefenders } = useUnits({
-    faction: defenderFaction,
-    name: defenderQuery || undefined,
-  })
-
-  const { data: attacker } = useGameUnit(attackerId)
-  const { data: defender } = useGameUnit(defenderId)
-
-  const handleAttackerSelect = useCallback((id: string) => {
-    setAttackerId(id)
-    setWeaponToggles({})
-    setSpecialRules([])
+  // When a unit is selected from picker, populate the relevant side
+  const handlePickUnit = useCallback((id: string) => {
+    setPickerUnitId(id)
   }, [])
 
-  const handleDefenderSelect = useCallback((id: string) => {
-    setDefenderId(id)
-    setDefenderModelCount(5)
-    setInvulnSave(undefined)
-  }, [])
-
-  const handleAttackTypeChange = useCallback((type: AttackType) => {
-    setAttackType(type)
-    setWeaponToggles({})
-  }, [])
-
-  // Derive selected weapons from data — recomputes when attacker data loads
-  const selectedWeapons = useMemo(() => {
-    const weapons = attacker?.weapons ?? []
-    const indices = new Set<number>()
-    weapons.forEach((w, i) => {
-      const isRanged = w.range !== 'melee'
-      const defaultSelected = (attackType === 'ranged' && isRanged) || (attackType === 'melee' && !isRanged)
-      const override = weaponToggles[String(i)]
-      if (override !== undefined ? override : defaultSelected) {
-        indices.add(i)
-      }
-    })
-    return indices
-  }, [attacker?.weapons, attackType, weaponToggles])
-
-  const handleToggleWeapon = useCallback((index: number) => {
-    setWeaponToggles((prev) => ({
-      ...prev,
-      [String(index)]: !selectedWeapons.has(index),
-    }))
-  }, [selectedWeapons])
-
-  // Get selected weapon profiles with merged special rules
-  const getSelectedWeapons = useCallback((): WeaponProfile[] => {
-    if (!attacker) return []
-    return Array.from(selectedWeapons)
-      .sort((a, b) => a - b)
-      .map((i) => attacker.weapons[i])
-      .filter(Boolean)
-      .map((w) => ({
-        ...w,
-        abilities: [...w.abilities, ...specialRules],
-      }))
-  }, [attacker, selectedWeapons, specialRules])
-
-  // Compute simulation locally
-  const simData = useMemo((): { result: SimResult; breakdowns: WeaponBreakdown[] } | null => {
-    if (!attacker || !defender) return null
-
-    const weapons = getSelectedWeapons()
-    if (weapons.length === 0) {
-      return {
-        result: {
-          expectedWounds: 0,
-          expectedModelsRemoved: 0,
-          survivors: defenderModelCount,
-          worstCase: { wounds: 0, modelsRemoved: 0 },
-          bestCase: { wounds: 0, modelsRemoved: 0 },
-        },
-        breakdowns: [],
-      }
+  const handleApplyUnit = useCallback(() => {
+    if (!pickerUnit) return
+    if (pickerTarget === 'attacker') {
+      setAttackerName(pickerUnit.name)
+      setWeapons(pickerUnit.weapons)
+    } else {
+      setDefenderName(pickerUnit.name)
+      setDefToughness(pickerUnit.toughness)
+      setDefSave(pickerUnit.save)
+      setDefWounds(pickerUnit.wounds)
     }
+    setShowUnitPicker(false)
+    setPickerUnitId(null)
+    setPickerQuery('')
+  }, [pickerUnit, pickerTarget])
+
+  // Add manual weapon
+  const handleAddWeapon = useCallback(() => {
+    const attacks = /^\d*D\d/i.test(wepAttacks) ? wepAttacks : (parseInt(wepAttacks) || 1)
+    const damage = /^\d*D\d/i.test(wepDamage) ? wepDamage : (parseInt(wepDamage) || 1)
+    const newWeapon: WeaponProfile = {
+      name: wepName || `Weapon ${weapons.length + 1}`,
+      range: 24,
+      attacks,
+      skill: wepSkill,
+      strength: wepStrength,
+      ap: -Math.abs(wepAp),
+      damage,
+      abilities: [],
+    }
+    setWeapons((prev) => [...prev, newWeapon])
+    setWepName('')
+  }, [wepName, wepAttacks, wepSkill, wepStrength, wepAp, wepDamage, weapons.length])
+
+  const handleRemoveWeapon = useCallback((index: number) => {
+    setWeapons((prev) => prev.filter((_, i) => i !== index))
+  }, [])
+
+  // Build weapon profiles with special rules merged
+  const weaponsWithRules = useMemo(() => {
+    return weapons.map((w) => ({
+      ...w,
+      abilities: [...w.abilities, ...specialRules],
+    }))
+  }, [weapons, specialRules])
+
+  // Compute simulation
+  const simData = useMemo((): { result: SimResult; breakdowns: WeaponBreakdown[] } | null => {
+    if (weapons.length === 0) return null
 
     let totalExpectedWounds = 0
     let totalExpectedModelsRemoved = 0
@@ -125,14 +118,15 @@ export function SimulatorScreen({ onSignOut }: Props) {
     let worstCaseWounds = 0
     const breakdowns: WeaponBreakdown[] = []
 
-    for (const weapon of weapons) {
+    for (const weapon of weaponsWithRules) {
       const r = simulateWeapon(
         weapon,
-        defender.toughness,
-        defender.save,
-        defender.wounds,
-        defenderModelCount,
-        invulnSave,
+        defToughness,
+        defSave,
+        defWounds,
+        defModels,
+        defInvuln,
+        defFnp,
       )
       totalExpectedWounds += r.expectedWounds
       totalExpectedModelsRemoved += r.expectedModelsRemoved
@@ -146,20 +140,10 @@ export function SimulatorScreen({ onSignOut }: Props) {
       })
     }
 
-    totalExpectedModelsRemoved = Math.min(
-      defenderModelCount,
-      totalExpectedModelsRemoved,
-    )
-    const survivors = Math.max(0, defenderModelCount - totalExpectedModelsRemoved)
-
-    bestCaseWounds = Math.min(
-      bestCaseWounds,
-      defenderModelCount * defender.wounds,
-    )
-    worstCaseWounds = Math.min(
-      worstCaseWounds,
-      defenderModelCount * defender.wounds,
-    )
+    totalExpectedModelsRemoved = Math.min(defModels, totalExpectedModelsRemoved)
+    const survivors = Math.max(0, defModels - totalExpectedModelsRemoved)
+    bestCaseWounds = Math.min(bestCaseWounds, defModels * defWounds)
+    worstCaseWounds = Math.min(worstCaseWounds, defModels * defWounds)
 
     return {
       result: {
@@ -168,16 +152,16 @@ export function SimulatorScreen({ onSignOut }: Props) {
         survivors: parseFloat(survivors.toFixed(4)),
         worstCase: {
           wounds: worstCaseWounds,
-          modelsRemoved: Math.floor(worstCaseWounds / defender.wounds),
+          modelsRemoved: Math.floor(worstCaseWounds / defWounds),
         },
         bestCase: {
           wounds: bestCaseWounds,
-          modelsRemoved: Math.floor(bestCaseWounds / defender.wounds),
+          modelsRemoved: Math.floor(bestCaseWounds / defWounds),
         },
       },
       breakdowns,
     }
-  }, [attacker, defender, defenderModelCount, invulnSave, getSelectedWeapons])
+  }, [weaponsWithRules, defToughness, defSave, defWounds, defModels, defInvuln, defFnp, weapons.length])
 
   const resultsRef = useRef<HTMLDivElement>(null)
 
@@ -189,22 +173,17 @@ export function SimulatorScreen({ onSignOut }: Props) {
 
   const saveMutation = trpc.simulate.save.useMutation()
 
-  const attackerName =
-    attackerUnits.find((u) => u.id === attackerId)?.name ?? attacker?.name ?? attackerId ?? ''
-  const defenderName =
-    defenderUnits.find((u) => u.id === defenderId)?.name ?? defender?.name ?? defenderId ?? ''
-
   async function handleSignOut() {
     await authClient.signOut()
     onSignOut()
   }
 
   function handleSave() {
-    if (!simData?.result || !attackerId || !defenderId) return
+    if (!simData?.result) return
     saveMutation.mutate({
-      attackerId,
+      attackerId: 'manual',
       attackerName,
-      defenderId,
+      defenderId: 'manual',
       defenderName,
       result: simData.result,
     })
@@ -224,91 +203,285 @@ export function SimulatorScreen({ onSignOut }: Props) {
       </header>
 
       <div className="max-w-2xl mx-auto p-4 space-y-6">
-        {/* No data warning */}
-        {!gameDataAvailable && (
-          <div className="bg-slate-900 border border-amber-400/30 rounded-lg p-4 text-center">
-            <p className="text-slate-200 font-semibold">No game data imported</p>
-            <p className="text-slate-400 text-sm mt-1">
-              Import unit profiles from the{' '}
-              <a href="/data-import/" className="text-amber-400 hover:underline">Data Import</a>{' '}
-              app to use the combat simulator.
-            </p>
-          </div>
-        )}
 
-        {/* Unit selectors */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-          <div className="space-y-4">
-            <UnitSelector
-              label="Attacker"
-              factions={factions}
-              units={attackerUnits}
-              selectedUnitId={attackerId}
-              isLoadingUnits={loadingAttackers}
-              onFactionChange={setAttackerFaction}
-              onQueryChange={setAttackerQuery}
-              onSelect={handleAttackerSelect}
-            />
-            {attacker && <UnitProfileCard unit={attacker} />}
-          </div>
+        {/* Unit picker (optional) */}
+        {gameDataAvailable && (
+          <div>
+            <button
+              onClick={() => setShowUnitPicker(!showUnitPicker)}
+              className="text-sm text-amber-400 hover:text-amber-300 transition-colors"
+            >
+              {showUnitPicker ? 'Hide unit picker' : 'Load from imported data'}
+            </button>
 
-          <div className="space-y-4">
-            <UnitSelector
-              label="Defender"
-              factions={factions}
-              units={defenderUnits}
-              selectedUnitId={defenderId}
-              isLoadingUnits={loadingDefenders}
-              onFactionChange={setDefenderFaction}
-              onQueryChange={setDefenderQuery}
-              onSelect={handleDefenderSelect}
-            />
-            {defender && (
-              <>
-                <UnitProfileCard unit={defender} invulnSave={invulnSave} />
-                <div className="flex gap-3">
-                  <div className="flex-1">
-                    <label className="block text-xs text-slate-400 mb-1">Models</label>
-                    <input
-                      type="number"
-                      min={1}
-                      max={30}
-                      value={defenderModelCount}
-                      onChange={(e) => setDefenderModelCount(Math.max(1, parseInt(e.target.value) || 1))}
-                      className="w-full px-3 py-1.5 rounded-lg bg-slate-900 border border-slate-800 text-slate-100 text-sm focus:outline-none focus:border-amber-400"
-                    />
-                  </div>
-                  <div className="flex-1">
-                    <label className="block text-xs text-slate-400 mb-1">Invuln save</label>
-                    <select
-                      value={invulnSave ?? ''}
-                      onChange={(e) => setInvulnSave(e.target.value ? parseInt(e.target.value) : undefined)}
-                      className="w-full px-3 py-1.5 rounded-lg bg-slate-900 border border-slate-800 text-slate-100 text-sm focus:outline-none focus:border-amber-400"
-                    >
-                      <option value="">None</option>
-                      <option value="2">2+</option>
-                      <option value="3">3+</option>
-                      <option value="4">4+</option>
-                      <option value="5">5+</option>
-                      <option value="6">6+</option>
-                    </select>
-                  </div>
+            {showUnitPicker && (
+              <div className="mt-3 rounded-lg bg-slate-900 border border-slate-800 p-4 space-y-3">
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => setPickerTarget('attacker')}
+                    className={`flex-1 py-1.5 rounded-lg text-sm font-medium transition-colors ${
+                      pickerTarget === 'attacker'
+                        ? 'bg-amber-400 text-slate-950'
+                        : 'bg-slate-800 text-slate-400'
+                    }`}
+                  >
+                    Pick Attacker
+                  </button>
+                  <button
+                    onClick={() => setPickerTarget('defender')}
+                    className={`flex-1 py-1.5 rounded-lg text-sm font-medium transition-colors ${
+                      pickerTarget === 'defender'
+                        ? 'bg-amber-400 text-slate-950'
+                        : 'bg-slate-800 text-slate-400'
+                    }`}
+                  >
+                    Pick Defender
+                  </button>
                 </div>
-              </>
+                <select
+                  className={inputClass}
+                  onChange={(e) => setPickerFaction(e.target.value || undefined)}
+                  defaultValue=""
+                >
+                  <option value="">All factions</option>
+                  {factions.map((f) => (
+                    <option key={f} value={f}>{f}</option>
+                  ))}
+                </select>
+                <input
+                  type="text"
+                  placeholder="Search units…"
+                  value={pickerQuery}
+                  onChange={(e) => setPickerQuery(e.target.value)}
+                  className={inputClass}
+                />
+                <div className="max-h-48 overflow-y-auto space-y-1">
+                  {loadingUnits ? (
+                    <p className="text-slate-400 text-sm py-2">Loading…</p>
+                  ) : pickerUnits.length === 0 ? (
+                    <p className="text-slate-500 text-sm py-2 italic">No units found</p>
+                  ) : (
+                    pickerUnits.map((unit) => (
+                      <button
+                        key={unit.id}
+                        onClick={() => handlePickUnit(unit.id)}
+                        className={`w-full text-left px-3 py-1.5 rounded text-sm transition-colors ${
+                          pickerUnitId === unit.id
+                            ? 'bg-amber-400/20 border border-amber-400 text-amber-400'
+                            : 'bg-slate-800 border border-slate-700 text-slate-100 hover:border-slate-600'
+                        }`}
+                      >
+                        {unit.name} <span className="text-slate-500">{unit.points}pts</span>
+                      </button>
+                    ))
+                  )}
+                </div>
+                {pickerUnit && (
+                  <button
+                    onClick={handleApplyUnit}
+                    className="w-full py-2 rounded-lg bg-amber-400 text-slate-950 font-semibold text-sm hover:bg-amber-300 transition-colors"
+                  >
+                    Apply as {pickerTarget === 'attacker' ? 'Attacker' : 'Defender'}
+                  </button>
+                )}
+              </div>
             )}
           </div>
-        </div>
-
-        {/* Weapon selection */}
-        {attacker && attacker.weapons.length > 0 && (
-          <WeaponSelector
-            weapons={attacker.weapons}
-            attackType={attackType}
-            selectedWeapons={selectedWeapons}
-            onToggleWeapon={handleToggleWeapon}
-            onAttackTypeChange={handleAttackTypeChange}
-          />
         )}
+
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          {/* Attacker — Weapons */}
+          <div className="space-y-4">
+            <h2 className="text-sm font-semibold text-slate-400 uppercase tracking-wider">
+              Attacker: {attackerName}
+            </h2>
+
+            {/* Weapon list */}
+            {weapons.length > 0 && (
+              <div className="space-y-2">
+                {weapons.map((w, i) => (
+                  <div key={i} className="flex items-center gap-2 rounded-lg bg-slate-900 border border-slate-800 px-3 py-2">
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-medium text-slate-100">{w.name}</p>
+                      <div className="flex flex-wrap gap-x-3 text-xs text-slate-400 mt-0.5">
+                        <span>A:{w.attacks}</span>
+                        <span>WS/BS:{w.skill}+</span>
+                        <span>S:{w.strength}</span>
+                        <span>AP:{w.ap}</span>
+                        <span>D:{w.damage}</span>
+                      </div>
+                    </div>
+                    <button
+                      onClick={() => handleRemoveWeapon(i)}
+                      className="text-slate-500 hover:text-red-400 text-xs px-1"
+                    >
+                      X
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {/* Add weapon form */}
+            <div className="rounded-lg bg-slate-900 border border-slate-800 p-3 space-y-2">
+              <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Add Weapon</p>
+              <input
+                type="text"
+                placeholder="Weapon name (optional)"
+                value={wepName}
+                onChange={(e) => setWepName(e.target.value)}
+                className={inputClass}
+              />
+              <div className="grid grid-cols-3 gap-2">
+                <div>
+                  <label className="block text-xs text-slate-400 mb-0.5">Attacks</label>
+                  <input
+                    type="text"
+                    value={wepAttacks}
+                    onChange={(e) => setWepAttacks(e.target.value)}
+                    placeholder="2 or D6"
+                    className={inputClass}
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs text-slate-400 mb-0.5">Skill</label>
+                  <select value={wepSkill} onChange={(e) => setWepSkill(parseInt(e.target.value))} className={inputClass}>
+                    <option value="2">2+</option>
+                    <option value="3">3+</option>
+                    <option value="4">4+</option>
+                    <option value="5">5+</option>
+                    <option value="6">6+</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-xs text-slate-400 mb-0.5">Strength</label>
+                  <input
+                    type="number"
+                    min={1}
+                    max={20}
+                    value={wepStrength}
+                    onChange={(e) => setWepStrength(parseInt(e.target.value) || 1)}
+                    className={inputClass}
+                  />
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <label className="block text-xs text-slate-400 mb-0.5">AP</label>
+                  <select value={wepAp} onChange={(e) => setWepAp(parseInt(e.target.value))} className={inputClass}>
+                    <option value="0">0</option>
+                    <option value="1">-1</option>
+                    <option value="2">-2</option>
+                    <option value="3">-3</option>
+                    <option value="4">-4</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-xs text-slate-400 mb-0.5">Damage</label>
+                  <input
+                    type="text"
+                    value={wepDamage}
+                    onChange={(e) => setWepDamage(e.target.value)}
+                    placeholder="1 or D6"
+                    className={inputClass}
+                  />
+                </div>
+              </div>
+              <button
+                onClick={handleAddWeapon}
+                className="w-full py-1.5 rounded-lg bg-slate-800 text-amber-400 text-sm font-medium hover:bg-slate-700 transition-colors"
+              >
+                + Add Weapon
+              </button>
+            </div>
+          </div>
+
+          {/* Defender — Stats */}
+          <div className="space-y-4">
+            <h2 className="text-sm font-semibold text-slate-400 uppercase tracking-wider">
+              Defender: {defenderName}
+            </h2>
+
+            <div className="rounded-lg bg-slate-900 border border-slate-800 p-3 space-y-2">
+              <div className="grid grid-cols-3 gap-2">
+                <div>
+                  <label className="block text-xs text-slate-400 mb-0.5">Toughness</label>
+                  <input
+                    type="number"
+                    min={1}
+                    max={16}
+                    value={defToughness}
+                    onChange={(e) => setDefToughness(parseInt(e.target.value) || 1)}
+                    className={inputClass}
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs text-slate-400 mb-0.5">Save</label>
+                  <select value={defSave} onChange={(e) => setDefSave(parseInt(e.target.value))} className={inputClass}>
+                    <option value="2">2+</option>
+                    <option value="3">3+</option>
+                    <option value="4">4+</option>
+                    <option value="5">5+</option>
+                    <option value="6">6+</option>
+                    <option value="7">None</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-xs text-slate-400 mb-0.5">Wounds</label>
+                  <input
+                    type="number"
+                    min={1}
+                    max={30}
+                    value={defWounds}
+                    onChange={(e) => setDefWounds(parseInt(e.target.value) || 1)}
+                    className={inputClass}
+                  />
+                </div>
+              </div>
+              <div className="grid grid-cols-3 gap-2">
+                <div>
+                  <label className="block text-xs text-slate-400 mb-0.5">Models</label>
+                  <input
+                    type="number"
+                    min={1}
+                    max={30}
+                    value={defModels}
+                    onChange={(e) => setDefModels(Math.max(1, parseInt(e.target.value) || 1))}
+                    className={inputClass}
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs text-slate-400 mb-0.5">Invuln</label>
+                  <select
+                    value={defInvuln ?? ''}
+                    onChange={(e) => setDefInvuln(e.target.value ? parseInt(e.target.value) : undefined)}
+                    className={inputClass}
+                  >
+                    <option value="">None</option>
+                    <option value="2">2+</option>
+                    <option value="3">3+</option>
+                    <option value="4">4+</option>
+                    <option value="5">5+</option>
+                    <option value="6">6+</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-xs text-slate-400 mb-0.5">FNP</label>
+                  <select
+                    value={defFnp ?? ''}
+                    onChange={(e) => setDefFnp(e.target.value ? parseInt(e.target.value) : undefined)}
+                    className={inputClass}
+                  >
+                    <option value="">None</option>
+                    <option value="4">4+</option>
+                    <option value="5">5+</option>
+                    <option value="6">6+</option>
+                  </select>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
 
         {/* Special rules */}
         <SpecialRulesEditor
@@ -319,11 +492,11 @@ export function SimulatorScreen({ onSignOut }: Props) {
 
         {/* Run button */}
         <button
-          disabled={!attackerId || !defenderId || selectedWeapons.size === 0}
+          disabled={weapons.length === 0}
           onClick={handleRunClick}
           className="w-full py-3 rounded-lg bg-amber-400 text-slate-950 font-semibold hover:bg-amber-300 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
         >
-          {!simData && attackerId && defenderId ? 'Calculating...' : 'Run Simulation'}
+          {weapons.length === 0 ? 'Add a weapon to simulate' : 'Run Simulation'}
         </button>
 
         {/* Result */}
