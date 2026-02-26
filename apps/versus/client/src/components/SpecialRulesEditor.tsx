@@ -20,6 +20,10 @@ const RULE_OPTIONS: { label: string; create: () => WeaponAbility }[] = [
   { label: '-1 to hit', create: () => ({ type: 'HIT_MOD', value: -1 }) },
   { label: '+1 to wound', create: () => ({ type: 'WOUND_MOD', value: 1 }) },
   { label: '-1 to wound', create: () => ({ type: 'WOUND_MOD', value: -1 }) },
+  { label: '+1 strength', create: () => ({ type: 'STRENGTH_MOD', value: 1 }) },
+  { label: '+2 strength', create: () => ({ type: 'STRENGTH_MOD', value: 2 }) },
+  { label: '+1 attacks', create: () => ({ type: 'ATTACKS_MOD', value: 1 }) },
+  { label: '+2 attacks', create: () => ({ type: 'ATTACKS_MOD', value: 2 }) },
 ]
 
 function ruleLabel(rule: WeaponAbility): string {
@@ -35,6 +39,8 @@ function ruleLabel(rule: WeaponAbility): string {
     case 'REROLL_WOUNDS': return 'Re-roll wounds'
     case 'HIT_MOD': return `${rule.value > 0 ? '+' : ''}${rule.value} to hit`
     case 'WOUND_MOD': return `${rule.value > 0 ? '+' : ''}${rule.value} to wound`
+    case 'STRENGTH_MOD': return `${rule.value > 0 ? '+' : ''}${rule.value} strength`
+    case 'ATTACKS_MOD': return `${rule.value > 0 ? '+' : ''}${rule.value} attacks`
     default: return 'Unknown'
   }
 }

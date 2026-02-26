@@ -28,6 +28,8 @@ export type WeaponAbility =
   | { type: 'REROLL_WOUNDS' }
   | { type: 'HIT_MOD'; value: number }
   | { type: 'WOUND_MOD'; value: number }
+  | { type: 'STRENGTH_MOD'; value: number }
+  | { type: 'ATTACKS_MOD'; value: number }
 
 export interface UnitProfile {
   id: string           // stable content ID (e.g. BSData entry ID)

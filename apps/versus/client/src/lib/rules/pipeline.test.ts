@@ -344,6 +344,81 @@ describe('simulateWeapon', () => {
     expect(r.bestCase.modelsRemoved).toBe(5)
   })
 
+  it('STRENGTH_MOD +1: S4 vs T4 becomes S5 vs T4 (3+ to wound)', () => {
+    // Without mod: S4 vs T4 = 4+ to wound (3/6)
+    // With +1 strength: S5 vs T4 = 3+ to wound (4/6) — more damage
+    const base = simulateWeapon(
+      { name: 'Bolter', range: 24, attacks: 10, skill: 3, strength: 4, ap: 0, damage: 1, abilities: [] },
+      4, 3, 2, 10,
+    )
+    const withMod = simulateWeapon(
+      { name: 'Bolter', range: 24, attacks: 10, skill: 3, strength: 4, ap: 0, damage: 1, abilities: [{ type: 'STRENGTH_MOD', value: 1 }] },
+      4, 3, 2, 10,
+    )
+    expect(withMod.expectedWounds).toBeGreaterThan(base.expectedWounds)
+  })
+
+  it('STRENGTH_MOD +2: S4 vs T4 becomes S6 vs T4 (3+ to wound)', () => {
+    // S6 vs T4 = 3+ to wound (same bracket as S5 vs T4)
+    const plus1 = simulateWeapon(
+      { name: 'Bolter', range: 24, attacks: 10, skill: 3, strength: 4, ap: 0, damage: 1, abilities: [{ type: 'STRENGTH_MOD', value: 1 }] },
+      4, 3, 2, 10,
+    )
+    const plus2 = simulateWeapon(
+      { name: 'Bolter', range: 24, attacks: 10, skill: 3, strength: 4, ap: 0, damage: 1, abilities: [{ type: 'STRENGTH_MOD', value: 2 }] },
+      4, 3, 2, 10,
+    )
+    // S5 and S6 are both 3+ vs T4, so same result
+    expect(plus2.expectedWounds).toBeCloseTo(plus1.expectedWounds)
+  })
+
+  it('STRENGTH_MOD -1: S4 vs T4 becomes S3 vs T4 (5+ to wound)', () => {
+    const base = simulateWeapon(
+      { name: 'Bolter', range: 24, attacks: 10, skill: 3, strength: 4, ap: 0, damage: 1, abilities: [] },
+      4, 3, 2, 10,
+    )
+    const withMod = simulateWeapon(
+      { name: 'Bolter', range: 24, attacks: 10, skill: 3, strength: 4, ap: 0, damage: 1, abilities: [{ type: 'STRENGTH_MOD', value: -1 }] },
+      4, 3, 2, 10,
+    )
+    expect(withMod.expectedWounds).toBeLessThan(base.expectedWounds)
+  })
+
+  it('ATTACKS_MOD +1: 2 attacks becomes 3', () => {
+    const base = simulateWeapon(
+      { name: 'Bolter', range: 24, attacks: 2, skill: 3, strength: 4, ap: 0, damage: 1, abilities: [] },
+      4, 3, 2, 10,
+    )
+    const withMod = simulateWeapon(
+      { name: 'Bolter', range: 24, attacks: 2, skill: 3, strength: 4, ap: 0, damage: 1, abilities: [{ type: 'ATTACKS_MOD', value: 1 }] },
+      4, 3, 2, 10,
+    )
+    // +1 attack = 50% more attacks, so 50% more damage
+    expect(withMod.expectedWounds).toBeCloseTo(base.expectedWounds * 1.5, 2)
+  })
+
+  it('ATTACKS_MOD +2: 2 attacks becomes 4', () => {
+    const base = simulateWeapon(
+      { name: 'Bolter', range: 24, attacks: 2, skill: 3, strength: 4, ap: 0, damage: 1, abilities: [] },
+      4, 3, 2, 10,
+    )
+    const withMod = simulateWeapon(
+      { name: 'Bolter', range: 24, attacks: 2, skill: 3, strength: 4, ap: 0, damage: 1, abilities: [{ type: 'ATTACKS_MOD', value: 2 }] },
+      4, 3, 2, 10,
+    )
+    // +2 attacks = double, so double damage
+    expect(withMod.expectedWounds).toBeCloseTo(base.expectedWounds * 2, 2)
+  })
+
+  it('ATTACKS_MOD enforces minimum 1 attack', () => {
+    const r = simulateWeapon(
+      { name: 'Bolter', range: 24, attacks: 1, skill: 3, strength: 4, ap: 0, damage: 1, abilities: [{ type: 'ATTACKS_MOD', value: -5 }] },
+      4, 3, 2, 10,
+    )
+    // Should still do some damage (1 attack minimum)
+    expect(r.expectedWounds).toBeGreaterThan(0)
+  })
+
   it('invuln save is passed through to resolveSaves', () => {
     const noInvuln = simulateWeapon(
       { name: 'Bolter', range: 24, attacks: 10, skill: 3, strength: 4, ap: -2, damage: 1, abilities: [] },
