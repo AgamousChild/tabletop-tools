@@ -77,7 +77,7 @@ export function SimulatorScreen({ onSignOut }: Props) {
       }
     })
     setSelectedWeapons(indices)
-  }, [attackerId, attackType]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [attackerId, attackType, attacker?.id]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const handleToggleWeapon = useCallback((index: number) => {
     setSelectedWeapons((prev) => {
