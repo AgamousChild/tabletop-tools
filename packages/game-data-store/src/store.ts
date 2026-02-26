@@ -1,7 +1,7 @@
 import type { UnitProfile } from '@tabletop-tools/game-content'
 
 const DB_NAME = 'tabletop-tools-game-data'
-const DB_VERSION = 3
+const DB_VERSION = 4
 const UNITS_STORE = 'units'
 const META_STORE = 'meta'
 const LISTS_STORE = 'lists'
@@ -61,6 +61,9 @@ export interface LocalList {
   id: string
   faction: string
   name: string
+  description?: string
+  detachment?: string
+  battleSize?: number
   totalPts: number
   createdAt: number
   updatedAt: number
@@ -72,6 +75,7 @@ export interface LocalListUnit {
   unitContentId: string
   unitName: string
   unitPoints: number
+  modelCount?: number
   count: number
 }
 

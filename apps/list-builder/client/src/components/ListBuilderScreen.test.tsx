@@ -28,6 +28,13 @@ vi.mock('../lib/trpc', () => ({
   },
 }))
 
+vi.mock('../lib/sync', () => ({
+  syncListToServer: vi.fn(),
+  syncAllToServer: vi.fn(),
+  deleteListFromServer: vi.fn(),
+  restoreFromServer: vi.fn().mockResolvedValue(0),
+}))
+
 const mockUseLists = vi.fn(() => ({
   data: [{ id: 'list-1', faction: 'Space Marines', name: 'My Crusade', totalPts: 90, createdAt: 0, updatedAt: 0 }],
   refetch: vi.fn(),
@@ -85,6 +92,16 @@ vi.mock('@tabletop-tools/game-data-store', () => ({
     isLoading: false,
   }),
   useUnitKeywords: () => ({
+    data: [],
+    error: null,
+    isLoading: false,
+  }),
+  useUnitCompositions: () => ({
+    data: [],
+    error: null,
+    isLoading: false,
+  }),
+  useUnitCosts: () => ({
     data: [],
     error: null,
     isLoading: false,

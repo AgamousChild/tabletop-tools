@@ -4,7 +4,10 @@ import {
   useDetachments,
   useEnhancements,
   useUnitKeywords,
+  useUnitCompositions,
+  useUnitCosts,
 } from '@tabletop-tools/game-data-store'
+import { parseModelOptions } from './modelOptions'
 
 export function useUnits(query: { faction?: string; name?: string }, enabled: boolean) {
   const localResult = useUnitSearch({ faction: query.faction, name: query.name })
@@ -36,4 +39,11 @@ export function useGameUnitKeywords(datasheetId: string) {
   const result = useUnitKeywords(datasheetId)
   if (!datasheetId) return { data: [], isLoading: false }
   return { data: result.data, isLoading: result.isLoading }
+}
+
+export function useUnitModelOptions(datasheetId: string) {
+  const compositions = useUnitCompositions(datasheetId)
+  const costs = useUnitCosts(datasheetId)
+  if (!datasheetId) return []
+  return parseModelOptions(compositions.data, costs.data)
 }

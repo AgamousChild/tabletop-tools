@@ -27,7 +27,13 @@ export function MyListsScreen({ onCreateNew, onSelectList }: Props) {
             <div className="flex items-center justify-between">
               <div>
                 <p className="font-semibold text-slate-100">{list.name}</p>
-                <p className="text-sm text-slate-400 mt-0.5">{list.faction}</p>
+                <p className="text-sm text-slate-400 mt-0.5">
+                  {list.faction}
+                  {list.detachment && ` — ${list.detachment}`}
+                </p>
+                {list.description && (
+                  <p className="text-xs text-slate-500 mt-1 line-clamp-2">{list.description}</p>
+                )}
               </div>
               <p className="text-lg font-bold text-amber-400 tabular-nums">{list.totalPts}pts</p>
             </div>
