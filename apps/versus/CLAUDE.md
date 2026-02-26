@@ -125,7 +125,7 @@ simulate(attacker, defender):
 
 ## Testing
 
-**119 tests** (8 server + 111 client), all passing.
+**121 tests** (8 server + 113 client), all passing.
 
 ```
 client/src/
@@ -134,7 +134,7 @@ client/src/
   lib/
     useGameData.test.tsx               <- IndexedDB hook tests
   components/
-    SimulatorScreen.test.tsx           <- 10 tests: title, panels, factions, run button, sign out, weapon/profile selection
+    SimulatorScreen.test.tsx           <- 12 tests: title, attacker/defender, add weapon form, defender stats, button states, results, weapon removal, sign out, special rules, unit picker
     SimulationResult.test.tsx          <- 7 tests: names, wounds, models, best/worst, save, survivors
 server/src/
   routers/
@@ -147,5 +147,5 @@ The pipeline runs client-side — moved from server to client as it's pure math 
 
 ```bash
 cd apps/versus/server && pnpm test   # 8 server tests
-cd apps/versus/client && pnpm test   # 64 client tests
+cd apps/versus/client && pnpm test   # 113 client tests
 ```
