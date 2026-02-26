@@ -84,6 +84,37 @@ Actual R2 upload requires deployment configuration (Phase 9).
 
 ---
 
+## Phase 10: Per-Turn Phase-Based Data Entry
+
+Redesign BattleScreen from flat single-form-per-round to per-turn phase-based entry.
+
+### Terminology
+- A game has 5 **rounds**. Each round has 2 **turns** (one per player).
+- Each turn: Command Phase → Action Phase → Photo (optional).
+- DB stores one `turns` row per round (V3 per-player columns: yourX/theirX).
+
+### Server changes
+- `turn.add` extended with V3 per-player fields + stratagems array
+- New `secondary` router: set, score, list, remove (uses `matchSecondaries` table)
+- `match.start` accepts `twistCards`, `challengerCards`, `requirePhotos`
+- `match.get` returns secondaries alongside turns
+
+### Client changes
+- MissionSetupScreen: twist/challenger/photos checkboxes
+- New battle components: VpStepper, Scoreboard, StratagemPicker, UnitPicker, SecondaryPicker, PhotoCaptureScreen
+- New phase screens: CommandPhaseScreen, ActionPhaseScreen, TurnFlow, RoundSummary, RoundWizard
+- BattleScreen rewritten to use Scoreboard + RoundWizard
+- EndGameScreen updated for per-player breakdown
+
+### Design decisions
+- One DB record per round (not per turn) — V3 yourX/theirX columns
+- Movement/Shooting/Charge/Fight combined into one Action Phase screen
+- Stratagems optional — picker shows IndexedDB data, free-text/skip always available
+- CP carries forward: `start + gained - spent`
+- Backward compatible: legacy columns still written
+
+---
+
 ## Open After Launch
 
 - Opponent unit browser (from BSData, for marking their losses)

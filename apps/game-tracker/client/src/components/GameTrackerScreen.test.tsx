@@ -47,6 +47,8 @@ function createInProgressMatch() {
     isTournament: 1,
     yourFinalScore: null,
     theirFinalScore: null,
+    requirePhotos: 0,
+    whoGoesFirst: 'YOU',
     turns: [] as Array<{
       id: string
       turnNumber: number
@@ -57,6 +59,7 @@ function createInProgressMatch() {
       theirUnitsLost: string
       notes: string | null
     }>,
+    secondaries: [],
   }
 }
 
@@ -73,6 +76,8 @@ function createCompletedMatch() {
     isTournament: 0,
     yourFinalScore: 85,
     theirFinalScore: 60,
+    requirePhotos: 0,
+    whoGoesFirst: 'YOU',
     turns: [
       {
         id: 't1',
@@ -80,11 +85,24 @@ function createCompletedMatch() {
         primaryScored: 15,
         secondaryScored: 10,
         cpSpent: 2,
+        yourPrimary: 15,
+        theirPrimary: 5,
+        yourSecondary: 10,
+        theirSecondary: 3,
+        yourCpStart: 0,
+        yourCpGained: 1,
+        yourCpSpent: 2,
+        theirCpStart: 0,
+        theirCpGained: 1,
+        theirCpSpent: 1,
         yourUnitsLost: '[]',
         theirUnitsLost: '[{"name":"Boyz"}]',
+        yourUnitsDestroyed: '[]',
+        theirUnitsDestroyed: '[]',
         notes: null,
       },
     ],
+    secondaries: [],
   }
 }
 
@@ -137,6 +155,26 @@ vi.mock('../lib/trpc', () => ({
           mutate: () => {
             opts?.onSuccess?.()
           },
+          isPending: false,
+        }),
+      },
+    },
+    secondary: {
+      set: {
+        useMutation: () => ({
+          mutate: vi.fn(),
+          isPending: false,
+        }),
+      },
+      remove: {
+        useMutation: () => ({
+          mutate: vi.fn(),
+          isPending: false,
+        }),
+      },
+      score: {
+        useMutation: () => ({
+          mutate: vi.fn(),
           isPending: false,
         }),
       },
@@ -249,7 +287,7 @@ describe('GameTrackerScreen', () => {
     render(<GameTrackerScreen onSignOut={vi.fn()} />)
     fireEvent.click(screen.getByText('vs Necrons').closest('button')!)
     expect(screen.getByText(/Priority Targets/)).toBeInTheDocument()
-    expect(screen.getByText('0VP')).toBeInTheDocument()
+    expect(screen.getByText('Round 1 of 5')).toBeInTheDocument()
   })
 
   // ─── Match Summary View ────────────────────────────────────────────

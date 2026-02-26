@@ -16,6 +16,8 @@ const completedMatch = {
   yourFinalScore: 85,
   theirFinalScore: 60,
   deploymentZone: 'Tipping Point',
+  requirePhotos: 0,
+  whoGoesFirst: 'YOU',
   turns: [
     {
       id: 't1',
@@ -23,8 +25,18 @@ const completedMatch = {
       primaryScored: 15,
       secondaryScored: 10,
       cpSpent: 2,
+      yourPrimary: 15,
+      theirPrimary: 8,
+      yourSecondary: 10,
+      theirSecondary: 5,
+      yourCpGained: 1,
+      yourCpSpent: 2,
+      theirCpGained: 1,
+      theirCpSpent: 1,
       yourUnitsLost: '[]',
       theirUnitsLost: '[{"name":"Boyz"}]',
+      yourUnitsDestroyed: '[]',
+      theirUnitsDestroyed: '[]',
       notes: null,
     },
     {
@@ -33,10 +45,24 @@ const completedMatch = {
       primaryScored: 20,
       secondaryScored: 15,
       cpSpent: 1,
+      yourPrimary: 20,
+      theirPrimary: 10,
+      yourSecondary: 15,
+      theirSecondary: 8,
+      yourCpGained: 1,
+      yourCpSpent: 1,
+      theirCpGained: 1,
+      theirCpSpent: 2,
       yourUnitsLost: '[{"name":"Intercessors"}]',
       theirUnitsLost: '[]',
+      yourUnitsDestroyed: '[]',
+      theirUnitsDestroyed: '[]',
       notes: 'Close round',
     },
+  ],
+  secondaries: [
+    { id: 's1', player: 'YOUR', secondaryName: 'Assassination', vpPerRound: '[3,4,0,0,0]' },
+    { id: 's2', player: 'THEIRS', secondaryName: 'Behind Enemy Lines', vpPerRound: '[2,0,0,0,0]' },
   ],
 }
 
@@ -80,12 +106,17 @@ describe('EndGameScreen', () => {
     expect(screen.getByText(/Gladius Task Force/)).toBeInTheDocument()
   })
 
-  it('shows match stats', () => {
+  it('shows per-player CP stats', () => {
     render(<EndGameScreen matchId="m1" onBack={vi.fn()} />)
-    expect(screen.getByText('CP Used')).toBeInTheDocument()
-    expect(screen.getByText('3')).toBeInTheDocument() // 2 + 1 CP
-    expect(screen.getByText('Units Lost')).toBeInTheDocument()
-    expect(screen.getByText('Units Killed')).toBeInTheDocument()
+    // Both player columns should show CP Used
+    const cpLabels = screen.getAllByText('CP Used')
+    expect(cpLabels).toHaveLength(2)
+  })
+
+  it('shows per-player units lost stats', () => {
+    render(<EndGameScreen matchId="m1" onBack={vi.fn()} />)
+    const unitsLabels = screen.getAllByText('Units Lost')
+    expect(unitsLabels).toHaveLength(2)
   })
 
   it('shows round breakdown', () => {
@@ -95,10 +126,20 @@ describe('EndGameScreen', () => {
     expect(screen.getByText('Round 2')).toBeInTheDocument()
   })
 
-  it('shows per-round VP breakdown', () => {
+  it('shows per-player VP in round breakdown', () => {
     render(<EndGameScreen matchId="m1" onBack={vi.fn()} />)
+    // Round 1: You 25VP, Them 13VP
     expect(screen.getByText('25VP (P:15 S:10)')).toBeInTheDocument()
-    expect(screen.getByText('35VP (P:20 S:15)')).toBeInTheDocument()
+    expect(screen.getByText('13VP (P:8 S:5)')).toBeInTheDocument()
+  })
+
+  it('shows secondaries summary', () => {
+    render(<EndGameScreen matchId="m1" onBack={vi.fn()} />)
+    expect(screen.getByText('Secondaries')).toBeInTheDocument()
+    expect(screen.getByText('Assassination')).toBeInTheDocument()
+    expect(screen.getByText('7 VP')).toBeInTheDocument()
+    expect(screen.getByText('Behind Enemy Lines')).toBeInTheDocument()
+    expect(screen.getByText('2 VP')).toBeInTheDocument()
   })
 
   it('shows units killed in round breakdown', () => {

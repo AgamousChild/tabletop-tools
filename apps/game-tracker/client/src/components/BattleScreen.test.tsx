@@ -18,7 +18,10 @@ const inProgressMatch = {
   isTournament: 0,
   yourFinalScore: null,
   theirFinalScore: null,
+  requirePhotos: 0,
+  whoGoesFirst: 'YOU',
   turns: [],
+  secondaries: [],
 }
 
 const matchWithTurns = {
@@ -27,11 +30,23 @@ const matchWithTurns = {
     {
       id: 't1',
       turnNumber: 1,
+      yourPrimary: 8,
+      theirPrimary: 4,
+      yourSecondary: 4,
+      theirSecondary: 2,
+      yourCpStart: 0,
+      yourCpGained: 1,
+      yourCpSpent: 2,
+      theirCpStart: 0,
+      theirCpGained: 1,
+      theirCpSpent: 1,
       primaryScored: 8,
       secondaryScored: 4,
       cpSpent: 2,
       yourUnitsLost: '[]',
       theirUnitsLost: '[{"name":"Boyz"}]',
+      yourUnitsDestroyed: '[]',
+      theirUnitsDestroyed: '[]',
       notes: null,
     },
   ],
@@ -69,6 +84,26 @@ vi.mock('../lib/trpc', () => ({
         }),
       },
     },
+    secondary: {
+      set: {
+        useMutation: () => ({
+          mutate: vi.fn(),
+          isPending: false,
+        }),
+      },
+      remove: {
+        useMutation: () => ({
+          mutate: vi.fn(),
+          isPending: false,
+        }),
+      },
+      score: {
+        useMutation: () => ({
+          mutate: vi.fn(),
+          isPending: false,
+        }),
+      },
+    },
   },
 }))
 
@@ -90,14 +125,16 @@ describe('BattleScreen', () => {
     expect(screen.getByText(/Tipping Point/)).toBeInTheDocument()
   })
 
-  it('shows current VP total', () => {
+  it('shows scoreboard with VP totals', () => {
     render(<BattleScreen matchId="m1" onBack={vi.fn()} onClose={vi.fn()} />)
-    expect(screen.getByText('0VP')).toBeInTheDocument()
+    expect(screen.getByText('Round 1 of 5')).toBeInTheDocument()
+    // Initial VP is 0 for both
+    expect(screen.getAllByText('0').length).toBeGreaterThanOrEqual(2)
   })
 
-  it('shows Round 1 heading for empty match', () => {
+  it('shows your Command Phase for round 1', () => {
     render(<BattleScreen matchId="m1" onBack={vi.fn()} onClose={vi.fn()} />)
-    expect(screen.getByText('Round 1')).toBeInTheDocument()
+    expect(screen.getByText('Your Command Phase')).toBeInTheDocument()
   })
 
   it('shows round history when turns exist', () => {
@@ -105,19 +142,26 @@ describe('BattleScreen', () => {
     render(<BattleScreen matchId="m1" onBack={vi.fn()} onClose={vi.fn()} />)
     expect(screen.getByText('Rounds recorded')).toBeInTheDocument()
     expect(screen.getByText('Round 1')).toBeInTheDocument()
-    expect(screen.getByText('P:8 S:4 CP:2')).toBeInTheDocument()
+    expect(screen.getByText(/You: 8VP/)).toBeInTheDocument()
   })
 
-  it('records a turn when submitted', async () => {
+  it('records a turn through the round wizard', async () => {
     render(<BattleScreen matchId="m1" onBack={vi.fn()} onClose={vi.fn()} />)
 
-    const numberInputs = screen.getAllByPlaceholderText('0')
-    fireEvent.change(numberInputs[0]!, { target: { value: '15' } })
-    fireEvent.click(screen.getByRole('button', { name: /end round 1/i }))
+    // Your command phase → action phase
+    fireEvent.click(screen.getByRole('button', { name: /continue to action phase/i }))
+    // Your action phase → their turn
+    fireEvent.click(screen.getByRole('button', { name: /continue/i }))
+    // Their command phase → action phase
+    fireEvent.click(screen.getByRole('button', { name: /continue to action phase/i }))
+    // Their action phase → summary
+    fireEvent.click(screen.getByRole('button', { name: /continue/i }))
+    // Confirm & save
+    fireEvent.click(screen.getByRole('button', { name: /confirm & save round/i }))
 
     await waitFor(() =>
       expect(mockAddTurn).toHaveBeenCalledWith(
-        expect.objectContaining({ matchId: 'm1', turnNumber: 1, primaryScored: 15 }),
+        expect.objectContaining({ matchId: 'm1', turnNumber: 1 }),
       ),
     )
   })

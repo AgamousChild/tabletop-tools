@@ -1,7 +1,7 @@
 import { TRPCError } from '@trpc/server'
 import { and, eq } from 'drizzle-orm'
 import { z } from 'zod'
-import { matches, turns } from '@tabletop-tools/db'
+import { matches, turns, stratagemLog } from '@tabletop-tools/db'
 
 import { protectedProcedure, router } from '../trpc'
 
@@ -27,6 +27,26 @@ export const turnRouter = router({
         cpSpent: z.number().int().min(0),
         notes: z.string().optional(),
         photoDataUrl: z.string().optional(),
+        // V3 per-player fields
+        yourCpStart: z.number().int().min(0).optional(),
+        yourCpGained: z.number().int().min(0).optional(),
+        yourCpSpent: z.number().int().min(0).optional(),
+        theirCpStart: z.number().int().min(0).optional(),
+        theirCpGained: z.number().int().min(0).optional(),
+        theirCpSpent: z.number().int().min(0).optional(),
+        yourPrimary: z.number().int().min(0).optional(),
+        theirPrimary: z.number().int().min(0).optional(),
+        yourSecondary: z.number().int().min(0).optional(),
+        theirSecondary: z.number().int().min(0).optional(),
+        yourPhotoDataUrl: z.string().optional(),
+        theirPhotoDataUrl: z.string().optional(),
+        yourUnitsDestroyed: z.string().optional(),
+        theirUnitsDestroyed: z.string().optional(),
+        stratagems: z.array(z.object({
+          player: z.enum(['YOUR', 'THEIRS']),
+          stratagemName: z.string(),
+          cpCost: z.number().int().min(0).default(1),
+        })).optional(),
       }),
     )
     .mutation(async ({ ctx, input }) => {
@@ -39,11 +59,21 @@ export const turnRouter = router({
         throw new TRPCError({ code: 'NOT_FOUND', message: 'Match not found' })
       }
 
-      // Upload photo if provided (NullR2Storage returns null if R2 not configured)
+      // Upload photos if provided (NullR2Storage returns null if R2 not configured)
       let photoUrl: string | null = null
       if (input.photoDataUrl) {
         const key = `${input.matchId}/turn-${input.turnNumber}-${Date.now()}.jpg`
         photoUrl = await ctx.storage.upload(key, input.photoDataUrl)
+      }
+      let yourPhotoUrl: string | null = null
+      if (input.yourPhotoDataUrl) {
+        const key = `${input.matchId}/turn-${input.turnNumber}-your-${Date.now()}.jpg`
+        yourPhotoUrl = await ctx.storage.upload(key, input.yourPhotoDataUrl)
+      }
+      let theirPhotoUrl: string | null = null
+      if (input.theirPhotoDataUrl) {
+        const key = `${input.matchId}/turn-${input.turnNumber}-their-${Date.now()}.jpg`
+        theirPhotoUrl = await ctx.storage.upload(key, input.theirPhotoDataUrl)
       }
 
       const id = generateId()
@@ -58,8 +88,36 @@ export const turnRouter = router({
         secondaryScored: input.secondaryScored,
         cpSpent: input.cpSpent,
         notes: input.notes ?? null,
+        // V3 per-player fields
+        yourCpStart: input.yourCpStart ?? 0,
+        yourCpGained: input.yourCpGained ?? 1,
+        yourCpSpent: input.yourCpSpent ?? 0,
+        theirCpStart: input.theirCpStart ?? 0,
+        theirCpGained: input.theirCpGained ?? 1,
+        theirCpSpent: input.theirCpSpent ?? 0,
+        yourPrimary: input.yourPrimary ?? 0,
+        theirPrimary: input.theirPrimary ?? 0,
+        yourSecondary: input.yourSecondary ?? 0,
+        theirSecondary: input.theirSecondary ?? 0,
+        yourPhotoUrl,
+        theirPhotoUrl,
+        yourUnitsDestroyed: input.yourUnitsDestroyed ?? '[]',
+        theirUnitsDestroyed: input.theirUnitsDestroyed ?? '[]',
         createdAt: Date.now(),
       })
+
+      // Write stratagem log entries
+      if (input.stratagems?.length) {
+        for (const s of input.stratagems) {
+          await ctx.db.insert(stratagemLog).values({
+            id: generateId(),
+            turnId: id,
+            player: s.player,
+            stratagemName: s.stratagemName,
+            cpCost: s.cpCost,
+          })
+        }
+      }
 
       const [turn] = await ctx.db
         .select()

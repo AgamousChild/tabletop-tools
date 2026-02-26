@@ -5,6 +5,35 @@ type Props = {
   onBack: () => void
 }
 
+type Turn = {
+  turnNumber: number
+  primaryScored: number
+  secondaryScored: number
+  cpSpent: number
+  yourUnitsLost: string
+  theirUnitsLost: string
+  yourPrimary?: number
+  theirPrimary?: number
+  yourSecondary?: number
+  theirSecondary?: number
+  yourCpGained?: number
+  yourCpSpent?: number
+  theirCpGained?: number
+  theirCpSpent?: number
+  yourUnitsDestroyed?: string
+  theirUnitsDestroyed?: string
+  yourPhotoUrl?: string | null
+  theirPhotoUrl?: string | null
+  notes: string | null
+}
+
+type Secondary = {
+  id: string
+  player: string
+  secondaryName: string
+  vpPerRound: string
+}
+
 export function EndGameScreen({ matchId, onBack }: Props) {
   const { data: match } = trpc.match.get.useQuery({ id: matchId })
 
@@ -17,19 +46,36 @@ export function EndGameScreen({ matchId, onBack }: Props) {
     ? `${match.opponentName} (${match.opponentFaction})`
     : match.opponentFaction
 
-  // Compute per-round breakdown
-  const roundBreakdown = match.turns.map((turn) => ({
+  const turns = match.turns as Turn[]
+  const secondaries = (match.secondaries ?? []) as Secondary[]
+
+  const yourSecondaries = secondaries.filter((s) => s.player === 'YOUR')
+  const theirSecondaries = secondaries.filter((s) => s.player === 'THEIRS')
+
+  // Compute per-round breakdown with V3 per-player data
+  const roundBreakdown = turns.map((turn) => ({
     round: turn.turnNumber,
-    yourVp: turn.primaryScored + turn.secondaryScored,
-    primary: turn.primaryScored,
-    secondary: turn.secondaryScored,
-    cpSpent: turn.cpSpent,
+    yourPrimary: turn.yourPrimary ?? turn.primaryScored,
+    theirPrimary: turn.theirPrimary ?? 0,
+    yourSecondary: turn.yourSecondary ?? turn.secondaryScored,
+    theirSecondary: turn.theirSecondary ?? 0,
+    yourVp: (turn.yourPrimary ?? turn.primaryScored) + (turn.yourSecondary ?? turn.secondaryScored),
+    theirVp: (turn.theirPrimary ?? 0) + (turn.theirSecondary ?? 0),
+    yourCpGained: turn.yourCpGained ?? 1,
+    yourCpSpent: turn.yourCpSpent ?? turn.cpSpent,
+    theirCpGained: turn.theirCpGained ?? 1,
+    theirCpSpent: turn.theirCpSpent ?? 0,
     yourLost: JSON.parse(turn.yourUnitsLost) as Array<{ name: string }>,
     theirLost: JSON.parse(turn.theirUnitsLost) as Array<{ name: string }>,
+    yourDestroyed: turn.yourUnitsDestroyed ? JSON.parse(turn.yourUnitsDestroyed) as Array<{ name: string }> : [],
+    theirDestroyed: turn.theirUnitsDestroyed ? JSON.parse(turn.theirUnitsDestroyed) as Array<{ name: string }> : [],
+    yourPhotoUrl: turn.yourPhotoUrl,
+    theirPhotoUrl: turn.theirPhotoUrl,
     notes: turn.notes,
   }))
 
-  const totalCp = roundBreakdown.reduce((sum, r) => sum + r.cpSpent, 0)
+  const totalYourCpSpent = roundBreakdown.reduce((sum, r) => sum + r.yourCpSpent, 0)
+  const totalTheirCpSpent = roundBreakdown.reduce((sum, r) => sum + r.theirCpSpent, 0)
   const totalYourLost = roundBreakdown.reduce((sum, r) => sum + r.yourLost.length, 0)
   const totalTheirLost = roundBreakdown.reduce((sum, r) => sum + r.theirLost.length, 0)
 
@@ -69,21 +115,70 @@ export function EndGameScreen({ matchId, onBack }: Props) {
           </p>
         </div>
 
-        {/* Match stats */}
-        <div className="grid grid-cols-3 gap-3">
-          <div className="text-center p-3 rounded-lg bg-slate-900 border border-slate-800">
-            <p className="text-xs text-slate-500">CP Used</p>
-            <p className="text-lg font-bold text-slate-100">{totalCp}</p>
+        {/* Per-player stats */}
+        <div className="grid grid-cols-2 gap-3">
+          <div className="p-3 rounded-lg bg-slate-900 border border-slate-800">
+            <h4 className="text-xs text-slate-500 text-center mb-2">You</h4>
+            <div className="space-y-1 text-sm">
+              <div className="flex justify-between">
+                <span className="text-slate-400">CP Used</span>
+                <span className="font-medium text-slate-100">{totalYourCpSpent}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-slate-400">Units Lost</span>
+                <span className="font-medium text-red-400">{totalYourLost}</span>
+              </div>
+            </div>
           </div>
-          <div className="text-center p-3 rounded-lg bg-slate-900 border border-slate-800">
-            <p className="text-xs text-slate-500">Units Lost</p>
-            <p className="text-lg font-bold text-red-400">{totalYourLost}</p>
-          </div>
-          <div className="text-center p-3 rounded-lg bg-slate-900 border border-slate-800">
-            <p className="text-xs text-slate-500">Units Killed</p>
-            <p className="text-lg font-bold text-emerald-400">{totalTheirLost}</p>
+          <div className="p-3 rounded-lg bg-slate-900 border border-slate-800">
+            <h4 className="text-xs text-slate-500 text-center mb-2">Opponent</h4>
+            <div className="space-y-1 text-sm">
+              <div className="flex justify-between">
+                <span className="text-slate-400">CP Used</span>
+                <span className="font-medium text-slate-100">{totalTheirCpSpent}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-slate-400">Units Lost</span>
+                <span className="font-medium text-red-400">{totalTheirLost}</span>
+              </div>
+            </div>
           </div>
         </div>
+
+        {/* Secondaries summary */}
+        {(yourSecondaries.length > 0 || theirSecondaries.length > 0) && (
+          <div>
+            <h3 className="font-semibold text-slate-300 mb-3">Secondaries</h3>
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1">
+                <h4 className="text-xs text-slate-500">Yours</h4>
+                {yourSecondaries.map((s) => {
+                  const vps: number[] = JSON.parse(s.vpPerRound)
+                  const total = vps.reduce((a, b) => a + b, 0)
+                  return (
+                    <div key={s.id} className="flex justify-between text-sm">
+                      <span className="text-slate-300">{s.secondaryName}</span>
+                      <span className="text-amber-400">{total} VP</span>
+                    </div>
+                  )
+                })}
+              </div>
+              <div className="space-y-1">
+                <h4 className="text-xs text-slate-500">Theirs</h4>
+                {theirSecondaries.map((s) => {
+                  const vps: number[] = JSON.parse(s.vpPerRound)
+                  const total = vps.reduce((a, b) => a + b, 0)
+                  return (
+                    <div key={s.id} className="flex justify-between text-sm">
+                      <span className="text-slate-300">{s.secondaryName}</span>
+                      <span className="text-amber-400">{total} VP</span>
+                    </div>
+                  )
+                })}
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* Round breakdown */}
         {roundBreakdown.length > 0 && (
@@ -97,12 +192,23 @@ export function EndGameScreen({ matchId, onBack }: Props) {
                 >
                   <div className="flex items-center justify-between mb-1">
                     <span className="font-medium text-slate-200">Round {r.round}</span>
-                    <span className="text-amber-400 text-sm">
-                      {r.yourVp}VP (P:{r.primary} S:{r.secondary})
-                    </span>
+                  </div>
+                  <div className="grid grid-cols-2 gap-2 text-xs mb-1">
+                    <div>
+                      <span className="text-slate-500">You: </span>
+                      <span className="text-amber-400">
+                        {r.yourVp}VP (P:{r.yourPrimary} S:{r.yourSecondary})
+                      </span>
+                    </div>
+                    <div>
+                      <span className="text-slate-500">Them: </span>
+                      <span className="text-slate-400">
+                        {r.theirVp}VP (P:{r.theirPrimary} S:{r.theirSecondary})
+                      </span>
+                    </div>
                   </div>
                   <div className="text-xs text-slate-500">
-                    CP: {r.cpSpent}
+                    CP: You {r.yourCpSpent} / Them {r.theirCpSpent}
                     {r.yourLost.length > 0 && (
                       <span className="text-red-400 ml-2">
                         Lost: {r.yourLost.map((u) => u.name).join(', ')}

@@ -1,5 +1,6 @@
 import { createClient } from '@libsql/client'
-import { createDbFromClient } from '@tabletop-tools/db'
+import { createDbFromClient, stratagemLog } from '@tabletop-tools/db'
+import { eq } from 'drizzle-orm'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 
 import { createNullR2Storage } from '../lib/storage/r2'
@@ -79,6 +80,20 @@ beforeAll(async () => {
       your_units_destroyed TEXT NOT NULL DEFAULT '[]',
       their_units_destroyed TEXT NOT NULL DEFAULT '[]',
       created_at INTEGER NOT NULL
+    );
+    CREATE TABLE IF NOT EXISTS match_secondaries (
+      id TEXT PRIMARY KEY,
+      match_id TEXT NOT NULL REFERENCES matches(id) ON DELETE CASCADE,
+      player TEXT NOT NULL,
+      secondary_name TEXT NOT NULL,
+      vp_per_round TEXT NOT NULL DEFAULT '[]'
+    );
+    CREATE TABLE IF NOT EXISTS stratagem_log (
+      id TEXT PRIMARY KEY,
+      turn_id TEXT NOT NULL REFERENCES turns(id) ON DELETE CASCADE,
+      player TEXT NOT NULL,
+      stratagem_name TEXT NOT NULL,
+      cp_cost INTEGER NOT NULL DEFAULT 1
     );
     INSERT INTO "user" (id, name, email, email_verified, created_at, updated_at)
     VALUES ('user-1', 'Alice', 'alice@example.com', 0, 0, 0);
@@ -165,6 +180,71 @@ describe('turn.add', () => {
         cpSpent: 0,
       }),
     ).rejects.toMatchObject({ code: 'NOT_FOUND' })
+  })
+
+  it('accepts V3 per-player fields', async () => {
+    const caller = createCaller(ctx)
+    const turn = await caller.turn.add({
+      matchId,
+      turnNumber: 5,
+      yourUnitsLost: [],
+      theirUnitsLost: [],
+      primaryScored: 5,
+      secondaryScored: 3,
+      cpSpent: 2,
+      yourCpStart: 4,
+      yourCpGained: 1,
+      yourCpSpent: 2,
+      theirCpStart: 5,
+      theirCpGained: 1,
+      theirCpSpent: 1,
+      yourPrimary: 5,
+      theirPrimary: 3,
+      yourSecondary: 3,
+      theirSecondary: 4,
+      yourUnitsDestroyed: JSON.stringify([{ contentId: 'u1', name: 'Boyz' }]),
+      theirUnitsDestroyed: JSON.stringify([{ contentId: 'u2', name: 'Intercessors' }]),
+    })
+    expect(turn.yourCpStart).toBe(4)
+    expect(turn.yourCpGained).toBe(1)
+    expect(turn.yourCpSpent).toBe(2)
+    expect(turn.theirCpStart).toBe(5)
+    expect(turn.theirCpGained).toBe(1)
+    expect(turn.theirCpSpent).toBe(1)
+    expect(turn.yourPrimary).toBe(5)
+    expect(turn.theirPrimary).toBe(3)
+    expect(turn.yourSecondary).toBe(3)
+    expect(turn.theirSecondary).toBe(4)
+    expect(JSON.parse(turn.yourUnitsDestroyed)).toEqual([{ contentId: 'u1', name: 'Boyz' }])
+    expect(JSON.parse(turn.theirUnitsDestroyed)).toEqual([{ contentId: 'u2', name: 'Intercessors' }])
+  })
+
+  it('writes stratagems to stratagem_log', async () => {
+    const caller = createCaller(ctx)
+    const turn = await caller.turn.add({
+      matchId,
+      turnNumber: 6,
+      yourUnitsLost: [],
+      theirUnitsLost: [],
+      primaryScored: 0,
+      secondaryScored: 0,
+      cpSpent: 3,
+      stratagems: [
+        { player: 'YOUR', stratagemName: 'Overwatch', cpCost: 1 },
+        { player: 'THEIRS', stratagemName: 'Counter-Offensive', cpCost: 2 },
+      ],
+    })
+    // Verify stratagems were written
+    const rows = await db
+      .select()
+      .from(stratagemLog)
+      .where(eq(stratagemLog.turnId, turn.id))
+    expect(rows).toHaveLength(2)
+    expect(rows[0].stratagemName).toBe('Overwatch')
+    expect(rows[0].player).toBe('YOUR')
+    expect(rows[1].stratagemName).toBe('Counter-Offensive')
+    expect(rows[1].player).toBe('THEIRS')
+    expect(rows[1].cpCost).toBe(2)
   })
 
   it('rejects unauthenticated callers', async () => {
