@@ -36,7 +36,7 @@ export default function App() {
   return (
     <div className="min-h-screen bg-slate-950">
       <nav className="border-b border-slate-800 px-6 py-3 flex items-center gap-6">
-        <span className="text-amber-400 font-bold text-sm tracking-wider">ADMIN</span>
+        <a href="/" className="text-amber-400 font-bold text-sm tracking-wider hover:text-amber-300 transition-colors">ADMIN</a>
         {NAV.map((nav) => (
           <button
             key={nav.id}

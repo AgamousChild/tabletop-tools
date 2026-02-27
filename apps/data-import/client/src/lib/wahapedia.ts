@@ -14,6 +14,7 @@ import {
   saveDatasheets,
   saveDatasheetWargear,
   saveDatasheetModels,
+  saveMissions,
   setRulesImportMeta,
   searchUnits,
 } from '@tabletop-tools/game-data-store'
@@ -31,6 +32,7 @@ import type {
   Datasheet,
   DatasheetWargear,
   DatasheetModel,
+  Mission,
 } from '@tabletop-tools/game-data-store'
 
 export interface RulesImportProgress {
@@ -141,6 +143,24 @@ function rekeyRecords<T extends { datasheetId: string }>(
 }
 
 /**
+ * Re-keys factionId from Wahapedia short codes ("AC", "AM") to full BSData
+ * faction names ("Adeptus Custodes", "Astra Militarum") so that queries by
+ * faction name (from BSData-imported units) match the stored records.
+ */
+function rekeyFactionIds<T extends { factionId: string }>(
+  records: T[],
+  factionCodeToName: Map<string, string>,
+): T[] {
+  return records.map(r => {
+    const fullName = factionCodeToName.get(r.factionId)
+    if (fullName) {
+      return { ...r, factionId: fullName }
+    }
+    return r
+  })
+}
+
+/**
  * Re-keys leader attachment records which use leaderId/attachedId (both are datasheet IDs).
  */
 function rekeyLeaderAttachments(
@@ -154,7 +174,7 @@ function rekeyLeaderAttachments(
   }))
 }
 
-const TOTAL_STEPS = 15 // factions + datasheets + ID mapping + 10 existing + wargear + models
+const TOTAL_STEPS = 16 // factions + datasheets + ID mapping + 10 existing + wargear + models + missions
 
 export async function importWahapediaRules(
   onProgress: (progress: RulesImportProgress) => void,
@@ -204,10 +224,24 @@ export async function importWahapediaRules(
     errors.push(`ID mapping: ${err instanceof Error ? err.message : String(err)}`)
   }
 
+  // Build faction code → full name map for re-keying faction IDs.
+  // Wahapedia uses short codes ("AC", "AM") but BSData uses full names
+  // ("Adeptus Custodes", "Astra Militarum"). Without this re-keying,
+  // queries like useDetachments("Adeptus Custodes") return nothing.
+  const factionCodeToName = new Map<string, string>()
+  for (const f of factions) {
+    factionCodeToName.set(f.id, f.name)
+  }
+
   // Re-key datasheets themselves (store with BSData IDs for consistency)
   const rekeyedDatasheets = datasheets.map(ds => {
     const bsdataId = idMap.get(ds.id)
-    return bsdataId ? { ...ds, id: bsdataId } : ds
+    const fullFactionName = factionCodeToName.get(ds.factionId)
+    return {
+      ...ds,
+      ...(bsdataId ? { id: bsdataId } : {}),
+      ...(fullFactionName ? { factionId: fullFactionName } : {}),
+    }
   })
   if (rekeyedDatasheets.length > 0) {
     try {
@@ -230,22 +264,22 @@ export async function importWahapediaRules(
     {
       file: 'detachments.json', label: 'Detachments', key: 'detachments',
       save: saveDetachments as (items: unknown[]) => Promise<void>,
-      rekey: (items) => items, // detachments don't have datasheetId
+      rekey: (items) => rekeyFactionIds(items as Array<{ factionId: string }>, factionCodeToName),
     },
     {
       file: 'detachment_abilities.json', label: 'Detachment Abilities', key: 'detachmentAbilities',
       save: saveDetachmentAbilities as (items: unknown[]) => Promise<void>,
-      rekey: (items) => items, // don't have datasheetId
+      rekey: (items) => rekeyFactionIds(items as Array<{ factionId: string }>, factionCodeToName),
     },
     {
       file: 'stratagems.json', label: 'Stratagems', key: 'stratagems',
       save: saveStratagems as (items: unknown[]) => Promise<void>,
-      rekey: (items) => items, // keyed by factionId/detachmentId, not datasheetId
+      rekey: (items) => rekeyFactionIds(items as Array<{ factionId: string }>, factionCodeToName),
     },
     {
       file: 'enhancements.json', label: 'Enhancements', key: 'enhancements',
       save: saveEnhancements as (items: unknown[]) => Promise<void>,
-      rekey: (items) => items, // keyed by detachmentId
+      rekey: (items) => rekeyFactionIds(items as Array<{ factionId: string }>, factionCodeToName),
     },
     {
       file: 'leader_attachments.json', label: 'Leader Attachments', key: 'leaderAttachments',
@@ -329,6 +363,21 @@ export async function importWahapediaRules(
     counts.datasheetModels = 0
   }
 
+  // Step 16: Import missions (from Chapter Approved markdown export)
+  step++
+  onProgress({ current: step, total: TOTAL_STEPS, currentStep: 'Missions' })
+  try {
+    const resp = await fetch(`${baseUrl}/missions.json`)
+    if (!resp.ok) throw new Error(`HTTP ${resp.status}`)
+    const data: Mission[] = await resp.json()
+    if (!Array.isArray(data)) throw new Error('missions.json is not an array')
+    await saveMissions(data)
+    counts.missions = data.length
+  } catch (err) {
+    errors.push(`Missions: ${err instanceof Error ? err.message : String(err)}`)
+    counts.missions = 0
+  }
+
   await setRulesImportMeta({
     lastImport: Date.now(),
     counts: {
@@ -341,6 +390,7 @@ export async function importWahapediaRules(
       wargearOptions: counts.wargearOptions ?? 0,
       unitKeywords: counts.unitKeywords ?? 0,
       unitAbilities: counts.unitAbilities ?? 0,
+      missions: counts.missions ?? 0,
     },
   })
 

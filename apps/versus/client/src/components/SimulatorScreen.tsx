@@ -1,6 +1,7 @@
 import { useState, useMemo, useCallback, useRef } from 'react'
-import type { WeaponAbility, WeaponProfile } from '@tabletop-tools/game-content'
+import type { WeaponAbility, WeaponProfile, UnitProfile } from '@tabletop-tools/game-content'
 import { useGameDataAvailable, useUnitCompositions } from '@tabletop-tools/game-data-store'
+import type { DatasheetModel } from '@tabletop-tools/game-data-store'
 
 import { authClient } from '../lib/auth'
 import { trpc } from '../lib/trpc'
@@ -16,6 +17,44 @@ import { WeaponSelector } from './WeaponSelector'
 import { SpecialRulesEditor } from './SpecialRulesEditor'
 
 type AttackType = 'ranged' | 'melee'
+
+/**
+ * Parses a Wahapedia stat string like "4+", "6\"", "5" to a number.
+ * Returns 0 if the string can't be parsed.
+ */
+function parseModelStat(val: string): number {
+  if (!val || val === '-' || val === '\u2013') return 0
+  const n = parseInt(val.replace(/[+"'″"]/g, ''), 10)
+  return isNaN(n) ? 0 : n
+}
+
+/**
+ * Merges Wahapedia DatasheetModel stats into a BSData UnitProfile,
+ * preferring Wahapedia values when they are non-zero (indicating valid data).
+ * BSData stats may be 0 due to parse failures; Wahapedia stats are authoritative.
+ */
+function resolveUnitFromModel(unit: UnitProfile, model: DatasheetModel): UnitProfile {
+  const wMove = parseModelStat(model.move)
+  const wToughness = parseModelStat(model.toughness)
+  const wSave = parseModelStat(model.save)
+  const wWounds = parseModelStat(model.wounds)
+  const wLd = parseModelStat(model.leadership)
+  const wOc = parseModelStat(model.oc)
+  const wInvSv = model.invSv && model.invSv !== '-' && model.invSv !== '\u2013'
+    ? parseModelStat(model.invSv)
+    : undefined
+
+  return {
+    ...unit,
+    move: wMove || unit.move,
+    toughness: wToughness || unit.toughness,
+    save: wSave || unit.save,
+    wounds: wWounds || unit.wounds,
+    leadership: wLd || unit.leadership,
+    oc: wOc || unit.oc,
+    invulnSave: wInvSv ?? unit.invulnSave,
+  }
+}
 
 function formatAbility(a: WeaponAbility): string {
   switch (a.type) {
@@ -94,7 +133,24 @@ export function SimulatorScreen({ onSignOut }: Props) {
   const { data: defenderKeywordRecords = [] } = useGameUnitKeywords(defenderId)
   const { data: wahapediaAttackerWeapons = [] } = useGameDatasheetWeapons(attackerId)
   const { data: wahapediaLeaderWeapons = [] } = useGameDatasheetWeapons(attackerLeaderId)
+  const { data: wahapediaAttackerModels = [] } = useGameDatasheetModels(attackerId)
   const { data: wahapediaDefenderModels = [] } = useGameDatasheetModels(defenderId)
+
+  // Resolve attacker/defender profiles: prefer Wahapedia model stats when available
+  // (Wahapedia has correct M/T/Sv/W/Ld/OC/invSv as strings; BSData may have 0 for missing)
+  const resolvedAttacker = useMemo(() => {
+    if (!attacker) return null
+    const model = wahapediaAttackerModels[0]
+    if (!model) return attacker
+    return resolveUnitFromModel(attacker, model)
+  }, [attacker, wahapediaAttackerModels])
+
+  const resolvedDefender = useMemo(() => {
+    if (!defender) return null
+    const model = wahapediaDefenderModels[0]
+    if (!model) return defender
+    return resolveUnitFromModel(defender, model)
+  }, [defender, wahapediaDefenderModels])
 
   // Auto-populate defender model count from composition data
   const defaultDefenderModels = useMemo(() => {
@@ -125,11 +181,11 @@ export function SimulatorScreen({ onSignOut }: Props) {
   // Combine attacker weapons with leader weapons.
   // Prefers Wahapedia weapon profiles when available (cleaner, normalized data).
   const combinedWeapons = useMemo((): WeaponProfile[] => {
-    if (!attacker) return []
+    if (!resolvedAttacker) return []
     // Use Wahapedia weapons if available, fall back to BSData-parsed weapons
     const baseWeapons = wahapediaAttackerWeapons.length > 0
       ? wahapediaAttackerWeapons
-      : attacker.weapons
+      : resolvedAttacker.weapons
     const weapons = [...baseWeapons]
     // Merge leader weapons
     const leaderWeapons = wahapediaLeaderWeapons.length > 0
@@ -141,7 +197,7 @@ export function SimulatorScreen({ onSignOut }: Props) {
       }
     }
     return weapons
-  }, [attacker, attackerLeader, wahapediaAttackerWeapons, wahapediaLeaderWeapons])
+  }, [resolvedAttacker, attackerLeader, wahapediaAttackerWeapons, wahapediaLeaderWeapons])
 
   // Derive selected weapons from loaded data — no useEffect.
   // When attacker data loads from IndexedDB, weapons auto-select by attack type.
@@ -216,7 +272,7 @@ export function SimulatorScreen({ onSignOut }: Props) {
 
   // Compute simulation locally
   const simData = useMemo((): { result: SimResult; breakdowns: WeaponBreakdown[] } | null => {
-    if (!attacker || !defender) return null
+    if (!resolvedAttacker || !resolvedDefender) return null
 
     const weapons = getSelectedWeapons()
     if (weapons.length === 0) {
@@ -238,17 +294,17 @@ export function SimulatorScreen({ onSignOut }: Props) {
     let worstCaseWounds = 0
     const breakdowns: WeaponBreakdown[] = []
 
-    // Use data-driven invuln/fnp from unit profile, allow override
-    const effectiveInvuln = invulnSave ?? defender.invulnSave
-    const effectiveFnp = fnp ?? defender.fnp
+    // Use data-driven invuln/fnp from resolved profile, allow override
+    const effectiveInvuln = invulnSave ?? resolvedDefender.invulnSave
+    const effectiveFnp = fnp ?? resolvedDefender.fnp
 
     for (const weapon of weapons) {
       const defKeywords = defenderKeywordRecords.map((k) => k.keyword)
       const r = simulateWeapon(
         weapon,
-        defender.toughness,
-        defender.save,
-        defender.wounds,
+        resolvedDefender.toughness,
+        resolvedDefender.save,
+        resolvedDefender.wounds,
         effectiveDefenderModels,
         effectiveInvuln,
         effectiveFnp,
@@ -275,11 +331,11 @@ export function SimulatorScreen({ onSignOut }: Props) {
 
     bestCaseWounds = Math.min(
       bestCaseWounds,
-      effectiveDefenderModels * defender.wounds,
+      effectiveDefenderModels * resolvedDefender.wounds,
     )
     worstCaseWounds = Math.min(
       worstCaseWounds,
-      effectiveDefenderModels * defender.wounds,
+      effectiveDefenderModels * resolvedDefender.wounds,
     )
 
     return {
@@ -289,16 +345,16 @@ export function SimulatorScreen({ onSignOut }: Props) {
         survivors: parseFloat(survivors.toFixed(4)),
         worstCase: {
           wounds: worstCaseWounds,
-          modelsRemoved: Math.floor(worstCaseWounds / defender.wounds),
+          modelsRemoved: Math.floor(worstCaseWounds / resolvedDefender.wounds),
         },
         bestCase: {
           wounds: bestCaseWounds,
-          modelsRemoved: Math.floor(bestCaseWounds / defender.wounds),
+          modelsRemoved: Math.floor(bestCaseWounds / resolvedDefender.wounds),
         },
       },
       breakdowns,
     }
-  }, [attacker, defender, effectiveDefenderModels, invulnSave, fnp, getSelectedWeapons])
+  }, [resolvedAttacker, resolvedDefender, effectiveDefenderModels, invulnSave, fnp, getSelectedWeapons])
 
   const resultsRef = useRef<HTMLDivElement>(null)
 
@@ -326,8 +382,8 @@ export function SimulatorScreen({ onSignOut }: Props) {
     const weaponConfig = {
       attackType,
       effectiveDefenderModels,
-      invulnSave: invulnSave ?? defender?.invulnSave,
-      fnp: fnp ?? defender?.fnp,
+      invulnSave: invulnSave ?? resolvedDefender?.invulnSave,
+      fnp: fnp ?? resolvedDefender?.fnp,
       specialRules,
       selectedWeapons: weapons.map((w) => w.name),
       leaderContentId: attackerLeaderId ?? undefined,
@@ -349,7 +405,7 @@ export function SimulatorScreen({ onSignOut }: Props) {
     <div className="min-h-screen bg-slate-950 text-slate-100">
       {/* Header */}
       <header className="border-b border-slate-800 px-4 py-3 flex items-center justify-between">
-        <h1 className="text-xl font-bold text-amber-400">Versus</h1>
+        <a href="/" className="text-xl font-bold text-amber-400 hover:text-amber-300 transition-colors">Versus</a>
         <button
           onClick={handleSignOut}
           className="text-sm text-slate-400 hover:text-slate-200 transition-colors"
@@ -384,7 +440,7 @@ export function SimulatorScreen({ onSignOut }: Props) {
               onQueryChange={setAttackerQuery}
               onSelect={handleAttackerSelect}
             />
-            {attacker && <UnitProfileCard unit={attacker} />}
+            {resolvedAttacker && <UnitProfileCard unit={resolvedAttacker} />}
             {attackerAbilities.length > 0 && (
               <UnitAbilitiesDisplay abilities={attackerAbilities} />
             )}
@@ -421,9 +477,9 @@ export function SimulatorScreen({ onSignOut }: Props) {
               onQueryChange={setDefenderQuery}
               onSelect={handleDefenderSelect}
             />
-            {defender && (
+            {resolvedDefender && (
               <>
-                <UnitProfileCard unit={defender} invulnSave={invulnSave} fnp={fnp} />
+                <UnitProfileCard unit={resolvedDefender} invulnSave={invulnSave} fnp={fnp} />
                 <div className="flex gap-3">
                   <div className="flex-1">
                     <label className="block text-xs text-slate-400 mb-1">
@@ -441,7 +497,7 @@ export function SimulatorScreen({ onSignOut }: Props) {
                   <div className="flex-1">
                     <label className="block text-xs text-slate-400 mb-1">Invuln save</label>
                     <select
-                      value={invulnSave ?? defender.invulnSave ?? ''}
+                      value={invulnSave ?? resolvedDefender.invulnSave ?? ''}
                       onChange={(e) => setInvulnSave(e.target.value ? parseInt(e.target.value) : undefined)}
                       className="w-full px-3 py-1.5 rounded-lg bg-slate-900 border border-slate-800 text-slate-100 text-sm focus:outline-none focus:border-amber-400"
                     >
@@ -456,7 +512,7 @@ export function SimulatorScreen({ onSignOut }: Props) {
                   <div className="flex-1">
                     <label className="block text-xs text-slate-400 mb-1">FNP</label>
                     <select
-                      value={fnp ?? defender.fnp ?? ''}
+                      value={fnp ?? resolvedDefender.fnp ?? ''}
                       onChange={(e) => setFnp(e.target.value ? parseInt(e.target.value) : undefined)}
                       className="w-full px-3 py-1.5 rounded-lg bg-slate-900 border border-slate-800 text-slate-100 text-sm focus:outline-none focus:border-amber-400"
                     >
@@ -498,7 +554,7 @@ export function SimulatorScreen({ onSignOut }: Props) {
         </div>
 
         {/* Leader attachment (if available) */}
-        {attacker && availableLeaders.length > 0 && (
+        {resolvedAttacker && availableLeaders.length > 0 && (
           <div className="rounded-lg border border-slate-800 bg-slate-900 p-4">
             <label className="block text-xs text-slate-400 mb-2">Attach Leader</label>
             <select
@@ -519,7 +575,7 @@ export function SimulatorScreen({ onSignOut }: Props) {
         )}
 
         {/* Weapon selection */}
-        {attacker && combinedWeapons.length > 0 && (
+        {resolvedAttacker && combinedWeapons.length > 0 && (
           <WeaponSelector
             weapons={combinedWeapons}
             attackType={attackType}

@@ -67,7 +67,7 @@ export function DiceSetScreen({ onSignOut }: Props) {
     <div className="min-h-screen bg-slate-950 text-slate-100 p-4">
       <div className="max-w-md mx-auto">
         <div className="flex items-center justify-between mb-8">
-          <h1 className="text-2xl font-bold text-amber-400">no-cheat</h1>
+          <a href="/" className="text-2xl font-bold text-amber-400 hover:text-amber-300 transition-colors">no-cheat</a>
           <button
             onClick={handleSignOut}
             className="text-slate-400 hover:text-slate-100 text-sm transition-colors"

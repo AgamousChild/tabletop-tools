@@ -117,6 +117,30 @@
     </a>
   </div>
 
-  <footer>tabletop-tools.net</footer>
+  <div id="data-notice" style="max-width: 960px; width: 100%; margin-top: 2rem; padding: 1rem 1.5rem; background: #1e293b; border: 1px solid #334155; border-radius: 0.75rem; display: none;">
+    <p style="color: #fbbf24; font-weight: 600; margin-bottom: 0.25rem; font-size: 0.9rem;">Game data needed</p>
+    <p style="color: #94a3b8; font-size: 0.85rem; line-height: 1.5;">
+      Import unit profiles and game rules to use Versus, List Builder, and Game Tracker.
+      <a href="/data-import/" style="color: #fbbf24; text-decoration: underline;">Open Data Import</a>
+    </p>
+  </div>
+  <script>
+    // Check if game data is loaded in IndexedDB
+    try {
+      var req = indexedDB.open('tabletop-tools-game-data', 6);
+      req.onsuccess = function(e) {
+        var db = e.target.result;
+        if (!db.objectStoreNames.contains('units')) { show(); db.close(); return; }
+        var tx = db.transaction('units', 'readonly');
+        var count = tx.objectStore('units').count();
+        count.onsuccess = function() { if (count.result === 0) show(); };
+        db.close();
+      };
+      req.onerror = function() { show(); };
+      function show() { document.getElementById('data-notice').style.display = 'block'; }
+    } catch(e) {}
+  </script>
+
+  <footer>tabletop-tools.net &middot; v<!--VERSION-->0.0.1</footer>
 </body>
 </html>
