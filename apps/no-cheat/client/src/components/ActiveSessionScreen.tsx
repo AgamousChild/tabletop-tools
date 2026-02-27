@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 
 import type { RoiResult } from '../lib/cv/pipeline'
 import { createPipeline } from '../lib/cv/pipeline'
+import { HelpTip } from '@tabletop-tools/ui'
 import { trpc } from '../lib/trpc'
 import { CalibrationWizard } from './CalibrationWizard'
 import { Camera } from './Camera'
@@ -376,6 +377,8 @@ export function ActiveSessionScreen({ diceSet, onDone }: Props) {
             End Session
           </button>
         </div>
+
+        <p className="text-[10px] text-slate-500">Roll dice in frame. Auto-captures when stable for ~1 second.<HelpTip text="Remove dice from view between rolls to reset detection" /></p>
 
         {/* Live camera with overlay */}
         <div className="relative rounded-lg overflow-hidden bg-slate-900 aspect-video">

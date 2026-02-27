@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { authClient } from '../lib/auth'
+import { HelpTip } from '@tabletop-tools/ui'
 import { trpc } from '../lib/trpc'
 import { useHashRoute, navigate } from '../lib/router'
 import type { Route } from '../lib/router'
@@ -285,13 +286,16 @@ export function TournamentScreen({ onSignOut }: Props) {
             onChange={(e) => setNewName(e.target.value)}
             required
           />
-          <input
-            className="w-full px-3 py-2 rounded bg-slate-800 border border-slate-700 text-slate-100"
-            placeholder="Format (e.g. 2000pts Matched Play)"
-            value={newFormat}
-            onChange={(e) => setNewFormat(e.target.value)}
-            required
-          />
+          <div>
+            <label className="text-slate-400 text-xs flex items-center mb-1">Format<HelpTip text="Game format and points level, e.g. 2000pts Matched Play or 1000pts Incursion" /></label>
+            <input
+              className="w-full px-3 py-2 rounded bg-slate-800 border border-slate-700 text-slate-100"
+              placeholder="Format (e.g. 2000pts Matched Play)"
+              value={newFormat}
+              onChange={(e) => setNewFormat(e.target.value)}
+              required
+            />
+          </div>
           <input
             className="w-full px-3 py-2 rounded bg-slate-800 border border-slate-700 text-slate-100"
             placeholder="Location (optional)"
@@ -300,7 +304,7 @@ export function TournamentScreen({ onSignOut }: Props) {
           />
           <div className="flex gap-4 items-center">
             <div className="flex gap-2 items-center">
-              <label className="text-slate-400 text-sm">Rounds:</label>
+              <label className="text-slate-400 text-sm flex items-center">Rounds:<HelpTip text="Number of Swiss rounds to play (typically 3-6)" /></label>
               <input
                 type="number"
                 min={1}
@@ -312,7 +316,7 @@ export function TournamentScreen({ onSignOut }: Props) {
               />
             </div>
             <div className="flex gap-2 items-center">
-              <label className="text-slate-400 text-sm">Max players:</label>
+              <label className="text-slate-400 text-sm flex items-center">Max players:<HelpTip text="Player cap for registration. Leave blank for unlimited." /></label>
               <input
                 type="number"
                 min={2}

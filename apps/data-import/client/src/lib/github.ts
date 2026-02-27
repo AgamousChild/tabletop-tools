@@ -74,6 +74,23 @@ export async function listCatalogFiles(
   return { files, rateLimit }
 }
 
+export async function getLatestCommitSha(
+  repo: string = DEFAULT_REPO,
+  branch: string = DEFAULT_BRANCH,
+): Promise<string | null> {
+  try {
+    const res = await fetch(
+      `https://api.github.com/repos/${repo}/commits/${branch}`,
+      { headers: { Accept: 'application/vnd.github.v3+json' } },
+    )
+    if (!res.ok) return null
+    const data = await res.json()
+    return data.sha ?? null
+  } catch {
+    return null
+  }
+}
+
 export async function fetchCatalogXml(file: CatalogFile): Promise<string> {
   const res = await fetch(file.downloadUrl)
   if (!res.ok) {

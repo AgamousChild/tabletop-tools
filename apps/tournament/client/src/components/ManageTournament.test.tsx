@@ -8,6 +8,7 @@ const mockCreateAward = vi.fn()
 const mockAssignAward = vi.fn()
 const mockRemovePlayer = vi.fn()
 const mockReinstate = vi.fn()
+const mockSeedPlayers = vi.fn()
 
 vi.mock('../lib/trpc', () => ({
   trpc: {
@@ -34,6 +35,15 @@ vi.mock('../lib/trpc', () => ({
         useMutation: (opts?: { onSuccess?: () => void }) => ({
           mutate: (args: unknown) => {
             mockReinstate(args)
+            opts?.onSuccess?.()
+          },
+          isPending: false,
+        }),
+      },
+      seedTestPlayers: {
+        useMutation: (opts?: { onSuccess?: () => void }) => ({
+          mutate: (args: unknown) => {
+            mockSeedPlayers(args)
             opts?.onSuccess?.()
           },
           isPending: false,
@@ -103,6 +113,7 @@ beforeEach(() => {
   mockAssignAward.mockReset()
   mockRemovePlayer.mockReset()
   mockReinstate.mockReset()
+  mockSeedPlayers.mockReset()
 })
 
 describe('ManageTournament', () => {

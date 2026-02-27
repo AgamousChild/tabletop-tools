@@ -3,12 +3,13 @@ import type { WeaponAbility, WeaponProfile, UnitProfile } from '@tabletop-tools/
 import { useGameDataAvailable, useUnitCompositions } from '@tabletop-tools/game-data-store'
 import type { DatasheetModel } from '@tabletop-tools/game-data-store'
 
+import { HelpTip, CollapsibleSection } from '@tabletop-tools/ui'
 import { authClient } from '../lib/auth'
 import { trpc } from '../lib/trpc'
 import { useUnits, useGameFactions, useGameUnit, useGameLeadersForUnit, useGameUnitAbilities, useGameUnitKeywords, useGameWargearOptions, useGameDatasheetWeapons, useGameDatasheetModels, useGameDetachments, useGameDetachmentAbilities, useGameEnhancements, useGameStratagems } from '../lib/useGameData'
 import { parseModelCount } from '../lib/modelCount'
-import { simulateWeapon } from '../lib/rules/pipeline'
-import type { SimResult } from '../lib/rules/pipeline'
+import { simulateWeapon, runMonteCarlo } from '../lib/rules/pipeline'
+import type { SimResult, DistributionData } from '../lib/rules/pipeline'
 import { SimulationResult } from './SimulationResult'
 import type { WeaponBreakdown } from './SimulationResult'
 import { UnitSelector } from './UnitSelector'
@@ -371,13 +372,37 @@ export function SimulatorScreen({ onSignOut }: Props) {
     }
   }, [resolvedAttacker, resolvedDefender, effectiveDefenderModels, invulnSave, fnp, getSelectedWeapons])
 
-  const resultsRef = useRef<HTMLDivElement>(null)
+  // Monte Carlo distribution (runs alongside deterministic sim)
+  const [distribution, setDistribution] = useState<DistributionData | null>(null)
 
   const handleRunClick = useCallback(() => {
+    // Run Monte Carlo in the background when user clicks Run
+    if (!resolvedAttacker || !resolvedDefender) return
+    const weapons = getSelectedWeapons()
+    if (weapons.length === 0) { setDistribution(null); return }
+
+    const effectiveInvuln = invulnSave ?? resolvedDefender.invulnSave
+    const effectiveFnp = fnp ?? resolvedDefender.fnp
+    const defKeywords = defenderKeywordRecords.map((k) => k.keyword)
+
+    const dist = runMonteCarlo(
+      weapons,
+      resolvedDefender.toughness,
+      resolvedDefender.save,
+      resolvedDefender.wounds,
+      effectiveDefenderModels,
+      effectiveInvuln,
+      effectiveFnp,
+      defKeywords,
+    )
+    setDistribution(dist)
+
     if (resultsRef.current && typeof resultsRef.current.scrollIntoView === 'function') {
       resultsRef.current.scrollIntoView({ behavior: 'smooth' })
     }
-  }, [])
+  }, [resolvedAttacker, resolvedDefender, effectiveDefenderModels, invulnSave, fnp, getSelectedWeapons, defenderKeywordRecords])
+
+  const resultsRef = useRef<HTMLDivElement>(null)
 
   const saveMutation = trpc.simulate.save.useMutation()
 
@@ -419,8 +444,16 @@ export function SimulatorScreen({ onSignOut }: Props) {
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100">
       {/* Header */}
-      <header className="border-b border-slate-800 px-4 py-3 flex items-center justify-between">
-        <a href="/" className="text-xl font-bold text-amber-400 hover:text-amber-300 transition-colors">Versus</a>
+      <header className="border-b border-slate-800 px-4 py-2 flex items-center justify-between">
+        <div className="flex items-center gap-3">
+          <a href="/" className="flex items-center gap-1 text-xs text-slate-400 hover:text-slate-200 transition-colors" title="Back to Home">
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-3.5 h-3.5">
+              <path fillRule="evenodd" d="M9.293 2.293a1 1 0 0 1 1.414 0l7 7A1 1 0 0 1 17 11h-1v6a1 1 0 0 1-1 1h-2a1 1 0 0 1-1-1v-3a1 1 0 0 0-1-1H9a1 1 0 0 0-1 1v3a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1v-6H3a1 1 0 0 1-.707-1.707l7-7Z" clipRule="evenodd" />
+            </svg>
+            Home
+          </a>
+          <span className="text-lg font-bold text-amber-400">Versus</span>
+        </div>
         <button
           onClick={handleSignOut}
           className="text-sm text-slate-400 hover:text-slate-200 transition-colors"
@@ -451,17 +484,26 @@ export function SimulatorScreen({ onSignOut }: Props) {
               units={attackerUnits}
               selectedUnitId={attackerId}
               isLoadingUnits={loadingAttackers}
+              hasFaction={!!attackerFaction}
               onFactionChange={setAttackerFaction}
               onQueryChange={setAttackerQuery}
               onSelect={handleAttackerSelect}
             />
             {resolvedAttacker && <UnitProfileCard unit={resolvedAttacker} />}
             {attackerAbilities.length > 0 && (
-              <UnitAbilitiesDisplay abilities={attackerAbilities} />
+              <CollapsibleSection title="Unit Abilities" count={attackerAbilities.length}>
+                <div className="space-y-1.5">
+                  {attackerAbilities.map((a, i) => (
+                    <div key={i}>
+                      <p className="text-xs font-medium text-amber-400">{a.name}</p>
+                      <p className="text-xs text-slate-400 leading-relaxed">{a.description}</p>
+                    </div>
+                  ))}
+                </div>
+              </CollapsibleSection>
             )}
             {attackerKeywordRecords.length > 0 && (
-              <div className="text-xs text-slate-500 bg-slate-900 rounded-lg p-2 border border-slate-800">
-                <p className="font-semibold text-slate-400 mb-1">Keywords</p>
+              <CollapsibleSection title="Keywords" count={attackerKeywordRecords.length}>
                 <div className="flex flex-wrap gap-1">
                   {attackerKeywordRecords.map((k, i) => (
                     <span key={i} className={`px-1.5 py-0.5 rounded text-[10px] ${k.isFactionKeyword ? 'bg-amber-400/20 text-amber-300' : 'bg-slate-800 text-slate-400'}`}>
@@ -469,15 +511,14 @@ export function SimulatorScreen({ onSignOut }: Props) {
                     </span>
                   ))}
                 </div>
-              </div>
+              </CollapsibleSection>
             )}
             {attackerWargear.length > 0 && (
-              <div className="text-xs text-slate-500 bg-slate-900 rounded-lg p-2 border border-slate-800">
-                <p className="font-semibold text-slate-400 mb-1">Wargear Options</p>
+              <CollapsibleSection title="Wargear Options" count={attackerWargear.length}>
                 {attackerWargear.map((w, i) => (
-                  <p key={i} className="text-slate-500">{w.description}</p>
+                  <p key={i} className="text-xs text-slate-500">{w.description}</p>
                 ))}
-              </div>
+              </CollapsibleSection>
             )}
           </div>
 
@@ -488,6 +529,7 @@ export function SimulatorScreen({ onSignOut }: Props) {
               units={defenderUnits}
               selectedUnitId={defenderId}
               isLoadingUnits={loadingDefenders}
+              hasFaction={!!defenderFaction}
               onFactionChange={setDefenderFaction}
               onQueryChange={setDefenderQuery}
               onSelect={handleDefenderSelect}
@@ -499,6 +541,7 @@ export function SimulatorScreen({ onSignOut }: Props) {
                   <div className="flex-1">
                     <label className="block text-xs text-slate-400 mb-1">
                       Models{defenderModelCount === -1 && defaultDefenderModels ? ' (from data)' : ''}
+                      <HelpTip text="Number of models in the defending unit. Auto-filled from unit data when available." />
                     </label>
                     <input
                       type="number"
@@ -510,7 +553,7 @@ export function SimulatorScreen({ onSignOut }: Props) {
                     />
                   </div>
                   <div className="flex-1">
-                    <label className="block text-xs text-slate-400 mb-1">Invuln save</label>
+                    <label className="block text-xs text-slate-400 mb-1">Invuln<HelpTip text="Invulnerable save. Ignores AP. Overrides unit data if set." /></label>
                     <select
                       value={invulnSave ?? resolvedDefender.invulnSave ?? ''}
                       onChange={(e) => setInvulnSave(e.target.value ? parseInt(e.target.value) : undefined)}
@@ -525,7 +568,7 @@ export function SimulatorScreen({ onSignOut }: Props) {
                     </select>
                   </div>
                   <div className="flex-1">
-                    <label className="block text-xs text-slate-400 mb-1">FNP</label>
+                    <label className="block text-xs text-slate-400 mb-1">FNP<HelpTip text="Feel No Pain. Each point of damage is ignored on this roll. Applied after saves." /></label>
                     <select
                       value={fnp ?? resolvedDefender.fnp ?? ''}
                       onChange={(e) => setFnp(e.target.value ? parseInt(e.target.value) : undefined)}
@@ -541,11 +584,19 @@ export function SimulatorScreen({ onSignOut }: Props) {
                   </div>
                 </div>
                 {defenderAbilities.length > 0 && (
-                  <UnitAbilitiesDisplay abilities={defenderAbilities} />
+                  <CollapsibleSection title="Unit Abilities" count={defenderAbilities.length}>
+                    <div className="space-y-1.5">
+                      {defenderAbilities.map((a, i) => (
+                        <div key={i}>
+                          <p className="text-xs font-medium text-amber-400">{a.name}</p>
+                          <p className="text-xs text-slate-400 leading-relaxed">{a.description}</p>
+                        </div>
+                      ))}
+                    </div>
+                  </CollapsibleSection>
                 )}
                 {defenderKeywordRecords.length > 0 && (
-                  <div className="text-xs text-slate-500 bg-slate-900 rounded-lg p-2 border border-slate-800">
-                    <p className="font-semibold text-slate-400 mb-1">Keywords</p>
+                  <CollapsibleSection title="Keywords" count={defenderKeywordRecords.length}>
                     <div className="flex flex-wrap gap-1">
                       {defenderKeywordRecords.map((k, i) => (
                         <span key={i} className={`px-1.5 py-0.5 rounded text-[10px] ${k.isFactionKeyword ? 'bg-amber-400/20 text-amber-300' : 'bg-slate-800 text-slate-400'}`}>
@@ -553,15 +604,14 @@ export function SimulatorScreen({ onSignOut }: Props) {
                         </span>
                       ))}
                     </div>
-                  </div>
+                  </CollapsibleSection>
                 )}
                 {defenderWargear.length > 0 && (
-                  <div className="text-xs text-slate-500 bg-slate-900 rounded-lg p-2 border border-slate-800">
-                    <p className="font-semibold text-slate-400 mb-1">Wargear Options</p>
+                  <CollapsibleSection title="Wargear Options" count={defenderWargear.length}>
                     {defenderWargear.map((w, i) => (
-                      <p key={i} className="text-slate-500">{w.description}</p>
+                      <p key={i} className="text-xs text-slate-500">{w.description}</p>
                     ))}
-                  </div>
+                  </CollapsibleSection>
                 )}
               </>
             )}
@@ -571,7 +621,7 @@ export function SimulatorScreen({ onSignOut }: Props) {
         {/* Leader attachment (if available) */}
         {resolvedAttacker && availableLeaders.length > 0 && (
           <div className="rounded-lg border border-slate-800 bg-slate-900 p-4">
-            <label className="block text-xs text-slate-400 mb-2">Attach Leader</label>
+            <label className="block text-xs text-slate-400 mb-2">Attach Leader<HelpTip text="Add a leader to the attacker. Leaders provide additional weapons and abilities." /></label>
             <select
               value={attackerLeaderId ?? ''}
               onChange={(e) => {
@@ -611,15 +661,16 @@ export function SimulatorScreen({ onSignOut }: Props) {
                     ))}
                   </select>
                   {atkDetachmentAbilities.length > 0 && (
-                    <div className="text-xs">
-                      <p className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider mb-1">Abilities</p>
-                      {atkDetachmentAbilities.map((a) => (
-                        <div key={a.id} className="mb-1.5">
-                          <p className="font-medium text-amber-400">{a.name}</p>
-                          <p className="text-slate-400 leading-relaxed">{stripHtmlTags(a.description)}</p>
-                        </div>
-                      ))}
-                    </div>
+                    <CollapsibleSection title="Detachment Abilities" count={atkDetachmentAbilities.length}>
+                      <div className="text-xs space-y-1.5">
+                        {atkDetachmentAbilities.map((a) => (
+                          <div key={a.id}>
+                            <p className="font-medium text-amber-400">{a.name}</p>
+                            <p className="text-slate-400 leading-relaxed">{stripHtmlTags(a.description)}</p>
+                          </div>
+                        ))}
+                      </div>
+                    </CollapsibleSection>
                   )}
                   {atkDetachmentEnhancements.length > 0 && (
                     <div>
@@ -667,15 +718,16 @@ export function SimulatorScreen({ onSignOut }: Props) {
                     ))}
                   </select>
                   {defDetachmentAbilities.length > 0 && (
-                    <div className="text-xs">
-                      <p className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider mb-1">Abilities</p>
-                      {defDetachmentAbilities.map((a) => (
-                        <div key={a.id} className="mb-1.5">
-                          <p className="font-medium text-amber-400">{a.name}</p>
-                          <p className="text-slate-400 leading-relaxed">{stripHtmlTags(a.description)}</p>
-                        </div>
-                      ))}
-                    </div>
+                    <CollapsibleSection title="Detachment Abilities" count={defDetachmentAbilities.length}>
+                      <div className="text-xs space-y-1.5">
+                        {defDetachmentAbilities.map((a) => (
+                          <div key={a.id}>
+                            <p className="font-medium text-amber-400">{a.name}</p>
+                            <p className="text-slate-400 leading-relaxed">{stripHtmlTags(a.description)}</p>
+                          </div>
+                        ))}
+                      </div>
+                    </CollapsibleSection>
                   )}
                 </>
               ) : (
@@ -733,6 +785,7 @@ export function SimulatorScreen({ onSignOut }: Props) {
               defenderName={defenderName}
               result={simData.result}
               weaponBreakdowns={simData.breakdowns}
+              distribution={distribution}
               onSave={handleSave}
             />
           </div>
@@ -751,22 +804,6 @@ export function SimulatorScreen({ onSignOut }: Props) {
   )
 }
 
-function UnitAbilitiesDisplay({ abilities }: { abilities: { name: string; description: string; type: string }[] }) {
-  if (abilities.length === 0) return null
-  return (
-    <div className="rounded-lg bg-slate-900 border border-slate-800 p-3">
-      <p className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider mb-2">Unit Abilities</p>
-      <div className="space-y-1.5">
-        {abilities.map((a, i) => (
-          <div key={i}>
-            <p className="text-xs font-medium text-amber-400">{a.name}</p>
-            <p className="text-xs text-slate-400 leading-relaxed">{a.description}</p>
-          </div>
-        ))}
-      </div>
-    </div>
-  )
-}
 
 function LeaderSelectOption({ leaderId }: { leaderId: string }) {
   const { data: unit } = useGameUnit(leaderId)

@@ -5,7 +5,6 @@ import {
   useDetachmentAbilities,
   useEnhancements,
   useUnitKeywords,
-  useAllUnitKeywords,
   useUnitCompositions,
   useUnitCosts,
   useAllDatasheets,
@@ -61,20 +60,8 @@ export function useUnitModelOptions(datasheetId: string) {
   return parseModelOptions(compositions.data, costs.data)
 }
 
-/** Returns a Set of datasheet IDs that have a LEGENDS/LEGEND keyword */
-export function useLegendsUnitIds(): Set<string> {
-  const { data: allKeywords } = useAllUnitKeywords()
-  return useMemo(() => {
-    const set = new Set<string>()
-    for (const k of allKeywords) {
-      const upper = k.keyword.toUpperCase()
-      if (upper === 'LEGENDS' || upper === 'LEGEND') {
-        set.add(k.datasheetId)
-      }
-    }
-    return set
-  }, [allKeywords])
-}
+// useLegendsUnitIds is re-exported from game-data-store
+export { useLegendsUnitIds } from '@tabletop-tools/game-data-store'
 
 /** Returns a Map of unit ID → role (e.g. "Battleline", "Character", "Dedicated Transport") */
 export function useUnitRoles(): Map<string, string> {

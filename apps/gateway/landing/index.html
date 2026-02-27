@@ -11,33 +11,34 @@
 
     body {
       font-family: 'Geist', system-ui, -apple-system, sans-serif;
+      font-size: 0.8125rem;
       background: #0f172a;
       color: #f1f5f9;
       min-height: 100vh;
       display: flex;
       flex-direction: column;
       align-items: center;
-      padding: 3rem 1rem;
+      padding: 2rem 1rem;
     }
 
     h1 {
-      font-size: 2.5rem;
+      font-size: 1.75rem;
       font-weight: 700;
-      margin-bottom: 0.5rem;
+      margin-bottom: 0.25rem;
     }
 
     .accent { color: #fbbf24; }
 
     .subtitle {
       color: #94a3b8;
-      font-size: 1.1rem;
-      margin-bottom: 3rem;
+      font-size: 0.85rem;
+      margin-bottom: 2rem;
     }
 
     .grid {
       display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
-      gap: 1rem;
+      grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+      gap: 0.75rem;
       max-width: 960px;
       width: 100%;
     }
@@ -46,8 +47,8 @@
       display: block;
       background: #1e293b;
       border: 1px solid #334155;
-      border-radius: 0.75rem;
-      padding: 1.5rem;
+      border-radius: 0.5rem;
+      padding: 1rem;
       text-decoration: none;
       color: #f1f5f9;
       transition: border-color 0.15s, transform 0.15s;
@@ -55,26 +56,26 @@
 
     a.card:hover {
       border-color: #fbbf24;
-      transform: translateY(-2px);
+      transform: translateY(-1px);
     }
 
     .card-title {
-      font-size: 1.25rem;
+      font-size: 0.9375rem;
       font-weight: 600;
-      margin-bottom: 0.5rem;
+      margin-bottom: 0.25rem;
     }
 
     .card-desc {
       color: #94a3b8;
-      font-size: 0.9rem;
-      line-height: 1.5;
+      font-size: 0.75rem;
+      line-height: 1.4;
     }
 
     footer {
       margin-top: auto;
-      padding-top: 3rem;
+      padding-top: 2rem;
       color: #475569;
-      font-size: 0.8rem;
+      font-size: 0.7rem;
     }
   </style>
 </head>
@@ -118,29 +119,71 @@
   </div>
 
   <div id="data-notice" style="max-width: 960px; width: 100%; margin-top: 2rem; padding: 1rem 1.5rem; background: #1e293b; border: 1px solid #334155; border-radius: 0.75rem; display: none;">
-    <p style="color: #fbbf24; font-weight: 600; margin-bottom: 0.25rem; font-size: 0.9rem;">Game data needed</p>
-    <p style="color: #94a3b8; font-size: 0.85rem; line-height: 1.5;">
+    <p id="data-notice-title" style="color: #fbbf24; font-weight: 600; margin-bottom: 0.25rem; font-size: 0.85rem;">Game data needed</p>
+    <p id="data-notice-body" style="color: #94a3b8; font-size: 0.8rem; line-height: 1.5;">
       Import unit profiles and game rules to use Versus, List Builder, and Game Tracker.
       <a href="/data-import/" style="color: #fbbf24; text-decoration: underline;">Open Data Import</a>
     </p>
   </div>
   <script>
-    // Check if game data is loaded in IndexedDB
-    try {
-      var req = indexedDB.open('tabletop-tools-game-data', 7);
-      req.onsuccess = function(e) {
-        var db = e.target.result;
-        if (!db.objectStoreNames.contains('units')) { show(); db.close(); return; }
-        var tx = db.transaction('units', 'readonly');
-        var count = tx.objectStore('units').count();
-        count.onsuccess = function() { if (count.result === 0) show(); };
-        db.close();
-      };
-      req.onerror = function() { show(); };
-      function show() { document.getElementById('data-notice').style.display = 'block'; }
-    } catch(e) {}
+    (function() {
+      var notice = document.getElementById('data-notice');
+      var title = document.getElementById('data-notice-title');
+      var body = document.getElementById('data-notice-body');
+
+      function showNotice(t, b) {
+        title.textContent = t;
+        body.innerHTML = b;
+        notice.style.display = 'block';
+      }
+
+      function showNeeded() {
+        showNotice('Game data needed',
+          'Import unit profiles and game rules to use Versus, List Builder, and Game Tracker. ' +
+          '<a href="/data-import/" style="color:#fbbf24;text-decoration:underline">Open Data Import</a>');
+      }
+
+      function checkForUpdates(db) {
+        // Read stored commitSha from importMeta
+        if (!db.objectStoreNames.contains('meta')) { db.close(); return; }
+        var tx = db.transaction('meta', 'readonly');
+        var metaReq = tx.objectStore('meta').get('importMeta');
+        metaReq.onsuccess = function() {
+          db.close();
+          var meta = metaReq.result;
+          if (!meta || !meta.commitSha) return;
+          // Check BSData latest commit
+          fetch('https://api.github.com/repos/BSData/wh40k-10e/commits/main', {
+            headers: { Accept: 'application/vnd.github.v3+json' }
+          }).then(function(r) { return r.ok ? r.json() : null; })
+            .then(function(data) {
+              if (data && data.sha && data.sha !== meta.commitSha) {
+                showNotice('Game data update available',
+                  'BSData has been updated since your last import. ' +
+                  '<a href="/data-import/" style="color:#fbbf24;text-decoration:underline">Reload Data</a>');
+              }
+            }).catch(function() {});
+        };
+        metaReq.onerror = function() { db.close(); };
+      }
+
+      try {
+        var req = indexedDB.open('tabletop-tools-game-data', 7);
+        req.onsuccess = function(e) {
+          var db = e.target.result;
+          if (!db.objectStoreNames.contains('units')) { showNeeded(); db.close(); return; }
+          var tx = db.transaction('units', 'readonly');
+          var count = tx.objectStore('units').count();
+          count.onsuccess = function() {
+            if (count.result === 0) { showNeeded(); db.close(); }
+            else { checkForUpdates(db); }
+          };
+        };
+        req.onerror = function() { showNeeded(); };
+      } catch(e) {}
+    })();
   </script>
 
-  <footer>tabletop-tools.net &middot; v<!--VERSION-->0.0.1</footer>
+  <footer>tabletop-tools.net <!--VERSION--></footer>
 </body>
 </html>

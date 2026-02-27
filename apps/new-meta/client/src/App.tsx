@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from 'react'
+import { HelpTip } from '@tabletop-tools/ui'
 import { Dashboard } from './pages/Dashboard'
 import { FactionDetail } from './pages/FactionDetail'
 import { PlayerRanking } from './pages/PlayerRanking'
@@ -83,6 +84,8 @@ export default function App() {
           </a>
         ))}
       </nav>
+
+      <p className="text-[10px] text-slate-500 px-6 pt-2">Win rates, matchups, and Glicko-2 player ratings from GT+ tournament results.<HelpTip text="All data is sourced from imported tournament CSVs and completed in-app tournaments" /></p>
 
       <main className="max-w-5xl mx-auto px-6 py-8">
         {page.id === 'dashboard' && (

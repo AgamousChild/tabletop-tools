@@ -24,6 +24,7 @@ const mockSearchUnits = vi.mocked(searchUnits)
 vi.mock('../lib/github', () => ({
   listCatalogFiles: vi.fn(),
   fetchCatalogXml: vi.fn(),
+  getLatestCommitSha: vi.fn().mockResolvedValue('abc123'),
   RateLimitError: class RateLimitError extends Error {
     resetAt: Date
     constructor(resetAt: Date, message?: string) {

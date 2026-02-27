@@ -1,6 +1,6 @@
 {
   "name": "tabletop-tools",
-  "version": "0.0.1",
+  "version": "2.1.0",
   "private": true,
   "scripts": {
     "dev": "pnpm --parallel --filter no-cheat-server --filter no-cheat-client --filter versus-server --filter versus-client --filter list-builder-server --filter list-builder-client --filter game-tracker-server --filter game-tracker-client --filter tournament-server --filter tournament-client dev",

@@ -15,6 +15,7 @@ const defaultProps = {
   units: mockUnits,
   selectedUnitId: null,
   isLoadingUnits: false,
+  hasFaction: true,
   onFactionChange: vi.fn(),
   onQueryChange: vi.fn(),
   onSelect: vi.fn(),
@@ -70,5 +71,10 @@ describe('UnitSelector', () => {
     render(<UnitSelector {...defaultProps} onQueryChange={onQueryChange} />)
     fireEvent.change(screen.getByPlaceholderText(/search/i), { target: { value: 'Intercessor' } })
     expect(onQueryChange).toHaveBeenCalledWith('Intercessor')
+  })
+
+  it('shows prompt to select faction when hasFaction is false', () => {
+    render(<UnitSelector {...defaultProps} units={[]} hasFaction={false} />)
+    expect(screen.getByText(/select a faction/i)).toBeInTheDocument()
   })
 })

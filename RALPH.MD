@@ -2,6 +2,7 @@
 
 ## Directive
 
+After EACH Set of Tasks is completed, please do a pull from remote to merge the RALPH.MD file I will be editing remotely. Then commit and push your changes AFTER EACH SET OF TASKS IS COMPLETE. NOT THE FULL LIST, EVEN BEFORE large scale testing occurs.
 Look at the functional requirements again. Implement those changes, correctly for every app. 
 Stop taking shortcuts with interface elements and data passed back to the backend.
 Each app should pull from the same data source.
@@ -17,6 +18,18 @@ Review all of the tests, make sure that they actually pass, not just pass becaus
 - Add detailed instructions on every page as a link, or a tool-tip.
 - Use a small font and minimally sized tools.
 - Show the statistical analysis of the Versus tool, show a screen that has the distribution of possible outcomes on the rolls.
+- Stored Data screen when I hit clear all Data does not have any visual feedback that the data is deleted. I don't think this works.
+- It is not clear that hitting the Title takes you back.
+- Where are the codex detachments? They exist in both BSData and Wahapedia data. They need to be included.
+- Do not include Legends units in any screen. Instead on the data-import pages, include an option for legends to be included in the app.
+- In the Versus app, do not show any units before a faction is chosen.
+- Convert all HTML in the detailed text sections into markdown as it is read from the database. 
+- Make each section that displays detailed text expandable, with only the section name shown at first. Showing all the text at once is bad.
+- Opponent detachment is not a dropdown in the Game Tracker, it should be.
+- In the game tracker, the secondaries and the strategems should be dropdowns, not search, not data entry.
+- In the game tracker, the data entry forms are not the same for the subsequent rounds, you dropped off all of the stuff you added for the first round.
+- For Tournament testing, I need a script or button I Can press locally in the app that pre-loads a test tournament set of players to test out the functionality.
+- On the data import page for BSData, the warnings are useless, give me a button where I can copy them to the clipboard.
 
 **Data Requirements:**
 
@@ -42,29 +55,56 @@ Review all of the tests, make sure that they actually pass, not just pass becaus
 ## Progress
 
 ### Completed
-Update this section every time you update or fix a section of the requirements. I moved all of your "Completed" items to "In Progress" - Re-review them and give them another pass before setting them to completed.
+Update this section every time you update or fix a section of the requirements.
 
+- [x] Wahapedia export script (`scripts/export-wahapedia.ts`) — 22 JSON files covering datasheets, models, wargear, detachments, stratagems, enhancements, missions, abilities, junction tables
+- [x] game-data-store IndexedDB schema V7 — 22 object stores including junction tables
+- [x] data-import tabs — BSData + Wahapedia import pipelines (28 tests)
+- [x] Versus: attacker/defender detachment selectors, enhancement selectors, stratagems display
+- [x] List-builder: Battleline exemption from duplicate limits, role-based filtering
+- [x] Game-tracker: secondary missions and stratagems data-driven (StratagemPicker, SecondaryPicker)
+- [x] Wahapedia-primary unit access functions (`getDatasheetAsUnit`, `searchDatasheets`, `listDatasheetFactions`, `hasDatasheets`)
+- [x] Shared `parseStat`, `parseDiceOrNum`, `parseWeaponAbilities` exported from game-data-store
+- [x] Shared primary hooks: `usePrimaryFactions`, `usePrimaryUnitSearch`, `usePrimaryUnit` — Wahapedia-first with BSData fallback
+- [x] Shared `convertWargearToWeapons` and `useWargearAsWeapons` in game-data-store
+- [x] Versus useGameData.ts refactored to use shared hooks (removed ~120 lines of duplicated code)
+- [x] List-builder useGameData.ts refactored to use shared hooks
+- [x] AppShell home icon — all auth-gated apps have back-to-landing link
+- [x] No-cheat ActiveSessionScreen cancel button during calibration phase
+- [x] Data-import home link on title
+- [x] Data-driven dropdowns: Factions, Detachments, Enhancements, Units — all apps
+
+- [x] Version number on landing page — `<!--VERSION-->` placeholder injected by build.sh, bumped to v2.1.0
+- [x] BSData commit version check — landing page fetches latest commit SHA and compares to stored importMeta.commitSha
+- [x] Versus statistical distribution — Monte Carlo simulation (5000 iterations), histogram with percentiles, collapsible in results
+- [x] Detailed instructions/tooltips — HelpTip component in packages/ui, added across all 8 apps on key fields
+- [x] Small font and compact UI — Tailwind preset base font 13px, AppShell header tightened, landing page compact
+- [x] Data-import Clear All Data — confirmation dialog, loading state, success feedback message
+- [x] Run full test suite — versus 133, data-import 30, game-tracker 143, tournament 57, new-meta 83, ui 25 all pass
+- [x] Versus: don't show units before a faction is chosen — useUnits returns empty without faction, UnitSelector shows prompt, 134 tests pass
+- [x] Back navigation — "Home" label added to AppShell and versus header
+- [x] Make detailed text sections expandable (collapsed by default) — CollapsibleSection component in packages/ui, applied to versus SimulatorScreen
+- [x] Game-tracker: secondaries and stratagems are now proper dropdowns (StratagemPicker/SecondaryPicker rewritten)
+- [x] Game-tracker: round forms consistent — added key={nextRound} to RoundWizard for state reset between rounds
+- [x] Tournament: test data preload — seedTestPlayers server mutation + "Load Test Players" button in ManageTournament
+- [x] Data-import: BSData warnings copy-to-clipboard button added
+- [x] Legends exclusion — `useLegendsUnitIds()` moved to game-data-store as shared hook, versus filters legends out of unit search, list-builder re-exports
+- [x] HTML→markdown conversion — `htmlToMarkdown()` in export-wahapedia.ts converts all description fields at export time (detachment abilities, stratagems, enhancements, unit abilities, abilities, wargear)
+- [x] Opponent detachment already a dropdown when data available — added 3 new tests for dropdown path in MatchSetupScreen.test.tsx (150 game-tracker tests)
+- [x] Codex detachments already fully implemented — export → import → IndexedDB → hooks → all consumer apps
 
 ### In Progress
 
-- [ ] Run full test suite and fix any remaining failures
-- [ ] Add version number to landing page
-- [ ] Add data reload notification to landing page
-- [ ] Wahapedia export script (`scripts/export-wahapedia.ts`) — 19 JSON files covering datasheets, models, wargear, detachments, stratagems, enhancements, missions, abilities, junction tables
-- [ ] game-data-store IndexedDB schema V7 — 22 object stores including junction tables (datasheet_stratagems: 84K, datasheet_enhancements: 10K, datasheet_detachment_abilities: 15K)
-- [ ] data-import tabs — BSData + Wahapedia import pipelines (28 tests)
-- [ ] Versus: attacker/defender detachment selectors, enhancement selectors, stratagems display
-- [ ] List-builder: Battleline exemption from duplicate limits, role-based filtering
-- [ ] Game-tracker: secondary missions and stratagems already data-driven (StratagemPicker, SecondaryPicker)
-- [ ] Wahapedia-primary unit access functions in store.ts (`getDatasheetAsUnit`, `searchDatasheets`, `listDatasheetFactions`, `hasDatasheets`)
-- [ ] Shared `parseStat`, `parseDiceOrNum`, `parseWeaponAbilities` exported from game-data-store (no duplication)
-- [ ] Shared primary hooks in game-data-store: `usePrimaryFactions`, `usePrimaryUnitSearch`, `usePrimaryUnit` — Wahapedia-first with BSData fallback
-- [ ] Shared `convertWargearToWeapons` and `useWargearAsWeapons` in game-data-store
-- [ ] Versus useGameData.ts refactored to use shared hooks (removed ~120 lines of duplicated parsing code)
-- [ ] List-builder useGameData.ts refactored to use shared hooks
-- [ ] AppShell home icon — all auth-gated apps now have a back-to-landing link
-- [ ] No-cheat ActiveSessionScreen cancel button during calibration phase
-- [ ] Data-import already has home link on title
+- [ ] Data-import: Include Legends toggle checkbox in import UI
+- [ ] Master SQLite database linking BSData + Wahapedia + game rules with referential integrity
+- [ ] Wahapedia tables mirroring BSData structure with integrity checks
+- [ ] Game rules linked to units/models in the database
+- [ ] Special rules connected to datasheets/units
+- [ ] Cross-reference tables linking all three data sources
+- [ ] Client-side IndexedDB code with same master data
+- [ ] Data-Import tests with real data validation
+- [ ] Scripts for setting up data sources for GitHub storage
+- [ ] Dice detection improvements
 
 ### Not Started
 
@@ -79,9 +119,11 @@ Update this section every time you update or fix a section of the requirements. 
 | Package | Tests | Status |
 |---------|-------|--------|
 | packages/game-data-store | 93 | PASS |
-| packages/ui | 25 | PASS |
-| apps/versus/client | 129 | PASS |
+| packages/ui | 30 | PASS |
+| apps/versus/client | 134 | PASS |
 | apps/list-builder/client | 52 | PASS |
+| apps/game-tracker/client | 150 | PASS |
+| apps/tournament/client | 57 | PASS |
 | Others | — | Not yet verified this session |
 
 ---

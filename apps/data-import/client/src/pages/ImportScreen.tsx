@@ -10,9 +10,11 @@ import {
   clearAll,
   clearGameRules,
   getRulesImportMeta,
+  getIncludeLegends,
+  setIncludeLegends,
 } from '@tabletop-tools/game-data-store'
 import type { ImportMeta, RulesImportMeta } from '@tabletop-tools/game-data-store'
-import { listCatalogFiles, fetchCatalogXml, RateLimitError } from '../lib/github'
+import { listCatalogFiles, fetchCatalogXml, getLatestCommitSha, RateLimitError } from '../lib/github'
 import type { CatalogFile, RateLimitInfo } from '../lib/github'
 import { importWahapediaRules, isWahapediaAvailable } from '../lib/wahapedia'
 import type { RulesImportProgress, RulesImportResult } from '../lib/wahapedia'
@@ -68,6 +70,9 @@ export function ImportScreen() {
   const [storedFactions, setStoredFactions] = useState<string[]>([])
   const [factionCounts, setFactionCounts] = useState<Record<string, number>>({})
   const [factionWeaponCounts, setFactionWeaponCounts] = useState<Record<string, number>>({})
+  const [clearing, setClearing] = useState(false)
+  const [clearMessage, setClearMessage] = useState<string | null>(null)
+  const [includeLegends, setIncludeLegendsState] = useState(false)
 
   const refreshStoredData = useCallback(async () => {
     const [meta, rmeta, factions] = await Promise.all([
@@ -93,6 +98,7 @@ export function ImportScreen() {
   useEffect(() => {
     refreshStoredData()
     isWahapediaAvailable().then(setRulesAvailable)
+    getIncludeLegends().then(setIncludeLegendsState)
   }, [refreshStoredData])
 
   // ── Unit import handlers ──────────────────────────────────────────────────
@@ -187,11 +193,13 @@ export function ImportScreen() {
     }
 
     if (successfulFactions.length > 0) {
+      const commitSha = await getLatestCommitSha(repo, branch)
       await setImportMeta({
         lastImport: Date.now(),
         factions: successfulFactions,
         totalUnits,
         parserVersion: PARSER_VERSION,
+        ...(commitSha ? { commitSha } : {}),
       })
     }
 
@@ -234,18 +242,41 @@ export function ImportScreen() {
   // ── Stored data handlers ──────────────────────────────────────────────────
 
   const handleClearFaction = async (faction: string) => {
-    await clearFaction(faction)
-    await refreshStoredData()
+    setClearing(true)
+    setClearMessage(null)
+    try {
+      await clearFaction(faction)
+      await refreshStoredData()
+      setClearMessage(`Removed ${faction} data.`)
+    } finally {
+      setClearing(false)
+    }
   }
 
   const handleClearAll = async () => {
-    await clearAll()
-    await refreshStoredData()
+    if (!confirm('Clear all imported unit profiles? This cannot be undone.')) return
+    setClearing(true)
+    setClearMessage(null)
+    try {
+      await clearAll()
+      await refreshStoredData()
+      setClearMessage('All unit profile data cleared.')
+    } finally {
+      setClearing(false)
+    }
   }
 
   const handleClearGameRules = async () => {
-    await clearGameRules()
-    await refreshStoredData()
+    if (!confirm('Clear all imported game rules? This cannot be undone.')) return
+    setClearing(true)
+    setClearMessage(null)
+    try {
+      await clearGameRules()
+      await refreshStoredData()
+      setClearMessage('All game rules data cleared.')
+    } finally {
+      setClearing(false)
+    }
   }
 
   // ── Helpers ───────────────────────────────────────────────────────────────
@@ -309,6 +340,9 @@ export function ImportScreen() {
         {/* ── Unit Profiles Tab ── */}
         {activeTab === 'units' && (
           <>
+            <p className="mb-4 text-xs text-slate-500">
+              Import unit stat lines and weapons from BSData (community-maintained XML). Data stays in your browser.
+            </p>
             {/* Rate limit warning */}
             {rateLimit && rateLimit.remaining < 10 && (
               <div className="mb-4 rounded-lg border border-amber-800 bg-amber-900/20 px-4 py-3 text-sm text-amber-300">
@@ -477,6 +511,17 @@ export function ImportScreen() {
                     <summary className="cursor-pointer text-sm text-amber-400">
                       Show all {result.errors.length} warning{result.errors.length !== 1 ? 's' : ''}
                     </summary>
+                    <div className="mt-1 flex justify-end">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          void navigator.clipboard.writeText(result.errors.join('\n'))
+                        }}
+                        className="text-xs text-slate-400 hover:text-slate-200 border border-slate-700 rounded px-2 py-0.5"
+                      >
+                        Copy to clipboard
+                      </button>
+                    </div>
                     <ul className="mt-1 max-h-48 space-y-1 overflow-y-auto text-xs text-slate-500">
                       {result.errors.map((err, i) => (
                         <li key={i}>{err}</li>
@@ -609,6 +654,21 @@ export function ImportScreen() {
         {/* ── Stored Data Tab ── */}
         {activeTab === 'stored' && (
           <>
+            <p className="mb-4 text-xs text-slate-500">
+              View and manage imported data. Remove individual factions or clear everything. Data is stored locally in your browser.
+            </p>
+            {/* Status messages */}
+            {clearing && (
+              <div className="mb-4 rounded-lg bg-slate-900 border border-slate-700 px-4 py-2 text-sm text-slate-400">
+                Clearing data…
+              </div>
+            )}
+            {clearMessage && !clearing && (
+              <div className="mb-4 rounded-lg bg-emerald-900/30 border border-emerald-700/50 px-4 py-2 text-sm text-emerald-400">
+                {clearMessage}
+              </div>
+            )}
+
             {/* Units summary */}
             <section className="mb-6 rounded-lg border border-slate-800 bg-slate-900 p-4">
               <div className="mb-3 flex items-center justify-between">
@@ -616,7 +676,8 @@ export function ImportScreen() {
                 {storedFactions.length > 0 && (
                   <button
                     onClick={handleClearAll}
-                    className="rounded px-3 py-1 text-sm text-red-400 hover:bg-red-400/10"
+                    disabled={clearing}
+                    className="rounded px-3 py-1 text-sm text-red-400 hover:bg-red-400/10 disabled:opacity-50"
                   >
                     Clear All Data
                   </button>
@@ -659,6 +720,29 @@ export function ImportScreen() {
               )}
             </section>
 
+            {/* Settings */}
+            <section className="mb-6 rounded-lg border border-slate-800 bg-slate-900 p-4">
+              <h2 className="mb-3 text-lg font-semibold text-slate-100">Settings</h2>
+              <label className="flex items-center gap-3 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={includeLegends}
+                  onChange={async (e) => {
+                    const val = e.target.checked
+                    setIncludeLegendsState(val)
+                    await setIncludeLegends(val)
+                  }}
+                  className="w-4 h-4 rounded accent-amber-400"
+                />
+                <div>
+                  <span className="text-sm text-slate-300">Include Legends units</span>
+                  <p className="text-xs text-slate-500">
+                    When enabled, Legends units will appear in all apps. Off by default.
+                  </p>
+                </div>
+              </label>
+            </section>
+
             {/* Game Rules summary */}
             <section className="mb-6 rounded-lg border border-slate-800 bg-slate-900 p-4">
               <div className="mb-3 flex items-center justify-between">
@@ -666,7 +750,8 @@ export function ImportScreen() {
                 {rulesMeta && (
                   <button
                     onClick={handleClearGameRules}
-                    className="rounded px-3 py-1 text-sm text-red-400 hover:bg-red-400/10"
+                    disabled={clearing}
+                    className="rounded px-3 py-1 text-sm text-red-400 hover:bg-red-400/10 disabled:opacity-50"
                   >
                     Clear Game Rules
                   </button>

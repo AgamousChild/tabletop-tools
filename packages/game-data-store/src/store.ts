@@ -53,6 +53,7 @@ export interface ImportMeta {
   factions: string[]
   totalUnits: number
   parserVersion?: number
+  commitSha?: string
 }
 
 export interface RulesImportMeta {
@@ -628,6 +629,40 @@ export async function setRulesImportMeta(meta: RulesImportMeta): Promise<void> {
   return new Promise((resolve, reject) => {
     const tx = db.transaction(META_STORE, 'readwrite')
     tx.objectStore(META_STORE).put(meta, 'rulesImportMeta')
+    tx.oncomplete = () => {
+      db.close()
+      resolve()
+    }
+    tx.onerror = () => {
+      db.close()
+      reject(tx.error)
+    }
+  })
+}
+
+// ── Settings ─────────────────────────────────────────────────────────────────
+
+export async function getIncludeLegends(): Promise<boolean> {
+  const db = await openDb()
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(META_STORE, 'readonly')
+    const req = tx.objectStore(META_STORE).get('includeLegends')
+    req.onsuccess = () => {
+      db.close()
+      resolve(req.result === true)
+    }
+    req.onerror = () => {
+      db.close()
+      reject(req.error)
+    }
+  })
+}
+
+export async function setIncludeLegends(value: boolean): Promise<void> {
+  const db = await openDb()
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(META_STORE, 'readwrite')
+    tx.objectStore(META_STORE).put(value, 'includeLegends')
     tx.oncomplete = () => {
       db.close()
       resolve()
