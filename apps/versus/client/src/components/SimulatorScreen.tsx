@@ -452,7 +452,7 @@ export function SimulatorScreen({ onSignOut }: Props) {
             </svg>
             Home
           </a>
-          <span className="text-lg font-bold text-amber-400">Versus</span>
+          <h1 className="text-lg font-bold text-amber-400">Versus</h1>
         </div>
         <button
           onClick={handleSignOut}

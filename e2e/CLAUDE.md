@@ -76,14 +76,14 @@ cd e2e && pnpm test -- --grep "no-cheat"
 
 | Spec | Tests | Project |
 |---|---|---|
-| landing.spec.ts | 8 | public |
+| landing.spec.ts | 4 | public |
 | auth.spec.ts | 5 | auth-flow |
-| cross-app-auth.spec.ts | 2 | auth-flow |
+| cross-app-auth.spec.ts | 1 | auth-flow |
 | no-cheat.spec.ts | 3 | authed |
 | versus.spec.ts | 4 | authed |
 | list-builder.spec.ts | 4 | authed |
-| game-tracker.spec.ts | 3 | authed |
+| game-tracker.spec.ts | 4 | authed |
 | tournament.spec.ts | 3 | authed |
-| new-meta.spec.ts | 2 | public |
-| data-import.spec.ts | 2 | public |
+| new-meta.spec.ts | 4 | public |
+| data-import.spec.ts | 4 | public |
 | **Total** | **36** | |

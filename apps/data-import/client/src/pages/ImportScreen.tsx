@@ -308,9 +308,9 @@ export function ImportScreen() {
     <div className="min-h-screen bg-slate-950 p-6">
       <div className="mx-auto max-w-3xl">
         <header className="mb-6">
-          <a href="/" className="text-3xl font-bold text-slate-100 hover:text-slate-300 transition-colors">
+          <h1><a href="/" className="text-3xl font-bold text-slate-100 hover:text-slate-300 transition-colors">
             Data <span className="text-amber-400">Import</span>
-          </a>
+          </a></h1>
           <p className="mt-1 text-slate-400">
             Load game data into your browser for use across all apps.
           </p>

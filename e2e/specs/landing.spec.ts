@@ -7,11 +7,11 @@ test.describe('Landing page', () => {
     await expect(page.locator('h1')).toContainText('Tools')
   })
 
-  test('shows all 7 app cards', async ({ page }) => {
+  test('shows all 8 app cards', async ({ page }) => {
     await page.goto('/')
 
     const cards = page.locator('a.card')
-    await expect(cards).toHaveCount(7)
+    await expect(cards).toHaveCount(8)
   })
 
   test('cards have correct hrefs', async ({ page }) => {
@@ -25,6 +25,7 @@ test.describe('Landing page', () => {
       { name: 'Tournament', href: '/tournament/' },
       { name: 'New Meta', href: '/new-meta/' },
       { name: 'Data Import', href: '/data-import/' },
+      { name: 'Admin', href: '/admin/' },
     ]
 
     for (const app of expectedApps) {

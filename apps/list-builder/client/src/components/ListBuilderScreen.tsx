@@ -101,7 +101,7 @@ export function ListBuilderScreen({ onSignOut }: Props) {
     <div className="min-h-screen bg-slate-950 text-slate-100">
       {/* Header */}
       <header className="border-b border-slate-800 px-6 py-4 flex items-center justify-between">
-        <a href="/" className="text-2xl font-bold text-amber-400 hover:text-amber-300 transition-colors">List Builder</a>
+        <h1><a href="/" className="text-2xl font-bold text-amber-400 hover:text-amber-300 transition-colors">List Builder</a></h1>
         <div className="flex items-center gap-3">
           {syncStatus && <span className="text-xs text-green-400">{syncStatus}</span>}
           <button
