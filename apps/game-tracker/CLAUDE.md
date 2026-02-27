@@ -238,7 +238,7 @@ secondary.remove({ secondaryId })                    -> void
 
 ## Testing
 
-**201 tests** (58 server + 143 client), all passing.
+**214 tests** (58 server + 156 client), all passing.
 
 ```
 server/src/
@@ -254,13 +254,13 @@ server/src/
 client/src/components/
   GameTrackerScreen.test.tsx               <- 13 tests: screen router, wizard flow, navigation
   MatchSetupScreen.test.tsx                <- 10 tests: fields, validation, tournament toggle
-  MissionSetupScreen.test.tsx              <- 16 tests: mission/deployment/terrain, twist/challenger cards, photos
+  MissionSetupScreen.test.tsx              <- 19 tests: mission/deployment/terrain, twist/challenger cards, photos, data-driven missions
   PregameScreen.test.tsx                   <- 7 tests: attacker/defender, who goes first
   BattleScreen.test.tsx                    <- 9 tests: scoreboard, round wizard, end game
   EndGameScreen.test.tsx                   <- 13 tests: result, per-player stats, secondaries, rounds
   battle/
     VpStepper.test.tsx                     <- 6 tests: increment/decrement, min/max
-    Scoreboard.test.tsx                    <- 4 tests: round number, VP, CP, opponent
+    Scoreboard.test.tsx                    <- 7 tests: round number, VP, CP, opponent, player labels, VP highlighting
     StratagemPicker.test.tsx               <- 7 tests: add/remove, input validation
     UnitPicker.test.tsx                    <- 7 tests: add/remove, custom label
     SecondaryPicker.test.tsx               <- 8 tests: add/remove/score, VP display
@@ -274,5 +274,5 @@ client/src/components/
 
 ```bash
 cd apps/game-tracker/server && pnpm test   # 58 server tests
-cd apps/game-tracker/client && pnpm test   # 138 client tests
+cd apps/game-tracker/client && pnpm test   # 156 client tests
 ```
