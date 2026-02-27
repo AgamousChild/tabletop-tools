@@ -10,6 +10,7 @@ export type WeaponBreakdown = {
   weaponName: string
   expectedWounds: number
   expectedModelsRemoved: number
+  abilities?: string[]
 }
 
 type Props = {
@@ -73,11 +74,16 @@ export function SimulationResult({ attackerName, defenderName, result, weaponBre
         <div className="space-y-1.5">
           <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Per-weapon breakdown</p>
           {weaponBreakdowns.map((wb, i) => (
-            <div key={i} className="flex justify-between items-center text-sm">
-              <span className="text-slate-400 truncate mr-2">{wb.weaponName}</span>
-              <span className="text-slate-300 tabular-nums whitespace-nowrap">
-                {wb.expectedWounds.toFixed(1)} wounds ({wb.expectedModelsRemoved.toFixed(1)} models)
-              </span>
+            <div key={i} className="text-sm">
+              <div className="flex justify-between items-center">
+                <span className="text-slate-400 truncate mr-2">{wb.weaponName}</span>
+                <span className="text-slate-300 tabular-nums whitespace-nowrap">
+                  {wb.expectedWounds.toFixed(1)} wounds ({wb.expectedModelsRemoved.toFixed(1)} models)
+                </span>
+              </div>
+              {wb.abilities && wb.abilities.length > 0 && (
+                <p className="text-xs text-amber-400/60 mt-0.5">[{wb.abilities.join(', ')}]</p>
+              )}
             </div>
           ))}
         </div>

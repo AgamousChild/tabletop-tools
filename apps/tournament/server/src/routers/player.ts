@@ -1,8 +1,8 @@
 import { TRPCError } from '@trpc/server'
-import { eq, and } from 'drizzle-orm'
+import { eq, and, like, inArray } from 'drizzle-orm'
 import { z } from 'zod'
 
-import { tournaments, tournamentPlayers } from '@tabletop-tools/db'
+import { tournaments, tournamentPlayers, pairings, rounds, tournamentCards, userBans, authUsers } from '@tabletop-tools/db'
 import { router, protectedProcedure } from '../trpc'
 
 export const playerRouter = router({
@@ -189,5 +189,209 @@ export const playerRouter = router({
         .set({ dropped: 1 })
         .where(eq(tournamentPlayers.id, input.playerId))
       return { dropped: true }
+    }),
+
+  // My profile: aggregate W-L-D, tournaments played, ELO, card history, bans
+  myProfile: protectedProcedure.query(async ({ ctx }) => {
+    const userId = ctx.user.id
+
+    // All registrations for this user
+    const registrations = await ctx.db
+      .select()
+      .from(tournamentPlayers)
+      .where(eq(tournamentPlayers.userId, userId))
+      .all()
+
+    const regIds = registrations.map((r) => r.id)
+
+    // Get all tournaments the user participated in
+    const tournamentIds = [...new Set(registrations.map((r) => r.tournamentId))]
+    const userTournaments = tournamentIds.length > 0
+      ? await ctx.db
+          .select()
+          .from(tournaments)
+          .where(inArray(tournaments.id, tournamentIds))
+          .all()
+      : []
+
+    // Compute W-L-D from pairings
+    let wins = 0
+    let losses = 0
+    let draws = 0
+    let totalVP = 0
+    let gamesPlayed = 0
+
+    if (regIds.length > 0) {
+      // Get all pairings involving this player
+      const allPairings = await ctx.db.select().from(pairings).all()
+      const myPairings = allPairings.filter(
+        (p) => p.result && (regIds.includes(p.player1Id) || (p.player2Id && regIds.includes(p.player2Id))),
+      )
+
+      for (const pair of myPairings) {
+        const isP1 = regIds.includes(pair.player1Id)
+        gamesPlayed++
+        if (pair.result === 'BYE') {
+          wins++
+        } else if (pair.result === 'DRAW') {
+          draws++
+          totalVP += isP1 ? (pair.player1Vp ?? 0) : (pair.player2Vp ?? 0)
+        } else if (pair.result === 'P1_WIN') {
+          if (isP1) wins++
+          else losses++
+          totalVP += isP1 ? (pair.player1Vp ?? 0) : (pair.player2Vp ?? 0)
+        } else if (pair.result === 'P2_WIN') {
+          if (isP1) losses++
+          else wins++
+          totalVP += isP1 ? (pair.player1Vp ?? 0) : (pair.player2Vp ?? 0)
+        }
+      }
+    }
+
+    // Card history
+    const allCards = regIds.length > 0
+      ? (await ctx.db.select().from(tournamentCards).all()).filter((c) => regIds.includes(c.playerId))
+      : []
+
+    // Ban status
+    const bans = await ctx.db
+      .select()
+      .from(userBans)
+      .where(eq(userBans.userId, userId))
+      .all()
+
+    return {
+      userId,
+      tournamentsPlayed: registrations.length,
+      tournaments: userTournaments.map((t) => ({
+        id: t.id,
+        name: t.name,
+        status: t.status,
+        eventDate: t.eventDate,
+        format: t.format,
+        faction: registrations.find((r) => r.tournamentId === t.id)?.faction ?? '',
+      })),
+      wins,
+      losses,
+      draws,
+      gamesPlayed,
+      totalVP,
+      cards: allCards.map((c) => ({
+        id: c.id,
+        cardType: c.cardType,
+        reason: c.reason,
+        issuedAt: c.issuedAt,
+        tournamentId: c.tournamentId,
+      })),
+      bans: bans.map((b) => ({
+        id: b.id,
+        reason: b.reason,
+        bannedAt: b.bannedAt,
+        liftedAt: b.liftedAt,
+      })),
+    }
+  }),
+
+  // Search army lists across tournaments by faction
+  searchLists: protectedProcedure
+    .input(z.object({ faction: z.string().optional(), query: z.string().optional() }))
+    .query(async ({ ctx, input }) => {
+      let results = await ctx.db.select().from(tournamentPlayers).all()
+
+      // Only return entries with actual list text
+      results = results.filter((r) => r.listText && r.listText.trim().length > 0)
+
+      if (input.faction) {
+        const factionLower = input.faction.toLowerCase()
+        results = results.filter((r) => r.faction.toLowerCase().includes(factionLower))
+      }
+      if (input.query) {
+        const queryLower = input.query.toLowerCase()
+        results = results.filter(
+          (r) =>
+            r.displayName.toLowerCase().includes(queryLower) ||
+            r.faction.toLowerCase().includes(queryLower) ||
+            (r.listText && r.listText.toLowerCase().includes(queryLower)),
+        )
+      }
+
+      // Get tournament names for display
+      const tIds = [...new Set(results.map((r) => r.tournamentId))]
+      const tourns = tIds.length > 0
+        ? await ctx.db.select().from(tournaments).where(inArray(tournaments.id, tIds)).all()
+        : []
+      const tournMap = new Map(tourns.map((t) => [t.id, t]))
+
+      return results.slice(0, 50).map((r) => ({
+        playerName: r.displayName,
+        faction: r.faction,
+        detachment: r.detachment,
+        listText: r.listText,
+        tournamentName: tournMap.get(r.tournamentId)?.name ?? '',
+        tournamentId: r.tournamentId,
+        eventDate: tournMap.get(r.tournamentId)?.eventDate ?? 0,
+      }))
+    }),
+
+  // Search players by name with tournament history
+  searchPlayers: protectedProcedure
+    .input(z.object({ query: z.string().min(1) }))
+    .query(async ({ ctx, input }) => {
+      const queryLower = input.query.toLowerCase()
+
+      // Search by display name across tournament registrations
+      const allRegs = await ctx.db.select().from(tournamentPlayers).all()
+      const matchingRegs = allRegs.filter((r) => r.displayName.toLowerCase().includes(queryLower))
+
+      // Group by userId to get unique players
+      const playerMap = new Map<string, { userId: string; displayName: string; registrations: typeof matchingRegs }>()
+      for (const reg of matchingRegs) {
+        const existing = playerMap.get(reg.userId)
+        if (existing) {
+          existing.registrations.push(reg)
+        } else {
+          playerMap.set(reg.userId, {
+            userId: reg.userId,
+            displayName: reg.displayName,
+            registrations: [reg],
+          })
+        }
+      }
+
+      // Get card counts for matched players
+      const allCards = await ctx.db.select().from(tournamentCards).all()
+      const regIdsByUser = new Map<string, string[]>()
+      for (const reg of allRegs) {
+        const ids = regIdsByUser.get(reg.userId) ?? []
+        ids.push(reg.id)
+        regIdsByUser.set(reg.userId, ids)
+      }
+
+      // Get tournament names
+      const tIds = [...new Set(matchingRegs.map((r) => r.tournamentId))]
+      const tourns = tIds.length > 0
+        ? await ctx.db.select().from(tournaments).where(inArray(tournaments.id, tIds)).all()
+        : []
+      const tournMap = new Map(tourns.map((t) => [t.id, t]))
+
+      const results = [...playerMap.values()].slice(0, 25).map((p) => {
+        const userRegIds = regIdsByUser.get(p.userId) ?? []
+        const userCards = allCards.filter((c) => userRegIds.includes(c.playerId))
+        return {
+          userId: p.userId,
+          displayName: p.displayName,
+          tournamentsPlayed: (regIdsByUser.get(p.userId) ?? []).length,
+          factions: [...new Set(allRegs.filter((r) => r.userId === p.userId).map((r) => r.faction))],
+          yellowCards: userCards.filter((c) => c.cardType === 'YELLOW').length,
+          redCards: userCards.filter((c) => c.cardType === 'RED').length,
+          recentTournaments: p.registrations.slice(0, 5).map((r) => ({
+            name: tournMap.get(r.tournamentId)?.name ?? '',
+            faction: r.faction,
+            eventDate: tournMap.get(r.tournamentId)?.eventDate ?? 0,
+          })),
+        }
+      })
+
+      return results
     }),
 })

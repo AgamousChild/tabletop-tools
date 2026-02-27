@@ -18,12 +18,16 @@ vi.mock('../lib/trpc', () => ({
       save: {
         useMutation: () => ({ mutate: mockSave }),
       },
+      history: {
+        useQuery: () => ({ data: [] }),
+      },
     },
   },
 }))
 
 vi.mock('@tabletop-tools/game-data-store', () => ({
   useGameDataAvailable: () => true,
+  useUnitCompositions: () => ({ data: [{ id: 'comp1', datasheetId: 'u1', line: '1', description: '5 models' }], error: null, isLoading: false }),
 }))
 
 vi.mock('../lib/useGameData', () => ({
@@ -58,6 +62,12 @@ vi.mock('../lib/useGameData', () => ({
           isLoading: false,
         }
       : { data: null, isLoading: false },
+  useGameLeadersForUnit: () => ({ data: [], isLoading: false }),
+  useGameUnitAbilities: () => ({ data: [], isLoading: false }),
+  useGameUnitKeywords: () => ({ data: [], isLoading: false }),
+  useGameWargearOptions: () => ({ data: [], isLoading: false }),
+  useGameDatasheetWeapons: () => ({ data: [], isLoading: false }),
+  useGameDatasheetModels: () => ({ data: [], isLoading: false }),
 }))
 
 beforeEach(() => {
@@ -102,7 +112,7 @@ describe('SimulatorScreen', () => {
 
   it('shows special rules editor', () => {
     render(<SimulatorScreen onSignOut={vi.fn()} />)
-    expect(screen.getByText('Special Rules')).toBeInTheDocument()
+    expect(screen.getByText('Additional Rules')).toBeInTheDocument()
   })
 
   it('shows weapon selector after selecting attacker unit', () => {

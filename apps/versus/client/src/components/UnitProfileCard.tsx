@@ -23,12 +23,29 @@ export function UnitProfileCard({ unit, invulnSave, fnp }: Props) {
   const displayInvuln = invulnSave ?? unit.invulnSave
   const displayFnp = fnp ?? unit.fnp
 
+  // Data quality warnings
+  const warnings: string[] = []
+  if (unit.toughness === 0) warnings.push('Toughness is 0 — possible parse error')
+  if (unit.save === 0) warnings.push('Save is 0 — possible parse error')
+  if (unit.weapons.length === 0) warnings.push('No weapons found in imported data')
+  for (const w of unit.weapons) {
+    if (w.strength === 0) warnings.push(`Weapon "${w.name}" has S0 — possible parse error`)
+  }
+
   return (
     <div className="rounded-lg bg-slate-800 border border-slate-700 px-3 py-2">
       <div className="flex items-center justify-between mb-2">
         <p className="text-sm font-semibold text-amber-400">{unit.name}</p>
         <span className="text-xs text-slate-500 tabular-nums">{unit.points}pts</span>
       </div>
+      {warnings.length > 0 && (
+        <div className="mb-2 rounded bg-amber-900/20 border border-amber-800/50 px-2 py-1.5 text-xs text-amber-300">
+          <p className="font-semibold">Data quality issues:</p>
+          <ul className="mt-0.5 space-y-0.5">
+            {warnings.map((w, i) => <li key={i}>{w}</li>)}
+          </ul>
+        </div>
+      )}
       <div className="grid grid-cols-7 gap-1">
         <StatBox label="M" value={`${unit.move}"`} />
         <StatBox label="T" value={unit.toughness} />

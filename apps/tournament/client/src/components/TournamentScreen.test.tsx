@@ -95,6 +95,24 @@ vi.mock('../lib/trpc', () => ({
       delete: {
         useMutation: () => ({ mutate: vi.fn(), isPending: false }),
       },
+      search: {
+        useQuery: () => ({
+          data: [
+            {
+              id: 'search-1',
+              name: 'Open GT 2025',
+              status: 'REGISTRATION',
+              format: '2000pts',
+              location: 'Denver',
+              eventDate: 1700000000000,
+              playerCount: 8,
+              maxPlayers: 32,
+              startTime: '10:00 AM',
+            },
+          ],
+          isPending: false,
+        }),
+      },
     },
     player: {
       register: {
@@ -117,6 +135,61 @@ vi.mock('../lib/trpc', () => ({
       },
       lockLists: {
         useMutation: () => ({ mutate: vi.fn(), isPending: false }),
+      },
+      myProfile: {
+        useQuery: () => ({
+          data: {
+            userId: 'to-1',
+            tournamentsPlayed: 3,
+            tournaments: [
+              { id: 't1', name: 'Test GT 2025', status: 'COMPLETE', eventDate: 1700000000000, format: '2000pts', faction: 'Orks' },
+            ],
+            wins: 5,
+            losses: 2,
+            draws: 1,
+            gamesPlayed: 8,
+            totalVP: 580,
+            cards: [
+              { id: 'c1', cardType: 'YELLOW', reason: 'Slow play', issuedAt: 1700000000000, tournamentId: 't1' },
+            ],
+            bans: [],
+          },
+          isPending: false,
+        }),
+      },
+      searchLists: {
+        useQuery: () => ({
+          data: [
+            {
+              playerName: 'Bob',
+              faction: 'Death Guard',
+              detachment: 'Plague Company',
+              listText: 'Plague Marines x10\nBlightlord Terminators x5',
+              tournamentName: 'Test GT',
+              tournamentId: 't1',
+              eventDate: 1700000000000,
+            },
+          ],
+          isPending: false,
+        }),
+      },
+      searchPlayers: {
+        useQuery: () => ({
+          data: [
+            {
+              userId: 'p1',
+              displayName: 'Bob',
+              tournamentsPlayed: 5,
+              factions: ['Orks', 'Death Guard'],
+              yellowCards: 1,
+              redCards: 0,
+              recentTournaments: [
+                { name: 'Test GT', faction: 'Orks', eventDate: 1700000000000 },
+              ],
+            },
+          ],
+          isPending: false,
+        }),
       },
     },
     round: {
@@ -162,6 +235,14 @@ vi.mock('../lib/trpc', () => ({
     elo: {
       get: {
         useQuery: () => ({ data: { rating: 1200, gamesPlayed: 5 } }),
+      },
+      leaderboard: {
+        useQuery: () => ({
+          data: [
+            { userId: 'to-1', displayName: 'Alice', rating: 1350, gamesPlayed: 10 },
+            { userId: 'p1', displayName: 'Bob', rating: 1200, gamesPlayed: 5 },
+          ],
+        }),
       },
     },
     award: {
@@ -423,5 +504,140 @@ describe('TournamentScreen', () => {
     await waitFor(() => {
       expect(screen.getByText('A great tournament')).toBeInTheDocument()
     })
+  })
+
+  // ─── Navigation tabs ─────────────────────────────────────────
+
+  it('shows navigation tabs on main page', () => {
+    render(<TournamentScreen onSignOut={vi.fn()} />)
+    expect(screen.getByRole('link', { name: /my tournaments/i })).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: /^play$/i })).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: /my info/i })).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: /^lists$/i })).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: /^players$/i })).toBeInTheDocument()
+  })
+
+  // ─── Play screen ─────────────────────────────────────────────
+
+  it('shows Play screen with tournament search', async () => {
+    render(<TournamentScreen onSignOut={vi.fn()} />)
+    act(() => {
+      window.location.hash = '#/play'
+      window.dispatchEvent(new HashChangeEvent('hashchange'))
+    })
+    await waitFor(() => {
+      expect(screen.getByPlaceholderText(/search tournaments/i)).toBeInTheDocument()
+    })
+    expect(screen.getByText('Open GT 2025')).toBeInTheDocument()
+    expect(screen.getByText(/8 \/ 32 players/)).toBeInTheDocument()
+  })
+
+  it('shows Register button on open tournaments in Play screen', async () => {
+    render(<TournamentScreen onSignOut={vi.fn()} />)
+    act(() => {
+      window.location.hash = '#/play'
+      window.dispatchEvent(new HashChangeEvent('hashchange'))
+    })
+    await waitFor(() => {
+      expect(screen.getByRole('link', { name: /register/i })).toBeInTheDocument()
+    })
+  })
+
+  it('shows status filter buttons on Play screen', async () => {
+    render(<TournamentScreen onSignOut={vi.fn()} />)
+    act(() => {
+      window.location.hash = '#/play'
+      window.dispatchEvent(new HashChangeEvent('hashchange'))
+    })
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: /^all$/i })).toBeInTheDocument()
+      expect(screen.getByRole('button', { name: /registration/i })).toBeInTheDocument()
+      expect(screen.getByRole('button', { name: /complete/i })).toBeInTheDocument()
+    })
+  })
+
+  // ─── My Info screen ──────────────────────────────────────────
+
+  it('shows My Info screen with profile data', async () => {
+    render(<TournamentScreen onSignOut={vi.fn()} />)
+    act(() => {
+      window.location.hash = '#/my-info'
+      window.dispatchEvent(new HashChangeEvent('hashchange'))
+    })
+    await waitFor(() => {
+      expect(screen.getByText('ELO Rating')).toBeInTheDocument()
+    })
+    expect(screen.getByText('1200')).toBeInTheDocument()
+    expect(screen.getByText('#1')).toBeInTheDocument() // Rank
+  })
+
+  it('shows W-L-D record on My Info', async () => {
+    render(<TournamentScreen onSignOut={vi.fn()} />)
+    act(() => {
+      window.location.hash = '#/my-info'
+      window.dispatchEvent(new HashChangeEvent('hashchange'))
+    })
+    await waitFor(() => {
+      expect(screen.getByText('Record')).toBeInTheDocument()
+    })
+    expect(screen.getByText('5')).toBeInTheDocument() // wins
+    expect(screen.getByText('Wins')).toBeInTheDocument()
+    expect(screen.getByText('Losses')).toBeInTheDocument()
+    expect(screen.getByText('Draws')).toBeInTheDocument()
+  })
+
+  it('shows tournament history on My Info', async () => {
+    render(<TournamentScreen onSignOut={vi.fn()} />)
+    act(() => {
+      window.location.hash = '#/my-info'
+      window.dispatchEvent(new HashChangeEvent('hashchange'))
+    })
+    await waitFor(() => {
+      expect(screen.getByText('Tournament History')).toBeInTheDocument()
+    })
+    expect(screen.getByText('Test GT 2025')).toBeInTheDocument()
+  })
+
+  it('shows card history on My Info', async () => {
+    render(<TournamentScreen onSignOut={vi.fn()} />)
+    act(() => {
+      window.location.hash = '#/my-info'
+      window.dispatchEvent(new HashChangeEvent('hashchange'))
+    })
+    await waitFor(() => {
+      expect(screen.getByText('Card History')).toBeInTheDocument()
+    })
+    expect(screen.getByText('Slow play')).toBeInTheDocument()
+  })
+
+  // ─── List Search screen ──────────────────────────────────────
+
+  it('shows List Search screen with results', async () => {
+    render(<TournamentScreen onSignOut={vi.fn()} />)
+    act(() => {
+      window.location.hash = '#/search/lists'
+      window.dispatchEvent(new HashChangeEvent('hashchange'))
+    })
+    await waitFor(() => {
+      expect(screen.getByPlaceholderText(/filter by faction/i)).toBeInTheDocument()
+    })
+    expect(screen.getByText(/Death Guard/)).toBeInTheDocument()
+    expect(screen.getByText(/Plague Marines/)).toBeInTheDocument()
+  })
+
+  // ─── Player Search screen ────────────────────────────────────
+
+  it('shows Player Search screen with results', async () => {
+    render(<TournamentScreen onSignOut={vi.fn()} />)
+    act(() => {
+      window.location.hash = '#/search/players'
+      window.dispatchEvent(new HashChangeEvent('hashchange'))
+    })
+    await waitFor(() => {
+      expect(screen.getByPlaceholderText(/search players/i)).toBeInTheDocument()
+    })
+    // The mock returns data when query >= 1 char, but initial state has empty query
+    // so we should see the "Enter a player name" prompt
+    expect(screen.getByText(/enter a player name/i)).toBeInTheDocument()
   })
 })

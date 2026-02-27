@@ -219,6 +219,80 @@ describe('ImportScreen', () => {
     })
   })
 
+  it('shows per-faction breakdown in import results', async () => {
+    mockListCatalogFiles.mockResolvedValueOnce(
+      catalogResult([
+        { name: 'Orks.cat', faction: 'Orks', downloadUrl: 'https://example.com/orks.cat', size: 200000 },
+      ]),
+    )
+
+    // Minimal XML that produces a parseable unit
+    const fakeXml = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<gameSystem id="test-sys" name="TestGame">
+  <selectionEntries>
+    <selectionEntry id="unit-001" name="Test Unit" type="unit">
+      <profiles>
+        <profile id="p1" name="Test Unit" typeName="Unit Characteristics">
+          <characteristics>
+            <characteristic name="M">6</characteristic>
+            <characteristic name="T">4</characteristic>
+            <characteristic name="Sv">3+</characteristic>
+            <characteristic name="W">2</characteristic>
+            <characteristic name="Ld">6</characteristic>
+            <characteristic name="OC">1</characteristic>
+          </characteristics>
+        </profile>
+        <profile id="w1" name="Test Gun" typeName="Ranged Weapons">
+          <characteristics>
+            <characteristic name="Range">24</characteristic>
+            <characteristic name="A">2</characteristic>
+            <characteristic name="BS">3+</characteristic>
+            <characteristic name="S">4</characteristic>
+            <characteristic name="AP">-1</characteristic>
+            <characteristic name="D">1</characteristic>
+          </characteristics>
+        </profile>
+      </profiles>
+    </selectionEntry>
+  </selectionEntries>
+</gameSystem>`
+    _mockFetchCatalogXml.mockResolvedValueOnce(fakeXml)
+
+    render(<ImportScreen />)
+    fireEvent.click(screen.getByText('Load Catalog List'))
+
+    await waitFor(() => {
+      expect(screen.getByText('Orks')).toBeInTheDocument()
+    })
+
+    fireEvent.click(screen.getByText(/Import 1 Faction/))
+
+    await waitFor(() => {
+      expect(screen.getByText('Import Complete')).toBeInTheDocument()
+    })
+
+    // Should show per-faction breakdown
+    expect(screen.getByText('Per-faction breakdown:')).toBeInTheDocument()
+    expect(screen.getByText('1 units')).toBeInTheDocument()
+    expect(screen.getByText('1 weapons')).toBeInTheDocument()
+  })
+
+  it('shows weapon counts in stored data tab', async () => {
+    mockGetImportMeta.mockResolvedValue({ lastImport: 1700000000000, factions: ['Orks'], totalUnits: 10, parserVersion: 999 })
+    mockListStoredFactions.mockResolvedValue(['Orks'])
+    // Return mock units with weapons
+    mockSearchUnits.mockResolvedValue([
+      { id: '1', faction: 'Orks', name: 'U1', move: 6, toughness: 4, save: 3, wounds: 2, leadership: 6, oc: 1, weapons: [{ name: 'Gun', range: 24, attacks: 2, skill: 3, strength: 4, ap: 0, damage: 1, abilities: [] }, { name: 'Blade', range: 'melee' as const, attacks: 3, skill: 3, strength: 4, ap: 0, damage: 1, abilities: [] }], abilities: [], points: 50 },
+    ])
+
+    render(<ImportScreen />)
+    fireEvent.click(screen.getByText('Stored Data'))
+
+    await waitFor(() => {
+      expect(screen.getByText(/2 weapons/)).toBeInTheDocument()
+    })
+  })
+
   // ── Game Rules tab tests ──────────────────────────────────────────────────
 
   it('shows game rules content when Game Rules tab clicked', () => {

@@ -122,7 +122,13 @@ export function TournamentScreen({ onSignOut }: Props) {
 
   // Register form
   const [regName, setRegName] = useState('')
-  const [regFaction, setRegFaction] = useState('')
+  const [regFaction, setRegFaction] = useState(() => {
+    try {
+      const stored = localStorage.getItem('tournament-list')
+      if (stored) return JSON.parse(stored).faction ?? ''
+    } catch { /* ignore */ }
+    return ''
+  })
   const [regList, setRegList] = useState('')
 
   // Result reporting
@@ -372,6 +378,21 @@ export function TournamentScreen({ onSignOut }: Props) {
           ← Back
         </a>
         <h2 className="text-xl font-bold mb-4">Register for Tournament</h2>
+        {(() => {
+          try {
+            const stored = localStorage.getItem('tournament-list')
+            if (stored) {
+              const { name, faction, totalPts } = JSON.parse(stored)
+              return (
+                <div className="bg-slate-900 border border-amber-400/30 rounded-lg p-3 text-sm">
+                  <p className="text-slate-400">Linked list from List Builder:</p>
+                  <p className="text-slate-100 font-medium">{name} — {faction} ({totalPts}pts)</p>
+                </div>
+              )
+            }
+          } catch { /* ignore */ }
+          return null
+        })()}
         <form onSubmit={(e) => void handleRegister(e)} className="space-y-3">
           <input
             className="w-full px-3 py-2 rounded bg-slate-800 border border-slate-700 text-slate-100"
@@ -712,11 +733,31 @@ export function TournamentScreen({ onSignOut }: Props) {
     )
   }
 
-  // Default: tournament list view
+  // Play: search open tournaments
+  if (route.view === 'play') {
+    return <PlayScreen />
+  }
+
+  // My Info: user profile
+  if (route.view === 'my-info') {
+    return <MyInfoScreen userId={userId} />
+  }
+
+  // List Search
+  if (route.view === 'search-lists') {
+    return <ListSearchScreen />
+  }
+
+  // Player Search
+  if (route.view === 'search-players') {
+    return <PlayerSearchScreen />
+  }
+
+  // Default: tournament list view with nav tabs
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100">
       <div className="max-w-2xl mx-auto p-4">
-        <div className="flex justify-between items-center mb-6">
+        <div className="flex justify-between items-center mb-4">
           <h1 className="text-2xl font-bold">Tournament</h1>
           <div className="flex gap-2">
             <a
@@ -736,6 +777,15 @@ export function TournamentScreen({ onSignOut }: Props) {
           </div>
         </div>
 
+        {/* Navigation tabs */}
+        <div className="flex gap-1 mb-6 border-b border-slate-800 pb-2">
+          <a href="#/" className="px-3 py-1.5 rounded text-sm font-medium bg-amber-400 text-slate-950">My Tournaments</a>
+          <a href="#/play" className="px-3 py-1.5 rounded text-sm font-medium text-slate-400 hover:text-slate-200">Play</a>
+          <a href="#/my-info" className="px-3 py-1.5 rounded text-sm font-medium text-slate-400 hover:text-slate-200">My Info</a>
+          <a href="#/search/lists" className="px-3 py-1.5 rounded text-sm font-medium text-slate-400 hover:text-slate-200">Lists</a>
+          <a href="#/search/players" className="px-3 py-1.5 rounded text-sm font-medium text-slate-400 hover:text-slate-200">Players</a>
+        </div>
+
         {myTournamentsQuery.isPending && (
           <p className="text-slate-400">Loading…</p>
         )}
@@ -743,7 +793,7 @@ export function TournamentScreen({ onSignOut }: Props) {
         {tournaments.length === 0 && !myTournamentsQuery.isPending && (
           <div className="text-center py-12 text-slate-500">
             <p>No tournaments yet.</p>
-            <p className="text-sm mt-1">Create one or register for an open event.</p>
+            <p className="text-sm mt-1">Create one or <a href="#/play" className="text-amber-400 hover:underline">find an open event</a> to register for.</p>
           </div>
         )}
 
@@ -757,7 +807,9 @@ export function TournamentScreen({ onSignOut }: Props) {
               <div className="flex justify-between items-start">
                 <div>
                   <p className="font-semibold text-slate-100">{t.name}</p>
-                  <p className="text-sm text-slate-400 mt-0.5">{t.format}</p>
+                  <p className="text-sm text-slate-400 mt-0.5">
+                    {t.format} · {new Date(t.eventDate).toLocaleDateString()}
+                  </p>
                   {t.location && (
                     <p className="text-xs text-slate-500">{t.location}</p>
                   )}
@@ -767,6 +819,473 @@ export function TournamentScreen({ onSignOut }: Props) {
             </a>
           ))}
         </div>
+      </div>
+    </div>
+  )
+}
+
+function NavTabs({ active }: { active: string }) {
+  const tabs = [
+    { label: 'My Tournaments', href: '#/' },
+    { label: 'Play', href: '#/play' },
+    { label: 'My Info', href: '#/my-info' },
+    { label: 'Lists', href: '#/search/lists' },
+    { label: 'Players', href: '#/search/players' },
+  ]
+  return (
+    <div className="flex gap-1 mb-6 border-b border-slate-800 pb-2">
+      {tabs.map((t) => (
+        <a
+          key={t.href}
+          href={t.href}
+          className={`px-3 py-1.5 rounded text-sm font-medium ${
+            t.label === active
+              ? 'bg-amber-400 text-slate-950'
+              : 'text-slate-400 hover:text-slate-200'
+          }`}
+        >
+          {t.label}
+        </a>
+      ))}
+    </div>
+  )
+}
+
+function PlayScreen() {
+  const [searchQuery, setSearchQuery] = useState('')
+  const [statusFilter, setStatusFilter] = useState<string>('')
+  const [favorites, setFavorites] = useState<string[]>(() => {
+    try {
+      return JSON.parse(localStorage.getItem('tournament-favorites') ?? '[]')
+    } catch { return [] }
+  })
+
+  const searchResults = trpc.tournament.search.useQuery({
+    query: searchQuery || undefined,
+    status: (statusFilter || undefined) as 'REGISTRATION' | 'IN_PROGRESS' | 'COMPLETE' | undefined,
+  })
+
+  function toggleFavorite(id: string) {
+    setFavorites((prev) => {
+      const next = prev.includes(id) ? prev.filter((f) => f !== id) : [...prev, id]
+      localStorage.setItem('tournament-favorites', JSON.stringify(next))
+      return next
+    })
+  }
+
+  const results = searchResults.data ?? []
+  const favorited = results.filter((t) => favorites.includes(t.id))
+  const others = results.filter((t) => !favorites.includes(t.id))
+
+  return (
+    <div className="min-h-screen bg-slate-950 text-slate-100">
+      <div className="max-w-2xl mx-auto p-4">
+        <h1 className="text-2xl font-bold mb-4">Tournament</h1>
+        <NavTabs active="Play" />
+
+        <div className="space-y-3 mb-6">
+          <input
+            className="w-full px-3 py-2 rounded bg-slate-800 border border-slate-700 text-slate-100 placeholder-slate-500"
+            placeholder="Search tournaments by name, location, or format..."
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+          />
+          <div className="flex gap-2">
+            {(['', 'REGISTRATION', 'IN_PROGRESS', 'COMPLETE'] as const).map((s) => (
+              <button
+                key={s}
+                onClick={() => setStatusFilter(s)}
+                className={`text-xs px-3 py-1 rounded ${
+                  statusFilter === s
+                    ? 'bg-amber-400 text-slate-950'
+                    : 'bg-slate-800 text-slate-400 hover:text-slate-200'
+                }`}
+              >
+                {s === '' ? 'All' : s.replace('_', ' ')}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {searchResults.isPending && <p className="text-slate-400">Searching…</p>}
+
+        {favorited.length > 0 && (
+          <div className="mb-6">
+            <h3 className="text-xs font-semibold text-amber-400 uppercase mb-2">Favorites</h3>
+            <div className="space-y-2">
+              {favorited.map((t) => (
+                <TournamentSearchCard key={t.id} tournament={t} isFavorite onToggleFavorite={() => toggleFavorite(t.id)} />
+              ))}
+            </div>
+          </div>
+        )}
+
+        {others.length > 0 && (
+          <div className="space-y-2">
+            {favorited.length > 0 && <h3 className="text-xs font-semibold text-slate-500 uppercase mb-2">All Results</h3>}
+            {others.map((t) => (
+              <TournamentSearchCard key={t.id} tournament={t} isFavorite={false} onToggleFavorite={() => toggleFavorite(t.id)} />
+            ))}
+          </div>
+        )}
+
+        {!searchResults.isPending && results.length === 0 && (
+          <div className="text-center py-12 text-slate-500">
+            <p>No tournaments found.</p>
+            <p className="text-sm mt-1">Try adjusting your search or status filter.</p>
+          </div>
+        )}
+      </div>
+    </div>
+  )
+}
+
+type SearchTournament = {
+  id: string
+  name: string
+  status: string
+  format: string
+  location: string | null
+  eventDate: number
+  playerCount: number
+  maxPlayers: number | null
+  startTime: string | null
+}
+
+function TournamentSearchCard({
+  tournament: t,
+  isFavorite,
+  onToggleFavorite,
+}: {
+  tournament: SearchTournament
+  isFavorite: boolean
+  onToggleFavorite: () => void
+}) {
+  return (
+    <div className="bg-slate-900 rounded p-4 flex justify-between items-start">
+      <a href={`#/tournament/${t.id}`} className="flex-1 hover:text-amber-400">
+        <p className="font-semibold text-slate-100">{t.name}</p>
+        <p className="text-sm text-slate-400 mt-0.5">
+          {t.format} · {new Date(t.eventDate).toLocaleDateString()}
+        </p>
+        {t.location && <p className="text-xs text-slate-500">{t.location}</p>}
+        {t.startTime && <p className="text-xs text-slate-500">Start: {t.startTime}</p>}
+        <p className="text-xs text-slate-500 mt-1">
+          {t.playerCount}{t.maxPlayers ? ` / ${t.maxPlayers}` : ''} players
+        </p>
+      </a>
+      <div className="flex flex-col items-end gap-2">
+        <StatusBadge status={t.status} />
+        <button
+          onClick={onToggleFavorite}
+          className={`text-sm ${isFavorite ? 'text-amber-400' : 'text-slate-600 hover:text-slate-400'}`}
+          title={isFavorite ? 'Remove from favorites' : 'Add to favorites'}
+        >
+          {isFavorite ? '★' : '☆'}
+        </button>
+        {t.status === 'REGISTRATION' && (
+          <a
+            href={`#/tournament/${t.id}/register`}
+            className="text-xs px-3 py-1 rounded bg-amber-400 text-slate-950 font-semibold hover:bg-amber-300"
+          >
+            Register
+          </a>
+        )}
+      </div>
+    </div>
+  )
+}
+
+function MyInfoScreen({ userId }: { userId: string }) {
+  const profileQuery = trpc.player.myProfile.useQuery()
+  const eloQuery = trpc.elo.get.useQuery(userId, { enabled: !!userId })
+  const leaderboardQuery = trpc.elo.leaderboard.useQuery()
+
+  const profile = profileQuery.data
+  const elo = eloQuery.data
+  const leaderboard = leaderboardQuery.data ?? []
+
+  const rank = leaderboard.findIndex((p) => p.userId === userId) + 1
+
+  return (
+    <div className="min-h-screen bg-slate-950 text-slate-100">
+      <div className="max-w-2xl mx-auto p-4">
+        <h1 className="text-2xl font-bold mb-4">Tournament</h1>
+        <NavTabs active="My Info" />
+
+        {profileQuery.isPending && <p className="text-slate-400">Loading profile…</p>}
+
+        {profile && (
+          <div className="space-y-6">
+            {/* Stats cards */}
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+              <StatCard label="ELO Rating" value={elo?.rating ?? 1200} />
+              <StatCard label="Rank" value={rank > 0 ? `#${rank}` : '—'} />
+              <StatCard label="Tournaments" value={profile.tournamentsPlayed} />
+              <StatCard label="Games" value={profile.gamesPlayed} />
+            </div>
+
+            {/* W-L-D */}
+            <div className="bg-slate-900 rounded-lg p-4">
+              <h3 className="text-sm font-semibold text-slate-500 uppercase mb-3">Record</h3>
+              <div className="flex gap-6">
+                <div className="text-center">
+                  <p className="text-2xl font-bold text-emerald-400">{profile.wins}</p>
+                  <p className="text-xs text-slate-500">Wins</p>
+                </div>
+                <div className="text-center">
+                  <p className="text-2xl font-bold text-red-400">{profile.losses}</p>
+                  <p className="text-xs text-slate-500">Losses</p>
+                </div>
+                <div className="text-center">
+                  <p className="text-2xl font-bold text-slate-400">{profile.draws}</p>
+                  <p className="text-xs text-slate-500">Draws</p>
+                </div>
+                <div className="text-center">
+                  <p className="text-2xl font-bold text-amber-400">{profile.totalVP}</p>
+                  <p className="text-xs text-slate-500">Total VP</p>
+                </div>
+              </div>
+            </div>
+
+            {/* Tournament history */}
+            {profile.tournaments.length > 0 && (
+              <div>
+                <h3 className="text-sm font-semibold text-slate-500 uppercase mb-2">Tournament History</h3>
+                <div className="space-y-2">
+                  {profile.tournaments.map((t) => (
+                    <a
+                      key={t.id}
+                      href={`#/tournament/${t.id}`}
+                      className="block bg-slate-900 rounded p-3 hover:bg-slate-800 transition-colors"
+                    >
+                      <div className="flex justify-between items-start">
+                        <div>
+                          <p className="font-medium text-slate-100">{t.name}</p>
+                          <p className="text-xs text-slate-400">{t.faction} · {t.format}</p>
+                        </div>
+                        <div className="text-right">
+                          <StatusBadge status={t.status} />
+                          <p className="text-xs text-slate-500 mt-1">{new Date(t.eventDate).toLocaleDateString()}</p>
+                        </div>
+                      </div>
+                    </a>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Cards */}
+            {profile.cards.length > 0 && (
+              <div>
+                <h3 className="text-sm font-semibold text-slate-500 uppercase mb-2">Card History</h3>
+                <div className="space-y-2">
+                  {profile.cards.map((c) => (
+                    <div key={c.id} className="bg-slate-900 rounded p-3 flex justify-between items-center">
+                      <div className="flex items-center gap-2">
+                        <span
+                          className={`text-xs px-1.5 py-0.5 rounded font-medium ${
+                            c.cardType === 'YELLOW'
+                              ? 'bg-yellow-400/20 text-yellow-400'
+                              : 'bg-red-400/20 text-red-400'
+                          }`}
+                        >
+                          {c.cardType}
+                        </span>
+                        <span className="text-sm text-slate-300">{c.reason}</span>
+                      </div>
+                      <span className="text-xs text-slate-500">{new Date(c.issuedAt).toLocaleDateString()}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Bans */}
+            {profile.bans.length > 0 && (
+              <div>
+                <h3 className="text-sm font-semibold text-red-400 uppercase mb-2">Ban History</h3>
+                <div className="space-y-2">
+                  {profile.bans.map((b) => (
+                    <div key={b.id} className="bg-red-950/30 border border-red-900/50 rounded p-3">
+                      <p className="text-sm text-red-300">{b.reason}</p>
+                      <p className="text-xs text-red-500/60 mt-1">
+                        {new Date(b.bannedAt).toLocaleDateString()}
+                        {b.liftedAt ? ` — Lifted ${new Date(b.liftedAt).toLocaleDateString()}` : ' — Active'}
+                      </p>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {profile.tournamentsPlayed === 0 && (
+              <div className="text-center py-8 text-slate-500">
+                <p>No tournament history yet.</p>
+                <p className="text-sm mt-1"><a href="#/play" className="text-amber-400 hover:underline">Find a tournament</a> to get started.</p>
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+    </div>
+  )
+}
+
+function StatCard({ label, value }: { label: string; value: string | number }) {
+  return (
+    <div className="bg-slate-900 rounded-lg p-3 text-center">
+      <p className="text-xl font-bold text-slate-100">{value}</p>
+      <p className="text-xs text-slate-500">{label}</p>
+    </div>
+  )
+}
+
+function ListSearchScreen() {
+  const [factionFilter, setFactionFilter] = useState('')
+  const [textQuery, setTextQuery] = useState('')
+
+  const searchResults = trpc.player.searchLists.useQuery({
+    faction: factionFilter || undefined,
+    query: textQuery || undefined,
+  })
+
+  const results = searchResults.data ?? []
+
+  return (
+    <div className="min-h-screen bg-slate-950 text-slate-100">
+      <div className="max-w-2xl mx-auto p-4">
+        <h1 className="text-2xl font-bold mb-4">Tournament</h1>
+        <NavTabs active="Lists" />
+
+        <div className="space-y-3 mb-6">
+          <input
+            className="w-full px-3 py-2 rounded bg-slate-800 border border-slate-700 text-slate-100 placeholder-slate-500"
+            placeholder="Filter by faction (e.g. Space Marines)"
+            value={factionFilter}
+            onChange={(e) => setFactionFilter(e.target.value)}
+          />
+          <input
+            className="w-full px-3 py-2 rounded bg-slate-800 border border-slate-700 text-slate-100 placeholder-slate-500"
+            placeholder="Search list contents..."
+            value={textQuery}
+            onChange={(e) => setTextQuery(e.target.value)}
+          />
+        </div>
+
+        {searchResults.isPending && <p className="text-slate-400">Searching…</p>}
+
+        {results.length > 0 && (
+          <div className="space-y-3">
+            {results.map((r, i) => (
+              <div key={i} className="bg-slate-900 rounded-lg p-4">
+                <div className="flex justify-between items-start mb-2">
+                  <div>
+                    <p className="font-medium text-slate-100">{r.playerName}</p>
+                    <p className="text-sm text-amber-400">{r.faction}{r.detachment ? ` · ${r.detachment}` : ''}</p>
+                  </div>
+                  <div className="text-right">
+                    <a href={`#/tournament/${r.tournamentId}`} className="text-xs text-slate-400 hover:text-amber-400">
+                      {r.tournamentName}
+                    </a>
+                    <p className="text-xs text-slate-600">{new Date(r.eventDate).toLocaleDateString()}</p>
+                  </div>
+                </div>
+                {r.listText && (
+                  <pre className="text-xs text-slate-400 bg-slate-800 rounded p-2 mt-2 whitespace-pre-wrap font-mono max-h-48 overflow-y-auto">
+                    {r.listText}
+                  </pre>
+                )}
+              </div>
+            ))}
+          </div>
+        )}
+
+        {!searchResults.isPending && results.length === 0 && (
+          <div className="text-center py-12 text-slate-500">
+            <p>No lists found.</p>
+            <p className="text-sm mt-1">Try a different faction or search term.</p>
+          </div>
+        )}
+      </div>
+    </div>
+  )
+}
+
+function PlayerSearchScreen() {
+  const [searchQuery, setSearchQuery] = useState('')
+
+  const searchResults = trpc.player.searchPlayers.useQuery(
+    { query: searchQuery },
+    { enabled: searchQuery.length >= 1 },
+  )
+
+  const results = searchResults.data ?? []
+
+  return (
+    <div className="min-h-screen bg-slate-950 text-slate-100">
+      <div className="max-w-2xl mx-auto p-4">
+        <h1 className="text-2xl font-bold mb-4">Tournament</h1>
+        <NavTabs active="Players" />
+
+        <input
+          className="w-full px-3 py-2 rounded bg-slate-800 border border-slate-700 text-slate-100 placeholder-slate-500 mb-6"
+          placeholder="Search players by name..."
+          value={searchQuery}
+          onChange={(e) => setSearchQuery(e.target.value)}
+        />
+
+        {searchResults.isPending && searchQuery && <p className="text-slate-400">Searching…</p>}
+
+        {results.length > 0 && (
+          <div className="space-y-3">
+            {results.map((p) => (
+              <div key={p.userId} className="bg-slate-900 rounded-lg p-4">
+                <div className="flex justify-between items-start">
+                  <div>
+                    <p className="font-semibold text-slate-100">{p.displayName}</p>
+                    <p className="text-xs text-slate-400 mt-0.5">
+                      {p.tournamentsPlayed} tournament{p.tournamentsPlayed === 1 ? '' : 's'} · {p.factions.join(', ')}
+                    </p>
+                  </div>
+                  <div className="flex gap-2">
+                    {p.yellowCards > 0 && (
+                      <span className="text-xs px-1.5 py-0.5 rounded bg-yellow-400/20 text-yellow-400">
+                        {p.yellowCards} Yellow
+                      </span>
+                    )}
+                    {p.redCards > 0 && (
+                      <span className="text-xs px-1.5 py-0.5 rounded bg-red-400/20 text-red-400">
+                        {p.redCards} Red
+                      </span>
+                    )}
+                  </div>
+                </div>
+                {p.recentTournaments.length > 0 && (
+                  <div className="mt-2 space-y-1">
+                    {p.recentTournaments.map((t, i) => (
+                      <p key={i} className="text-xs text-slate-500">
+                        {t.name} — {t.faction} ({new Date(t.eventDate).toLocaleDateString()})
+                      </p>
+                    ))}
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+        )}
+
+        {!searchResults.isPending && searchQuery && results.length === 0 && (
+          <div className="text-center py-12 text-slate-500">
+            <p>No players found.</p>
+          </div>
+        )}
+
+        {!searchQuery && (
+          <div className="text-center py-12 text-slate-500">
+            <p>Enter a player name to search.</p>
+          </div>
+        )}
       </div>
     </div>
   )

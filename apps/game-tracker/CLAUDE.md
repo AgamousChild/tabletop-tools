@@ -238,7 +238,7 @@ secondary.remove({ secondaryId })                    -> void
 
 ## Testing
 
-**196 tests** (58 server + 138 client), all passing.
+**201 tests** (58 server + 143 client), all passing.
 
 ```
 server/src/
@@ -254,7 +254,7 @@ server/src/
 client/src/components/
   GameTrackerScreen.test.tsx               <- 13 tests: screen router, wizard flow, navigation
   MatchSetupScreen.test.tsx                <- 10 tests: fields, validation, tournament toggle
-  MissionSetupScreen.test.tsx              <- 11 tests: mission/deployment/terrain, twist/challenger/photos
+  MissionSetupScreen.test.tsx              <- 16 tests: mission/deployment/terrain, twist/challenger cards, photos
   PregameScreen.test.tsx                   <- 7 tests: attacker/defender, who goes first
   BattleScreen.test.tsx                    <- 9 tests: scoreboard, round wizard, end game
   EndGameScreen.test.tsx                   <- 13 tests: result, per-player stats, secondaries, rounds

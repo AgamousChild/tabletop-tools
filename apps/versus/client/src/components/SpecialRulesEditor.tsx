@@ -3,6 +3,8 @@ import type { WeaponAbility } from '@tabletop-tools/game-content'
 
 type Props = {
   rules: WeaponAbility[]
+  /** Abilities already on selected weapons — shown read-only so user knows they're applied */
+  weaponAbilities?: string[]
   onAdd: (rule: WeaponAbility) => void
   onRemove: (index: number) => void
 }
@@ -45,13 +47,39 @@ function ruleLabel(rule: WeaponAbility): string {
   }
 }
 
-export function SpecialRulesEditor({ rules, onAdd, onRemove }: Props) {
+export function SpecialRulesEditor({ rules, weaponAbilities, onAdd, onRemove }: Props) {
   const [showDropdown, setShowDropdown] = useState(false)
+
+  // Deduplicate weapon abilities for display
+  const uniqueWeaponAbilities = weaponAbilities
+    ? [...new Set(weaponAbilities)].filter(Boolean)
+    : []
 
   return (
     <div className="space-y-2">
+      {/* Data-derived abilities from weapons */}
+      {uniqueWeaponAbilities.length > 0 && (
+        <div>
+          <p className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider mb-1">
+            From weapon data
+          </p>
+          <div className="flex flex-wrap gap-1.5">
+            {uniqueWeaponAbilities.map((label) => (
+              <span
+                key={label}
+                className="inline-flex items-center rounded-full bg-slate-800 border border-slate-700 px-2.5 py-0.5 text-xs text-slate-400"
+              >
+                {label}
+              </span>
+            ))}
+          </div>
+        </div>
+      )}
+
       <div className="flex items-center justify-between">
-        <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Special Rules</p>
+        <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider">
+          Additional Rules
+        </p>
         <button
           onClick={() => setShowDropdown(!showDropdown)}
           className="text-xs text-amber-400 hover:text-amber-300 transition-colors"

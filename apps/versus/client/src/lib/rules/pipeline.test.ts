@@ -217,6 +217,27 @@ describe('resolveWounds', () => {
     const r = resolveWounds(6, 0, 4, 4, [{ type: 'WOUND_MOD', value: 1 }])
     expect(r.wounds).toBeCloseTo(4)
   })
+
+  it('ANTI with matching keyword uses lower wound target', () => {
+    // S4 vs T8 normally wounds on 6+ (1/6). Anti-Monster 4+ changes to 4+ (3/6)
+    const base = resolveWounds(6, 0, 4, 8, noAbilities)
+    const withAnti = resolveWounds(6, 0, 4, 8, [{ type: 'ANTI', keyword: 'Monster', value: 4 }], ['Monster'])
+    expect(base.wounds).toBeCloseTo(1) // 6+ = 1/6 of 6 hits
+    expect(withAnti.wounds).toBeCloseTo(3) // 4+ = 3/6 of 6 hits
+  })
+
+  it('ANTI without matching keyword has no effect', () => {
+    const base = resolveWounds(6, 0, 4, 8, noAbilities, ['Vehicle'])
+    const withAnti = resolveWounds(6, 0, 4, 8, [{ type: 'ANTI', keyword: 'Monster', value: 4 }], ['Vehicle'])
+    expect(withAnti.wounds).toBeCloseTo(base.wounds)
+  })
+
+  it('ANTI does not increase wound target beyond normal', () => {
+    // S8 vs T4 normally wounds on 2+. Anti-Monster 4+ should not change to 4+
+    const base = resolveWounds(6, 0, 8, 4, noAbilities, ['Monster'])
+    const withAnti = resolveWounds(6, 0, 8, 4, [{ type: 'ANTI', keyword: 'Monster', value: 4 }], ['Monster'])
+    expect(withAnti.wounds).toBeCloseTo(base.wounds)
+  })
 })
 
 // ── effectiveSave ─────────────────────────────────────────────────────────────
@@ -459,5 +480,31 @@ describe('simulateWeapon', () => {
     )
     // Invuln 4+ is better than 3+ armor with AP-2 (which becomes 5+)
     expect(withInvuln.expectedWounds).toBeLessThan(noInvuln.expectedWounds)
+  })
+
+  it('ANTI ability improves wound rate when defender keyword matches', () => {
+    const base = simulateWeapon(
+      { name: 'Bolter', range: 24, attacks: 10, skill: 3, strength: 4, ap: 0, damage: 1, abilities: [] },
+      8, 3, 3, 5, undefined, undefined, [],
+    )
+    const withAnti = simulateWeapon(
+      { name: 'Anti-Monster Gun', range: 24, attacks: 10, skill: 3, strength: 4, ap: 0, damage: 1, abilities: [{ type: 'ANTI', keyword: 'Monster', value: 4 }] },
+      8, 3, 3, 5, undefined, undefined, ['Monster', 'Infantry'],
+    )
+    // S4 vs T8 normally wounds on 6+, but Anti-Monster 4+ changes it to 4+
+    expect(withAnti.expectedWounds).toBeGreaterThan(base.expectedWounds)
+  })
+
+  it('ANTI ability has no effect when defender keyword does not match', () => {
+    const base = simulateWeapon(
+      { name: 'Bolter', range: 24, attacks: 10, skill: 3, strength: 4, ap: 0, damage: 1, abilities: [] },
+      8, 3, 3, 5, undefined, undefined, ['Vehicle'],
+    )
+    const withAnti = simulateWeapon(
+      { name: 'Anti-Monster Gun', range: 24, attacks: 10, skill: 3, strength: 4, ap: 0, damage: 1, abilities: [{ type: 'ANTI', keyword: 'Monster', value: 4 }] },
+      8, 3, 3, 5, undefined, undefined, ['Vehicle'],
+    )
+    // No matching keyword, so ANTI should not change anything
+    expect(withAnti.expectedWounds).toBeCloseTo(base.expectedWounds, 4)
   })
 })

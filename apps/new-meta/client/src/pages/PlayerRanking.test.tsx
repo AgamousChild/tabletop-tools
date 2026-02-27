@@ -1,5 +1,5 @@
-import { render, screen } from '@testing-library/react'
-import { describe, expect, it } from 'vitest'
+import { fireEvent, render, screen } from '@testing-library/react'
+import { describe, expect, it, vi } from 'vitest'
 
 import { PlayerRanking } from './PlayerRanking'
 
@@ -11,6 +11,9 @@ vi.mock('../lib/trpc', () => ({
     player: {
       leaderboard: {
         useQuery: () => ({ data: mockPlayers, isLoading: mockIsLoading }),
+      },
+      search: {
+        useQuery: () => ({ data: [] }),
       },
     },
   },
@@ -57,5 +60,28 @@ describe('PlayerRanking', () => {
     render(<PlayerRanking />)
     expect(screen.getByText('#1')).toBeInTheDocument()
     expect(screen.getByText('#2')).toBeInTheDocument()
+  })
+
+  it('shows player search input', () => {
+    mockIsLoading = false
+    mockPlayers = fakePlayers
+    render(<PlayerRanking />)
+    expect(screen.getByLabelText('Search players')).toBeInTheDocument()
+  })
+
+  it('shows search button', () => {
+    mockIsLoading = false
+    mockPlayers = fakePlayers
+    render(<PlayerRanking />)
+    expect(screen.getByRole('button', { name: 'Search' })).toBeInTheDocument()
+  })
+
+  it('calls onPlayerSelect when player row is clicked', () => {
+    mockIsLoading = false
+    mockPlayers = fakePlayers
+    const onSelect = vi.fn()
+    render(<PlayerRanking onPlayerSelect={onSelect} />)
+    fireEvent.click(screen.getByText('Alice'))
+    expect(onSelect).toHaveBeenCalledWith('p1')
   })
 })

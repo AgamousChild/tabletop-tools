@@ -53,4 +53,28 @@ describe('UnitProfileCard', () => {
     render(<UnitProfileCard unit={unit} />)
     expect(screen.getByText('-')).toBeInTheDocument()
   })
+
+  it('shows data quality warning for toughness 0', () => {
+    render(<UnitProfileCard unit={{ ...unit, toughness: 0 }} />)
+    expect(screen.getByText('Data quality issues:')).toBeInTheDocument()
+    expect(screen.getByText(/Toughness is 0/)).toBeInTheDocument()
+  })
+
+  it('shows warning for weapon with strength 0', () => {
+    const unitWithBadWeapon = {
+      ...unit,
+      weapons: [{ name: 'Broken Gun', range: 24 as const, attacks: 2, skill: 3, strength: 0, ap: 0, damage: 1, abilities: [] }],
+    }
+    render(<UnitProfileCard unit={unitWithBadWeapon} />)
+    expect(screen.getByText(/Broken Gun.*S0/)).toBeInTheDocument()
+  })
+
+  it('shows no warnings for valid unit', () => {
+    const validUnit = {
+      ...unit,
+      weapons: [{ name: 'Good Gun', range: 24 as const, attacks: 2, skill: 3, strength: 4, ap: 0, damage: 1, abilities: [] }],
+    }
+    render(<UnitProfileCard unit={validUnit} />)
+    expect(screen.queryByText('Data quality issues:')).not.toBeInTheDocument()
+  })
 })

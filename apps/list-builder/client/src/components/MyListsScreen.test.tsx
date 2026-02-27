@@ -46,4 +46,26 @@ describe('MyListsScreen', () => {
     fireEvent.click(screen.getByRole('button', { name: /new list/i }))
     expect(onCreate).toHaveBeenCalled()
   })
+
+  it('shows Use in Tournament button on each list', () => {
+    render(<MyListsScreen onCreateNew={vi.fn()} onSelectList={vi.fn()} />)
+    const buttons = screen.getAllByText('Use in Tournament')
+    expect(buttons).toHaveLength(2)
+  })
+
+  it('sets tournament list in localStorage when Use in Tournament is clicked', () => {
+    render(<MyListsScreen onCreateNew={vi.fn()} onSelectList={vi.fn()} />)
+    const buttons = screen.getAllByText('Use in Tournament')
+    fireEvent.click(buttons[0])
+    const stored = JSON.parse(localStorage.getItem('tournament-list')!)
+    expect(stored.listId).toBe('list-1')
+    expect(stored.faction).toBe('Space Marines')
+  })
+
+  it('shows Active for Tournament after clicking Use in Tournament', () => {
+    render(<MyListsScreen onCreateNew={vi.fn()} onSelectList={vi.fn()} />)
+    const buttons = screen.getAllByText('Use in Tournament')
+    fireEvent.click(buttons[0])
+    expect(screen.getByText('Active for Tournament')).toBeInTheDocument()
+  })
 })

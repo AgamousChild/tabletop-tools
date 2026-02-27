@@ -147,8 +147,12 @@ export interface WoundResult {
 /**
  * Compute expected wound counts from hit results.
  *
- * Handles: WOUND_MOD, REROLL_WOUNDS, TWIN_LINKED, DEVASTATING_WOUNDS.
+ * Handles: WOUND_MOD, REROLL_WOUNDS, TWIN_LINKED, DEVASTATING_WOUNDS, ANTI.
  * lethalHits from resolveHits are treated as auto-wounds (go straight to saves).
+ *
+ * ANTI-[KEYWORD] X+: if the defender has the matching keyword, wound rolls of X+
+ * are critical wounds (auto-wound). This effectively lowers the wound target to
+ * whichever is lower: the normal wound target or the ANTI value.
  */
 export function resolveWounds(
   normalHits: number,
@@ -156,13 +160,29 @@ export function resolveWounds(
   strength: number,
   toughness: number,
   abilities: WeaponAbility[],
+  defenderKeywords?: string[],
 ): WoundResult {
   const target = woundTarget(strength, toughness)
 
   const woundMod = abilities
     .filter((a): a is { type: 'WOUND_MOD'; value: number } => a.type === 'WOUND_MOD')
     .reduce((sum, a) => sum + a.value, 0)
-  const effectiveTarget = Math.min(6, Math.max(2, target - woundMod))
+  let effectiveTarget = Math.min(6, Math.max(2, target - woundMod))
+
+  // ANTI: if defender has matching keyword, use lower of normal target or anti value
+  if (defenderKeywords && defenderKeywords.length > 0) {
+    const antiAbilities = abilities.filter(
+      (a): a is { type: 'ANTI'; keyword: string; value: number } => a.type === 'ANTI'
+    )
+    for (const anti of antiAbilities) {
+      const matches = defenderKeywords.some(
+        (k) => k.toLowerCase() === anti.keyword.toLowerCase()
+      )
+      if (matches) {
+        effectiveTarget = Math.min(effectiveTarget, anti.value)
+      }
+    }
+  }
 
   const baseWoundRate = (7 - effectiveTarget) / 6
   const baseSixWoundRate = 1 / 6
@@ -259,6 +279,7 @@ export function simulateWeapon(
   defenderModelCount: number,
   defenderInvulnSave?: number,
   defenderFnp?: number,
+  defenderKeywords?: string[],
 ): SimResult {
   // BLAST: minimum 3 attacks vs 6+ model unit
   let attackCount = resolveAttacks(weapon.attacks)
@@ -287,6 +308,7 @@ export function simulateWeapon(
     effectiveStrength,
     defenderToughness,
     weapon.abilities,
+    defenderKeywords,
   )
   const damageDealt = resolveSaves(
     wounds,
