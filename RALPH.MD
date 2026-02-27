@@ -93,14 +93,16 @@ Update this section every time you update or fix a section of the requirements.
 - [x] Opponent detachment already a dropdown when data available — added 3 new tests for dropdown path in MatchSetupScreen.test.tsx (150 game-tracker tests)
 - [x] Codex detachments already fully implemented — export → import → IndexedDB → hooks → all consumer apps
 - [x] Data-import: Include Legends toggle checkbox — Settings section in Stored Data tab with IndexedDB persistence
+- [x] E2E test selectors fixed — semantic h1/main elements added to all apps, landing page card count updated to 8
+- [x] Master SQLite database — `scripts/create-master-db.ts` creates 27-table DB combining Wahapedia (19 tables, 160K+ rows) + BSData (4 tables, 1351 units) with FK constraints, 0 violations
+- [x] Wahapedia tables mirroring BSData structure with integrity checks — all 19 Wahapedia tables imported with proper FK constraints (ON DELETE CASCADE)
+- [x] Cross-reference tables — xref_factions (36/36 matched), xref_units (908/1351 = 67.2% matched by name)
+- [x] Game rules linked to units/models — 30 rules extracted (weapon abilities + core/faction abilities), 3494 unit-rule links
+- [x] Special rules connected to datasheets/units — Core and Faction abilities from Wahapedia linked to datasheets via unit_rules table
+- [x] BSData sync tool run — 1351 units across 36 factions generated in sync-data repo
 
 ### In Progress
 
-- [ ] Master SQLite database linking BSData + Wahapedia + game rules with referential integrity
-- [ ] Wahapedia tables mirroring BSData structure with integrity checks
-- [ ] Game rules linked to units/models in the database
-- [ ] Special rules connected to datasheets/units
-- [ ] Cross-reference tables linking all three data sources
 - [ ] Client-side IndexedDB code with same master data
 - [ ] Data-Import tests with real data validation
 - [ ] Scripts for setting up data sources for GitHub storage
