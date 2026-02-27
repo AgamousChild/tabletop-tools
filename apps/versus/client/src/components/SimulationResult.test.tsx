@@ -118,7 +118,7 @@ describe('SimulationResult', () => {
     expect(screen.getByText('Bolt Pistol')).toBeInTheDocument()
   })
 
-  it('hides per-weapon breakdown with single weapon', () => {
+  it('shows per-weapon breakdown even with single weapon', () => {
     render(
       <SimulationResult
         attackerName="A"
@@ -130,6 +130,7 @@ describe('SimulationResult', () => {
         onSave={vi.fn()}
       />,
     )
-    expect(screen.queryByText('Per-weapon breakdown')).not.toBeInTheDocument()
+    expect(screen.getByText('Per-weapon breakdown')).toBeInTheDocument()
+    expect(screen.getByText('Bolt Rifle')).toBeInTheDocument()
   })
 })

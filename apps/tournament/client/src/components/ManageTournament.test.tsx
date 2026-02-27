@@ -58,6 +58,13 @@ vi.mock('../lib/trpc', () => ({
           isPending: false,
         }),
       },
+      playerHistory: {
+        useQuery: (_id: unknown, _opts: unknown) => ({
+          data: [
+            { id: 'h1', tournamentId: 't-other', playerId: 'p-other', cardType: 'RED', reason: 'Cheating in past event', issuedAt: 500 },
+          ],
+        }),
+      },
     },
     award: {
       list: {
@@ -167,6 +174,18 @@ describe('ManageTournament', () => {
     fireEvent.click(screen.getByRole('button', { name: 'awards' }))
     expect(screen.getByRole('heading', { name: 'Add Award' })).toBeInTheDocument()
     expect(screen.getByPlaceholderText(/award name/i)).toBeInTheDocument()
+  })
+
+  it('shows History button for each active player', () => {
+    render(<ManageTournament tournamentId="t1" onBack={vi.fn()} />)
+    expect(screen.getByRole('button', { name: 'History' })).toBeInTheDocument()
+  })
+
+  it('clicking History shows card history panel', () => {
+    render(<ManageTournament tournamentId="t1" onBack={vi.fn()} />)
+    fireEvent.click(screen.getByRole('button', { name: 'History' }))
+    expect(screen.getByText('Card History (all tournaments)')).toBeInTheDocument()
+    expect(screen.getByText('Cheating in past event')).toBeInTheDocument()
   })
 
   it('calls onBack when back is clicked', () => {

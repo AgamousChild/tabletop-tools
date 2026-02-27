@@ -10,6 +10,10 @@ const unitSchema = z.object({
   unitPoints: z.number(),
   modelCount: z.number().optional(),
   count: z.number(),
+  isWarlord: z.boolean().optional(),
+  enhancementId: z.string().optional(),
+  enhancementName: z.string().optional(),
+  enhancementCost: z.number().optional(),
 })
 
 const listSyncSchema = z.object({
@@ -72,6 +76,10 @@ export const listRouter = router({
             unitPoints: u.unitPoints,
             modelCount: u.modelCount ?? null,
             count: u.count,
+            isWarlord: u.isWarlord ? 1 : 0,
+            enhancementId: u.enhancementId ?? null,
+            enhancementName: u.enhancementName ?? null,
+            enhancementCost: u.enhancementCost ?? null,
           })),
         )
       }
@@ -157,6 +165,10 @@ export const listRouter = router({
             unitPoints: u.unitPoints,
             modelCount: u.modelCount,
             count: u.count,
+            isWarlord: u.isWarlord === 1,
+            enhancementId: u.enhancementId,
+            enhancementName: u.enhancementName,
+            enhancementCost: u.enhancementCost,
           })),
         })
       }

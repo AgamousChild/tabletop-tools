@@ -1,9 +1,14 @@
-import { useState } from 'react'
+import { useState, useMemo } from 'react'
 
 export type SecondaryMission = {
   id: string
   secondaryName: string
   vpPerRound: number[]
+}
+
+type AvailableSecondary = {
+  id: string
+  name: string
 }
 
 type Props = {
@@ -13,6 +18,7 @@ type Props = {
   onScore: (id: string, roundNumber: number, vp: number) => void
   currentRound: number
   label?: string
+  availableSecondaries?: AvailableSecondary[]
 }
 
 export function SecondaryPicker({
@@ -22,15 +28,34 @@ export function SecondaryPicker({
   onScore,
   currentRound,
   label = 'Secondaries',
+  availableSecondaries,
 }: Props) {
   const [name, setName] = useState('')
   const [showInput, setShowInput] = useState(false)
+  const [showSuggestions, setShowSuggestions] = useState(false)
+
+  const suggestions = useMemo(() => {
+    if (!availableSecondaries || !name.trim()) return []
+    const lowerQ = name.toLowerCase()
+    const alreadyPicked = new Set(secondaries.map((s) => s.secondaryName.toLowerCase()))
+    return availableSecondaries
+      .filter((s) => s.name.toLowerCase().includes(lowerQ) && !alreadyPicked.has(s.name.toLowerCase()))
+      .slice(0, 8)
+  }, [availableSecondaries, name, secondaries])
 
   function handleAdd() {
     if (!name.trim()) return
     onAdd(name.trim())
     setName('')
     setShowInput(false)
+    setShowSuggestions(false)
+  }
+
+  function handleSelectSuggestion(s: AvailableSecondary) {
+    onAdd(s.name)
+    setName('')
+    setShowInput(false)
+    setShowSuggestions(false)
   }
 
   return (
@@ -48,29 +73,48 @@ export function SecondaryPicker({
       </div>
 
       {showInput && (
-        <div className="flex gap-2 mb-2">
-          <input
-            type="text"
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-            placeholder="Secondary name..."
-            aria-label="Secondary name"
-            onKeyDown={(e) => e.key === 'Enter' && handleAdd()}
-            className="flex-1 px-2 py-1.5 rounded bg-slate-800 border border-slate-700 text-slate-100 text-sm placeholder-slate-500 focus:outline-none focus:border-amber-400"
-          />
-          <button
-            onClick={handleAdd}
-            disabled={!name.trim()}
-            className="px-3 py-1.5 rounded bg-amber-400 text-slate-950 text-sm font-bold disabled:opacity-40"
-          >
-            Add
-          </button>
-          <button
-            onClick={() => setShowInput(false)}
-            className="px-2 py-1.5 rounded bg-slate-700 text-slate-300 text-sm"
-          >
-            Cancel
-          </button>
+        <div className="relative mb-2">
+          <div className="flex gap-2">
+            <input
+              type="text"
+              value={name}
+              onChange={(e) => {
+                setName(e.target.value)
+                setShowSuggestions(true)
+              }}
+              onFocus={() => setShowSuggestions(true)}
+              placeholder="Secondary name..."
+              aria-label="Secondary name"
+              onKeyDown={(e) => e.key === 'Enter' && handleAdd()}
+              className="flex-1 px-2 py-1.5 rounded bg-slate-800 border border-slate-700 text-slate-100 text-sm placeholder-slate-500 focus:outline-none focus:border-amber-400"
+            />
+            <button
+              onClick={handleAdd}
+              disabled={!name.trim()}
+              className="px-3 py-1.5 rounded bg-amber-400 text-slate-950 text-sm font-bold disabled:opacity-40"
+            >
+              Add
+            </button>
+            <button
+              onClick={() => { setShowInput(false); setShowSuggestions(false) }}
+              className="px-2 py-1.5 rounded bg-slate-700 text-slate-300 text-sm"
+            >
+              Cancel
+            </button>
+          </div>
+          {showSuggestions && suggestions.length > 0 && (
+            <div className="absolute left-0 right-0 top-full mt-1 bg-slate-800 border border-slate-700 rounded shadow-lg z-10 max-h-48 overflow-y-auto">
+              {suggestions.map((s) => (
+                <button
+                  key={s.id}
+                  onClick={() => handleSelectSuggestion(s)}
+                  className="w-full text-left px-3 py-1.5 text-sm text-slate-200 hover:bg-slate-700 hover:text-amber-400"
+                >
+                  {s.name}
+                </button>
+              ))}
+            </div>
+          )}
         </div>
       )}
 

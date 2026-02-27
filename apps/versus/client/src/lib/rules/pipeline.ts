@@ -297,7 +297,14 @@ export function simulateWeapon(
     defenderFnp,
   )
 
-  const damagePerUnsaved = resolveAttacks(weapon.damage)
+  let damagePerUnsaved = resolveAttacks(weapon.damage)
+  // MELTA: adds bonus damage (simulated as always at half range for average)
+  const meltaBonus = weapon.abilities
+    .filter((a): a is { type: 'MELTA'; value: number } => a.type === 'MELTA')
+    .reduce((sum, a) => sum + a.value, 0)
+  if (meltaBonus > 0) {
+    damagePerUnsaved += meltaBonus
+  }
   const expectedTotalDamage = damageDealt * damagePerUnsaved
   const expectedModelsRemoved = Math.min(
     defenderModelCount,
@@ -305,18 +312,26 @@ export function simulateWeapon(
   )
   const survivors = Math.max(0, defenderModelCount - expectedModelsRemoved)
 
-  // Best case: all attacks hit, wound, fail saves, max damage per attack
-  const maxDamagePerAttack = resolveMax(weapon.damage)
-  const bestDamage = attackCount * maxDamagePerAttack
+  // Save probability for best/worst estimates
+  const saveTarget = effectiveSave(defenderSave, weapon.ap, defenderInvulnSave)
+  const saveRate = saveTarget <= 6 ? (7 - saveTarget) / 6 : 0
+  const failSaveRate = 1 - saveRate
+  const fnpPassRate = defenderFnp !== undefined && defenderFnp <= 6 ? (7 - defenderFnp) / 6 : 0
+  const throughRate = failSaveRate * (1 - fnpPassRate)
+
+  // Best case: all attacks hit, wound, then apply save/FNP probability, max damage
+  const maxDamagePerAttack = resolveMax(weapon.damage) + meltaBonus
+  const bestUnsaved = attackCount * throughRate
+  const bestDamage = bestUnsaved * maxDamagePerAttack
   const bestWounds = Math.min(
     bestDamage,
     defenderModelCount * defenderWoundsPerModel,
   )
 
-  // Worst case: 1 attack gets through at minimum damage
-  const minDamagePerAttack = resolveMin(weapon.damage)
+  // Worst case: 1 attack gets through saves at minimum damage
+  const minDamagePerAttack = resolveMin(weapon.damage) + meltaBonus
   const worstWounds = Math.min(
-    minDamagePerAttack,
+    minDamagePerAttack * throughRate,
     defenderModelCount * defenderWoundsPerModel,
   )
 

@@ -1,5 +1,5 @@
 import { z } from 'zod'
-import { eq, desc, gte } from 'drizzle-orm'
+import { eq, desc, gte, like } from 'drizzle-orm'
 import { router, publicProcedure } from '../trpc.js'
 import { playerGlicko, glickoHistory } from '@tabletop-tools/db'
 
@@ -19,12 +19,11 @@ export const playerRouter = router({
       const rows = await ctx.db
         .select()
         .from(playerGlicko)
+        .where(gte(playerGlicko.gamesPlayed, minGames))
         .orderBy(desc(playerGlicko.rating))
+        .limit(limit)
 
-      return rows
-        .filter((r: any) => r.gamesPlayed >= minGames)
-        .slice(0, limit)
-        .map((r: any) => ({
+      return rows.map((r) => ({
           id: r.id,
           userId: r.userId,
           playerName: r.playerName,
@@ -32,7 +31,6 @@ export const playerRouter = router({
           ratingDeviation: r.ratingDeviation,
           volatility: r.volatility,
           gamesPlayed: r.gamesPlayed,
-          // Display as "1687 ± 94" where ±94 = 2×RD
           displayRating: Math.round(r.rating),
           displayBand: Math.round(2 * r.ratingDeviation),
         }))
@@ -70,11 +68,12 @@ export const playerRouter = router({
   search: publicProcedure
     .input(z.object({ name: z.string().min(1) }))
     .query(async ({ ctx, input }) => {
-      const rows = await ctx.db.select().from(playerGlicko)
-      const needle = input.name.toLowerCase()
-      return rows
-        .filter((r: any) => r.playerName.toLowerCase().includes(needle))
-        .map((r: any) => ({
+      const rows = await ctx.db
+        .select()
+        .from(playerGlicko)
+        .where(like(playerGlicko.playerName, `%${input.name}%`))
+
+      return rows.map((r) => ({
           id: r.id,
           userId: r.userId,
           playerName: r.playerName,

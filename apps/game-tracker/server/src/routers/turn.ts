@@ -134,6 +134,19 @@ export const turnRouter = router({
         primaryScored: z.number().int().min(0).optional(),
         secondaryScored: z.number().int().min(0).optional(),
         cpSpent: z.number().int().min(0).optional(),
+        // V3 per-player fields
+        yourCpStart: z.number().int().min(0).optional(),
+        yourCpGained: z.number().int().min(0).optional(),
+        yourCpSpent: z.number().int().min(0).optional(),
+        theirCpStart: z.number().int().min(0).optional(),
+        theirCpGained: z.number().int().min(0).optional(),
+        theirCpSpent: z.number().int().min(0).optional(),
+        yourPrimary: z.number().int().min(0).optional(),
+        theirPrimary: z.number().int().min(0).optional(),
+        yourSecondary: z.number().int().min(0).optional(),
+        theirSecondary: z.number().int().min(0).optional(),
+        yourUnitsDestroyed: z.string().optional(),
+        theirUnitsDestroyed: z.string().optional(),
       }),
     )
     .mutation(async ({ ctx, input }) => {
@@ -159,6 +172,19 @@ export const turnRouter = router({
       if (input.primaryScored !== undefined) updates.primaryScored = input.primaryScored
       if (input.secondaryScored !== undefined) updates.secondaryScored = input.secondaryScored
       if (input.cpSpent !== undefined) updates.cpSpent = input.cpSpent
+      // V3 per-player fields
+      if (input.yourCpStart !== undefined) updates.yourCpStart = input.yourCpStart
+      if (input.yourCpGained !== undefined) updates.yourCpGained = input.yourCpGained
+      if (input.yourCpSpent !== undefined) updates.yourCpSpent = input.yourCpSpent
+      if (input.theirCpStart !== undefined) updates.theirCpStart = input.theirCpStart
+      if (input.theirCpGained !== undefined) updates.theirCpGained = input.theirCpGained
+      if (input.theirCpSpent !== undefined) updates.theirCpSpent = input.theirCpSpent
+      if (input.yourPrimary !== undefined) updates.yourPrimary = input.yourPrimary
+      if (input.theirPrimary !== undefined) updates.theirPrimary = input.theirPrimary
+      if (input.yourSecondary !== undefined) updates.yourSecondary = input.yourSecondary
+      if (input.theirSecondary !== undefined) updates.theirSecondary = input.theirSecondary
+      if (input.yourUnitsDestroyed !== undefined) updates.yourUnitsDestroyed = input.yourUnitsDestroyed
+      if (input.theirUnitsDestroyed !== undefined) updates.theirUnitsDestroyed = input.theirUnitsDestroyed
 
       if (Object.keys(updates).length > 0) {
         await ctx.db.update(turns).set(updates).where(eq(turns.id, input.turnId))

@@ -69,7 +69,7 @@ export function SimulationResult({ attackerName, defenderName, result, weaponBre
       </div>
 
       {/* Per-weapon breakdown */}
-      {weaponBreakdowns && weaponBreakdowns.length > 1 && (
+      {weaponBreakdowns && weaponBreakdowns.length >= 1 && (
         <div className="space-y-1.5">
           <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Per-weapon breakdown</p>
           {weaponBreakdowns.map((wb, i) => (

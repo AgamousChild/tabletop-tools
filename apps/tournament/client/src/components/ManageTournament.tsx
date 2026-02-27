@@ -52,9 +52,17 @@ export function ManageTournament({ tournamentId, onBack }: Props) {
     onSuccess: () => void playersQuery.refetch(),
   })
 
+  // Track which player's history we're viewing
+  const [historyPlayerId, setHistoryPlayerId] = useState<string | null>(null)
+  const historyQuery = trpc.card.playerHistory.useQuery(
+    { playerId: historyPlayerId! },
+    { enabled: !!historyPlayerId },
+  )
+
   const players = playersQuery.data ?? []
   const cards = cardsQuery.data ?? []
   const awards = awardsQuery.data ?? []
+  const playerHistory = historyQuery.data ?? []
 
   const activePlayers = players.filter((p) => !p.dropped)
   const droppedPlayers = players.filter((p) => p.dropped)
@@ -115,6 +123,12 @@ export function ManageTournament({ tournamentId, onBack }: Props) {
                 </div>
                 <div className="flex gap-1">
                   <button
+                    onClick={() => setHistoryPlayerId(historyPlayerId === p.id ? null : p.id)}
+                    className="text-xs px-2 py-1 rounded bg-slate-700 text-slate-400 hover:text-slate-200"
+                  >
+                    History
+                  </button>
+                  <button
                     onClick={() => {
                       setCardPlayerId(p.id)
                       setCardType('YELLOW')
@@ -139,6 +153,33 @@ export function ManageTournament({ tournamentId, onBack }: Props) {
                     Drop
                   </button>
                 </div>
+                {/* Player card history panel */}
+                {historyPlayerId === p.id && (
+                  <div className="col-span-full mt-2 p-3 rounded bg-slate-800 border border-slate-700">
+                    <h5 className="text-xs font-medium text-slate-400 mb-2">Card History (all tournaments)</h5>
+                    {playerHistory.length === 0 ? (
+                      <p className="text-xs text-slate-500">No card history</p>
+                    ) : (
+                      <div className="space-y-1">
+                        {playerHistory.map((h) => (
+                          <div key={h.id} className="flex items-center gap-2 text-xs">
+                            <span
+                              className={`px-1.5 py-0.5 rounded font-medium ${
+                                h.cardType === 'YELLOW'
+                                  ? 'bg-yellow-400/20 text-yellow-400'
+                                  : 'bg-red-400/20 text-red-400'
+                              }`}
+                            >
+                              {h.cardType}
+                            </span>
+                            <span className="text-slate-400">{h.reason}</span>
+                            <span className="text-slate-600 ml-auto">{new Date(h.issuedAt).toLocaleDateString()}</span>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )}
               </div>
             )
           })}

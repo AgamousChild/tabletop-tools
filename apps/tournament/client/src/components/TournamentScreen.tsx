@@ -18,6 +18,13 @@ type Tournament = {
   location: string | null
   createdAt: number
   playerCount?: number
+  description?: string | null
+  startTime?: string | null
+  externalLink?: string | null
+  maxPlayers?: number | null
+  requirePhotos?: number
+  includeTwists?: number
+  includeChallenger?: number
 }
 
 type PlayerStanding = {
@@ -133,6 +140,10 @@ export function TournamentScreen({ onSignOut }: Props) {
   const roundDetailQuery = trpc.round.get.useQuery(selectedRoundId!, {
     enabled: !!selectedRoundId,
   })
+  const awardsQuery = trpc.award.list.useQuery(
+    { tournamentId: selectedTournamentId! },
+    { enabled: !!selectedTournamentId },
+  )
 
   const createTournament = trpc.tournament.create.useMutation({
     onSuccess: (t) => {
@@ -443,8 +454,13 @@ export function TournamentScreen({ onSignOut }: Props) {
                       Table {p.tableNumber} · {p.mission}
                     </p>
                     <p className="text-slate-100 font-medium">
-                      {p.player1Id} vs {p.player2Id ?? 'BYE'}
+                      {p.player1Name ?? p.player1Id} vs {p.player2Name ?? p.player2Id ?? 'BYE'}
                     </p>
+                    {(p.player1Faction || p.player2Faction) && (
+                      <p className="text-xs text-slate-500 mt-0.5">
+                        {p.player1Faction ?? '—'} vs {p.player2Faction ?? '—'}
+                      </p>
+                    )}
                   </div>
                   <div className="text-right">
                     {p.result ? (
@@ -531,7 +547,7 @@ export function TournamentScreen({ onSignOut }: Props) {
             ))}
           {pairings.filter((p) => p.result === 'BYE').map((p) => (
             <div key={p.id} className="bg-slate-900 rounded p-3 text-slate-400 text-sm">
-              BYE: {p.player1Id}
+              BYE: {p.player1Name ?? p.player1Id}
             </div>
           ))}
         </div>
@@ -567,6 +583,21 @@ export function TournamentScreen({ onSignOut }: Props) {
             {tournament?.startTime && (
               <p className="text-slate-500 text-sm">Start: {tournament.startTime}</p>
             )}
+            {tournament?.eventDate && (
+              <p className="text-slate-500 text-sm">
+                {new Date(tournament.eventDate).toLocaleDateString()}
+              </p>
+            )}
+            {tournament?.externalLink && (
+              <a
+                href={tournament.externalLink}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-amber-400 text-sm hover:underline inline-block mt-1"
+              >
+                Event Link ↗
+              </a>
+            )}
           </div>
           <div className="flex flex-col items-end gap-2">
             {tournament && <StatusBadge status={tournament.status} />}
@@ -597,6 +628,14 @@ export function TournamentScreen({ onSignOut }: Props) {
               className="px-4 py-2 rounded bg-amber-400 text-slate-950 font-semibold text-sm hover:bg-amber-300"
             >
               Register
+            </a>
+          )}
+          {tournament?.status === 'COMPLETE' && (
+            <a
+              href={`#/tournament/${selectedTournamentId}/standings`}
+              className="px-4 py-2 rounded bg-emerald-600 text-white font-semibold text-sm hover:bg-emerald-500"
+            >
+              View Results
             </a>
           )}
           {isTO && tournament?.status === 'IN_PROGRESS' && (
@@ -634,9 +673,40 @@ export function TournamentScreen({ onSignOut }: Props) {
           </div>
         )}
 
+        {/* Awards */}
+        {awardsQuery.data && awardsQuery.data.length > 0 && (
+          <div className="mb-6">
+            <h3 className="text-sm font-semibold text-slate-500 uppercase mb-2">Awards</h3>
+            <div className="space-y-2">
+              {awardsQuery.data.map((award: { id: string; name: string; description: string | null; recipientId: string | null }) => {
+                const recipient = award.recipientId && standings
+                  ? standings.players.find((p: PlayerStanding) => p.id === award.recipientId)
+                  : null
+                return (
+                  <div key={award.id} className="flex items-center justify-between p-3 rounded-lg bg-slate-900 border border-slate-800">
+                    <div>
+                      <span className="text-slate-100 font-medium">{award.name}</span>
+                      {award.description && (
+                        <p className="text-xs text-slate-500 mt-0.5">{award.description}</p>
+                      )}
+                    </div>
+                    {recipient ? (
+                      <span className="text-xs px-2 py-0.5 rounded bg-emerald-400/10 text-emerald-400 font-medium">
+                        {recipient.displayName}
+                      </span>
+                    ) : (
+                      <span className="text-xs text-slate-600">Unassigned</span>
+                    )}
+                  </div>
+                )
+              })}
+            </div>
+          </div>
+        )}
+
         {/* Player count */}
         <p className="text-slate-500 text-sm">
-          {tournament?.playerCount ?? 0} player{tournament?.playerCount === 1 ? '' : 's'} registered
+          {tournament?.playerCount ?? 0}{tournament?.maxPlayers ? ` / ${tournament.maxPlayers}` : ''} player{tournament?.playerCount === 1 ? '' : 's'} registered
         </p>
       </div>
     )

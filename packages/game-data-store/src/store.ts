@@ -77,6 +77,10 @@ export interface LocalListUnit {
   unitPoints: number
   modelCount?: number
   count: number
+  isWarlord?: boolean
+  enhancementId?: string
+  enhancementName?: string
+  enhancementCost?: number
 }
 
 export interface Detachment {
@@ -598,6 +602,26 @@ export async function getListUnits(listId: string): Promise<LocalListUnit[]> {
     req.onsuccess = () => resolve(req.result as LocalListUnit[])
     req.onerror = () => reject(req.error)
     tx.oncomplete = () => db.close()
+  })
+}
+
+export async function updateListUnit(id: string, updates: Partial<Pick<LocalListUnit, 'isWarlord' | 'enhancementId' | 'enhancementName' | 'enhancementCost'>>): Promise<void> {
+  const db = await openDb()
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(LIST_UNITS_STORE, 'readwrite')
+    const store = tx.objectStore(LIST_UNITS_STORE)
+    const getReq = store.get(id)
+    getReq.onsuccess = () => {
+      const existing = getReq.result as LocalListUnit | undefined
+      if (!existing) {
+        db.close()
+        reject(new Error(`List unit ${id} not found`))
+        return
+      }
+      store.put({ ...existing, ...updates })
+    }
+    tx.oncomplete = () => { db.close(); resolve() }
+    tx.onerror = () => { db.close(); reject(tx.error) }
   })
 }
 

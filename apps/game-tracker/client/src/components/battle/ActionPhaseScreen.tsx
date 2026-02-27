@@ -1,17 +1,25 @@
+import type { Stratagem } from '@tabletop-tools/game-data-store'
 import type { StratagemEntry } from './StratagemPicker'
 import type { DestroyedUnit } from './UnitPicker'
 import type { TurnData } from './types'
 import { UnitPicker } from './UnitPicker'
 import { StratagemPicker } from './StratagemPicker'
 
+type AvailableUnit = {
+  contentId: string
+  name: string
+}
+
 type Props = {
   player: 'You' | string
   turnData: TurnData
   onUpdate: (data: Partial<TurnData>) => void
   onNext: () => void
+  availableStratagems?: Stratagem[]
+  availableUnits?: AvailableUnit[]
 }
 
-export function ActionPhaseScreen({ player, turnData, onUpdate, onNext }: Props) {
+export function ActionPhaseScreen({ player, turnData, onUpdate, onNext, availableStratagems, availableUnits }: Props) {
   const isYou = player === 'You'
 
   return (
@@ -27,6 +35,7 @@ export function ActionPhaseScreen({ player, turnData, onUpdate, onNext }: Props)
           onUpdate({ unitsDestroyed: turnData.unitsDestroyed.filter((_, idx) => idx !== i) })
         }
         label={isYou ? 'Their Units You Destroyed' : 'Your Units They Destroyed'}
+        availableUnits={availableUnits}
       />
 
       <StratagemPicker
@@ -36,6 +45,7 @@ export function ActionPhaseScreen({ player, turnData, onUpdate, onNext }: Props)
           onUpdate({ stratagems: turnData.stratagems.filter((_, idx) => idx !== i) })
         }
         label="Action Phase Stratagems"
+        availableStratagems={availableStratagems}
       />
 
       <div>

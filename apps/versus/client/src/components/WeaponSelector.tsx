@@ -25,6 +25,18 @@ function formatAbilities(weapon: WeaponProfile): string {
         case 'REROLL_WOUNDS': return 'Re-roll wounds'
         case 'HIT_MOD': return `Hit ${a.value > 0 ? '+' : ''}${a.value}`
         case 'WOUND_MOD': return `Wound ${a.value > 0 ? '+' : ''}${a.value}`
+        case 'STRENGTH_MOD': return `Str ${a.value > 0 ? '+' : ''}${a.value}`
+        case 'ATTACKS_MOD': return `Attacks ${a.value > 0 ? '+' : ''}${a.value}`
+        case 'ANTI': return `Anti-${a.keyword} ${a.value}+`
+        case 'MELTA': return `Melta ${a.value}`
+        case 'IGNORES_COVER': return 'Ignores Cover'
+        case 'HAZARDOUS': return 'Hazardous'
+        case 'PRECISION': return 'Precision'
+        case 'INDIRECT_FIRE': return 'Indirect Fire'
+        case 'ASSAULT': return 'Assault'
+        case 'PISTOL': return 'Pistol'
+        case 'ONE_SHOT': return 'One Shot'
+        case 'PSYCHIC': return 'Psychic'
         default: return ''
       }
     })
