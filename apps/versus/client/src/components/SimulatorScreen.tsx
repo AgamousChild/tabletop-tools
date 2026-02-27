@@ -16,6 +16,16 @@ import { SpecialRulesEditor } from './SpecialRulesEditor'
 
 type AttackType = 'ranged' | 'melee'
 
+/** Simple FNV-1a hash for cache key. Not cryptographic. */
+function simpleHash(str: string): string {
+  let hash = 0x811c9dc5
+  for (let i = 0; i < str.length; i++) {
+    hash ^= str.charCodeAt(i)
+    hash = (hash * 0x01000193) >>> 0
+  }
+  return hash.toString(16)
+}
+
 type Props = {
   onSignOut: () => void
 }
@@ -29,6 +39,7 @@ export function SimulatorScreen({ onSignOut }: Props) {
   const [defenderId, setDefenderId] = useState<string | null>(null)
   const [defenderModelCount, setDefenderModelCount] = useState(5)
   const [invulnSave, setInvulnSave] = useState<number | undefined>()
+  const [fnp, setFnp] = useState<number | undefined>()
   const [attackType, setAttackType] = useState<AttackType>('ranged')
   const [weaponOverrides, setWeaponOverrides] = useState<Map<number, boolean>>(new Map())
   const [specialRules, setSpecialRules] = useState<WeaponAbility[]>([])
@@ -60,6 +71,7 @@ export function SimulatorScreen({ onSignOut }: Props) {
     setDefenderId(id)
     setDefenderModelCount(5)
     setInvulnSave(undefined)
+    setFnp(undefined)
   }, [])
 
   // Derive selected weapons from loaded data — no useEffect.
@@ -127,6 +139,10 @@ export function SimulatorScreen({ onSignOut }: Props) {
     let worstCaseWounds = 0
     const breakdowns: WeaponBreakdown[] = []
 
+    // Use data-driven invuln/fnp from unit profile, allow override
+    const effectiveInvuln = invulnSave ?? defender.invulnSave
+    const effectiveFnp = fnp ?? defender.fnp
+
     for (const weapon of weapons) {
       const r = simulateWeapon(
         weapon,
@@ -134,7 +150,8 @@ export function SimulatorScreen({ onSignOut }: Props) {
         defender.save,
         defender.wounds,
         defenderModelCount,
-        invulnSave,
+        effectiveInvuln,
+        effectiveFnp,
       )
       totalExpectedWounds += r.expectedWounds
       totalExpectedModelsRemoved += r.expectedModelsRemoved
@@ -179,7 +196,7 @@ export function SimulatorScreen({ onSignOut }: Props) {
       },
       breakdowns,
     }
-  }, [attacker, defender, defenderModelCount, invulnSave, getSelectedWeapons])
+  }, [attacker, defender, defenderModelCount, invulnSave, fnp, getSelectedWeapons])
 
   const resultsRef = useRef<HTMLDivElement>(null)
 
@@ -203,12 +220,24 @@ export function SimulatorScreen({ onSignOut }: Props) {
 
   function handleSave() {
     if (!simData?.result || !attackerId || !defenderId) return
+    const weapons = getSelectedWeapons()
+    const weaponConfig = {
+      attackType,
+      defenderModelCount,
+      invulnSave: invulnSave ?? defender?.invulnSave,
+      fnp: fnp ?? defender?.fnp,
+      specialRules,
+      selectedWeapons: weapons.map((w) => w.name),
+    }
+    const configStr = JSON.stringify(weaponConfig)
     saveMutation.mutate({
       attackerId,
       attackerName,
       defenderId,
       defenderName,
       result: simData.result,
+      weaponConfig: configStr,
+      configHash: simpleHash(configStr),
     })
   }
 
@@ -267,7 +296,7 @@ export function SimulatorScreen({ onSignOut }: Props) {
             />
             {defender && (
               <>
-                <UnitProfileCard unit={defender} invulnSave={invulnSave} />
+                <UnitProfileCard unit={defender} invulnSave={invulnSave} fnp={fnp} />
                 <div className="flex gap-3">
                   <div className="flex-1">
                     <label className="block text-xs text-slate-400 mb-1">Models</label>
@@ -283,8 +312,23 @@ export function SimulatorScreen({ onSignOut }: Props) {
                   <div className="flex-1">
                     <label className="block text-xs text-slate-400 mb-1">Invuln save</label>
                     <select
-                      value={invulnSave ?? ''}
+                      value={invulnSave ?? defender.invulnSave ?? ''}
                       onChange={(e) => setInvulnSave(e.target.value ? parseInt(e.target.value) : undefined)}
+                      className="w-full px-3 py-1.5 rounded-lg bg-slate-900 border border-slate-800 text-slate-100 text-sm focus:outline-none focus:border-amber-400"
+                    >
+                      <option value="">None</option>
+                      <option value="2">2+</option>
+                      <option value="3">3+</option>
+                      <option value="4">4+</option>
+                      <option value="5">5+</option>
+                      <option value="6">6+</option>
+                    </select>
+                  </div>
+                  <div className="flex-1">
+                    <label className="block text-xs text-slate-400 mb-1">FNP</label>
+                    <select
+                      value={fnp ?? defender.fnp ?? ''}
+                      onChange={(e) => setFnp(e.target.value ? parseInt(e.target.value) : undefined)}
                       className="w-full px-3 py-1.5 rounded-lg bg-slate-900 border border-slate-800 text-slate-100 text-sm focus:outline-none focus:border-amber-400"
                     >
                       <option value="">None</option>

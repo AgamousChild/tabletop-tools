@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import type { Stratagem } from '@tabletop-tools/game-data-store'
 import type { SecondaryMission } from './SecondaryPicker'
 import type { TurnData } from './types'
 import { CommandPhaseScreen } from './CommandPhaseScreen'
@@ -6,6 +7,11 @@ import { ActionPhaseScreen } from './ActionPhaseScreen'
 import { PhotoCaptureScreen } from './PhotoCaptureScreen'
 
 type Phase = 'command' | 'action' | 'photo'
+
+type AvailableUnit = {
+  contentId: string
+  name: string
+}
 
 type Props = {
   player: 'You' | string
@@ -18,6 +24,9 @@ type Props = {
   onRemoveSecondary: (id: string) => void
   onScoreSecondary: (id: string, roundNumber: number, vp: number) => void
   currentRound: number
+  availableStratagems?: Stratagem[]
+  availableUnits?: AvailableUnit[]
+  availableSecondaries?: Array<{ id: string; name: string }>
 }
 
 export function TurnFlow({
@@ -31,6 +40,9 @@ export function TurnFlow({
   onRemoveSecondary,
   onScoreSecondary,
   currentRound,
+  availableStratagems,
+  availableUnits,
+  availableSecondaries,
 }: Props) {
   const [phase, setPhase] = useState<Phase>('command')
 
@@ -46,6 +58,8 @@ export function TurnFlow({
         onRemoveSecondary={onRemoveSecondary}
         onScoreSecondary={onScoreSecondary}
         currentRound={currentRound}
+        availableStratagems={availableStratagems}
+        availableSecondaries={availableSecondaries}
       />
     )
   }
@@ -63,6 +77,8 @@ export function TurnFlow({
             onComplete()
           }
         }}
+        availableStratagems={availableStratagems}
+        availableUnits={availableUnits}
       />
     )
   }

@@ -1,6 +1,7 @@
-import { useState } from 'react'
+import { useState, useMemo } from 'react'
 
 import { trpc } from '../lib/trpc'
+import { useStratagems, useList, useMissions } from '@tabletop-tools/game-data-store'
 import { Scoreboard } from './battle/Scoreboard'
 import { RoundWizard } from './battle/RoundWizard'
 import type { TurnData } from './battle/types'
@@ -34,6 +35,36 @@ export function BattleScreen({ matchId, onBack, onClose }: Props) {
   const setSecondary = trpc.secondary?.set?.useMutation?.() ?? { mutate: () => {}, isPending: false }
   const removeSecondary = trpc.secondary?.remove?.useMutation?.() ?? { mutate: () => {}, isPending: false }
   const scoreSecondary = trpc.secondary?.score?.useMutation?.() ?? { mutate: () => {}, isPending: false }
+
+  // Load stratagems from IndexedDB based on match faction/detachment
+  const yourFaction = match?.yourFaction ?? ''
+  const yourDetachment = match?.yourDetachment ?? ''
+  const { data: yourStratagems } = useStratagems({ factionId: yourFaction, detachmentId: yourDetachment || undefined })
+
+  // Load opponent stratagems if we know their faction
+  const opponentFaction = match?.opponentFaction ?? ''
+  const opponentDetachment = match?.opponentDetachment ?? ''
+  const { data: theirStratagems } = useStratagems({ factionId: opponentFaction, detachmentId: opponentDetachment || undefined })
+
+  // Load army list units from IndexedDB (if match has a listId)
+  const listId = match?.listId ?? null
+  const { data: armyList } = useList(listId)
+
+  const yourArmyUnits = useMemo(() => {
+    if (!armyList?.units) return []
+    return armyList.units.map((u) => ({
+      contentId: u.unitContentId,
+      name: u.unitName,
+    }))
+  }, [armyList])
+
+  // Load secondary missions from IndexedDB (type=secondary)
+  const { data: indexedMissions = [] } = useMissions()
+  const availableSecondaries = useMemo(() => {
+    return indexedMissions
+      .filter((m) => m.type === 'secondary')
+      .map((m) => ({ id: m.id, name: m.name }))
+  }, [indexedMissions])
 
   if (!match) return <div className="p-6 text-slate-400">Loading...</div>
 
@@ -209,6 +240,10 @@ export function BattleScreen({ matchId, onBack, onClose }: Props) {
           onSave={handleSaveRound}
           isSaving={addTurn.isPending}
           whoGoesFirst={match.whoGoesFirst as 'YOU' | 'THEM' | null}
+          yourStratagems={yourStratagems}
+          theirStratagems={theirStratagems}
+          yourArmyUnits={yourArmyUnits}
+          availableSecondaries={availableSecondaries}
         />
       ) : null}
 

@@ -315,13 +315,15 @@ describe('simulateWeapon', () => {
     expect(r.expectedWounds).toBeGreaterThan(rNoBlast.expectedWounds)
   })
 
-  it('worstCase is 1 minimum damage for flat damage weapons', () => {
+  it('worstCase accounts for save probability', () => {
     const r = simulateWeapon(
       { name: 'Bolter', range: 24, attacks: 2, skill: 3, strength: 4, ap: 0, damage: 1, abilities: [] },
       4, 3, 2, 5,
     )
-    expect(r.worstCase.wounds).toBe(1)
-    expect(r.worstCase.modelsRemoved).toBe(0) // 1 wound < 2 wounds per model
+    // With AP0 vs Sv3+, save rate = 4/6, fail rate = 2/6 = 0.333
+    // Worst case: 1 damage × throughRate ≈ 0.33
+    expect(r.worstCase.wounds).toBeCloseTo(0.33, 1)
+    expect(r.worstCase.modelsRemoved).toBe(0)
   })
 
   it('worstCase uses minimum dice roll for variable damage', () => {
@@ -329,19 +331,31 @@ describe('simulateWeapon', () => {
       { name: 'Melta', range: 12, attacks: 1, skill: 4, strength: 9, ap: -4, damage: 'D6', abilities: [] },
       4, 3, 2, 5,
     )
-    // D6 min = 1
-    expect(r.worstCase.wounds).toBe(1)
+    // D6 min = 1, AP-4 vs Sv3+ = Sv7+ (impossible), fail rate = 1.0
+    // Worst: 1 × 1.0 = 1
+    expect(r.worstCase.wounds).toBeCloseTo(1, 1)
   })
 
-  it('bestCase uses maximum dice roll for variable damage', () => {
-    // 2 attacks, D6 damage each, vs T4 Sv3+ 2W 5 models
+  it('bestCase accounts for save probability', () => {
+    // 2 attacks, D6 damage each, vs T4 Sv3+ 2W 5 models, AP-4
     const r = simulateWeapon(
       { name: 'Melta', range: 12, attacks: 2, skill: 4, strength: 9, ap: -4, damage: 'D6', abilities: [] },
       4, 3, 2, 5,
     )
-    // Best: 2 attacks × 6 max damage = 12, capped at 5 models × 2 wounds = 10
+    // AP-4 vs Sv3+ = Sv7+ (impossible to save), throughRate = 1.0
+    // Best: 2 × 1.0 × 6 = 12, capped at 10
     expect(r.bestCase.wounds).toBe(10)
     expect(r.bestCase.modelsRemoved).toBe(5)
+  })
+
+  it('bestCase with good saves reduces damage', () => {
+    // AP0 vs Sv2+, throughRate = 1/6
+    const r = simulateWeapon(
+      { name: 'Bolter', range: 24, attacks: 10, skill: 3, strength: 4, ap: 0, damage: 1, abilities: [] },
+      4, 2, 1, 20,
+    )
+    // Best: 10 attacks × (1/6 fail save) × 1 damage = ~1.67
+    expect(r.bestCase.wounds).toBeCloseTo(1.67, 0)
   })
 
   it('STRENGTH_MOD +1: S4 vs T4 becomes S5 vs T4 (3+ to wound)', () => {
@@ -417,6 +431,21 @@ describe('simulateWeapon', () => {
     )
     // Should still do some damage (1 attack minimum)
     expect(r.expectedWounds).toBeGreaterThan(0)
+  })
+
+  it('MELTA adds bonus damage per unsaved wound', () => {
+    const base = simulateWeapon(
+      { name: 'Melta', range: 12, attacks: 1, skill: 4, strength: 9, ap: -4, damage: 'D6', abilities: [] },
+      4, 3, 2, 5,
+    )
+    const withMelta = simulateWeapon(
+      { name: 'Melta', range: 12, attacks: 1, skill: 4, strength: 9, ap: -4, damage: 'D6', abilities: [{ type: 'MELTA', value: 2 }] },
+      4, 3, 2, 5,
+    )
+    // Melta 2 adds +2 to average damage: D6 avg = 3.5, with melta = 5.5
+    expect(withMelta.expectedWounds).toBeGreaterThan(base.expectedWounds)
+    // Ratio should be approximately 5.5/3.5
+    expect(withMelta.expectedWounds / base.expectedWounds).toBeCloseTo(5.5 / 3.5, 1)
   })
 
   it('invuln save is passed through to resolveSaves', () => {

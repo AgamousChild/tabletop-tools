@@ -188,7 +188,32 @@ export const roundRouter = router({
       .from(pairings)
       .where(eq(pairings.roundId, input))
       .all()
-    return { ...round, pairings: roundPairings }
+
+    // Resolve player names from tournamentPlayers
+    const playerIds = new Set<string>()
+    for (const p of roundPairings) {
+      playerIds.add(p.player1Id)
+      if (p.player2Id) playerIds.add(p.player2Id)
+    }
+    const playerIdArray = Array.from(playerIds)
+    const players = playerIdArray.length > 0
+      ? await ctx.db
+          .select({ id: tournamentPlayers.id, displayName: tournamentPlayers.displayName, faction: tournamentPlayers.faction })
+          .from(tournamentPlayers)
+          .where(inArray(tournamentPlayers.id, playerIdArray))
+          .all()
+      : []
+    const playerMap = new Map(players.map((p) => [p.id, p]))
+
+    const enrichedPairings = roundPairings.map((p) => ({
+      ...p,
+      player1Name: playerMap.get(p.player1Id)?.displayName ?? p.player1Id,
+      player1Faction: playerMap.get(p.player1Id)?.faction ?? null,
+      player2Name: p.player2Id ? (playerMap.get(p.player2Id)?.displayName ?? p.player2Id) : null,
+      player2Faction: p.player2Id ? (playerMap.get(p.player2Id)?.faction ?? null) : null,
+    }))
+
+    return { ...round, pairings: enrichedPairings }
   }),
 
   close: protectedProcedure

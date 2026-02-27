@@ -24,6 +24,10 @@ export function syncListToServer(listId: string): void {
           unitPoints: u.unitPoints,
           modelCount: u.modelCount,
           count: u.count,
+          isWarlord: u.isWarlord,
+          enhancementId: u.enhancementId,
+          enhancementName: u.enhancementName,
+          enhancementCost: u.enhancementCost,
         })),
       })
     } catch {
@@ -55,6 +59,10 @@ export function syncAllToServer(): void {
             unitPoints: u.unitPoints,
             modelCount: u.modelCount,
             count: u.count,
+            isWarlord: u.isWarlord,
+            enhancementId: u.enhancementId,
+            enhancementName: u.enhancementName,
+            enhancementCost: u.enhancementCost,
           })),
         })
       }
@@ -106,6 +114,10 @@ export async function restoreFromServer(): Promise<number> {
         unitPoints: unit.unitPoints,
         modelCount: unit.modelCount ?? undefined,
         count: unit.count,
+        isWarlord: unit.isWarlord,
+        enhancementId: unit.enhancementId ?? undefined,
+        enhancementName: unit.enhancementName ?? undefined,
+        enhancementCost: unit.enhancementCost ?? undefined,
       })
     }
     count++

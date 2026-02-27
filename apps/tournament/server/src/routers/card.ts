@@ -64,10 +64,31 @@ export const cardRouter = router({
   playerHistory: protectedProcedure
     .input(z.object({ playerId: z.string() }))
     .query(async ({ ctx, input }) => {
-      return ctx.db
+      // Find the user behind this tournament player registration
+      const player = await ctx.db
+        .select()
+        .from(tournamentPlayers)
+        .where(eq(tournamentPlayers.id, input.playerId))
+        .get()
+      if (!player) {
+        return ctx.db
+          .select()
+          .from(tournamentCards)
+          .where(eq(tournamentCards.playerId, input.playerId))
+          .all()
+      }
+      // Find all tournament registrations for this user, then all their cards
+      const allRegs = await ctx.db
+        .select({ id: tournamentPlayers.id })
+        .from(tournamentPlayers)
+        .where(eq(tournamentPlayers.userId, player.userId))
+        .all()
+      const regIds = allRegs.map((r) => r.id)
+      if (regIds.length === 0) return []
+      const allCards = await ctx.db
         .select()
         .from(tournamentCards)
-        .where(eq(tournamentCards.playerId, input.playerId))
         .all()
+      return allCards.filter((c) => regIds.includes(c.playerId))
     }),
 })

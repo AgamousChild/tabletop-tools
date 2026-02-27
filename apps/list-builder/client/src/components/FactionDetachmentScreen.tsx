@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { useGameDataAvailable } from '@tabletop-tools/game-data-store'
+import { useGameDataAvailable, useDetachmentAbilities } from '@tabletop-tools/game-data-store'
 
 import { useGameFactions, useGameDetachments } from '../lib/useGameData'
 import type { BattleSize } from '../lib/armyRules'
@@ -8,6 +8,40 @@ type Props = {
   battleSize: BattleSize
   onSelect: (faction: string, detachment: string) => void
   onBack: () => void
+}
+
+/** Shows detachment button with abilities preview */
+function DetachmentCard({ detId, detName, onSelect }: {
+  detId: string
+  detName: string
+  onSelect: () => void
+}) {
+  const { data: abilities = [] } = useDetachmentAbilities(detId)
+
+  return (
+    <button
+      onClick={onSelect}
+      className="w-full text-left p-4 rounded-xl bg-slate-900 border border-slate-800 hover:border-amber-400/50 transition-colors"
+    >
+      <p className="font-semibold text-slate-100">{detName}</p>
+      {abilities.length > 0 && (
+        <div className="mt-2 space-y-1">
+          {abilities.slice(0, 3).map((a) => (
+            <div key={a.id} className="text-xs text-slate-400">
+              <span className="text-slate-300 font-medium">{a.name}</span>
+              {a.legend && <span className="text-slate-600"> ({a.legend})</span>}
+              {a.description && (
+                <p className="text-slate-500 mt-0.5 line-clamp-2">{a.description}</p>
+              )}
+            </div>
+          ))}
+          {abilities.length > 3 && (
+            <p className="text-xs text-slate-600">+{abilities.length - 3} more rules</p>
+          )}
+        </div>
+      )}
+    </button>
+  )
 }
 
 export function FactionDetachmentScreen({ battleSize, onSelect, onBack }: Props) {
@@ -67,13 +101,12 @@ export function FactionDetachmentScreen({ battleSize, onSelect, onBack }: Props)
             </button>
           ) : (
             detachments.map((det) => (
-              <button
+              <DetachmentCard
                 key={det.id}
-                onClick={() => onSelect(selectedFaction, det.name)}
-                className="w-full text-left p-4 rounded-xl bg-slate-900 border border-slate-800 hover:border-amber-400/50 transition-colors"
-              >
-                <p className="font-semibold text-slate-100">{det.name}</p>
-              </button>
+                detId={det.id}
+                detName={det.name}
+                onSelect={() => onSelect(selectedFaction, det.name)}
+              />
             ))
           )}
         </div>

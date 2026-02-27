@@ -30,6 +30,16 @@ export type WeaponAbility =
   | { type: 'WOUND_MOD'; value: number }
   | { type: 'STRENGTH_MOD'; value: number }
   | { type: 'ATTACKS_MOD'; value: number }
+  | { type: 'ANTI'; keyword: string; value: number }
+  | { type: 'MELTA'; value: number }
+  | { type: 'IGNORES_COVER' }
+  | { type: 'HAZARDOUS' }
+  | { type: 'PRECISION' }
+  | { type: 'INDIRECT_FIRE' }
+  | { type: 'ASSAULT' }
+  | { type: 'PISTOL' }
+  | { type: 'ONE_SHOT' }
+  | { type: 'PSYCHIC' }
 
 export interface UnitProfile {
   id: string           // stable content ID (e.g. BSData entry ID)
@@ -41,8 +51,11 @@ export interface UnitProfile {
   wounds: number
   leadership: number
   oc: number           // objective control
+  invulnSave?: number  // invulnerable save (e.g. 4 means 4+)
+  fnp?: number         // feel no pain (e.g. 5 means 5+)
   weapons: WeaponProfile[]
   abilities: string[]  // free-text ability names; mapped to typed rules separately
+  abilityDescriptions?: Record<string, string>  // ability name -> rule text
   points: number
 }
 

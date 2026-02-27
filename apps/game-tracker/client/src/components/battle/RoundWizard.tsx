@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import type { Stratagem } from '@tabletop-tools/game-data-store'
 import type { SecondaryMission } from './SecondaryPicker'
 import type { TurnData } from './types'
 import { createEmptyTurnData } from './types'
@@ -6,6 +7,11 @@ import { TurnFlow } from './TurnFlow'
 import { RoundSummary } from './RoundSummary'
 
 type Step = 'your-turn' | 'their-turn' | 'summary'
+
+type AvailableUnit = {
+  contentId: string
+  name: string
+}
 
 type Props = {
   roundNumber: number
@@ -19,6 +25,11 @@ type Props = {
   onSave: (yourTurn: TurnData, theirTurn: TurnData) => void
   isSaving: boolean
   whoGoesFirst: 'YOU' | 'THEM' | null
+  yourStratagems?: Stratagem[]
+  theirStratagems?: Stratagem[]
+  yourArmyUnits?: AvailableUnit[]
+  opponentArmyUnits?: AvailableUnit[]
+  availableSecondaries?: Array<{ id: string; name: string }>
 }
 
 export function RoundWizard({
@@ -33,6 +44,11 @@ export function RoundWizard({
   onSave,
   isSaving,
   whoGoesFirst,
+  yourStratagems,
+  theirStratagems,
+  yourArmyUnits,
+  opponentArmyUnits,
+  availableSecondaries,
 }: Props) {
   const [step, setStep] = useState<Step>(
     whoGoesFirst === 'THEM' ? 'their-turn' : 'your-turn',
@@ -65,6 +81,9 @@ export function RoundWizard({
         onRemoveSecondary={onRemoveSecondary}
         onScoreSecondary={onScoreSecondary}
         currentRound={roundNumber}
+        availableStratagems={yourStratagems}
+        availableUnits={opponentArmyUnits}
+        availableSecondaries={availableSecondaries}
       />
     )
   }
@@ -83,6 +102,9 @@ export function RoundWizard({
         onRemoveSecondary={onRemoveSecondary}
         onScoreSecondary={onScoreSecondary}
         currentRound={roundNumber}
+        availableStratagems={theirStratagems}
+        availableUnits={yourArmyUnits}
+        availableSecondaries={availableSecondaries}
       />
     )
   }

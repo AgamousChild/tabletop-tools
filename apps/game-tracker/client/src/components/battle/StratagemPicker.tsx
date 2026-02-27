@@ -1,4 +1,5 @@
-import { useState } from 'react'
+import { useState, useMemo } from 'react'
+import type { Stratagem } from '@tabletop-tools/game-data-store'
 
 export type StratagemEntry = {
   stratagemName: string
@@ -10,16 +11,31 @@ type Props = {
   onAdd: (entry: StratagemEntry) => void
   onRemove: (index: number) => void
   label?: string
+  availableStratagems?: Stratagem[]
 }
 
-export function StratagemPicker({ stratagems, onAdd, onRemove, label = 'Stratagems' }: Props) {
+export function StratagemPicker({ stratagems, onAdd, onRemove, label = 'Stratagems', availableStratagems = [] }: Props) {
   const [name, setName] = useState('')
   const [cost, setCost] = useState(1)
   const [showInput, setShowInput] = useState(false)
 
+  const filtered = useMemo(() => {
+    if (!name.trim() || availableStratagems.length === 0) return []
+    const q = name.toLowerCase()
+    return availableStratagems.filter((s) => s.name.toLowerCase().includes(q)).slice(0, 8)
+  }, [name, availableStratagems])
+
   function handleAdd() {
     if (!name.trim()) return
     onAdd({ stratagemName: name.trim(), cpCost: cost })
+    setName('')
+    setCost(1)
+    setShowInput(false)
+  }
+
+  function handleSelectSuggestion(s: Stratagem) {
+    const cpCost = parseInt(s.cpCost) || 1
+    onAdd({ stratagemName: s.name, cpCost })
     setName('')
     setCost(1)
     setShowInput(false)
@@ -40,36 +56,55 @@ export function StratagemPicker({ stratagems, onAdd, onRemove, label = 'Stratage
       </div>
 
       {showInput && (
-        <div className="flex gap-2 mb-2">
-          <input
-            type="text"
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-            placeholder="Stratagem name..."
-            aria-label="Stratagem name"
-            className="flex-1 px-2 py-1.5 rounded bg-slate-800 border border-slate-700 text-slate-100 text-sm placeholder-slate-500 focus:outline-none focus:border-amber-400"
-          />
-          <input
-            type="number"
-            value={cost}
-            onChange={(e) => setCost(Number(e.target.value) || 1)}
-            min={0}
-            aria-label="CP cost"
-            className="w-14 px-2 py-1.5 rounded bg-slate-800 border border-slate-700 text-slate-100 text-sm text-center focus:outline-none focus:border-amber-400"
-          />
-          <button
-            onClick={handleAdd}
-            disabled={!name.trim()}
-            className="px-3 py-1.5 rounded bg-amber-400 text-slate-950 text-sm font-bold disabled:opacity-40"
-          >
-            Add
-          </button>
-          <button
-            onClick={() => setShowInput(false)}
-            className="px-2 py-1.5 rounded bg-slate-700 text-slate-300 text-sm"
-          >
-            Cancel
-          </button>
+        <div className="mb-2">
+          <div className="flex gap-2">
+            <div className="flex-1 relative">
+              <input
+                type="text"
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                placeholder={availableStratagems.length > 0 ? 'Search stratagems...' : 'Stratagem name...'}
+                aria-label="Stratagem name"
+                onKeyDown={(e) => e.key === 'Enter' && handleAdd()}
+                className="w-full px-2 py-1.5 rounded bg-slate-800 border border-slate-700 text-slate-100 text-sm placeholder-slate-500 focus:outline-none focus:border-amber-400"
+              />
+              {filtered.length > 0 && (
+                <div className="absolute z-10 mt-1 w-full rounded bg-slate-800 border border-slate-700 shadow-lg max-h-48 overflow-y-auto">
+                  {filtered.map((s) => (
+                    <button
+                      key={s.id}
+                      onClick={() => handleSelectSuggestion(s)}
+                      className="w-full text-left px-2 py-1.5 hover:bg-slate-700 text-sm"
+                    >
+                      <span className="text-slate-200">{s.name}</span>
+                      <span className="text-slate-500 ml-1">({s.cpCost} CP · {s.phase})</span>
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+            <input
+              type="number"
+              value={cost}
+              onChange={(e) => setCost(Number(e.target.value) || 1)}
+              min={0}
+              aria-label="CP cost"
+              className="w-14 px-2 py-1.5 rounded bg-slate-800 border border-slate-700 text-slate-100 text-sm text-center focus:outline-none focus:border-amber-400"
+            />
+            <button
+              onClick={handleAdd}
+              disabled={!name.trim()}
+              className="px-3 py-1.5 rounded bg-amber-400 text-slate-950 text-sm font-bold disabled:opacity-40"
+            >
+              Add
+            </button>
+            <button
+              onClick={() => setShowInput(false)}
+              className="px-2 py-1.5 rounded bg-slate-700 text-slate-300 text-sm"
+            >
+              Cancel
+            </button>
+          </div>
         </div>
       )}
 

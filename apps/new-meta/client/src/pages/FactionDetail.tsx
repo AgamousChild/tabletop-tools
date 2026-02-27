@@ -1,9 +1,18 @@
+import { useMemo } from 'react'
 import { trpc } from '../lib/trpc'
 import { ListCard } from '../components/ListCard'
 
 interface Props {
   faction: string
   onBack: () => void
+}
+
+type TimelinePoint = {
+  week: string
+  faction: string
+  wins: number
+  losses: number
+  draws: number
 }
 
 export function FactionDetail({ faction, onBack }: Props) {
@@ -27,7 +36,7 @@ export function FactionDetail({ faction, onBack }: Props) {
     )
   }
 
-  const { stat, detachments, topLists } = data
+  const { stat, detachments, timeline, topLists } = data
 
   return (
     <div className="space-y-8">
@@ -91,6 +100,10 @@ export function FactionDetail({ faction, onBack }: Props) {
         </section>
       )}
 
+      {timeline && timeline.length > 0 && (
+        <TimelineChart points={timeline} />
+      )}
+
       {topLists.length > 0 && (
         <section>
           <h2 className="text-lg font-medium text-slate-200 mb-3">Top Lists</h2>
@@ -105,5 +118,47 @@ export function FactionDetail({ faction, onBack }: Props) {
         </section>
       )}
     </div>
+  )
+}
+
+function TimelineChart({ points }: { points: TimelinePoint[] }) {
+  const sorted = useMemo(() => {
+    return [...points].sort((a, b) => a.week.localeCompare(b.week))
+  }, [points])
+
+  const maxGames = Math.max(...sorted.map((p) => p.wins + p.losses + p.draws), 1)
+
+  return (
+    <section>
+      <h2 className="text-lg font-medium text-slate-200 mb-3">Win Rate Over Time</h2>
+      <div className="flex items-end gap-1 h-32">
+        {sorted.map((p) => {
+          const games = p.wins + p.losses + p.draws
+          const winRate = games > 0 ? p.wins / games : 0
+          const height = Math.max((games / maxGames) * 100, 4)
+          const color = winRate >= 0.55
+            ? 'bg-emerald-400'
+            : winRate >= 0.45
+              ? 'bg-amber-400'
+              : 'bg-red-400'
+          return (
+            <div
+              key={p.week}
+              className="flex flex-col items-center flex-1 min-w-0"
+              title={`${p.week}: ${(winRate * 100).toFixed(1)}% (${games} games)`}
+            >
+              <div
+                className={`w-full rounded-t ${color} opacity-80`}
+                style={{ height: `${height}%` }}
+              />
+            </div>
+          )
+        })}
+      </div>
+      <div className="flex justify-between mt-1 text-xs text-slate-600">
+        <span>{sorted[0]?.week}</span>
+        <span>{sorted[sorted.length - 1]?.week}</span>
+      </div>
+    </section>
   )
 }

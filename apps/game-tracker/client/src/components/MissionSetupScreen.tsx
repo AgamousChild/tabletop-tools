@@ -1,6 +1,7 @@
 import { useState } from 'react'
+import { useMissions } from '@tabletop-tools/game-data-store'
 
-const MISSIONS = [
+const FALLBACK_MISSIONS = [
   'Take and Hold',
   'Supply Drop',
   'Scorched Earth',
@@ -54,6 +55,13 @@ export function MissionSetupScreen({ onNext, onBack }: Props) {
   const [includeChallenger, setIncludeChallenger] = useState(false)
   const [requirePhotos, setRequirePhotos] = useState(false)
 
+  const { data: indexedMissions = [] } = useMissions()
+  const primaryMissions = indexedMissions.filter((m) => m.type === 'primary')
+  // Use data-driven missions when available, fall back to hardcoded list
+  const missionNames = primaryMissions.length > 0
+    ? primaryMissions.map((m) => m.name)
+    : FALLBACK_MISSIONS
+
   const canProceed = mission !== ''
 
   return (
@@ -75,7 +83,7 @@ export function MissionSetupScreen({ onNext, onBack }: Props) {
             className="w-full px-3 py-2 rounded-lg bg-slate-900 border border-slate-800 text-slate-100 focus:outline-none focus:border-amber-400"
           >
             <option value="">Select mission...</option>
-            {MISSIONS.map((m) => (
+            {missionNames.map((m) => (
               <option key={m} value={m}>{m}</option>
             ))}
           </select>

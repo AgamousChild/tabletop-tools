@@ -106,6 +106,29 @@ vi.mock('@tabletop-tools/game-data-store', () => ({
     error: null,
     isLoading: false,
   }),
+  useUnit: () => ({
+    data: {
+      id: 'u1',
+      name: 'Intercessors',
+      faction: 'Space Marines',
+      points: 90,
+      move: 6,
+      toughness: 4,
+      save: 3,
+      wounds: 2,
+      leadership: 6,
+      oc: 2,
+      weapons: [],
+      abilities: [],
+    },
+    error: null,
+    isLoading: false,
+  }),
+  useDetachmentAbilities: () => ({
+    data: [],
+    error: null,
+    isLoading: false,
+  }),
   useGameDataAvailable: () => true,
   useLists: (...args: unknown[]) => mockUseLists(...args),
   useList: (...args: unknown[]) => mockUseList(...(args as [string | null])),
@@ -196,5 +219,15 @@ describe('ListBuilderScreen', () => {
     expect(screen.getByText('Select Battle Size')).toBeInTheDocument()
     fireEvent.click(screen.getByText('Back'))
     expect(screen.getByText('My Army Lists')).toBeInTheDocument()
+  })
+
+  it('shows unit stat line when list is open', () => {
+    render(<ListBuilderScreen onSignOut={vi.fn()} />)
+    fireEvent.click(screen.getByText('My Crusade'))
+    // Stat line should show for units in the list
+    const statLines = screen.getAllByTestId('unit-stat-line')
+    expect(statLines.length).toBeGreaterThanOrEqual(1)
+    expect(statLines[0]?.textContent).toContain('M6')
+    expect(statLines[0]?.textContent).toContain('T4')
   })
 })

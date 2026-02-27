@@ -1,9 +1,15 @@
+import type { Stratagem } from '@tabletop-tools/game-data-store'
 import type { SecondaryMission } from './SecondaryPicker'
 import type { StratagemEntry } from './StratagemPicker'
 import type { TurnData } from './types'
 import { VpStepper } from './VpStepper'
 import { SecondaryPicker } from './SecondaryPicker'
 import { StratagemPicker } from './StratagemPicker'
+
+type AvailableSecondary = {
+  id: string
+  name: string
+}
 
 type Props = {
   player: 'You' | string
@@ -15,6 +21,8 @@ type Props = {
   onRemoveSecondary: (id: string) => void
   onScoreSecondary: (id: string, roundNumber: number, vp: number) => void
   currentRound: number
+  availableStratagems?: Stratagem[]
+  availableSecondaries?: AvailableSecondary[]
 }
 
 export function CommandPhaseScreen({
@@ -27,6 +35,8 @@ export function CommandPhaseScreen({
   onRemoveSecondary,
   onScoreSecondary,
   currentRound,
+  availableStratagems,
+  availableSecondaries,
 }: Props) {
   return (
     <div className="p-6 space-y-5 max-w-md mx-auto">
@@ -59,6 +69,7 @@ export function CommandPhaseScreen({
         onScore={onScoreSecondary}
         currentRound={currentRound}
         label={player === 'You' ? 'Your Secondaries' : `${player}'s Secondaries`}
+        availableSecondaries={availableSecondaries}
       />
 
       <StratagemPicker
@@ -68,6 +79,7 @@ export function CommandPhaseScreen({
           onUpdate({ stratagems: turnData.stratagems.filter((_, idx) => idx !== i) })
         }
         label="Command Phase Stratagems"
+        availableStratagems={availableStratagems}
       />
 
       <button

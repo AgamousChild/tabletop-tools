@@ -26,11 +26,15 @@ const mockTournaments = [
     status: 'REGISTRATION',
     totalRounds: 5,
     toUserId: 'to-1',
-    eventDate: 1700000000,
+    eventDate: 1700000000000,
     format: '2000pts Matched Play',
     location: 'London',
     createdAt: 0,
     playerCount: 12,
+    description: 'A great tournament',
+    startTime: '10:00 AM',
+    externalLink: 'https://example.com/event',
+    maxPlayers: 32,
   },
   {
     id: 't2',
@@ -38,7 +42,7 @@ const mockTournaments = [
     status: 'IN_PROGRESS',
     totalRounds: 3,
     toUserId: 'other-user',
-    eventDate: 1700000000,
+    eventDate: 1700000000000,
     format: '1000pts',
     location: null,
     createdAt: 0,
@@ -158,6 +162,11 @@ vi.mock('../lib/trpc', () => ({
     elo: {
       get: {
         useQuery: () => ({ data: { rating: 1200, gamesPlayed: 5 } }),
+      },
+    },
+    award: {
+      list: {
+        useQuery: () => ({ data: [], refetch: vi.fn() }),
       },
     },
   },
@@ -338,7 +347,7 @@ describe('TournamentScreen', () => {
       window.dispatchEvent(new HashChangeEvent('hashchange'))
     })
     await waitFor(() => {
-      expect(screen.getByText(/12 players registered/)).toBeInTheDocument()
+      expect(screen.getByText(/12 \/ 32 players registered/)).toBeInTheDocument()
     })
   })
 
@@ -374,6 +383,45 @@ describe('TournamentScreen', () => {
     })
     await waitFor(() => {
       expect(screen.getByText(/no pairings yet/i)).toBeInTheDocument()
+    })
+  })
+
+  // ─── Tournament Detail — new display fields ───────────────────
+
+  it('shows external link on tournament detail', async () => {
+    render(<TournamentScreen onSignOut={vi.fn()} />)
+    act(() => {
+      window.location.hash = '#/tournament/t1'
+      window.dispatchEvent(new HashChangeEvent('hashchange'))
+    })
+    await waitFor(() => {
+      const link = screen.getByRole('link', { name: /event link/i })
+      expect(link).toBeInTheDocument()
+      expect(link).toHaveAttribute('href', 'https://example.com/event')
+    })
+  })
+
+  it('shows event date on tournament detail', async () => {
+    render(<TournamentScreen onSignOut={vi.fn()} />)
+    act(() => {
+      window.location.hash = '#/tournament/t1'
+      window.dispatchEvent(new HashChangeEvent('hashchange'))
+    })
+    await waitFor(() => {
+      // eventDate 1700000000000 = Nov 14, 2023 (locale-dependent)
+      const dateEl = screen.getByText(/2023/)
+      expect(dateEl).toBeInTheDocument()
+    })
+  })
+
+  it('shows description on tournament detail', async () => {
+    render(<TournamentScreen onSignOut={vi.fn()} />)
+    act(() => {
+      window.location.hash = '#/tournament/t1'
+      window.dispatchEvent(new HashChangeEvent('hashchange'))
+    })
+    await waitFor(() => {
+      expect(screen.getByText('A great tournament')).toBeInTheDocument()
     })
   })
 })

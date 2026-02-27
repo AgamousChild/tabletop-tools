@@ -30,6 +30,20 @@ vi.mock('@tabletop-tools/game-data-store', () => ({
     data: [],
     refetch: vi.fn(),
   }),
+  useStratagems: () => ({
+    data: [],
+    error: null,
+    isLoading: false,
+  }),
+  useList: () => ({
+    data: null,
+    refetch: vi.fn(),
+  }),
+  useMissions: () => ({
+    data: [],
+    error: null,
+    isLoading: false,
+  }),
 }))
 
 let matchGetData: ReturnType<typeof createInProgressMatch> | ReturnType<typeof createCompletedMatch> | null = null
@@ -130,7 +144,7 @@ vi.mock('../lib/trpc', () => ({
             mockStartMatch(args)
             opts?.onSuccess?.({
               id: 'new-match',
-              opponentFaction: 'Tau',
+              opponentFaction: 'Orks',
               opponentName: null,
               mission: 'Test',
               result: null,
@@ -234,8 +248,8 @@ describe('GameTrackerScreen', () => {
     expect(screen.getByText('Match Setup')).toBeInTheDocument()
 
     // Fill opponent faction and proceed
-    fireEvent.change(screen.getByPlaceholderText(/orks, necrons/i), {
-      target: { value: 'Tau' },
+    fireEvent.change(screen.getByLabelText('Opponent faction'), {
+      target: { value: 'Orks' },
     })
     fireEvent.click(screen.getByRole('button', { name: /next/i }))
     expect(screen.getByText('Mission Setup')).toBeInTheDocument()
@@ -253,8 +267,8 @@ describe('GameTrackerScreen', () => {
 
     // Match setup
     fireEvent.click(screen.getByRole('button', { name: /\+ new match/i }))
-    fireEvent.change(screen.getByPlaceholderText(/orks, necrons/i), {
-      target: { value: 'Tau' },
+    fireEvent.change(screen.getByLabelText('Opponent faction'), {
+      target: { value: 'Orks' },
     })
     fireEvent.click(screen.getByRole('button', { name: /next/i }))
 
@@ -272,7 +286,7 @@ describe('GameTrackerScreen', () => {
     await waitFor(() =>
       expect(mockStartMatch).toHaveBeenCalledWith(
         expect.objectContaining({
-          opponentFaction: 'Tau',
+          opponentFaction: 'Orks',
           mission: 'Take and Hold',
           attackerDefender: 'YOU_ATTACK',
           whoGoesFirst: 'YOU',

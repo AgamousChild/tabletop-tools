@@ -173,9 +173,12 @@ function parseUnitEntry(
     }
   }
   const abilities = extractAbilityNames(body)
+  const abilityDescriptions = extractAbilityDescriptions(body)
   const points = extractPoints(body)
+  const invulnSave = extractInvulnerableSave(body)
+  const fnp = extractFeelNoPain(body, abilityDescriptions)
 
-  return {
+  const unit: UnitProfile = {
     id,
     faction,
     name,
@@ -189,6 +192,12 @@ function parseUnitEntry(
     abilities,
     points,
   }
+
+  if (invulnSave !== undefined) unit.invulnSave = invulnSave
+  if (fnp !== undefined) unit.fnp = fnp
+  if (Object.keys(abilityDescriptions).length > 0) unit.abilityDescriptions = abilityDescriptions
+
+  return unit
 }
 
 // ---- Characteristic extraction ----
@@ -272,11 +281,10 @@ function extractWeaponAbilityNames(profileBody: string): string[] {
     .filter(Boolean)
 }
 
-// ---- Ability name extraction ----
+// ---- Ability name + description extraction ----
 
 function extractAbilityNames(body: string): string[] {
   const names: string[] = []
-  // Match entire opening tag and inspect attributes in any order
   const tagPattern = /<profile\b([^>]*)>/gi
   let m: RegExpExecArray | null
   while ((m = tagPattern.exec(body)) !== null) {
@@ -286,6 +294,76 @@ function extractAbilityNames(body: string): string[] {
     if (nameMatch) names.push(nameMatch[1]!.trim())
   }
   return names
+}
+
+function extractAbilityDescriptions(body: string): Record<string, string> {
+  const descriptions: Record<string, string> = {}
+  const profilePattern =
+    /<profile\b([^>]*)type(?:Name)?="Abilities"([^>]*)>([\s\S]*?)<\/profile>/gi
+  let m: RegExpExecArray | null
+  while ((m = profilePattern.exec(body)) !== null) {
+    const allAttrs = (m[1] ?? '') + (m[2] ?? '')
+    const profileBody = m[3] ?? ''
+    const nameMatch = /\bname="([^"]+)"/i.exec(allAttrs)
+    if (!nameMatch) continue
+    const abilityName = nameMatch[1]!.trim()
+    const descPattern = /<characteristic\b[^>]*name="Description"[^>]*>([\s\S]*?)<\/characteristic>/i
+    const descMatch = descPattern.exec(profileBody)
+    if (descMatch && descMatch[1]?.trim()) {
+      descriptions[abilityName] = descMatch[1].trim()
+    }
+  }
+  return descriptions
+}
+
+// ---- Invulnerable save extraction ----
+
+function extractInvulnerableSave(body: string): number | undefined {
+  // Look for <profile typeName="Invulnerable Save"> with characteristic value
+  const profilePattern =
+    /<profile\b[^>]*type(?:Name)?="Invulnerable Save"[^>]*>([\s\S]*?)<\/profile>/gi
+  let m: RegExpExecArray | null
+  while ((m = profilePattern.exec(body)) !== null) {
+    const charPattern = /<characteristic\b[^>]*>([\s\S]*?)<\/characteristic>/gi
+    let c: RegExpExecArray | null
+    while ((c = charPattern.exec(m[1] ?? '')) !== null) {
+      const val = parseStatNumber(c[1]?.trim() ?? '')
+      if (val >= 2 && val <= 6) return val
+    }
+  }
+
+  // Fallback: look in ability descriptions for "X+ invulnerable save"
+  const invulnPattern = /(\d)\+\s*invulnerable\s+save/i
+  const invulnMatch = invulnPattern.exec(body)
+  if (invulnMatch) {
+    const val = parseInt(invulnMatch[1]!)
+    if (val >= 2 && val <= 6) return val
+  }
+
+  return undefined
+}
+
+// ---- Feel No Pain extraction ----
+
+function extractFeelNoPain(body: string, abilityDescriptions: Record<string, string>): number | undefined {
+  // Check ability descriptions for "feel no pain X+" pattern
+  for (const desc of Object.values(abilityDescriptions)) {
+    const fnpMatch = /feel\s+no\s+pain\s+(\d)\+/i.exec(desc)
+    if (fnpMatch) {
+      const val = parseInt(fnpMatch[1]!)
+      if (val >= 2 && val <= 6) return val
+    }
+  }
+
+  // Fallback: search raw body for FNP profile or description
+  const fnpPattern = /feel\s+no\s+pain\s+(\d)\+/i
+  const fnpMatch = fnpPattern.exec(body)
+  if (fnpMatch) {
+    const val = parseInt(fnpMatch[1]!)
+    if (val >= 2 && val <= 6) return val
+  }
+
+  return undefined
 }
 
 // ---- Points extraction ----
@@ -299,27 +377,52 @@ function extractPoints(body: string): number {
 
 // ---- Ability mapping ----
 
-const ABILITY_KEYWORDS: Array<{ pattern: RegExp; ability: WeaponAbility }> = [
-  { pattern: /sustained hits\s*(\d+)/i, ability: { type: 'SUSTAINED_HITS', value: 1 } },
-  { pattern: /lethal hits/i, ability: { type: 'LETHAL_HITS' } },
-  { pattern: /devastating wounds/i, ability: { type: 'DEVASTATING_WOUNDS' } },
-  { pattern: /torrent/i, ability: { type: 'TORRENT' } },
-  { pattern: /twin.linked/i, ability: { type: 'TWIN_LINKED' } },
-  { pattern: /blast/i, ability: { type: 'BLAST' } },
+const ABILITY_KEYWORDS: Array<{ pattern: RegExp; create: (name: string) => WeaponAbility }> = [
+  { pattern: /sustained hits\s*(\d+)/i, create: (n) => {
+    const m = /sustained hits\s*(\d+)/i.exec(n)
+    return { type: 'SUSTAINED_HITS', value: m ? parseInt(m[1]!) : 1 }
+  }},
+  { pattern: /lethal hits/i, create: () => ({ type: 'LETHAL_HITS' }) },
+  { pattern: /devastating wounds/i, create: () => ({ type: 'DEVASTATING_WOUNDS' }) },
+  { pattern: /torrent/i, create: () => ({ type: 'TORRENT' }) },
+  { pattern: /twin.linked/i, create: () => ({ type: 'TWIN_LINKED' }) },
+  { pattern: /blast/i, create: () => ({ type: 'BLAST' }) },
+  { pattern: /re-?roll\s+(all\s+)?hit\s+rolls?\s+of\s+1/i, create: () => ({ type: 'REROLL_HITS_OF_1' }) },
+  { pattern: /re-?roll\s+(all\s+)?hit\s+rolls?(?!\s+of)/i, create: () => ({ type: 'REROLL_HITS' }) },
+  { pattern: /re-?roll\s+(all\s+)?wound\s+rolls?/i, create: () => ({ type: 'REROLL_WOUNDS' }) },
+  { pattern: /heavy/i, create: () => ({ type: 'HIT_MOD', value: 1 }) },
+  { pattern: /rapid fire\s*(\d+)/i, create: (n) => {
+    const m = /rapid fire\s*(\d+)/i.exec(n)
+    return { type: 'ATTACKS_MOD', value: m ? parseInt(m[1]!) : 1 }
+  }},
+  { pattern: /extra attacks/i, create: () => ({ type: 'ATTACKS_MOD', value: 0 }) },
+  { pattern: /lance/i, create: () => ({ type: 'WOUND_MOD', value: 1 }) },
+  // Anti-keyword X+ — improved wound roll vs keyword targets
+  { pattern: /anti-(.+?)\s+(\d)\+/i, create: (n) => {
+    const m = /anti-(.+?)\s+(\d)\+/i.exec(n)
+    return { type: 'ANTI', keyword: m?.[1]?.trim() ?? '', value: m ? parseInt(m[2]!) : 4 }
+  }},
+  // Melta X — bonus damage at half range
+  { pattern: /melta\s*(\d+)/i, create: (n) => {
+    const m = /melta\s*(\d+)/i.exec(n)
+    return { type: 'MELTA', value: m ? parseInt(m[1]!) : 1 }
+  }},
+  { pattern: /ignores cover/i, create: () => ({ type: 'IGNORES_COVER' }) },
+  { pattern: /hazardous/i, create: () => ({ type: 'HAZARDOUS' }) },
+  { pattern: /precision/i, create: () => ({ type: 'PRECISION' }) },
+  { pattern: /indirect fire/i, create: () => ({ type: 'INDIRECT_FIRE' }) },
+  { pattern: /\bassault\b/i, create: () => ({ type: 'ASSAULT' }) },
+  { pattern: /\bpistol\b/i, create: () => ({ type: 'PISTOL' }) },
+  { pattern: /one shot/i, create: () => ({ type: 'ONE_SHOT' }) },
+  { pattern: /psychic/i, create: () => ({ type: 'PSYCHIC' }) },
 ]
 
 function mapAbilityNames(names: string[]): WeaponAbility[] {
   const abilities: WeaponAbility[] = []
   for (const name of names) {
-    for (const { pattern, ability } of ABILITY_KEYWORDS) {
+    for (const { pattern, create } of ABILITY_KEYWORDS) {
       if (pattern.test(name)) {
-        // Special case: extract the value for SUSTAINED_HITS
-        if (ability.type === 'SUSTAINED_HITS') {
-          const valueMatch = /sustained hits\s*(\d+)/i.exec(name)
-          abilities.push({ type: 'SUSTAINED_HITS', value: valueMatch ? parseInt(valueMatch[1]!) : 1 })
-        } else {
-          abilities.push(ability)
-        }
+        abilities.push(create(name))
         break
       }
     }

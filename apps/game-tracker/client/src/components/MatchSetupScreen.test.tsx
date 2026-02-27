@@ -45,7 +45,7 @@ describe('MatchSetupScreen', () => {
   it('shows Opponent section', () => {
     render(<MatchSetupScreen onNext={vi.fn()} onBack={vi.fn()} />)
     expect(screen.getByText('Opponent')).toBeInTheDocument()
-    expect(screen.getByPlaceholderText(/orks, necrons/i)).toBeInTheDocument()
+    expect(screen.getByLabelText('Opponent faction')).toBeInTheDocument()
   })
 
   it('shows tournament checkbox', () => {
@@ -68,13 +68,13 @@ describe('MatchSetupScreen', () => {
     const onNext = vi.fn()
     render(<MatchSetupScreen onNext={onNext} onBack={vi.fn()} />)
 
-    fireEvent.change(screen.getByPlaceholderText(/orks, necrons/i), {
-      target: { value: 'Tau' },
+    fireEvent.change(screen.getByLabelText('Opponent faction'), {
+      target: { value: 'Orks' },
     })
     fireEvent.click(screen.getByRole('button', { name: /next/i }))
 
     expect(onNext).toHaveBeenCalledWith(
-      expect.objectContaining({ opponentFaction: 'Tau' }),
+      expect.objectContaining({ opponentFaction: 'Orks' }),
     )
   })
 

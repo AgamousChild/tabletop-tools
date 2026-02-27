@@ -17,6 +17,7 @@ export {
   deleteList,
   addListUnit,
   getListUnits,
+  updateListUnit,
   removeListUnit,
   saveDetachments,
   getDetachmentsByFaction,

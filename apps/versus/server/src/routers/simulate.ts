@@ -21,6 +21,8 @@ export const simulateRouter = router({
         defenderId: z.string(),
         defenderName: z.string(),
         result: simResultSchema,
+        weaponConfig: z.string().optional(),
+        configHash: z.string().optional(),
       }),
     )
     .mutation(async ({ ctx, input }) => {
@@ -33,6 +35,8 @@ export const simulateRouter = router({
         defenderContentId: input.defenderId,
         defenderName: input.defenderName,
         result: JSON.stringify(input.result),
+        weaponConfig: input.weaponConfig ?? null,
+        configHash: input.configHash ?? null,
         createdAt: Date.now(),
       })
       return { id }

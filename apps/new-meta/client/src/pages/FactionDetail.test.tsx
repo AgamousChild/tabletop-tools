@@ -32,6 +32,10 @@ const fakeData = {
   detachments: [
     { detachment: 'Waaagh! Tribe', wins: 8, losses: 5, games: 13, winRate: 0.615 },
   ],
+  timeline: [
+    { week: '2025-01-06', faction: 'Orks', wins: 5, losses: 3, draws: 0 },
+    { week: '2025-01-13', faction: 'Orks', wins: 7, losses: 5, draws: 1 },
+  ],
   topLists: [
     {
       eventName: 'London GT',
@@ -82,6 +86,14 @@ describe('FactionDetail', () => {
     render(<FactionDetail faction="Orks" onBack={() => {}} />)
     // eventName is rendered alongside the date: "London GT · <date>"
     expect(screen.getByText(/London GT/)).toBeInTheDocument()
+  })
+
+  it('shows timeline section with date range', () => {
+    mockQueryResult = { data: fakeData, isLoading: false }
+    render(<FactionDetail faction="Orks" onBack={() => {}} />)
+    expect(screen.getByText('Win Rate Over Time')).toBeInTheDocument()
+    expect(screen.getByText('2025-01-06')).toBeInTheDocument()
+    expect(screen.getByText('2025-01-13')).toBeInTheDocument()
   })
 
   it('calls onBack when back button is clicked', () => {
