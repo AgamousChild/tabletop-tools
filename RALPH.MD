@@ -124,16 +124,28 @@ Update this section every time you update or fix a section of the requirements.
 
 | Package | Tests | Status |
 |---------|-------|--------|
+| packages/db | 61 | PASS |
+| packages/auth | 16 | PASS |
+| packages/server-core | 17 | PASS |
+| packages/game-content | 118 | PASS |
 | packages/game-data-store | 93 | PASS |
-| packages/ui | 24 | PASS |
-| apps/versus/client | 134 | PASS |
-| apps/list-builder/client | 52 | PASS |
-| apps/game-tracker/client | 150 | PASS |
-| apps/tournament/client | 57 | PASS |
-| apps/data-import/client | 57 | PASS |
+| packages/ui | 30 | PASS |
 | apps/no-cheat/server | 64 | PASS |
 | apps/no-cheat/client | 178 | PASS |
-| Others | — | Not yet verified this session |
+| apps/versus/server | 8 | PASS |
+| apps/versus/client | 134 | PASS |
+| apps/list-builder/server | 35 | PASS |
+| apps/list-builder/client | 52 | PASS |
+| apps/game-tracker/server | 58 | PASS |
+| apps/game-tracker/client | 150 | PASS |
+| apps/tournament/server | 70 | PASS |
+| apps/tournament/client | 57 | PASS |
+| apps/new-meta/server | 57 | PASS |
+| apps/new-meta/client | 83 | PASS |
+| apps/admin/server | 46 | PASS |
+| apps/admin/client | 47 | PASS |
+| apps/data-import/client | 57 | PASS |
+| **Total** | **1,431** | **ALL PASS** |
 
 ---
 
