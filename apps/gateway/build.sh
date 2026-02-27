@@ -18,7 +18,7 @@ for app in no-cheat versus list-builder game-tracker tournament new-meta data-im
 done
 
 # Copy landing page with version injection
-VERSION=$(node -e "console.log(require('$REPO_ROOT/package.json').version)")
+VERSION=$(cd "$REPO_ROOT" && node -p "require('./package.json').version")
 sed "s/<!--VERSION-->/v${VERSION} \&middot; /g" "$GATEWAY_DIR/landing/index.html" > "$DIST/index.html"
 
 # Copy SPA redirects
