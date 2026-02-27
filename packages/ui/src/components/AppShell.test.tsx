@@ -42,7 +42,7 @@ describe('AppShell', () => {
     expect(onSignOut).toHaveBeenCalledOnce()
   })
 
-  it('renders a home link', () => {
+  it('renders a home link with label', () => {
     render(
       <AppShell title="MyApp" onSignOut={vi.fn()}>
         <div>Content</div>
@@ -51,5 +51,6 @@ describe('AppShell', () => {
     const homeLink = screen.getByTitle('Back to Home')
     expect(homeLink).toBeInTheDocument()
     expect(homeLink).toHaveAttribute('href', '/')
+    expect(homeLink).toHaveTextContent('Home')
   })
 })

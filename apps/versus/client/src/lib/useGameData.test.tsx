@@ -24,6 +24,7 @@ vi.mock('@tabletop-tools/game-data-store', () => ({
   useDetachmentAbilities: () => ({ data: [], error: null, isLoading: false }),
   useEnhancements: () => ({ data: [], error: null, isLoading: false }),
   useStratagems: () => ({ data: [], error: null, isLoading: false }),
+  useLegendsUnitIds: () => new Set<string>(),
   useWargearAsWeapons: () => ({ data: [], isLoading: false }),
 }))
 

@@ -32,12 +32,15 @@ vi.mock('@tabletop-tools/game-data-store', () => ({
 
 vi.mock('../lib/useGameData', () => ({
   useGameFactions: () => ({ data: ['Space Marines', 'Orks'], isLoading: false }),
-  useUnits: () => ({
-    data: [
-      { id: 'u1', name: 'Intercessor Squad', faction: 'Space Marines', points: 100 },
-    ],
-    isLoading: false,
-  }),
+  useUnits: (query: { faction?: string; name?: string }) => {
+    if (!query?.faction) return { data: [], isLoading: false }
+    return {
+      data: [
+        { id: 'u1', name: 'Intercessor Squad', faction: 'Space Marines', points: 100 },
+      ],
+      isLoading: false,
+    }
+  },
   useGameUnit: (id: string | null) =>
     id
       ? {
@@ -121,6 +124,9 @@ describe('SimulatorScreen', () => {
 
   it('shows weapon selector after selecting attacker unit', () => {
     render(<SimulatorScreen onSignOut={vi.fn()} />)
+    // Select a faction first so units appear
+    const selects = screen.getAllByRole('combobox')
+    fireEvent.change(selects[0], { target: { value: 'Space Marines' } })
     // Click the first unit button to select it as attacker
     const unitButtons = screen.getAllByRole('button', { name: /intercessor squad/i })
     fireEvent.click(unitButtons[0])
@@ -131,6 +137,10 @@ describe('SimulatorScreen', () => {
 
   it('Run Simulation button enables when both units selected', () => {
     render(<SimulatorScreen onSignOut={vi.fn()} />)
+    // Select factions first so units appear
+    const selects = screen.getAllByRole('combobox')
+    fireEvent.change(selects[0], { target: { value: 'Space Marines' } })
+    fireEvent.change(selects[1], { target: { value: 'Space Marines' } })
     // Select attacker and defender
     const unitButtons = screen.getAllByRole('button', { name: /intercessor squad/i })
     fireEvent.click(unitButtons[0]) // attacker
@@ -143,6 +153,9 @@ describe('SimulatorScreen', () => {
 
   it('shows unit profile card after selecting a unit', () => {
     render(<SimulatorScreen onSignOut={vi.fn()} />)
+    // Select a faction first so units appear
+    const selects = screen.getAllByRole('combobox')
+    fireEvent.change(selects[0], { target: { value: 'Space Marines' } })
     const unitButtons = screen.getAllByRole('button', { name: /intercessor squad/i })
     fireEvent.click(unitButtons[0])
     // UnitProfileCard shows stat labels

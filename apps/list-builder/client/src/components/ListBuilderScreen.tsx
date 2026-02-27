@@ -12,6 +12,7 @@ import { FactionDetachmentScreen } from './FactionDetachmentScreen'
 import { UnitSelectionScreen } from './UnitSelectionScreen'
 import type { BattleSize } from '../lib/armyRules'
 import { syncListToServer, syncAllToServer, restoreFromServer } from '../lib/sync'
+import { HelpTip } from '@tabletop-tools/ui'
 
 type Screen =
   | { type: 'my-lists' }
@@ -113,6 +114,7 @@ export function ListBuilderScreen({ onSignOut }: Props) {
           >
             Sync
           </button>
+          <HelpTip text="Upload lists to server backup" />
           <button
             onClick={() => {
               void (async () => {
@@ -131,6 +133,7 @@ export function ListBuilderScreen({ onSignOut }: Props) {
           >
             Restore
           </button>
+          <HelpTip text="Download lists from server to this device" />
           <button
             onClick={() => void handleSignOut()}
             className="text-slate-400 hover:text-slate-100 text-sm"
@@ -139,6 +142,8 @@ export function ListBuilderScreen({ onSignOut }: Props) {
           </button>
         </div>
       </header>
+
+      <p className="text-[10px] text-slate-500 px-6 pt-2">Build and manage army lists with live meta ratings. Lists save locally and sync to your account.</p>
 
       <div className="max-w-4xl mx-auto p-6">
         {screen.type === 'my-lists' && (

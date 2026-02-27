@@ -229,6 +229,7 @@ export function BattleScreen({ matchId, onBack, onClose }: Props) {
       {/* Round wizard or end game */}
       {nextRound <= 5 && !showEndGame ? (
         <RoundWizard
+          key={nextRound}
           roundNumber={nextRound}
           opponentName={opponentShort}
           requirePhotos={match.requirePhotos === 1}

@@ -6,7 +6,7 @@ import {
   getStratagems, getEnhancements, getLeaderAttachments, getLeadersForUnit,
   getUnitCompositions, getUnitCosts, getWargearOptions,
   getUnitKeywords, getAllUnitKeywords, getUnitAbilities, getMissions,
-  getRulesImportMeta,
+  getRulesImportMeta, getIncludeLegends,
   getAllDatasheets, getDatasheetWargear, getDatasheetModels,
   getDatasheetStratagems, getDatasheetEnhancements, getDatasheetDetachmentAbilities,
   listDatasheetFactions, searchDatasheets, getDatasheetAsUnit, hasDatasheets,
@@ -380,6 +380,32 @@ export function useWargearAsWeapons(datasheetId: string | null) {
   }, [datasheetId, result.data])
   if (!datasheetId) return { data: [] as WeaponProfile[], isLoading: false }
   return { data: weapons, isLoading: result.isLoading }
+}
+
+// ── Settings hooks ──────────────────────────────────────────────────────────
+
+export function useIncludeLegends() {
+  return useStoreQuery(() => getIncludeLegends(), [], false)
+}
+
+// ── Legends detection ───────────────────────────────────────────────────────
+
+/** Returns a Set of datasheet IDs that have a LEGENDS/LEGEND keyword.
+ *  Returns empty Set if the user has enabled "Include Legends" in settings. */
+export function useLegendsUnitIds(): Set<string> {
+  const { data: includeLegends } = useIncludeLegends()
+  const { data: allKeywords } = useAllUnitKeywords()
+  return useMemo(() => {
+    if (includeLegends) return new Set<string>()
+    const set = new Set<string>()
+    for (const k of allKeywords) {
+      const upper = k.keyword.toUpperCase()
+      if (upper === 'LEGENDS' || upper === 'LEGEND') {
+        set.add(k.datasheetId)
+      }
+    }
+    return set
+  }, [includeLegends, allKeywords])
 }
 
 // ── Wahapedia-primary with BSData fallback ──────────────────────────────────

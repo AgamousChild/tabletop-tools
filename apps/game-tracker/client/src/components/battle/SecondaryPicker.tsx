@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react'
+import { useState } from 'react'
 
 export type SecondaryMission = {
   id: string
@@ -30,41 +30,37 @@ export function SecondaryPicker({
   label = 'Secondaries',
   availableSecondaries,
 }: Props) {
+  const [showCustom, setShowCustom] = useState(false)
   const [name, setName] = useState('')
-  const [showInput, setShowInput] = useState(false)
-  const [showSuggestions, setShowSuggestions] = useState(false)
 
-  const suggestions = useMemo(() => {
-    if (!availableSecondaries || !name.trim()) return []
-    const lowerQ = name.toLowerCase()
-    const alreadyPicked = new Set(secondaries.map((s) => s.secondaryName.toLowerCase()))
-    return availableSecondaries
-      .filter((s) => s.name.toLowerCase().includes(lowerQ) && !alreadyPicked.has(s.name.toLowerCase()))
-      .slice(0, 8)
-  }, [availableSecondaries, name, secondaries])
+  const alreadyPicked = new Set(secondaries.map((s) => s.secondaryName.toLowerCase()))
 
-  function handleAdd() {
+  // Filter out already-selected secondaries from the dropdown
+  const dropdownOptions = (availableSecondaries ?? []).filter(
+    (s) => !alreadyPicked.has(s.name.toLowerCase()),
+  )
+
+  function handleDropdownSelect(e: React.ChangeEvent<HTMLSelectElement>) {
+    const selectedName = e.target.value
+    if (!selectedName) return
+    onAdd(selectedName)
+    e.target.value = '' // reset dropdown
+  }
+
+  function handleAddCustom() {
     if (!name.trim()) return
     onAdd(name.trim())
     setName('')
-    setShowInput(false)
-    setShowSuggestions(false)
-  }
-
-  function handleSelectSuggestion(s: AvailableSecondary) {
-    onAdd(s.name)
-    setName('')
-    setShowInput(false)
-    setShowSuggestions(false)
+    setShowCustom(false)
   }
 
   return (
     <div>
       <div className="flex items-center justify-between mb-2">
         <span className="text-sm text-slate-400">{label}</span>
-        {!showInput && (
+        {(!availableSecondaries || availableSecondaries.length === 0) && !showCustom && (
           <button
-            onClick={() => setShowInput(true)}
+            onClick={() => setShowCustom(true)}
             className="text-xs text-amber-400 hover:text-amber-300"
           >
             + Add Secondary
@@ -72,49 +68,60 @@ export function SecondaryPicker({
         )}
       </div>
 
-      {showInput && (
-        <div className="relative mb-2">
+      {/* Dropdown when data available */}
+      {availableSecondaries && availableSecondaries.length > 0 && (
+        <div className="mb-2 flex gap-2 items-center">
+          <select
+            onChange={handleDropdownSelect}
+            defaultValue=""
+            aria-label="Select secondary"
+            className="flex-1 px-2 py-1.5 rounded bg-slate-800 border border-slate-700 text-slate-100 text-sm focus:outline-none focus:border-amber-400"
+          >
+            <option value="">Select secondary...</option>
+            {dropdownOptions.map((s) => (
+              <option key={s.id} value={s.name}>
+                {s.name}
+              </option>
+            ))}
+          </select>
+          {!showCustom && (
+            <button
+              onClick={() => setShowCustom(true)}
+              className="text-xs text-slate-500 hover:text-slate-300 whitespace-nowrap"
+            >
+              Custom
+            </button>
+          )}
+        </div>
+      )}
+
+      {/* Custom text input fallback */}
+      {showCustom && (
+        <div className="mb-2">
           <div className="flex gap-2">
             <input
               type="text"
               value={name}
-              onChange={(e) => {
-                setName(e.target.value)
-                setShowSuggestions(true)
-              }}
-              onFocus={() => setShowSuggestions(true)}
+              onChange={(e) => setName(e.target.value)}
               placeholder="Secondary name..."
               aria-label="Secondary name"
-              onKeyDown={(e) => e.key === 'Enter' && handleAdd()}
+              onKeyDown={(e) => e.key === 'Enter' && handleAddCustom()}
               className="flex-1 px-2 py-1.5 rounded bg-slate-800 border border-slate-700 text-slate-100 text-sm placeholder-slate-500 focus:outline-none focus:border-amber-400"
             />
             <button
-              onClick={handleAdd}
+              onClick={handleAddCustom}
               disabled={!name.trim()}
               className="px-3 py-1.5 rounded bg-amber-400 text-slate-950 text-sm font-bold disabled:opacity-40"
             >
               Add
             </button>
             <button
-              onClick={() => { setShowInput(false); setShowSuggestions(false) }}
+              onClick={() => setShowCustom(false)}
               className="px-2 py-1.5 rounded bg-slate-700 text-slate-300 text-sm"
             >
               Cancel
             </button>
           </div>
-          {showSuggestions && suggestions.length > 0 && (
-            <div className="absolute left-0 right-0 top-full mt-1 bg-slate-800 border border-slate-700 rounded shadow-lg z-10 max-h-48 overflow-y-auto">
-              {suggestions.map((s) => (
-                <button
-                  key={s.id}
-                  onClick={() => handleSelectSuggestion(s)}
-                  className="w-full text-left px-3 py-1.5 text-sm text-slate-200 hover:bg-slate-700 hover:text-amber-400"
-                >
-                  {s.name}
-                </button>
-              ))}
-            </div>
-          )}
         </div>
       )}
 

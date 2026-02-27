@@ -9,6 +9,7 @@ import {
   resolveSaves,
   resolveWounds,
   simulateWeapon,
+  runMonteCarlo,
   woundTarget,
 } from './pipeline'
 import type { WeaponAbility } from '@tabletop-tools/game-content'
@@ -506,5 +507,57 @@ describe('simulateWeapon', () => {
     )
     // No matching keyword, so ANTI should not change anything
     expect(withAnti.expectedWounds).toBeCloseTo(base.expectedWounds, 4)
+  })
+})
+
+// ── runMonteCarlo ─────────────────────────────────────────────────────────────
+
+describe('runMonteCarlo', () => {
+  const bolter = {
+    name: 'Bolt Rifle',
+    range: 24,
+    attacks: 2,
+    skill: 3,
+    strength: 4,
+    ap: -1,
+    damage: 1,
+    abilities: [] as WeaponAbility[],
+  }
+
+  it('returns a histogram that sums to the iteration count', () => {
+    const dist = runMonteCarlo([bolter], 4, 3, 1, 5, undefined, undefined, undefined, 1000)
+    const totalCounts = Array.from(dist.histogram.values()).reduce((a, b) => a + b, 0)
+    expect(totalCounts).toBe(1000)
+    expect(dist.iterations).toBe(1000)
+  })
+
+  it('returns percentiles within plausible range', () => {
+    const dist = runMonteCarlo([bolter], 4, 3, 1, 5, undefined, undefined, undefined, 2000)
+    expect(dist.percentiles.p10).toBeGreaterThanOrEqual(0)
+    expect(dist.percentiles.p90).toBeLessThanOrEqual(5)
+    expect(dist.percentiles.median).toBeGreaterThanOrEqual(0)
+    expect(dist.percentiles.median).toBeLessThanOrEqual(dist.percentiles.p90)
+  })
+
+  it('mean is close to the deterministic expected wounds', () => {
+    const det = simulateWeapon(bolter, 4, 3, 1, 5)
+    const dist = runMonteCarlo([bolter], 4, 3, 1, 5, undefined, undefined, undefined, 10000)
+    // Monte Carlo mean should be within 0.3 of deterministic expected wounds
+    expect(Math.abs(dist.mean - det.expectedWounds)).toBeLessThan(0.3)
+  })
+
+  it('handles weapons with abilities', () => {
+    const melta = {
+      ...bolter,
+      name: 'Multi-melta',
+      attacks: 2,
+      strength: 9,
+      ap: -4,
+      damage: 'D6',
+      abilities: [{ type: 'MELTA' as const, value: 2 }],
+    }
+    const dist = runMonteCarlo([melta], 10, 2, 12, 1, undefined, undefined, undefined, 1000)
+    expect(dist.histogram.size).toBeGreaterThan(0)
+    expect(dist.mean).toBeGreaterThan(0)
   })
 })

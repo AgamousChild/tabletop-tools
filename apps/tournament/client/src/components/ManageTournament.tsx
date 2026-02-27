@@ -52,6 +52,10 @@ export function ManageTournament({ tournamentId, onBack }: Props) {
     onSuccess: () => void playersQuery.refetch(),
   })
 
+  const seedPlayers = trpc.player.seedTestPlayers.useMutation({
+    onSuccess: () => void playersQuery.refetch(),
+  })
+
   // Track which player's history we're viewing
   const [historyPlayerId, setHistoryPlayerId] = useState<string | null>(null)
   const historyQuery = trpc.card.playerHistory.useQuery(
@@ -94,9 +98,18 @@ export function ManageTournament({ tournamentId, onBack }: Props) {
       {/* Players tab */}
       {tab === 'players' && (
         <div className="space-y-3">
-          <h3 className="text-sm font-semibold text-slate-400 uppercase">
-            Active Players ({activePlayers.length})
-          </h3>
+          <div className="flex items-center justify-between">
+            <h3 className="text-sm font-semibold text-slate-400 uppercase">
+              Active Players ({activePlayers.length})
+            </h3>
+            <button
+              onClick={() => seedPlayers.mutate({ tournamentId, count: 8 })}
+              disabled={seedPlayers.isPending}
+              className="text-xs text-slate-500 hover:text-slate-300 border border-slate-700 rounded px-2 py-1"
+            >
+              {seedPlayers.isPending ? 'Loading...' : 'Load Test Players'}
+            </button>
+          </div>
           {activePlayers.map((p) => {
             const playerCards = cards.filter((c) => c.playerId === p.id)
             return (

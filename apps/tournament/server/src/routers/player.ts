@@ -191,6 +191,62 @@ export const playerRouter = router({
       return { dropped: true }
     }),
 
+  // Seed test players — dev/testing only. TO inserts fake players for local testing.
+  seedTestPlayers: protectedProcedure
+    .input(z.object({ tournamentId: z.string(), count: z.number().min(1).max(32).optional() }))
+    .mutation(async ({ ctx, input }) => {
+      const tournament = await ctx.db
+        .select()
+        .from(tournaments)
+        .where(eq(tournaments.id, input.tournamentId))
+        .get()
+      if (!tournament) throw new TRPCError({ code: 'NOT_FOUND', message: 'Tournament not found' })
+      if (tournament.toUserId !== ctx.user.id) throw new TRPCError({ code: 'FORBIDDEN', message: 'Not authorized' })
+
+      const count = input.count ?? 8
+      const testPlayers = [
+        { name: 'Alex Ironforge', faction: 'Space Marines', detachment: 'Gladius Task Force' },
+        { name: 'Sam Greenskin', faction: 'Orks', detachment: 'Waaagh! Tribe' },
+        { name: 'Jordan Cryptek', faction: 'Necrons', detachment: 'Awakened Dynasty' },
+        { name: 'Morgan Shas', faction: 'T\'au Empire', detachment: 'Kauyon' },
+        { name: 'Riley Warpsmith', faction: 'Chaos Space Marines', detachment: 'Pactbound Zealots' },
+        { name: 'Casey Farstrider', faction: 'Aeldari', detachment: 'Battle Host' },
+        { name: 'Taylor Canticles', faction: 'Adeptus Mechanicus', detachment: 'Rad-Zone Corps' },
+        { name: 'Jamie Terminator', faction: 'Grey Knights', detachment: 'Teleport Strike Force' },
+        { name: 'Pat Shadowkeeper', faction: 'Adeptus Custodes', detachment: 'Shield Host' },
+        { name: 'Drew Lictor', faction: 'Tyranids', detachment: 'Invasion Fleet' },
+        { name: 'Charlie Bloodletter', faction: 'Chaos Daemons', detachment: 'Daemonic Incursion' },
+        { name: 'Avery Commissar', faction: 'Astra Militarum', detachment: 'Combined Regiment' },
+        { name: 'Quinn Plague', faction: 'Death Guard', detachment: 'Plague Company' },
+        { name: 'Robin Hexfire', faction: 'Thousand Sons', detachment: 'Cult of Magic' },
+        { name: 'Blair Skitarii', faction: 'Adeptus Mechanicus', detachment: 'Skitarii Hunter Cohort' },
+        { name: 'Kai Wychking', faction: 'Drukhari', detachment: 'Realspace Raiders' },
+      ]
+
+      const now = Date.now()
+      const inserted: string[] = []
+      for (let i = 0; i < Math.min(count, testPlayers.length); i++) {
+        const p = testPlayers[i]!
+        const id = crypto.randomUUID()
+        await ctx.db.insert(tournamentPlayers).values({
+          id,
+          tournamentId: input.tournamentId,
+          userId: `test-${crypto.randomUUID()}`,
+          displayName: p.name,
+          faction: p.faction,
+          detachment: p.detachment,
+          listText: null,
+          listId: null,
+          listLocked: 0,
+          checkedIn: 0,
+          dropped: 0,
+          registeredAt: now - (count - i) * 60000, // stagger registration times
+        })
+        inserted.push(p.name)
+      }
+      return { inserted: inserted.length, players: inserted }
+    }),
+
   // My profile: aggregate W-L-D, tournaments played, ELO, card history, bans
   myProfile: protectedProcedure.query(async ({ ctx }) => {
     const userId = ctx.user.id

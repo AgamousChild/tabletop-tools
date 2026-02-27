@@ -1,6 +1,7 @@
 import { useState } from 'react'
 
 import { authClient } from '../lib/auth'
+import { HelpTip } from '@tabletop-tools/ui'
 import { trpc } from '../lib/trpc'
 import { MatchSetupScreen, type MatchSetupData } from './MatchSetupScreen'
 import { MissionSetupScreen, type MissionSetupData } from './MissionSetupScreen'
@@ -79,6 +80,8 @@ export function GameTrackerScreen({ onSignOut }: Props) {
           </button>
         </header>
 
+        <p className="text-[10px] text-slate-500 px-6 pt-2">Track 40K matches turn-by-turn: setup, mission, scoring, and end-game summary.</p>
+
         <div className="p-6">
           <button
             onClick={() => setScreen({ type: 'match-setup' })}
@@ -87,7 +90,7 @@ export function GameTrackerScreen({ onSignOut }: Props) {
             + New Match
           </button>
 
-          <h2 className="text-lg font-semibold text-slate-300 mb-3">Match History</h2>
+          <h2 className="text-lg font-semibold text-slate-300 mb-3">Match History<HelpTip text="Tap a match to view details or resume an in-progress game" /></h2>
 
           {matches.length === 0 && (
             <p className="text-slate-500 text-sm">No matches yet. Start a new match above.</p>

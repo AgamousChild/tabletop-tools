@@ -3,6 +3,11 @@ import { describe, expect, it, vi } from 'vitest'
 
 import { SecondaryPicker } from './SecondaryPicker'
 
+const mockSecondaries = [
+  { id: 'sec1', name: 'Assassination' },
+  { id: 'sec2', name: 'Behind Enemy Lines' },
+]
+
 describe('SecondaryPicker', () => {
   it('shows label', () => {
     render(
@@ -11,14 +16,14 @@ describe('SecondaryPicker', () => {
     expect(screen.getByText('Secondaries')).toBeInTheDocument()
   })
 
-  it('shows + Add Secondary button', () => {
+  it('shows + Add Secondary button when no available data', () => {
     render(
       <SecondaryPicker secondaries={[]} onAdd={vi.fn()} onRemove={vi.fn()} onScore={vi.fn()} currentRound={1} />,
     )
     expect(screen.getByText('+ Add Secondary')).toBeInTheDocument()
   })
 
-  it('shows input when + Add clicked', () => {
+  it('shows text input when + Add clicked (no data mode)', () => {
     render(
       <SecondaryPicker secondaries={[]} onAdd={vi.fn()} onRemove={vi.fn()} onScore={vi.fn()} currentRound={1} />,
     )
@@ -26,7 +31,7 @@ describe('SecondaryPicker', () => {
     expect(screen.getByLabelText('Secondary name')).toBeInTheDocument()
   })
 
-  it('calls onAdd with name', () => {
+  it('calls onAdd with name from text input', () => {
     const onAdd = vi.fn()
     render(
       <SecondaryPicker secondaries={[]} onAdd={onAdd} onRemove={vi.fn()} onScore={vi.fn()} currentRound={1} />,
@@ -34,6 +39,37 @@ describe('SecondaryPicker', () => {
     fireEvent.click(screen.getByText('+ Add Secondary'))
     fireEvent.change(screen.getByLabelText('Secondary name'), { target: { value: 'Assassination' } })
     fireEvent.click(screen.getByRole('button', { name: 'Add' }))
+    expect(onAdd).toHaveBeenCalledWith('Assassination')
+  })
+
+  it('shows dropdown when available secondaries provided', () => {
+    render(
+      <SecondaryPicker
+        secondaries={[]}
+        onAdd={vi.fn()}
+        onRemove={vi.fn()}
+        onScore={vi.fn()}
+        currentRound={1}
+        availableSecondaries={mockSecondaries}
+      />,
+    )
+    expect(screen.getByLabelText('Select secondary')).toBeInTheDocument()
+    expect(screen.getByText('Assassination')).toBeInTheDocument()
+  })
+
+  it('calls onAdd when secondary selected from dropdown', () => {
+    const onAdd = vi.fn()
+    render(
+      <SecondaryPicker
+        secondaries={[]}
+        onAdd={onAdd}
+        onRemove={vi.fn()}
+        onScore={vi.fn()}
+        currentRound={1}
+        availableSecondaries={mockSecondaries}
+      />,
+    )
+    fireEvent.change(screen.getByLabelText('Select secondary'), { target: { value: 'Assassination' } })
     expect(onAdd).toHaveBeenCalledWith('Assassination')
   })
 

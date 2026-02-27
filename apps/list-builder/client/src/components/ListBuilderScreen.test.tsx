@@ -157,6 +157,7 @@ vi.mock('@tabletop-tools/game-data-store', () => ({
     error: null,
     isLoading: false,
   }),
+  useLegendsUnitIds: () => new Set<string>(),
   useGameDataAvailable: () => true,
   useLists: (...args: unknown[]) => mockUseLists(...args),
   useList: (...args: unknown[]) => mockUseList(...(args as [string | null])),

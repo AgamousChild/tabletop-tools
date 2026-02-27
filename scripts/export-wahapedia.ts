@@ -180,6 +180,61 @@ function extractMissions(): Mission[] {
   return missions
 }
 
+/**
+ * Convert Wahapedia HTML descriptions to clean markdown.
+ * Handles the specific HTML patterns used in Wahapedia data:
+ * <b>, <i>, <br>, <span class="kwb">, <p>, <div>, <table>, <li>
+ */
+function htmlToMarkdown(html: string): string {
+  if (!html || !html.includes('<')) return html
+
+  return html
+    // <br> → newline
+    .replace(/<br\s*\/?>/gi, '\n')
+    // <b> → bold
+    .replace(/<b>(.*?)<\/b>/gi, '**$1**')
+    // <i>/<em> → italic
+    .replace(/<(?:i|em)>(.*?)<\/(?:i|em)>/gi, '*$1*')
+    // <span class="kwb"> → bold (keyword)
+    .replace(/<span[^>]*class="kwb"[^>]*>(.*?)<\/span>/gi, '**$1**')
+    // <span> with other classes → just the text
+    .replace(/<span[^>]*>(.*?)<\/span>/gi, '$1')
+    // <p> → text with newline
+    .replace(/<\/p>/gi, '\n')
+    .replace(/<p[^>]*>/gi, '')
+    // <div> → text with newline
+    .replace(/<\/div>/gi, '\n')
+    .replace(/<div[^>]*>/gi, '')
+    // <ul>/<ol>/<li> → bullet list
+    .replace(/<li[^>]*>/gi, '- ')
+    .replace(/<\/li>/gi, '\n')
+    .replace(/<\/?(?:ul|ol)[^>]*>/gi, '\n')
+    // <table> → just text (strip table structure)
+    .replace(/<\/(?:td|th)>/gi, ' ')
+    .replace(/<\/tr>/gi, '\n')
+    .replace(/<\/?(?:table|thead|tbody|tr|td|th)[^>]*>/gi, '')
+    // Strip remaining HTML tags
+    .replace(/<[^>]+>/g, '')
+    // HTML entities
+    .replace(/&nbsp;/g, ' ')
+    .replace(/&amp;/g, '&')
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;/g, "'")
+    // Clean up excessive whitespace/newlines
+    .replace(/\n{3,}/g, '\n\n')
+    .trim()
+}
+
+/** Apply htmlToMarkdown to a specific field across all rows */
+function convertDescriptions(rows: Record<string, unknown>[], field = 'description'): Record<string, unknown>[] {
+  return rows.map(row => ({
+    ...row,
+    [field]: typeof row[field] === 'string' ? htmlToMarkdown(row[field] as string) : row[field],
+  }))
+}
+
 function titleCase(s: string): string {
   return s
     .replace(/[\u2018\u2019\u2032]/g, "'") // normalize curly/prime apostrophes
@@ -210,7 +265,7 @@ async function main() {
            name, legend, description
     FROM detachment_abilities ORDER BY detachment_id
   `)
-  writeJson('detachment_abilities.json', detachmentAbilities)
+  writeJson('detachment_abilities.json', convertDescriptions(detachmentAbilities as Record<string, unknown>[]))
 
   // Stratagems
   const stratagems = await query(`
@@ -218,7 +273,7 @@ async function main() {
            name, type, cp_cost AS cpCost, turn, phase, legend, description
     FROM stratagems ORDER BY faction_id, name
   `)
-  writeJson('stratagems.json', stratagems)
+  writeJson('stratagems.json', convertDescriptions(stratagems as Record<string, unknown>[]))
 
   // Enhancements
   const enhancements = await query(`
@@ -226,7 +281,7 @@ async function main() {
            name, legend, description, cost
     FROM enhancements ORDER BY faction_id, name
   `)
-  writeJson('enhancements.json', enhancements)
+  writeJson('enhancements.json', convertDescriptions(enhancements as Record<string, unknown>[]))
 
   // Leader attachments
   const leaderAttachments = await query(`
@@ -279,14 +334,14 @@ async function main() {
     LEFT JOIN abilities a ON da.ability_id = a.id
     ORDER BY da.datasheet_id, da.line
   `)
-  writeJson('unit_abilities.json', unitAbilities)
+  writeJson('unit_abilities.json', convertDescriptions(unitAbilities as Record<string, unknown>[]))
 
   // Global abilities (Core rules: Leader, Deadly Demise, Deep Strike, etc.)
   const abilities = await query(`
     SELECT id, name, legend, faction_id AS factionId, description
     FROM abilities ORDER BY name
   `)
-  writeJson('abilities.json', abilities)
+  writeJson('abilities.json', convertDescriptions(abilities as Record<string, unknown>[]))
 
   // Datasheets (master unit reference — needed for ID mapping to BSData)
   const datasheets = await query(`
@@ -303,7 +358,7 @@ async function main() {
            S AS strength, AP AS ap, D AS damage
     FROM datasheet_wargear ORDER BY datasheet_id, line
   `)
-  writeJson('datasheet_wargear.json', datasheetWargear)
+  writeJson('datasheet_wargear.json', convertDescriptions(datasheetWargear as Record<string, unknown>[]))
 
   // Datasheet models (model stat lines — M/T/Sv/W/Ld/OC)
   const datasheetModels = await query(`

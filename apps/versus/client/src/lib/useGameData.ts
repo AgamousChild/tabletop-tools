@@ -1,3 +1,4 @@
+import { useMemo } from 'react'
 import {
   useLeaderAttachments,
   useLeadersForUnit,
@@ -10,6 +11,7 @@ import {
   useDetachmentAbilities,
   useEnhancements,
   useStratagems,
+  useLegendsUnitIds,
   usePrimaryFactions,
   usePrimaryUnitSearch,
   usePrimaryUnit,
@@ -18,7 +20,15 @@ import {
 import type { DatasheetModel, Detachment, DetachmentAbility, Enhancement, Stratagem } from '@tabletop-tools/game-data-store'
 
 export function useUnits(query: { faction?: string; name?: string }) {
-  return usePrimaryUnitSearch(query)
+  const result = usePrimaryUnitSearch(query)
+  const legendsIds = useLegendsUnitIds()
+  // Don't show any units until a faction is selected
+  const filtered = useMemo(() => {
+    if (!query.faction) return []
+    return result.data.filter(u => !legendsIds.has(u.id))
+  }, [query.faction, result.data, legendsIds])
+  if (!query.faction) return { data: [], isLoading: false }
+  return { data: filtered, isLoading: result.isLoading }
 }
 
 export function useGameFactions() {

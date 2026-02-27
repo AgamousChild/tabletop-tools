@@ -11,6 +11,7 @@ type Props = {
   units: UnitOption[]
   selectedUnitId: string | null
   isLoadingUnits: boolean
+  hasFaction?: boolean
   onFactionChange: (faction: string) => void
   onQueryChange: (query: string) => void
   onSelect: (unitId: string) => void
@@ -22,6 +23,7 @@ export function UnitSelector({
   units,
   selectedUnitId,
   isLoadingUnits,
+  hasFaction,
   onFactionChange,
   onQueryChange,
   onSelect,
@@ -54,12 +56,14 @@ export function UnitSelector({
 
       <div className="space-y-1 max-h-64 overflow-y-auto">
         {isLoadingUnits ? (
-          <p className="text-slate-400 text-sm py-2">Loading units…</p>
+          <p className="text-slate-400 text-xs py-2">Loading units…</p>
+        ) : !hasFaction ? (
+          <p className="text-slate-500 text-xs py-2 italic">Select a faction to browse units.</p>
         ) : units.length === 0 ? (
-          <p className="text-slate-500 text-sm py-2 italic">
+          <p className="text-slate-500 text-xs py-2 italic">
             No units found. Import unit profiles from{' '}
             <a href="/data-import/" className="text-amber-400 hover:underline">Data Import</a>{' '}
-            (Unit Profiles tab) first.
+            first.
           </p>
         ) : (
           units.map((unit) => (

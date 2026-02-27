@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react'
+import { useState } from 'react'
 import type { Stratagem } from '@tabletop-tools/game-data-store'
 
 export type StratagemEntry = {
@@ -15,39 +15,35 @@ type Props = {
 }
 
 export function StratagemPicker({ stratagems, onAdd, onRemove, label = 'Stratagems', availableStratagems = [] }: Props) {
+  const [showCustom, setShowCustom] = useState(false)
   const [name, setName] = useState('')
   const [cost, setCost] = useState(1)
-  const [showInput, setShowInput] = useState(false)
 
-  const filtered = useMemo(() => {
-    if (!name.trim() || availableStratagems.length === 0) return []
-    const q = name.toLowerCase()
-    return availableStratagems.filter((s) => s.name.toLowerCase().includes(q)).slice(0, 8)
-  }, [name, availableStratagems])
+  function handleDropdownSelect(e: React.ChangeEvent<HTMLSelectElement>) {
+    const id = e.target.value
+    if (!id) return
+    const strat = availableStratagems.find((s) => s.id === id)
+    if (strat) {
+      onAdd({ stratagemName: strat.name, cpCost: parseInt(strat.cpCost) || 1 })
+    }
+    e.target.value = '' // reset dropdown
+  }
 
-  function handleAdd() {
+  function handleAddCustom() {
     if (!name.trim()) return
     onAdd({ stratagemName: name.trim(), cpCost: cost })
     setName('')
     setCost(1)
-    setShowInput(false)
-  }
-
-  function handleSelectSuggestion(s: Stratagem) {
-    const cpCost = parseInt(s.cpCost) || 1
-    onAdd({ stratagemName: s.name, cpCost })
-    setName('')
-    setCost(1)
-    setShowInput(false)
+    setShowCustom(false)
   }
 
   return (
     <div>
       <div className="flex items-center justify-between mb-2">
         <span className="text-sm text-slate-400">{label}</span>
-        {!showInput && (
+        {availableStratagems.length === 0 && !showCustom && (
           <button
-            onClick={() => setShowInput(true)}
+            onClick={() => setShowCustom(true)}
             className="text-xs text-amber-400 hover:text-amber-300"
           >
             + Add Stratagem
@@ -55,34 +51,46 @@ export function StratagemPicker({ stratagems, onAdd, onRemove, label = 'Stratage
         )}
       </div>
 
-      {showInput && (
+      {/* Dropdown when data available */}
+      {availableStratagems.length > 0 && (
+        <div className="mb-2 flex gap-2 items-center">
+          <select
+            onChange={handleDropdownSelect}
+            defaultValue=""
+            aria-label="Select stratagem"
+            className="flex-1 px-2 py-1.5 rounded bg-slate-800 border border-slate-700 text-slate-100 text-sm focus:outline-none focus:border-amber-400"
+          >
+            <option value="">Select stratagem...</option>
+            {availableStratagems.map((s) => (
+              <option key={s.id} value={s.id}>
+                {s.name} ({s.cpCost} CP · {s.phase})
+              </option>
+            ))}
+          </select>
+          {!showCustom && (
+            <button
+              onClick={() => setShowCustom(true)}
+              className="text-xs text-slate-500 hover:text-slate-300 whitespace-nowrap"
+            >
+              Custom
+            </button>
+          )}
+        </div>
+      )}
+
+      {/* Custom text input fallback */}
+      {showCustom && (
         <div className="mb-2">
           <div className="flex gap-2">
-            <div className="flex-1 relative">
-              <input
-                type="text"
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-                placeholder={availableStratagems.length > 0 ? 'Search stratagems...' : 'Stratagem name...'}
-                aria-label="Stratagem name"
-                onKeyDown={(e) => e.key === 'Enter' && handleAdd()}
-                className="w-full px-2 py-1.5 rounded bg-slate-800 border border-slate-700 text-slate-100 text-sm placeholder-slate-500 focus:outline-none focus:border-amber-400"
-              />
-              {filtered.length > 0 && (
-                <div className="absolute z-10 mt-1 w-full rounded bg-slate-800 border border-slate-700 shadow-lg max-h-48 overflow-y-auto">
-                  {filtered.map((s) => (
-                    <button
-                      key={s.id}
-                      onClick={() => handleSelectSuggestion(s)}
-                      className="w-full text-left px-2 py-1.5 hover:bg-slate-700 text-sm"
-                    >
-                      <span className="text-slate-200">{s.name}</span>
-                      <span className="text-slate-500 ml-1">({s.cpCost} CP · {s.phase})</span>
-                    </button>
-                  ))}
-                </div>
-              )}
-            </div>
+            <input
+              type="text"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              placeholder="Stratagem name..."
+              aria-label="Stratagem name"
+              onKeyDown={(e) => e.key === 'Enter' && handleAddCustom()}
+              className="flex-1 px-2 py-1.5 rounded bg-slate-800 border border-slate-700 text-slate-100 text-sm placeholder-slate-500 focus:outline-none focus:border-amber-400"
+            />
             <input
               type="number"
               value={cost}
@@ -92,14 +100,14 @@ export function StratagemPicker({ stratagems, onAdd, onRemove, label = 'Stratage
               className="w-14 px-2 py-1.5 rounded bg-slate-800 border border-slate-700 text-slate-100 text-sm text-center focus:outline-none focus:border-amber-400"
             />
             <button
-              onClick={handleAdd}
+              onClick={handleAddCustom}
               disabled={!name.trim()}
               className="px-3 py-1.5 rounded bg-amber-400 text-slate-950 text-sm font-bold disabled:opacity-40"
             >
               Add
             </button>
             <button
-              onClick={() => setShowInput(false)}
+              onClick={() => setShowCustom(false)}
               className="px-2 py-1.5 rounded bg-slate-700 text-slate-300 text-sm"
             >
               Cancel
