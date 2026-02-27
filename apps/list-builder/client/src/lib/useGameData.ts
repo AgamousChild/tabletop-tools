@@ -1,7 +1,5 @@
 import { useMemo } from 'react'
 import {
-  useUnitSearch,
-  useFactions,
   useDetachments,
   useDetachment,
   useDetachmentAbilities,
@@ -11,21 +9,19 @@ import {
   useUnitCompositions,
   useUnitCosts,
   useAllDatasheets,
+  usePrimaryFactions,
+  usePrimaryUnitSearch,
 } from '@tabletop-tools/game-data-store'
 import { parseModelOptions } from './modelOptions'
 
 export function useUnits(query: { faction?: string; name?: string }, enabled: boolean) {
-  const localResult = useUnitSearch({ faction: query.faction, name: query.name })
-
-  if (!enabled) {
-    return { data: [], isLoading: false }
-  }
-  return { data: localResult.data, isLoading: localResult.isLoading }
+  const result = usePrimaryUnitSearch(query)
+  if (!enabled) return { data: [], isLoading: false }
+  return result
 }
 
 export function useGameFactions() {
-  const localResult = useFactions()
-  return { data: localResult.data, isLoading: localResult.isLoading }
+  return usePrimaryFactions()
 }
 
 export function useGameDetachments(factionId: string) {

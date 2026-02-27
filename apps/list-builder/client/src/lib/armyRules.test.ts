@@ -69,4 +69,26 @@ describe('validateArmy', () => {
     const errors = validateArmy(units, incursion)
     expect(errors.some((e) => e.type === 'DUPLICATE_LIMIT')).toBe(true)
   })
+
+  it('exempts Battleline units from duplicate limits', () => {
+    const incursion = BATTLE_SIZES[0] // max 1 duplicate
+    const units: ListUnit[] = [
+      { unitContentId: 'u1', unitName: 'Captain', unitPoints: 100, count: 1, isWarlord: true },
+      { unitContentId: 'u2', unitName: 'Intercessors', unitPoints: 80, count: 3, role: 'Battleline' },
+    ]
+    const errors = validateArmy(units, incursion)
+    expect(errors.some((e) => e.type === 'DUPLICATE_LIMIT')).toBe(false)
+  })
+
+  it('still limits non-Battleline units when Battleline is exempt', () => {
+    const incursion = BATTLE_SIZES[0] // max 1 duplicate
+    const units: ListUnit[] = [
+      { unitContentId: 'u1', unitName: 'Captain', unitPoints: 100, count: 1, isWarlord: true },
+      { unitContentId: 'u2', unitName: 'Intercessors', unitPoints: 80, count: 3, role: 'Battleline' },
+      { unitContentId: 'u3', unitName: 'Aggressors', unitPoints: 120, count: 2, role: 'Infantry' },
+    ]
+    const errors = validateArmy(units, incursion)
+    expect(errors.some((e) => e.type === 'DUPLICATE_LIMIT')).toBe(true)
+    expect(errors.find((e) => e.type === 'DUPLICATE_LIMIT')?.message).toContain('Aggressors')
+  })
 })

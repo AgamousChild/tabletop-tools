@@ -15,6 +15,10 @@ import {
   saveDatasheetWargear,
   saveDatasheetModels,
   saveMissions,
+  saveAbilities,
+  saveDatasheetStratagems,
+  saveDatasheetEnhancements,
+  saveDatasheetDetachmentAbilities,
   setRulesImportMeta,
   searchUnits,
 } from '@tabletop-tools/game-data-store'
@@ -33,6 +37,10 @@ import type {
   DatasheetWargear,
   DatasheetModel,
   Mission,
+  Ability,
+  DatasheetStratagem,
+  DatasheetEnhancement,
+  DatasheetDetachmentAbility,
 } from '@tabletop-tools/game-data-store'
 
 export interface RulesImportProgress {
@@ -174,7 +182,7 @@ function rekeyLeaderAttachments(
   }))
 }
 
-const TOTAL_STEPS = 16 // factions + datasheets + ID mapping + 10 existing + wargear + models + missions
+const TOTAL_STEPS = 20 // factions + datasheets + ID mapping + 10 existing + wargear + models + missions + abilities + 3 junction tables
 
 export async function importWahapediaRules(
   onProgress: (progress: RulesImportProgress) => void,
@@ -378,6 +386,69 @@ export async function importWahapediaRules(
     counts.missions = 0
   }
 
+  // Step 17: Import global abilities (Core rules: Leader, Deadly Demise, etc.)
+  step++
+  onProgress({ current: step, total: TOTAL_STEPS, currentStep: 'Global Abilities' })
+  try {
+    const resp = await fetch(`${baseUrl}/abilities.json`)
+    if (!resp.ok) throw new Error(`HTTP ${resp.status}`)
+    const data: Ability[] = await resp.json()
+    if (!Array.isArray(data)) throw new Error('abilities.json is not an array')
+    await saveAbilities(data)
+    counts.abilities = data.length
+  } catch (err) {
+    errors.push(`Global Abilities: ${err instanceof Error ? err.message : String(err)}`)
+    counts.abilities = 0
+  }
+
+  // Step 18: Import datasheet → stratagem junction table
+  step++
+  onProgress({ current: step, total: TOTAL_STEPS, currentStep: 'Datasheet Stratagems' })
+  try {
+    const resp = await fetch(`${baseUrl}/datasheet_stratagems.json`)
+    if (!resp.ok) throw new Error(`HTTP ${resp.status}`)
+    const data: DatasheetStratagem[] = await resp.json()
+    if (!Array.isArray(data)) throw new Error('datasheet_stratagems.json is not an array')
+    const rekeyed = rekeyRecords(data, idMap)
+    await saveDatasheetStratagems(rekeyed)
+    counts.datasheetStratagems = data.length
+  } catch (err) {
+    errors.push(`Datasheet Stratagems: ${err instanceof Error ? err.message : String(err)}`)
+    counts.datasheetStratagems = 0
+  }
+
+  // Step 19: Import datasheet → enhancement junction table
+  step++
+  onProgress({ current: step, total: TOTAL_STEPS, currentStep: 'Datasheet Enhancements' })
+  try {
+    const resp = await fetch(`${baseUrl}/datasheet_enhancements.json`)
+    if (!resp.ok) throw new Error(`HTTP ${resp.status}`)
+    const data: DatasheetEnhancement[] = await resp.json()
+    if (!Array.isArray(data)) throw new Error('datasheet_enhancements.json is not an array')
+    const rekeyed = rekeyRecords(data, idMap)
+    await saveDatasheetEnhancements(rekeyed)
+    counts.datasheetEnhancements = data.length
+  } catch (err) {
+    errors.push(`Datasheet Enhancements: ${err instanceof Error ? err.message : String(err)}`)
+    counts.datasheetEnhancements = 0
+  }
+
+  // Step 20: Import datasheet → detachment ability junction table
+  step++
+  onProgress({ current: step, total: TOTAL_STEPS, currentStep: 'Datasheet Detachment Abilities' })
+  try {
+    const resp = await fetch(`${baseUrl}/datasheet_detachment_abilities.json`)
+    if (!resp.ok) throw new Error(`HTTP ${resp.status}`)
+    const data: DatasheetDetachmentAbility[] = await resp.json()
+    if (!Array.isArray(data)) throw new Error('datasheet_detachment_abilities.json is not an array')
+    const rekeyed = rekeyRecords(data, idMap)
+    await saveDatasheetDetachmentAbilities(rekeyed)
+    counts.datasheetDetachmentAbilities = data.length
+  } catch (err) {
+    errors.push(`Datasheet Det. Abilities: ${err instanceof Error ? err.message : String(err)}`)
+    counts.datasheetDetachmentAbilities = 0
+  }
+
   await setRulesImportMeta({
     lastImport: Date.now(),
     counts: {
@@ -391,6 +462,10 @@ export async function importWahapediaRules(
       unitKeywords: counts.unitKeywords ?? 0,
       unitAbilities: counts.unitAbilities ?? 0,
       missions: counts.missions ?? 0,
+      abilities: counts.abilities ?? 0,
+      datasheetStratagems: counts.datasheetStratagems ?? 0,
+      datasheetEnhancements: counts.datasheetEnhancements ?? 0,
+      datasheetDetachmentAbilities: counts.datasheetDetachmentAbilities ?? 0,
     },
   })
 

@@ -269,12 +269,24 @@ async function main() {
   }))
   writeJson('unit_keywords.json', keywordsTyped)
 
-  // Unit abilities
+  // Unit abilities — JOIN to abilities table to resolve Core/Faction ability names
   const unitAbilities = await query(`
-    SELECT id, datasheet_id AS datasheetId, name, description, type
-    FROM datasheet_abilities ORDER BY datasheet_id, line
+    SELECT da.id, da.datasheet_id AS datasheetId,
+           CASE WHEN da.name = '' AND a.name IS NOT NULL THEN a.name ELSE da.name END AS name,
+           CASE WHEN da.description = '' AND a.description IS NOT NULL THEN a.description ELSE da.description END AS description,
+           da.type, da.ability_id AS abilityId, da.parameter
+    FROM datasheet_abilities da
+    LEFT JOIN abilities a ON da.ability_id = a.id
+    ORDER BY da.datasheet_id, da.line
   `)
   writeJson('unit_abilities.json', unitAbilities)
+
+  // Global abilities (Core rules: Leader, Deadly Demise, Deep Strike, etc.)
+  const abilities = await query(`
+    SELECT id, name, legend, faction_id AS factionId, description
+    FROM abilities ORDER BY name
+  `)
+  writeJson('abilities.json', abilities)
 
   // Datasheets (master unit reference — needed for ID mapping to BSData)
   const datasheets = await query(`
@@ -302,6 +314,25 @@ async function main() {
     FROM datasheet_models ORDER BY datasheet_id, line
   `)
   writeJson('datasheet_models.json', datasheetModels)
+
+  // Junction tables — which stratagems/enhancements/abilities apply to which datasheets
+  const datasheetStratagems = await query(`
+    SELECT id, datasheet_id AS datasheetId, stratagem_id AS stratagemId
+    FROM datasheet_stratagems ORDER BY datasheet_id
+  `)
+  writeJson('datasheet_stratagems.json', datasheetStratagems)
+
+  const datasheetEnhancements = await query(`
+    SELECT id, datasheet_id AS datasheetId, enhancement_id AS enhancementId
+    FROM datasheet_enhancements ORDER BY datasheet_id
+  `)
+  writeJson('datasheet_enhancements.json', datasheetEnhancements)
+
+  const datasheetDetachmentAbilities = await query(`
+    SELECT id, datasheet_id AS datasheetId, detachment_ability_id AS detachmentAbilityId
+    FROM datasheet_detachment_abilities ORDER BY datasheet_id
+  `)
+  writeJson('datasheet_detachment_abilities.json', datasheetDetachmentAbilities)
 
   // Missions (from Chapter Approved markdown)
   console.log()

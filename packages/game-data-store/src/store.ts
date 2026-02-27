@@ -1,7 +1,7 @@
 import type { UnitProfile } from '@tabletop-tools/game-content'
 
 const DB_NAME = 'tabletop-tools-game-data'
-const DB_VERSION = 6
+const DB_VERSION = 7
 const UNITS_STORE = 'units'
 const META_STORE = 'meta'
 const LISTS_STORE = 'lists'
@@ -20,6 +20,10 @@ const MISSIONS_STORE = 'missions'
 const DATASHEETS_STORE = 'datasheets'
 const DATASHEET_WARGEAR_STORE = 'datasheet_wargear'
 const DATASHEET_MODELS_STORE = 'datasheet_models'
+const ABILITIES_STORE = 'abilities'
+const DATASHEET_STRATAGEMS_STORE = 'datasheet_stratagems'
+const DATASHEET_ENHANCEMENTS_STORE = 'datasheet_enhancements'
+const DATASHEET_DETACHMENT_ABILITIES_STORE = 'datasheet_detachment_abilities'
 
 const ALL_STORES = [
   UNITS_STORE, META_STORE, LISTS_STORE, LIST_UNITS_STORE,
@@ -28,6 +32,8 @@ const ALL_STORES = [
   UNIT_COSTS_STORE, WARGEAR_OPTIONS_STORE, UNIT_KEYWORDS_STORE,
   UNIT_ABILITIES_STORE, MISSIONS_STORE, DATASHEETS_STORE,
   DATASHEET_WARGEAR_STORE, DATASHEET_MODELS_STORE,
+  ABILITIES_STORE, DATASHEET_STRATAGEMS_STORE,
+  DATASHEET_ENHANCEMENTS_STORE, DATASHEET_DETACHMENT_ABILITIES_STORE,
 ]
 
 const GAME_RULES_STORES = [
@@ -36,6 +42,8 @@ const GAME_RULES_STORES = [
   UNIT_COSTS_STORE, WARGEAR_OPTIONS_STORE, UNIT_KEYWORDS_STORE,
   UNIT_ABILITIES_STORE, MISSIONS_STORE, DATASHEETS_STORE,
   DATASHEET_WARGEAR_STORE, DATASHEET_MODELS_STORE,
+  ABILITIES_STORE, DATASHEET_STRATAGEMS_STORE,
+  DATASHEET_ENHANCEMENTS_STORE, DATASHEET_DETACHMENT_ABILITIES_STORE,
 ]
 
 // ── Types ────────────────────────────────────────────────────────────────────
@@ -60,6 +68,10 @@ export interface RulesImportMeta {
     unitKeywords: number
     unitAbilities: number
     missions: number
+    abilities: number
+    datasheetStratagems: number
+    datasheetEnhancements: number
+    datasheetDetachmentAbilities: number
   }
 }
 
@@ -170,6 +182,8 @@ export interface UnitAbility {
   name: string
   description: string
   type: string
+  abilityId?: string
+  parameter?: string
 }
 
 export interface Mission {
@@ -218,6 +232,32 @@ export interface DatasheetModel {
   invSv: string
   invSvDescription: string
   baseSize: string
+}
+
+export interface Ability {
+  id: string
+  name: string
+  legend: string
+  factionId: string
+  description: string
+}
+
+export interface DatasheetStratagem {
+  id: number
+  datasheetId: string
+  stratagemId: string
+}
+
+export interface DatasheetEnhancement {
+  id: number
+  datasheetId: string
+  enhancementId: string
+}
+
+export interface DatasheetDetachmentAbility {
+  id: number
+  datasheetId: string
+  detachmentAbilityId: string
 }
 
 // ── Database ─────────────────────────────────────────────────────────────────
@@ -311,6 +351,25 @@ function openDb(): Promise<IDBDatabase> {
       if (!db.objectStoreNames.contains(DATASHEET_MODELS_STORE)) {
         const s = db.createObjectStore(DATASHEET_MODELS_STORE, { keyPath: 'id' })
         s.createIndex('datasheetId', 'datasheetId', { unique: false })
+      }
+      // V7 stores — global abilities + junction tables
+      if (!db.objectStoreNames.contains(ABILITIES_STORE)) {
+        db.createObjectStore(ABILITIES_STORE, { keyPath: 'id' })
+      }
+      if (!db.objectStoreNames.contains(DATASHEET_STRATAGEMS_STORE)) {
+        const s = db.createObjectStore(DATASHEET_STRATAGEMS_STORE, { keyPath: 'id' })
+        s.createIndex('datasheetId', 'datasheetId', { unique: false })
+        s.createIndex('stratagemId', 'stratagemId', { unique: false })
+      }
+      if (!db.objectStoreNames.contains(DATASHEET_ENHANCEMENTS_STORE)) {
+        const s = db.createObjectStore(DATASHEET_ENHANCEMENTS_STORE, { keyPath: 'id' })
+        s.createIndex('datasheetId', 'datasheetId', { unique: false })
+        s.createIndex('enhancementId', 'enhancementId', { unique: false })
+      }
+      if (!db.objectStoreNames.contains(DATASHEET_DETACHMENT_ABILITIES_STORE)) {
+        const s = db.createObjectStore(DATASHEET_DETACHMENT_ABILITIES_STORE, { keyPath: 'id' })
+        s.createIndex('datasheetId', 'datasheetId', { unique: false })
+        s.createIndex('detachmentAbilityId', 'detachmentAbilityId', { unique: false })
       }
     }
     req.onsuccess = () => resolve(req.result)
@@ -787,3 +846,204 @@ export const getDatasheetWargear = (datasheetId: string) => getByIndex<Datasheet
 
 export const saveDatasheetModels = (items: DatasheetModel[]) => batchSave(DATASHEET_MODELS_STORE, items)
 export const getDatasheetModels = (datasheetId: string) => getByIndex<DatasheetModel>(DATASHEET_MODELS_STORE, 'datasheetId', datasheetId)
+
+// ── Global Abilities ────────────────────────────────────────────────────────
+
+export const saveAbilities = (items: Ability[]) => batchSave(ABILITIES_STORE, items)
+export const getAllAbilities = () => getAllFromStore<Ability>(ABILITIES_STORE)
+export const getAbility = (id: string) => getOne<Ability>(ABILITIES_STORE, id)
+
+// ── Datasheet Stratagems (junction) ─────────────────────────────────────────
+
+export const saveDatasheetStratagems = (items: DatasheetStratagem[]) => batchSave(DATASHEET_STRATAGEMS_STORE, items)
+export const getDatasheetStratagems = (datasheetId: string) => getByIndex<DatasheetStratagem>(DATASHEET_STRATAGEMS_STORE, 'datasheetId', datasheetId)
+
+// ── Datasheet Enhancements (junction) ───────────────────────────────────────
+
+export const saveDatasheetEnhancements = (items: DatasheetEnhancement[]) => batchSave(DATASHEET_ENHANCEMENTS_STORE, items)
+export const getDatasheetEnhancements = (datasheetId: string) => getByIndex<DatasheetEnhancement>(DATASHEET_ENHANCEMENTS_STORE, 'datasheetId', datasheetId)
+
+// ── Datasheet Detachment Abilities (junction) ───────────────────────────────
+
+export const saveDatasheetDetachmentAbilities = (items: DatasheetDetachmentAbility[]) => batchSave(DATASHEET_DETACHMENT_ABILITIES_STORE, items)
+export const getDatasheetDetachmentAbilities = (datasheetId: string) => getByIndex<DatasheetDetachmentAbility>(DATASHEET_DETACHMENT_ABILITIES_STORE, 'datasheetId', datasheetId)
+
+// ── Wahapedia-primary unit access ───────────────────────────────────────────
+// These functions use Wahapedia datasheets as the primary data source,
+// joining with datasheet_models, datasheet_wargear, and unit_costs to
+// produce UnitProfile-compatible objects.
+
+export function parseStat(val: string): number {
+  if (!val || val === '-' || val === '\u2013') return 0
+  const n = parseInt(val.replace(/[+"'″"]/g, ''), 10)
+  return isNaN(n) ? 0 : n
+}
+
+export function parseDiceOrNum(val: string): number | string {
+  const s = val.trim().replace(/\s+/g, '').toUpperCase()
+  if (/^\d+$/.test(s)) return parseInt(s, 10)
+  if (s === '' || s === '-' || s === '\u2013') return 1
+  return s
+}
+
+export function parseWeaponAbilities(desc: string): import('@tabletop-tools/game-content').WeaponAbility[] {
+  if (!desc || desc === '-') return []
+  type WA = import('@tabletop-tools/game-content').WeaponAbility
+  const abilities: WA[] = []
+  const parts = desc.split(/,\s*/)
+  for (const raw of parts) {
+    const part = raw.trim().toLowerCase()
+    if (!part) continue
+    if (part === 'lethal hits') { abilities.push({ type: 'LETHAL_HITS' }); continue }
+    if (part === 'devastating wounds') { abilities.push({ type: 'DEVASTATING_WOUNDS' }); continue }
+    if (part === 'torrent') { abilities.push({ type: 'TORRENT' }); continue }
+    if (part === 'twin-linked') { abilities.push({ type: 'TWIN_LINKED' }); continue }
+    if (part === 'ignores cover') { abilities.push({ type: 'IGNORES_COVER' }); continue }
+    if (part === 'hazardous') { abilities.push({ type: 'HAZARDOUS' }); continue }
+    if (part === 'precision') { abilities.push({ type: 'PRECISION' }); continue }
+    if (part === 'indirect fire') { abilities.push({ type: 'INDIRECT_FIRE' }); continue }
+    if (part === 'assault') { abilities.push({ type: 'ASSAULT' }); continue }
+    if (part === 'pistol') { abilities.push({ type: 'PISTOL' }); continue }
+    if (part === 'one shot') { abilities.push({ type: 'ONE_SHOT' }); continue }
+    if (part === 'psychic') { abilities.push({ type: 'PSYCHIC' }); continue }
+    if (part === 'extra attacks') { abilities.push({ type: 'ATTACKS_MOD', value: 0 }); continue }
+    if (part === 'blast') { abilities.push({ type: 'BLAST' }); continue }
+    const sustained = part.match(/sustained hits\s*(\d+)/)
+    if (sustained) { abilities.push({ type: 'SUSTAINED_HITS', value: parseInt(sustained[1]!, 10) }); continue }
+    const anti = part.match(/anti-(.+?)\s+(\d+)\+/)
+    if (anti) { abilities.push({ type: 'ANTI', keyword: anti[1]!, value: parseInt(anti[2]!, 10) }); continue }
+    const melta = part.match(/melta\s*(\d+)/)
+    if (melta) { abilities.push({ type: 'MELTA', value: parseInt(melta[1]!, 10) }); continue }
+    const rapidFire = part.match(/rapid fire\s*(\d+)/)
+    if (rapidFire) { abilities.push({ type: 'ATTACKS_MOD', value: parseInt(rapidFire[1]!, 10) }); continue }
+    if (/^heavy$/.test(part)) { abilities.push({ type: 'HIT_MOD', value: 1 }); continue }
+  }
+  return abilities
+}
+
+/** List unique factions from the datasheets store. */
+export async function listDatasheetFactions(): Promise<string[]> {
+  const db = await openDb()
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(DATASHEETS_STORE, 'readonly')
+    const index = tx.objectStore(DATASHEETS_STORE).index('factionId')
+    const req = index.openKeyCursor(null, 'nextunique')
+    const factions: string[] = []
+    req.onsuccess = () => {
+      const cursor = req.result
+      if (cursor) {
+        factions.push(cursor.key as string)
+        cursor.continue()
+      }
+    }
+    tx.oncomplete = () => { db.close(); resolve(factions.sort()) }
+    tx.onerror = () => { db.close(); reject(tx.error) }
+  })
+}
+
+/** Search datasheets by faction/name (mirrors searchUnits API). */
+export async function searchDatasheets(query: { faction?: string; name?: string }): Promise<Datasheet[]> {
+  const db = await openDb()
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(DATASHEETS_STORE, 'readonly')
+    const store = tx.objectStore(DATASHEETS_STORE)
+    const results: Datasheet[] = []
+    let source: IDBRequest
+    if (query.faction) {
+      source = store.index('factionId').openCursor(IDBKeyRange.only(query.faction))
+    } else {
+      source = store.openCursor()
+    }
+    source.onsuccess = () => {
+      const cursor = source.result as IDBCursorWithValue | null
+      if (cursor) {
+        const ds = cursor.value as Datasheet
+        if (!query.name || ds.name.toLowerCase().includes(query.name.toLowerCase())) {
+          results.push(ds)
+        }
+        cursor.continue()
+      }
+    }
+    tx.oncomplete = () => { db.close(); resolve(results) }
+    tx.onerror = () => { db.close(); reject(tx.error) }
+  })
+}
+
+/**
+ * Load a single Wahapedia datasheet as a UnitProfile by joining
+ * datasheet + models + wargear + costs + abilities.
+ */
+export async function getDatasheetAsUnit(datasheetId: string): Promise<UnitProfile | null> {
+  const ds = await getDatasheet(datasheetId)
+  if (!ds) return null
+
+  const [models, wargear, costs, abilities] = await Promise.all([
+    getDatasheetModels(datasheetId),
+    getDatasheetWargear(datasheetId),
+    getUnitCosts(datasheetId),
+    getByIndex<UnitAbility>(UNIT_ABILITIES_STORE, 'datasheetId', datasheetId),
+  ])
+
+  const primaryModel = models[0]
+  const invSvVal = primaryModel?.invSv ? parseStat(primaryModel.invSv) : undefined
+
+  // Parse points from first cost entry (format: "X models ... Xpts" or just a number)
+  let points = 0
+  if (costs.length > 0) {
+    const costStr = costs[0].cost || costs[0].description || ''
+    const m = costStr.match(/(\d+)\s*pts?/i)
+    if (m) points = parseInt(m[1], 10)
+    else {
+      const n = parseInt(costStr, 10)
+      if (!isNaN(n)) points = n
+    }
+  }
+
+  const weapons: import('@tabletop-tools/game-content').WeaponProfile[] = wargear
+    .filter(w => w.name && w.name !== '-')
+    .map(w => ({
+      name: w.name,
+      range: w.type === 'Melee' || w.range === 'Melee' ? 'melee' as const : parseStat(w.range),
+      attacks: parseDiceOrNum(w.attacks),
+      skill: parseStat(w.skill),
+      strength: parseStat(w.strength),
+      ap: parseStat(w.ap),
+      damage: parseDiceOrNum(w.damage),
+      abilities: parseWeaponAbilities(w.description),
+    }))
+
+  const abilityNames = abilities.map(a => a.name).filter(Boolean)
+  const abilityDescs: Record<string, string> = {}
+  for (const a of abilities) {
+    if (a.name && a.description) abilityDescs[a.name] = a.description
+  }
+
+  return {
+    id: ds.id,
+    faction: ds.factionId,
+    name: ds.name,
+    move: primaryModel ? parseStat(primaryModel.move) : 0,
+    toughness: primaryModel ? parseStat(primaryModel.toughness) : 0,
+    save: primaryModel ? parseStat(primaryModel.save) : 0,
+    wounds: primaryModel ? parseStat(primaryModel.wounds) : 0,
+    leadership: primaryModel ? parseStat(primaryModel.leadership) : 0,
+    oc: primaryModel ? parseStat(primaryModel.oc) : 0,
+    invulnSave: invSvVal && invSvVal > 0 ? invSvVal : undefined,
+    weapons,
+    abilities: abilityNames,
+    abilityDescriptions: Object.keys(abilityDescs).length > 0 ? abilityDescs : undefined,
+    points,
+  }
+}
+
+/** Check if Wahapedia datasheets are available (any records in the store). */
+export async function hasDatasheets(): Promise<boolean> {
+  const db = await openDb()
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(DATASHEETS_STORE, 'readonly')
+    const req = tx.objectStore(DATASHEETS_STORE).count()
+    req.onsuccess = () => resolve(req.result > 0)
+    req.onerror = () => reject(req.error)
+    tx.oncomplete = () => db.close()
+  })
+}

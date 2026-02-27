@@ -5,12 +5,21 @@ import { useUnits, useGameFactions } from './useGameData'
 
 // ---- Mocks ----
 
-const mockUseUnitSearch = vi.fn(() => ({ data: [], error: null, isLoading: false }))
-const mockUseFactions = vi.fn(() => ({ data: [], error: null, isLoading: false }))
+const mockUsePrimaryUnitSearch = vi.fn(() => ({ data: [], isLoading: false }))
+const mockUsePrimaryFactions = vi.fn(() => ({ data: [], isLoading: false }))
 
 vi.mock('@tabletop-tools/game-data-store', () => ({
-  useUnitSearch: (...args: unknown[]) => mockUseUnitSearch(...args),
-  useFactions: (...args: unknown[]) => mockUseFactions(...args),
+  usePrimaryUnitSearch: (...args: unknown[]) => mockUsePrimaryUnitSearch(...args),
+  usePrimaryFactions: (...args: unknown[]) => mockUsePrimaryFactions(...args),
+  useDetachments: () => ({ data: [], error: null, isLoading: false }),
+  useDetachment: () => ({ data: null, error: null, isLoading: false }),
+  useDetachmentAbilities: () => ({ data: [], error: null, isLoading: false }),
+  useEnhancements: () => ({ data: [], error: null, isLoading: false }),
+  useUnitKeywords: () => ({ data: [], error: null, isLoading: false }),
+  useAllUnitKeywords: () => ({ data: [], error: null, isLoading: false }),
+  useUnitCompositions: () => ({ data: [], error: null, isLoading: false }),
+  useUnitCosts: () => ({ data: [], error: null, isLoading: false }),
+  useAllDatasheets: () => ({ data: [], error: null, isLoading: false }),
 }))
 
 // ---- Tests ----
@@ -24,8 +33,8 @@ const MOCK_UNITS = [
 ]
 
 describe('useUnits', () => {
-  it('returns units from IndexedDB when enabled', () => {
-    mockUseUnitSearch.mockReturnValue({ data: MOCK_UNITS, error: null, isLoading: false })
+  it('returns units from primary source when enabled', () => {
+    mockUsePrimaryUnitSearch.mockReturnValue({ data: MOCK_UNITS, isLoading: false })
 
     const { result } = renderHook(() => useUnits({ faction: 'Faction A' }, true))
 
@@ -34,7 +43,7 @@ describe('useUnits', () => {
   })
 
   it('returns empty when disabled', () => {
-    mockUseUnitSearch.mockReturnValue({ data: MOCK_UNITS, error: null, isLoading: false })
+    mockUsePrimaryUnitSearch.mockReturnValue({ data: MOCK_UNITS, isLoading: false })
 
     const { result } = renderHook(() => useUnits({ faction: 'Faction A' }, false))
 
@@ -44,8 +53,8 @@ describe('useUnits', () => {
 })
 
 describe('useGameFactions', () => {
-  it('returns factions from IndexedDB', () => {
-    mockUseFactions.mockReturnValue({ data: ['Faction A', 'Faction B'], error: null, isLoading: false })
+  it('returns factions from primary source', () => {
+    mockUsePrimaryFactions.mockReturnValue({ data: ['Faction A', 'Faction B'], isLoading: false })
 
     const { result } = renderHook(() => useGameFactions())
 

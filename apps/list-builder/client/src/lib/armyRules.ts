@@ -18,6 +18,7 @@ export type ListUnit = {
   unitPoints: number
   count: number
   isWarlord?: boolean
+  role?: string
 }
 
 export type ValidationError = {
@@ -41,14 +42,16 @@ export function validateArmy(
   }
 
   // Check duplicate limits (group by unitContentId)
+  // Battleline units are exempt from duplicate limits per matched play rules
   const counts = new Map<string, number>()
   for (const u of units) {
     const current = counts.get(u.unitContentId) ?? 0
     counts.set(u.unitContentId, current + u.count)
   }
-  for (const [, count] of counts) {
-    if (count > battleSize.maxDuplicates) {
-      const unit = units.find((u) => counts.get(u.unitContentId) === count)
+  for (const [unitId, count] of counts) {
+    const unit = units.find((u) => u.unitContentId === unitId)
+    const isBattleline = unit?.role?.toLowerCase() === 'battleline'
+    if (!isBattleline && count > battleSize.maxDuplicates) {
       errors.push({
         type: 'DUPLICATE_LIMIT',
         message: `${unit?.unitName ?? 'Unit'}: ${count}× exceeds limit of ${battleSize.maxDuplicates}`,

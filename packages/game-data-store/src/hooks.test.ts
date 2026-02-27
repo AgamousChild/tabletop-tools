@@ -394,7 +394,7 @@ describe('useRulesImportMeta', () => {
   it('returns rules import meta after save', async () => {
     await setRulesImportMeta({
       lastImport: Date.now(),
-      counts: { detachments: 10, stratagems: 20, enhancements: 5, leaderAttachments: 15, unitCompositions: 30, unitCosts: 25, wargearOptions: 40, unitKeywords: 100, unitAbilities: 50 },
+      counts: { detachments: 10, stratagems: 20, enhancements: 5, leaderAttachments: 15, unitCompositions: 30, unitCosts: 25, wargearOptions: 40, unitKeywords: 100, unitAbilities: 50, missions: 0, abilities: 0, datasheetStratagems: 0, datasheetEnhancements: 0, datasheetDetachmentAbilities: 0 },
     })
     const { result } = renderHook(() => useRulesImportMeta())
     await waitFor(() => expect(result.current.isLoading).toBe(false))
