@@ -137,7 +137,7 @@ Update this section every time you update or fix a section of the requirements.
 | apps/list-builder/server | 35 | PASS |
 | apps/list-builder/client | 52 | PASS |
 | apps/game-tracker/server | 58 | PASS |
-| apps/game-tracker/client | 150 | PASS |
+| apps/game-tracker/client | 156 | PASS |
 | apps/tournament/server | 70 | PASS |
 | apps/tournament/client | 57 | PASS |
 | apps/new-meta/server | 57 | PASS |
@@ -145,7 +145,7 @@ Update this section every time you update or fix a section of the requirements.
 | apps/admin/server | 46 | PASS |
 | apps/admin/client | 47 | PASS |
 | apps/data-import/client | 57 | PASS |
-| **Total** | **1,431** | **ALL PASS** |
+| **Total** | **1,437** | **ALL PASS** |
 
 ---
 
