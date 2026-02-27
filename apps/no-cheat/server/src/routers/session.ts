@@ -1,6 +1,6 @@
 import { diceRollingSessions, diceSets, rolls } from '@tabletop-tools/db'
 import { TRPCError } from '@trpc/server'
-import { and, desc, eq } from 'drizzle-orm'
+import { and, desc, eq, sql } from 'drizzle-orm'
 import { z } from 'zod'
 
 import { analyze } from '../lib/stats/analyze'
@@ -87,6 +87,52 @@ export const sessionRouter = router({
       const { zScore } = analyze(rollData)
 
       return { rollCount: allRolls.length, zScore }
+    }),
+
+  undoLastRoll: protectedProcedure
+    .input(z.object({ sessionId: z.string() }))
+    .mutation(async ({ ctx, input }) => {
+      const [session] = await ctx.db
+        .select()
+        .from(diceRollingSessions)
+        .where(
+          and(
+            eq(diceRollingSessions.id, input.sessionId),
+            eq(diceRollingSessions.userId, ctx.user.id),
+          ),
+        )
+
+      if (!session) {
+        throw new TRPCError({ code: 'FORBIDDEN', message: 'Session not found' })
+      }
+      if (session.closedAt !== null) {
+        throw new TRPCError({ code: 'BAD_REQUEST', message: 'Session is already closed' })
+      }
+
+      // Find the most recent roll (use rowid for stable ordering when createdAt ties)
+      const [lastRoll] = await ctx.db
+        .select()
+        .from(rolls)
+        .where(eq(rolls.sessionId, input.sessionId))
+        .orderBy(sql`rowid DESC`)
+        .limit(1)
+
+      if (!lastRoll) {
+        throw new TRPCError({ code: 'BAD_REQUEST', message: 'No rolls to undo' })
+      }
+
+      await ctx.db.delete(rolls).where(eq(rolls.id, lastRoll.id))
+
+      // Recompute stats with remaining rolls
+      const allRolls = await ctx.db.select().from(rolls).where(eq(rolls.sessionId, input.sessionId))
+      const rollData = allRolls.map((r) => JSON.parse(r.pipValues) as number[])
+      const { zScore } = allRolls.length > 0 ? analyze(rollData) : { zScore: 0 }
+
+      return {
+        rollCount: allRolls.length,
+        zScore,
+        removedPips: JSON.parse(lastRoll.pipValues) as number[],
+      }
     }),
 
   close: protectedProcedure

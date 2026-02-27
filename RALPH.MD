@@ -105,16 +105,18 @@ Update this section every time you update or fix a section of the requirements.
 - [x] Wahapedia import bug fix — non-array datasheets.json response no longer corrupts `datasheets` variable (safe variable reset)
 - [x] Data source setup script — `scripts/setup-data.sh` orchestrates sync tools + export pipeline with --export and --validate modes
 
+- [x] Client-side IndexedDB code with same master data — 22 stores match master DB: 18 Wahapedia stores + BSData units + lists/meta. Cross-referencing done at import time via buildIdMapping/rekeyRecords. BSData weapons/abilities redundant with Wahapedia data.
+- [x] Full build verification — `pnpm -r build` all 16 packages pass cleanly
+
+- [x] Dice detection false positive handling — added `undoLastRoll` server endpoint (deletes last roll, recomputes stats), undo button in recording UI, last capture display with removedPips feedback. 5 new server tests + 1 new client test (64 server + 178 client = 242 no-cheat tests)
+
 ### In Progress
 
-- [ ] Client-side IndexedDB code with same master data
-- [ ] Dice detection improvements
+(none — all RALPH.MD requirements implemented)
 
 ### Not Started
 
-- [ ] Full build verification (`pnpm -r build`)
-- [ ] Commit all changes
-- [ ] Push and deploy
+- [ ] Deploy updated code to production
 
 ---
 
@@ -129,6 +131,8 @@ Update this section every time you update or fix a section of the requirements.
 | apps/game-tracker/client | 150 | PASS |
 | apps/tournament/client | 57 | PASS |
 | apps/data-import/client | 57 | PASS |
+| apps/no-cheat/server | 64 | PASS |
+| apps/no-cheat/client | 178 | PASS |
 | Others | — | Not yet verified this session |
 
 ---

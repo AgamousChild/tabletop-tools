@@ -117,6 +117,7 @@ diceSet.list()
 // Sessions
 session.start({ diceSetId, opponentName? })        -> session
 session.addRoll({ sessionId, pipValues })           -> { rollCount, zScore }
+session.undoLastRoll({ sessionId })                 -> { rollCount, zScore, removedPips }
 session.close({ sessionId })                        -> { zScore, isLoaded, outlierFace, observedRate, rollCount }
 session.list({ diceSetId? })                        -> session[]
 session.get({ sessionId })                          -> { session, rolls }
@@ -141,7 +142,7 @@ and again on `close` (final verdict).
 
 ## Testing
 
-**236 tests** (59 server + 177 client), all passing.
+**242 tests** (64 server + 178 client), all passing.
 
 ```
 server/src/lib/
