@@ -5,14 +5,26 @@ import { useUnits, useGameFactions, useGameUnit } from './useGameData'
 
 // ---- Mocks ----
 
-const mockUseUnitSearch = vi.fn(() => ({ data: [], error: null, isLoading: false }))
-const mockUseFactions = vi.fn(() => ({ data: [], error: null, isLoading: false }))
-const mockUseUnit = vi.fn(() => ({ data: null, error: null, isLoading: false }))
+const mockUsePrimaryUnitSearch = vi.fn(() => ({ data: [], isLoading: false }))
+const mockUsePrimaryFactions = vi.fn(() => ({ data: [], isLoading: false }))
+const mockUsePrimaryUnit = vi.fn(() => ({ data: null, isLoading: false }))
 
 vi.mock('@tabletop-tools/game-data-store', () => ({
-  useUnitSearch: (...args: unknown[]) => mockUseUnitSearch(...args),
-  useFactions: (...args: unknown[]) => mockUseFactions(...args),
-  useUnit: (...args: unknown[]) => mockUseUnit(...args),
+  usePrimaryUnitSearch: (...args: unknown[]) => mockUsePrimaryUnitSearch(...args),
+  usePrimaryFactions: (...args: unknown[]) => mockUsePrimaryFactions(...args),
+  usePrimaryUnit: (...args: unknown[]) => mockUsePrimaryUnit(...args),
+  useLeaderAttachments: () => ({ data: [], error: null, isLoading: false }),
+  useLeadersForUnit: () => ({ data: [], error: null, isLoading: false }),
+  useUnitAbilities: () => ({ data: [], error: null, isLoading: false }),
+  useUnitCompositions: () => ({ data: [], error: null, isLoading: false }),
+  useUnitKeywords: () => ({ data: [], error: null, isLoading: false }),
+  useWargearOptions: () => ({ data: [], error: null, isLoading: false }),
+  useDatasheetModels: () => ({ data: [], error: null, isLoading: false }),
+  useDetachments: () => ({ data: [], error: null, isLoading: false }),
+  useDetachmentAbilities: () => ({ data: [], error: null, isLoading: false }),
+  useEnhancements: () => ({ data: [], error: null, isLoading: false }),
+  useStratagems: () => ({ data: [], error: null, isLoading: false }),
+  useWargearAsWeapons: () => ({ data: [], isLoading: false }),
 }))
 
 // ---- Tests ----
@@ -27,8 +39,8 @@ const MOCK_UNITS = [
 ]
 
 describe('useUnits', () => {
-  it('returns units from IndexedDB', () => {
-    mockUseUnitSearch.mockReturnValue({ data: MOCK_UNITS, error: null, isLoading: false })
+  it('returns units from primary source', () => {
+    mockUsePrimaryUnitSearch.mockReturnValue({ data: MOCK_UNITS, isLoading: false })
 
     const { result } = renderHook(() => useUnits({ faction: 'Faction A' }))
 
@@ -38,8 +50,8 @@ describe('useUnits', () => {
 })
 
 describe('useGameFactions', () => {
-  it('returns factions from IndexedDB', () => {
-    mockUseFactions.mockReturnValue({ data: ['Faction A', 'Faction B'], error: null, isLoading: false })
+  it('returns factions from primary source', () => {
+    mockUsePrimaryFactions.mockReturnValue({ data: ['Faction A', 'Faction B'], isLoading: false })
 
     const { result } = renderHook(() => useGameFactions())
 
@@ -48,9 +60,9 @@ describe('useGameFactions', () => {
 })
 
 describe('useGameUnit', () => {
-  it('returns unit by ID from IndexedDB', () => {
+  it('returns unit by ID from primary source', () => {
     const mockUnit = { id: 'u1', name: 'Alpha Squad', faction: 'Faction A', points: 100 }
-    mockUseUnit.mockReturnValue({ data: mockUnit, error: null, isLoading: false })
+    mockUsePrimaryUnit.mockReturnValue({ data: mockUnit, isLoading: false })
 
     const { result } = renderHook(() => useGameUnit('u1'))
 

@@ -68,6 +68,10 @@ vi.mock('../lib/useGameData', () => ({
   useGameWargearOptions: () => ({ data: [], isLoading: false }),
   useGameDatasheetWeapons: () => ({ data: [], isLoading: false }),
   useGameDatasheetModels: () => ({ data: [], isLoading: false }),
+  useGameDetachments: () => ({ data: [], isLoading: false }),
+  useGameDetachmentAbilities: () => ({ data: [], isLoading: false }),
+  useGameEnhancements: () => ({ data: [], isLoading: false }),
+  useGameStratagems: () => ({ data: [], isLoading: false }),
 }))
 
 beforeEach(() => {

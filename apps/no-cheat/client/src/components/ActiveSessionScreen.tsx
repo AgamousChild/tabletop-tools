@@ -298,7 +298,12 @@ export function ActiveSessionScreen({ diceSet, onDone }: Props) {
       <div className="min-h-screen bg-slate-950 text-slate-100 p-4">
         <div className="max-w-md mx-auto space-y-4">
           <div className="flex items-center justify-between">
-            <h2 className="text-lg font-semibold text-slate-100">{diceSet.name}</h2>
+            <div className="flex items-center gap-3">
+              <button onClick={onDone} className="text-slate-400 hover:text-slate-200 text-sm" aria-label="Cancel">
+                ← Cancel
+              </button>
+              <h2 className="text-lg font-semibold text-slate-100">{diceSet.name}</h2>
+            </div>
             <span className="text-sm text-slate-400">Calibration</span>
           </div>
           <CalibrationWizard

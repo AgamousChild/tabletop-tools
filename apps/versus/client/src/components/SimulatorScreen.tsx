@@ -5,7 +5,7 @@ import type { DatasheetModel } from '@tabletop-tools/game-data-store'
 
 import { authClient } from '../lib/auth'
 import { trpc } from '../lib/trpc'
-import { useUnits, useGameFactions, useGameUnit, useGameLeadersForUnit, useGameUnitAbilities, useGameUnitKeywords, useGameWargearOptions, useGameDatasheetWeapons, useGameDatasheetModels } from '../lib/useGameData'
+import { useUnits, useGameFactions, useGameUnit, useGameLeadersForUnit, useGameUnitAbilities, useGameUnitKeywords, useGameWargearOptions, useGameDatasheetWeapons, useGameDatasheetModels, useGameDetachments, useGameDetachmentAbilities, useGameEnhancements, useGameStratagems } from '../lib/useGameData'
 import { parseModelCount } from '../lib/modelCount'
 import { simulateWeapon } from '../lib/rules/pipeline'
 import type { SimResult } from '../lib/rules/pipeline'
@@ -78,6 +78,11 @@ function formatAbility(a: WeaponAbility): string {
   }
 }
 
+/** Strip HTML tags from a string, returning plain text. */
+function stripHtmlTags(html: string): string {
+  return html.replace(/<[^>]*>/g, ' ').replace(/\s{2,}/g, ' ').trim()
+}
+
 /** Simple FNV-1a hash for cache key. Not cryptographic. */
 function simpleHash(str: string): string {
   let hash = 0x811c9dc5
@@ -106,6 +111,9 @@ export function SimulatorScreen({ onSignOut }: Props) {
   const [attackType, setAttackType] = useState<AttackType>('ranged')
   const [weaponOverrides, setWeaponOverrides] = useState<Map<number, boolean>>(new Map())
   const [specialRules, setSpecialRules] = useState<WeaponAbility[]>([])
+  const [attackerDetachmentId, setAttackerDetachmentId] = useState<string | null>(null)
+  const [attackerEnhancementId, setAttackerEnhancementId] = useState<string | null>(null)
+  const [defenderDetachmentId, setDefenderDetachmentId] = useState<string | null>(null)
 
   const gameDataAvailable = useGameDataAvailable()
   const { data: factions = [] } = useGameFactions()
@@ -135,6 +143,13 @@ export function SimulatorScreen({ onSignOut }: Props) {
   const { data: wahapediaLeaderWeapons = [] } = useGameDatasheetWeapons(attackerLeaderId)
   const { data: wahapediaAttackerModels = [] } = useGameDatasheetModels(attackerId)
   const { data: wahapediaDefenderModels = [] } = useGameDatasheetModels(defenderId)
+  const { data: attackerDetachments = [] } = useGameDetachments(attackerFaction)
+  const { data: atkDetachmentAbilities = [] } = useGameDetachmentAbilities(attackerDetachmentId)
+  const { data: atkDetachmentEnhancements = [] } = useGameEnhancements(attackerDetachmentId)
+  const { data: defenderDetachments = [] } = useGameDetachments(defenderFaction)
+  const { data: defDetachmentAbilities = [] } = useGameDetachmentAbilities(defenderDetachmentId)
+  const { data: attackerStratagems = [] } = useGameStratagems(attackerFaction, attackerDetachmentId)
+  const { data: defenderStratagems = [] } = useGameStratagems(defenderFaction, defenderDetachmentId)
 
   // Resolve attacker/defender profiles: prefer Wahapedia model stats when available
   // (Wahapedia has correct M/T/Sv/W/Ld/OC/invSv as strings; BSData may have 0 for missing)
@@ -574,6 +589,110 @@ export function SimulatorScreen({ onSignOut }: Props) {
           </div>
         )}
 
+        {/* Detachments */}
+        {(attackerDetachments.length > 0 || defenderDetachments.length > 0) && (
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {/* Attacker Detachment */}
+            <div className="rounded-lg border border-slate-800 bg-slate-900 p-4 space-y-3">
+              <p className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider">Attacker Detachment</p>
+              {attackerDetachments.length > 0 ? (
+                <>
+                  <select
+                    value={attackerDetachmentId ?? ''}
+                    onChange={(e) => {
+                      setAttackerDetachmentId(e.target.value || null)
+                      setAttackerEnhancementId(null)
+                    }}
+                    className="w-full px-3 py-1.5 rounded-lg bg-slate-800 border border-slate-700 text-slate-100 text-sm focus:outline-none focus:border-amber-400"
+                  >
+                    <option value="">No detachment</option>
+                    {attackerDetachments.map((d) => (
+                      <option key={d.id} value={d.id}>{d.name}</option>
+                    ))}
+                  </select>
+                  {atkDetachmentAbilities.length > 0 && (
+                    <div className="text-xs">
+                      <p className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider mb-1">Abilities</p>
+                      {atkDetachmentAbilities.map((a) => (
+                        <div key={a.id} className="mb-1.5">
+                          <p className="font-medium text-amber-400">{a.name}</p>
+                          <p className="text-slate-400 leading-relaxed">{stripHtmlTags(a.description)}</p>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                  {atkDetachmentEnhancements.length > 0 && (
+                    <div>
+                      <label className="block text-xs text-slate-400 mb-1">Enhancement</label>
+                      <select
+                        value={attackerEnhancementId ?? ''}
+                        onChange={(e) => setAttackerEnhancementId(e.target.value || null)}
+                        className="w-full px-3 py-1.5 rounded-lg bg-slate-800 border border-slate-700 text-slate-100 text-sm focus:outline-none focus:border-amber-400"
+                      >
+                        <option value="">No enhancement</option>
+                        {atkDetachmentEnhancements.map((enh) => (
+                          <option key={enh.id} value={enh.id}>{enh.name} ({enh.cost}pts)</option>
+                        ))}
+                      </select>
+                      {attackerEnhancementId && (() => {
+                        const enh = atkDetachmentEnhancements.find(e => e.id === attackerEnhancementId)
+                        if (!enh) return null
+                        return (
+                          <div className="mt-1.5 text-xs">
+                            <p className="font-medium text-amber-400">{enh.name}</p>
+                            <p className="text-slate-400 leading-relaxed">{stripHtmlTags(enh.description)}</p>
+                          </div>
+                        )
+                      })()}
+                    </div>
+                  )}
+                </>
+              ) : (
+                <p className="text-xs text-slate-500">Select attacker faction</p>
+              )}
+            </div>
+            {/* Defender Detachment */}
+            <div className="rounded-lg border border-slate-800 bg-slate-900 p-4 space-y-3">
+              <p className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider">Defender Detachment</p>
+              {defenderDetachments.length > 0 ? (
+                <>
+                  <select
+                    value={defenderDetachmentId ?? ''}
+                    onChange={(e) => setDefenderDetachmentId(e.target.value || null)}
+                    className="w-full px-3 py-1.5 rounded-lg bg-slate-800 border border-slate-700 text-slate-100 text-sm focus:outline-none focus:border-amber-400"
+                  >
+                    <option value="">No detachment</option>
+                    {defenderDetachments.map((d) => (
+                      <option key={d.id} value={d.id}>{d.name}</option>
+                    ))}
+                  </select>
+                  {defDetachmentAbilities.length > 0 && (
+                    <div className="text-xs">
+                      <p className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider mb-1">Abilities</p>
+                      {defDetachmentAbilities.map((a) => (
+                        <div key={a.id} className="mb-1.5">
+                          <p className="font-medium text-amber-400">{a.name}</p>
+                          <p className="text-slate-400 leading-relaxed">{stripHtmlTags(a.description)}</p>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </>
+              ) : (
+                <p className="text-xs text-slate-500">Select defender faction</p>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* Stratagems Reference */}
+        {(attackerStratagems.length > 0 || defenderStratagems.length > 0) && (
+          <StratagemReference
+            attackerStratagems={attackerStratagems}
+            defenderStratagems={defenderStratagems}
+          />
+        )}
+
         {/* Weapon selection */}
         {resolvedAttacker && combinedWeapons.length > 0 && (
           <WeaponSelector
@@ -652,6 +771,74 @@ function UnitAbilitiesDisplay({ abilities }: { abilities: { name: string; descri
 function LeaderSelectOption({ leaderId }: { leaderId: string }) {
   const { data: unit } = useGameUnit(leaderId)
   return <option value={leaderId}>{unit?.name ?? leaderId}</option>
+}
+
+interface StratagemItem {
+  id: string
+  name: string
+  type: string
+  cpCost: string
+  turn: string
+  phase: string
+  legend: string
+  description: string
+}
+
+function StratagemReference({ attackerStratagems, defenderStratagems }: {
+  attackerStratagems: StratagemItem[]
+  defenderStratagems: StratagemItem[]
+}) {
+  const [expanded, setExpanded] = useState(false)
+
+  return (
+    <div className="rounded-lg border border-slate-800 bg-slate-900 p-4">
+      <button
+        onClick={() => setExpanded((prev) => !prev)}
+        className="w-full flex items-center justify-between text-sm font-semibold text-slate-300 hover:text-slate-100"
+      >
+        <span>Stratagems ({attackerStratagems.length + defenderStratagems.length})</span>
+        <span className="text-slate-500">{expanded ? '▲' : '▼'}</span>
+      </button>
+      {expanded && (
+        <div className="mt-3 grid grid-cols-1 md:grid-cols-2 gap-4 max-h-96 overflow-y-auto">
+          {attackerStratagems.length > 0 && (
+            <div>
+              <p className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider mb-2">Attacker</p>
+              <div className="space-y-2">
+                {attackerStratagems.map((s) => (
+                  <div key={s.id} className="text-xs">
+                    <div className="flex items-center gap-2">
+                      <span className="font-medium text-amber-400">{s.name}</span>
+                      <span className="px-1 py-0.5 rounded bg-slate-800 text-slate-400 text-[10px]">{s.cpCost}CP</span>
+                      <span className="px-1 py-0.5 rounded bg-slate-800 text-slate-500 text-[10px]">{s.phase}</span>
+                    </div>
+                    <p className="text-slate-500 mt-0.5 leading-relaxed">{stripHtmlTags(s.legend)}</p>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+          {defenderStratagems.length > 0 && (
+            <div>
+              <p className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider mb-2">Defender</p>
+              <div className="space-y-2">
+                {defenderStratagems.map((s) => (
+                  <div key={s.id} className="text-xs">
+                    <div className="flex items-center gap-2">
+                      <span className="font-medium text-amber-400">{s.name}</span>
+                      <span className="px-1 py-0.5 rounded bg-slate-800 text-slate-400 text-[10px]">{s.cpCost}CP</span>
+                      <span className="px-1 py-0.5 rounded bg-slate-800 text-slate-500 text-[10px]">{s.phase}</span>
+                    </div>
+                    <p className="text-slate-500 mt-0.5 leading-relaxed">{stripHtmlTags(s.legend)}</p>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  )
 }
 
 interface HistorySimulation {

@@ -241,6 +241,7 @@ export function UnitSelectionScreen({ listId, faction, detachment, battleSize, o
           unitPoints: u.unitPoints,
           count: u.count,
           isWarlord: u.isWarlord,
+          role: unitRoles.get(u.unitContentId),
         })),
         battleSize,
       )

@@ -127,7 +127,7 @@
   <script>
     // Check if game data is loaded in IndexedDB
     try {
-      var req = indexedDB.open('tabletop-tools-game-data', 6);
+      var req = indexedDB.open('tabletop-tools-game-data', 7);
       req.onsuccess = function(e) {
         var db = e.target.result;
         if (!db.objectStoreNames.contains('units')) { show(); db.close(); return; }

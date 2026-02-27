@@ -81,6 +81,16 @@ vi.mock('@tabletop-tools/game-data-store', () => ({
     error: null,
     isLoading: false,
   }),
+  usePrimaryFactions: () => ({
+    data: ['Space Marines', 'Orks'],
+    isLoading: false,
+  }),
+  usePrimaryUnitSearch: () => ({
+    data: [
+      { id: 'u1', name: 'Intercessors', faction: 'Space Marines', points: 90, weapons: [], abilities: [] },
+    ],
+    isLoading: false,
+  }),
   useDetachments: () => ({
     data: [],
     error: null,

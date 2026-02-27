@@ -247,6 +247,8 @@ describe('rulesImportMeta', () => {
         detachments: 246, stratagems: 1397, enhancements: 869,
         leaderAttachments: 1899, unitCompositions: 2138, unitCosts: 2104,
         wargearOptions: 2790, unitKeywords: 15685, unitAbilities: 7031,
+        missions: 0, abilities: 0, datasheetStratagems: 0,
+        datasheetEnhancements: 0, datasheetDetachmentAbilities: 0,
       },
     }
     await setRulesImportMeta(meta)
@@ -257,7 +259,7 @@ describe('rulesImportMeta', () => {
     await setImportMeta({ lastImport: 1, factions: ['A'], totalUnits: 1 })
     await setRulesImportMeta({
       lastImport: 2,
-      counts: { detachments: 1, stratagems: 0, enhancements: 0, leaderAttachments: 0, unitCompositions: 0, unitCosts: 0, wargearOptions: 0, unitKeywords: 0, unitAbilities: 0 },
+      counts: { detachments: 1, stratagems: 0, enhancements: 0, leaderAttachments: 0, unitCompositions: 0, unitCosts: 0, wargearOptions: 0, unitKeywords: 0, unitAbilities: 0, missions: 0, abilities: 0, datasheetStratagems: 0, datasheetEnhancements: 0, datasheetDetachmentAbilities: 0 },
     })
     expect((await getImportMeta())?.lastImport).toBe(1)
     expect((await getRulesImportMeta())?.lastImport).toBe(2)
