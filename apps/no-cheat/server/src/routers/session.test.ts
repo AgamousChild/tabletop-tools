@@ -152,6 +152,64 @@ describe('session.addRoll', () => {
 })
 
 // ---------------------------------------------------------------------------
+// session.undoLastRoll
+// ---------------------------------------------------------------------------
+describe('session.undoLastRoll', () => {
+  it('removes the most recent roll and returns updated stats', async () => {
+    const caller = createCaller(alice)
+    const session = await caller.session.start({ diceSetId: 'set-1' })
+    await caller.session.addRoll({ sessionId: session.id, pipValues: [1, 2, 3] })
+    await caller.session.addRoll({ sessionId: session.id, pipValues: [4, 5, 6] })
+
+    const result = await caller.session.undoLastRoll({ sessionId: session.id })
+    expect(result.rollCount).toBe(1)
+    expect(result.removedPips).toEqual([4, 5, 6])
+    expect(typeof result.zScore).toBe('number')
+  })
+
+  it('returns zero z-score when all rolls are removed', async () => {
+    const caller = createCaller(alice)
+    const session = await caller.session.start({ diceSetId: 'set-1' })
+    await caller.session.addRoll({ sessionId: session.id, pipValues: [1, 2, 3] })
+
+    const result = await caller.session.undoLastRoll({ sessionId: session.id })
+    expect(result.rollCount).toBe(0)
+    expect(result.zScore).toBe(0)
+  })
+
+  it('rejects undo on empty session', async () => {
+    const caller = createCaller(alice)
+    const session = await caller.session.start({ diceSetId: 'set-1' })
+
+    await expect(caller.session.undoLastRoll({ sessionId: session.id })).rejects.toMatchObject({
+      code: 'BAD_REQUEST',
+    })
+  })
+
+  it('rejects undo on closed session', async () => {
+    const caller = createCaller(alice)
+    const session = await caller.session.start({ diceSetId: 'set-1' })
+    await caller.session.addRoll({ sessionId: session.id, pipValues: [1, 2, 3] })
+    await caller.session.close({ sessionId: session.id })
+
+    await expect(caller.session.undoLastRoll({ sessionId: session.id })).rejects.toMatchObject({
+      code: 'BAD_REQUEST',
+    })
+  })
+
+  it('rejects undo by another user', async () => {
+    const aliceCaller = createCaller(alice)
+    const session = await aliceCaller.session.start({ diceSetId: 'set-1' })
+    await aliceCaller.session.addRoll({ sessionId: session.id, pipValues: [1, 2, 3] })
+
+    const bobCaller = createCaller(bob)
+    await expect(bobCaller.session.undoLastRoll({ sessionId: session.id })).rejects.toMatchObject({
+      code: 'FORBIDDEN',
+    })
+  })
+})
+
+// ---------------------------------------------------------------------------
 // session.close
 // ---------------------------------------------------------------------------
 describe('session.close', () => {

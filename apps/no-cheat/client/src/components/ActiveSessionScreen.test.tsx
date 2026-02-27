@@ -28,6 +28,12 @@ vi.mock('../lib/trpc', () => ({
           isPending: false,
         }),
       },
+      undoLastRoll: {
+        useMutation: () => ({
+          mutate: vi.fn(),
+          isPending: false,
+        }),
+      },
       close: {
         useMutation: () => ({
           mutate: vi.fn(),
@@ -159,6 +165,16 @@ describe('ActiveSessionScreen', () => {
       expect(screen.getByText('Session limit reached')).toBeInTheDocument()
     })
     expect(screen.getByText('← Back')).toBeInTheDocument()
+  })
+
+  it('does not show undo button when no rolls captured', async () => {
+    startResult = { id: 'sess-1' }
+    render(<ActiveSessionScreen diceSet={{ id: 'd1', name: 'Red Dice' }} onDone={vi.fn()} />)
+    await waitFor(() => screen.getByTestId('calibration-wizard'))
+    screen.getByText('Complete Calibration').click()
+    await waitFor(() => screen.getByText(/hands-free/i))
+    // No undo button should be present without any captured rolls
+    expect(screen.queryByRole('button', { name: /undo/i })).not.toBeInTheDocument()
   })
 
   it('shows dice set name during calibration', async () => {

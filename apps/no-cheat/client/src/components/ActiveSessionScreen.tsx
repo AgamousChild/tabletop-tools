@@ -49,6 +49,8 @@ export function ActiveSessionScreen({ diceSet, onDone }: Props) {
   const [error, setError] = useState<string | null>(null)
   const [detectedResults, setDetectedResults] = useState<RoiResult[]>([])
   const [autoCapturing, setAutoCapturing] = useState(false)
+  const [lastCapture, setLastCapture] = useState<{ pips: number[]; time: number } | null>(null)
+  const [undoFeedback, setUndoFeedback] = useState<string | null>(null)
 
   const pipeline = useMemo(() => createPipeline(diceSet.id), [diceSet.id])
 
@@ -65,6 +67,7 @@ export function ActiveSessionScreen({ diceSet, onDone }: Props) {
 
   const startMutation = trpc.session.start.useMutation()
   const addRollMutation = trpc.session.addRoll.useMutation()
+  const undoMutation = trpc.session.undoLastRoll.useMutation()
   const closeMutation = trpc.session.close.useMutation()
   const savePhotoMutation = trpc.session.savePhoto.useMutation()
 
@@ -131,6 +134,8 @@ export function ActiveSessionScreen({ diceSet, onDone }: Props) {
               distribution: newDist,
             })
             setAutoCapturing(false)
+            setLastCapture({ pips: pipValues, time: Date.now() })
+            setUndoFeedback(null)
           },
           onError: (err) => setError(err.message),
         },
@@ -138,6 +143,55 @@ export function ActiveSessionScreen({ diceSet, onDone }: Props) {
     },
     [],
   )
+
+  const handleUndo = useCallback(() => {
+    const p = phaseRef.current
+    if (p.name !== 'recording' || p.rollCount === 0) return
+    if (undoMutation.isPending) return
+
+    undoMutation.mutate(
+      { sessionId: p.sessionId },
+      {
+        onSuccess: ({ rollCount, zScore, removedPips }) => {
+          // Rebuild distribution by subtracting removed pips
+          const newDist = new Map(
+            (phaseRef.current as Extract<Phase, { name: 'recording' }>).distribution,
+          )
+          for (const pip of removedPips) {
+            const count = newDist.get(pip) ?? 0
+            if (count <= 1) {
+              newDist.delete(pip)
+            } else {
+              newDist.set(pip, count - 1)
+            }
+          }
+          // Recompute chi-squared
+          const total = Array.from(newDist.values()).reduce((a, b) => a + b, 0)
+          let chiSq = 0
+          if (total > 0) {
+            const expected = total / 6
+            for (let i = 1; i <= 6; i++) {
+              const obs = newDist.get(i) ?? 0
+              chiSq += ((obs - expected) ** 2) / expected
+            }
+          }
+
+          setPhase({
+            name: 'recording',
+            sessionId: (phaseRef.current as Extract<Phase, { name: 'recording' }>).sessionId,
+            rollCount,
+            zScore,
+            chiSquared: chiSq,
+            distribution: newDist,
+          })
+          setLastCapture(null)
+          setUndoFeedback(`Removed roll [${removedPips.join(', ')}]`)
+          setTimeout(() => setUndoFeedback(null), 3000)
+        },
+        onError: (err) => setError(err.message),
+      },
+    )
+  }, [undoMutation])
 
   // Recording loop — continuous frame processing with auto-capture
   useEffect(() => {
@@ -407,6 +461,27 @@ export function ActiveSessionScreen({ diceSet, onDone }: Props) {
           chiSquared={phase.chiSquared}
           distribution={phase.distribution}
         />
+
+        {/* Last capture + undo */}
+        {lastCapture && (
+          <div className="flex items-center justify-between bg-slate-900 rounded-lg px-3 py-2">
+            <div className="text-sm">
+              <span className="text-slate-400">Last roll: </span>
+              <span className="text-emerald-400 font-mono">[{lastCapture.pips.join(', ')}]</span>
+            </div>
+            <button
+              onClick={handleUndo}
+              disabled={undoMutation.isPending}
+              className="text-xs px-2 py-1 rounded border border-red-800 text-red-400 hover:bg-red-900/30 transition-colors disabled:opacity-50"
+            >
+              {undoMutation.isPending ? 'Undoing…' : 'Undo'}
+            </button>
+          </div>
+        )}
+
+        {undoFeedback && (
+          <p className="text-center text-amber-400 text-xs">{undoFeedback}</p>
+        )}
 
         {addRollMutation.isPending && (
           <p className="text-center text-slate-400 text-sm">Recording roll…</p>
