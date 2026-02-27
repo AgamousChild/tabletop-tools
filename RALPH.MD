@@ -127,7 +127,7 @@ Update this section every time you update or fix a section of the requirements.
 | packages/db | 61 | PASS |
 | packages/auth | 16 | PASS |
 | packages/server-core | 17 | PASS |
-| packages/game-content | 118 | PASS |
+| packages/game-content | 108 | PASS |
 | packages/game-data-store | 93 | PASS |
 | packages/ui | 30 | PASS |
 | apps/no-cheat/server | 64 | PASS |
@@ -145,7 +145,7 @@ Update this section every time you update or fix a section of the requirements.
 | apps/admin/server | 46 | PASS |
 | apps/admin/client | 47 | PASS |
 | apps/data-import/client | 57 | PASS |
-| **Total** | **1,437** | **ALL PASS** |
+| **Total** | **1,427** | **ALL PASS** |
 
 ---
 
