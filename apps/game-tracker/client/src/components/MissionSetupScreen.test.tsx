@@ -1,11 +1,17 @@
 import { fireEvent, render, screen } from '@testing-library/react'
-import { describe, expect, it, vi } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
+
+let mockMissions: Array<{ id: string; name: string; type: string; description: string }> = []
 
 vi.mock('@tabletop-tools/game-data-store', () => ({
-  useMissions: () => ({ data: [], error: null, isLoading: false }),
+  useMissions: () => ({ data: mockMissions, error: null, isLoading: false }),
 }))
 
 import { MissionSetupScreen } from './MissionSetupScreen'
+
+beforeEach(() => {
+  mockMissions = []
+})
 
 describe('MissionSetupScreen', () => {
   it('shows Mission Setup title', () => {
@@ -151,6 +157,53 @@ describe('MissionSetupScreen', () => {
     expect(onNext).toHaveBeenCalledWith(
       expect.objectContaining({
         challengerCards: ['Double Down'],
+      }),
+    )
+  })
+
+  it('uses data-driven missions instead of fallbacks when available', () => {
+    mockMissions = [
+      { id: 'm1', name: 'Scorched Earth', type: 'primary', description: 'Burn objectives' },
+      { id: 'm2', name: 'Supply Drop', type: 'primary', description: 'Secure supplies' },
+      { id: 'd1', name: 'Dawn of War', type: 'deployment_zone', description: 'Long edges' },
+    ]
+    render(<MissionSetupScreen onNext={vi.fn()} onBack={vi.fn()} />)
+    const missionSelect = screen.getByLabelText('Select mission')
+    const options = missionSelect.querySelectorAll('option')
+    // Placeholder + 2 data-driven missions (not 7 fallbacks)
+    expect(options).toHaveLength(3)
+    expect(options[1]!.textContent).toBe('Scorched Earth')
+    expect(options[2]!.textContent).toBe('Supply Drop')
+  })
+
+  it('uses data-driven deployment zones instead of fallbacks when available', () => {
+    mockMissions = [
+      { id: 'd1', name: 'Dawn of War', type: 'deployment_zone', description: 'Long edges' },
+      { id: 'd2', name: 'Hammer and Anvil', type: 'deployment_zone', description: 'Short edges' },
+    ]
+    render(<MissionSetupScreen onNext={vi.fn()} onBack={vi.fn()} />)
+    const deploymentSelect = screen.getByLabelText('Select deployment zone')
+    const options = deploymentSelect.querySelectorAll('option')
+    // Placeholder + 2 data-driven zones (not 6 fallbacks)
+    expect(options).toHaveLength(3)
+    expect(options[1]!.textContent).toBe('Dawn of War')
+    expect(options[2]!.textContent).toBe('Hammer and Anvil')
+  })
+
+  it('selects a data-driven mission and includes in onNext', () => {
+    mockMissions = [
+      { id: 'm1', name: 'Scorched Earth', type: 'primary', description: 'Burn objectives' },
+      { id: 'd1', name: 'Dawn of War', type: 'deployment_zone', description: 'Long edges' },
+    ]
+    const onNext = vi.fn()
+    render(<MissionSetupScreen onNext={onNext} onBack={vi.fn()} />)
+    fireEvent.change(screen.getByLabelText('Select mission'), { target: { value: 'Scorched Earth' } })
+    fireEvent.change(screen.getByLabelText('Select deployment zone'), { target: { value: 'Dawn of War' } })
+    fireEvent.click(screen.getByRole('button', { name: /next/i }))
+    expect(onNext).toHaveBeenCalledWith(
+      expect.objectContaining({
+        mission: 'Scorched Earth',
+        deploymentZone: 'Dawn of War',
       }),
     )
   })
