@@ -71,9 +71,9 @@ at `tabletop-tools.net/auth/*`.
 | App | Port | Tests | Status | Purpose |
 |---|---|---|---|---|
 | no-cheat | 3001 | 216 | Deployed | Detect loaded dice via CV + statistics |
-| versus | 3002 | 72 | Deployed | Simulate 40K combat: hit/wound/save/damage |
-| list-builder | 3003 | 48 | Deployed | Build lists with live meta ratings from GT data |
-| game-tracker | 3004 | 54 | Deployed | Track matches turn-by-turn with photos |
+| versus | 3002 | 137 | Deployed | Simulate 40K combat: hit/wound/save/damage |
+| list-builder | 3003 | 85 | Deployed | Build lists with live meta ratings from GT data |
+| game-tracker | 3004 | 201 | Deployed | Track matches turn-by-turn with photos |
 | tournament | 3005 | 73 | Deployed | Swiss events: pairings, results, standings, ELO |
 | new-meta | 3006 | 128 | Deployed | Meta analytics: win rates, Glicko-2 ratings |
 | data-import | — | 24 | Deployed (client-only) | BSData importer: fetch + parse XML → IndexedDB |
@@ -416,7 +416,7 @@ SQLite database — no mocks for the database layer.
 
 The specific test file structure for each app is documented in that app's own CLAUDE.md.
 
-**Platform total: 925 unit tests, all passing.** Plus 36 Playwright E2E browser tests.
+**Platform total: 1,335 unit tests, all passing.** Plus 36 Playwright E2E browser tests.
 
 ---
 

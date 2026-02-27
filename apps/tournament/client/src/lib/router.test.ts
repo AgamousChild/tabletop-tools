@@ -37,4 +37,20 @@ describe('parseHash', () => {
       roundId: 'r1',
     })
   })
+
+  it('returns play view for #/play', () => {
+    expect(parseHash('#/play')).toEqual({ view: 'play' })
+  })
+
+  it('returns my-info view for #/my-info', () => {
+    expect(parseHash('#/my-info')).toEqual({ view: 'my-info' })
+  })
+
+  it('returns search-lists view for #/search/lists', () => {
+    expect(parseHash('#/search/lists')).toEqual({ view: 'search-lists' })
+  })
+
+  it('returns search-players view for #/search/players', () => {
+    expect(parseHash('#/search/players')).toEqual({ view: 'search-players' })
+  })
 })

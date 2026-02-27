@@ -96,6 +96,11 @@ vi.mock('@tabletop-tools/game-data-store', () => ({
     error: null,
     isLoading: false,
   }),
+  useAllUnitKeywords: () => ({
+    data: [],
+    error: null,
+    isLoading: false,
+  }),
   useUnitCompositions: () => ({
     data: [],
     error: null,
@@ -125,7 +130,15 @@ vi.mock('@tabletop-tools/game-data-store', () => ({
     isLoading: false,
   }),
   useDetachmentAbilities: () => ({
-    data: [],
+    data: [{ id: 'da1', detachmentId: 'det1', factionId: 'f1', name: 'Test Ability', legend: '', description: 'All INFANTRY gain +1 to hit' }],
+    error: null,
+    isLoading: false,
+  }),
+  useAllDatasheets: () => ({
+    data: [
+      { id: 'u1', name: 'Intercessors', factionId: 'SM', role: 'Battleline', legend: '', transport: '', loadout: '', damagedW: '', damagedDescription: '' },
+      { id: 'u2', name: 'Captain', factionId: 'SM', role: 'Character', legend: '', transport: '', loadout: '', damagedW: '', damagedDescription: '' },
+    ],
     error: null,
     isLoading: false,
   }),

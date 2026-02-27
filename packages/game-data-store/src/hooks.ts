@@ -3,16 +3,17 @@ import type { UnitProfile } from '@tabletop-tools/game-content'
 import {
   getUnit, searchUnits, listFactions, getImportMeta, getLists, getList, getListUnits,
   getDetachmentsByFaction, getDetachment, getDetachmentAbilities,
-  getStratagems, getEnhancements, getLeaderAttachments,
+  getStratagems, getEnhancements, getLeaderAttachments, getLeadersForUnit,
   getUnitCompositions, getUnitCosts, getWargearOptions,
-  getUnitKeywords, getUnitAbilities, getMissions,
+  getUnitKeywords, getAllUnitKeywords, getUnitAbilities, getMissions,
   getRulesImportMeta,
+  getAllDatasheets, getDatasheetWargear, getDatasheetModels,
 } from './store.js'
 import type {
   LocalList, LocalListUnit, Detachment, DetachmentAbility,
   Stratagem, Enhancement, LeaderAttachment, UnitComposition,
   UnitCost, WargearOption, UnitKeyword, UnitAbility, Mission,
-  RulesImportMeta,
+  RulesImportMeta, Datasheet, DatasheetWargear, DatasheetModel,
 } from './store.js'
 
 // ── Internal helper ──────────────────────────────────────────────────────────
@@ -252,6 +253,10 @@ export function useLeaderAttachments(leaderId: string) {
   return useStoreQuery(() => getLeaderAttachments(leaderId), [leaderId], [] as LeaderAttachment[])
 }
 
+export function useLeadersForUnit(attachedId: string) {
+  return useStoreQuery(() => getLeadersForUnit(attachedId), [attachedId], [] as LeaderAttachment[])
+}
+
 // ── Unit detail hooks ────────────────────────────────────────────────────────
 
 export function useUnitCompositions(datasheetId: string) {
@@ -270,6 +275,10 @@ export function useUnitKeywords(datasheetId: string) {
   return useStoreQuery(() => getUnitKeywords(datasheetId), [datasheetId], [] as UnitKeyword[])
 }
 
+export function useAllUnitKeywords() {
+  return useStoreQuery(() => getAllUnitKeywords(), [], [] as UnitKeyword[])
+}
+
 export function useUnitAbilities(datasheetId: string) {
   return useStoreQuery(() => getUnitAbilities(datasheetId), [datasheetId], [] as UnitAbility[])
 }
@@ -284,4 +293,18 @@ export function useMissions() {
 
 export function useRulesImportMeta() {
   return useStoreQuery(() => getRulesImportMeta(), [], null as RulesImportMeta | null)
+}
+
+// ── Datasheet hooks ─────────────────────────────────────────────────────────
+
+export function useAllDatasheets() {
+  return useStoreQuery(() => getAllDatasheets(), [], [] as Datasheet[])
+}
+
+export function useDatasheetWargear(datasheetId: string) {
+  return useStoreQuery(() => getDatasheetWargear(datasheetId), [datasheetId], [] as DatasheetWargear[])
+}
+
+export function useDatasheetModels(datasheetId: string) {
+  return useStoreQuery(() => getDatasheetModels(datasheetId), [datasheetId], [] as DatasheetModel[])
 }

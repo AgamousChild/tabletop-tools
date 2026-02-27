@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from 'react'
 import { Dashboard } from './pages/Dashboard'
 import { FactionDetail } from './pages/FactionDetail'
 import { PlayerRanking } from './pages/PlayerRanking'
+import { PlayerProfile } from './pages/PlayerProfile'
 import { SourceData } from './pages/SourceData'
 import { TournamentDetail } from './pages/TournamentDetail'
 import { Admin } from './pages/Admin'
@@ -10,6 +11,7 @@ type Page =
   | { id: 'dashboard' }
   | { id: 'faction'; faction: string }
   | { id: 'players' }
+  | { id: 'player'; playerId: string }
   | { id: 'source' }
   | { id: 'tournament'; importId: string }
   | { id: 'admin' }
@@ -18,9 +20,12 @@ function parseHash(hash: string): Page {
   if (hash.startsWith('#/faction/')) {
     return { id: 'faction', faction: decodeURIComponent(hash.slice('#/faction/'.length)) }
   }
-  if (hash.startsWith('#/player/') || hash === '#/players') {
+  if (hash.startsWith('#/player/')) {
+    const playerId = hash.slice('#/player/'.length)
+    if (playerId) return { id: 'player', playerId }
     return { id: 'players' }
   }
+  if (hash === '#/players') return { id: 'players' }
   if (hash.startsWith('#/tournament/')) {
     return { id: 'tournament', importId: hash.slice('#/tournament/'.length) }
   }
@@ -56,7 +61,9 @@ export default function App() {
     ? 'dashboard'
     : page.id === 'tournament'
       ? 'source'
-      : page.id
+      : page.id === 'player'
+        ? 'players'
+        : page.id
 
   return (
     <div className="min-h-screen bg-slate-950">
@@ -87,7 +94,15 @@ export default function App() {
             onBack={() => navigate('#/')}
           />
         )}
-        {page.id === 'players' && <PlayerRanking />}
+        {page.id === 'players' && (
+          <PlayerRanking onPlayerSelect={(id) => navigate(`#/player/${id}`)} />
+        )}
+        {page.id === 'player' && (
+          <PlayerProfile
+            playerId={page.playerId}
+            onBack={() => navigate('#/players')}
+          />
+        )}
         {page.id === 'source' && (
           <SourceData
             onTournamentSelect={(importId) => navigate(`#/tournament/${importId}`)}

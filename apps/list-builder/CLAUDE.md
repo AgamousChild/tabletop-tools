@@ -142,7 +142,7 @@ List sync runs in the background after every IndexedDB write.
 
 ## Testing
 
-**81 tests** (35 server + 46 client), all passing.
+**85 tests** (35 server + 50 client), all passing.
 
 ```
 server/src/
@@ -163,5 +163,5 @@ client/src/
 
 ```bash
 cd apps/list-builder/server && pnpm test   # 35 server tests
-cd apps/list-builder/client && pnpm test   # 46 client tests
+cd apps/list-builder/client && pnpm test   # 50 client tests
 ```

@@ -1,7 +1,7 @@
 import type { UnitProfile, WeaponAbility, WeaponProfile } from '../../types.js'
 
 /** Bump when parser output changes in a way that invalidates previously-imported data. */
-export const PARSER_VERSION = 2
+export const PARSER_VERSION = 4
 
 // ============================================================
 // BSData XML → UnitProfile parser
@@ -38,6 +38,8 @@ export function parseBSDataXml(xml: string, faction: string): ParseResult {
 
     try {
       const unit = parseUnitEntry(id, name, faction, entry.body, entry.fullBody)
+      // Validate parsed data and add warnings for suspicious values
+      validateUnit(unit, errors)
       units.push(unit)
     } catch (err) {
       errors.push(`Failed to parse unit "${name}" (${id}): ${String(err)}`)
@@ -45,6 +47,30 @@ export function parseBSDataXml(xml: string, faction: string): ParseResult {
   }
 
   return { units, errors }
+}
+
+/**
+ * Validate a parsed unit and add warnings for suspicious/impossible values.
+ * Warnings don't prevent the unit from being stored — they inform the user.
+ */
+function validateUnit(unit: UnitProfile, errors: string[]): void {
+  if (unit.toughness === 0) {
+    errors.push(`${unit.name}: Toughness is 0 (missing characteristic data)`)
+  }
+  if (unit.save === 0) {
+    errors.push(`${unit.name}: Save is 0 (missing characteristic data)`)
+  }
+  if (unit.weapons.length === 0) {
+    errors.push(`${unit.name}: No weapons found`)
+  }
+  for (const w of unit.weapons) {
+    if (w.strength === 0) {
+      errors.push(`${unit.name}: Weapon "${w.name}" has Strength 0 (missing data)`)
+    }
+    if (typeof w.attacks === 'number' && w.attacks === 0) {
+      errors.push(`${unit.name}: Weapon "${w.name}" has 0 attacks (missing data)`)
+    }
+  }
 }
 
 /**
@@ -270,15 +296,21 @@ function extractWeaponCharacteristics(profileBody: string): Record<string, strin
 }
 
 function extractWeaponAbilityNames(profileBody: string): string[] {
-  const special = ''
   const statsObj = extractWeaponCharacteristics(profileBody)
+  // Check multiple characteristic names BSData might use for weapon abilities
   const abilityText =
-    statsObj['Abilities'] ?? statsObj['Special Rules'] ?? statsObj['Keywords'] ?? special
+    statsObj['Abilities'] ?? statsObj['Special Rules'] ?? statsObj['Keywords']
+    ?? statsObj['Special'] ?? statsObj['Rules Text'] ?? statsObj['Type']
+    ?? ''
   if (!abilityText) return []
   return abilityText
-    .split(/[,;]/)
+    .split(/[,;—–]/)  // Split on commas, semicolons, em-dashes, en-dashes
     .map((s) => s.trim())
-    .filter(Boolean)
+    // Strip square brackets: [TORRENT] → TORRENT
+    .map((s) => s.replace(/^\[(.+)\]$/, '$1'))
+    // Strip trailing periods: "Lethal Hits." → "Lethal Hits"
+    .map((s) => s.replace(/\.+$/, ''))
+    .filter((s) => s.length > 0 && s !== '-' && s !== 'N/A')
 }
 
 // ---- Ability name + description extraction ----
@@ -332,12 +364,19 @@ function extractInvulnerableSave(body: string): number | undefined {
     }
   }
 
-  // Fallback: look in ability descriptions for "X+ invulnerable save"
-  const invulnPattern = /(\d)\+\s*invulnerable\s+save/i
-  const invulnMatch = invulnPattern.exec(body)
-  if (invulnMatch) {
-    const val = parseInt(invulnMatch[1]!)
-    if (val >= 2 && val <= 6) return val
+  // Fallback: multiple patterns for invuln text in body
+  // "X+ invulnerable save", "invulnerable save of X+", "invulnerable save (X+)"
+  const patterns = [
+    /(\d)\+\s*invulnerable\s+save/i,
+    /invulnerable\s+save\s+(?:of\s+)?(\d)\+/i,
+    /invulnerable\s+save\s*\(\s*(\d)\+\s*\)/i,
+  ]
+  for (const pattern of patterns) {
+    const match = pattern.exec(body)
+    if (match) {
+      const val = parseInt(match[1]!)
+      if (val >= 2 && val <= 6) return val
+    }
   }
 
   return undefined
@@ -346,21 +385,31 @@ function extractInvulnerableSave(body: string): number | undefined {
 // ---- Feel No Pain extraction ----
 
 function extractFeelNoPain(body: string, abilityDescriptions: Record<string, string>): number | undefined {
-  // Check ability descriptions for "feel no pain X+" pattern
+  // Multiple FNP text patterns: "Feel No Pain X+", "Feel No Pain (X+)", "has a X+ FNP"
+  const fnpPatterns = [
+    /feel\s+no\s+pain\s+(\d)\+/i,
+    /feel\s+no\s+pain\s*\(\s*(\d)\+\s*\)/i,
+    /(\d)\+\s*feel\s+no\s+pain/i,
+  ]
+
+  // Check ability descriptions first
   for (const desc of Object.values(abilityDescriptions)) {
-    const fnpMatch = /feel\s+no\s+pain\s+(\d)\+/i.exec(desc)
-    if (fnpMatch) {
-      const val = parseInt(fnpMatch[1]!)
-      if (val >= 2 && val <= 6) return val
+    for (const pattern of fnpPatterns) {
+      const match = pattern.exec(desc)
+      if (match) {
+        const val = parseInt(match[1]!)
+        if (val >= 2 && val <= 6) return val
+      }
     }
   }
 
   // Fallback: search raw body for FNP profile or description
-  const fnpPattern = /feel\s+no\s+pain\s+(\d)\+/i
-  const fnpMatch = fnpPattern.exec(body)
-  if (fnpMatch) {
-    const val = parseInt(fnpMatch[1]!)
-    if (val >= 2 && val <= 6) return val
+  for (const pattern of fnpPatterns) {
+    const match = pattern.exec(body)
+    if (match) {
+      const val = parseInt(match[1]!)
+      if (val >= 2 && val <= 6) return val
+    }
   }
 
   return undefined
@@ -378,8 +427,9 @@ function extractPoints(body: string): number {
 // ---- Ability mapping ----
 
 const ABILITY_KEYWORDS: Array<{ pattern: RegExp; create: (name: string) => WeaponAbility }> = [
-  { pattern: /sustained hits\s*(\d+)/i, create: (n) => {
-    const m = /sustained hits\s*(\d+)/i.exec(n)
+  // Handle both "Sustained Hits 1" and "Sustained Hits (1)" formats
+  { pattern: /sustained hits\s*\(?(\d+)\)?/i, create: (n) => {
+    const m = /sustained hits\s*\(?(\d+)\)?/i.exec(n)
     return { type: 'SUSTAINED_HITS', value: m ? parseInt(m[1]!) : 1 }
   }},
   { pattern: /lethal hits/i, create: () => ({ type: 'LETHAL_HITS' }) },
@@ -391,20 +441,23 @@ const ABILITY_KEYWORDS: Array<{ pattern: RegExp; create: (name: string) => Weapo
   { pattern: /re-?roll\s+(all\s+)?hit\s+rolls?(?!\s+of)/i, create: () => ({ type: 'REROLL_HITS' }) },
   { pattern: /re-?roll\s+(all\s+)?wound\s+rolls?/i, create: () => ({ type: 'REROLL_WOUNDS' }) },
   { pattern: /heavy/i, create: () => ({ type: 'HIT_MOD', value: 1 }) },
-  { pattern: /rapid fire\s*(\d+)/i, create: (n) => {
-    const m = /rapid fire\s*(\d+)/i.exec(n)
+  // Handle both "Rapid Fire 1" and "Rapid Fire (1)" formats
+  { pattern: /rapid fire\s*\(?(\d+)\)?/i, create: (n) => {
+    const m = /rapid fire\s*\(?(\d+)\)?/i.exec(n)
     return { type: 'ATTACKS_MOD', value: m ? parseInt(m[1]!) : 1 }
   }},
   { pattern: /extra attacks/i, create: () => ({ type: 'ATTACKS_MOD', value: 0 }) },
   { pattern: /lance/i, create: () => ({ type: 'WOUND_MOD', value: 1 }) },
   // Anti-keyword X+ — improved wound roll vs keyword targets
-  { pattern: /anti-(.+?)\s+(\d)\+/i, create: (n) => {
-    const m = /anti-(.+?)\s+(\d)\+/i.exec(n)
+  // Handle both "Anti-Infantry 4+" and "Anti-Infantry (4+)" formats
+  { pattern: /anti-(.+?)\s*\(?(\d)\+\)?/i, create: (n) => {
+    const m = /anti-(.+?)\s*\(?(\d)\+\)?/i.exec(n)
     return { type: 'ANTI', keyword: m?.[1]?.trim() ?? '', value: m ? parseInt(m[2]!) : 4 }
   }},
   // Melta X — bonus damage at half range
-  { pattern: /melta\s*(\d+)/i, create: (n) => {
-    const m = /melta\s*(\d+)/i.exec(n)
+  // Handle both "Melta 2" and "Melta (2)" formats
+  { pattern: /melta\s*\(?(\d+)\)?/i, create: (n) => {
+    const m = /melta\s*\(?(\d+)\)?/i.exec(n)
     return { type: 'MELTA', value: m ? parseInt(m[1]!) : 1 }
   }},
   { pattern: /ignores cover/i, create: () => ({ type: 'IGNORES_COVER' }) },
@@ -438,15 +491,24 @@ function extractAttr(attrs: string, name: string): string {
 }
 
 function parseStatNumber(value: string): number {
-  // Strip trailing '+' (e.g. "3+", "4+")
-  const cleaned = value.replace(/\+$/, '').trim()
+  // Strip trailing '+' (e.g. "3+", "4+"), quotes, inch marks, and common non-numeric markers
+  const cleaned = value
+    .replace(/\+$/, '')
+    .replace(/["'"″″'']/g, '')  // ASCII and Unicode quotes/inch marks
+    .trim()
+  if (cleaned === '' || cleaned === '-' || cleaned === '–' || cleaned === '—'
+    || cleaned === 'N/A' || cleaned === 'n/a' || cleaned === '*') {
+    return 0
+  }
   const n = parseInt(cleaned, 10)
   return isNaN(n) ? 0 : n
 }
 
 function parseDiceOrNumber(value: string): number | string {
-  const trimmed = value.trim()
+  // Normalize: trim whitespace, collapse internal spaces, uppercase dice notation
+  const trimmed = value.trim().replace(/\s+/g, '').toUpperCase()
   if (/^\d+$/.test(trimmed)) return parseInt(trimmed, 10)
+  if (trimmed === '' || trimmed === '-' || trimmed === '–') return 1
   return trimmed  // e.g. "D6", "2D6", "D3+1"
 }
 

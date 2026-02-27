@@ -3,6 +3,10 @@ import { useState, useEffect, useCallback } from 'react'
 export type Route =
   | { view: 'list' }
   | { view: 'create' }
+  | { view: 'play' }
+  | { view: 'my-info' }
+  | { view: 'search-lists' }
+  | { view: 'search-players' }
   | { view: 'tournament'; id: string }
   | { view: 'tournament-standings'; id: string }
   | { view: 'tournament-register'; id: string }
@@ -11,6 +15,10 @@ export type Route =
 
 export function parseHash(hash: string): Route {
   if (hash === '#/create') return { view: 'create' }
+  if (hash === '#/play') return { view: 'play' }
+  if (hash === '#/my-info') return { view: 'my-info' }
+  if (hash === '#/search/lists') return { view: 'search-lists' }
+  if (hash === '#/search/players') return { view: 'search-players' }
 
   const tournamentMatch = hash.match(/^#\/tournament\/([^/]+)(?:\/(.+))?$/)
   if (tournamentMatch) {

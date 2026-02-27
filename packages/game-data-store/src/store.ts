@@ -1,7 +1,7 @@
 import type { UnitProfile } from '@tabletop-tools/game-content'
 
 const DB_NAME = 'tabletop-tools-game-data'
-const DB_VERSION = 4
+const DB_VERSION = 6
 const UNITS_STORE = 'units'
 const META_STORE = 'meta'
 const LISTS_STORE = 'lists'
@@ -17,20 +17,25 @@ const WARGEAR_OPTIONS_STORE = 'wargear_options'
 const UNIT_KEYWORDS_STORE = 'unit_keywords'
 const UNIT_ABILITIES_STORE = 'unit_abilities'
 const MISSIONS_STORE = 'missions'
+const DATASHEETS_STORE = 'datasheets'
+const DATASHEET_WARGEAR_STORE = 'datasheet_wargear'
+const DATASHEET_MODELS_STORE = 'datasheet_models'
 
 const ALL_STORES = [
   UNITS_STORE, META_STORE, LISTS_STORE, LIST_UNITS_STORE,
   DETACHMENTS_STORE, DETACHMENT_ABILITIES_STORE, STRATAGEMS_STORE,
   ENHANCEMENTS_STORE, LEADER_ATTACHMENTS_STORE, UNIT_COMPOSITIONS_STORE,
   UNIT_COSTS_STORE, WARGEAR_OPTIONS_STORE, UNIT_KEYWORDS_STORE,
-  UNIT_ABILITIES_STORE, MISSIONS_STORE,
+  UNIT_ABILITIES_STORE, MISSIONS_STORE, DATASHEETS_STORE,
+  DATASHEET_WARGEAR_STORE, DATASHEET_MODELS_STORE,
 ]
 
 const GAME_RULES_STORES = [
   DETACHMENTS_STORE, DETACHMENT_ABILITIES_STORE, STRATAGEMS_STORE,
   ENHANCEMENTS_STORE, LEADER_ATTACHMENTS_STORE, UNIT_COMPOSITIONS_STORE,
   UNIT_COSTS_STORE, WARGEAR_OPTIONS_STORE, UNIT_KEYWORDS_STORE,
-  UNIT_ABILITIES_STORE, MISSIONS_STORE,
+  UNIT_ABILITIES_STORE, MISSIONS_STORE, DATASHEETS_STORE,
+  DATASHEET_WARGEAR_STORE, DATASHEET_MODELS_STORE,
 ]
 
 // ── Types ────────────────────────────────────────────────────────────────────
@@ -173,6 +178,47 @@ export interface Mission {
   description: string
 }
 
+export interface Datasheet {
+  id: string
+  name: string
+  factionId: string
+  role: string
+  legend: string
+  transport: string
+  loadout: string
+  damagedW: string
+  damagedDescription: string
+}
+
+export interface DatasheetWargear {
+  id: number
+  datasheetId: string
+  name: string
+  description: string
+  range: string
+  type: string
+  attacks: string
+  skill: string
+  strength: string
+  ap: string
+  damage: string
+}
+
+export interface DatasheetModel {
+  id: number
+  datasheetId: string
+  name: string
+  move: string
+  toughness: string
+  save: string
+  wounds: string
+  leadership: string
+  oc: string
+  invSv: string
+  invSvDescription: string
+  baseSize: string
+}
+
 // ── Database ─────────────────────────────────────────────────────────────────
 
 function openDb(): Promise<IDBDatabase> {
@@ -217,6 +263,16 @@ function openDb(): Promise<IDBDatabase> {
       if (!db.objectStoreNames.contains(LEADER_ATTACHMENTS_STORE)) {
         const s = db.createObjectStore(LEADER_ATTACHMENTS_STORE, { keyPath: 'id' })
         s.createIndex('leaderId', 'leaderId', { unique: false })
+        s.createIndex('attachedId', 'attachedId', { unique: false })
+      } else {
+        // V5 upgrade: add attachedId index for reverse lookup
+        const tx = req.transaction
+        if (tx) {
+          const s = tx.objectStore(LEADER_ATTACHMENTS_STORE)
+          if (!s.indexNames.contains('attachedId')) {
+            s.createIndex('attachedId', 'attachedId', { unique: false })
+          }
+        }
       }
       if (!db.objectStoreNames.contains(UNIT_COMPOSITIONS_STORE)) {
         const s = db.createObjectStore(UNIT_COMPOSITIONS_STORE, { keyPath: 'id' })
@@ -240,6 +296,20 @@ function openDb(): Promise<IDBDatabase> {
       }
       if (!db.objectStoreNames.contains(MISSIONS_STORE)) {
         db.createObjectStore(MISSIONS_STORE, { keyPath: 'id' })
+      }
+      // V6 stores — datasheets, wargear profiles, model stats
+      if (!db.objectStoreNames.contains(DATASHEETS_STORE)) {
+        const s = db.createObjectStore(DATASHEETS_STORE, { keyPath: 'id' })
+        s.createIndex('factionId', 'factionId', { unique: false })
+        s.createIndex('name', 'name', { unique: false })
+      }
+      if (!db.objectStoreNames.contains(DATASHEET_WARGEAR_STORE)) {
+        const s = db.createObjectStore(DATASHEET_WARGEAR_STORE, { keyPath: 'id' })
+        s.createIndex('datasheetId', 'datasheetId', { unique: false })
+      }
+      if (!db.objectStoreNames.contains(DATASHEET_MODELS_STORE)) {
+        const s = db.createObjectStore(DATASHEET_MODELS_STORE, { keyPath: 'id' })
+        s.createIndex('datasheetId', 'datasheetId', { unique: false })
       }
     }
     req.onsuccess = () => resolve(req.result)
@@ -667,6 +737,7 @@ export const getEnhancements = (detachmentId: string) => getByIndex<Enhancement>
 
 export const saveLeaderAttachments = (items: LeaderAttachment[]) => batchSave(LEADER_ATTACHMENTS_STORE, items)
 export const getLeaderAttachments = (leaderId: string) => getByIndex<LeaderAttachment>(LEADER_ATTACHMENTS_STORE, 'leaderId', leaderId)
+export const getLeadersForUnit = (attachedId: string) => getByIndex<LeaderAttachment>(LEADER_ATTACHMENTS_STORE, 'attachedId', attachedId)
 
 // ── Unit Compositions ────────────────────────────────────────────────────────
 
@@ -687,6 +758,7 @@ export const getWargearOptions = (datasheetId: string) => getByIndex<WargearOpti
 
 export const saveUnitKeywords = (items: UnitKeyword[]) => batchSave(UNIT_KEYWORDS_STORE, items)
 export const getUnitKeywords = (datasheetId: string) => getByIndex<UnitKeyword>(UNIT_KEYWORDS_STORE, 'datasheetId', datasheetId)
+export const getAllUnitKeywords = () => getAllFromStore<UnitKeyword>(UNIT_KEYWORDS_STORE)
 
 // ── Unit Abilities ───────────────────────────────────────────────────────────
 
@@ -697,3 +769,20 @@ export const getUnitAbilities = (datasheetId: string) => getByIndex<UnitAbility>
 
 export const saveMissions = (items: Mission[]) => batchSave(MISSIONS_STORE, items)
 export const getMissions = () => getAllFromStore<Mission>(MISSIONS_STORE)
+
+// ── Datasheets ───────────────────────────────────────────────────────────────
+
+export const saveDatasheets = (items: Datasheet[]) => batchSave(DATASHEETS_STORE, items)
+export const getAllDatasheets = () => getAllFromStore<Datasheet>(DATASHEETS_STORE)
+export const getDatasheet = (id: string) => getOne<Datasheet>(DATASHEETS_STORE, id)
+export const getDatasheetsByFaction = (factionId: string) => getByIndex<Datasheet>(DATASHEETS_STORE, 'factionId', factionId)
+
+// ── Datasheet Wargear (weapon profiles) ─────────────────────────────────────
+
+export const saveDatasheetWargear = (items: DatasheetWargear[]) => batchSave(DATASHEET_WARGEAR_STORE, items)
+export const getDatasheetWargear = (datasheetId: string) => getByIndex<DatasheetWargear>(DATASHEET_WARGEAR_STORE, 'datasheetId', datasheetId)
+
+// ── Datasheet Models (stat lines) ───────────────────────────────────────────
+
+export const saveDatasheetModels = (items: DatasheetModel[]) => batchSave(DATASHEET_MODELS_STORE, items)
+export const getDatasheetModels = (datasheetId: string) => getByIndex<DatasheetModel>(DATASHEET_MODELS_STORE, 'datasheetId', datasheetId)

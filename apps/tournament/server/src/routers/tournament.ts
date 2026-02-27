@@ -85,6 +85,54 @@ export const tournamentRouter = router({
       .all()
   }),
 
+  search: protectedProcedure
+    .input(
+      z.object({
+        query: z.string().optional(),
+        status: z.enum(['DRAFT', 'REGISTRATION', 'CHECK_IN', 'IN_PROGRESS', 'COMPLETE']).optional(),
+      }),
+    )
+    .query(async ({ ctx, input }) => {
+      let results = await ctx.db.select().from(tournaments).all()
+
+      if (input.status) {
+        results = results.filter((t) => t.status === input.status)
+      } else {
+        // Default: exclude DRAFT (only show publicly relevant tournaments)
+        results = results.filter((t) => t.status !== 'DRAFT')
+      }
+
+      if (input.query) {
+        const q = input.query.toLowerCase()
+        results = results.filter(
+          (t) =>
+            t.name.toLowerCase().includes(q) ||
+            (t.location && t.location.toLowerCase().includes(q)) ||
+            t.format.toLowerCase().includes(q),
+        )
+      }
+
+      // Sort by event date descending (most recent first)
+      results.sort((a, b) => b.eventDate - a.eventDate)
+
+      // Get player counts for results
+      const tIds = results.map((t) => t.id)
+      const players = tIds.length > 0
+        ? await ctx.db.select().from(tournamentPlayers).all()
+        : []
+      const countMap = new Map<string, number>()
+      for (const p of players) {
+        if (tIds.includes(p.tournamentId)) {
+          countMap.set(p.tournamentId, (countMap.get(p.tournamentId) ?? 0) + 1)
+        }
+      }
+
+      return results.slice(0, 50).map((t) => ({
+        ...t,
+        playerCount: countMap.get(t.id) ?? 0,
+      }))
+    }),
+
   listMine: protectedProcedure.query(async ({ ctx }) => {
     // Tournaments the user is a TO for
     const asTO = await ctx.db

@@ -77,7 +77,9 @@ describe('MissionSetupScreen', () => {
       expect.objectContaining({
         mission: 'Take and Hold',
         includeTwists: true,
+        twistCards: [],
         includeChallenger: false,
+        challengerCards: [],
         requirePhotos: true,
       }),
     )
@@ -88,5 +90,68 @@ describe('MissionSetupScreen', () => {
     render(<MissionSetupScreen onNext={vi.fn()} onBack={onBack} />)
     fireEvent.click(screen.getByText('Back'))
     expect(onBack).toHaveBeenCalled()
+  })
+
+  it('shows twist card input when checkbox is checked', () => {
+    render(<MissionSetupScreen onNext={vi.fn()} onBack={vi.fn()} />)
+    fireEvent.click(screen.getByLabelText('Include Twist Cards'))
+    expect(screen.getByLabelText('Twist card name')).toBeInTheDocument()
+  })
+
+  it('shows challenger card input when checkbox is checked', () => {
+    render(<MissionSetupScreen onNext={vi.fn()} onBack={vi.fn()} />)
+    fireEvent.click(screen.getByLabelText('Include Challenger Cards'))
+    expect(screen.getByLabelText('Challenger card name')).toBeInTheDocument()
+  })
+
+  it('adds twist card and includes in onNext data', () => {
+    const onNext = vi.fn()
+    render(<MissionSetupScreen onNext={onNext} onBack={vi.fn()} />)
+
+    fireEvent.change(screen.getByLabelText('Select mission'), { target: { value: 'Take and Hold' } })
+    fireEvent.click(screen.getByLabelText('Include Twist Cards'))
+    fireEvent.change(screen.getByLabelText('Twist card name'), { target: { value: 'Chilling Rain' } })
+    // Click the Add button next to the twist input
+    const addButtons = screen.getAllByRole('button', { name: /add/i })
+    fireEvent.click(addButtons[0]!)
+
+    expect(screen.getByText('Chilling Rain')).toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('button', { name: /next/i }))
+    expect(onNext).toHaveBeenCalledWith(
+      expect.objectContaining({
+        twistCards: ['Chilling Rain'],
+      }),
+    )
+  })
+
+  it('removes twist card when x clicked', () => {
+    render(<MissionSetupScreen onNext={vi.fn()} onBack={vi.fn()} />)
+    fireEvent.click(screen.getByLabelText('Include Twist Cards'))
+    fireEvent.change(screen.getByLabelText('Twist card name'), { target: { value: 'Chilling Rain' } })
+    const addButtons = screen.getAllByRole('button', { name: /add/i })
+    fireEvent.click(addButtons[0]!)
+
+    expect(screen.getByText('Chilling Rain')).toBeInTheDocument()
+    fireEvent.click(screen.getByLabelText('Remove Chilling Rain'))
+    expect(screen.queryByText('Chilling Rain')).not.toBeInTheDocument()
+  })
+
+  it('adds challenger card and includes in onNext data', () => {
+    const onNext = vi.fn()
+    render(<MissionSetupScreen onNext={onNext} onBack={vi.fn()} />)
+
+    fireEvent.change(screen.getByLabelText('Select mission'), { target: { value: 'Take and Hold' } })
+    fireEvent.click(screen.getByLabelText('Include Challenger Cards'))
+    fireEvent.change(screen.getByLabelText('Challenger card name'), { target: { value: 'Double Down' } })
+    const addButtons = screen.getAllByRole('button', { name: /add/i })
+    fireEvent.click(addButtons[0]!)
+
+    fireEvent.click(screen.getByRole('button', { name: /next/i }))
+    expect(onNext).toHaveBeenCalledWith(
+      expect.objectContaining({
+        challengerCards: ['Double Down'],
+      }),
+    )
   })
 })

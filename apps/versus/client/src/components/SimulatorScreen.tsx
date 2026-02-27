@@ -1,10 +1,11 @@
 import { useState, useMemo, useCallback, useRef } from 'react'
 import type { WeaponAbility, WeaponProfile } from '@tabletop-tools/game-content'
-import { useGameDataAvailable } from '@tabletop-tools/game-data-store'
+import { useGameDataAvailable, useUnitCompositions } from '@tabletop-tools/game-data-store'
 
 import { authClient } from '../lib/auth'
 import { trpc } from '../lib/trpc'
-import { useUnits, useGameFactions, useGameUnit } from '../lib/useGameData'
+import { useUnits, useGameFactions, useGameUnit, useGameLeadersForUnit, useGameUnitAbilities, useGameUnitKeywords, useGameWargearOptions, useGameDatasheetWeapons, useGameDatasheetModels } from '../lib/useGameData'
+import { parseModelCount } from '../lib/modelCount'
 import { simulateWeapon } from '../lib/rules/pipeline'
 import type { SimResult } from '../lib/rules/pipeline'
 import { SimulationResult } from './SimulationResult'
@@ -15,6 +16,28 @@ import { WeaponSelector } from './WeaponSelector'
 import { SpecialRulesEditor } from './SpecialRulesEditor'
 
 type AttackType = 'ranged' | 'melee'
+
+function formatAbility(a: WeaponAbility): string {
+  switch (a.type) {
+    case 'SUSTAINED_HITS': return `Sustained Hits ${a.value}`
+    case 'LETHAL_HITS': return 'Lethal Hits'
+    case 'DEVASTATING_WOUNDS': return 'Devastating Wounds'
+    case 'TORRENT': return 'Torrent'
+    case 'TWIN_LINKED': return 'Twin-linked'
+    case 'BLAST': return 'Blast'
+    case 'REROLL_HITS_OF_1': return 'Re-roll hits of 1'
+    case 'REROLL_HITS': return 'Re-roll all hits'
+    case 'REROLL_WOUNDS': return 'Re-roll wounds'
+    case 'HIT_MOD': return `${a.value > 0 ? '+' : ''}${a.value} to hit`
+    case 'WOUND_MOD': return `${a.value > 0 ? '+' : ''}${a.value} to wound`
+    case 'STRENGTH_MOD': return `Str ${a.value > 0 ? '+' : ''}${a.value}`
+    case 'ATTACKS_MOD': return a.value === 0 ? 'Extra Attacks' : `Attacks ${a.value > 0 ? '+' : ''}${a.value}`
+    case 'ANTI': return `Anti-${a.keyword} ${a.value}+`
+    case 'MELTA': return `Melta ${a.value}`
+    case 'IGNORES_COVER': return 'Ignores Cover'
+    default: return a.type
+  }
+}
 
 /** Simple FNV-1a hash for cache key. Not cryptographic. */
 function simpleHash(str: string): string {
@@ -37,6 +60,7 @@ export function SimulatorScreen({ onSignOut }: Props) {
   const [defenderQuery, setDefenderQuery] = useState('')
   const [attackerId, setAttackerId] = useState<string | null>(null)
   const [defenderId, setDefenderId] = useState<string | null>(null)
+  const [attackerLeaderId, setAttackerLeaderId] = useState<string | null>(null)
   const [defenderModelCount, setDefenderModelCount] = useState(5)
   const [invulnSave, setInvulnSave] = useState<number | undefined>()
   const [fnp, setFnp] = useState<number | undefined>()
@@ -59,38 +83,113 @@ export function SimulatorScreen({ onSignOut }: Props) {
 
   const { data: attacker } = useGameUnit(attackerId)
   const { data: defender } = useGameUnit(defenderId)
+  const { data: attackerLeader } = useGameUnit(attackerLeaderId)
+  const { data: defenderComps = [] } = useUnitCompositions(defenderId ?? '')
+  const { data: availableLeaders = [] } = useGameLeadersForUnit(attackerId)
+  const { data: attackerAbilities = [] } = useGameUnitAbilities(attackerId)
+  const { data: defenderAbilities = [] } = useGameUnitAbilities(defenderId)
+  const { data: attackerWargear = [] } = useGameWargearOptions(attackerId)
+  const { data: defenderWargear = [] } = useGameWargearOptions(defenderId)
+  const { data: attackerKeywordRecords = [] } = useGameUnitKeywords(attackerId)
+  const { data: defenderKeywordRecords = [] } = useGameUnitKeywords(defenderId)
+  const { data: wahapediaAttackerWeapons = [] } = useGameDatasheetWeapons(attackerId)
+  const { data: wahapediaLeaderWeapons = [] } = useGameDatasheetWeapons(attackerLeaderId)
+  const { data: wahapediaDefenderModels = [] } = useGameDatasheetModels(defenderId)
 
-  // When attacker changes, clear overrides so defaults kick in from data
+  // Auto-populate defender model count from composition data
+  const defaultDefenderModels = useMemo(() => {
+    if (defenderComps.length === 0) return null
+    return parseModelCount(defenderComps)
+  }, [defenderComps])
+
+  // When attacker changes, clear overrides and leader so defaults kick in from data
   const handleAttackerSelect = useCallback((id: string) => {
     setAttackerId(id)
+    setAttackerLeaderId(null)
     setWeaponOverrides(new Map())
     setSpecialRules([])
   }, [])
 
   const handleDefenderSelect = useCallback((id: string) => {
     setDefenderId(id)
-    setDefenderModelCount(5)
+    setDefenderModelCount(-1) // sentinel: use composition data if available
     setInvulnSave(undefined)
     setFnp(undefined)
   }, [])
 
+  // Resolve effective model count: user override > composition data > default 5
+  const effectiveDefenderModels = defenderModelCount === -1
+    ? (defaultDefenderModels ?? 5)
+    : defenderModelCount
+
+  // Combine attacker weapons with leader weapons.
+  // Prefers Wahapedia weapon profiles when available (cleaner, normalized data).
+  const combinedWeapons = useMemo((): WeaponProfile[] => {
+    if (!attacker) return []
+    // Use Wahapedia weapons if available, fall back to BSData-parsed weapons
+    const baseWeapons = wahapediaAttackerWeapons.length > 0
+      ? wahapediaAttackerWeapons
+      : attacker.weapons
+    const weapons = [...baseWeapons]
+    // Merge leader weapons
+    const leaderWeapons = wahapediaLeaderWeapons.length > 0
+      ? wahapediaLeaderWeapons
+      : (attackerLeader?.weapons ?? [])
+    for (const w of leaderWeapons) {
+      if (!weapons.some(ew => ew.name === w.name)) {
+        weapons.push(w)
+      }
+    }
+    return weapons
+  }, [attacker, attackerLeader, wahapediaAttackerWeapons, wahapediaLeaderWeapons])
+
   // Derive selected weapons from loaded data — no useEffect.
   // When attacker data loads from IndexedDB, weapons auto-select by attack type.
   // User can override individual toggles; overrides clear on unit change.
+  // Melee constraint: only one melee profile unless weapon has "extra attacks" ability.
   const selectedWeapons = useMemo(() => {
-    if (!attacker) return new Set<number>()
+    if (combinedWeapons.length === 0) return new Set<number>()
     const indices = new Set<number>()
-    attacker.weapons.forEach((w, i) => {
+    let meleeSelected = false
+    combinedWeapons.forEach((w, i) => {
       const isRanged = w.range !== 'melee'
-      const defaultSelected =
-        (attackType === 'ranged' && isRanged) || (attackType === 'melee' && !isRanged)
+      const isExtraAttacks = !isRanged && w.abilities.some(a => a.type === 'ATTACKS_MOD' && a.value === 0)
+      let defaultSelected: boolean
+      if (attackType === 'ranged') {
+        defaultSelected = isRanged
+      } else {
+        // Melee mode: extra attacks weapons always selected, others limited to one
+        if (isExtraAttacks) {
+          defaultSelected = true
+        } else if (!isRanged) {
+          defaultSelected = !meleeSelected
+          if (defaultSelected) meleeSelected = true
+        } else {
+          defaultSelected = false
+        }
+      }
       const override = weaponOverrides.get(i)
       if (override !== undefined ? override : defaultSelected) {
         indices.add(i)
       }
     })
     return indices
-  }, [attacker, attackType, weaponOverrides])
+  }, [combinedWeapons, attackType, weaponOverrides])
+
+  // Collect ability labels from selected weapons for display
+  const selectedWeaponAbilities = useMemo(() => {
+    if (combinedWeapons.length === 0) return []
+    const labels: string[] = []
+    for (const i of selectedWeapons) {
+      const w = combinedWeapons[i]
+      if (w) {
+        for (const a of w.abilities) {
+          labels.push(formatAbility(a))
+        }
+      }
+    }
+    return labels
+  }, [combinedWeapons, selectedWeapons])
 
   const handleToggleWeapon = useCallback((index: number) => {
     setWeaponOverrides((prev) => {
@@ -104,16 +203,16 @@ export function SimulatorScreen({ onSignOut }: Props) {
 
   // Get selected weapon profiles with merged special rules
   const getSelectedWeapons = useCallback((): WeaponProfile[] => {
-    if (!attacker) return []
+    if (combinedWeapons.length === 0) return []
     return Array.from(selectedWeapons)
       .sort((a, b) => a - b)
-      .map((i) => attacker.weapons[i])
+      .map((i) => combinedWeapons[i])
       .filter(Boolean)
       .map((w) => ({
         ...w,
         abilities: [...w.abilities, ...specialRules],
       }))
-  }, [attacker, selectedWeapons, specialRules])
+  }, [combinedWeapons, selectedWeapons, specialRules])
 
   // Compute simulation locally
   const simData = useMemo((): { result: SimResult; breakdowns: WeaponBreakdown[] } | null => {
@@ -125,7 +224,7 @@ export function SimulatorScreen({ onSignOut }: Props) {
         result: {
           expectedWounds: 0,
           expectedModelsRemoved: 0,
-          survivors: defenderModelCount,
+          survivors: effectiveDefenderModels,
           worstCase: { wounds: 0, modelsRemoved: 0 },
           bestCase: { wounds: 0, modelsRemoved: 0 },
         },
@@ -144,14 +243,16 @@ export function SimulatorScreen({ onSignOut }: Props) {
     const effectiveFnp = fnp ?? defender.fnp
 
     for (const weapon of weapons) {
+      const defKeywords = defenderKeywordRecords.map((k) => k.keyword)
       const r = simulateWeapon(
         weapon,
         defender.toughness,
         defender.save,
         defender.wounds,
-        defenderModelCount,
+        effectiveDefenderModels,
         effectiveInvuln,
         effectiveFnp,
+        defKeywords,
       )
       totalExpectedWounds += r.expectedWounds
       totalExpectedModelsRemoved += r.expectedModelsRemoved
@@ -162,22 +263,23 @@ export function SimulatorScreen({ onSignOut }: Props) {
         weaponName: weapon.name,
         expectedWounds: r.expectedWounds,
         expectedModelsRemoved: r.expectedModelsRemoved,
+        abilities: weapon.abilities.map(formatAbility),
       })
     }
 
     totalExpectedModelsRemoved = Math.min(
-      defenderModelCount,
+      effectiveDefenderModels,
       totalExpectedModelsRemoved,
     )
-    const survivors = Math.max(0, defenderModelCount - totalExpectedModelsRemoved)
+    const survivors = Math.max(0, effectiveDefenderModels - totalExpectedModelsRemoved)
 
     bestCaseWounds = Math.min(
       bestCaseWounds,
-      defenderModelCount * defender.wounds,
+      effectiveDefenderModels * defender.wounds,
     )
     worstCaseWounds = Math.min(
       worstCaseWounds,
-      defenderModelCount * defender.wounds,
+      effectiveDefenderModels * defender.wounds,
     )
 
     return {
@@ -196,7 +298,7 @@ export function SimulatorScreen({ onSignOut }: Props) {
       },
       breakdowns,
     }
-  }, [attacker, defender, defenderModelCount, invulnSave, fnp, getSelectedWeapons])
+  }, [attacker, defender, effectiveDefenderModels, invulnSave, fnp, getSelectedWeapons])
 
   const resultsRef = useRef<HTMLDivElement>(null)
 
@@ -223,11 +325,13 @@ export function SimulatorScreen({ onSignOut }: Props) {
     const weapons = getSelectedWeapons()
     const weaponConfig = {
       attackType,
-      defenderModelCount,
+      effectiveDefenderModels,
       invulnSave: invulnSave ?? defender?.invulnSave,
       fnp: fnp ?? defender?.fnp,
       specialRules,
       selectedWeapons: weapons.map((w) => w.name),
+      leaderContentId: attackerLeaderId ?? undefined,
+      breakdowns: simData.breakdowns,
     }
     const configStr = JSON.stringify(weaponConfig)
     saveMutation.mutate({
@@ -281,6 +385,29 @@ export function SimulatorScreen({ onSignOut }: Props) {
               onSelect={handleAttackerSelect}
             />
             {attacker && <UnitProfileCard unit={attacker} />}
+            {attackerAbilities.length > 0 && (
+              <UnitAbilitiesDisplay abilities={attackerAbilities} />
+            )}
+            {attackerKeywordRecords.length > 0 && (
+              <div className="text-xs text-slate-500 bg-slate-900 rounded-lg p-2 border border-slate-800">
+                <p className="font-semibold text-slate-400 mb-1">Keywords</p>
+                <div className="flex flex-wrap gap-1">
+                  {attackerKeywordRecords.map((k, i) => (
+                    <span key={i} className={`px-1.5 py-0.5 rounded text-[10px] ${k.isFactionKeyword ? 'bg-amber-400/20 text-amber-300' : 'bg-slate-800 text-slate-400'}`}>
+                      {k.keyword}
+                    </span>
+                  ))}
+                </div>
+              </div>
+            )}
+            {attackerWargear.length > 0 && (
+              <div className="text-xs text-slate-500 bg-slate-900 rounded-lg p-2 border border-slate-800">
+                <p className="font-semibold text-slate-400 mb-1">Wargear Options</p>
+                {attackerWargear.map((w, i) => (
+                  <p key={i} className="text-slate-500">{w.description}</p>
+                ))}
+              </div>
+            )}
           </div>
 
           <div className="space-y-4">
@@ -299,12 +426,14 @@ export function SimulatorScreen({ onSignOut }: Props) {
                 <UnitProfileCard unit={defender} invulnSave={invulnSave} fnp={fnp} />
                 <div className="flex gap-3">
                   <div className="flex-1">
-                    <label className="block text-xs text-slate-400 mb-1">Models</label>
+                    <label className="block text-xs text-slate-400 mb-1">
+                      Models{defenderModelCount === -1 && defaultDefenderModels ? ' (from data)' : ''}
+                    </label>
                     <input
                       type="number"
                       min={1}
                       max={30}
-                      value={defenderModelCount}
+                      value={effectiveDefenderModels}
                       onChange={(e) => setDefenderModelCount(Math.max(1, parseInt(e.target.value) || 1))}
                       className="w-full px-3 py-1.5 rounded-lg bg-slate-900 border border-slate-800 text-slate-100 text-sm focus:outline-none focus:border-amber-400"
                     />
@@ -340,15 +469,59 @@ export function SimulatorScreen({ onSignOut }: Props) {
                     </select>
                   </div>
                 </div>
+                {defenderAbilities.length > 0 && (
+                  <UnitAbilitiesDisplay abilities={defenderAbilities} />
+                )}
+                {defenderKeywordRecords.length > 0 && (
+                  <div className="text-xs text-slate-500 bg-slate-900 rounded-lg p-2 border border-slate-800">
+                    <p className="font-semibold text-slate-400 mb-1">Keywords</p>
+                    <div className="flex flex-wrap gap-1">
+                      {defenderKeywordRecords.map((k, i) => (
+                        <span key={i} className={`px-1.5 py-0.5 rounded text-[10px] ${k.isFactionKeyword ? 'bg-amber-400/20 text-amber-300' : 'bg-slate-800 text-slate-400'}`}>
+                          {k.keyword}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                )}
+                {defenderWargear.length > 0 && (
+                  <div className="text-xs text-slate-500 bg-slate-900 rounded-lg p-2 border border-slate-800">
+                    <p className="font-semibold text-slate-400 mb-1">Wargear Options</p>
+                    {defenderWargear.map((w, i) => (
+                      <p key={i} className="text-slate-500">{w.description}</p>
+                    ))}
+                  </div>
+                )}
               </>
             )}
           </div>
         </div>
 
+        {/* Leader attachment (if available) */}
+        {attacker && availableLeaders.length > 0 && (
+          <div className="rounded-lg border border-slate-800 bg-slate-900 p-4">
+            <label className="block text-xs text-slate-400 mb-2">Attach Leader</label>
+            <select
+              value={attackerLeaderId ?? ''}
+              onChange={(e) => {
+                setAttackerLeaderId(e.target.value || null)
+                setWeaponOverrides(new Map())
+              }}
+              className="w-full px-3 py-1.5 rounded-lg bg-slate-800 border border-slate-700 text-slate-100 text-sm focus:outline-none focus:border-amber-400"
+            >
+              <option value="">No leader</option>
+              {availableLeaders.map((la) => (
+                <LeaderSelectOption key={la.leaderId} leaderId={la.leaderId} />
+              ))}
+            </select>
+            {attackerLeader && <UnitProfileCard unit={attackerLeader} />}
+          </div>
+        )}
+
         {/* Weapon selection */}
-        {attacker && attacker.weapons.length > 0 && (
+        {attacker && combinedWeapons.length > 0 && (
           <WeaponSelector
-            weapons={attacker.weapons}
+            weapons={combinedWeapons}
             attackType={attackType}
             selectedWeapons={selectedWeapons}
             onToggleWeapon={handleToggleWeapon}
@@ -359,6 +532,7 @@ export function SimulatorScreen({ onSignOut }: Props) {
         {/* Special rules */}
         <SpecialRulesEditor
           rules={specialRules}
+          weaponAbilities={selectedWeaponAbilities}
           onAdd={(rule) => setSpecialRules((prev) => [...prev, rule])}
           onRemove={(index) => setSpecialRules((prev) => prev.filter((_, i) => i !== index))}
         />
@@ -388,7 +562,105 @@ export function SimulatorScreen({ onSignOut }: Props) {
             />
           </div>
         )}
+
+        {/* History */}
+        <SimulationHistory
+          onLoadSimulation={(sim) => {
+            // Navigate to the simulation's attacker/defender
+            setAttackerId(sim.attackerContentId)
+            setDefenderId(sim.defenderContentId)
+          }}
+        />
       </div>
+    </div>
+  )
+}
+
+function UnitAbilitiesDisplay({ abilities }: { abilities: { name: string; description: string; type: string }[] }) {
+  if (abilities.length === 0) return null
+  return (
+    <div className="rounded-lg bg-slate-900 border border-slate-800 p-3">
+      <p className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider mb-2">Unit Abilities</p>
+      <div className="space-y-1.5">
+        {abilities.map((a, i) => (
+          <div key={i}>
+            <p className="text-xs font-medium text-amber-400">{a.name}</p>
+            <p className="text-xs text-slate-400 leading-relaxed">{a.description}</p>
+          </div>
+        ))}
+      </div>
+    </div>
+  )
+}
+
+function LeaderSelectOption({ leaderId }: { leaderId: string }) {
+  const { data: unit } = useGameUnit(leaderId)
+  return <option value={leaderId}>{unit?.name ?? leaderId}</option>
+}
+
+interface HistorySimulation {
+  id: string
+  attackerContentId: string
+  attackerName: string
+  defenderContentId: string
+  defenderName: string
+  result: string
+  createdAt: number
+}
+
+function SimulationHistory({ onLoadSimulation }: {
+  onLoadSimulation: (sim: HistorySimulation) => void
+}) {
+  const [showHistory, setShowHistory] = useState(false)
+  const { data: history = [] } = trpc.simulate.history.useQuery(undefined, { enabled: showHistory })
+
+  return (
+    <div className="rounded-lg border border-slate-800 bg-slate-900 p-4">
+      <button
+        onClick={() => setShowHistory((prev) => !prev)}
+        className="w-full flex items-center justify-between text-sm font-semibold text-slate-300 hover:text-slate-100"
+      >
+        <span>Simulation History</span>
+        <span className="text-slate-500">{showHistory ? '▲' : '▼'}</span>
+      </button>
+
+      {showHistory && (
+        <div className="mt-3 space-y-2 max-h-80 overflow-y-auto">
+          {history.length === 0 && (
+            <p className="text-sm text-slate-500">No saved simulations yet.</p>
+          )}
+          {history.map((sim) => {
+            let result: { expectedWounds: number; expectedModelsRemoved: number } | null = null
+            try {
+              result = JSON.parse(sim.result as string)
+            } catch { /* empty */ }
+
+            return (
+              <button
+                key={sim.id as string}
+                onClick={() => onLoadSimulation(sim as unknown as HistorySimulation)}
+                className="w-full text-left rounded-lg bg-slate-800 border border-slate-700 p-3 hover:border-amber-400/50 transition-colors"
+              >
+                <div className="flex items-center justify-between">
+                  <div>
+                    <span className="text-sm font-medium text-amber-400">{sim.attackerName as string}</span>
+                    <span className="text-xs text-slate-500 mx-2">vs</span>
+                    <span className="text-sm font-medium text-slate-200">{sim.defenderName as string}</span>
+                  </div>
+                  <span className="text-xs text-slate-500">
+                    {new Date(sim.createdAt as number).toLocaleDateString()}
+                  </span>
+                </div>
+                {result && (
+                  <p className="text-xs text-slate-400 mt-1">
+                    {(result.expectedWounds ?? 0).toFixed(1)} wounds, {result.expectedModelsRemoved ?? 0} models removed
+                  </p>
+                )}
+              </button>
+            )
+          })}
+        </div>
+      )}
     </div>
   )
 }

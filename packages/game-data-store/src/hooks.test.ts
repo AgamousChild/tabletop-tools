@@ -12,7 +12,7 @@ import type { LocalList, LocalListUnit } from './store'
 import {
   useUnit, useUnitSearch, useFactions, useGameDataAvailable, useLists, useList,
   useDetachments, useDetachment, useDetachmentAbilities,
-  useStratagems, useEnhancements, useLeaderAttachments,
+  useStratagems, useEnhancements, useLeaderAttachments, useLeadersForUnit,
   useUnitCompositions, useUnitCosts, useWargearOptions,
   useUnitKeywords, useUnitAbilities, useMissions, useRulesImportMeta,
 } from './hooks'
@@ -283,6 +283,19 @@ describe('useLeaderAttachments', () => {
       { id: 'la3', leaderId: 'chaplain', attachedId: 'assault-intercessors' },
     ])
     const { result } = renderHook(() => useLeaderAttachments('captain'))
+    await waitFor(() => expect(result.current.isLoading).toBe(false))
+    expect(result.current.data).toHaveLength(2)
+  })
+})
+
+describe('useLeadersForUnit', () => {
+  it('returns leaders that can attach to a unit', async () => {
+    await saveLeaderAttachments([
+      { id: 'la4', leaderId: 'captain', attachedId: 'intercessors' },
+      { id: 'la5', leaderId: 'chaplain', attachedId: 'intercessors' },
+      { id: 'la6', leaderId: 'captain', attachedId: 'hellblasters' },
+    ])
+    const { result } = renderHook(() => useLeadersForUnit('intercessors'))
     await waitFor(() => expect(result.current.isLoading).toBe(false))
     expect(result.current.data).toHaveLength(2)
   })

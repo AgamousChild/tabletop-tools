@@ -134,6 +134,10 @@ export const listRouter = router({
               unitPoints: u.unitPoints,
               modelCount: u.modelCount ?? null,
               count: u.count,
+              isWarlord: u.isWarlord ? 1 : 0,
+              enhancementId: u.enhancementId ?? null,
+              enhancementName: u.enhancementName ?? null,
+              enhancementCost: u.enhancementCost ?? null,
             })),
           )
         }

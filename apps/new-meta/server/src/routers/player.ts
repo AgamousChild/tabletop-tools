@@ -1,7 +1,7 @@
 import { z } from 'zod'
 import { eq, desc, gte, like } from 'drizzle-orm'
 import { router, publicProcedure } from '../trpc.js'
-import { playerGlicko, glickoHistory } from '@tabletop-tools/db'
+import { playerGlicko, glickoHistory, importedTournamentResults } from '@tabletop-tools/db'
 
 export const playerRouter = router({
   /** Glicko-2 leaderboard sorted by rating descending. */
@@ -48,9 +48,23 @@ export const playerRouter = router({
 
       if (!player) return null
 
-      const history = await ctx.db
-        .select()
+      const historyRows = await ctx.db
+        .select({
+          id: glickoHistory.id,
+          playerId: glickoHistory.playerId,
+          ratingPeriod: glickoHistory.ratingPeriod,
+          ratingBefore: glickoHistory.ratingBefore,
+          rdBefore: glickoHistory.rdBefore,
+          ratingAfter: glickoHistory.ratingAfter,
+          rdAfter: glickoHistory.rdAfter,
+          volatilityAfter: glickoHistory.volatilityAfter,
+          delta: glickoHistory.delta,
+          gamesInPeriod: glickoHistory.gamesInPeriod,
+          recordedAt: glickoHistory.recordedAt,
+          eventName: importedTournamentResults.eventName,
+        })
         .from(glickoHistory)
+        .leftJoin(importedTournamentResults, eq(glickoHistory.ratingPeriod, importedTournamentResults.id))
         .where(eq(glickoHistory.playerId, input.playerId))
         .orderBy(desc(glickoHistory.recordedAt))
 
@@ -60,7 +74,7 @@ export const playerRouter = router({
           displayRating: Math.round(player.rating),
           displayBand: Math.round(2 * player.ratingDeviation),
         },
-        history,
+        history: historyRows,
       }
     }),
 

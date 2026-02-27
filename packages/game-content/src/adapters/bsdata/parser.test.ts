@@ -356,7 +356,9 @@ describe('parseBSDataXml — nested selectionEntry', () => {
   </selectionEntries>
 </gameSystem>`
     const { units, errors } = parseBSDataXml(xml, 'Test Faction')
-    expect(errors).toHaveLength(0)
+    // Standalone character with no weapons gets a warning
+    expect(errors).toHaveLength(1)
+    expect(errors[0]).toContain('No weapons found')
     expect(units).toHaveLength(1)
     expect(units[0]!.name).toBe('Iron Father')
   })
@@ -666,6 +668,180 @@ describe('parseBSDataXml — new weapon ability patterns', () => {
     expect(w.abilities).toContainEqual({ type: 'ANTI', keyword: 'Infantry', value: 4 })
     expect(w.abilities).toContainEqual({ type: 'MELTA', value: 2 })
     expect(w.abilities).toContainEqual({ type: 'IGNORES_COVER' })
+  })
+})
+
+describe('parseBSDataXml — parenthesized ability values', () => {
+  function makeWeaponXml(abilities: string): string {
+    return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<gameSystem id="test-sys" name="TestGame">
+  <selectionEntries>
+    <selectionEntry id="unit-paren" name="Paren Test Unit" type="unit">
+      <profiles>
+        <profile id="p-paren" name="Paren Test Unit" typeName="Unit Characteristics">
+          <characteristics>
+            <characteristic name="M">6</characteristic>
+            <characteristic name="T">4</characteristic>
+            <characteristic name="Sv">3+</characteristic>
+            <characteristic name="W">2</characteristic>
+            <characteristic name="Ld">6</characteristic>
+            <characteristic name="OC">1</characteristic>
+          </characteristics>
+        </profile>
+        <profile id="w-paren" name="Paren Weapon" typeName="Ranged Weapons">
+          <characteristics>
+            <characteristic name="Range">24</characteristic>
+            <characteristic name="A">2</characteristic>
+            <characteristic name="BS">3+</characteristic>
+            <characteristic name="S">4</characteristic>
+            <characteristic name="AP">-1</characteristic>
+            <characteristic name="D">1</characteristic>
+            <characteristic name="Abilities">${abilities}</characteristic>
+          </characteristics>
+        </profile>
+      </profiles>
+    </selectionEntry>
+  </selectionEntries>
+</gameSystem>`
+  }
+
+  it('handles "Sustained Hits (1)" with parentheses', () => {
+    const { units } = parseBSDataXml(makeWeaponXml('Sustained Hits (1)'), 'Test')
+    expect(units[0]!.weapons[0]!.abilities).toContainEqual({ type: 'SUSTAINED_HITS', value: 1 })
+  })
+
+  it('handles "Rapid Fire (2)" with parentheses', () => {
+    const { units } = parseBSDataXml(makeWeaponXml('Rapid Fire (2)'), 'Test')
+    expect(units[0]!.weapons[0]!.abilities).toContainEqual({ type: 'ATTACKS_MOD', value: 2 })
+  })
+
+  it('handles "Anti-Infantry (4+)" with parenthesized value', () => {
+    const { units } = parseBSDataXml(makeWeaponXml('Anti-Infantry (4+)'), 'Test')
+    expect(units[0]!.weapons[0]!.abilities).toContainEqual({ type: 'ANTI', keyword: 'Infantry', value: 4 })
+  })
+
+  it('handles "Melta (2)" with parentheses', () => {
+    const { units } = parseBSDataXml(makeWeaponXml('Melta (2)'), 'Test')
+    expect(units[0]!.weapons[0]!.abilities).toContainEqual({ type: 'MELTA', value: 2 })
+  })
+
+  it('filters dash-only ability text', () => {
+    const { units } = parseBSDataXml(makeWeaponXml('-'), 'Test')
+    expect(units[0]!.weapons[0]!.abilities).toHaveLength(0)
+  })
+
+  it('filters em-dash ability text', () => {
+    const { units } = parseBSDataXml(makeWeaponXml('—'), 'Test')
+    expect(units[0]!.weapons[0]!.abilities).toHaveLength(0)
+  })
+
+  it('handles bracketed ability text [TORRENT]', () => {
+    const { units } = parseBSDataXml(makeWeaponXml('[TORRENT]'), 'Test')
+    expect(units[0]!.weapons[0]!.abilities).toContainEqual({ type: 'TORRENT' })
+  })
+
+  it('handles ability text with trailing period', () => {
+    const { units } = parseBSDataXml(makeWeaponXml('Lethal Hits.'), 'Test')
+    expect(units[0]!.weapons[0]!.abilities).toContainEqual({ type: 'LETHAL_HITS' })
+  })
+
+  it('handles mixed brackets and periods', () => {
+    const { units } = parseBSDataXml(makeWeaponXml('[BLAST], Sustained Hits 1.'), 'Test')
+    const w = units[0]!.weapons[0]!
+    expect(w.abilities).toContainEqual({ type: 'BLAST' })
+    expect(w.abilities).toContainEqual({ type: 'SUSTAINED_HITS', value: 1 })
+  })
+})
+
+describe('parseBSDataXml — validation warnings', () => {
+  it('warns when unit has toughness 0', () => {
+    const xml = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<gameSystem id="test-sys" name="TestGame">
+  <selectionEntries>
+    <selectionEntry id="unit-t0" name="Ghost Unit" type="unit">
+      <profiles>
+        <profile id="p-t0" name="Ghost Unit" typeName="Unit Characteristics">
+          <characteristics>
+            <characteristic name="M">6</characteristic>
+            <characteristic name="Sv">3+</characteristic>
+            <characteristic name="W">2</characteristic>
+            <characteristic name="Ld">6</characteristic>
+            <characteristic name="OC">1</characteristic>
+          </characteristics>
+        </profile>
+      </profiles>
+    </selectionEntry>
+  </selectionEntries>
+</gameSystem>`
+    const { units, errors } = parseBSDataXml(xml, 'Test')
+    expect(units).toHaveLength(1)
+    expect(units[0]!.toughness).toBe(0)
+    expect(errors.some(e => e.includes('Toughness is 0'))).toBe(true)
+  })
+
+  it('warns when unit has no weapons', () => {
+    const xml = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<gameSystem id="test-sys" name="TestGame">
+  <selectionEntries>
+    <selectionEntry id="unit-nw" name="Unarmed Unit" type="unit">
+      <profiles>
+        <profile id="p-nw" name="Unarmed Unit" typeName="Unit Characteristics">
+          <characteristics>
+            <characteristic name="M">6</characteristic>
+            <characteristic name="T">4</characteristic>
+            <characteristic name="Sv">3+</characteristic>
+            <characteristic name="W">2</characteristic>
+            <characteristic name="Ld">6</characteristic>
+            <characteristic name="OC">1</characteristic>
+          </characteristics>
+        </profile>
+      </profiles>
+    </selectionEntry>
+  </selectionEntries>
+</gameSystem>`
+    const { units, errors } = parseBSDataXml(xml, 'Test')
+    expect(units).toHaveLength(1)
+    expect(errors.some(e => e.includes('No weapons found'))).toBe(true)
+  })
+
+  it('warns when weapon has strength 0 (empty value)', () => {
+    const xml = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<gameSystem id="test-sys" name="TestGame">
+  <selectionEntries>
+    <selectionEntry id="unit-ws0" name="Weak Weapon Unit" type="unit">
+      <profiles>
+        <profile id="p-ws0" name="Weak Weapon Unit" typeName="Unit Characteristics">
+          <characteristics>
+            <characteristic name="M">6</characteristic>
+            <characteristic name="T">4</characteristic>
+            <characteristic name="Sv">3+</characteristic>
+            <characteristic name="W">2</characteristic>
+            <characteristic name="Ld">6</characteristic>
+            <characteristic name="OC">1</characteristic>
+          </characteristics>
+        </profile>
+        <profile id="w-ws0" name="Broken Gun" typeName="Ranged Weapons">
+          <characteristics>
+            <characteristic name="Range">24</characteristic>
+            <characteristic name="A">2</characteristic>
+            <characteristic name="BS">3+</characteristic>
+            <characteristic name="S"></characteristic>
+            <characteristic name="AP">0</characteristic>
+            <characteristic name="D">1</characteristic>
+          </characteristics>
+        </profile>
+      </profiles>
+    </selectionEntry>
+  </selectionEntries>
+</gameSystem>`
+    const { units, errors } = parseBSDataXml(xml, 'Test')
+    expect(units).toHaveLength(1)
+    expect(errors.some(e => e.includes('Strength 0'))).toBe(true)
+  })
+
+  it('no warnings for properly formed unit', () => {
+    const { errors } = parseBSDataXml(SINGLE_UNIT_XML, 'Test Faction')
+    expect(errors).toHaveLength(0)
   })
 })
 

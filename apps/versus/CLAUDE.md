@@ -125,17 +125,22 @@ simulate(attacker, defender):
 
 ## Testing
 
-**121 tests** (8 server + 113 client), all passing.
+**137 tests** (8 server + 129 client), all passing.
 
 ```
 client/src/
   lib/rules/
-    pipeline.ts / pipeline.test.ts     <- rules engine: every weapon ability, modifier interaction (45 tests)
+    pipeline.ts / pipeline.test.ts     <- rules engine: every weapon ability, modifier interaction, ANTI (66 tests)
   lib/
-    useGameData.test.tsx               <- IndexedDB hook tests
+    modelCount.test.ts                 <- model count parsing (6 tests)
+    useGameData.test.tsx               <- IndexedDB hook tests (4 tests)
   components/
-    SimulatorScreen.test.tsx           <- 12 tests: title, attacker/defender, add weapon form, defender stats, button states, results, weapon removal, sign out, special rules, unit picker
-    SimulationResult.test.tsx          <- 7 tests: names, wounds, models, best/worst, save, survivors
+    SimulatorScreen.test.tsx           <- 10 tests: title, attacker/defender, weapon form, stats, results, save, special rules, unit picker
+    SimulationResult.test.tsx          <- 9 tests: names, wounds, models, best/worst, save, survivors
+    UnitProfileCard.test.tsx           <- 8 tests: stat display, invuln, fnp
+    SpecialRulesEditor.test.tsx        <- 9 tests: add/remove abilities
+    UnitSelector.test.tsx              <- 8 tests: faction/unit selection
+    WeaponSelector.test.tsx            <- 9 tests: weapon selection, attack type toggle
 server/src/
   routers/
     simulate.test.ts                   <- save + history router tests

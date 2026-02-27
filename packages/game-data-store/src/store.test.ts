@@ -31,6 +31,7 @@ import {
   getEnhancements,
   saveLeaderAttachments,
   getLeaderAttachments,
+  getLeadersForUnit,
   saveUnitCompositions,
   getUnitCompositions,
   saveUnitCosts,
@@ -508,6 +509,22 @@ describe('leaderAttachments', () => {
 
   it('returns empty for unknown leader', async () => {
     expect(await getLeaderAttachments('nonexistent')).toEqual([])
+  })
+
+  it('reverse lookup: retrieves leaders for a unit', async () => {
+    const items: LeaderAttachment[] = [
+      { id: 'la4', leaderId: 'captain', attachedId: 'intercessors' },
+      { id: 'la5', leaderId: 'chaplain', attachedId: 'intercessors' },
+      { id: 'la6', leaderId: 'captain', attachedId: 'hellblasters' },
+    ]
+    await saveLeaderAttachments(items)
+    const result = await getLeadersForUnit('intercessors')
+    expect(result).toHaveLength(2)
+    expect(result.map(la => la.leaderId).sort()).toEqual(['captain', 'chaplain'])
+  })
+
+  it('reverse lookup returns empty for unknown unit', async () => {
+    expect(await getLeadersForUnit('nonexistent')).toEqual([])
   })
 })
 

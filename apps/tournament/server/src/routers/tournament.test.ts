@@ -107,6 +107,31 @@ beforeAll(async () => {
       parsed_data TEXT NOT NULL,
       imported_at INTEGER NOT NULL
     );
+    CREATE TABLE IF NOT EXISTS tournament_cards (
+      id TEXT PRIMARY KEY,
+      tournament_id TEXT NOT NULL REFERENCES tournaments(id),
+      player_id TEXT NOT NULL REFERENCES tournament_players(id),
+      issued_by TEXT NOT NULL REFERENCES "user"(id),
+      card_type TEXT NOT NULL,
+      reason TEXT NOT NULL,
+      issued_at INTEGER NOT NULL
+    );
+    CREATE TABLE IF NOT EXISTS tournament_awards (
+      id TEXT PRIMARY KEY,
+      tournament_id TEXT NOT NULL REFERENCES tournaments(id),
+      name TEXT NOT NULL,
+      description TEXT,
+      recipient_id TEXT,
+      created_at INTEGER NOT NULL
+    );
+    CREATE TABLE IF NOT EXISTS user_bans (
+      id TEXT PRIMARY KEY,
+      user_id TEXT NOT NULL REFERENCES "user"(id),
+      reason TEXT NOT NULL,
+      banned_by TEXT NOT NULL REFERENCES "user"(id),
+      banned_at INTEGER NOT NULL,
+      lifted_at INTEGER
+    );
     INSERT INTO "user" (id, name, email, email_verified, created_at, updated_at)
     VALUES ('to-1', 'Alice', 'alice@example.com', 0, 0, 0);
     INSERT INTO "user" (id, name, email, email_verified, created_at, updated_at)
@@ -397,5 +422,181 @@ describe('tournament.standings', () => {
     const standings = await toCaller.tournament.standings(t!.id)
     expect(standings.players).toHaveLength(1)
     expect(standings.players[0].wins).toBe(0)
+  })
+})
+
+describe('tournament.search', () => {
+  it('returns non-DRAFT tournaments', async () => {
+    const toCaller = createCaller(toCtx)
+    const t = await toCaller.tournament.create({
+      name: 'Searchable GT',
+      eventDate: 1700000000,
+      location: 'Denver',
+      format: '2000pts',
+      totalRounds: 3,
+    })
+    await toCaller.tournament.advanceStatus(t!.id) // → REGISTRATION
+
+    const results = await toCaller.tournament.search({})
+    const found = results.find((r) => r.name === 'Searchable GT')
+    expect(found).toBeDefined()
+    expect(found!.playerCount).toBe(0)
+  })
+
+  it('filters by name query', async () => {
+    const toCaller = createCaller(toCtx)
+    const results = await toCaller.tournament.search({ query: 'Searchable' })
+    expect(results.some((r) => r.name === 'Searchable GT')).toBe(true)
+  })
+
+  it('filters by location query', async () => {
+    const toCaller = createCaller(toCtx)
+    const results = await toCaller.tournament.search({ query: 'Denver' })
+    expect(results.some((r) => r.name === 'Searchable GT')).toBe(true)
+  })
+
+  it('filters by status', async () => {
+    const toCaller = createCaller(toCtx)
+    const results = await toCaller.tournament.search({ status: 'COMPLETE' })
+    // Should only return complete tournaments
+    expect(results.every((r) => r.status === 'COMPLETE')).toBe(true)
+  })
+})
+
+describe('player.myProfile', () => {
+  it('returns profile with tournament history and W-L-D record', async () => {
+    // Setup: create tournament, register player, play a match
+    const toCaller = createCaller(toCtx)
+    const t = await toCaller.tournament.create({
+      name: 'Profile Test GT',
+      eventDate: 1700000000,
+      format: '2000pts',
+      totalRounds: 1,
+    })
+    await toCaller.tournament.advanceStatus(t!.id) // → REGISTRATION
+
+    const p1Caller = createCaller(p1Ctx)
+    const p2Caller = createCaller(p2Ctx)
+    const tp1 = await p1Caller.player.register({
+      tournamentId: t!.id,
+      displayName: 'Bob',
+      faction: 'Orks',
+    })
+    await p2Caller.player.register({
+      tournamentId: t!.id,
+      displayName: 'Carol',
+      faction: 'Necrons',
+    })
+
+    await toCaller.tournament.advanceStatus(t!.id) // CHECK_IN
+    await toCaller.tournament.advanceStatus(t!.id) // IN_PROGRESS
+
+    const round = await toCaller.round.create({ tournamentId: t!.id })
+    const players = await toCaller.player.list({ tournamentId: t!.id })
+    const dbTp1 = players.find((p) => p.displayName === 'Bob')!
+    const dbTp2 = players.find((p) => p.displayName === 'Carol')!
+
+    await client.execute({
+      sql: `INSERT INTO pairings (id, round_id, table_number, player1_id, player2_id, mission, player1_vp, player2_vp, result, confirmed, to_override, created_at)
+            VALUES ('profile-pair', ?, 1, ?, ?, 'Take and Hold', 80, 55, 'P1_WIN', 1, 0, ?)`,
+      args: [round!.id, dbTp1.id, dbTp2.id, Date.now()],
+    })
+
+    // Bob's profile
+    const profile = await p1Caller.player.myProfile()
+    expect(profile.tournamentsPlayed).toBeGreaterThanOrEqual(1)
+    expect(profile.wins).toBeGreaterThanOrEqual(1)
+    expect(profile.totalVP).toBeGreaterThanOrEqual(80)
+    expect(profile.tournaments.some((t) => t.name === 'Profile Test GT')).toBe(true)
+
+    // Carol's profile
+    const profile2 = await p2Caller.player.myProfile()
+    expect(profile2.losses).toBeGreaterThanOrEqual(1)
+  })
+
+  it('returns empty profile for user with no tournaments', async () => {
+    const freshCtx = { user: { id: 'to-1', email: 'alice@example.com', name: 'Alice' }, req, db }
+    const caller = createCaller(freshCtx)
+    const profile = await caller.player.myProfile()
+    // Alice is a TO, check that the profile returns at minimum
+    expect(profile.userId).toBe('to-1')
+    expect(typeof profile.wins).toBe('number')
+    expect(typeof profile.losses).toBe('number')
+    expect(Array.isArray(profile.cards)).toBe(true)
+    expect(Array.isArray(profile.bans)).toBe(true)
+  })
+})
+
+describe('player.searchLists', () => {
+  it('searches lists by faction', async () => {
+    // Register a player with list text first
+    const toCaller = createCaller(toCtx)
+    const t = await toCaller.tournament.create({
+      name: 'List Search Test',
+      eventDate: 1700000000,
+      format: '2000pts',
+      totalRounds: 3,
+    })
+    await toCaller.tournament.advanceStatus(t!.id) // → REGISTRATION
+
+    const p1Caller = createCaller(p1Ctx)
+    await p1Caller.player.register({
+      tournamentId: t!.id,
+      displayName: 'Bob',
+      faction: 'Death Guard',
+      listText: 'Plague Marines x10\nBlightlord Terminators x5',
+    })
+
+    const results = await toCaller.player.searchLists({ faction: 'Death Guard' })
+    expect(results.length).toBeGreaterThanOrEqual(1)
+    expect(results.some((r) => r.faction === 'Death Guard')).toBe(true)
+    expect(results.some((r) => r.listText?.includes('Plague Marines'))).toBe(true)
+  })
+
+  it('returns empty for faction with no lists', async () => {
+    const caller = createCaller(toCtx)
+    const results = await caller.player.searchLists({ faction: 'Nonexistent Faction' })
+    expect(results).toHaveLength(0)
+  })
+})
+
+describe('player.searchPlayers', () => {
+  it('searches players by name', async () => {
+    const caller = createCaller(toCtx)
+    const results = await caller.player.searchPlayers({ query: 'Bob' })
+    expect(results.length).toBeGreaterThanOrEqual(1)
+    expect(results[0].displayName).toBe('Bob')
+    expect(results[0].tournamentsPlayed).toBeGreaterThanOrEqual(1)
+  })
+
+  it('includes card counts', async () => {
+    // Issue a card first
+    const toCaller = createCaller(toCtx)
+    const t = await toCaller.tournament.create({
+      name: 'Card Search Test',
+      eventDate: 1700000000,
+      format: '2000pts',
+      totalRounds: 3,
+    })
+    await toCaller.tournament.advanceStatus(t!.id) // → REGISTRATION
+
+    const p1Caller = createCaller(p1Ctx)
+    const tp = await p1Caller.player.register({
+      tournamentId: t!.id,
+      displayName: 'Bob',
+      faction: 'Orks',
+    })
+
+    await toCaller.card.issue({
+      tournamentId: t!.id,
+      playerId: tp!.id,
+      cardType: 'YELLOW',
+      reason: 'Slow play',
+    })
+
+    const results = await toCaller.player.searchPlayers({ query: 'Bob' })
+    const bob = results.find((r) => r.displayName === 'Bob')
+    expect(bob).toBeDefined()
+    expect(bob!.yellowCards).toBeGreaterThanOrEqual(1)
   })
 })

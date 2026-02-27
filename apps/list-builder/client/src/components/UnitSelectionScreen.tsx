@@ -1,7 +1,7 @@
 import { useState, useMemo, useRef, useEffect } from 'react'
 
 import { trpc, trpcClient } from '../lib/trpc'
-import { useUnits, useUnitModelOptions, useGameEnhancements, useGameUnitKeywords } from '../lib/useGameData'
+import { useUnits, useUnitModelOptions, useGameEnhancements, useGameUnitKeywords, useGameDetachmentAbilities, useLegendsUnitIds, useUnitRoles } from '../lib/useGameData'
 import {
   addListUnit as addListUnitInDb,
   removeListUnit as removeListUnitInDb,
@@ -70,12 +70,46 @@ function ModelCountPicker({ unitId, unitName, defaultPoints, remaining, onSelect
   )
 }
 
-/** Shows keywords for a unit inline */
+/** Shows keywords for a unit inline + reports if LEGEND/CHARACTER */
 function UnitKeywordBadges({ unitId }: { unitId: string }) {
   const { data: keywords } = useGameUnitKeywords(unitId)
   const charKeyword = keywords.find((k) => k.keyword.toUpperCase() === 'CHARACTER')
-  if (!charKeyword) return null
-  return <span className="text-[10px] px-1.5 py-0.5 rounded bg-amber-400/20 text-amber-400 font-semibold">CHARACTER</span>
+  const legendKeyword = keywords.find((k) => k.keyword.toUpperCase() === 'LEGENDS' || k.keyword.toUpperCase() === 'LEGEND')
+
+  return (
+    <>
+      {charKeyword && <span className="text-[10px] px-1.5 py-0.5 rounded bg-amber-400/20 text-amber-400 font-semibold">CHARACTER</span>}
+      {legendKeyword && <span className="text-[10px] px-1.5 py-0.5 rounded bg-red-400/20 text-red-400 font-semibold">LEGENDS</span>}
+    </>
+  )
+}
+
+/** Returns true if this unit has a CHARACTER keyword */
+function useIsCharacter(unitId: string): boolean {
+  const { data: keywords } = useGameUnitKeywords(unitId)
+  return keywords.some((k) => k.keyword.toUpperCase() === 'CHARACTER')
+}
+
+/** Warlord toggle — only enabled for CHARACTER units */
+function WarlordButton({ unit, onToggle }: { unit: LocalListUnit; onToggle: () => void }) {
+  const isCharacter = useIsCharacter(unit.unitContentId)
+
+  // Non-characters can't be warlord (unless already set — allow un-toggle)
+  if (!isCharacter && !unit.isWarlord) return null
+
+  return (
+    <button
+      onClick={onToggle}
+      className={`px-2 py-1 rounded text-xs ${
+        unit.isWarlord
+          ? 'bg-amber-400 text-slate-950 font-bold'
+          : 'bg-slate-700 text-slate-400 hover:bg-amber-400/20 hover:text-amber-400'
+      }`}
+      title={unit.isWarlord ? 'Remove as Warlord' : 'Set as Warlord'}
+    >
+      {unit.isWarlord ? 'Warlord' : 'Set Warlord'}
+    </button>
+  )
 }
 
 /** Enhancement picker dropdown for a character unit */
@@ -124,8 +158,14 @@ function UnitStatLine({ unitContentId }: { unitContentId: string }) {
   )
 }
 
+const ROLE_FILTERS = ['All', 'Battleline', 'Character', 'Infantry', 'Vehicle', 'Monster', 'Dedicated Transport'] as const
+type RoleFilter = typeof ROLE_FILTERS[number]
+
 export function UnitSelectionScreen({ listId, faction, detachment, battleSize, onDone, onBack }: Props) {
   const [searchQuery, setSearchQuery] = useState('')
+  const [showLegends, setShowLegends] = useState(false)
+  const [showDetachmentRules, setShowDetachmentRules] = useState(false)
+  const [roleFilter, setRoleFilter] = useState<RoleFilter>('All')
   const [suggestion, setSuggestion] = useState<{
     addedName: string
     addedRating: string | null
@@ -139,10 +179,23 @@ export function UnitSelectionScreen({ listId, faction, detachment, battleSize, o
   const [descValue, setDescValue] = useState('')
   const nameInitialized = useRef(false)
 
-  const { data: units = [], isLoading: unitsLoading } = useUnits(
+  const { data: allUnits = [], isLoading: unitsLoading } = useUnits(
     { faction, name: searchQuery || undefined },
     true,
   )
+  const legendsIds = useLegendsUnitIds()
+  const unitRoles = useUnitRoles()
+  const units = useMemo(() => {
+    let filtered = showLegends ? allUnits : allUnits.filter((u) => !legendsIds.has(u.id))
+    if (roleFilter !== 'All') {
+      filtered = filtered.filter((u) => {
+        const role = unitRoles.get(u.id) ?? ''
+        return role.toLowerCase() === roleFilter.toLowerCase()
+      })
+    }
+    return filtered
+  }, [allUnits, legendsIds, showLegends, roleFilter, unitRoles])
+  const { data: detachmentAbilities = [] } = useGameDetachmentAbilities(detachment)
   const { data: activeList, refetch: refetchList } = useList(listId)
 
   // Fetch all ratings for rating badges in the unit browser
@@ -405,6 +458,30 @@ export function UnitSelectionScreen({ listId, faction, detachment, battleSize, o
         </button>
       )}
 
+      {/* Detachment rules */}
+      {detachmentAbilities.length > 0 && (
+        <div className="rounded-lg bg-slate-900 border border-slate-800 overflow-hidden">
+          <button
+            onClick={() => setShowDetachmentRules(!showDetachmentRules)}
+            className="w-full flex items-center justify-between px-3 py-2 text-sm text-slate-400 hover:text-slate-200"
+          >
+            <span>{detachment} Rules ({detachmentAbilities.length})</span>
+            <span className="text-xs">{showDetachmentRules ? 'Hide' : 'Show'}</span>
+          </button>
+          {showDetachmentRules && (
+            <div className="px-3 pb-3 space-y-2">
+              {detachmentAbilities.map((ability) => (
+                <div key={ability.id} className="text-xs">
+                  <p className="font-semibold text-amber-400">{ability.name}</p>
+                  {ability.legend && <p className="text-slate-500 italic">{ability.legend}</p>}
+                  <p className="text-slate-400 mt-0.5 whitespace-pre-wrap">{ability.description}</p>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
       {/* Validation errors */}
       {errors.map((err, i) => (
         <div key={i} className={`px-3 py-2 rounded-lg text-sm ${err.type === 'NO_WARLORD' ? 'bg-amber-900/20 border border-amber-500/30 text-amber-400' : 'bg-red-900/20 border border-red-500/30 text-red-400'}`}>
@@ -416,13 +493,41 @@ export function UnitSelectionScreen({ listId, faction, detachment, battleSize, o
       <div className="flex gap-4" style={{ minHeight: 'calc(100vh - 240px)' }}>
         {/* Left: Unit browser */}
         <div className="w-1/2 space-y-3">
-          <input
-            type="text"
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            placeholder="Search units..."
-            className="w-full px-3 py-2 rounded-lg bg-slate-900 border border-slate-800 text-slate-100 placeholder-slate-500 focus:outline-none focus:border-amber-400"
-          />
+          <div className="flex gap-2">
+            <input
+              type="text"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              placeholder="Search units..."
+              className="flex-1 px-3 py-2 rounded-lg bg-slate-900 border border-slate-800 text-slate-100 placeholder-slate-500 focus:outline-none focus:border-amber-400"
+            />
+            <label className="flex items-center gap-1.5 text-xs text-slate-400 whitespace-nowrap cursor-pointer select-none">
+              <input
+                type="checkbox"
+                checked={showLegends}
+                onChange={(e) => setShowLegends(e.target.checked)}
+                className="w-4 h-4 rounded border-slate-700 bg-slate-900 text-amber-400 focus:ring-amber-400"
+              />
+              Legends
+            </label>
+          </div>
+
+          {/* Role filter pills */}
+          <div className="flex gap-1 flex-wrap">
+            {ROLE_FILTERS.map((role) => (
+              <button
+                key={role}
+                onClick={() => setRoleFilter(role)}
+                className={`px-2.5 py-1 rounded-full text-xs font-medium transition-colors ${
+                  roleFilter === role
+                    ? 'bg-amber-400 text-slate-950'
+                    : 'bg-slate-800 text-slate-400 hover:bg-slate-700 hover:text-slate-200'
+                }`}
+              >
+                {role}
+              </button>
+            ))}
+          </div>
 
           <div className="space-y-2 max-h-[60vh] overflow-y-auto">
             {unitsLoading && <p className="text-slate-500 text-sm">Loading units...</p>}
@@ -438,6 +543,11 @@ export function UnitSelectionScreen({ listId, faction, detachment, battleSize, o
                   <div className="flex items-center gap-2">
                     <span className="font-medium text-slate-100">{unit.name}</span>
                     <RatingBadge rating={ratingMap.get(unit.id) ?? null} />
+                    {unitRoles.get(unit.id) && (
+                      <span className="px-1.5 py-0.5 rounded text-[10px] font-medium bg-slate-800 text-slate-500">
+                        {unitRoles.get(unit.id)}
+                      </span>
+                    )}
                     <UnitKeywordBadges unitId={unit.id} />
                   </div>
                   <p className="text-sm text-slate-400 mt-0.5">{unit.points}pts</p>
@@ -498,13 +608,10 @@ export function UnitSelectionScreen({ listId, faction, detachment, battleSize, o
                     <UnitStatLine unitContentId={unit.unitContentId} />
                   </div>
                   <div className="flex items-center gap-1 ml-2">
-                    <button
-                      onClick={() => void handleToggleWarlord(unit)}
-                      title={unit.isWarlord ? 'Remove Warlord' : 'Set as Warlord'}
-                      className={`px-2 py-1 rounded text-xs ${unit.isWarlord ? 'bg-amber-400 text-slate-950 font-bold' : 'bg-slate-700 text-slate-400 hover:bg-amber-400/20 hover:text-amber-400'}`}
-                    >
-                      W
-                    </button>
+                    <WarlordButton
+                      unit={unit}
+                      onToggle={() => void handleToggleWarlord(unit)}
+                    />
                     <button
                       onClick={() => void handleRemoveUnit(unit.id, unit.unitPoints, unit.count)}
                       className="px-2 py-1 rounded bg-slate-700 text-slate-400 hover:bg-red-900 hover:text-red-400 text-xs"

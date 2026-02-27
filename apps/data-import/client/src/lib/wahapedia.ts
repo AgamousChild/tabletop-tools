@@ -11,7 +11,11 @@ import {
   saveWargearOptions,
   saveUnitKeywords,
   saveUnitAbilities,
+  saveDatasheets,
+  saveDatasheetWargear,
+  saveDatasheetModels,
   setRulesImportMeta,
+  searchUnits,
 } from '@tabletop-tools/game-data-store'
 import type {
   Detachment,
@@ -24,6 +28,9 @@ import type {
   WargearOption,
   UnitKeyword,
   UnitAbility,
+  Datasheet,
+  DatasheetWargear,
+  DatasheetModel,
 } from '@tabletop-tools/game-data-store'
 
 export interface RulesImportProgress {
@@ -32,61 +39,312 @@ export interface RulesImportProgress {
   currentStep: string
 }
 
-const STEPS = [
-  { file: 'detachments.json', label: 'Detachments', save: saveDetachments as (items: unknown[]) => Promise<void>, key: 'detachments' as const },
-  { file: 'detachment_abilities.json', label: 'Detachment Abilities', save: saveDetachmentAbilities as (items: unknown[]) => Promise<void>, key: 'detachmentAbilities' as const },
-  { file: 'stratagems.json', label: 'Stratagems', save: saveStratagems as (items: unknown[]) => Promise<void>, key: 'stratagems' as const },
-  { file: 'enhancements.json', label: 'Enhancements', save: saveEnhancements as (items: unknown[]) => Promise<void>, key: 'enhancements' as const },
-  { file: 'leader_attachments.json', label: 'Leader Attachments', save: saveLeaderAttachments as (items: unknown[]) => Promise<void>, key: 'leaderAttachments' as const },
-  { file: 'unit_compositions.json', label: 'Unit Compositions', save: saveUnitCompositions as (items: unknown[]) => Promise<void>, key: 'unitCompositions' as const },
-  { file: 'unit_costs.json', label: 'Unit Costs', save: saveUnitCosts as (items: unknown[]) => Promise<void>, key: 'unitCosts' as const },
-  { file: 'wargear_options.json', label: 'Wargear Options', save: saveWargearOptions as (items: unknown[]) => Promise<void>, key: 'wargearOptions' as const },
-  { file: 'unit_keywords.json', label: 'Unit Keywords', save: saveUnitKeywords as (items: unknown[]) => Promise<void>, key: 'unitKeywords' as const },
-  { file: 'unit_abilities.json', label: 'Unit Abilities', save: saveUnitAbilities as (items: unknown[]) => Promise<void>, key: 'unitAbilities' as const },
-] as const
-
-type CountKey = typeof STEPS[number]['key']
-type Counts = Record<CountKey, number>
-
 export interface RulesImportResult {
-  counts: Counts
+  counts: Record<string, number>
   errors: string[]
+  idMappingStats?: { matched: number; unmatched: number }
 }
+
+/**
+ * Normalizes a unit name for fuzzy matching between BSData and Wahapedia.
+ * Strips special characters, collapses whitespace, lowercases.
+ */
+function normalizeName(name: string): string {
+  return name
+    .toLowerCase()
+    .replace(/[''`]/g, "'")
+    .replace(/[^\w\s'-]/g, '')
+    .replace(/\s+/g, ' ')
+    .trim()
+}
+
+/**
+ * Builds a mapping from Wahapedia datasheet IDs to BSData unit IDs.
+ * Matches by normalized unit name. For ambiguous matches, prefers same faction.
+ */
+async function buildIdMapping(
+  datasheets: Datasheet[],
+  factions: Array<{ id: string; name: string }>,
+): Promise<{ map: Map<string, string>; matched: number; unmatched: number }> {
+  // Load all BSData units
+  const bsdataUnits = await searchUnits({})
+
+  // Build faction ID → faction name mapping from Wahapedia factions
+  const factionIdToName = new Map<string, string>()
+  for (const f of factions) {
+    factionIdToName.set(f.id, f.name)
+  }
+
+  // Build BSData lookup: normalizedName → array of { id, faction }
+  const bsdataByName = new Map<string, Array<{ id: string; faction: string }>>()
+  for (const unit of bsdataUnits) {
+    const key = normalizeName(unit.name)
+    const arr = bsdataByName.get(key) || []
+    arr.push({ id: unit.id, faction: unit.faction })
+    bsdataByName.set(key, arr)
+  }
+
+  const map = new Map<string, string>()
+  let matched = 0
+  let unmatched = 0
+
+  for (const ds of datasheets) {
+    const key = normalizeName(ds.name)
+    const candidates = bsdataByName.get(key)
+
+    if (!candidates || candidates.length === 0) {
+      unmatched++
+      continue
+    }
+
+    // If only one match, use it
+    if (candidates.length === 1) {
+      map.set(ds.id, candidates[0]!.id)
+      matched++
+      continue
+    }
+
+    // Multiple matches — try faction-based disambiguation
+    const wahapediaFactionName = factionIdToName.get(ds.factionId)
+    const factionMatch = wahapediaFactionName
+      ? candidates.find(c =>
+          normalizeName(c.faction) === normalizeName(wahapediaFactionName))
+      : null
+
+    if (factionMatch) {
+      map.set(ds.id, factionMatch.id)
+    } else {
+      // Fallback: use first candidate
+      map.set(ds.id, candidates[0]!.id)
+    }
+    matched++
+  }
+
+  return { map, matched, unmatched }
+}
+
+/**
+ * Re-keys an array of records, replacing wahapediaId with bsdataId for the
+ * datasheetId field. Records without a mapping are kept with original ID.
+ */
+function rekeyRecords<T extends { datasheetId: string }>(
+  records: T[],
+  idMap: Map<string, string>,
+): T[] {
+  return records.map(r => {
+    const bsdataId = idMap.get(r.datasheetId)
+    if (bsdataId) {
+      return { ...r, datasheetId: bsdataId }
+    }
+    return r
+  })
+}
+
+/**
+ * Re-keys leader attachment records which use leaderId/attachedId (both are datasheet IDs).
+ */
+function rekeyLeaderAttachments(
+  records: LeaderAttachment[],
+  idMap: Map<string, string>,
+): LeaderAttachment[] {
+  return records.map(r => ({
+    ...r,
+    leaderId: idMap.get(r.leaderId) ?? r.leaderId,
+    attachedId: idMap.get(r.attachedId) ?? r.attachedId,
+  }))
+}
+
+const TOTAL_STEPS = 15 // factions + datasheets + ID mapping + 10 existing + wargear + models
 
 export async function importWahapediaRules(
   onProgress: (progress: RulesImportProgress) => void,
 ): Promise<RulesImportResult> {
-  const counts = {} as Counts
+  const counts: Record<string, number> = {}
   const errors: string[] = []
   const baseUrl = `${import.meta.env.BASE_URL}wahapedia`
+  let step = 0
 
-  for (let i = 0; i < STEPS.length; i++) {
-    const step = STEPS[i]!
-    onProgress({ current: i + 1, total: STEPS.length, currentStep: step.label })
+  // Step 1: Fetch factions (needed for ID mapping)
+  step++
+  onProgress({ current: step, total: TOTAL_STEPS, currentStep: 'Factions' })
+  let factions: Array<{ id: string; name: string }> = []
+  try {
+    const resp = await fetch(`${baseUrl}/factions.json`)
+    if (!resp.ok) throw new Error(`HTTP ${resp.status}`)
+    factions = await resp.json()
+  } catch (err) {
+    errors.push(`Factions: ${err instanceof Error ? err.message : String(err)}`)
+  }
+
+  // Step 2: Fetch datasheets (master unit table — needed for ID mapping)
+  step++
+  onProgress({ current: step, total: TOTAL_STEPS, currentStep: 'Datasheets' })
+  let datasheets: Datasheet[] = []
+  try {
+    const resp = await fetch(`${baseUrl}/datasheets.json`)
+    if (!resp.ok) throw new Error(`HTTP ${resp.status}`)
+    datasheets = await resp.json()
+    if (!Array.isArray(datasheets)) throw new Error('datasheets.json is not an array')
+    counts.datasheets = datasheets.length
+  } catch (err) {
+    errors.push(`Datasheets: ${err instanceof Error ? err.message : String(err)}`)
+    counts.datasheets = 0
+  }
+
+  // Step 3: Build ID mapping from Wahapedia → BSData
+  step++
+  onProgress({ current: step, total: TOTAL_STEPS, currentStep: 'Building ID mapping' })
+  let idMap = new Map<string, string>()
+  let mappingStats = { matched: 0, unmatched: 0 }
+  try {
+    const result = await buildIdMapping(datasheets, factions)
+    idMap = result.map
+    mappingStats = { matched: result.matched, unmatched: result.unmatched }
+  } catch (err) {
+    errors.push(`ID mapping: ${err instanceof Error ? err.message : String(err)}`)
+  }
+
+  // Re-key datasheets themselves (store with BSData IDs for consistency)
+  const rekeyedDatasheets = datasheets.map(ds => {
+    const bsdataId = idMap.get(ds.id)
+    return bsdataId ? { ...ds, id: bsdataId } : ds
+  })
+  if (rekeyedDatasheets.length > 0) {
+    try {
+      await saveDatasheets(rekeyedDatasheets)
+    } catch (err) {
+      errors.push(`Save datasheets: ${err instanceof Error ? err.message : String(err)}`)
+    }
+  }
+
+  // Steps 4-13: Import all existing Wahapedia data with re-keyed IDs
+  type StepConfig = {
+    file: string
+    label: string
+    save: (items: unknown[]) => Promise<void>
+    key: string
+    rekey: (items: unknown[], map: Map<string, string>) => unknown[]
+  }
+
+  const steps: StepConfig[] = [
+    {
+      file: 'detachments.json', label: 'Detachments', key: 'detachments',
+      save: saveDetachments as (items: unknown[]) => Promise<void>,
+      rekey: (items) => items, // detachments don't have datasheetId
+    },
+    {
+      file: 'detachment_abilities.json', label: 'Detachment Abilities', key: 'detachmentAbilities',
+      save: saveDetachmentAbilities as (items: unknown[]) => Promise<void>,
+      rekey: (items) => items, // don't have datasheetId
+    },
+    {
+      file: 'stratagems.json', label: 'Stratagems', key: 'stratagems',
+      save: saveStratagems as (items: unknown[]) => Promise<void>,
+      rekey: (items) => items, // keyed by factionId/detachmentId, not datasheetId
+    },
+    {
+      file: 'enhancements.json', label: 'Enhancements', key: 'enhancements',
+      save: saveEnhancements as (items: unknown[]) => Promise<void>,
+      rekey: (items) => items, // keyed by detachmentId
+    },
+    {
+      file: 'leader_attachments.json', label: 'Leader Attachments', key: 'leaderAttachments',
+      save: saveLeaderAttachments as (items: unknown[]) => Promise<void>,
+      rekey: (items, map) => rekeyLeaderAttachments(items as LeaderAttachment[], map),
+    },
+    {
+      file: 'unit_compositions.json', label: 'Unit Compositions', key: 'unitCompositions',
+      save: saveUnitCompositions as (items: unknown[]) => Promise<void>,
+      rekey: (items, map) => rekeyRecords(items as Array<{ datasheetId: string }>, map),
+    },
+    {
+      file: 'unit_costs.json', label: 'Unit Costs', key: 'unitCosts',
+      save: saveUnitCosts as (items: unknown[]) => Promise<void>,
+      rekey: (items, map) => rekeyRecords(items as Array<{ datasheetId: string }>, map),
+    },
+    {
+      file: 'wargear_options.json', label: 'Wargear Options', key: 'wargearOptions',
+      save: saveWargearOptions as (items: unknown[]) => Promise<void>,
+      rekey: (items, map) => rekeyRecords(items as Array<{ datasheetId: string }>, map),
+    },
+    {
+      file: 'unit_keywords.json', label: 'Unit Keywords', key: 'unitKeywords',
+      save: saveUnitKeywords as (items: unknown[]) => Promise<void>,
+      rekey: (items, map) => rekeyRecords(items as Array<{ datasheetId: string }>, map),
+    },
+    {
+      file: 'unit_abilities.json', label: 'Unit Abilities', key: 'unitAbilities',
+      save: saveUnitAbilities as (items: unknown[]) => Promise<void>,
+      rekey: (items, map) => rekeyRecords(items as Array<{ datasheetId: string }>, map),
+    },
+  ]
+
+  for (const s of steps) {
+    step++
+    onProgress({ current: step, total: TOTAL_STEPS, currentStep: s.label })
 
     try {
-      const resp = await fetch(`${baseUrl}/${step.file}`)
-      if (!resp.ok) {
-        throw new Error(`HTTP ${resp.status} fetching ${step.file}`)
-      }
+      const resp = await fetch(`${baseUrl}/${s.file}`)
+      if (!resp.ok) throw new Error(`HTTP ${resp.status} fetching ${s.file}`)
       const data = await resp.json()
-      if (!Array.isArray(data)) {
-        throw new Error(`${step.file} is not an array`)
-      }
-      await step.save(data)
-      counts[step.key] = data.length
+      if (!Array.isArray(data)) throw new Error(`${s.file} is not an array`)
+      const rekeyed = s.rekey(data, idMap)
+      await s.save(rekeyed)
+      counts[s.key] = data.length
     } catch (err) {
-      errors.push(`${step.label}: ${err instanceof Error ? err.message : String(err)}`)
-      counts[step.key] = 0
+      errors.push(`${s.label}: ${err instanceof Error ? err.message : String(err)}`)
+      counts[s.key] = 0
     }
+  }
+
+  // Step 14: Import weapon profiles (datasheet_wargear)
+  step++
+  onProgress({ current: step, total: TOTAL_STEPS, currentStep: 'Weapon Profiles' })
+  try {
+    const resp = await fetch(`${baseUrl}/datasheet_wargear.json`)
+    if (!resp.ok) throw new Error(`HTTP ${resp.status}`)
+    const data: DatasheetWargear[] = await resp.json()
+    if (!Array.isArray(data)) throw new Error('datasheet_wargear.json is not an array')
+    const rekeyed = rekeyRecords(data, idMap)
+    await saveDatasheetWargear(rekeyed)
+    counts.datasheetWargear = data.length
+  } catch (err) {
+    errors.push(`Weapon Profiles: ${err instanceof Error ? err.message : String(err)}`)
+    counts.datasheetWargear = 0
+  }
+
+  // Step 15: Import model stat lines (datasheet_models)
+  step++
+  onProgress({ current: step, total: TOTAL_STEPS, currentStep: 'Model Stats' })
+  try {
+    const resp = await fetch(`${baseUrl}/datasheet_models.json`)
+    if (!resp.ok) throw new Error(`HTTP ${resp.status}`)
+    const data: DatasheetModel[] = await resp.json()
+    if (!Array.isArray(data)) throw new Error('datasheet_models.json is not an array')
+    const rekeyed = rekeyRecords(data, idMap)
+    await saveDatasheetModels(rekeyed)
+    counts.datasheetModels = data.length
+  } catch (err) {
+    errors.push(`Model Stats: ${err instanceof Error ? err.message : String(err)}`)
+    counts.datasheetModels = 0
   }
 
   await setRulesImportMeta({
     lastImport: Date.now(),
-    counts,
+    counts: {
+      detachments: counts.detachments ?? 0,
+      stratagems: counts.stratagems ?? 0,
+      enhancements: counts.enhancements ?? 0,
+      leaderAttachments: counts.leaderAttachments ?? 0,
+      unitCompositions: counts.unitCompositions ?? 0,
+      unitCosts: counts.unitCosts ?? 0,
+      wargearOptions: counts.wargearOptions ?? 0,
+      unitKeywords: counts.unitKeywords ?? 0,
+      unitAbilities: counts.unitAbilities ?? 0,
+    },
   })
 
-  return { counts, errors }
+  return { counts, errors, idMappingStats: mappingStats }
 }
 
 export function isWahapediaAvailable(): Promise<boolean> {

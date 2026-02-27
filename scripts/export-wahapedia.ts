@@ -127,6 +127,33 @@ async function main() {
   `)
   writeJson('unit_abilities.json', unitAbilities)
 
+  // Datasheets (master unit reference — needed for ID mapping to BSData)
+  const datasheets = await query(`
+    SELECT id, name, faction_id AS factionId, role, legend, transport, loadout,
+           damaged_w AS damagedW, damaged_description AS damagedDescription
+    FROM datasheets ORDER BY faction_id, name
+  `)
+  writeJson('datasheets.json', datasheets)
+
+  // Datasheet wargear (weapon profiles with full stats)
+  const datasheetWargear = await query(`
+    SELECT id, datasheet_id AS datasheetId, name, description,
+           range, type, A AS attacks, BS_WS AS skill,
+           S AS strength, AP AS ap, D AS damage
+    FROM datasheet_wargear ORDER BY datasheet_id, line
+  `)
+  writeJson('datasheet_wargear.json', datasheetWargear)
+
+  // Datasheet models (model stat lines — M/T/Sv/W/Ld/OC)
+  const datasheetModels = await query(`
+    SELECT id, datasheet_id AS datasheetId, name,
+           M AS move, T AS toughness, Sv AS save, W AS wounds,
+           Ld AS leadership, OC AS oc, inv_sv AS invSv,
+           inv_sv_descr AS invSvDescription, base_size AS baseSize
+    FROM datasheet_models ORDER BY datasheet_id, line
+  `)
+  writeJson('datasheet_models.json', datasheetModels)
+
   console.log('\nDone! JSON files written to:', outDir)
   console.log('These files are gitignored and will be served as static assets by data-import.')
 

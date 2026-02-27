@@ -23,10 +23,18 @@ interface ImportProgress {
   currentFaction: string
 }
 
+interface FactionImportDetail {
+  faction: string
+  unitCount: number
+  weaponCount: number
+  warnings: string[]
+}
+
 interface ImportResult {
   totalUnits: number
   factions: number
   errors: string[]
+  details: FactionImportDetail[]
 }
 
 type FactionStatus = 'pending' | 'importing' | 'success' | 'failed'
@@ -59,6 +67,7 @@ export function ImportScreen() {
   const [rulesMeta, setRulesMeta] = useState<RulesImportMeta | null>(null)
   const [storedFactions, setStoredFactions] = useState<string[]>([])
   const [factionCounts, setFactionCounts] = useState<Record<string, number>>({})
+  const [factionWeaponCounts, setFactionWeaponCounts] = useState<Record<string, number>>({})
 
   const refreshStoredData = useCallback(async () => {
     const [meta, rmeta, factions] = await Promise.all([
@@ -71,11 +80,14 @@ export function ImportScreen() {
     setStoredFactions(factions)
 
     const counts: Record<string, number> = {}
+    const weaponCounts: Record<string, number> = {}
     for (const f of factions) {
       const units = await searchUnits({ faction: f })
       counts[f] = units.length
+      weaponCounts[f] = units.reduce((sum, u) => sum + u.weapons.length, 0)
     }
     setFactionCounts(counts)
+    setFactionWeaponCounts(weaponCounts)
   }, [])
 
   useEffect(() => {
@@ -131,6 +143,7 @@ export function ImportScreen() {
     setImporting(true)
     setResult(null)
     const allErrors: string[] = []
+    const details: FactionImportDetail[] = []
     let totalUnits = 0
     const successfulFactions: string[] = []
 
@@ -156,9 +169,19 @@ export function ImportScreen() {
         totalUnits += units.length
         allErrors.push(...errors)
         successfulFactions.push(file.faction)
+
+        const weaponCount = units.reduce((sum, u) => sum + u.weapons.length, 0)
+        details.push({
+          faction: file.faction,
+          unitCount: units.length,
+          weaponCount,
+          warnings: errors.filter(e => e.startsWith(file.faction) || units.some(u => e.startsWith(u.name))),
+        })
+
         setFactionStatuses((prev) => ({ ...prev, [file.faction]: 'success' }))
       } catch (err) {
         allErrors.push(`${file.faction}: ${err instanceof Error ? err.message : String(err)}`)
+        details.push({ faction: file.faction, unitCount: 0, weaponCount: 0, warnings: [] })
         setFactionStatuses((prev) => ({ ...prev, [file.faction]: 'failed' }))
       }
     }
@@ -172,7 +195,7 @@ export function ImportScreen() {
       })
     }
 
-    setResult({ totalUnits, factions: successfulFactions.length, errors: allErrors })
+    setResult({ totalUnits, factions: successfulFactions.length, errors: allErrors, details })
     setImporting(false)
     setProgress(null)
     await refreshStoredData()
@@ -420,12 +443,41 @@ export function ImportScreen() {
                 <h2 className="mb-2 text-lg font-semibold text-emerald-400">Import Complete</h2>
                 <p className="text-sm text-slate-200">
                   Imported {result.totalUnits} units from {result.factions} faction{result.factions !== 1 ? 's' : ''}.
-                  {result.errors.length > 0 && ` ${result.errors.length} parse warning${result.errors.length !== 1 ? 's' : ''}.`}
+                  {result.errors.length > 0 && (
+                    <span className="ml-1 text-amber-400">
+                      {result.errors.length} warning{result.errors.length !== 1 ? 's' : ''} — review below.
+                    </span>
+                  )}
                 </p>
+
+                {/* Per-faction breakdown */}
+                {result.details.length > 0 && (
+                  <div className="mt-3 space-y-1">
+                    <p className="text-xs font-medium text-slate-400">Per-faction breakdown:</p>
+                    <div className="max-h-48 space-y-1 overflow-y-auto">
+                      {result.details.map((d) => (
+                        <div key={d.faction} className="flex items-center gap-2 rounded px-2 py-1 text-xs">
+                          <span className={d.unitCount > 0 ? 'text-emerald-400' : 'text-red-400'}>
+                            {d.unitCount > 0 ? '✓' : '✕'}
+                          </span>
+                          <span className="flex-1 text-slate-200">{d.faction}</span>
+                          <span className="text-slate-400">{d.unitCount} units</span>
+                          <span className="text-slate-500">{d.weaponCount} weapons</span>
+                          {d.warnings.length > 0 && (
+                            <span className="text-amber-400">{d.warnings.length} warn</span>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
                 {result.errors.length > 0 && (
-                  <details className="mt-2">
-                    <summary className="cursor-pointer text-sm text-slate-400">Show warnings</summary>
-                    <ul className="mt-1 space-y-1 text-xs text-slate-500">
+                  <details className="mt-3">
+                    <summary className="cursor-pointer text-sm text-amber-400">
+                      Show all {result.errors.length} warning{result.errors.length !== 1 ? 's' : ''}
+                    </summary>
+                    <ul className="mt-1 max-h-48 space-y-1 overflow-y-auto text-xs text-slate-500">
                       {result.errors.map((err, i) => (
                         <li key={i}>{err}</li>
                       ))}
@@ -444,8 +496,14 @@ export function ImportScreen() {
               <h2 className="mb-3 text-lg font-semibold text-slate-100">Game Rules Data</h2>
               <p className="mb-4 text-sm text-slate-400">
                 Import detachments, stratagems, enhancements, leader attachments, unit compositions,
-                costs, wargear options, keywords, and abilities.
+                costs, wargear options, keywords, abilities, weapon profiles, and model stats.
+                IDs are automatically mapped to your imported unit profiles.
               </p>
+              {!currentMeta && (
+                <div className="mb-4 rounded-lg border border-amber-800 bg-amber-900/20 px-4 py-3 text-sm text-amber-300">
+                  Import Unit Profiles first so game rules data can be linked to your units.
+                </div>
+              )}
 
               {rulesMeta && (
                 <div className="mb-4 rounded-lg border border-slate-700 bg-slate-800 px-4 py-3 text-sm text-slate-300">
@@ -491,16 +549,45 @@ export function ImportScreen() {
             {rulesResult && (
               <section className="mb-6 rounded-lg border border-emerald-800 bg-emerald-900/20 p-4">
                 <h2 className="mb-2 text-lg font-semibold text-emerald-400">Import Complete</h2>
-                <div className="space-y-1 text-sm text-slate-200">
-                  <p>Detachments: {rulesResult.counts.detachments.toLocaleString()}</p>
-                  <p>Stratagems: {rulesResult.counts.stratagems.toLocaleString()}</p>
-                  <p>Enhancements: {rulesResult.counts.enhancements.toLocaleString()}</p>
-                  <p>Leader Attachments: {rulesResult.counts.leaderAttachments.toLocaleString()}</p>
-                  <p>Unit Compositions: {rulesResult.counts.unitCompositions.toLocaleString()}</p>
-                  <p>Unit Costs: {rulesResult.counts.unitCosts.toLocaleString()}</p>
-                  <p>Wargear Options: {rulesResult.counts.wargearOptions.toLocaleString()}</p>
-                  <p>Unit Keywords: {rulesResult.counts.unitKeywords.toLocaleString()}</p>
-                  <p>Unit Abilities: {rulesResult.counts.unitAbilities.toLocaleString()}</p>
+
+                {rulesResult.idMappingStats && (
+                  <div className="mb-3 rounded border border-slate-700 bg-slate-800 px-3 py-2 text-sm">
+                    <span className="text-emerald-400">
+                      {rulesResult.idMappingStats.matched.toLocaleString()} datasheets matched
+                    </span>
+                    {rulesResult.idMappingStats.unmatched > 0 && (
+                      <span className="ml-2 text-amber-400">
+                        ({rulesResult.idMappingStats.unmatched} unmatched — import more factions in Unit Profiles)
+                      </span>
+                    )}
+                  </div>
+                )}
+
+                <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-sm text-slate-200">
+                  <span className="text-slate-400">Datasheets</span>
+                  <span>{(rulesResult.counts.datasheets ?? 0).toLocaleString()}</span>
+                  <span className="text-slate-400">Weapon Profiles</span>
+                  <span>{(rulesResult.counts.datasheetWargear ?? 0).toLocaleString()}</span>
+                  <span className="text-slate-400">Model Stats</span>
+                  <span>{(rulesResult.counts.datasheetModels ?? 0).toLocaleString()}</span>
+                  <span className="text-slate-400">Detachments</span>
+                  <span>{(rulesResult.counts.detachments ?? 0).toLocaleString()}</span>
+                  <span className="text-slate-400">Stratagems</span>
+                  <span>{(rulesResult.counts.stratagems ?? 0).toLocaleString()}</span>
+                  <span className="text-slate-400">Enhancements</span>
+                  <span>{(rulesResult.counts.enhancements ?? 0).toLocaleString()}</span>
+                  <span className="text-slate-400">Leader Attachments</span>
+                  <span>{(rulesResult.counts.leaderAttachments ?? 0).toLocaleString()}</span>
+                  <span className="text-slate-400">Unit Compositions</span>
+                  <span>{(rulesResult.counts.unitCompositions ?? 0).toLocaleString()}</span>
+                  <span className="text-slate-400">Unit Costs</span>
+                  <span>{(rulesResult.counts.unitCosts ?? 0).toLocaleString()}</span>
+                  <span className="text-slate-400">Wargear Options</span>
+                  <span>{(rulesResult.counts.wargearOptions ?? 0).toLocaleString()}</span>
+                  <span className="text-slate-400">Unit Keywords</span>
+                  <span>{(rulesResult.counts.unitKeywords ?? 0).toLocaleString()}</span>
+                  <span className="text-slate-400">Unit Abilities</span>
+                  <span>{(rulesResult.counts.unitAbilities ?? 0).toLocaleString()}</span>
                 </div>
                 {rulesResult.errors.length > 0 && (
                   <details className="mt-2">
@@ -556,7 +643,9 @@ export function ImportScreen() {
                     >
                       <span className="text-sm text-slate-200">
                         {faction}{' '}
-                        <span className="text-slate-500">({factionCounts[faction] ?? 0} units)</span>
+                        <span className="text-slate-500">
+                          ({factionCounts[faction] ?? 0} units, {factionWeaponCounts[faction] ?? 0} weapons)
+                        </span>
                       </span>
                       <button
                         onClick={() => handleClearFaction(faction)}

@@ -8,7 +8,7 @@ describe('SpecialRulesEditor', () => {
     render(
       <SpecialRulesEditor rules={[]} onAdd={vi.fn()} onRemove={vi.fn()} />,
     )
-    expect(screen.getByText('Special Rules')).toBeInTheDocument()
+    expect(screen.getByText('Additional Rules')).toBeInTheDocument()
   })
 
   it('shows add rule button', () => {
@@ -77,5 +77,35 @@ describe('SpecialRulesEditor', () => {
     fireEvent.click(screen.getByText('Lethal Hits'))
     // The dropdown should be closed now — rule options list should be gone
     expect(screen.queryByText('Devastating Wounds')).not.toBeInTheDocument()
+  })
+
+  it('shows data-driven weapon abilities when provided', () => {
+    render(
+      <SpecialRulesEditor
+        rules={[]}
+        weaponAbilities={['Sustained Hits 1', 'Lethal Hits']}
+        onAdd={vi.fn()}
+        onRemove={vi.fn()}
+      />,
+    )
+    expect(screen.getByText('From weapon data')).toBeInTheDocument()
+    // Abilities appear as read-only chips
+    expect(screen.getByText('Sustained Hits 1')).toBeInTheDocument()
+    expect(screen.getByText('Lethal Hits')).toBeInTheDocument()
+  })
+
+  it('deduplicates weapon abilities', () => {
+    render(
+      <SpecialRulesEditor
+        rules={[]}
+        weaponAbilities={['Lethal Hits', 'Lethal Hits', 'Blast']}
+        onAdd={vi.fn()}
+        onRemove={vi.fn()}
+      />,
+    )
+    // Should show each unique ability once
+    const chips = screen.getAllByText('Lethal Hits')
+    expect(chips).toHaveLength(1)
+    expect(screen.getByText('Blast')).toBeInTheDocument()
   })
 })
