@@ -86,6 +86,11 @@ vi.mock('@tabletop-tools/game-data-store', () => ({
     error: null,
     isLoading: false,
   }),
+  useDetachment: () => ({
+    data: null,
+    error: null,
+    isLoading: false,
+  }),
   useEnhancements: () => ({
     data: [],
     error: null,

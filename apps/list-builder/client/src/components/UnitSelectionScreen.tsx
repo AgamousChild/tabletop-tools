@@ -1,7 +1,7 @@
 import { useState, useMemo, useRef, useEffect } from 'react'
 
 import { trpc, trpcClient } from '../lib/trpc'
-import { useUnits, useUnitModelOptions, useGameEnhancements, useGameUnitKeywords, useGameDetachmentAbilities, useLegendsUnitIds, useUnitRoles } from '../lib/useGameData'
+import { useUnits, useUnitModelOptions, useGameEnhancements, useGameUnitKeywords, useGameDetachmentAbilities, useGameDetachment, useLegendsUnitIds, useUnitRoles } from '../lib/useGameData'
 import {
   addListUnit as addListUnitInDb,
   removeListUnit as removeListUnitInDb,
@@ -166,6 +166,8 @@ export function UnitSelectionScreen({ listId, faction, detachment, battleSize, o
   const [showLegends, setShowLegends] = useState(false)
   const [showDetachmentRules, setShowDetachmentRules] = useState(false)
   const [roleFilter, setRoleFilter] = useState<RoleFilter>('All')
+  const { data: detachmentData } = useGameDetachment(detachment)
+  const detachmentName = detachmentData?.name ?? detachment
   const [suggestion, setSuggestion] = useState<{
     addedName: string
     addedRating: string | null
@@ -372,7 +374,7 @@ export function UnitSelectionScreen({ listId, faction, detachment, battleSize, o
   function exportList(): string {
     if (!activeList) return ''
     const lines: string[] = [
-      `++ ${faction} — ${detachment} [${totalPts}/${battleSize.points}pts] ++`,
+      `++ ${faction} — ${detachmentName} [${totalPts}/${battleSize.points}pts] ++`,
       `[List] ${activeList.name}`,
       '',
     ]
@@ -429,7 +431,7 @@ export function UnitSelectionScreen({ listId, faction, detachment, battleSize, o
                 {activeList?.name ?? 'List'}
               </h2>
             )}
-            <p className="text-xs text-slate-400">{faction} — {detachment}</p>
+            <p className="text-xs text-slate-400">{faction} — {detachmentName}</p>
           </div>
         </div>
         <div className="text-right">
@@ -465,7 +467,7 @@ export function UnitSelectionScreen({ listId, faction, detachment, battleSize, o
             onClick={() => setShowDetachmentRules(!showDetachmentRules)}
             className="w-full flex items-center justify-between px-3 py-2 text-sm text-slate-400 hover:text-slate-200"
           >
-            <span>{detachment} Rules ({detachmentAbilities.length})</span>
+            <span>{detachmentName} Rules ({detachmentAbilities.length})</span>
             <span className="text-xs">{showDetachmentRules ? 'Hide' : 'Show'}</span>
           </button>
           {showDetachmentRules && (

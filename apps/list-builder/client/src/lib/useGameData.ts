@@ -3,6 +3,7 @@ import {
   useUnitSearch,
   useFactions,
   useDetachments,
+  useDetachment,
   useDetachmentAbilities,
   useEnhancements,
   useUnitKeywords,
@@ -30,6 +31,12 @@ export function useGameFactions() {
 export function useGameDetachments(factionId: string) {
   const result = useDetachments(factionId)
   if (!factionId) return { data: [], isLoading: false }
+  return { data: result.data, isLoading: result.isLoading }
+}
+
+export function useGameDetachment(detachmentId: string) {
+  const result = useDetachment(detachmentId)
+  if (!detachmentId) return { data: null, isLoading: false }
   return { data: result.data, isLoading: result.isLoading }
 }
 

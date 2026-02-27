@@ -105,7 +105,7 @@ export function FactionDetachmentScreen({ battleSize, onSelect, onBack }: Props)
                 key={det.id}
                 detId={det.id}
                 detName={det.name}
-                onSelect={() => onSelect(selectedFaction, det.name)}
+                onSelect={() => onSelect(selectedFaction, det.id)}
               />
             ))
           )}

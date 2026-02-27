@@ -14,7 +14,7 @@
  */
 
 import { createClient } from '@libsql/client'
-import { writeFileSync, mkdirSync } from 'node:fs'
+import { writeFileSync, mkdirSync, readFileSync, existsSync } from 'node:fs'
 import { resolve, dirname } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
@@ -37,6 +37,155 @@ function writeJson(filename: string, data: unknown) {
   writeFileSync(path, JSON.stringify(data))
   const count = Array.isArray(data) ? data.length : 'N/A'
   console.log(`  ${filename}: ${count} records`)
+}
+
+const CHAPTER_APPROVED_DIR = 'C:/R/sync-data/.local/chapter-approved/markdown'
+
+interface Mission {
+  id: string
+  name: string
+  type: string
+  description: string
+}
+
+/**
+ * Extracts missions from Chapter Approved markdown files.
+ * Missions are identified by known patterns in the PDF-extracted text.
+ */
+function extractMissions(): Mission[] {
+  if (!existsSync(CHAPTER_APPROVED_DIR)) {
+    console.log('  Chapter Approved markdown not found — skipping missions export')
+    return []
+  }
+
+  const missions: Mission[] = []
+  let nextId = 1
+
+  function addMission(name: string, type: string, description: string) {
+    missions.push({
+      id: `mission-${nextId++}`,
+      name: name.trim(),
+      type,
+      description: description.trim(),
+    })
+  }
+
+  // Helper to clean mission name from continuous PDF text —
+  // removes prefix garbage like "SECOND BATTLE ROUND ONWARDS VP", scoring text, etc.
+  function cleanMissionName(raw: string): string {
+    return raw
+      // Strip everything up to the LAST "VP" (greedy) — handles chained VP prefixes
+      .replace(/^.*\bVP\s+/g, '')
+      // Strip "FOR PLAYERS USING TACTICAL/FIXED MISSIONS" prefixes (twist cards)
+      .replace(/(?:FOR PLAYERS USING (?:TACTICAL|FIXED) MISSIONS\s*)+/gi, '')
+      // Strip AND/OR connectors and arrows
+      .replace(/^(?:AND|OR)\s+/g, '')
+      .replace(/^\s*↑↓\s*/g, '')
+      .trim()
+  }
+
+  // Known stratagem names that appear on challenger cards between mission name and "CHALLENGER MISSION"
+  const challengerStrategems = [
+    'PIVOTAL MOMENT', 'HARBORED POWER', 'RENEWED FOCUS', 'BURST OF SPEED',
+    'GREAT HASTE', 'FORCE A BREACH', 'ALL IN', 'OPPORTUNISTIC STRIKE', 'STRATEGIC RETREAT',
+  ]
+
+  function cleanChallengerName(raw: string): string {
+    let cleaned = cleanMissionName(raw)
+    // Strip trailing stratagem names
+    for (const s of challengerStrategems) {
+      cleaned = cleaned.replace(new RegExp(`\\s+${s}$`, 'i'), '')
+    }
+    return cleaned.trim()
+  }
+
+  // Primary missions
+  const primaryFile = resolve(CHAPTER_APPROVED_DIR, 'primary-missions.md')
+  if (existsSync(primaryFile)) {
+    const text = readFileSync(primaryFile, 'utf8')
+    const re = /([A-Z][A-Z '\u2019]+?)\s+PRIMARY MISSION/g
+    let m
+    while ((m = re.exec(text)) !== null) {
+      const name = cleanMissionName(m[1]!)
+      if (name && name.length > 2) {
+        addMission(titleCase(name), 'primary', '')
+      }
+    }
+  }
+
+  // Secondary missions (attacker file has all standard secondaries)
+  const secondaryFile = resolve(CHAPTER_APPROVED_DIR, 'secondary-missions-attacker.md')
+  if (existsSync(secondaryFile)) {
+    const text = readFileSync(secondaryFile, 'utf8')
+    const re = /([A-Z][A-Z '\u2019]+?)\s+(?:FIXED - )?SECONDARY MISSION/g
+    let m
+    while ((m = re.exec(text)) !== null) {
+      const name = cleanMissionName(m[1]!)
+      if (name && name.length > 2) {
+        addMission(titleCase(name), 'secondary', '')
+      }
+    }
+  }
+
+  // Deployment zones
+  const deploymentFile = resolve(CHAPTER_APPROVED_DIR, 'deployment-zones.md')
+  if (existsSync(deploymentFile)) {
+    const text = readFileSync(deploymentFile, 'utf8')
+    // Each deployment zone name appears before "INCURSION" or "STRIKE FORCE" or "ASYMMETRIC WAR"
+    const seen = new Set<string>()
+    const re = /([A-Z][A-Z\s]+?)(?:\s+(?:INCURSION|STRIKE FORCE|ASYMMETRIC WAR))/g
+    let m
+    while ((m = re.exec(text)) !== null) {
+      const name = titleCase(m[1]!.trim())
+      if (!seen.has(name) && !name.startsWith('#')) {
+        seen.add(name)
+        addMission(name, 'deployment_zone', '')
+      }
+    }
+  }
+
+  // Twist cards
+  const twistFile = resolve(CHAPTER_APPROVED_DIR, 'twist-cards.md')
+  if (existsSync(twistFile)) {
+    const text = readFileSync(twistFile, 'utf8')
+    const re = /([A-Z][A-Z '\u2019]+?)\s+TWIST\b/g
+    let m
+    while ((m = re.exec(text)) !== null) {
+      const name = cleanMissionName(m[1]!)
+      if (name && name.length > 2) {
+        addMission(titleCase(name), 'twist', '')
+      }
+    }
+  }
+
+  // Challenger cards — mission name precedes optional stratagem name + "CHALLENGER MISSION"
+  const challengerFile = resolve(CHAPTER_APPROVED_DIR, 'challenger-cards.md')
+  if (existsSync(challengerFile)) {
+    const text = readFileSync(challengerFile, 'utf8')
+    const re = /([A-Z][A-Z '\u2019]+?)\s+CHALLENGER MISSION/g
+    const seen = new Set<string>()
+    let m
+    while ((m = re.exec(text)) !== null) {
+      const name = cleanChallengerName(m[1]!)
+      if (name && name.length > 2) {
+        const tc = titleCase(name)
+        if (!seen.has(tc)) {
+          seen.add(tc)
+          addMission(tc, 'challenger', '')
+        }
+      }
+    }
+  }
+
+  return missions
+}
+
+function titleCase(s: string): string {
+  return s
+    .replace(/[\u2018\u2019\u2032]/g, "'") // normalize curly/prime apostrophes
+    .toLowerCase()
+    .replace(/(?:^|\s)\S/g, c => c.toUpperCase())
+    .trim()
 }
 
 async function main() {
@@ -153,6 +302,12 @@ async function main() {
     FROM datasheet_models ORDER BY datasheet_id, line
   `)
   writeJson('datasheet_models.json', datasheetModels)
+
+  // Missions (from Chapter Approved markdown)
+  console.log()
+  console.log('Extracting missions from Chapter Approved:')
+  const missions = extractMissions()
+  writeJson('missions.json', missions)
 
   console.log('\nDone! JSON files written to:', outDir)
   console.log('These files are gitignored and will be served as static assets by data-import.')

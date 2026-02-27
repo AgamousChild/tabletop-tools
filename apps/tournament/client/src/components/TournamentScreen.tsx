@@ -758,7 +758,7 @@ export function TournamentScreen({ onSignOut }: Props) {
     <div className="min-h-screen bg-slate-950 text-slate-100">
       <div className="max-w-2xl mx-auto p-4">
         <div className="flex justify-between items-center mb-4">
-          <h1 className="text-2xl font-bold">Tournament</h1>
+          <a href="/" className="text-2xl font-bold hover:text-amber-400 transition-colors">Tournament</a>
           <div className="flex gap-2">
             <a
               href="#/create"

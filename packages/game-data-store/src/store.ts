@@ -59,6 +59,7 @@ export interface RulesImportMeta {
     wargearOptions: number
     unitKeywords: number
     unitAbilities: number
+    missions: number
   }
 }
 

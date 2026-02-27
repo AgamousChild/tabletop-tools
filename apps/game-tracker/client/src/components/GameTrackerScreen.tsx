@@ -70,7 +70,7 @@ export function GameTrackerScreen({ onSignOut }: Props) {
     return (
       <div className="min-h-screen bg-slate-950 text-slate-100">
         <header className="border-b border-slate-800 px-6 py-4 flex items-center justify-between">
-          <h1 className="text-2xl font-bold text-amber-400">Game Tracker</h1>
+          <a href="/" className="text-2xl font-bold text-amber-400 hover:text-amber-300 transition-colors">Game Tracker</a>
           <button
             onClick={() => void handleSignOut()}
             className="text-slate-400 hover:text-slate-100 text-sm"
