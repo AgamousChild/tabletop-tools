@@ -11,12 +11,14 @@ for loading unit/weapon/faction data at runtime. Zero GW content is ever committ
 from BSData XML files loaded at startup, tournament CSV imports, or the NullAdapter (dev/test).
 
 Also provides:
-- **`createUnitRouter()`** — shared tRPC router factory for unit listing/search/get (used by versus and list-builder)
 - **Tournament CSV parsers** — BCP, Tabletop Admiral, and generic CSV formats
 
 This package is used by:
-- **Server apps** (versus, list-builder, new-meta, tournament): load game data via adapter at startup
+- **Server apps** (new-meta, tournament): tournament CSV import at server side
 - **data-import client**: imports `parseBSDataXml` directly from the BSData parser (not via barrel export -- barrel pulls in Node APIs)
+
+Note: versus and list-builder no longer use this package server-side — all game data comes from
+client-side IndexedDB (via `@tabletop-tools/game-data-store`).
 
 ---
 
@@ -27,18 +29,15 @@ packages/game-content/
   src/
     types.ts                              <- GameContentAdapter, UnitProfile, WeaponProfile, WeaponAbility, TournamentRecord, etc.
     index.ts                              <- barrel export (DO NOT import in data-import client)
-    routers/
-      unit.ts                             <- createUnitRouter() factory (10 tests)
-      unit.test.ts
     adapters/
       null/
         index.ts                          <- NullAdapter (empty results, no deps)
       bsdata/
         index.ts                          <- BSDataAdapter (reads XML from disk)
         loader.ts                         <- file discovery + read
-        loader.test.ts                    <- 13 tests
+        loader.test.ts                    <- 14 tests
         parser.ts                         <- XML -> UnitProfile[] extraction (stack-based for nested entries)
-        parser.test.ts                    <- 16 tests
+        parser.test.ts                    <- 54 tests
       tournament-import/
         index.ts                          <- TournamentImportAdapter + parser re-exports
         bcp-csv/
@@ -73,57 +72,12 @@ export { BSDataAdapter, parseBSDataXml } from './adapters/bsdata'
 // Tournament import
 export { TournamentImportAdapter, parseBcpCsv, parseTabletopAdmiralCsv, parseGenericCsv }
   from './adapters/tournament-import'
-
-// Unit router factory
-export { createUnitRouter } from './routers/unit'
 ```
 
 ### Import Paths
 
-- **Server apps:** `import { GameContentAdapter, BSDataAdapter, NullAdapter, createUnitRouter } from '@tabletop-tools/game-content'`
+- **Server apps:** `import { BSDataAdapter, NullAdapter } from '@tabletop-tools/game-content'`
 - **data-import client:** `import { parseBSDataXml } from '@tabletop-tools/game-content/src/adapters/bsdata/parser'` (direct path -- barrel export pulls in Node APIs via BSDataAdapter)
-
----
-
-## createUnitRouter Factory
-
-The factory creates its own `initTRPC` instance with a minimal context type (`UnitRouterContext`)
-and returns a complete router with `listFactions`, `search`, and `get` procedures. It takes
-**no arguments** -- the internal tRPC instance preserves full type inference.
-
-```typescript
-// packages/game-content/src/routers/unit.ts
-type UnitRouterContext = {
-  user: { id: string; email: string; name: string } | null
-  gameContent: GameContentAdapter
-}
-
-const t = initTRPC.context<UnitRouterContext>().create()
-
-export function createUnitRouter() {
-  return t.router({
-    listFactions: protectedProcedure.query(({ ctx }) => ctx.gameContent.listFactions()),
-    search: protectedProcedure
-      .input(z.object({ faction: z.string().optional(), query: z.string().optional() }))
-      .query(({ ctx, input }) => ctx.gameContent.searchUnits({ faction: input.faction, name: input.query })),
-    get: protectedProcedure
-      .input(z.object({ id: z.string() }))
-      .query(({ ctx, input }) => /* returns unit or throws NOT_FOUND */),
-  })
-}
-```
-
-Apps use it as:
-```typescript
-import { createUnitRouter } from '@tabletop-tools/game-content'
-export const appRouter = router({
-  unit: createUnitRouter(),
-  // ... app-specific routers
-})
-```
-
-The app's tRPC context must include `user` and `gameContent` fields. tRPC handles
-cross-instance router composition at runtime.
 
 ---
 
@@ -148,12 +102,11 @@ Profile and characteristic extraction uses regex (safe since these don't nest).
 
 ## Testing
 
-**82 tests** across 6 test files:
+**108 tests** across 5 test files:
 
 | File | Tests | What it covers |
 |---|---|---|
-| `routers/unit.test.ts` | 10 | listFactions, search (by faction/query/both/neither), get (happy/NOT_FOUND/auth) |
-| `adapters/bsdata/parser.test.ts` | 18 | XML parsing: units, weapons, abilities, nested model exclusion, top-level models, edge cases |
+| `adapters/bsdata/parser.test.ts` | 54 | XML parsing: units, weapons, abilities, nested model exclusion, top-level models, edge cases |
 | `adapters/bsdata/loader.test.ts` | 14 | File discovery, .cat/.gst loading, nested model filtering, error handling |
 | `adapters/tournament-import/bcp-csv/parser.test.ts` | 13 | BCP CSV format parsing |
 | `adapters/tournament-import/tabletop-admiral-csv/parser.test.ts` | 12 | Tabletop Admiral CSV format parsing |
