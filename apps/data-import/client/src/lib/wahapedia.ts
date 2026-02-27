@@ -211,8 +211,9 @@ export async function importWahapediaRules(
   try {
     const resp = await fetch(`${baseUrl}/datasheets.json`)
     if (!resp.ok) throw new Error(`HTTP ${resp.status}`)
-    datasheets = await resp.json()
-    if (!Array.isArray(datasheets)) throw new Error('datasheets.json is not an array')
+    const raw = await resp.json()
+    if (!Array.isArray(raw)) throw new Error('datasheets.json is not an array')
+    datasheets = raw
     counts.datasheets = datasheets.length
   } catch (err) {
     errors.push(`Datasheets: ${err instanceof Error ? err.message : String(err)}`)

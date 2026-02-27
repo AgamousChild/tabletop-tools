@@ -101,11 +101,13 @@ Update this section every time you update or fix a section of the requirements.
 - [x] Special rules connected to datasheets/units — Core and Faction abilities from Wahapedia linked to datasheets via unit_rules table
 - [x] BSData sync tool run — 1351 units across 36 factions generated in sync-data repo
 
+- [x] Data-Import Wahapedia validation tests — 29 new tests covering full 20-step pipeline, ID re-keying, faction re-keying, error handling, data integrity (57 total data-import tests)
+- [x] Wahapedia import bug fix — non-array datasheets.json response no longer corrupts `datasheets` variable (safe variable reset)
+- [x] Data source setup script — `scripts/setup-data.sh` orchestrates sync tools + export pipeline with --export and --validate modes
+
 ### In Progress
 
 - [ ] Client-side IndexedDB code with same master data
-- [ ] Data-Import tests with real data validation
-- [ ] Scripts for setting up data sources for GitHub storage
 - [ ] Dice detection improvements
 
 ### Not Started
@@ -121,11 +123,12 @@ Update this section every time you update or fix a section of the requirements.
 | Package | Tests | Status |
 |---------|-------|--------|
 | packages/game-data-store | 93 | PASS |
-| packages/ui | 30 | PASS |
+| packages/ui | 24 | PASS |
 | apps/versus/client | 134 | PASS |
 | apps/list-builder/client | 52 | PASS |
 | apps/game-tracker/client | 150 | PASS |
 | apps/tournament/client | 57 | PASS |
+| apps/data-import/client | 57 | PASS |
 | Others | — | Not yet verified this session |
 
 ---
