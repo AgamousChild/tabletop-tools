@@ -92,10 +92,10 @@ Update this section every time you update or fix a section of the requirements.
 - [x] HTML→markdown conversion — `htmlToMarkdown()` in export-wahapedia.ts converts all description fields at export time (detachment abilities, stratagems, enhancements, unit abilities, abilities, wargear)
 - [x] Opponent detachment already a dropdown when data available — added 3 new tests for dropdown path in MatchSetupScreen.test.tsx (150 game-tracker tests)
 - [x] Codex detachments already fully implemented — export → import → IndexedDB → hooks → all consumer apps
+- [x] Data-import: Include Legends toggle checkbox — Settings section in Stored Data tab with IndexedDB persistence
 
 ### In Progress
 
-- [ ] Data-import: Include Legends toggle checkbox in import UI
 - [ ] Master SQLite database linking BSData + Wahapedia + game rules with referential integrity
 - [ ] Wahapedia tables mirroring BSData structure with integrity checks
 - [ ] Game rules linked to units/models in the database
