@@ -37,7 +37,8 @@ describe('ListCard', () => {
 
   it('omits draws from record when draws = 0', () => {
     render(<ListCard list={baseList} />)
-    expect(screen.queryByText(/D/)).toBeNull()
+    // Record should be exactly "5W 1L" with no draws suffix
+    expect(screen.getByText('5W 1L')).toBeInTheDocument()
   })
 
   it('includes draws in record when draws > 0', () => {

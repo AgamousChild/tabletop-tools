@@ -15,9 +15,11 @@ describe('StatCard', () => {
   })
 
   it('does not render subtitle when not provided', () => {
-    const { container } = render(<StatCard label="Test" value={0} />)
-    const sub = container.querySelector('.text-xs')
-    expect(sub).toBeNull()
+    render(<StatCard label="Test" value={0} />)
+    // Only label and value should be rendered — no subtitle paragraph
+    expect(screen.getByText('Test')).toBeInTheDocument()
+    expect(screen.getByText('0')).toBeInTheDocument()
+    expect(screen.queryByText(/this week|ago|recent/i)).toBeNull()
   })
 
   it('renders string values', () => {
