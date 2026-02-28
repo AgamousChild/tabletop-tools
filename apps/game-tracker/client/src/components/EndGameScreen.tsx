@@ -89,6 +89,7 @@ export function EndGameScreen({ matchId, onBack }: Props) {
       </header>
 
       <div className="p-6 space-y-6">
+        <p className="text-xs text-slate-500 mb-4">Here is your match summary with round-by-round breakdown. Tap Back to return to your match list and start a new game.</p>
         {/* Result card */}
         <div className="text-center p-6 rounded-xl bg-slate-900 border border-slate-700">
           <p className="text-sm text-slate-400 mb-1">

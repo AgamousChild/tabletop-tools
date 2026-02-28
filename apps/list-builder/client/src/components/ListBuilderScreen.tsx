@@ -143,7 +143,7 @@ export function ListBuilderScreen({ onSignOut }: Props) {
         </div>
       </header>
 
-      <p className="text-[10px] text-slate-500 px-6 pt-2">Build and manage army lists with live meta ratings. Lists save locally and sync to your account.</p>
+      <p className="text-xs text-slate-500 px-6 pt-2 mb-4">Create a new list or select an existing one to edit. Use Sync to back up lists to your account, or Restore to download them to this device.</p>
 
       <div className="max-w-4xl mx-auto p-6">
         {screen.type === 'my-lists' && (

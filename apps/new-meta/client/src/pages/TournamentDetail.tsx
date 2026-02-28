@@ -41,6 +41,9 @@ export function TournamentDetail({ importId, onBack }: Props) {
         <div className="flex items-start justify-between">
           <div>
             <h1 className="text-2xl font-semibold text-slate-100">{data.eventName}</h1>
+            <p className="text-xs text-slate-500 mt-1">
+              Full results table. Click "View" on a player's list to expand it. Use the download buttons to export data.
+            </p>
             <div className="flex gap-4 mt-1 text-sm text-slate-400">
               <span>{new Date(data.eventDate).toLocaleDateString()}</span>
               <span>{data.format}</span>

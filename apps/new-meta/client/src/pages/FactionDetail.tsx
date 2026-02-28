@@ -48,6 +48,9 @@ export function FactionDetail({ faction, onBack }: Props) {
           ← Back
         </button>
         <h1 className="text-2xl font-semibold text-slate-100">{faction}</h1>
+        <p className="text-xs text-slate-500 mt-1">
+          Detachment breakdowns, win rate trend over time, and top-performing lists. Tap "Back" to return to the dashboard.
+        </p>
         <div className="flex gap-6 mt-2 text-sm text-slate-400">
           <span>
             Win rate:{' '}

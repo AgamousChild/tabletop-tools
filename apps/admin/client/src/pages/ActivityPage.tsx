@@ -31,6 +31,9 @@ export function ActivityPage() {
   return (
     <div>
       <h2 className="text-lg font-semibold text-slate-100 mb-4">App Activity</h2>
+      <p className="text-xs text-slate-500 mb-4">
+        Usage breakdown per app, showing total records and activity in the last 7 days.
+      </p>
       <div className="space-y-3">
         {data.map((entry) => (
           <div key={entry.app} className="bg-slate-900 border border-slate-800 rounded-lg p-4">

@@ -30,6 +30,9 @@ export function DiceSetDetailScreen({ diceSet, onBack, onStartSession, onSelectS
         <h3 className="text-slate-400 text-sm font-semibold uppercase tracking-wider mb-3">
           Sessions
         </h3>
+        <p className="text-xs text-slate-500 mb-4">
+          Past recording sessions for this dice set. Tap "New Session" to start calibrating and recording rolls.
+        </p>
 
         {isLoading ? (
           <p className="text-slate-400 text-center py-8">Loading…</p>

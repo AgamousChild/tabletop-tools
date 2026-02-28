@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { useFactions, useDetachments, useLists } from '@tabletop-tools/game-data-store'
+import { usePrimaryFactions, useDetachments, useLists } from '@tabletop-tools/game-data-store'
 
 type MatchSetupData = {
   date: number
@@ -37,7 +37,7 @@ export function MatchSetupScreen({ onNext, onBack }: Props) {
   const [isTournament, setIsTournament] = useState(false)
   const [tournamentName, setTournamentName] = useState('')
 
-  const { data: factions = [] } = useFactions()
+  const { data: factions = [] } = usePrimaryFactions()
   const { data: yourDetachments = [] } = useDetachments(yourFaction)
   const { data: opponentDetachments = [] } = useDetachments(opponentFaction)
   const { data: lists = [] } = useLists()
@@ -71,6 +71,7 @@ export function MatchSetupScreen({ onNext, onBack }: Props) {
       </header>
 
       <div className="p-6 space-y-5 max-w-md mx-auto">
+        <p className="text-xs text-slate-500 mb-4">Fill in your army and opponent details below, then tap Next to continue. Only opponent faction is required.</p>
         {/* Date & Location */}
         <div className="grid grid-cols-2 gap-3">
           <div>

@@ -25,6 +25,9 @@ export function Dashboard({ onFactionSelect }: Props) {
         <h1 className="text-2xl font-semibold text-slate-100">Meta Dashboard</h1>
         <MetaWindowSelector value={metaWindow} onChange={setMetaWindow} />
       </div>
+      <p className="text-xs text-slate-500 mb-4">
+        Faction win rates and head-to-head matchups from imported tournament data. Click a faction row to see detailed stats. Use the meta window selector to filter by time period.
+      </p>
 
       <section>
         <h2 className="text-lg font-medium text-slate-200 mb-4">Faction Win Rates</h2>

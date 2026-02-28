@@ -462,6 +462,8 @@ export function UnitSelectionScreen({ listId, faction, detachment, battleSize, o
         </button>
       )}
 
+      <p className="text-xs text-slate-500 mb-4">Browse units on the left and click "Add" to include them in your list. Watch your points total and role limits. Use "Back" to return to your lists or "Done" to save.</p>
+
       {/* Detachment rules */}
       {detachmentAbilities.length > 0 && (
         <div className="rounded-lg bg-slate-900 border border-slate-800 overflow-hidden">

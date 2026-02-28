@@ -71,6 +71,7 @@ export {
   parseStat,
   parseDiceOrNum,
   parseWeaponAbilities,
+  normalizeFactionName,
 } from './store.js'
 export type {
   ImportMeta,

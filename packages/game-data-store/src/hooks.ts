@@ -11,6 +11,7 @@ import {
   getDatasheetStratagems, getDatasheetEnhancements, getDatasheetDetachmentAbilities,
   listDatasheetFactions, searchDatasheets, getDatasheetAsUnit, hasDatasheets,
   parseStat, parseDiceOrNum, parseWeaponAbilities,
+  normalizeFactionName,
 } from './store.js'
 import type {
   LocalList, LocalListUnit, Detachment, DetachmentAbility,
@@ -129,7 +130,9 @@ export function useFactions(): { data: string[]; error: string | null; isLoading
     listFactions()
       .then((result) => {
         if (!cancelled) {
-          setData(result)
+          // Normalize BSData catalog names to match Wahapedia conventions
+          const deduped = [...new Set(result.map(normalizeFactionName))].sort()
+          setData(deduped)
           setIsLoading(false)
         }
       })

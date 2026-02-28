@@ -77,6 +77,9 @@ export function ManageTournament({ tournamentId, onBack }: Props) {
         Back to Tournament
       </button>
       <h2 className="text-xl font-bold mb-4">Manage Tournament</h2>
+      <p className="text-xs text-slate-500 mb-4">
+        Use the tabs to manage players (drop or reinstate), issue yellow/red cards, and create awards.
+      </p>
 
       {/* Tab bar */}
       <div className="flex gap-2 mb-6">

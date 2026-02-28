@@ -4,9 +4,8 @@ import { describe, expect, it, vi } from 'vitest'
 import { MatchSetupScreen } from './MatchSetupScreen'
 
 vi.mock('@tabletop-tools/game-data-store', () => ({
-  useFactions: () => ({
+  usePrimaryFactions: () => ({
     data: ['Space Marines', 'Orks'],
-    error: null,
     isLoading: false,
   }),
   useDetachments: (factionId: string) => ({

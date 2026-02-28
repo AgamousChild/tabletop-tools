@@ -463,23 +463,45 @@ export async function searchUnits(query: { faction?: string; name?: string }): P
     const tx = db.transaction(UNITS_STORE, 'readonly')
     const store = tx.objectStore(UNITS_STORE)
     const results: UnitProfile[] = []
+    const seen = new Set<string>()
 
-    let source: IDBRequest
     if (query.faction) {
+      // Search both the exact name and BSData-prefixed variants for backward compatibility.
+      // New imports use normalized names ("Space Marines"), old imports may have
+      // "Imperium - Space Marines". We query all variants on the faction index.
+      const normalized = normalizeFactionName(query.faction)
+      const keysToTry = [...new Set([
+        query.faction, normalized,
+        `Imperium - ${normalized}`, `Chaos - ${normalized}`,
+      ])]
       const index = store.index('faction')
-      source = index.openCursor(IDBKeyRange.only(query.faction))
-    } else {
-      source = store.openCursor()
-    }
-
-    source.onsuccess = () => {
-      const cursor = source.result as IDBCursorWithValue | null
-      if (cursor) {
-        const unit = cursor.value as UnitProfile
-        if (!query.name || unit.name.toLowerCase().includes(query.name.toLowerCase())) {
-          results.push(unit)
+      for (const key of keysToTry) {
+        const req = index.openCursor(IDBKeyRange.only(key))
+        req.onsuccess = () => {
+          const cursor = req.result as IDBCursorWithValue | null
+          if (cursor) {
+            const unit = cursor.value as UnitProfile
+            if (!seen.has(unit.id)) {
+              seen.add(unit.id)
+              if (!query.name || unit.name.toLowerCase().includes(query.name.toLowerCase())) {
+                results.push(unit)
+              }
+            }
+            cursor.continue()
+          }
         }
-        cursor.continue()
+      }
+    } else {
+      const source = store.openCursor()
+      source.onsuccess = () => {
+        const cursor = source.result as IDBCursorWithValue | null
+        if (cursor) {
+          const unit = cursor.value as UnitProfile
+          if (!query.name || unit.name.toLowerCase().includes(query.name.toLowerCase())) {
+            results.push(unit)
+          }
+          cursor.continue()
+        }
       }
     }
 
@@ -527,13 +549,21 @@ export async function clearFaction(faction: string): Promise<void> {
     const tx = db.transaction(UNITS_STORE, 'readwrite')
     const store = tx.objectStore(UNITS_STORE)
     const index = store.index('faction')
-    const req = index.openCursor(IDBKeyRange.only(faction))
 
-    req.onsuccess = () => {
-      const cursor = req.result as IDBCursorWithValue | null
-      if (cursor) {
-        cursor.delete()
-        cursor.continue()
+    // Clear both the exact name and BSData-prefixed variants for backward compatibility
+    const normalized = normalizeFactionName(faction)
+    const keysToTry = [...new Set([
+      faction, normalized,
+      `Imperium - ${normalized}`, `Chaos - ${normalized}`,
+    ])]
+    for (const key of keysToTry) {
+      const req = index.openCursor(IDBKeyRange.only(key))
+      req.onsuccess = () => {
+        const cursor = req.result as IDBCursorWithValue | null
+        if (cursor) {
+          cursor.delete()
+          cursor.continue()
+        }
       }
     }
 
@@ -569,10 +599,13 @@ export async function clearAll(): Promise<void> {
 export async function clearGameRules(): Promise<void> {
   const db = await openDb()
   return new Promise((resolve, reject) => {
-    const tx = db.transaction(GAME_RULES_STORES, 'readwrite')
+    const stores = [...GAME_RULES_STORES, META_STORE]
+    const tx = db.transaction(stores, 'readwrite')
     for (const name of GAME_RULES_STORES) {
       tx.objectStore(name).clear()
     }
+    // Remove rules import metadata so the UI reflects cleared state
+    tx.objectStore(META_STORE).delete('rulesImportMeta')
     tx.oncomplete = () => {
       db.close()
       resolve()
@@ -1082,4 +1115,14 @@ export async function hasDatasheets(): Promise<boolean> {
     req.onerror = () => reject(req.error)
     tx.oncomplete = () => db.close()
   })
+}
+
+/**
+ * Normalize BSData catalog faction names to match Wahapedia conventions.
+ * Strips "Imperium - " and "Chaos - " prefixes from BSData catalog filenames
+ * so they match Wahapedia faction names (e.g., "Space Marines" instead of
+ * "Imperium - Space Marines").
+ */
+export function normalizeFactionName(name: string): string {
+  return name.replace(/^(Imperium|Chaos)\s*-\s*/, '')
 }

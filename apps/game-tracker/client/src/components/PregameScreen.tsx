@@ -30,6 +30,7 @@ export function PregameScreen({ opponentFaction, mission, onStart, onBack }: Pro
       </header>
 
       <div className="p-6 space-y-6 max-w-md mx-auto">
+        <p className="text-xs text-slate-500 mb-4">Select who is the attacker/defender and who goes first, then tap Start Battle. Tap Back to change mission settings.</p>
         <div className="text-center p-4 rounded-lg bg-slate-900 border border-slate-800">
           <p className="text-slate-400 text-sm">vs {opponentFaction}</p>
           <p className="text-slate-100 font-medium">{mission}</p>

@@ -29,6 +29,9 @@ export function ImportsPage() {
       <h2 className="text-lg font-semibold text-slate-100 mb-4">
         Tournament Imports <span className="text-slate-400 font-normal text-sm">({data.length})</span>
       </h2>
+      <p className="text-xs text-slate-500 mb-4">
+        History of tournament CSV imports used to compute meta analytics and Glicko-2 ratings.
+      </p>
       <div className="bg-slate-900 border border-slate-800 rounded-lg overflow-hidden">
         <table className="w-full text-sm">
           <thead>

@@ -46,6 +46,10 @@ export function SessionDetailScreen({ sessionId, onBack }: Props) {
           <h2 className="text-xl font-bold text-slate-100">Session Detail</h2>
         </div>
 
+        <p className="text-xs text-slate-500">
+          Session verdict and individual rolls recorded during this session. Tap the back arrow to return to the dice set.
+        </p>
+
         <div className="px-4 py-3 rounded-lg bg-slate-900 border border-slate-800 space-y-1">
           <p className={`font-semibold ${verdictColor}`}>{verdictLabel}</p>
           {session.zScore != null && (

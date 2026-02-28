@@ -24,6 +24,9 @@ export function Dashboard() {
   return (
     <div className="space-y-8">
       <h2 className="text-lg font-semibold text-slate-100">Platform Overview</h2>
+      <p className="text-xs text-slate-500">
+        Aggregate stats across all platform apps. Use the navigation tabs above to drill into users, sessions, activity, or import history.
+      </p>
 
       {/* Users & Sessions */}
       <section>

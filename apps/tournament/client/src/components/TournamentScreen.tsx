@@ -278,6 +278,9 @@ export function TournamentScreen({ onSignOut }: Props) {
           ← Back
         </a>
         <h2 className="text-xl font-bold mb-4">Create Tournament</h2>
+        <p className="text-xs text-slate-500 mb-4">
+          Fill in the details below to set up your event. You can change settings later while the tournament is still in DRAFT status.
+        </p>
         <form onSubmit={(e) => void handleCreateTournament(e)} className="space-y-3">
           <input
             className="w-full px-3 py-2 rounded bg-slate-800 border border-slate-700 text-slate-100"
@@ -382,6 +385,9 @@ export function TournamentScreen({ onSignOut }: Props) {
           ← Back
         </a>
         <h2 className="text-xl font-bold mb-4">Register for Tournament</h2>
+        <p className="text-xs text-slate-500 mb-4">
+          Enter your display name and faction. Army list is optional until the TO locks lists.
+        </p>
         {(() => {
           try {
             const stored = localStorage.getItem('tournament-list')
@@ -439,6 +445,10 @@ export function TournamentScreen({ onSignOut }: Props) {
         >
           ← Back to Tournament
         </a>
+
+        <p className="text-xs text-slate-500 mb-4">
+          View pairings and report results below. Both players should confirm the result after reporting.
+        </p>
 
         <div className="flex justify-between items-center mb-4">
           <h2 className="text-xl font-bold">
@@ -638,6 +648,12 @@ export function TournamentScreen({ onSignOut }: Props) {
           </div>
         </div>
 
+        <p className="text-xs text-slate-500 mb-4">
+          {isTO
+            ? 'Use "Advance" to move through tournament stages. Create rounds, generate pairings, and close rounds from here.'
+            : 'Register, view standings, and check round pairings from this page.'}
+        </p>
+
         {/* Description */}
         {tournament?.description && (
           <div className="mb-4 p-4 rounded-lg bg-slate-900 border border-slate-800">
@@ -789,6 +805,10 @@ export function TournamentScreen({ onSignOut }: Props) {
           <a href="#/search/lists" className="px-3 py-1.5 rounded text-sm font-medium text-slate-400 hover:text-slate-200">Lists</a>
           <a href="#/search/players" className="px-3 py-1.5 rounded text-sm font-medium text-slate-400 hover:text-slate-200">Players</a>
         </div>
+
+        <p className="text-xs text-slate-500 mb-4">
+          View your tournaments below, or tap "+ New Tournament" to create one. Use the tabs to find open events, search lists, or check your ELO.
+        </p>
 
         {myTournamentsQuery.isPending && (
           <p className="text-slate-400">Loading…</p>
