@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import { parseBSDataXml, PARSER_VERSION } from '@tabletop-tools/game-content/src/adapters/bsdata/parser'
 import {
   saveUnits,
@@ -73,6 +73,8 @@ export function ImportScreen() {
   const [clearing, setClearing] = useState(false)
   const [clearMessage, setClearMessage] = useState<string | null>(null)
   const [includeLegends, setIncludeLegendsState] = useState(false)
+  const [copiedWarnings, setCopiedWarnings] = useState(false)
+  const copiedWarningsTimer = useRef<ReturnType<typeof setTimeout>>(null)
 
   const refreshStoredData = useCallback(async () => {
     const [meta, rmeta, factions] = await Promise.all([
@@ -532,11 +534,15 @@ export function ImportScreen() {
                       <button
                         type="button"
                         onClick={() => {
-                          void navigator.clipboard.writeText(result.errors.join('\n'))
+                          void navigator.clipboard.writeText(result.errors.join('\n')).then(() => {
+                            setCopiedWarnings(true)
+                            if (copiedWarningsTimer.current) clearTimeout(copiedWarningsTimer.current)
+                            copiedWarningsTimer.current = setTimeout(() => setCopiedWarnings(false), 2000)
+                          })
                         }}
-                        className="text-xs text-slate-400 hover:text-slate-200 border border-slate-700 rounded px-2 py-0.5"
+                        className="text-xs text-amber-400 hover:text-amber-300 border border-slate-700 rounded px-2 py-0.5"
                       >
-                        Copy to clipboard
+                        {copiedWarnings ? 'Copied!' : 'Copy to clipboard'}
                       </button>
                     </div>
                     <ul className="mt-1 max-h-48 space-y-1 overflow-y-auto text-xs text-slate-500">

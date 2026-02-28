@@ -10,6 +10,7 @@ type MatchSetupData = {
   yourFaction: string
   yourDetachment: string
   listId: string | null
+  pastedList: string
   isTournament: boolean
   tournamentName: string
   tournamentId: string | null
@@ -34,6 +35,8 @@ export function MatchSetupScreen({ onNext, onBack }: Props) {
   const [yourFaction, setYourFaction] = useState('')
   const [yourDetachment, setYourDetachment] = useState('')
   const [selectedListId, setSelectedListId] = useState<string | null>(null)
+  const [pastedList, setPastedList] = useState('')
+  const [listMode, setListMode] = useState<'select' | 'paste'>('select')
   const [isTournament, setIsTournament] = useState(false)
   const [tournamentName, setTournamentName] = useState('')
 
@@ -54,7 +57,8 @@ export function MatchSetupScreen({ onNext, onBack }: Props) {
       opponentDetachment: opponentDetachment.trim(),
       yourFaction: yourFaction.trim(),
       yourDetachment: yourDetachment.trim(),
-      listId: selectedListId,
+      listId: listMode === 'select' ? selectedListId : null,
+      pastedList: listMode === 'paste' ? pastedList.trim() : '',
       isTournament,
       tournamentName: tournamentName.trim(),
       tournamentId: null,
@@ -133,27 +137,54 @@ export function MatchSetupScreen({ onNext, onBack }: Props) {
           )}
           <div>
             <label className="block text-sm text-slate-400 mb-1">Your List</label>
-            <select
-              value={selectedListId ?? ''}
-              onChange={(e) => {
-                const listId = e.target.value || null
-                setSelectedListId(listId)
-                if (listId) {
-                  const list = lists.find((l) => l.id === listId)
-                  if (list?.detachment) setYourDetachment(list.detachment)
-                  if (list?.faction) {
-                    setYourFaction(list.faction)
+            <div className="flex gap-2 mb-2">
+              <button
+                type="button"
+                onClick={() => setListMode('select')}
+                className={`px-3 py-1 rounded text-xs font-medium ${listMode === 'select' ? 'bg-amber-400 text-slate-950' : 'bg-slate-800 text-slate-400 hover:bg-slate-700'}`}
+              >
+                Select List
+              </button>
+              <button
+                type="button"
+                onClick={() => setListMode('paste')}
+                className={`px-3 py-1 rounded text-xs font-medium ${listMode === 'paste' ? 'bg-amber-400 text-slate-950' : 'bg-slate-800 text-slate-400 hover:bg-slate-700'}`}
+              >
+                Paste List
+              </button>
+            </div>
+            {listMode === 'select' ? (
+              <select
+                value={selectedListId ?? ''}
+                onChange={(e) => {
+                  const listId = e.target.value || null
+                  setSelectedListId(listId)
+                  if (listId) {
+                    const list = lists.find((l) => l.id === listId)
+                    if (list?.detachment) setYourDetachment(list.detachment)
+                    if (list?.faction) {
+                      setYourFaction(list.faction)
+                    }
                   }
-                }
-              }}
-              aria-label="Your list"
-              className="w-full px-3 py-2 rounded-lg bg-slate-900 border border-slate-800 text-slate-100 focus:outline-none focus:border-amber-400"
-            >
-              <option value="">No list selected</option>
-              {lists.map((l) => (
-                <option key={l.id} value={l.id}>{l.name} ({l.totalPts}pts)</option>
-              ))}
-            </select>
+                }}
+                aria-label="Your list"
+                className="w-full px-3 py-2 rounded-lg bg-slate-900 border border-slate-800 text-slate-100 focus:outline-none focus:border-amber-400"
+              >
+                <option value="">No list selected</option>
+                {lists.map((l) => (
+                  <option key={l.id} value={l.id}>{l.name} ({l.totalPts}pts)</option>
+                ))}
+              </select>
+            ) : (
+              <textarea
+                value={pastedList}
+                onChange={(e) => setPastedList(e.target.value)}
+                placeholder="Paste your army list text here..."
+                rows={6}
+                aria-label="Paste list"
+                className="w-full px-3 py-2 rounded-lg bg-slate-900 border border-slate-800 text-slate-100 placeholder-slate-500 focus:outline-none focus:border-amber-400 text-sm font-mono"
+              />
+            )}
           </div>
         </div>
 

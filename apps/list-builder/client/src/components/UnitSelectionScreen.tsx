@@ -1,6 +1,6 @@
 import { useState, useMemo, useRef, useEffect } from 'react'
 
-import { htmlToText } from '@tabletop-tools/ui'
+import { htmlToText, CollapsibleSection } from '@tabletop-tools/ui'
 import { trpc, trpcClient } from '../lib/trpc'
 import { useUnits, useUnitModelOptions, useGameEnhancements, useGameUnitKeywords, useGameDetachmentAbilities, useGameDetachment, useLegendsUnitIds, useUnitRoles } from '../lib/useGameData'
 import {
@@ -165,7 +165,6 @@ type RoleFilter = typeof ROLE_FILTERS[number]
 export function UnitSelectionScreen({ listId, faction, detachment, battleSize, onDone, onBack }: Props) {
   const [searchQuery, setSearchQuery] = useState('')
   const [showLegends, setShowLegends] = useState(false)
-  const [showDetachmentRules, setShowDetachmentRules] = useState(false)
   const [roleFilter, setRoleFilter] = useState<RoleFilter>('All')
   const { data: detachmentData } = useGameDetachment(detachment)
   const detachmentName = detachmentData?.name ?? detachment
@@ -466,26 +465,17 @@ export function UnitSelectionScreen({ listId, faction, detachment, battleSize, o
 
       {/* Detachment rules */}
       {detachmentAbilities.length > 0 && (
-        <div className="rounded-lg bg-slate-900 border border-slate-800 overflow-hidden">
-          <button
-            onClick={() => setShowDetachmentRules(!showDetachmentRules)}
-            className="w-full flex items-center justify-between px-3 py-2 text-sm text-slate-400 hover:text-slate-200"
-          >
-            <span>{detachmentName} Rules ({detachmentAbilities.length})</span>
-            <span className="text-xs">{showDetachmentRules ? 'Hide' : 'Show'}</span>
-          </button>
-          {showDetachmentRules && (
-            <div className="px-3 pb-3 space-y-2">
-              {detachmentAbilities.map((ability) => (
-                <div key={ability.id} className="text-xs">
-                  <p className="font-semibold text-amber-400">{ability.name}</p>
-                  {ability.legend && <p className="text-slate-500 italic">{ability.legend}</p>}
-                  <p className="text-slate-400 mt-0.5 whitespace-pre-wrap">{htmlToText(ability.description)}</p>
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
+        <CollapsibleSection title={`${detachmentName} Rules`} count={detachmentAbilities.length}>
+          <div className="space-y-2">
+            {detachmentAbilities.map((ability) => (
+              <div key={ability.id} className="text-xs">
+                <p className="font-semibold text-amber-400">{ability.name}</p>
+                {ability.legend && <p className="text-slate-500 italic">{ability.legend}</p>}
+                <p className="text-slate-400 mt-0.5 whitespace-pre-wrap">{htmlToText(ability.description)}</p>
+              </div>
+            ))}
+          </div>
+        </CollapsibleSection>
       )}
 
       {/* Validation errors */}
