@@ -49,4 +49,22 @@ export const simulateRouter = router({
       .where(eq(simulations.userId, ctx.user.id))
       .orderBy(desc(simulations.createdAt))
   }),
+
+  lookup: protectedProcedure
+    .input(z.object({ configHash: z.string() }))
+    .query(async ({ ctx, input }) => {
+      const cached = await ctx.db
+        .select()
+        .from(simulations)
+        .where(eq(simulations.configHash, input.configHash))
+        .limit(1)
+        .get()
+      if (!cached) return null
+      return {
+        id: cached.id,
+        result: JSON.parse(cached.result) as z.infer<typeof simResultSchema>,
+        weaponConfig: cached.weaponConfig,
+        createdAt: cached.createdAt,
+      }
+    }),
 })
