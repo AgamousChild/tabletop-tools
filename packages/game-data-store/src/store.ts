@@ -843,6 +843,7 @@ export const getUnitCompositions = (datasheetId: string) => getByIndex<UnitCompo
 
 export const saveUnitCosts = (items: UnitCost[]) => batchSave(UNIT_COSTS_STORE, items)
 export const getUnitCosts = (datasheetId: string) => getByIndex<UnitCost>(UNIT_COSTS_STORE, 'datasheetId', datasheetId)
+export const getAllUnitCosts = () => getAllFromStore<UnitCost>(UNIT_COSTS_STORE)
 
 // ── Wargear Options ──────────────────────────────────────────────────────────
 
