@@ -20,6 +20,7 @@ type Tournament = {
   createdAt: number
   playerCount?: number
   description?: string | null
+  imageUrl?: string | null
   startTime?: string | null
   externalLink?: string | null
   maxPlayers?: number | null
@@ -116,6 +117,7 @@ export function TournamentScreen({ onSignOut }: Props) {
   const [newDescription, setNewDescription] = useState('')
   const [newStartTime, setNewStartTime] = useState('')
   const [newMaxPlayers, setNewMaxPlayers] = useState('')
+  const [newImageUrl, setNewImageUrl] = useState('')
   const [newExternalLink, setNewExternalLink] = useState('')
   const [newRequirePhotos, setNewRequirePhotos] = useState(false)
   const [newIncludeTwists, setNewIncludeTwists] = useState(false)
@@ -225,6 +227,7 @@ export function TournamentScreen({ onSignOut }: Props) {
       format: newFormat,
       totalRounds: parseInt(newRounds, 10),
       description: newDescription || undefined,
+      imageUrl: newImageUrl || undefined,
       startTime: newStartTime || undefined,
       maxPlayers: newMaxPlayers ? parseInt(newMaxPlayers, 10) : undefined,
       externalLink: newExternalLink || undefined,
@@ -237,6 +240,7 @@ export function TournamentScreen({ onSignOut }: Props) {
     setNewDescription('')
     setNewStartTime('')
     setNewMaxPlayers('')
+    setNewImageUrl('')
     setNewExternalLink('')
     setNewRequirePhotos(false)
     setNewIncludeTwists(false)
@@ -345,6 +349,12 @@ export function TournamentScreen({ onSignOut }: Props) {
             placeholder="Description (optional, supports markdown)"
             value={newDescription}
             onChange={(e) => setNewDescription(e.target.value)}
+          />
+          <input
+            className="w-full px-3 py-2 rounded bg-slate-800 border border-slate-700 text-slate-100"
+            placeholder="Image URL (optional, e.g. event poster or banner)"
+            value={newImageUrl}
+            onChange={(e) => setNewImageUrl(e.target.value)}
           />
           <input
             className="w-full px-3 py-2 rounded bg-slate-800 border border-slate-700 text-slate-100"
@@ -662,6 +672,17 @@ export function TournamentScreen({ onSignOut }: Props) {
             ? 'Use "Advance" to move through tournament stages. Create rounds, generate pairings, and close rounds from here.'
             : 'Register, view standings, and check round pairings from this page.'}
         </p>
+
+        {/* Image */}
+        {tournament?.imageUrl && (
+          <div className="mb-4">
+            <img
+              src={tournament.imageUrl}
+              alt={tournament.name}
+              className="w-full rounded-lg border border-slate-800 max-h-64 object-cover"
+            />
+          </div>
+        )}
 
         {/* Description */}
         {tournament?.description && (
@@ -987,6 +1008,7 @@ type SearchTournament = {
   status: string
   format: string
   location: string | null
+  imageUrl: string | null
   eventDate: number
   playerCount: number
   maxPlayers: number | null
