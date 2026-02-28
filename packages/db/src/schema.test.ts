@@ -271,6 +271,7 @@ beforeAll(async () => {
     tournament_id TEXT NOT NULL REFERENCES tournaments(id) ON DELETE CASCADE,
     round_number INTEGER NOT NULL,
     status TEXT NOT NULL DEFAULT 'PENDING',
+    start_time TEXT,
     created_at INTEGER NOT NULL
   )`)
 

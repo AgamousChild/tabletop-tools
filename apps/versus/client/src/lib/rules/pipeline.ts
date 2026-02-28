@@ -462,9 +462,14 @@ export function runMonteCarlo(
         .reduce((sum, a) => sum + a.value, 0)
       const effectiveStrength = weapon.strength + strengthMod
 
+      const toughnessMod = weapon.abilities
+        .filter((a): a is { type: 'TOUGHNESS_MOD'; value: number } => a.type === 'TOUGHNESS_MOD')
+        .reduce((sum, a) => sum + a.value, 0)
+      const mcEffectiveToughness = Math.max(1, defenderToughness + toughnessMod)
+
       const { normalHits, lethalHits } = mcRollHits(attackCount, weapon.skill, weapon.abilities)
       const { wounds, mortals } = mcRollWounds(
-        normalHits, lethalHits, effectiveStrength, defenderToughness,
+        normalHits, lethalHits, effectiveStrength, mcEffectiveToughness,
         weapon.abilities, defenderKeywords,
       )
 
@@ -553,12 +558,18 @@ export function simulateWeapon(
     .reduce((sum, a) => sum + a.value, 0)
   const effectiveStrength = weapon.strength + strengthMod
 
+  // TOUGHNESS_MOD: +/- to defender toughness (minimum 1)
+  const toughnessMod = weapon.abilities
+    .filter((a): a is { type: 'TOUGHNESS_MOD'; value: number } => a.type === 'TOUGHNESS_MOD')
+    .reduce((sum, a) => sum + a.value, 0)
+  const effectiveToughness = Math.max(1, defenderToughness + toughnessMod)
+
   const { normalHits, lethalHits } = resolveHits(attackCount, weapon.skill, weapon.abilities)
   const { wounds, mortals } = resolveWounds(
     normalHits,
     lethalHits,
     effectiveStrength,
-    defenderToughness,
+    effectiveToughness,
     weapon.abilities,
     defenderKeywords,
   )

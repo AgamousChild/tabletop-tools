@@ -62,6 +62,7 @@ beforeAll(async () => {
       tournament_id TEXT NOT NULL REFERENCES tournaments(id),
       round_number INTEGER NOT NULL,
       status TEXT NOT NULL DEFAULT 'PENDING',
+      start_time TEXT,
       created_at INTEGER NOT NULL
     );
     CREATE TABLE IF NOT EXISTS pairings (
@@ -598,5 +599,64 @@ describe('player.searchPlayers', () => {
     const bob = results.find((r) => r.displayName === 'Bob')
     expect(bob).toBeDefined()
     expect(bob!.yellowCards).toBeGreaterThanOrEqual(1)
+  })
+})
+
+describe('round.create with startTime', () => {
+  it('creates a round with a start time', async () => {
+    const toCaller = createCaller(toCtx)
+    const t = await toCaller.tournament.create({
+      name: 'Round StartTime Test',
+      eventDate: 1700000000,
+      format: '2000pts',
+      totalRounds: 3,
+    })
+    await toCaller.tournament.advanceStatus(t!.id) // REGISTRATION
+    await toCaller.tournament.advanceStatus(t!.id) // CHECK_IN
+    await toCaller.tournament.advanceStatus(t!.id) // IN_PROGRESS
+
+    const round = await toCaller.round.create({
+      tournamentId: t!.id,
+      startTime: '10:00 AM',
+    })
+    expect(round?.startTime).toBe('10:00 AM')
+    expect(round?.roundNumber).toBe(1)
+  })
+
+  it('creates a round without a start time (null)', async () => {
+    const toCaller = createCaller(toCtx)
+    const t = await toCaller.tournament.create({
+      name: 'Round No StartTime Test',
+      eventDate: 1700000000,
+      format: '2000pts',
+      totalRounds: 3,
+    })
+    await toCaller.tournament.advanceStatus(t!.id) // REGISTRATION
+    await toCaller.tournament.advanceStatus(t!.id) // CHECK_IN
+    await toCaller.tournament.advanceStatus(t!.id) // IN_PROGRESS
+
+    const round = await toCaller.round.create({ tournamentId: t!.id })
+    expect(round?.startTime).toBeNull()
+  })
+
+  it('returns startTime in round.get', async () => {
+    const toCaller = createCaller(toCtx)
+    const t = await toCaller.tournament.create({
+      name: 'Round Get StartTime Test',
+      eventDate: 1700000000,
+      format: '2000pts',
+      totalRounds: 3,
+    })
+    await toCaller.tournament.advanceStatus(t!.id) // REGISTRATION
+    await toCaller.tournament.advanceStatus(t!.id) // CHECK_IN
+    await toCaller.tournament.advanceStatus(t!.id) // IN_PROGRESS
+
+    const round = await toCaller.round.create({
+      tournamentId: t!.id,
+      startTime: '2:30 PM',
+    })
+
+    const fetched = await toCaller.round.get(round!.id)
+    expect(fetched?.startTime).toBe('2:30 PM')
   })
 })

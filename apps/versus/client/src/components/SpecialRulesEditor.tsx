@@ -1,10 +1,17 @@
 import { useState } from 'react'
 import type { WeaponAbility } from '@tabletop-tools/game-content'
 
+export interface LeaderRule {
+  rule: WeaponAbility
+  source: string
+}
+
 type Props = {
   rules: WeaponAbility[]
   /** Abilities already on selected weapons — shown read-only so user knows they're applied */
   weaponAbilities?: string[]
+  /** Rules auto-applied from an attached leader's abilities */
+  leaderRules?: LeaderRule[]
   onAdd: (rule: WeaponAbility) => void
   onRemove: (index: number) => void
 }
@@ -24,6 +31,9 @@ const RULE_OPTIONS: { label: string; create: () => WeaponAbility }[] = [
   { label: '-1 to wound', create: () => ({ type: 'WOUND_MOD', value: -1 }) },
   { label: '+1 strength', create: () => ({ type: 'STRENGTH_MOD', value: 1 }) },
   { label: '+2 strength', create: () => ({ type: 'STRENGTH_MOD', value: 2 }) },
+  { label: '+1 toughness', create: () => ({ type: 'TOUGHNESS_MOD', value: 1 }) },
+  { label: '+2 toughness', create: () => ({ type: 'TOUGHNESS_MOD', value: 2 }) },
+  { label: '-1 toughness', create: () => ({ type: 'TOUGHNESS_MOD', value: -1 }) },
   { label: '+1 attacks', create: () => ({ type: 'ATTACKS_MOD', value: 1 }) },
   { label: '+2 attacks', create: () => ({ type: 'ATTACKS_MOD', value: 2 }) },
 ]
@@ -42,12 +52,13 @@ function ruleLabel(rule: WeaponAbility): string {
     case 'HIT_MOD': return `${rule.value > 0 ? '+' : ''}${rule.value} to hit`
     case 'WOUND_MOD': return `${rule.value > 0 ? '+' : ''}${rule.value} to wound`
     case 'STRENGTH_MOD': return `${rule.value > 0 ? '+' : ''}${rule.value} strength`
+    case 'TOUGHNESS_MOD': return `${rule.value > 0 ? '+' : ''}${rule.value} toughness`
     case 'ATTACKS_MOD': return `${rule.value > 0 ? '+' : ''}${rule.value} attacks`
     default: return 'Unknown'
   }
 }
 
-export function SpecialRulesEditor({ rules, weaponAbilities, onAdd, onRemove }: Props) {
+export function SpecialRulesEditor({ rules, weaponAbilities, leaderRules, onAdd, onRemove }: Props) {
   const [showDropdown, setShowDropdown] = useState(false)
 
   // Deduplicate weapon abilities for display
@@ -70,6 +81,26 @@ export function SpecialRulesEditor({ rules, weaponAbilities, onAdd, onRemove }: 
                 className="inline-flex items-center rounded-full bg-slate-800 border border-slate-700 px-2.5 py-0.5 text-xs text-slate-400"
               >
                 {label}
+              </span>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Auto-applied leader abilities */}
+      {leaderRules && leaderRules.length > 0 && (
+        <div>
+          <p className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider mb-1">
+            From leader
+          </p>
+          <div className="flex flex-wrap gap-1.5">
+            {leaderRules.map((lr, i) => (
+              <span
+                key={i}
+                className="inline-flex items-center rounded-full bg-purple-400/10 border border-purple-400/20 px-2.5 py-0.5 text-xs text-purple-300"
+                title={lr.source}
+              >
+                {ruleLabel(lr.rule)}
               </span>
             ))}
           </div>

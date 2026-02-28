@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { authClient } from '../lib/auth'
-import { HelpTip } from '@tabletop-tools/ui'
+import { HelpTip, SimpleMarkdown } from '@tabletop-tools/ui'
 import { trpc } from '../lib/trpc'
 import { useHashRoute, navigate } from '../lib/router'
 import type { Route } from '../lib/router'
@@ -132,6 +132,9 @@ export function TournamentScreen({ onSignOut }: Props) {
   })
   const [regList, setRegList] = useState('')
 
+  // Round start time
+  const [roundStartTime, setRoundStartTime] = useState('')
+
   // Result reporting
   const [reportP1VP, setReportP1VP] = useState('')
   const [reportP2VP, setReportP2VP] = useState('')
@@ -182,6 +185,7 @@ export function TournamentScreen({ onSignOut }: Props) {
   const createRound = trpc.round.create.useMutation({
     onSuccess: (round) => {
       void tournamentDetailQuery.refetch()
+      setRoundStartTime('')
       if (round && selectedTournamentId) {
         navigate(`#/tournament/${selectedTournamentId}/round/${round.id}`)
       }
@@ -451,9 +455,14 @@ export function TournamentScreen({ onSignOut }: Props) {
         </p>
 
         <div className="flex justify-between items-center mb-4">
-          <h2 className="text-xl font-bold">
-            Round {roundDetail?.roundNumber ?? '…'} — <span className="text-slate-400">{roundDetail?.status}</span>
-          </h2>
+          <div>
+            <h2 className="text-xl font-bold">
+              Round {roundDetail?.roundNumber ?? '…'} — <span className="text-slate-400">{roundDetail?.status}</span>
+            </h2>
+            {roundDetail?.startTime && (
+              <p className="text-slate-500 text-sm">Start: {roundDetail.startTime}</p>
+            )}
+          </div>
           {isTO && roundDetail?.status === 'PENDING' && (
             <button
               onClick={() => generatePairings.mutate({ roundId: selectedRoundId })}
@@ -657,7 +666,7 @@ export function TournamentScreen({ onSignOut }: Props) {
         {/* Description */}
         {tournament?.description && (
           <div className="mb-4 p-4 rounded-lg bg-slate-900 border border-slate-800">
-            <p className="text-slate-300 text-sm whitespace-pre-wrap">{tournament.description}</p>
+            <SimpleMarkdown text={tournament.description} />
           </div>
         )}
 
@@ -680,13 +689,21 @@ export function TournamentScreen({ onSignOut }: Props) {
             </a>
           )}
           {isTO && tournament?.status === 'IN_PROGRESS' && (
-            <button
-              onClick={() => createRound.mutate({ tournamentId: selectedTournamentId })}
-              disabled={createRound.isPending}
-              className="px-4 py-2 rounded bg-amber-400 text-slate-950 font-semibold text-sm hover:bg-amber-300 disabled:opacity-50"
-            >
-              + New Round
-            </button>
+            <div className="flex gap-2 items-center">
+              <input
+                className="px-3 py-2 rounded bg-slate-800 border border-slate-700 text-slate-100 text-sm w-36"
+                placeholder="Start time"
+                value={roundStartTime}
+                onChange={(e) => setRoundStartTime(e.target.value)}
+              />
+              <button
+                onClick={() => createRound.mutate({ tournamentId: selectedTournamentId, startTime: roundStartTime || undefined })}
+                disabled={createRound.isPending}
+                className="px-4 py-2 rounded bg-amber-400 text-slate-950 font-semibold text-sm hover:bg-amber-300 disabled:opacity-50"
+              >
+                + New Round
+              </button>
+            </div>
           )}
           {isTO && (
             <a
