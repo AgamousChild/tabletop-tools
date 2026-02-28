@@ -4,7 +4,7 @@ import {
   getUnit, searchUnits, listFactions, getImportMeta, getLists, getList, getListUnits,
   getDetachmentsByFaction, getDetachment, getDetachmentAbilities,
   getStratagems, getEnhancements, getLeaderAttachments, getLeadersForUnit,
-  getUnitCompositions, getUnitCosts, getWargearOptions,
+  getUnitCompositions, getUnitCosts, getAllUnitCosts, getWargearOptions,
   getUnitKeywords, getAllUnitKeywords, getUnitAbilities, getMissions,
   getRulesImportMeta, getIncludeLegends,
   getAllDatasheets, getDatasheetWargear, getDatasheetModels,
@@ -271,6 +271,25 @@ export function useUnitCosts(datasheetId: string) {
   return useStoreQuery(() => getUnitCosts(datasheetId), [datasheetId], [] as UnitCost[])
 }
 
+/** Returns a Map from datasheetId to minimum points cost. */
+export function useUnitCostMap(): Map<string, number> {
+  const { data: allCosts } = useStoreQuery(() => getAllUnitCosts(), [], [] as UnitCost[])
+  return useMemo(() => {
+    const map = new Map<string, number>()
+    for (const c of allCosts) {
+      if (map.has(c.datasheetId)) continue // keep first (lowest) cost
+      const costStr = c.cost || c.description || ''
+      const m = costStr.match(/(\d+)\s*pts?/i)
+      if (m) map.set(c.datasheetId, parseInt(m[1], 10))
+      else {
+        const n = parseInt(costStr, 10)
+        if (!isNaN(n)) map.set(c.datasheetId, n)
+      }
+    }
+    return map
+  }, [allCosts])
+}
+
 export function useWargearOptions(datasheetId: string) {
   return useStoreQuery(() => getWargearOptions(datasheetId), [datasheetId], [] as WargearOption[])
 }
@@ -426,6 +445,7 @@ export function usePrimaryUnitSearch(query: { faction?: string; name?: string })
   const { data: hasWaha, isLoading: checkLoading } = useHasDatasheets()
   const wahaResult = useDatasheetSearch({ faction: query.faction, name: query.name })
   const bsdataResult = useUnitSearch({ faction: query.faction, name: query.name })
+  const costMap = useUnitCostMap()
 
   // Convert Wahapedia datasheets to lightweight UnitProfile for list display
   const wahaUnits = useMemo(() => {
@@ -436,9 +456,9 @@ export function usePrimaryUnitSearch(query: { faction?: string; name?: string })
       move: 0, toughness: 0, save: 0, wounds: 0, leadership: 0, oc: 0,
       weapons: [],
       abilities: [],
-      points: 0,
+      points: costMap.get(ds.id) ?? 0,
     } as UnitProfile))
-  }, [wahaResult.data])
+  }, [wahaResult.data, costMap])
 
   if (checkLoading) return { data: [] as UnitProfile[], isLoading: true }
   if (hasWaha) return { data: wahaUnits, isLoading: wahaResult.isLoading }
