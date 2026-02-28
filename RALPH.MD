@@ -120,6 +120,10 @@ Update this section every time you update or fix a section of the requirements.
 - **Remove Default Detachment (2026-02-27)**: List builder — removed "Default Detachment" fallback. Shows message + "Continue without detachment" button when no data imported.
 - **Legends filter (2026-02-27)**: Versus — added "Include Legends units" checkbox (was hardcoded exclusion). List builder already had checkbox.
 - **HTML to text conversion (2026-02-27)**: Created shared `htmlToText()` utility in packages/ui. Applied to versus (abilities, wargear, detachment abilities, enhancements, stratagems) and list-builder (detachment abilities) descriptions.
+- **Fix missing point costs (2026-02-27)**: `usePrimaryUnitSearch` was hardcoding `points: 0` for Wahapedia datasheets. Added `useUnitCostMap` hook that loads costs from IndexedDB. Points now show in list-builder and versus.
+- **Stored data screen clearing fix (2026-02-27)**: `clearGameRules()` now also removes `rulesImportMeta` from meta store so UI reflects cleared state. All clear handlers optimistically update UI immediately.
+- **Wahapedia/BSData faction matching (2026-02-27)**: BSData catalog prefixes ("Imperium - ", "Chaos - ") now stripped during import so faction names match Wahapedia conventions. Added `normalizeFactionName()` utility. Game-tracker switched to `usePrimaryFactions` for consistent faction names. `searchUnits` and `clearFaction` handle both old and new naming for backward compatibility.
+- **Instructions on every page (2026-02-27)**: Added concise instructional text to every screen in all 8 apps: game-tracker (5 screens), list-builder (4 screens), versus (1 screen), tournament (6 sections), new-meta (7 pages), no-cheat (3 screens), admin (5 pages), data-import (already had them).
 
 ### In Progress
 
@@ -128,12 +132,8 @@ Update this section every time you update or fix a section of the requirements.
 ### Not Started
 
 - Dice detection rewrite (detect_dice or OpenCV)
-- Wahapedia/BSData faction designation matching
 - Data Requirements (master database plan, client-side code, automated scripts)
 - Paste list feature in game tracker
-- Instructions on every page
-- Point costs for units (RALPH reports missing)
-- Stored data screen clearing visual feedback
 - Tournament features (geocoding, TO management, player search, etc.)
 - Versus leader special rules auto-apply
 
