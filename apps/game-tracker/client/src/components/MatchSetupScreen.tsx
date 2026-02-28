@@ -114,7 +114,7 @@ export function MatchSetupScreen({ onNext, onBack }: Props) {
               ))}
             </select>
           </div>
-          {yourFaction && yourDetachments.length > 0 && (
+          {yourFaction && (
             <div>
               <label className="block text-sm text-slate-400 mb-1">Your Detachment</label>
               <select
@@ -130,22 +130,30 @@ export function MatchSetupScreen({ onNext, onBack }: Props) {
               </select>
             </div>
           )}
-          {lists.length > 0 && (
-            <div>
-              <label className="block text-sm text-slate-400 mb-1">Your List</label>
-              <select
-                value={selectedListId ?? ''}
-                onChange={(e) => setSelectedListId(e.target.value || null)}
-                aria-label="Your list"
-                className="w-full px-3 py-2 rounded-lg bg-slate-900 border border-slate-800 text-slate-100 focus:outline-none focus:border-amber-400"
-              >
-                <option value="">No list selected</option>
-                {lists.map((l) => (
-                  <option key={l.id} value={l.id}>{l.name} ({l.totalPts}pts)</option>
-                ))}
-              </select>
-            </div>
-          )}
+          <div>
+            <label className="block text-sm text-slate-400 mb-1">Your List</label>
+            <select
+              value={selectedListId ?? ''}
+              onChange={(e) => {
+                const listId = e.target.value || null
+                setSelectedListId(listId)
+                if (listId) {
+                  const list = lists.find((l) => l.id === listId)
+                  if (list?.detachment) setYourDetachment(list.detachment)
+                  if (list?.faction) {
+                    setYourFaction(list.faction)
+                  }
+                }
+              }}
+              aria-label="Your list"
+              className="w-full px-3 py-2 rounded-lg bg-slate-900 border border-slate-800 text-slate-100 focus:outline-none focus:border-amber-400"
+            >
+              <option value="">No list selected</option>
+              {lists.map((l) => (
+                <option key={l.id} value={l.id}>{l.name} ({l.totalPts}pts)</option>
+              ))}
+            </select>
+          </div>
         </div>
 
         {/* Opponent Info */}
@@ -163,32 +171,22 @@ export function MatchSetupScreen({ onNext, onBack }: Props) {
           </div>
           <div>
             <label className="block text-sm text-slate-400 mb-1">Opponent Faction</label>
-            {factions.length > 0 ? (
-              <select
-                value={opponentFaction}
-                onChange={(e) => {
-                  setOpponentFaction(e.target.value)
-                  setOpponentDetachment('')
-                }}
-                aria-label="Opponent faction"
-                className="w-full px-3 py-2 rounded-lg bg-slate-900 border border-slate-800 text-slate-100 focus:outline-none focus:border-amber-400"
-              >
-                <option value="">Select faction...</option>
-                {factions.map((f) => (
-                  <option key={f} value={f}>{f}</option>
-                ))}
-              </select>
-            ) : (
-              <input
-                type="text"
-                value={opponentFaction}
-                onChange={(e) => setOpponentFaction(e.target.value)}
-                placeholder="e.g. Orks, Necrons, Tau..."
-                className="w-full px-3 py-2 rounded-lg bg-slate-900 border border-slate-800 text-slate-100 placeholder-slate-500 focus:outline-none focus:border-amber-400"
-              />
-            )}
+            <select
+              value={opponentFaction}
+              onChange={(e) => {
+                setOpponentFaction(e.target.value)
+                setOpponentDetachment('')
+              }}
+              aria-label="Opponent faction"
+              className="w-full px-3 py-2 rounded-lg bg-slate-900 border border-slate-800 text-slate-100 focus:outline-none focus:border-amber-400"
+            >
+              <option value="">Select faction...</option>
+              {factions.map((f) => (
+                <option key={f} value={f}>{f}</option>
+              ))}
+            </select>
           </div>
-          {opponentFaction && opponentDetachments.length > 0 && (
+          {opponentFaction && (
             <div>
               <label className="block text-sm text-slate-400 mb-1">Opponent Detachment</label>
               <select
@@ -202,18 +200,6 @@ export function MatchSetupScreen({ onNext, onBack }: Props) {
                   <option key={d.id} value={d.name}>{d.name}</option>
                 ))}
               </select>
-            </div>
-          )}
-          {opponentFaction && opponentDetachments.length === 0 && (
-            <div>
-              <label className="block text-sm text-slate-400 mb-1">Opponent Detachment</label>
-              <input
-                type="text"
-                value={opponentDetachment}
-                onChange={(e) => setOpponentDetachment(e.target.value)}
-                placeholder="Optional"
-                className="w-full px-3 py-2 rounded-lg bg-slate-900 border border-slate-800 text-slate-100 placeholder-slate-500 focus:outline-none focus:border-amber-400"
-              />
             </div>
           )}
         </div>

@@ -23,7 +23,7 @@ vi.mock('@tabletop-tools/game-data-store', () => ({
   }),
   useLists: () => ({
     data: [
-      { id: 'list-1', name: 'My List', faction: 'Space Marines', totalPts: 2000, createdAt: 0, updatedAt: 0 },
+      { id: 'list-1', name: 'My List', faction: 'Space Marines', detachment: 'Gladius Task Force', totalPts: 2000, createdAt: 0, updatedAt: 0 },
     ],
     refetch: vi.fn(),
   }),
@@ -111,6 +111,24 @@ describe('MatchSetupScreen', () => {
     fireEvent.change(screen.getByLabelText('Opponent faction'), { target: { value: 'Orks' } })
     expect(screen.getByLabelText('Opponent detachment')).toBeInTheDocument()
     expect(screen.getByText('Waaagh! Tribe')).toBeInTheDocument()
+  })
+
+  it('auto-populates faction and detachment when list selected', () => {
+    const onNext = vi.fn()
+    render(<MatchSetupScreen onNext={onNext} onBack={vi.fn()} />)
+    fireEvent.change(screen.getByLabelText('Your list'), { target: { value: 'list-1' } })
+    // Selecting the list should auto-populate faction
+    expect(screen.getByLabelText('Your faction')).toHaveValue('Space Marines')
+    // And set opponent faction so we can submit
+    fireEvent.change(screen.getByLabelText('Opponent faction'), { target: { value: 'Orks' } })
+    fireEvent.click(screen.getByRole('button', { name: /next/i }))
+    expect(onNext).toHaveBeenCalledWith(
+      expect.objectContaining({
+        yourFaction: 'Space Marines',
+        yourDetachment: 'Gladius Task Force',
+        listId: 'list-1',
+      }),
+    )
   })
 
   it('includes detachment in submitted data', () => {

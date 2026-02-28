@@ -1,7 +1,7 @@
 import type { UnitProfile, WeaponAbility, WeaponProfile } from '../../types.js'
 
 /** Bump when parser output changes in a way that invalidates previously-imported data. */
-export const PARSER_VERSION = 4
+export const PARSER_VERSION = 5
 
 // ============================================================
 // BSData XML → UnitProfile parser
@@ -210,9 +210,9 @@ function parseUnitEntry(
     name,
     move: parseStatNumber(stats['M'] ?? stats['Move'] ?? '0'),
     toughness: parseStatNumber(stats['T'] ?? stats['Toughness'] ?? '0'),
-    save: parseStatNumber(stats['Sv'] ?? stats['Save'] ?? '0'),
+    save: parseStatNumber(stats['Sv'] ?? stats['SV'] ?? stats['Save'] ?? '0'),
     wounds: parseStatNumber(stats['W'] ?? stats['Wounds'] ?? '1'),
-    leadership: parseStatNumber(stats['Ld'] ?? stats['Leadership'] ?? '6'),
+    leadership: parseStatNumber(stats['Ld'] ?? stats['LD'] ?? stats['Leadership'] ?? '6'),
     oc: parseStatNumber(stats['OC'] ?? stats['Objective Control'] ?? '1'),
     weapons,
     abilities,
@@ -232,7 +232,7 @@ function extractCharacteristics(body: string): Record<string, string> {
   const stats: Record<string, string> = {}
 
   const profilePattern =
-    /<profile\b[^>]*type(?:Name)?="(?:Unit|Model)\s*Characteristics?"[^>]*>([\s\S]*?)<\/profile>/gi
+    /<profile\b[^>]*type(?:Name)?="(?:Unit|Model)(?:\s*Characteristics?)?"[^>]*>([\s\S]*?)<\/profile>/gi
   const profileMatch = profilePattern.exec(body)
   if (!profileMatch) return stats
 
