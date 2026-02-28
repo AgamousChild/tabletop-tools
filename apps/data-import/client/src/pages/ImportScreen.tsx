@@ -74,7 +74,7 @@ export function ImportScreen() {
   const [clearMessage, setClearMessage] = useState<string | null>(null)
   const [includeLegends, setIncludeLegendsState] = useState(false)
   const [copiedWarnings, setCopiedWarnings] = useState(false)
-  const copiedWarningsTimer = useRef<ReturnType<typeof setTimeout>>(null)
+  const copiedWarningsTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   const refreshStoredData = useCallback(async () => {
     const [meta, rmeta, factions] = await Promise.all([
