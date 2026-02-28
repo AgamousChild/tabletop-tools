@@ -2,7 +2,7 @@ import { TRPCError } from '@trpc/server'
 import { eq, and, inArray } from 'drizzle-orm'
 import { z } from 'zod'
 
-import { tournaments, tournamentPlayers, rounds, pairings, importedTournamentResults } from '@tabletop-tools/db'
+import { tournaments, tournamentPlayers, rounds, pairings, importedTournamentResults, authUsers } from '@tabletop-tools/db'
 import { computeStandings } from '../lib/standings/compute'
 import { router, protectedProcedure } from '../trpc'
 
@@ -73,7 +73,13 @@ export const tournamentRouter = router({
       .from(tournamentPlayers)
       .where(eq(tournamentPlayers.tournamentId, input))
       .all()
-    return { ...tournament, playerCount: players.length }
+    // Fetch TO name
+    const toUser = await ctx.db
+      .select({ name: authUsers.name })
+      .from(authUsers)
+      .where(eq(authUsers.id, tournament.toUserId))
+      .get()
+    return { ...tournament, playerCount: players.length, toName: toUser?.name ?? null }
   }),
 
   listOpen: protectedProcedure.query(async ({ ctx }) => {
