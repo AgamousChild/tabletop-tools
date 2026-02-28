@@ -5,6 +5,7 @@ export { ErrorBoundary } from './components/ErrorBoundary'
 export { GameContentDisclaimer } from './components/GameContentDisclaimer'
 export { HelpTip } from './components/HelpTip'
 export { CollapsibleSection } from './components/CollapsibleSection'
+export { SimpleMarkdown } from './components/SimpleMarkdown'
 
 // Auth client factory
 export { createAuthClient } from './lib/auth'

@@ -7,6 +7,7 @@ import { HelpTip, CollapsibleSection, htmlToText } from '@tabletop-tools/ui'
 import { authClient } from '../lib/auth'
 import { trpc } from '../lib/trpc'
 import { useUnits, useGameFactions, useGameUnit, useGameLeadersForUnit, useGameUnitAbilities, useGameUnitKeywords, useGameWargearOptions, useGameDatasheetWeapons, useGameDatasheetModels, useGameDetachments, useGameDetachmentAbilities, useGameEnhancements, useGameStratagems } from '../lib/useGameData'
+import { extractLeaderRules } from '../lib/leaderAbilities'
 import { parseModelCount } from '../lib/modelCount'
 import { simulateWeapon, runMonteCarlo } from '../lib/rules/pipeline'
 import type { SimResult, DistributionData } from '../lib/rules/pipeline'
@@ -148,6 +149,13 @@ export function SimulatorScreen({ onSignOut }: Props) {
   const { data: defDetachmentAbilities = [] } = useGameDetachmentAbilities(defenderDetachmentId)
   const { data: attackerStratagems = [] } = useGameStratagems(attackerFaction, attackerDetachmentId)
   const { data: defenderStratagems = [] } = useGameStratagems(defenderFaction, defenderDetachmentId)
+  const { data: leaderAbilities = [] } = useGameUnitAbilities(attackerLeaderId)
+
+  // Auto-extract simulation rules from attached leader abilities
+  const leaderRules = useMemo(() => {
+    if (!attackerLeaderId || leaderAbilities.length === 0) return []
+    return extractLeaderRules(leaderAbilities)
+  }, [attackerLeaderId, leaderAbilities])
 
   // Resolve attacker/defender profiles: prefer Wahapedia model stats when available
   // (Wahapedia has correct M/T/Sv/W/Ld/OC/invSv as strings; BSData may have 0 for missing)
@@ -270,7 +278,8 @@ export function SimulatorScreen({ onSignOut }: Props) {
     })
   }, [selectedWeapons])
 
-  // Get selected weapon profiles with merged special rules
+  // Get selected weapon profiles with merged special rules (user-added + leader auto-applied)
+  const leaderWeaponAbilities = useMemo(() => leaderRules.map((lr) => lr.rule), [leaderRules])
   const getSelectedWeapons = useCallback((): WeaponProfile[] => {
     if (combinedWeapons.length === 0) return []
     return Array.from(selectedWeapons)
@@ -279,9 +288,9 @@ export function SimulatorScreen({ onSignOut }: Props) {
       .filter(Boolean)
       .map((w) => ({
         ...w,
-        abilities: [...w.abilities, ...specialRules],
+        abilities: [...w.abilities, ...specialRules, ...leaderWeaponAbilities],
       }))
-  }, [combinedWeapons, selectedWeapons, specialRules])
+  }, [combinedWeapons, selectedWeapons, specialRules, leaderWeaponAbilities])
 
   // Compute simulation locally
   const simData = useMemo((): { result: SimResult; breakdowns: WeaponBreakdown[] } | null => {
@@ -772,6 +781,7 @@ export function SimulatorScreen({ onSignOut }: Props) {
         <SpecialRulesEditor
           rules={specialRules}
           weaponAbilities={selectedWeaponAbilities}
+          leaderRules={leaderRules}
           onAdd={(rule) => setSpecialRules((prev) => [...prev, rule])}
           onRemove={(index) => setSpecialRules((prev) => prev.filter((_, i) => i !== index))}
         />

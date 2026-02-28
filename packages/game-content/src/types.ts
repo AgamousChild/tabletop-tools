@@ -30,6 +30,7 @@ export type WeaponAbility =
   | { type: 'WOUND_MOD'; value: number }
   | { type: 'STRENGTH_MOD'; value: number }
   | { type: 'ATTACKS_MOD'; value: number }
+  | { type: 'TOUGHNESS_MOD'; value: number }
   | { type: 'ANTI'; keyword: string; value: number }
   | { type: 'MELTA'; value: number }
   | { type: 'IGNORES_COVER' }

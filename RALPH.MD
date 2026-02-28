@@ -129,6 +129,11 @@ Update this section every time you update or fix a section of the requirements.
 - **Paste list feature in game tracker (2026-02-27)**: MatchSetupScreen now has Select List / Paste List toggle. Paste mode provides a textarea for army list text. Select mode auto-populates faction and detachment from the chosen list.
 - **Tournament test data preload button (2026-02-27)**: "Load Test Players" button in ManageTournament (Players tab). Inserts 8 fake players with diverse factions/detachments via `player.seedTestPlayers` mutation. TO-only.
 - **Round form consistency verified (2026-02-27)**: Confirmed all rounds render identically in game-tracker — same fields (CP, VP, secondaries, stratagems, units, photos) for every round.
+- **List-builder export clipboard notification (2026-02-27)**: Export button now shows "Copied!" in emerald green for 2 seconds after successful clipboard copy.
+- **Versus toughness/reroll-wounds special rules (2026-02-27)**: Added TOUGHNESS_MOD (+1, +2, -1) to SpecialRulesEditor and simulation pipeline. REROLL_WOUNDS was already in pipeline. Both deterministic and Monte Carlo paths handle toughness modification.
+- **Versus leader auto-apply (2026-02-27)**: When a leader is attached, their abilities are parsed for simulation-relevant rules (re-roll hits, lethal hits, sustained hits, etc.) and auto-applied as read-only "From leader" chips in SpecialRulesEditor. 22 new unit tests for ability parsing.
+- **Tournament round start time (2026-02-27)**: Added `startTime` column to rounds DB table. Round creation accepts optional start time. UI shows start time in round detail and provides input when creating rounds. 4 new tests.
+- **Tournament markdown descriptions (2026-02-27)**: Created `SimpleMarkdown` component in packages/ui (handles bold, italic, links, headers, lists, code). Tournament detail view renders descriptions with markdown formatting. 10 new tests.
 
 ### In Progress
 
@@ -138,8 +143,7 @@ Update this section every time you update or fix a section of the requirements.
 
 - Dice detection rewrite (detect_dice or OpenCV)
 - Data Requirements (master database plan, client-side code, automated scripts)
-- Tournament features (geocoding, TO management, player search, etc.)
-- Versus leader special rules auto-apply
+- Tournament features (geocoding, image upload)
 
 ---
 
@@ -152,23 +156,23 @@ Update this section every time you update or fix a section of the requirements.
 | packages/server-core | 17 | PASS |
 | packages/game-content | 108 | PASS |
 | packages/game-data-store | 93 | PASS |
-| packages/ui | 40 | PASS |
+| packages/ui | 50 | PASS |
 | apps/no-cheat/server | 64 | PASS |
 | apps/no-cheat/client | 178 | PASS |
 | apps/versus/server | 8 | PASS |
-| apps/versus/client | 134 | PASS |
+| apps/versus/client | 160 | PASS |
 | apps/list-builder/server | 35 | PASS |
 | apps/list-builder/client | 52 | PASS |
 | apps/game-tracker/server | 58 | PASS |
 | apps/game-tracker/client | 158 | PASS |
-| apps/tournament/server | 70 | PASS |
-| apps/tournament/client | 57 | PASS |
+| apps/tournament/server | 73 | PASS |
+| apps/tournament/client | 58 | PASS |
 | apps/new-meta/server | 57 | PASS |
 | apps/new-meta/client | 83 | PASS |
 | apps/admin/server | 46 | PASS |
 | apps/admin/client | 47 | PASS |
 | apps/data-import/client | 57 | PASS |
-| **Total** | **1,439** | **ALL PASS** |
+| **Total** | **1,475** | **ALL PASS** |
 
 ---
 

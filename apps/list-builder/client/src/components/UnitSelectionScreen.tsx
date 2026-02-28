@@ -179,6 +179,7 @@ export function UnitSelectionScreen({ listId, faction, detachment, battleSize, o
   const [editingDesc, setEditingDesc] = useState(false)
   const [nameValue, setNameValue] = useState('')
   const [descValue, setDescValue] = useState('')
+  const [exportCopied, setExportCopied] = useState(false)
   const nameInitialized = useRef(false)
 
   const { data: allUnits = [], isLoading: unitsLoading } = useUnits(
@@ -401,7 +402,10 @@ export function UnitSelectionScreen({ listId, faction, detachment, battleSize, o
 
   function handleExport() {
     const text = exportList()
-    navigator.clipboard.writeText(text).catch(() => {
+    navigator.clipboard.writeText(text).then(() => {
+      setExportCopied(true)
+      setTimeout(() => setExportCopied(false), 2000)
+    }).catch(() => {
       const w = window.open('')
       w?.document.write(`<pre>${text}</pre>`)
     })
@@ -632,9 +636,9 @@ export function UnitSelectionScreen({ listId, faction, detachment, battleSize, o
           <div className="flex gap-3 pt-3 border-t border-slate-800">
             <button
               onClick={handleExport}
-              className="flex-1 py-2 rounded-lg bg-amber-400 text-slate-950 font-semibold hover:bg-amber-300 text-sm"
+              className={`flex-1 py-2 rounded-lg font-semibold text-sm ${exportCopied ? 'bg-emerald-400 text-slate-950' : 'bg-amber-400 text-slate-950 hover:bg-amber-300'}`}
             >
-              Export list
+              {exportCopied ? 'Copied!' : 'Export list'}
             </button>
             <button
               onClick={onDone}

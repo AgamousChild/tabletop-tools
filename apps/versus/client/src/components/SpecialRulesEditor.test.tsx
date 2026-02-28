@@ -108,4 +108,65 @@ describe('SpecialRulesEditor', () => {
     expect(chips).toHaveLength(1)
     expect(screen.getByText('Blast')).toBeInTheDocument()
   })
+
+  it('shows leader rules section when leaderRules are provided', () => {
+    render(
+      <SpecialRulesEditor
+        rules={[]}
+        leaderRules={[
+          { rule: { type: 'REROLL_HITS' }, source: 'Rites of Battle' },
+          { rule: { type: 'WOUND_MOD', value: 1 }, source: 'Tactical Precision' },
+        ]}
+        onAdd={vi.fn()}
+        onRemove={vi.fn()}
+      />,
+    )
+    expect(screen.getByText('From leader')).toBeInTheDocument()
+    expect(screen.getByText('Re-roll all hits')).toBeInTheDocument()
+    expect(screen.getByText('+1 to wound')).toBeInTheDocument()
+  })
+
+  it('does not show leader rules section when leaderRules is empty', () => {
+    render(
+      <SpecialRulesEditor
+        rules={[]}
+        leaderRules={[]}
+        onAdd={vi.fn()}
+        onRemove={vi.fn()}
+      />,
+    )
+    expect(screen.queryByText('From leader')).not.toBeInTheDocument()
+  })
+
+  it('leader rule chips have title attribute with source ability name', () => {
+    render(
+      <SpecialRulesEditor
+        rules={[]}
+        leaderRules={[
+          { rule: { type: 'LETHAL_HITS' }, source: 'Oath of Moment' },
+        ]}
+        onAdd={vi.fn()}
+        onRemove={vi.fn()}
+      />,
+    )
+    const chip = screen.getByText('Lethal Hits')
+    expect(chip.closest('[title]')).toHaveAttribute('title', 'Oath of Moment')
+  })
+
+  it('leader rules are read-only (no dismiss button)', () => {
+    render(
+      <SpecialRulesEditor
+        rules={[]}
+        leaderRules={[
+          { rule: { type: 'REROLL_HITS' }, source: 'Rites of Battle' },
+        ]}
+        onAdd={vi.fn()}
+        onRemove={vi.fn()}
+      />,
+    )
+    // Leader rules should not have any dismiss 'x' buttons
+    const leaderSection = screen.getByText('From leader').parentElement!
+    const dismissButtons = leaderSection.querySelectorAll('button')
+    expect(dismissButtons).toHaveLength(0)
+  })
 })

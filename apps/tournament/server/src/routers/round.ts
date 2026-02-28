@@ -22,7 +22,7 @@ function randomMission(): string {
 
 export const roundRouter = router({
   create: protectedProcedure
-    .input(z.object({ tournamentId: z.string() }))
+    .input(z.object({ tournamentId: z.string(), startTime: z.string().optional() }))
     .mutation(async ({ ctx, input }) => {
       const tournament = await ctx.db
         .select()
@@ -46,6 +46,7 @@ export const roundRouter = router({
         tournamentId: input.tournamentId,
         roundNumber,
         status: 'PENDING',
+        startTime: input.startTime ?? null,
         createdAt: Date.now(),
       })
       return ctx.db.select().from(rounds).where(eq(rounds.id, id)).get()

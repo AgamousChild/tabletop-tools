@@ -213,7 +213,7 @@ vi.mock('../lib/trpc', () => ({
       },
       get: {
         useQuery: (_id: unknown, _opts: unknown) => ({
-          data: { id: 'round-1', roundNumber: 1, status: 'ACTIVE', pairings: [] },
+          data: { id: 'round-1', roundNumber: 1, status: 'ACTIVE', startTime: '10:00 AM', pairings: [] },
           refetch: vi.fn(),
         }),
       },
@@ -466,6 +466,18 @@ describe('TournamentScreen', () => {
       expect(screen.getByText(/no pairings yet/i)).toBeInTheDocument()
     })
   })
+
+  it('shows round start time on round detail', async () => {
+    render(<TournamentScreen onSignOut={vi.fn()} />)
+    act(() => {
+      window.location.hash = '#/tournament/t1/round/round-1'
+      window.dispatchEvent(new HashChangeEvent('hashchange'))
+    })
+    await waitFor(() => {
+      expect(screen.getByText(/start: 10:00 am/i)).toBeInTheDocument()
+    })
+  })
+
 
   // ─── Tournament Detail — new display fields ───────────────────
 

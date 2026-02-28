@@ -340,6 +340,8 @@ export const rounds = sqliteTable('rounds', {
   roundNumber: integer('round_number').notNull(),
   // PENDING | ACTIVE | COMPLETE
   status: text('status').notNull().default('PENDING'),
+  // Optional start time for this round (HH:MM format or free text like "10:00 AM")
+  startTime: text('start_time'),
   createdAt: integer('created_at').notNull(),
 }, (table) => [
   index('idx_rounds_tournament_id').on(table.tournamentId),

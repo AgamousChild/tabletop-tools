@@ -119,6 +119,7 @@ beforeAll(async () => {
       tournament_id TEXT NOT NULL,
       round_number INTEGER NOT NULL,
       status TEXT NOT NULL DEFAULT 'PENDING',
+      start_time TEXT,
       created_at INTEGER NOT NULL
     );
     CREATE TABLE IF NOT EXISTS pairings (
