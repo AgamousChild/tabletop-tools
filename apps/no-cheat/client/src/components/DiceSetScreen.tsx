@@ -26,6 +26,9 @@ export function DiceSetScreen({ onSignOut }: Props) {
   const createMutation = trpc.diceSet.create.useMutation({
     onSuccess: () => refetch(),
   })
+  const deleteDiceSet = trpc.diceSet.delete.useMutation({
+    onSuccess: () => void refetch(),
+  })
 
   async function handleSignOut() {
     await authClient.signOut()
@@ -94,6 +97,7 @@ export function DiceSetScreen({ onSignOut }: Props) {
         <DiceSetList
           diceSets={diceSets}
           onSelect={(ds) => setScreen({ name: 'detail', diceSet: ds })}
+          onDelete={(ds) => deleteDiceSet.mutate({ id: ds.id })}
         />
 
         <div className="mt-6">

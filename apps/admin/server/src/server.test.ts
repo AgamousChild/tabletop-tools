@@ -45,7 +45,7 @@ beforeAll(async () => {
     CREATE TABLE IF NOT EXISTS matches (
       id TEXT PRIMARY KEY, user_id TEXT NOT NULL, list_id TEXT, opponent_faction TEXT NOT NULL,
       mission TEXT NOT NULL, result TEXT, your_final_score INTEGER, their_final_score INTEGER,
-      is_tournament INTEGER NOT NULL DEFAULT 0, created_at INTEGER NOT NULL, closed_at INTEGER
+      is_tournament INTEGER NOT NULL DEFAULT 0, created_at INTEGER NOT NULL, closed_at INTEGER, hidden_at INTEGER
     );
     CREATE TABLE IF NOT EXISTS turns (
       id TEXT PRIMARY KEY, match_id TEXT NOT NULL, turn_number INTEGER NOT NULL, photo_url TEXT,

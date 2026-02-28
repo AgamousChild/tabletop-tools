@@ -231,6 +231,7 @@ export const matches = sqliteTable('matches', {
   tournamentId: text('tournament_id'),
   createdAt: integer('created_at').notNull(),
   closedAt: integer('closed_at'),
+  hiddenAt: integer('hidden_at'),
 }, (table) => [
   index('idx_matches_user_id').on(table.userId),
 ])

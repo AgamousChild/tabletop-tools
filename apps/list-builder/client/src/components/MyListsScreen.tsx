@@ -1,6 +1,7 @@
 import { useState } from 'react'
-import { useLists } from '@tabletop-tools/game-data-store'
+import { useLists, deleteList } from '@tabletop-tools/game-data-store'
 import type { LocalList } from '@tabletop-tools/game-data-store'
+import { deleteListFromServer } from '../lib/sync'
 
 type Props = {
   onCreateNew: () => void
@@ -18,7 +19,7 @@ function setTournamentList(list: LocalList) {
 }
 
 export function MyListsScreen({ onCreateNew, onSelectList }: Props) {
-  const { data: lists } = useLists()
+  const { data: lists, refetch } = useLists()
   const [tournamentListId, setTournamentListId] = useState<string | null>(() => {
     try {
       const stored = localStorage.getItem('tournament-list')
@@ -76,6 +77,20 @@ export function MyListsScreen({ onCreateNew, onSelectList }: Props) {
                   }`}
                 >
                   {isActive ? 'Active for Tournament' : 'Use in Tournament'}
+                </button>
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    if (!confirm('Delete this list?')) return
+                    void (async () => {
+                      await deleteList(list.id)
+                      deleteListFromServer(list.id)
+                      refetch()
+                    })()
+                  }}
+                  className="text-xs px-2.5 py-1 rounded-full bg-slate-800 text-red-400 hover:text-red-300 border border-slate-700 hover:border-red-400/30 transition-colors"
+                >
+                  Delete
                 </button>
               </div>
             </div>

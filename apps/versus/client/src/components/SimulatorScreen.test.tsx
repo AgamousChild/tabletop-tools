@@ -14,6 +14,9 @@ vi.mock('../lib/auth', () => ({
 
 vi.mock('../lib/trpc', () => ({
   trpc: {
+    useUtils: () => ({
+      simulate: { history: { invalidate: vi.fn() } },
+    }),
     simulate: {
       save: {
         useMutation: () => ({ mutate: mockSave }),
@@ -23,6 +26,9 @@ vi.mock('../lib/trpc', () => ({
       },
       lookup: {
         useQuery: () => ({ data: null }),
+      },
+      delete: {
+        useMutation: () => ({ mutate: vi.fn() }),
       },
     },
   },

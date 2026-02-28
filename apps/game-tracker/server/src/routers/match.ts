@@ -1,5 +1,5 @@
 import { TRPCError } from '@trpc/server'
-import { and, eq } from 'drizzle-orm'
+import { and, eq, isNull } from 'drizzle-orm'
 import { z } from 'zod'
 import { matches, turns, matchSecondaries, tournaments, tournamentPlayers, pairings, rounds } from '@tabletop-tools/db'
 
@@ -150,7 +150,7 @@ export const matchRouter = router({
     return ctx.db
       .select()
       .from(matches)
-      .where(eq(matches.userId, ctx.user.id))
+      .where(and(eq(matches.userId, ctx.user.id), isNull(matches.hiddenAt)))
   }),
 
   get: protectedProcedure
@@ -172,6 +172,28 @@ export const matchRouter = router({
         .from(matchSecondaries)
         .where(eq(matchSecondaries.matchId, input.id))
       return { ...match, turns: matchTurns, secondaries }
+    }),
+
+  delete: protectedProcedure
+    .input(z.object({ id: z.string() }))
+    .mutation(async ({ ctx, input }) => {
+      const [match] = await ctx.db
+        .select()
+        .from(matches)
+        .where(and(eq(matches.id, input.id), eq(matches.userId, ctx.user.id)))
+      if (!match) throw new TRPCError({ code: 'NOT_FOUND', message: 'Match not found' })
+
+      if (match.tournamentId) {
+        // Tournament matches: hide from list, but keep for tournament
+        await ctx.db
+          .update(matches)
+          .set({ hiddenAt: Date.now() })
+          .where(eq(matches.id, input.id))
+      } else {
+        // Non-tournament matches: delete entirely (cascade handles turns, secondaries)
+        await ctx.db.delete(matches).where(eq(matches.id, input.id))
+      }
+      return { success: true }
     }),
 
   close: protectedProcedure

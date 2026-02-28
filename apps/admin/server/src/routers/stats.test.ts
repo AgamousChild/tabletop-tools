@@ -139,7 +139,8 @@ beforeAll(async () => {
       their_final_score INTEGER,
       is_tournament INTEGER NOT NULL DEFAULT 0,
       created_at INTEGER NOT NULL,
-      closed_at INTEGER
+      closed_at INTEGER,
+      hidden_at INTEGER
     );
     CREATE TABLE IF NOT EXISTS turns (
       id TEXT PRIMARY KEY,

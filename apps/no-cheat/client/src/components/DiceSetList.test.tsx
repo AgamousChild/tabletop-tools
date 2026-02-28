@@ -10,19 +10,19 @@ const fakeSets = [
 
 describe('DiceSetList', () => {
   it('shows empty state when there are no dice sets', () => {
-    render(<DiceSetList diceSets={[]} onSelect={() => {}} />)
+    render(<DiceSetList diceSets={[]} onSelect={() => {}} onDelete={() => {}} />)
     expect(screen.getByText(/no dice sets yet/i)).toBeInTheDocument()
   })
 
   it('renders each dice set name', () => {
-    render(<DiceSetList diceSets={fakeSets} onSelect={() => {}} />)
+    render(<DiceSetList diceSets={fakeSets} onSelect={() => {}} onDelete={() => {}} />)
     expect(screen.getByText('Red Dragons')).toBeInTheDocument()
     expect(screen.getByText('Blue Crystals')).toBeInTheDocument()
   })
 
   it('calls onSelect with the dice set when clicked', async () => {
     const onSelect = vi.fn()
-    render(<DiceSetList diceSets={fakeSets} onSelect={onSelect} />)
+    render(<DiceSetList diceSets={fakeSets} onSelect={onSelect} onDelete={() => {}} />)
     screen.getByText('Red Dragons').click()
     expect(onSelect).toHaveBeenCalledWith(fakeSets[0])
   })

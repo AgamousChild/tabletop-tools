@@ -49,7 +49,8 @@ beforeAll(async () => {
       tournament_name TEXT,
       tournament_id TEXT,
       created_at INTEGER NOT NULL,
-      closed_at INTEGER
+      closed_at INTEGER,
+      hidden_at INTEGER
     );
     CREATE TABLE IF NOT EXISTS turns (
       id TEXT PRIMARY KEY,
@@ -334,6 +335,42 @@ describe('match.close', () => {
     await expect(
       caller.match.close({ matchId: 'any', yourScore: 50, theirScore: 50 }),
     ).rejects.toMatchObject({ code: 'UNAUTHORIZED' })
+  })
+})
+
+describe('match.delete', () => {
+  it('deletes a non-tournament match', async () => {
+    const caller = createCaller(ctx)
+    const match = await caller.match.start({ opponentFaction: 'Tyranids', mission: 'Delete Test' })
+    await caller.match.delete({ id: match.id })
+    const all = await caller.match.list()
+    expect(all.find((m) => m.id === match.id)).toBeUndefined()
+  })
+
+  it('hides a tournament match instead of deleting', async () => {
+    const caller = createCaller(ctx)
+    const match = await caller.match.start({
+      opponentFaction: 'Necrons',
+      mission: 'Tournament Delete',
+      isTournament: true,
+      tournamentId: 'tourn-hide-test',
+    })
+    await caller.match.delete({ id: match.id })
+    // Hidden from list
+    const all = await caller.match.list()
+    expect(all.find((m) => m.id === match.id)).toBeUndefined()
+    // But still accessible via get
+    const found = await caller.match.get({ id: match.id })
+    expect(found.id).toBe(match.id)
+  })
+
+  it('rejects deleting another user\'s match', async () => {
+    const caller = createCaller(ctx)
+    const match = await caller.match.start({ opponentFaction: 'Eldar', mission: 'Ownership Test' })
+    const caller2 = createCaller(ctx2)
+    await expect(caller2.match.delete({ id: match.id })).rejects.toMatchObject({
+      code: 'NOT_FOUND',
+    })
   })
 })
 
