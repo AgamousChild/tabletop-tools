@@ -1,4 +1,4 @@
-import { useState, useMemo, useCallback, useRef } from 'react'
+import { useState, useMemo, useCallback, useRef, useEffect } from 'react'
 import type { WeaponAbility, WeaponProfile, UnitProfile } from '@tabletop-tools/game-content'
 import { useGameDataAvailable, useUnitCompositions } from '@tabletop-tools/game-data-store'
 import type { DatasheetModel } from '@tabletop-tools/game-data-store'
@@ -837,56 +837,45 @@ function StratagemReference({ attackerStratagems, defenderStratagems }: {
   attackerStratagems: StratagemItem[]
   defenderStratagems: StratagemItem[]
 }) {
-  const [expanded, setExpanded] = useState(false)
-
   return (
-    <div className="rounded-lg border border-slate-800 bg-slate-900 p-4">
-      <button
-        onClick={() => setExpanded((prev) => !prev)}
-        className="w-full flex items-center justify-between text-sm font-semibold text-slate-300 hover:text-slate-100"
-      >
-        <span>Stratagems ({attackerStratagems.length + defenderStratagems.length})</span>
-        <span className="text-slate-500">{expanded ? '▲' : '▼'}</span>
-      </button>
-      {expanded && (
-        <div className="mt-3 grid grid-cols-1 md:grid-cols-2 gap-4 max-h-96 overflow-y-auto">
-          {attackerStratagems.length > 0 && (
-            <div>
-              <p className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider mb-2">Attacker</p>
-              <div className="space-y-2">
-                {attackerStratagems.map((s) => (
-                  <div key={s.id} className="text-xs">
-                    <div className="flex items-center gap-2">
-                      <span className="font-medium text-amber-400">{s.name}</span>
-                      <span className="px-1 py-0.5 rounded bg-slate-800 text-slate-400 text-[10px]">{s.cpCost}CP</span>
-                      <span className="px-1 py-0.5 rounded bg-slate-800 text-slate-500 text-[10px]">{s.phase}</span>
-                    </div>
-                    <p className="text-slate-500 mt-0.5 leading-relaxed whitespace-pre-wrap">{htmlToText(s.legend)}</p>
+    <CollapsibleSection title="Stratagems" count={attackerStratagems.length + defenderStratagems.length}>
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 max-h-96 overflow-y-auto">
+        {attackerStratagems.length > 0 && (
+          <div>
+            <p className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider mb-2">Attacker</p>
+            <div className="space-y-2">
+              {attackerStratagems.map((s) => (
+                <div key={s.id} className="text-xs">
+                  <div className="flex items-center gap-2">
+                    <span className="font-medium text-amber-400">{s.name}</span>
+                    <span className="px-1 py-0.5 rounded bg-slate-800 text-slate-400 text-[10px]">{s.cpCost}CP</span>
+                    <span className="px-1 py-0.5 rounded bg-slate-800 text-slate-500 text-[10px]">{s.phase}</span>
                   </div>
-                ))}
-              </div>
+                  <p className="text-slate-500 mt-0.5 leading-relaxed whitespace-pre-wrap">{htmlToText(s.legend)}</p>
+                </div>
+              ))}
             </div>
-          )}
-          {defenderStratagems.length > 0 && (
-            <div>
-              <p className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider mb-2">Defender</p>
-              <div className="space-y-2">
-                {defenderStratagems.map((s) => (
-                  <div key={s.id} className="text-xs">
-                    <div className="flex items-center gap-2">
-                      <span className="font-medium text-amber-400">{s.name}</span>
-                      <span className="px-1 py-0.5 rounded bg-slate-800 text-slate-400 text-[10px]">{s.cpCost}CP</span>
-                      <span className="px-1 py-0.5 rounded bg-slate-800 text-slate-500 text-[10px]">{s.phase}</span>
-                    </div>
-                    <p className="text-slate-500 mt-0.5 leading-relaxed whitespace-pre-wrap">{htmlToText(s.legend)}</p>
+          </div>
+        )}
+        {defenderStratagems.length > 0 && (
+          <div>
+            <p className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider mb-2">Defender</p>
+            <div className="space-y-2">
+              {defenderStratagems.map((s) => (
+                <div key={s.id} className="text-xs">
+                  <div className="flex items-center gap-2">
+                    <span className="font-medium text-amber-400">{s.name}</span>
+                    <span className="px-1 py-0.5 rounded bg-slate-800 text-slate-400 text-[10px]">{s.cpCost}CP</span>
+                    <span className="px-1 py-0.5 rounded bg-slate-800 text-slate-500 text-[10px]">{s.phase}</span>
                   </div>
-                ))}
-              </div>
+                  <p className="text-slate-500 mt-0.5 leading-relaxed whitespace-pre-wrap">{htmlToText(s.legend)}</p>
+                </div>
+              ))}
             </div>
-          )}
-        </div>
-      )}
-    </div>
+          </div>
+        )}
+      </div>
+    </CollapsibleSection>
   )
 }
 
@@ -907,52 +896,57 @@ function SimulationHistory({ onLoadSimulation }: {
   const { data: history = [] } = trpc.simulate.history.useQuery(undefined, { enabled: showHistory })
 
   return (
-    <div className="rounded-lg border border-slate-800 bg-slate-900 p-4">
-      <button
-        onClick={() => setShowHistory((prev) => !prev)}
-        className="w-full flex items-center justify-between text-sm font-semibold text-slate-300 hover:text-slate-100"
-      >
-        <span>Simulation History</span>
-        <span className="text-slate-500">{showHistory ? '▲' : '▼'}</span>
-      </button>
+    <CollapsibleSection title="Simulation History">
+      {/* Trigger data fetch when section opens */}
+      <HistoryLoader onShow={() => setShowHistory(true)} />
+      <div className="space-y-2 max-h-80 overflow-y-auto">
+        {!showHistory && (
+          <p className="text-sm text-slate-500">Loading...</p>
+        )}
+        {showHistory && history.length === 0 && (
+          <p className="text-sm text-slate-500">No saved simulations yet.</p>
+        )}
+        {history.map((sim) => {
+          let result: { expectedWounds: number; expectedModelsRemoved: number } | null = null
+          try {
+            result = JSON.parse(sim.result as string)
+          } catch { /* empty */ }
 
-      {showHistory && (
-        <div className="mt-3 space-y-2 max-h-80 overflow-y-auto">
-          {history.length === 0 && (
-            <p className="text-sm text-slate-500">No saved simulations yet.</p>
-          )}
-          {history.map((sim) => {
-            let result: { expectedWounds: number; expectedModelsRemoved: number } | null = null
-            try {
-              result = JSON.parse(sim.result as string)
-            } catch { /* empty */ }
-
-            return (
-              <button
-                key={sim.id as string}
-                onClick={() => onLoadSimulation(sim as unknown as HistorySimulation)}
-                className="w-full text-left rounded-lg bg-slate-800 border border-slate-700 p-3 hover:border-amber-400/50 transition-colors"
-              >
-                <div className="flex items-center justify-between">
-                  <div>
-                    <span className="text-sm font-medium text-amber-400">{sim.attackerName as string}</span>
-                    <span className="text-xs text-slate-500 mx-2">vs</span>
-                    <span className="text-sm font-medium text-slate-200">{sim.defenderName as string}</span>
-                  </div>
-                  <span className="text-xs text-slate-500">
-                    {new Date(sim.createdAt as number).toLocaleDateString()}
-                  </span>
+          return (
+            <button
+              key={sim.id as string}
+              onClick={() => onLoadSimulation(sim as unknown as HistorySimulation)}
+              className="w-full text-left rounded-lg bg-slate-800 border border-slate-700 p-3 hover:border-amber-400/50 transition-colors"
+            >
+              <div className="flex items-center justify-between">
+                <div>
+                  <span className="text-sm font-medium text-amber-400">{sim.attackerName as string}</span>
+                  <span className="text-xs text-slate-500 mx-2">vs</span>
+                  <span className="text-sm font-medium text-slate-200">{sim.defenderName as string}</span>
                 </div>
-                {result && (
-                  <p className="text-xs text-slate-400 mt-1">
-                    {(result.expectedWounds ?? 0).toFixed(1)} wounds, {result.expectedModelsRemoved ?? 0} models removed
-                  </p>
-                )}
-              </button>
-            )
-          })}
-        </div>
-      )}
-    </div>
+                <span className="text-xs text-slate-500">
+                  {new Date(sim.createdAt as number).toLocaleDateString()}
+                </span>
+              </div>
+              {result && (
+                <p className="text-xs text-slate-400 mt-1">
+                  {(result.expectedWounds ?? 0).toFixed(1)} wounds, {result.expectedModelsRemoved ?? 0} models removed
+                </p>
+              )}
+            </button>
+          )
+        })}
+      </div>
+    </CollapsibleSection>
   )
+}
+
+/** Triggers the history data fetch when mounted (i.e. when CollapsibleSection opens) */
+function HistoryLoader({ onShow }: { onShow: () => void }) {
+  const onShowRef = useRef(onShow)
+  onShowRef.current = onShow
+  useEffect(() => {
+    onShowRef.current()
+  }, [])
+  return null
 }

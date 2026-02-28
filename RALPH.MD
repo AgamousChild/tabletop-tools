@@ -124,6 +124,11 @@ Update this section every time you update or fix a section of the requirements.
 - **Stored data screen clearing fix (2026-02-27)**: `clearGameRules()` now also removes `rulesImportMeta` from meta store so UI reflects cleared state. All clear handlers optimistically update UI immediately.
 - **Wahapedia/BSData faction matching (2026-02-27)**: BSData catalog prefixes ("Imperium - ", "Chaos - ") now stripped during import so faction names match Wahapedia conventions. Added `normalizeFactionName()` utility. Game-tracker switched to `usePrimaryFactions` for consistent faction names. `searchUnits` and `clearFaction` handle both old and new naming for backward compatibility.
 - **Instructions on every page (2026-02-27)**: Added concise instructional text to every screen in all 8 apps: game-tracker (5 screens), list-builder (4 screens), versus (1 screen), tournament (6 sections), new-meta (7 pages), no-cheat (3 screens), admin (5 pages), data-import (already had them).
+- **Expandable/collapsible text sections (2026-02-27)**: `CollapsibleSection` component in packages/ui. Applied to versus (stratagems, simulation history), list-builder (detachment rules). Sections show title only by default, expand on click.
+- **BSData import clipboard button (2026-02-27)**: Enhanced copy-to-clipboard button on BSData import warnings with "Copied!" feedback and amber accent styling.
+- **Paste list feature in game tracker (2026-02-27)**: MatchSetupScreen now has Select List / Paste List toggle. Paste mode provides a textarea for army list text. Select mode auto-populates faction and detachment from the chosen list.
+- **Tournament test data preload button (2026-02-27)**: "Load Test Players" button in ManageTournament (Players tab). Inserts 8 fake players with diverse factions/detachments via `player.seedTestPlayers` mutation. TO-only.
+- **Round form consistency verified (2026-02-27)**: Confirmed all rounds render identically in game-tracker — same fields (CP, VP, secondaries, stratagems, units, photos) for every round.
 
 ### In Progress
 
@@ -133,7 +138,6 @@ Update this section every time you update or fix a section of the requirements.
 
 - Dice detection rewrite (detect_dice or OpenCV)
 - Data Requirements (master database plan, client-side code, automated scripts)
-- Paste list feature in game tracker
 - Tournament features (geocoding, TO management, player search, etc.)
 - Versus leader special rules auto-apply
 
@@ -148,7 +152,7 @@ Update this section every time you update or fix a section of the requirements.
 | packages/server-core | 17 | PASS |
 | packages/game-content | 108 | PASS |
 | packages/game-data-store | 93 | PASS |
-| packages/ui | 30 | PASS |
+| packages/ui | 40 | PASS |
 | apps/no-cheat/server | 64 | PASS |
 | apps/no-cheat/client | 178 | PASS |
 | apps/versus/server | 8 | PASS |
@@ -156,7 +160,7 @@ Update this section every time you update or fix a section of the requirements.
 | apps/list-builder/server | 35 | PASS |
 | apps/list-builder/client | 52 | PASS |
 | apps/game-tracker/server | 58 | PASS |
-| apps/game-tracker/client | 156 | PASS |
+| apps/game-tracker/client | 158 | PASS |
 | apps/tournament/server | 70 | PASS |
 | apps/tournament/client | 57 | PASS |
 | apps/new-meta/server | 57 | PASS |
@@ -164,7 +168,7 @@ Update this section every time you update or fix a section of the requirements.
 | apps/admin/server | 46 | PASS |
 | apps/admin/client | 47 | PASS |
 | apps/data-import/client | 57 | PASS |
-| **Total** | **1,427** | **ALL PASS** |
+| **Total** | **1,439** | **ALL PASS** |
 
 ---
 
