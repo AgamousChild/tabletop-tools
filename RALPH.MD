@@ -142,6 +142,8 @@ Update this section every time you update or fix a section of the requirements.
 - **Tournament TO info display (2026-02-28)**: tournament.get query now joins authUsers table to fetch TO name. Tournament detail view shows "TO: {name}" in header. 73 server + 58 client tests pass.
 - **"Use in Tournament" button verified (2026-02-28)**: Already implemented in MyListsScreen.tsx — sets localStorage `tournament-list` which tournament registration reads. Button shows "Active for Tournament" with amber highlight when active.
 - **Game Tracker dropdown audit (2026-02-28)**: Verified all faction/detachment fields use `<select>` dropdowns (not text inputs). Secondaries use SecondaryPicker dropdown. Stratagems use StratagemPicker dropdown. Text inputs are only for user-entered data (date, location, opponent name, notes).
+- **TO score override UI (2026-02-28)**: Added "TO Override" button on round pairings view — TOs can enter/change VP scores directly for any pairing. Uses `result.override` mutation (auto-confirms, sets `toOverride` flag). Override form pre-fills existing scores. Overridden results show "TO Override" label instead of "Confirmed". 73 server + 58 client tests pass.
+- **Feature audit verified (2026-02-28)**: Comprehensive audit of all app feature requirements. Confirmed: list-builder (army size, faction/detachment flow, creation rules, model count, suggestions, save — all implemented). Versus (weapon count, melee limits, save with units/rules/results — all implemented). Tournament (Play search, My Info, list search, player search — all implemented).
 
 ### In Progress
 

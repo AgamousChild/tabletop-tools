@@ -143,6 +143,11 @@ export function TournamentScreen({ onSignOut }: Props) {
   const [reportP2VP, setReportP2VP] = useState('')
   const [reportingPairingId, setReportingPairingId] = useState<string | null>(null)
 
+  // TO override
+  const [overrideP1VP, setOverrideP1VP] = useState('')
+  const [overrideP2VP, setOverrideP2VP] = useState('')
+  const [overridingPairingId, setOverridingPairingId] = useState<string | null>(null)
+
   const myTournamentsQuery = trpc.tournament.listMine.useQuery()
   const tournamentDetailQuery = trpc.tournament.get.useQuery(selectedTournamentId!, {
     enabled: !!selectedTournamentId,
@@ -218,6 +223,25 @@ export function TournamentScreen({ onSignOut }: Props) {
   const confirmResult = trpc.result.confirm.useMutation({
     onSuccess: () => void roundDetailQuery.refetch(),
   })
+
+  const overrideResult = trpc.result.override.useMutation({
+    onSuccess: () => {
+      void roundDetailQuery.refetch()
+      setOverridingPairingId(null)
+      setOverrideP1VP('')
+      setOverrideP2VP('')
+    },
+  })
+
+  function handleOverride(e: React.FormEvent) {
+    e.preventDefault()
+    if (!overridingPairingId) return
+    overrideResult.mutate({
+      pairingId: overridingPairingId,
+      player1VP: parseInt(overrideP1VP, 10),
+      player2VP: parseInt(overrideP2VP, 10),
+    })
+  }
 
   function handleCreateTournament(e: React.FormEvent) {
     e.preventDefault()
@@ -532,7 +556,9 @@ export function TournamentScreen({ onSignOut }: Props) {
                           {p.player1Vp} – {p.player2Vp}
                         </span>
                         {p.confirmed ? (
-                          <p className="text-xs text-emerald-400">Confirmed</p>
+                          <p className="text-xs text-emerald-400">
+                            {p.toOverride ? 'TO Override' : 'Confirmed'}
+                          </p>
                         ) : (
                           <div className="flex gap-2 mt-1">
                             <button
@@ -596,6 +622,68 @@ export function TournamentScreen({ onSignOut }: Props) {
                     >
                       Cancel
                     </button>
+                  </form>
+                )}
+
+                {/* TO Override: allows TO to enter or change scores directly */}
+                {isTO && overridingPairingId !== p.id && (
+                  <div className="mt-2">
+                    <button
+                      onClick={() => {
+                        setOverridingPairingId(p.id)
+                        setOverrideP1VP(p.player1Vp != null ? String(p.player1Vp) : '')
+                        setOverrideP2VP(p.player2Vp != null ? String(p.player2Vp) : '')
+                      }}
+                      className="text-xs px-2 py-1 rounded bg-slate-700 text-slate-400 hover:text-slate-200"
+                    >
+                      TO Override
+                    </button>
+                  </div>
+                )}
+                {isTO && overridingPairingId === p.id && (
+                  <form
+                    onSubmit={(e) => void handleOverride(e)}
+                    className="mt-3 p-3 rounded bg-slate-800 border border-slate-700"
+                  >
+                    <p className="text-xs text-slate-400 mb-2 font-medium">TO Score Override (auto-confirms)</p>
+                    <div className="flex gap-2 items-end">
+                      <div>
+                        <label className="text-xs text-slate-500 block">P1 VP</label>
+                        <input
+                          type="number"
+                          min={0}
+                          value={overrideP1VP}
+                          onChange={(e) => setOverrideP1VP(e.target.value)}
+                          required
+                          className="w-20 px-2 py-1 rounded bg-slate-900 border border-slate-700 text-slate-100"
+                        />
+                      </div>
+                      <div>
+                        <label className="text-xs text-slate-500 block">P2 VP</label>
+                        <input
+                          type="number"
+                          min={0}
+                          value={overrideP2VP}
+                          onChange={(e) => setOverrideP2VP(e.target.value)}
+                          required
+                          className="w-20 px-2 py-1 rounded bg-slate-900 border border-slate-700 text-slate-100"
+                        />
+                      </div>
+                      <button
+                        type="submit"
+                        disabled={overrideResult.isPending}
+                        className="px-3 py-1 rounded bg-amber-400 text-slate-950 font-semibold text-sm disabled:opacity-50"
+                      >
+                        Override
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setOverridingPairingId(null)}
+                        className="px-3 py-1 rounded text-slate-400 text-sm"
+                      >
+                        Cancel
+                      </button>
+                    </div>
                   </form>
                 )}
               </div>
