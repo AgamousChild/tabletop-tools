@@ -412,14 +412,21 @@ export function useIncludeLegends() {
 
 // ── Legends detection ───────────────────────────────────────────────────────
 
-/** Returns a Set of datasheet IDs that have a LEGENDS/LEGEND keyword.
+/** Returns a Set of datasheet IDs that are Legends units.
+ *  Uses the isLegends flag from source data (primary), falls back to LEGENDS/LEGEND keywords.
  *  Returns empty Set if the user has enabled "Include Legends" in settings. */
 export function useLegendsUnitIds(): Set<string> {
   const { data: includeLegends } = useIncludeLegends()
+  const { data: allDatasheets } = useAllDatasheets()
   const { data: allKeywords } = useAllUnitKeywords()
   return useMemo(() => {
     if (includeLegends) return new Set<string>()
     const set = new Set<string>()
+    // Primary: source-based detection (datasheets with isLegends flag)
+    for (const ds of allDatasheets) {
+      if (ds.isLegends) set.add(ds.id)
+    }
+    // Fallback: keyword-based detection for BSData units without source info
     for (const k of allKeywords) {
       const upper = k.keyword.toUpperCase()
       if (upper === 'LEGENDS' || upper === 'LEGEND') {
@@ -427,7 +434,7 @@ export function useLegendsUnitIds(): Set<string> {
       }
     }
     return set
-  }, [includeLegends, allKeywords])
+  }, [includeLegends, allDatasheets, allKeywords])
 }
 
 // ── Wahapedia-primary with BSData fallback ──────────────────────────────────
@@ -451,12 +458,18 @@ export function usePrimaryUnitSearch(query: { faction?: string; name?: string })
   const costMap = useUnitCostMap()
 
   // Convert Wahapedia datasheets to lightweight UnitProfile for list display
+  // Uses embedded primary model stats from the datasheets export
   const wahaUnits = useMemo(() => {
     return wahaResult.data.map(ds => ({
       id: ds.id,
       faction: ds.factionId,
       name: ds.name,
-      move: 0, toughness: 0, save: 0, wounds: 0, leadership: 0, oc: 0,
+      move: ds.move ? parseStat(ds.move) : 0,
+      toughness: ds.toughness ? parseStat(ds.toughness) : 0,
+      save: ds.save ? parseStat(ds.save) : 0,
+      wounds: ds.wounds ? parseStat(ds.wounds) : 0,
+      leadership: ds.leadership ? parseStat(ds.leadership) : 0,
+      oc: ds.oc ? parseStat(ds.oc) : 0,
       weapons: [],
       abilities: [],
       points: costMap.get(ds.id) ?? 0,

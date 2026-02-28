@@ -204,6 +204,14 @@ export interface Datasheet {
   loadout: string
   damagedW: string
   damagedDescription: string
+  isLegends?: boolean
+  move?: string
+  toughness?: string
+  save?: string
+  wounds?: string
+  leadership?: string
+  oc?: string
+  invSv?: string
 }
 
 export interface DatasheetWargear {

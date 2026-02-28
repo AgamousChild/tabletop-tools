@@ -67,7 +67,15 @@ export function DiceSetScreen({ onSignOut }: Props) {
     <div className="min-h-screen bg-slate-950 text-slate-100 p-4">
       <div className="max-w-md mx-auto">
         <div className="flex items-center justify-between mb-8">
-          <a href="/" className="text-2xl font-bold text-amber-400 hover:text-amber-300 transition-colors">no-cheat</a>
+          <div className="flex items-center gap-3">
+            <a href="/" className="flex items-center gap-1 text-xs text-slate-400 hover:text-slate-200 transition-colors" title="Back to Home">
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-3.5 h-3.5">
+                <path fillRule="evenodd" d="M9.293 2.293a1 1 0 0 1 1.414 0l7 7A1 1 0 0 1 17 11h-1v6a1 1 0 0 1-1 1h-2a1 1 0 0 1-1-1v-3a1 1 0 0 0-1-1H9a1 1 0 0 0-1 1v3a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1v-6H3a1 1 0 0 1-.707-1.707l7-7Z" clipRule="evenodd" />
+              </svg>
+              Home
+            </a>
+            <a href="/" className="text-2xl font-bold text-amber-400 hover:text-amber-300 transition-colors">no-cheat</a>
+          </div>
           <button
             onClick={handleSignOut}
             className="text-slate-400 hover:text-slate-100 text-sm transition-colors"
