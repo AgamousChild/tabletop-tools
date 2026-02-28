@@ -16,33 +16,17 @@ describe('SecondaryPicker', () => {
     expect(screen.getByText('Secondaries')).toBeInTheDocument()
   })
 
-  it('shows + Add Secondary button when no available data', () => {
+  it('shows empty dropdown when no available data', () => {
     render(
       <SecondaryPicker secondaries={[]} onAdd={vi.fn()} onRemove={vi.fn()} onScore={vi.fn()} currentRound={1} />,
     )
-    expect(screen.getByText('+ Add Secondary')).toBeInTheDocument()
+    expect(screen.getByLabelText('Select secondary')).toBeInTheDocument()
+    const options = screen.getByLabelText('Select secondary').querySelectorAll('option')
+    expect(options).toHaveLength(1)
+    expect(options[0]!.textContent).toBe('Select secondary...')
   })
 
-  it('shows text input when + Add clicked (no data mode)', () => {
-    render(
-      <SecondaryPicker secondaries={[]} onAdd={vi.fn()} onRemove={vi.fn()} onScore={vi.fn()} currentRound={1} />,
-    )
-    fireEvent.click(screen.getByText('+ Add Secondary'))
-    expect(screen.getByLabelText('Secondary name')).toBeInTheDocument()
-  })
-
-  it('calls onAdd with name from text input', () => {
-    const onAdd = vi.fn()
-    render(
-      <SecondaryPicker secondaries={[]} onAdd={onAdd} onRemove={vi.fn()} onScore={vi.fn()} currentRound={1} />,
-    )
-    fireEvent.click(screen.getByText('+ Add Secondary'))
-    fireEvent.change(screen.getByLabelText('Secondary name'), { target: { value: 'Assassination' } })
-    fireEvent.click(screen.getByRole('button', { name: 'Add' }))
-    expect(onAdd).toHaveBeenCalledWith('Assassination')
-  })
-
-  it('shows dropdown when available secondaries provided', () => {
+  it('shows dropdown with options when available secondaries provided', () => {
     render(
       <SecondaryPicker
         secondaries={[]}

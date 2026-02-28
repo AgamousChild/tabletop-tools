@@ -12,5 +12,8 @@ export { createAuthClient } from './lib/auth'
 // tRPC client factory
 export { createTRPCLinks } from './lib/trpc'
 
+// Utilities
+export { htmlToText } from './lib/htmlToText'
+
 // App entry point
 export { renderApp } from './lib/render'

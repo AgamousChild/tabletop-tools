@@ -1,5 +1,6 @@
 import { useState, useMemo, useRef, useEffect } from 'react'
 
+import { htmlToText } from '@tabletop-tools/ui'
 import { trpc, trpcClient } from '../lib/trpc'
 import { useUnits, useUnitModelOptions, useGameEnhancements, useGameUnitKeywords, useGameDetachmentAbilities, useGameDetachment, useLegendsUnitIds, useUnitRoles } from '../lib/useGameData'
 import {
@@ -477,7 +478,7 @@ export function UnitSelectionScreen({ listId, faction, detachment, battleSize, o
                 <div key={ability.id} className="text-xs">
                   <p className="font-semibold text-amber-400">{ability.name}</p>
                   {ability.legend && <p className="text-slate-500 italic">{ability.legend}</p>}
-                  <p className="text-slate-400 mt-0.5 whitespace-pre-wrap">{ability.description}</p>
+                  <p className="text-slate-400 mt-0.5 whitespace-pre-wrap">{htmlToText(ability.description)}</p>
                 </div>
               ))}
             </div>

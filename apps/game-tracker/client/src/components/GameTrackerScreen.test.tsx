@@ -172,6 +172,14 @@ vi.mock('../lib/trpc', () => ({
           isPending: false,
         }),
       },
+      update: {
+        useMutation: (opts?: { onSuccess?: () => void }) => ({
+          mutate: () => {
+            opts?.onSuccess?.()
+          },
+          isPending: false,
+        }),
+      },
     },
     secondary: {
       set: {

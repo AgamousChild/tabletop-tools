@@ -4,6 +4,7 @@ import { trpc } from '../lib/trpc'
 import { useStratagems, useList, useMissions } from '@tabletop-tools/game-data-store'
 import { Scoreboard } from './battle/Scoreboard'
 import { RoundWizard } from './battle/RoundWizard'
+import { RoundEditor } from './battle/RoundEditor'
 import type { TurnData } from './battle/types'
 import type { SecondaryMission } from './battle/SecondaryPicker'
 
@@ -18,9 +19,17 @@ export function BattleScreen({ matchId, onBack, onClose }: Props) {
   const [yourFinalScore, setYourFinalScore] = useState('')
   const [theirFinalScore, setTheirFinalScore] = useState('')
   const [showEndGame, setShowEndGame] = useState(false)
+  const [editingTurnId, setEditingTurnId] = useState<string | null>(null)
 
   const addTurn = trpc.turn.add.useMutation({
     onSuccess: () => {
+      void refetch()
+    },
+  })
+
+  const updateTurn = trpc.turn.update.useMutation({
+    onSuccess: () => {
+      setEditingTurnId(null)
       void refetch()
     },
   })
@@ -194,25 +203,37 @@ export function BattleScreen({ matchId, onBack, onClose }: Props) {
         opponentName={opponentShort}
       />
 
-      {/* Round history */}
+      {/* Round history — click to edit */}
       {turns.length > 0 && (
         <div className="px-6 pt-4">
-          <h3 className="text-sm font-medium text-slate-400 mb-2">Rounds recorded</h3>
+          <h3 className="text-sm font-medium text-slate-400 mb-2">Rounds recorded <span className="text-slate-600 text-xs">(tap to edit)</span></h3>
           <div className="space-y-2">
             {turns.map((turn: {
               id: string
               turnNumber: number
               yourPrimary?: number
               theirPrimary?: number
+              yourCpGained?: number
+              theirCpGained?: number
               yourCpSpent?: number
               theirCpSpent?: number
               primaryScored?: number
               secondaryScored?: number
               cpSpent?: number
-            }) => (
-              <div
+              notes?: string | null
+            }) => editingTurnId === turn.id ? (
+              <RoundEditor
                 key={turn.id}
-                className="flex items-center justify-between p-3 rounded-lg bg-slate-900 border border-slate-800"
+                turn={turn}
+                onSave={(data) => updateTurn.mutate({ turnId: turn.id, ...data })}
+                onCancel={() => setEditingTurnId(null)}
+                isSaving={updateTurn.isPending}
+              />
+            ) : (
+              <button
+                key={turn.id}
+                onClick={() => setEditingTurnId(turn.id)}
+                className="w-full flex items-center justify-between p-3 rounded-lg bg-slate-900 border border-slate-800 hover:border-amber-400/50 transition-colors text-left"
               >
                 <span className="text-slate-300 font-medium">Round {turn.turnNumber}</span>
                 <span className="text-amber-400 text-sm">
@@ -220,7 +241,7 @@ export function BattleScreen({ matchId, onBack, onClose }: Props) {
                   {' · '}
                   Them: {(turn.theirPrimary ?? 0)}VP
                 </span>
-              </div>
+              </button>
             ))}
           </div>
         </div>

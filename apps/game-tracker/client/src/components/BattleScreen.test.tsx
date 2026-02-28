@@ -89,6 +89,14 @@ vi.mock('../lib/trpc', () => ({
           isPending: false,
         }),
       },
+      update: {
+        useMutation: (opts?: { onSuccess?: () => void }) => ({
+          mutate: (args: unknown) => {
+            opts?.onSuccess?.()
+          },
+          isPending: false,
+        }),
+      },
     },
     secondary: {
       set: {
@@ -146,7 +154,7 @@ describe('BattleScreen', () => {
   it('shows round history when turns exist', () => {
     currentMatch = matchWithTurns
     render(<BattleScreen matchId="m1" onBack={vi.fn()} onClose={vi.fn()} />)
-    expect(screen.getByText('Rounds recorded')).toBeInTheDocument()
+    expect(screen.getByText(/Rounds recorded/)).toBeInTheDocument()
     expect(screen.getByText('Round 1')).toBeInTheDocument()
     expect(screen.getByText(/You: 8VP/)).toBeInTheDocument()
   })

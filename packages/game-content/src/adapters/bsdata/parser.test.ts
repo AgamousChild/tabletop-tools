@@ -845,6 +845,112 @@ describe('parseBSDataXml — validation warnings', () => {
   })
 })
 
+describe('parseBSDataXml — BSData 2025+ format (typeName="Unit", uppercase stat names)', () => {
+  const BSDATA_NEW_FORMAT_XML = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<gameSystem id="test-sys" name="TestGame">
+  <selectionEntries>
+    <selectionEntry id="unit-new" name="Shield Guard" type="unit">
+      <profiles>
+        <profile id="p-new" name="Shield Guard" hidden="false" typeId="c547" typeName="Unit">
+          <characteristics>
+            <characteristic name="M" typeId="e703">6"</characteristic>
+            <characteristic name="T" typeId="d29d">6</characteristic>
+            <characteristic name="SV" typeId="450a">2+</characteristic>
+            <characteristic name="W" typeId="750a">3</characteristic>
+            <characteristic name="LD" typeId="58d2">6+</characteristic>
+            <characteristic name="OC" typeId="bef7">2</characteristic>
+          </characteristics>
+        </profile>
+        <profile id="w-new" name="Guardian Spear" hidden="false" typeId="f77d" typeName="Ranged Weapons">
+          <characteristics>
+            <characteristic name="Range" typeId="9896">24"</characteristic>
+            <characteristic name="A" typeId="3bb0">2</characteristic>
+            <characteristic name="BS" typeId="94d0">2+</characteristic>
+            <characteristic name="S" typeId="2229">4</characteristic>
+            <characteristic name="AP" typeId="9ead">-1</characteristic>
+            <characteristic name="D" typeId="a354">2</characteristic>
+            <characteristic name="Keywords" typeId="7f1b">Assault</characteristic>
+          </characteristics>
+        </profile>
+      </profiles>
+      <costs>
+        <cost name="pts" typeId="points" value="50" />
+      </costs>
+    </selectionEntry>
+  </selectionEntries>
+</gameSystem>`
+
+  it('parses typeName="Unit" (without "Characteristics" suffix)', () => {
+    const { units, errors } = parseBSDataXml(BSDATA_NEW_FORMAT_XML, 'Test')
+    expect(units).toHaveLength(1)
+    expect(units[0]!.toughness).toBe(6)
+    expect(units[0]!.save).toBe(2)
+    expect(units[0]!.wounds).toBe(3)
+    expect(units[0]!.leadership).toBe(6)
+    expect(units[0]!.oc).toBe(2)
+    // No validation warnings for T or Sv
+    expect(errors.some(e => e.includes('Toughness is 0'))).toBe(false)
+    expect(errors.some(e => e.includes('Save is 0'))).toBe(false)
+  })
+
+  it('handles uppercase characteristic names SV and LD', () => {
+    const { units } = parseBSDataXml(BSDATA_NEW_FORMAT_XML, 'Test')
+    expect(units[0]!.save).toBe(2)
+    expect(units[0]!.leadership).toBe(6)
+  })
+
+  it('parses weapons with Keywords characteristic (not Abilities)', () => {
+    const { units } = parseBSDataXml(BSDATA_NEW_FORMAT_XML, 'Test')
+    expect(units[0]!.weapons).toHaveLength(1)
+    expect(units[0]!.weapons[0]!.name).toBe('Guardian Spear')
+    expect(units[0]!.weapons[0]!.abilities).toContainEqual({ type: 'ASSAULT' })
+  })
+
+  it('handles inch marks in stat values (6" → 6)', () => {
+    const { units } = parseBSDataXml(BSDATA_NEW_FORMAT_XML, 'Test')
+    expect(units[0]!.move).toBe(6)
+  })
+
+  it('parses typeName="Model" (without "Characteristics" suffix)', () => {
+    const xml = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<gameSystem id="test-sys" name="TestGame">
+  <selectionEntries>
+    <selectionEntry id="model-new" name="Lone Champion" type="model">
+      <profiles>
+        <profile id="pm" name="Lone Champion" typeName="Model">
+          <characteristics>
+            <characteristic name="M">8</characteristic>
+            <characteristic name="T">5</characteristic>
+            <characteristic name="SV">3+</characteristic>
+            <characteristic name="W">4</characteristic>
+            <characteristic name="LD">7+</characteristic>
+            <characteristic name="OC">1</characteristic>
+          </characteristics>
+        </profile>
+        <profile id="wm" name="Power Blade" typeName="Melee Weapons">
+          <characteristics>
+            <characteristic name="Range">Melee</characteristic>
+            <characteristic name="A">4</characteristic>
+            <characteristic name="WS">2+</characteristic>
+            <characteristic name="S">5</characteristic>
+            <characteristic name="AP">-2</characteristic>
+            <characteristic name="D">2</characteristic>
+            <characteristic name="Keywords">-</characteristic>
+          </characteristics>
+        </profile>
+      </profiles>
+    </selectionEntry>
+  </selectionEntries>
+</gameSystem>`
+    const { units, errors } = parseBSDataXml(xml, 'Test')
+    expect(units).toHaveLength(1)
+    expect(units[0]!.toughness).toBe(5)
+    expect(units[0]!.save).toBe(3)
+    expect(units[0]!.leadership).toBe(7)
+    expect(errors.some(e => e.includes('Toughness is 0'))).toBe(false)
+  })
+})
+
 describe('parseBSDataXml — empty / malformed input', () => {
   it('returns empty results for empty string', () => {
     const { units, errors } = parseBSDataXml('', 'Test Faction')

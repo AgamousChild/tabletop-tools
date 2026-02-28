@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { htmlToText } from '@tabletop-tools/ui'
 import { useGameDataAvailable, useDetachmentAbilities } from '@tabletop-tools/game-data-store'
 
 import { useGameFactions, useGameDetachments } from '../lib/useGameData'
@@ -31,7 +32,7 @@ function DetachmentCard({ detId, detName, onSelect }: {
               <span className="text-slate-300 font-medium">{a.name}</span>
               {a.legend && <span className="text-slate-600"> ({a.legend})</span>}
               {a.description && (
-                <p className="text-slate-500 mt-0.5 line-clamp-2">{a.description}</p>
+                <p className="text-slate-500 mt-0.5 line-clamp-2">{htmlToText(a.description)}</p>
               )}
             </div>
           ))}
@@ -92,13 +93,21 @@ export function FactionDetachmentScreen({ battleSize, onSelect, onBack }: Props)
         <div className="space-y-3">
           <label className="block text-sm text-slate-400">Select Detachment</label>
           {detachments.length === 0 ? (
-            <button
-              onClick={() => onSelect(selectedFaction, 'Default')}
-              className="w-full text-left p-4 rounded-xl bg-slate-900 border border-amber-400/30 transition-colors"
-            >
-              <p className="font-semibold text-slate-100">Default Detachment</p>
-              <p className="text-sm text-slate-400 mt-0.5">No detachment data imported. Continue with default rules.</p>
-            </button>
+            <div className="space-y-3">
+              <div className="p-4 rounded-xl bg-slate-900 border border-slate-800 text-center">
+                <p className="text-slate-400 text-sm">
+                  No detachments found for this faction. Import data from the{' '}
+                  <a href="/data-import/" className="text-amber-400 hover:underline">Data Import</a>{' '}
+                  app to see available detachments.
+                </p>
+              </div>
+              <button
+                onClick={() => onSelect(selectedFaction, '')}
+                className="w-full py-3 rounded-lg bg-amber-400 text-slate-950 font-semibold hover:bg-amber-300 text-sm"
+              >
+                Continue without detachment
+              </button>
+            </div>
           ) : (
             detachments.map((det) => (
               <DetachmentCard

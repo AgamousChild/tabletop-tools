@@ -4,51 +4,107 @@
 
 After EACH Set of Tasks is completed, please do a pull from remote to merge the RALPH.MD file I will be editing remotely. Then commit and push your changes AFTER EACH SET OF TASKS IS COMPLETE. NOT THE FULL LIST, EVEN BEFORE large scale testing occurs.
 Look at the functional requirements again. Implement those changes, correctly for every app. 
-Stop taking shortcuts with interface elements and data passed back to the backend.
-Each app should pull from the same data source.
+All apps ahould use one data source on the front end, and one data source on the back end. They should be able to be connected by the same ids. 
 Review all of the tests, make sure that they actually pass, not just pass because nothing is implemented.
+
+** IMPORTANT **
+Build a copy of the app locally, and run it locally in a local browser, and run the import functions. Validate the data generated.
 
 
 **UI Requirements:**
-- Every field that can have generated data should have a dropdown for that data. Factions, Detachments, Army lists, Units. Review every field and see if you can generate a data-driven dropdown for it.
-- Add a back button on every screen
-- Add the version number to the main page
-- On the main page, notify if the user has to reload data, basedupon there being a new commit version number in the BSData
+- Remove fallback logic on data entry fields. I want to see an empty dropdown instead of a text entry box.
+- The consistency of home links is poor, make every page have the ability to go back to home, and look the same, make them all have the home link.
+- In the Game Tracker, implement go back to previous rounds to update the data.
+- In the Game Tracker, I still see text fields that should be dropdowns, I am guessing that these are fall back, or you missed them.
+- In the Game Tracker, the opponents Detachment is a text field, it should be a drop down.
+- In the Game Tracker, the player should be able to either pick a list, or paste a list into a field, and select a detachment from a drop down. If the player selects a list from the list builder, the detachment should auto-populate.
+- I don't see detailed instructions on every page. You added data details on pages, this is good, but what I want to see are instructions on how to proceed or go back or use the tools on the screen.
 - The Dice detection is not good. There is no selection for false positives. Use this library, and rewrite in Typescript if you dont want to use python: https://github.com/MohamadNematizadeh/detect_dice. OR use OpenCV, In testing, it cant find the dice in the image at all.
-- Add detailed instructions on every page as a link, or a tool-tip.
-- Use a small font and minimally sized tools.
-- Show the statistical analysis of the Versus tool, show a screen that has the distribution of possible outcomes on the rolls.
-- Stored Data screen when I hit clear all Data does not have any visual feedback that the data is deleted. I don't think this works.
-- It is not clear that hitting the Title takes you back.
-- Where are the codex detachments? They exist in both BSData and Wahapedia data. They need to be included.
-- Do not include Legends units in any screen. Instead on the data-import pages, include an option for legends to be included in the app.
-- In the Versus app, do not show any units before a faction is chosen.
+- In the data, point costs for units have disappeared.
+- Match up the Wahapedia Faction designations with the BSData Faction Designations, you have both World Eaters and WE. Use context and analysis to match them.
+- In the Stored data screen, the tools are there now that show some feedback that the data has been cleared out, but the underlying screen does not clear, so it still looks like its not working.
+- Where are the codex detachments? They exist in both BSData and Wahapedia data. They need to be included. I still do not see them in the List Builder. 
+- Do not show "Default Detachment" There is no "Default Detachment", I Saw them at least once, now they are gone again.
+- Legends unit still show up. In Every App, on every screen, set a choice for include legends, as a check box, and set it to not selected, and do not show them as default. 
 - Convert all HTML in the detailed text sections into markdown as it is read from the database. 
 - Make each section that displays detailed text expandable, with only the section name shown at first. Showing all the text at once is bad.
 - Opponent detachment is not a dropdown in the Game Tracker, it should be.
 - In the game tracker, the secondaries and the strategems should be dropdowns, not search, not data entry.
 - In the game tracker, the data entry forms are not the same for the subsequent rounds, you dropped off all of the stuff you added for the first round.
-- For Tournament testing, I need a script or button I Can press locally in the app that pre-loads a test tournament set of players to test out the functionality.
+- I Still don't have a testing button that preloads a tournament with fake player data.For Tournament testing, I need a button I Can press locally in the app that pre-loads a test tournament set of players to test out the functionality.
 - On the data import page for BSData, the warnings are useless, give me a button where I can copy them to the clipboard.
+
 
 **Data Requirements:**
 
-- Use the data from the 4 folders in the data-sync project to create a local master database that you can use to validate the app.
-- Read the data in the BSData sqlite db, and create referential integrity checks for all of the data elements. Connect all of the tables together correctly. To test this, you should be able to find Factions,Detachments,Units,Models,Weapons,Strategems,Enhancements,Leader Options, Model Counts, point costs for each faction.
-- Read the data in the Wahapedia data, and inside the BSData sqlite db, create separate tables that mirror the BSData tables. Datasheets = Units. Do the same process, create referential ingtegrity checks for all of the data elements. Connect the tables together correctly. To test this, you should be able to find Factions, Detachments, Datasheets, Models, Weapons, Strategems, Enhancements, Leader Options, Model Counts, and point costs for each faction.
-- Read the data for the game rules that you have in the versus tool, add these rules to the same database, and then link them to the units/models that have these rules.
-- Read the special rules that all of the datasheets/units have and add them to the standard rules dataset.
-- Connect all of the special rules/standard rules to the datasheets/units
-- Connect the three set of data to one another in a third set of tables that link the same data from each source together.
-- Create the code that will run on the client side to create the IndexDB that has the same data.
-- Use that code on the Data-Import app, and run tests to make sure that all of the data checks out.
-- Prepare a set of scripts that set up the data sources for the application, and then that data that will be stored in Github. In GitHub, the source data that is used to create the data entries is stored, not the databases or code used in development to generate the code in the app.
+- Show me the master database. Show me how you plan on using the master database in the app to create a method for getting the correct data in the local db. 
+- Create the code that will run on the client side to create the IndexDB that has the same data as teh master database.
+-Show me where you use that code on the Data-Import app, and run tests to make sure that all of the data checks out.
+- Prepare a set of scripts that set up the data sources that we will put on a github rfepo that can be used for our app. I need a set of scripts that can be automated so I can update the data frequently.
 
 **Code Quality:**
 - Refactor on every iteration if needed, make the code better, and leaner, not more bloated.
 - Do not duplicate code — create base functionality that can be shared.
 - Run all of your tests with good test data, not just objects with the right signature.
-- 
+ 
+## List Builder Features required to be considered functional 
+  
+- Include a text box for the Name of a list.
+- After creating a list, the next screen should be the size of the army, with the associated battle size name 500, 1000, 2000, 3000 pts
+- Then the faction should be chosen on the next screen, with the detachment then chosen.
+- In the unit selector, no legends shown unless the legends checkbox is selected.
+- There are rules in army creation, limited choices for 500 pt games, 2 of any in 1000 pt games, and 3 of any in 2000 pt games, plus warlords must be chosen. And the user cant choose more than the allotted number of points.
+- Some detachments have unit choice limitations, use them if they exist.
+- During unit selection, after each unit is chosen, choose the number of models selected, there are usually different levels allowed, with different point costs and then show the statistical information about that unit, and in a popup, show units that have the same or fewer points in the same role that have higher win rates.
+- There should be a done button, and then the list selections should be saved back to the server, associated with the user and the list name, it should just be listname, user_id, faction_id, detachment_id, unit_id(S) for that list. This is the same as saved locally.
+- The export should export in full text format, and the user can then edit that text before saving off, it should be stored in the clipboard, and the user should see a note.
+- The user should be able to select a list and then a button should be available that says use list in tournament tracker. that list is then used when the user registers for a tournament.
+- There should be a description text box for the list.
+
+## No-cheat Features required to be considered functional
+
+-  Calibration workflow needs to be clearer in the app. List out the steps on buttons for each step.
+   → `CalibrationWizard.tsx`: 4-step wizard (Background → Place Dice → Label Faces → Test Roll) with numbered step indicators. If the Wizard shows a screen clip that is not a dice face, a selector should be there that says, NOT A DICE.
+-  When the calibration is complete, it should ask for a test roll to show that it can accurately see the dice faces.
+   → Step 4 (Test Roll) captures a frame, shows detected dice with bounding boxes and pip values, and asks "Does this look correct?" with Recalibrate/Retest/Start Recording buttons.
+-  It should show squares around each face it captures, with the number of each dice captured in that square in the video, using an overlay.
+   → Canvas overlay in recording phase draws emerald bounding boxes with pip labels for each detected die face. CalibrationWizard step 4 also shows bounding boxes.
+-  You should not have to click a button to capture the rolls from that point forward.
+   → Hands-free auto-capture in recording phase: continuous requestAnimationFrame loop detects dice, waits for stability (~0.7s), auto-submits, then waits for dice removal before next detection.
+-  The Z score calculation and Chi squared values should show up in the video as an overlay, and the analysis should be in real time, and not a result after clicking complete.
+   → `StatsOverlay.tsx` displays real-time Z-score, χ², and verdict (FAIR/SUSPECT/LOADED) below the video feed. `DistributionChart.tsx` shows per-pip distribution with color-coded bars.
+
+## Tournament Features required to be considered functional 
+
+- TO can register for event.
+- Add Geocoding to event location
+- Give an area for description using markdown, add image upload for tournament, add external link, add location, add number of rounds.
+- Add Date and start time as data fields, image storage, link
+- Add TO information, location, description, image, link, number registered to the Tournament display
+- Add registered player management to the TO display - Add players, remove, reinstate. Yellow Card, Red Card, Ban
+- Show previous Card status of each player to the TO.
+- In TO tools, add special award location where the TO can add awards like Best Painted, Most sportsmanlike, etc. All customizable per tournament.
+- In round management, allow TO to enter score results if players do not use Game-tracker to score the match.
+- Add a clock to each round. (Optional)
+- Add a start time to each round.
+- Close Tournament should export data to the new-meta data.
+- Add a new selection interface to the main page of the app called Play, where users are presented with a search interface to find tournaments in their area. allow them to favorite and unfavorite them, and register.
+- After a tournament is closed out, show the view results button instead of the registration button.
+- Store tournament data back to a user record, and make a new selection interface to the main page called My Info, that shows list names, tournaments played in, ELO, GLICKO, rank, and overall record, include Card data and Ban data.
+- Add a list search tool for lists used in tournaments by faction.
+- Add a player search tool that shows tournaments played in, card status, lists used.
+
+## Versus Features required to be considered functional
+
+- The correct number of weapons is calculated.
+- All Ranged weapons are allowed to be used unless the unit has ranged options.
+- Only one melee profile is allowed, unless there are weapon profiles labelled extra attacks.
+- I still cannot increase strength or Toughness, or number of attacks, or reroll-wounds. The special rules need to be addressed, allow for an array of special rules be put in place for each unit.
+- Apply the special rules correctly.
+- The data stored should include the units included, the special rules applied, and the results.
+- When saving the data, the results can be sent to the server. They are not GW IP. We can then use the unit ids and applied special rules to cache results and send them back and compare to the calculated results, or show them more quickly.
+- Allow for Leader additions to make a unit comparison more meaningful, so you can add a leader in to those units that allow leaders, mostly infantry.
+- Leaders have special rules, apply them automatically.
 
 ---
 
@@ -57,69 +113,29 @@ Review all of the tests, make sure that they actually pass, not just pass becaus
 ### Completed
 Update this section every time you update or fix a section of the requirements.
 
-- [x] Wahapedia export script (`scripts/export-wahapedia.ts`) — 22 JSON files covering datasheets, models, wargear, detachments, stratagems, enhancements, missions, abilities, junction tables
-- [x] game-data-store IndexedDB schema V7 — 22 object stores including junction tables
-- [x] data-import tabs — BSData + Wahapedia import pipelines (28 tests)
-- [x] Versus: attacker/defender detachment selectors, enhancement selectors, stratagems display
-- [x] List-builder: Battleline exemption from duplicate limits, role-based filtering
-- [x] Game-tracker: secondary missions and stratagems data-driven (StratagemPicker, SecondaryPicker)
-- [x] Wahapedia-primary unit access functions (`getDatasheetAsUnit`, `searchDatasheets`, `listDatasheetFactions`, `hasDatasheets`)
-- [x] Shared `parseStat`, `parseDiceOrNum`, `parseWeaponAbilities` exported from game-data-store
-- [x] Shared primary hooks: `usePrimaryFactions`, `usePrimaryUnitSearch`, `usePrimaryUnit` — Wahapedia-first with BSData fallback
-- [x] Shared `convertWargearToWeapons` and `useWargearAsWeapons` in game-data-store
-- [x] Versus useGameData.ts refactored to use shared hooks (removed ~120 lines of duplicated code)
-- [x] List-builder useGameData.ts refactored to use shared hooks
-- [x] AppShell home icon — all auth-gated apps have back-to-landing link
-- [x] No-cheat ActiveSessionScreen cancel button during calibration phase
-- [x] Data-import home link on title
-- [x] Data-driven dropdowns: Factions, Detachments, Enhancements, Units — all apps
-
-- [x] Version number on landing page — `<!--VERSION-->` placeholder injected by build.sh, bumped to v2.1.0
-- [x] BSData commit version check — landing page fetches latest commit SHA and compares to stored importMeta.commitSha
-- [x] Versus statistical distribution — Monte Carlo simulation (5000 iterations), histogram with percentiles, collapsible in results
-- [x] Detailed instructions/tooltips — HelpTip component in packages/ui, added across all 8 apps on key fields
-- [x] Small font and compact UI — Tailwind preset base font 13px, AppShell header tightened, landing page compact
-- [x] Data-import Clear All Data — confirmation dialog, loading state, success feedback message
-- [x] Run full test suite — versus 133, data-import 30, game-tracker 143, tournament 57, new-meta 83, ui 25 all pass
-- [x] Versus: don't show units before a faction is chosen — useUnits returns empty without faction, UnitSelector shows prompt, 134 tests pass
-- [x] Back navigation — "Home" label added to AppShell and versus header
-- [x] Make detailed text sections expandable (collapsed by default) — CollapsibleSection component in packages/ui, applied to versus SimulatorScreen
-- [x] Game-tracker: secondaries and stratagems are now proper dropdowns (StratagemPicker/SecondaryPicker rewritten)
-- [x] Game-tracker: round forms consistent — added key={nextRound} to RoundWizard for state reset between rounds
-- [x] Tournament: test data preload — seedTestPlayers server mutation + "Load Test Players" button in ManageTournament
-- [x] Data-import: BSData warnings copy-to-clipboard button added
-- [x] Legends exclusion — `useLegendsUnitIds()` moved to game-data-store as shared hook, versus filters legends out of unit search, list-builder re-exports
-- [x] HTML→markdown conversion — `htmlToMarkdown()` in export-wahapedia.ts converts all description fields at export time (detachment abilities, stratagems, enhancements, unit abilities, abilities, wargear)
-- [x] Opponent detachment already a dropdown when data available — added 3 new tests for dropdown path in MatchSetupScreen.test.tsx (150 game-tracker tests)
-- [x] Codex detachments already fully implemented — export → import → IndexedDB → hooks → all consumer apps
-- [x] Data-import: Include Legends toggle checkbox — Settings section in Stored Data tab with IndexedDB persistence
-- [x] E2E test selectors fixed — semantic h1/main elements added to all apps, landing page card count updated to 8
-- [x] Master SQLite database — `scripts/create-master-db.ts` creates 27-table DB combining Wahapedia (19 tables, 160K+ rows) + BSData (4 tables, 1351 units) with FK constraints, 0 violations
-- [x] Wahapedia tables mirroring BSData structure with integrity checks — all 19 Wahapedia tables imported with proper FK constraints (ON DELETE CASCADE)
-- [x] Cross-reference tables — xref_factions (36/36 matched), xref_units (908/1351 = 67.2% matched by name)
-- [x] Game rules linked to units/models — 30 rules extracted (weapon abilities + core/faction abilities), 3494 unit-rule links
-- [x] Special rules connected to datasheets/units — Core and Faction abilities from Wahapedia linked to datasheets via unit_rules table
-- [x] BSData sync tool run — 1351 units across 36 factions generated in sync-data repo
-
-- [x] Data-Import Wahapedia validation tests — 29 new tests covering full 20-step pipeline, ID re-keying, faction re-keying, error handling, data integrity (57 total data-import tests)
-- [x] Wahapedia import bug fix — non-array datasheets.json response no longer corrupts `datasheets` variable (safe variable reset)
-- [x] Data source setup script — `scripts/setup-data.sh` orchestrates sync tools + export pipeline with --export and --validate modes
-
-- [x] Client-side IndexedDB code with same master data — 22 stores match master DB: 18 Wahapedia stores + BSData units + lists/meta. Cross-referencing done at import time via buildIdMapping/rekeyRecords. BSData weapons/abilities redundant with Wahapedia data.
-- [x] Full build verification — `pnpm -r build` all 16 packages pass cleanly
-
-- [x] Dice detection false positive handling — added `undoLastRoll` server endpoint (deletes last roll, recomputes stats), undo button in recording UI, last capture display with removedPips feedback. 5 new server tests + 1 new client test (64 server + 178 client = 242 no-cheat tests)
-
-- [x] Deploy updated code to production — 6 Workers deployed (no-cheat, versus, list-builder, game-tracker, tournament, new-meta), gateway deployed (all 8 SPAs), 18/18 health checks pass
-- [x] E2E tests updated for new UI — auth button "Sign in" (was "Log in"), name placeholder "Name" (was "Your name"), new-meta tabs are `<a>` links with `exact: true`, list-builder shows "My Army Lists" + "+ New List", versus uses heading roles + "Select attacker and defender" button, tournament "+ New Tournament" is `<a>` link — 36/36 E2E tests pass
+- **BSData parser fix (2026-02-27)**: Fixed upstream XML schema changes (typeName="Unit", SV/LD uppercase). PARSER_VERSION 4→5. 113 game-content tests pass.
+- **Remove fallback text inputs (2026-02-27)**: Game tracker — opponent faction, opponent detachment, your detachment, secondaries, stratagems all converted from text fallbacks to empty dropdowns.
+- **Auto-populate detachment from list (2026-02-27)**: Game tracker — selecting a list auto-fills faction and detachment.
+- **Round editing (2026-02-27)**: Game tracker — tap any recorded round to edit it inline (RoundEditor component).
+- **Remove Default Detachment (2026-02-27)**: List builder — removed "Default Detachment" fallback. Shows message + "Continue without detachment" button when no data imported.
+- **Legends filter (2026-02-27)**: Versus — added "Include Legends units" checkbox (was hardcoded exclusion). List builder already had checkbox.
+- **HTML to text conversion (2026-02-27)**: Created shared `htmlToText()` utility in packages/ui. Applied to versus (abilities, wargear, detachment abilities, enhancements, stratagems) and list-builder (detachment abilities) descriptions.
 
 ### In Progress
 
-(none — all RALPH.MD requirements implemented and deployed)
+(none)
 
 ### Not Started
 
-(none)
+- Dice detection rewrite (detect_dice or OpenCV)
+- Wahapedia/BSData faction designation matching
+- Data Requirements (master database plan, client-side code, automated scripts)
+- Paste list feature in game tracker
+- Instructions on every page
+- Point costs for units (RALPH reports missing)
+- Stored data screen clearing visual feedback
+- Tournament features (geocoding, TO management, player search, etc.)
+- Versus leader special rules auto-apply
 
 ---
 

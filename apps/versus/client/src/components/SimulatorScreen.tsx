@@ -3,7 +3,7 @@ import type { WeaponAbility, WeaponProfile, UnitProfile } from '@tabletop-tools/
 import { useGameDataAvailable, useUnitCompositions } from '@tabletop-tools/game-data-store'
 import type { DatasheetModel } from '@tabletop-tools/game-data-store'
 
-import { HelpTip, CollapsibleSection } from '@tabletop-tools/ui'
+import { HelpTip, CollapsibleSection, htmlToText } from '@tabletop-tools/ui'
 import { authClient } from '../lib/auth'
 import { trpc } from '../lib/trpc'
 import { useUnits, useGameFactions, useGameUnit, useGameLeadersForUnit, useGameUnitAbilities, useGameUnitKeywords, useGameWargearOptions, useGameDatasheetWeapons, useGameDatasheetModels, useGameDetachments, useGameDetachmentAbilities, useGameEnhancements, useGameStratagems } from '../lib/useGameData'
@@ -79,10 +79,6 @@ function formatAbility(a: WeaponAbility): string {
   }
 }
 
-/** Strip HTML tags from a string, returning plain text. */
-function stripHtmlTags(html: string): string {
-  return html.replace(/<[^>]*>/g, ' ').replace(/\s{2,}/g, ' ').trim()
-}
 
 /** Simple FNV-1a hash for cache key. Not cryptographic. */
 function simpleHash(str: string): string {
@@ -115,6 +111,7 @@ export function SimulatorScreen({ onSignOut }: Props) {
   const [attackerDetachmentId, setAttackerDetachmentId] = useState<string | null>(null)
   const [attackerEnhancementId, setAttackerEnhancementId] = useState<string | null>(null)
   const [defenderDetachmentId, setDefenderDetachmentId] = useState<string | null>(null)
+  const [showLegends, setShowLegends] = useState(false)
 
   const gameDataAvailable = useGameDataAvailable()
   const { data: factions = [] } = useGameFactions()
@@ -122,12 +119,12 @@ export function SimulatorScreen({ onSignOut }: Props) {
   const { data: attackerUnits = [], isLoading: loadingAttackers } = useUnits({
     faction: attackerFaction,
     name: attackerQuery || undefined,
-  })
+  }, showLegends)
 
   const { data: defenderUnits = [], isLoading: loadingDefenders } = useUnits({
     faction: defenderFaction,
     name: defenderQuery || undefined,
-  })
+  }, showLegends)
 
   const { data: attacker } = useGameUnit(attackerId)
   const { data: defender } = useGameUnit(defenderId)
@@ -475,6 +472,19 @@ export function SimulatorScreen({ onSignOut }: Props) {
           </div>
         )}
 
+        {/* Legends toggle */}
+        <div className="flex justify-end">
+          <label className="flex items-center gap-1.5 text-xs text-slate-400 cursor-pointer select-none">
+            <input
+              type="checkbox"
+              checked={showLegends}
+              onChange={(e) => setShowLegends(e.target.checked)}
+              className="w-4 h-4 rounded border-slate-700 bg-slate-900 text-amber-400 focus:ring-amber-400"
+            />
+            Include Legends units
+          </label>
+        </div>
+
         {/* Unit selectors */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
           <div className="space-y-4">
@@ -496,7 +506,7 @@ export function SimulatorScreen({ onSignOut }: Props) {
                   {attackerAbilities.map((a, i) => (
                     <div key={i}>
                       <p className="text-xs font-medium text-amber-400">{a.name}</p>
-                      <p className="text-xs text-slate-400 leading-relaxed">{a.description}</p>
+                      <p className="text-xs text-slate-400 leading-relaxed whitespace-pre-wrap">{htmlToText(a.description)}</p>
                     </div>
                   ))}
                 </div>
@@ -516,7 +526,7 @@ export function SimulatorScreen({ onSignOut }: Props) {
             {attackerWargear.length > 0 && (
               <CollapsibleSection title="Wargear Options" count={attackerWargear.length}>
                 {attackerWargear.map((w, i) => (
-                  <p key={i} className="text-xs text-slate-500">{w.description}</p>
+                  <p key={i} className="text-xs text-slate-500 whitespace-pre-wrap">{htmlToText(w.description)}</p>
                 ))}
               </CollapsibleSection>
             )}
@@ -589,7 +599,7 @@ export function SimulatorScreen({ onSignOut }: Props) {
                       {defenderAbilities.map((a, i) => (
                         <div key={i}>
                           <p className="text-xs font-medium text-amber-400">{a.name}</p>
-                          <p className="text-xs text-slate-400 leading-relaxed">{a.description}</p>
+                          <p className="text-xs text-slate-400 leading-relaxed whitespace-pre-wrap">{htmlToText(a.description)}</p>
                         </div>
                       ))}
                     </div>
@@ -609,7 +619,7 @@ export function SimulatorScreen({ onSignOut }: Props) {
                 {defenderWargear.length > 0 && (
                   <CollapsibleSection title="Wargear Options" count={defenderWargear.length}>
                     {defenderWargear.map((w, i) => (
-                      <p key={i} className="text-xs text-slate-500">{w.description}</p>
+                      <p key={i} className="text-xs text-slate-500 whitespace-pre-wrap">{htmlToText(w.description)}</p>
                     ))}
                   </CollapsibleSection>
                 )}
@@ -666,7 +676,7 @@ export function SimulatorScreen({ onSignOut }: Props) {
                         {atkDetachmentAbilities.map((a) => (
                           <div key={a.id}>
                             <p className="font-medium text-amber-400">{a.name}</p>
-                            <p className="text-slate-400 leading-relaxed">{stripHtmlTags(a.description)}</p>
+                            <p className="text-slate-400 leading-relaxed whitespace-pre-wrap">{htmlToText(a.description)}</p>
                           </div>
                         ))}
                       </div>
@@ -691,7 +701,7 @@ export function SimulatorScreen({ onSignOut }: Props) {
                         return (
                           <div className="mt-1.5 text-xs">
                             <p className="font-medium text-amber-400">{enh.name}</p>
-                            <p className="text-slate-400 leading-relaxed">{stripHtmlTags(enh.description)}</p>
+                            <p className="text-slate-400 leading-relaxed whitespace-pre-wrap">{htmlToText(enh.description)}</p>
                           </div>
                         )
                       })()}
@@ -723,7 +733,7 @@ export function SimulatorScreen({ onSignOut }: Props) {
                         {defDetachmentAbilities.map((a) => (
                           <div key={a.id}>
                             <p className="font-medium text-amber-400">{a.name}</p>
-                            <p className="text-slate-400 leading-relaxed">{stripHtmlTags(a.description)}</p>
+                            <p className="text-slate-400 leading-relaxed whitespace-pre-wrap">{htmlToText(a.description)}</p>
                           </div>
                         ))}
                       </div>
@@ -849,7 +859,7 @@ function StratagemReference({ attackerStratagems, defenderStratagems }: {
                       <span className="px-1 py-0.5 rounded bg-slate-800 text-slate-400 text-[10px]">{s.cpCost}CP</span>
                       <span className="px-1 py-0.5 rounded bg-slate-800 text-slate-500 text-[10px]">{s.phase}</span>
                     </div>
-                    <p className="text-slate-500 mt-0.5 leading-relaxed">{stripHtmlTags(s.legend)}</p>
+                    <p className="text-slate-500 mt-0.5 leading-relaxed whitespace-pre-wrap">{htmlToText(s.legend)}</p>
                   </div>
                 ))}
               </div>
@@ -866,7 +876,7 @@ function StratagemReference({ attackerStratagems, defenderStratagems }: {
                       <span className="px-1 py-0.5 rounded bg-slate-800 text-slate-400 text-[10px]">{s.cpCost}CP</span>
                       <span className="px-1 py-0.5 rounded bg-slate-800 text-slate-500 text-[10px]">{s.phase}</span>
                     </div>
-                    <p className="text-slate-500 mt-0.5 leading-relaxed">{stripHtmlTags(s.legend)}</p>
+                    <p className="text-slate-500 mt-0.5 leading-relaxed whitespace-pre-wrap">{htmlToText(s.legend)}</p>
                   </div>
                 ))}
               </div>
