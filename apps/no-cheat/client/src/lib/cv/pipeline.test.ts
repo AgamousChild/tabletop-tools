@@ -1,15 +1,14 @@
 import { describe, expect, it } from 'vitest'
 
 import { createPipeline } from './pipeline'
-import type { PipelineState } from './pipeline'
 
 const W = 128
 const H = 128
 
 /**
  * Build a synthetic RGBA ImageData-like buffer.
- * Background is gray (100, 100, 100). Each die face is a white square at (x,y,w,h)
- * with a centered pip circle (black on white).
+ * Background is gray (100, 100, 100). Each die face is a white square at (x,y,size)
+ * with pip circles (dark dots on white surface).
  */
 function makeRgbaBuffer(
   width: number,
@@ -60,18 +59,17 @@ function makeRgbaBuffer(
 }
 
 describe('pipeline', () => {
-  it('creates a pipeline with initial state (no background, empty clusters)', () => {
+  it('creates a pipeline with initial state (no background)', () => {
     const pipeline = createPipeline('set-1')
-    expect(pipeline.state.backgroundLab).toBeNull()
-    expect(pipeline.state.clusters).toHaveLength(0)
+    expect(pipeline.state.backgroundGray).toBeNull()
   })
 
-  it('captureBackground stores the background in LAB space', () => {
+  it('captureBackground stores the background in grayscale', () => {
     const pipeline = createPipeline('set-1')
     const bgData = makeRgbaBuffer(W, H, [])
     pipeline.captureBackground(bgData, W, H)
-    expect(pipeline.state.backgroundLab).not.toBeNull()
-    expect(pipeline.state.backgroundLab!.length).toBe(W * H * 3)
+    expect(pipeline.state.backgroundGray).not.toBeNull()
+    expect(pipeline.state.backgroundGray!.length).toBe(W * H)
   })
 
   it('processFrame returns empty array before background is set', () => {
@@ -84,11 +82,9 @@ describe('pipeline', () => {
   it('processFrame returns one ROI result for a single die face', () => {
     const pipeline = createPipeline('set-1')
 
-    // Capture background (plain gray)
     const bgData = makeRgbaBuffer(W, H, [])
     pipeline.captureBackground(bgData, W, H)
 
-    // Process a frame with one die face
     const frameData = makeRgbaBuffer(W, H, [
       { x: 30, y: 30, size: 45, pips: [[52, 52]] },
     ])
@@ -96,7 +92,7 @@ describe('pipeline', () => {
     expect(result).toHaveLength(1)
   })
 
-  it('processFrame returns two ROI results for two dice', () => {
+  it('processFrame returns two ROI results for two well-separated dice', () => {
     const pipeline = createPipeline('set-1')
 
     const bgData = makeRgbaBuffer(W, H, [])
@@ -110,7 +106,7 @@ describe('pipeline', () => {
     expect(result).toHaveLength(2)
   })
 
-  it('each result has a roi, clusterId and a blobCount', () => {
+  it('each result has a roi and pipCount', () => {
     const pipeline = createPipeline('set-1')
     const bgData = makeRgbaBuffer(W, H, [])
     pipeline.captureBackground(bgData, W, H)
@@ -120,25 +116,41 @@ describe('pipeline', () => {
     ])
     const result = pipeline.processFrame(frameData, W, H)
     expect(result[0]).toHaveProperty('roi')
-    expect(result[0]).toHaveProperty('clusterId')
-    expect(result[0]).toHaveProperty('blobCount')
+    expect(result[0]).toHaveProperty('pipCount')
   })
 
-  it('assigns same cluster for identical die face orientations', () => {
+  it('consistent results for identical frames', () => {
     const pipeline = createPipeline('set-1')
     const bgData = makeRgbaBuffer(W, H, [])
     pipeline.captureBackground(bgData, W, H)
 
-    const facePips: [number, number][] = [[52, 52]]
-    const frame = makeRgbaBuffer(W, H, [{ x: 30, y: 30, size: 45, pips: facePips }])
+    const frame = makeRgbaBuffer(W, H, [{ x: 30, y: 30, size: 45, pips: [[52, 52]] }])
 
-    // Process the same face twice
     const r1 = pipeline.processFrame(frame, W, H)
     const r2 = pipeline.processFrame(frame, W, H)
 
     expect(r1).toHaveLength(1)
     expect(r2).toHaveLength(1)
-    // Same face → same cluster (merged, not created anew)
-    expect(r1[0]!.clusterId).toBe(r2[0]!.clusterId)
+    expect(r1[0]!.pipCount).toBe(r2[0]!.pipCount)
+  })
+
+  it('returns empty when frame matches background', () => {
+    const pipeline = createPipeline('set-1')
+    const bgData = makeRgbaBuffer(W, H, [])
+    pipeline.captureBackground(bgData, W, H)
+
+    // Process same frame as background — no dice
+    const result = pipeline.processFrame(bgData, W, H)
+    expect(result).toHaveLength(0)
+  })
+
+  it('returns empty when frame dimensions differ from background', () => {
+    const pipeline = createPipeline('set-1')
+    const bgData = makeRgbaBuffer(W, H, [])
+    pipeline.captureBackground(bgData, W, H)
+
+    const wrongSize = makeRgbaBuffer(64, 64, [{ x: 10, y: 10, size: 20, pips: [[20, 20]] }])
+    const result = pipeline.processFrame(wrongSize, 64, 64)
+    expect(result).toHaveLength(0)
   })
 })

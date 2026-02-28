@@ -2,85 +2,74 @@
  * Background calibration and subtraction for the no-cheat CV pipeline.
  *
  * Before the first roll in a session, the user points the camera at the empty
- * rolling surface. One frame is captured and converted to LAB color space.
- * This "background" is subtracted from every subsequent live frame to isolate
- * the dice.
+ * rolling surface. One frame is captured and converted to grayscale with
+ * Gaussian blur applied. This "background" is subtracted from every subsequent
+ * live frame to isolate the dice.
  *
- * All operations are pure TypeScript — no opencv.js dependency. The integration
- * layer (pipeline.ts) converts ImageData → Uint8Array before passing it here.
- *
- * LAB storage format: flat Uint8Array, 3 bytes per pixel [L, a, b].
- * Values are in the OpenCV convention: L ∈ [0, 255], a ∈ [0, 255], b ∈ [0, 255]
- * (where 128 = neutral for a and b channels).
+ * All operations are pure TypeScript — no opencv.js dependency.
  */
 
 /**
- * Convert an RGBA ImageData buffer to LAB color space.
- *
- * Uses the sRGB → XYZ → D65 LAB conversion. Output is a flat Uint8Array
- * with 3 bytes per pixel [L, a, b] in OpenCV scale:
- *   L = [0, 255]  (CIE L* / 100 × 255)
- *   a = [0, 255]  (CIE a* + 128, clamped)
- *   b = [0, 255]  (CIE b* + 128, clamped)
+ * Convert an RGBA ImageData buffer to grayscale.
+ * Uses standard luminance coefficients (ITU-R BT.601).
  */
-export function rgbaToLab(rgba: Uint8ClampedArray, width: number, height: number): Uint8Array {
-  const out = new Uint8Array(width * height * 3)
+export function rgbaToGray(rgba: Uint8ClampedArray, width: number, height: number): Uint8Array {
+  const N = width * height
+  const out = new Uint8Array(N)
+  for (let i = 0; i < N; i++) {
+    out[i] = Math.round(
+      0.299 * rgba[i * 4]! + 0.587 * rgba[i * 4 + 1]! + 0.114 * rgba[i * 4 + 2]!,
+    )
+  }
+  return out
+}
 
-  for (let i = 0; i < width * height; i++) {
-    const r = rgba[i * 4]! / 255
-    const g = rgba[i * 4 + 1]! / 255
-    const b = rgba[i * 4 + 2]! / 255
+/**
+ * Apply a 5×5 Gaussian blur to a grayscale image.
+ * Uses a separable kernel approximation for performance.
+ *
+ * Kernel (normalized): [1, 4, 6, 4, 1] / 16 (applied horizontally, then vertically)
+ */
+export function gaussianBlur(gray: Uint8Array, width: number, height: number): Uint8Array {
+  const kernel = [1, 4, 6, 4, 1]
+  const kSum = 16
 
-    // sRGB → linear RGB
-    const rl = r <= 0.04045 ? r / 12.92 : ((r + 0.055) / 1.055) ** 2.4
-    const gl = g <= 0.04045 ? g / 12.92 : ((g + 0.055) / 1.055) ** 2.4
-    const bl = b <= 0.04045 ? b / 12.92 : ((b + 0.055) / 1.055) ** 2.4
+  // Horizontal pass
+  const horiz = new Uint8Array(width * height)
+  for (let y = 0; y < height; y++) {
+    for (let x = 0; x < width; x++) {
+      let sum = 0
+      for (let k = -2; k <= 2; k++) {
+        const sx = Math.min(Math.max(x + k, 0), width - 1)
+        sum += gray[y * width + sx]! * kernel[k + 2]!
+      }
+      horiz[y * width + x] = Math.round(sum / kSum)
+    }
+  }
 
-    // Linear RGB → XYZ (D65)
-    const x = rl * 0.4124564 + gl * 0.3575761 + bl * 0.1804375
-    const y = rl * 0.2126729 + gl * 0.7151522 + bl * 0.0721750
-    const z = rl * 0.0193339 + gl * 0.1191920 + bl * 0.9503041
-
-    // XYZ → LAB (D65 reference white)
-    const fx = f(x / 0.95047)
-    const fy = f(y / 1.00000)
-    const fz = f(z / 1.08883)
-
-    const L = Math.max(0, 116 * fy - 16)
-    const aVal = 500 * (fx - fy) + 128
-    const bVal = 200 * (fy - fz) + 128
-
-    out[i * 3] = Math.round(Math.min(255, (L / 100) * 255))
-    out[i * 3 + 1] = Math.round(Math.min(255, Math.max(0, aVal)))
-    out[i * 3 + 2] = Math.round(Math.min(255, Math.max(0, bVal)))
+  // Vertical pass
+  const out = new Uint8Array(width * height)
+  for (let y = 0; y < height; y++) {
+    for (let x = 0; x < width; x++) {
+      let sum = 0
+      for (let k = -2; k <= 2; k++) {
+        const sy = Math.min(Math.max(y + k, 0), height - 1)
+        sum += horiz[sy * width + x]! * kernel[k + 2]!
+      }
+      out[y * width + x] = Math.round(sum / kSum)
+    }
   }
 
   return out
 }
 
-function f(t: number): number {
-  return t > 0.008856 ? t ** (1 / 3) : 7.787 * t + 16 / 116
-}
-
 /**
- * Compute per-pixel absolute difference between two LAB images.
- * Returns a single-channel Uint8Array (one value per pixel) using the
- * maximum channel difference as the combined distance metric.
- *
- * Input format: flat [L, a, b, L, a, b, ...] Uint8Array (3 bytes/pixel).
+ * Compute per-pixel absolute difference between two grayscale images.
  */
-export function absDiffLab(
-  fg: Uint8Array,
-  bg: Uint8Array,
-  width: number,
-  height: number,
-): Uint8Array {
-  const out = new Uint8Array(width * height)
-  for (let i = 0; i < width * height; i++) {
-    const dL = Math.abs(fg[i * 3]! - bg[i * 3]!)
-    const dA = Math.abs(fg[i * 3 + 1]! - bg[i * 3 + 1]!)
-    const dB = Math.abs(fg[i * 3 + 2]! - bg[i * 3 + 2]!)
-    out[i] = Math.max(dL, dA, dB)
+export function absDiffGray(fg: Uint8Array, bg: Uint8Array): Uint8Array {
+  const out = new Uint8Array(fg.length)
+  for (let i = 0; i < fg.length; i++) {
+    out[i] = Math.abs(fg[i]! - bg[i]!)
   }
   return out
 }
@@ -89,11 +78,10 @@ export function absDiffLab(
  * Apply Otsu's method to compute an optimal threshold for a grayscale image,
  * then return a binary mask (0 or 255 per pixel).
  *
- * Otsu's method minimizes the intra-class variance of the two pixel groups
- * produced by the threshold. Works well for bimodal histograms (dice on a
- * distinct background).
+ * A minimum threshold floor is applied to avoid triggering on noise
+ * when no dice are present in the frame.
  */
-export function otsuThreshold(gray: Uint8Array): Uint8Array {
+export function otsuThreshold(gray: Uint8Array, minThreshold = 15): Uint8Array {
   const N = gray.length
 
   // Build histogram
@@ -127,10 +115,108 @@ export function otsuThreshold(gray: Uint8Array): Uint8Array {
     }
   }
 
+  // Enforce minimum threshold to suppress noise
+  threshold = Math.max(threshold, minThreshold)
+
   // Apply threshold
   const mask = new Uint8Array(N)
   for (let i = 0; i < N; i++) {
     mask[i] = gray[i]! > threshold ? 255 : 0
   }
   return mask
+}
+
+/**
+ * Morphological dilation with a square kernel.
+ * A pixel is set to 255 if any pixel in its kernel neighborhood is 255.
+ */
+export function dilate(
+  src: Uint8Array,
+  width: number,
+  height: number,
+  radius: number,
+  iterations = 1,
+): Uint8Array {
+  let current = new Uint8Array(src)
+
+  for (let iter = 0; iter < iterations; iter++) {
+    const next = new Uint8Array(width * height)
+
+    for (let y = 0; y < height; y++) {
+      for (let x = 0; x < width; x++) {
+        let maxVal = 0
+        for (let ky = -radius; ky <= radius; ky++) {
+          for (let kx = -radius; kx <= radius; kx++) {
+            const ny = y + ky
+            const nx = x + kx
+            if (ny >= 0 && ny < height && nx >= 0 && nx < width) {
+              const v = current[ny * width + nx]!
+              if (v > maxVal) maxVal = v
+            }
+          }
+        }
+        next[y * width + x] = maxVal
+      }
+    }
+
+    current = next
+  }
+
+  return current
+}
+
+/**
+ * Morphological erosion with a square kernel.
+ * A pixel stays 255 only if ALL pixels in its kernel neighborhood are 255.
+ */
+export function erode(
+  src: Uint8Array,
+  width: number,
+  height: number,
+  radius: number,
+  iterations = 1,
+): Uint8Array {
+  let current = new Uint8Array(src)
+
+  for (let iter = 0; iter < iterations; iter++) {
+    const next = new Uint8Array(width * height)
+
+    for (let y = 0; y < height; y++) {
+      for (let x = 0; x < width; x++) {
+        let minVal = 255
+        for (let ky = -radius; ky <= radius; ky++) {
+          for (let kx = -radius; kx <= radius; kx++) {
+            const ny = y + ky
+            const nx = x + kx
+            if (ny >= 0 && ny < height && nx >= 0 && nx < width) {
+              const v = current[ny * width + nx]!
+              if (v < minVal) minVal = v
+            } else {
+              minVal = 0
+            }
+          }
+        }
+        next[y * width + x] = minVal
+      }
+    }
+
+    current = next
+  }
+
+  return current
+}
+
+/**
+ * Morphological close: dilate then erode.
+ * Fills small gaps between nearby foreground regions.
+ */
+export function morphClose(
+  src: Uint8Array,
+  width: number,
+  height: number,
+  radius: number,
+  iterations = 1,
+): Uint8Array {
+  const dilated = dilate(src, width, height, radius, iterations)
+  return erode(dilated, width, height, radius, iterations)
 }

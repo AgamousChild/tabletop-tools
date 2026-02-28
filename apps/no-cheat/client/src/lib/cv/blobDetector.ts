@@ -1,24 +1,18 @@
 /**
- * SimpleBlobDetector fallback for d6 pip counting.
+ * Pip counting via blob detection.
  *
- * Used before cluster calibration stabilizes, or as a cross-check for d6.
- * Operates on a 64×64 binary (0/255) Uint8Array.
+ * Detects circular pip dots on a die face image. Operates on a grayscale
+ * image of any size (not restricted to 64×64).
  *
  * Algorithm:
- *   1. Find all connected components (4-connectivity BFS)
- *   2. Filter by area [20, 600] and circularity ≥ 0.5
- *   3. Count remaining blobs → pip value
- *   4. If count > 6 → null (false detection, reject)
+ *   1. Apply Otsu threshold to separate pips from die surface
+ *   2. Find all connected components (4-connectivity BFS)
+ *   3. Filter by area (scale-relative) and circularity ≥ 0.4
+ *   4. Try both foreground and background pixel groups
+ *   5. Return pip count from whichever group gives a valid 1–6 count
  *
  * All operations are pure TypeScript — no opencv.js dependency.
  */
-
-const SIZE = 64
-
-// Filter parameters (matching CLAUDE.md SimpleBlobDetector spec)
-const MIN_AREA = 20
-const MAX_AREA = 600
-const MIN_CIRCULARITY = 0.5
 
 interface BlobInfo {
   area: number
@@ -28,16 +22,15 @@ interface BlobInfo {
 
 /**
  * Find all 4-connected blob regions in a binary image via BFS.
- * Returns an array of BlobInfo for each blob found.
+ * target = the pixel value to search for (0 or 255).
  */
-function findBlobInfo(binary: Uint8Array, width: number, height: number): BlobInfo[] {
+function findBlobInfo(binary: Uint8Array, width: number, height: number, target = 255): BlobInfo[] {
   const visited = new Uint8Array(width * height)
   const blobs: BlobInfo[] = []
 
   for (let startIdx = 0; startIdx < width * height; startIdx++) {
-    if (binary[startIdx] !== 255 || visited[startIdx]) continue
+    if (binary[startIdx] !== target || visited[startIdx]) continue
 
-    // BFS from this pixel
     const queue: number[] = [startIdx]
     visited[startIdx] = 1
     let area = 0
@@ -61,7 +54,7 @@ function findBlobInfo(binary: Uint8Array, width: number, height: number): BlobIn
           continue
         }
         const ni = ny * width + nx
-        if (binary[ni] !== 255) {
+        if (binary[ni] !== target) {
           isEdge = true
         } else if (!visited[ni]) {
           visited[ni] = 1
@@ -72,7 +65,7 @@ function findBlobInfo(binary: Uint8Array, width: number, height: number): BlobIn
       if (isEdge) perimeter++
     }
 
-    if (perimeter === 0) perimeter = 1  // avoid division by zero for 1-pixel blobs
+    if (perimeter === 0) perimeter = 1
     const circularity = (4 * Math.PI * area) / (perimeter * perimeter)
 
     blobs.push({ area, perimeter, circularity })
@@ -82,20 +75,105 @@ function findBlobInfo(binary: Uint8Array, width: number, height: number): BlobIn
 }
 
 /**
- * Count the number of pip dots in a 64×64 binary die face image.
- *
- * Returns the pip count (1–6), or null if no valid pips are found or
- * if more than 6 blobs are detected (likely a false detection).
+ * Apply Otsu threshold to a grayscale image and return binary mask.
  */
-export function detectBlobs(binary: Uint8Array): number | null {
-  const blobs = findBlobInfo(binary, SIZE, SIZE)
+function otsuBinarize(gray: Uint8Array): Uint8Array {
+  const N = gray.length
+  const hist = new Array<number>(256).fill(0)
+  for (let i = 0; i < N; i++) hist[gray[i]!]++
 
+  let totalMean = 0
+  for (let i = 0; i < 256; i++) totalMean += i * hist[i]!
+
+  let sumB = 0
+  let wB = 0
+  let maxVariance = 0
+  let threshold = 128
+
+  for (let t = 0; t < 256; t++) {
+    wB += hist[t]!
+    if (wB === 0) continue
+    const wF = N - wB
+    if (wF === 0) break
+    sumB += t * hist[t]!
+    const meanB = sumB / wB
+    const meanF = (totalMean - sumB) / wF
+    const variance = wB * wF * (meanB - meanF) ** 2
+    if (variance > maxVariance) {
+      maxVariance = variance
+      threshold = t
+    }
+  }
+
+  const mask = new Uint8Array(N)
+  for (let i = 0; i < N; i++) {
+    mask[i] = gray[i]! > threshold ? 255 : 0
+  }
+  return mask
+}
+
+/**
+ * Filter blobs by area and circularity, return count.
+ */
+function countValidBlobs(blobs: BlobInfo[], minArea: number, maxArea: number): number {
   const pips = blobs.filter(
-    (b) => b.area >= MIN_AREA && b.area <= MAX_AREA && b.circularity >= MIN_CIRCULARITY,
+    (b) => b.area >= minArea && b.area <= maxArea && b.circularity >= 0.4,
+  )
+  return pips.length
+}
+
+/**
+ * Count the number of pip dots in a die face image.
+ *
+ * @param gray - Grayscale image of a single die face
+ * @param width - Image width
+ * @param height - Image height
+ * @returns pip count (1–6), or null if detection failed
+ */
+export function detectPips(gray: Uint8Array, width: number, height: number): number | null {
+  const imageArea = width * height
+
+  // Scale area thresholds to image size
+  // Pips are typically 1-8% of the die face area each
+  const minArea = Math.max(3, Math.floor(imageArea * 0.005))
+  const maxArea = Math.floor(imageArea * 0.15)
+
+  const binary = otsuBinarize(gray)
+
+  // Try dark pips (below threshold = 0 values)
+  const darkBlobs = findBlobInfo(binary, width, height, 0)
+  const darkCount = countValidBlobs(darkBlobs, minArea, maxArea)
+
+  if (darkCount >= 1 && darkCount <= 6) return darkCount
+
+  // Try light pips (above threshold = 255 values)
+  const lightBlobs = findBlobInfo(binary, width, height, 255)
+  const lightCount = countValidBlobs(lightBlobs, minArea, maxArea)
+
+  if (lightCount >= 1 && lightCount <= 6) return lightCount
+
+  // If dark pips gave a plausible count despite being >6, try with looser filter
+  if (darkCount > 6) return null // too many blobs, unreliable
+  if (lightCount > 6) return null
+
+  return null
+}
+
+/**
+ * Legacy API: count blobs in a pre-binarized 64×64 image.
+ * Kept for backward compatibility with existing tests.
+ */
+export function detectBlobs(binary: Uint8Array, size = 64): number | null {
+  const minArea = Math.max(3, Math.floor(size * size * 0.005))
+  const maxArea = Math.floor(size * size * 0.15)
+
+  const blobs = findBlobInfo(binary, size, size, 255)
+  const pips = blobs.filter(
+    (b) => b.area >= minArea && b.area <= maxArea && b.circularity >= 0.4,
   )
 
   if (pips.length === 0) return 0
-  if (pips.length > 6) return null  // false detection
+  if (pips.length > 6) return null
 
   return pips.length
 }

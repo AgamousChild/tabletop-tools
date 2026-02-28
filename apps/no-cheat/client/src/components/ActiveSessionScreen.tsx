@@ -237,8 +237,7 @@ export function ActiveSessionScreen({ diceSet, onDone }: Props) {
       overlayCtx.clearRect(0, 0, w, h)
 
       for (const r of results) {
-        const cluster = pipeline.state.clusters.find((c) => c.id === r.clusterId)
-        const pip = cluster?.pipValue ?? (r.blobCount && r.blobCount > 0 ? r.blobCount : '?')
+        const pip = r.pipCount ?? '?'
 
         // Bounding box
         overlayCtx.strokeStyle = '#34d399' // emerald-400
@@ -269,10 +268,7 @@ export function ActiveSessionScreen({ diceSet, onDone }: Props) {
         stableCountRef.current++
         if (stableCountRef.current >= STABLE_FRAMES) {
           // Stable! Auto-capture
-          const pipValues = results.map((r) => {
-            const c = pipeline.state.clusters.find((cl) => cl.id === r.clusterId)
-            return c?.pipValue ?? (r.blobCount && r.blobCount > 0 ? r.blobCount : 1)
-          })
+          const pipValues = results.map((r) => r.pipCount ?? 1)
           setAutoCapturing(true)
           submitRoll(pipValues)
           stableCountRef.current = 0
