@@ -1,5 +1,6 @@
+import { TRPCError } from '@trpc/server'
 import { simulations } from '@tabletop-tools/db'
-import { desc, eq } from 'drizzle-orm'
+import { and, desc, eq } from 'drizzle-orm'
 import { z } from 'zod'
 
 import { protectedProcedure, router } from '@tabletop-tools/server-core'
@@ -49,6 +50,18 @@ export const simulateRouter = router({
       .where(eq(simulations.userId, ctx.user.id))
       .orderBy(desc(simulations.createdAt))
   }),
+
+  delete: protectedProcedure
+    .input(z.object({ id: z.string() }))
+    .mutation(async ({ ctx, input }) => {
+      const [sim] = await ctx.db
+        .select()
+        .from(simulations)
+        .where(and(eq(simulations.id, input.id), eq(simulations.userId, ctx.user.id)))
+      if (!sim) throw new TRPCError({ code: 'NOT_FOUND', message: 'Simulation not found' })
+      await ctx.db.delete(simulations).where(eq(simulations.id, input.id))
+      return { success: true }
+    }),
 
   lookup: protectedProcedure
     .input(z.object({ configHash: z.string() }))

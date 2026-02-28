@@ -60,6 +60,25 @@ describe('diceSet.create', () => {
   })
 })
 
+describe('diceSet.delete', () => {
+  it('deletes a dice set owned by the user', async () => {
+    const caller = createCaller(aliceCtx)
+    const created = await caller.diceSet.create({ name: 'To Delete' })
+    await caller.diceSet.delete({ id: created.id })
+    const sets = await caller.diceSet.list()
+    expect(sets.find((s) => s.id === created.id)).toBeUndefined()
+  })
+
+  it('rejects deleting another user\'s dice set', async () => {
+    const caller = createCaller(aliceCtx)
+    const created = await caller.diceSet.create({ name: 'Alice Only' })
+    const bobCaller = createCaller(bobCtx)
+    await expect(bobCaller.diceSet.delete({ id: created.id })).rejects.toMatchObject({
+      code: 'NOT_FOUND',
+    })
+  })
+})
+
 describe('diceSet.list', () => {
   it("returns only the authenticated user's dice sets", async () => {
     const aliceCaller = createCaller(aliceCtx)
@@ -95,8 +114,12 @@ describe('diceSet.list', () => {
   it('returns dice sets ordered by creation time descending', async () => {
     const caller = createCaller(aliceCtx)
     const sets = await caller.diceSet.list()
-    // Blue Crystals was created after Red Dragons, so it should come first
-    expect(sets[0]?.name).toBe('Blue Crystals')
-    expect(sets[1]?.name).toBe('Red Dragons')
+    // Most recently created should come first
+    const names = sets.map((s) => s.name)
+    const blueIdx = names.indexOf('Blue Crystals')
+    const redIdx = names.indexOf('Red Dragons')
+    expect(blueIdx).toBeGreaterThanOrEqual(0)
+    expect(redIdx).toBeGreaterThanOrEqual(0)
+    expect(blueIdx).toBeLessThan(redIdx)
   })
 })

@@ -21,7 +21,29 @@
       padding: 2rem 1rem;
     }
 
+    .title-wrapper {
+      position: relative;
+      display: inline-block;
+    }
+
+    .title-wrapper::before {
+      content: 'BETA';
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%) rotate(-18deg);
+      font-size: 3.5rem;
+      font-weight: 800;
+      color: rgba(239, 68, 68, 0.15);
+      letter-spacing: 0.15em;
+      pointer-events: none;
+      z-index: 0;
+      white-space: nowrap;
+    }
+
     h1 {
+      position: relative;
+      z-index: 1;
       font-size: 1.75rem;
       font-weight: 700;
       margin-bottom: 0.25rem;
@@ -80,7 +102,9 @@
   </style>
 </head>
 <body>
-  <h1>Tabletop <span class="accent">Tools</span></h1>
+  <div class="title-wrapper">
+    <h1>Tabletop <span class="accent">Tools</span></h1>
+  </div>
   <p class="subtitle">Tools for tabletop miniature wargamers</p>
 
   <main class="grid">
@@ -168,7 +192,7 @@
       }
 
       try {
-        var req = indexedDB.open('tabletop-tools-game-data', 7);
+        var req = indexedDB.open('tabletop-tools-game-data', 8);
         req.onsuccess = function(e) {
           var db = e.target.result;
           if (!db.objectStoreNames.contains('units')) { showNeeded(); db.close(); return; }

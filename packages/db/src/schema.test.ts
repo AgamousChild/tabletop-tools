@@ -196,7 +196,8 @@ beforeAll(async () => {
     tournament_name TEXT,
     tournament_id TEXT,
     created_at INTEGER NOT NULL,
-    closed_at INTEGER
+    closed_at INTEGER,
+    hidden_at INTEGER
   )`)
 
   await client.execute(`CREATE TABLE turns (

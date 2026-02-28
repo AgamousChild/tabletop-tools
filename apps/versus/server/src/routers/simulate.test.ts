@@ -98,6 +98,41 @@ describe('simulate.history', () => {
   })
 })
 
+describe('simulate.delete', () => {
+  it('deletes a simulation owned by the user', async () => {
+    const caller = createCaller(ctx)
+    const saved = await caller.simulate.save({
+      attackerId: 'a-del',
+      attackerName: 'Del Attacker',
+      defenderId: 'd-del',
+      defenderName: 'Del Defender',
+      result: sampleResult,
+    })
+    await caller.simulate.delete({ id: saved.id })
+    const history = await caller.simulate.history()
+    expect(history.find((s) => s.id === saved.id)).toBeUndefined()
+  })
+
+  it('rejects deleting another user\'s simulation', async () => {
+    const caller = createCaller(ctx)
+    const saved = await caller.simulate.save({
+      attackerId: 'a-other',
+      attackerName: 'Other Attacker',
+      defenderId: 'd-other',
+      defenderName: 'Other Defender',
+      result: sampleResult,
+    })
+    const otherCaller = createCaller({
+      user: { id: 'user-other', email: 'other@example.com', name: 'Other' },
+      req,
+      db,
+    })
+    await expect(otherCaller.simulate.delete({ id: saved.id })).rejects.toMatchObject({
+      code: 'NOT_FOUND',
+    })
+  })
+})
+
 describe('simulate.lookup', () => {
   it('returns cached result for known configHash', async () => {
     const caller = createCaller(ctx)

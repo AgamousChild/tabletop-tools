@@ -1,5 +1,6 @@
+import { TRPCError } from '@trpc/server'
 import { diceSets } from '@tabletop-tools/db'
-import { desc, eq } from 'drizzle-orm'
+import { and, desc, eq } from 'drizzle-orm'
 import { z } from 'zod'
 
 import { protectedProcedure, router } from '../trpc'
@@ -30,4 +31,16 @@ export const diceSetRouter = router({
       .where(eq(diceSets.userId, ctx.user.id))
       .orderBy(desc(diceSets.createdAt))
   }),
+
+  delete: protectedProcedure
+    .input(z.object({ id: z.string() }))
+    .mutation(async ({ ctx, input }) => {
+      const [ds] = await ctx.db
+        .select()
+        .from(diceSets)
+        .where(and(eq(diceSets.id, input.id), eq(diceSets.userId, ctx.user.id)))
+      if (!ds) throw new TRPCError({ code: 'NOT_FOUND', message: 'Dice set not found' })
+      await ctx.db.delete(diceSets).where(eq(diceSets.id, input.id))
+      return { success: true }
+    }),
 })
