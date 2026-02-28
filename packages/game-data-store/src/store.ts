@@ -1,7 +1,7 @@
 import type { UnitProfile } from '@tabletop-tools/game-content'
 
 const DB_NAME = 'tabletop-tools-game-data'
-const DB_VERSION = 7
+const DB_VERSION = 8
 const UNITS_STORE = 'units'
 const META_STORE = 'meta'
 const LISTS_STORE = 'lists'

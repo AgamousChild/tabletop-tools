@@ -149,6 +149,8 @@ Update this section every time you update or fix a section of the requirements.
 - **Tournament geocoding (2026-02-28)**: Integrated Nominatim (OpenStreetMap) geocoding — no API key needed. On tournament creation, location string is geocoded to lat/lng and stored. Tournament detail shows "View Map" link to OpenStreetMap. Play search has "Near Me" button using browser geolocation — sorts results by distance (Haversine formula) and shows distance in miles on each card. DB columns already existed from V3 schema. 73 server + 58 client tests pass.
 - **Dice detection rewrite (2026-02-28)**: Complete rewrite of the CV pipeline. Replaced LAB color space + template matching + clustering (required 4-step calibration) with grayscale + Gaussian blur + morphological close + direct pip counting via blob detection. Now only requires 2 steps: capture background + test roll. Scale-aware parameters work at any camera resolution. Removed 10 dead files (cluster.ts, templateMatch.ts, normalize.ts, imageUtils.ts, pipReader.ts, ClusterLabelingScreen.tsx + all tests, exemplarStore). 64 server + 125 client = 189 tests pass.
 - **Full deployment (2026-02-28)**: All 8 apps deployed to tabletop-tools.net. 7 app Workers + 1 auth Worker deployed. DB migrations applied. Gateway deployed with 8 SPAs + landing page. Verification: 18/18 endpoint checks passed (9 static pages, 7 tRPC health endpoints, auth health + signup smoke test).
+- **Fix IndexedDB store creation (2026-02-28)**: Bumped DB_VERSION from 7 to 8 to force `onupgradeneeded` to fire and create missing V6/V7 stores (datasheets, datasheet_wargear, datasheet_models, abilities, datasheet_stratagems, datasheet_enhancements, datasheet_detachment_abilities). Users with old IndexedDB versions from previous sessions were hitting "object store not found" errors on Wahapedia import.
+- **Fix BSData characteristic extraction (2026-02-28)**: `extractCharacteristics()` was using stripped `body` (nested `<selectionEntry>` blocks removed). Real BSData XML puts unit characteristic profiles inside nested `<selectionEntry type="model">` blocks. Changed to use `fullBody` so characteristics are found for all units. PARSER_VERSION 5→6. 114 game-content tests pass (1 new test for nested model characteristics).
 
 ### In Progress
 
@@ -167,12 +169,12 @@ Update this section every time you update or fix a section of the requirements.
 | packages/db | 61 | PASS |
 | packages/auth | 16 | PASS |
 | packages/server-core | 17 | PASS |
-| packages/game-content | 108 | PASS |
+| packages/game-content | 114 | PASS |
 | packages/game-data-store | 93 | PASS |
 | packages/ui | 50 | PASS |
 | apps/no-cheat/server | 64 | PASS |
 | apps/no-cheat/client | 125 | PASS |
-| apps/versus/server | 8 | PASS |
+| apps/versus/server | 11 | PASS |
 | apps/versus/client | 160 | PASS |
 | apps/list-builder/server | 35 | PASS |
 | apps/list-builder/client | 52 | PASS |
@@ -185,7 +187,7 @@ Update this section every time you update or fix a section of the requirements.
 | apps/admin/server | 46 | PASS |
 | apps/admin/client | 47 | PASS |
 | apps/data-import/client | 57 | PASS |
-| **Total** | **1,475** | **ALL PASS** |
+| **Total** | **1,435** | **ALL PASS** |
 
 ---
 

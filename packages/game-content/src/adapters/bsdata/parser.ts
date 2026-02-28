@@ -1,7 +1,7 @@
 import type { UnitProfile, WeaponAbility, WeaponProfile } from '../../types.js'
 
 /** Bump when parser output changes in a way that invalidates previously-imported data. */
-export const PARSER_VERSION = 5
+export const PARSER_VERSION = 6
 
 // ============================================================
 // BSData XML → UnitProfile parser
@@ -186,7 +186,10 @@ function parseUnitEntry(
   body: string,
   fullBody: string,
 ): UnitProfile {
-  const stats = extractCharacteristics(body)
+  // Extract characteristics from fullBody (includes nested model entries).
+  // Real BSData XML puts the unit profile inside nested <selectionEntry type="model"> blocks,
+  // which are stripped from `body`. Using fullBody ensures characteristics are found.
+  const stats = extractCharacteristics(fullBody)
   // Extract weapons from fullBody (includes nested model entries) and deduplicate by name.
   // Real BSData XML puts weapons inside nested <selectionEntry type="model"> blocks.
   const allWeapons = extractWeapons(fullBody)
