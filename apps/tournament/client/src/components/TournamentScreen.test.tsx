@@ -231,6 +231,9 @@ vi.mock('../lib/trpc', () => ({
       dispute: {
         useMutation: () => ({ mutate: vi.fn(), isPending: false }),
       },
+      override: {
+        useMutation: () => ({ mutate: vi.fn(), isPending: false }),
+      },
     },
     elo: {
       get: {
