@@ -136,10 +136,13 @@ Update this section every time you update or fix a section of the requirements.
 - **Tournament markdown descriptions (2026-02-27)**: Created `SimpleMarkdown` component in packages/ui (handles bold, italic, links, headers, lists, code). Tournament detail view renders descriptions with markdown formatting. 10 new tests.
 - **No-cheat "Not a Dice" button (2026-02-27)**: Added "Not a Dice" button to ClusterLabelingScreen in calibration wizard. When the detected image is a false positive (not a die face), the user can skip it instead of being forced to label it.
 - **Tournament image URL (2026-02-27)**: Added `imageUrl` to tournament.create mutation (Zod `.url()` validated). Create form has image URL field. Tournament detail view shows image above description with `max-h-64 object-cover`. DB column already existed from V3 schema.
+- **Data pipeline documentation (2026-02-28)**: Created `docs/DATA-PIPELINE.md` documenting the full three-tier data system: source DBs → JSON export → IndexedDB. Covers master database schema (`create-master-db.ts`), export pipeline (`export-wahapedia.ts`), ID mapping strategy, IndexedDB stores (22 stores, 7 indexes), and automation.
+- **Data automation scripts (2026-02-28)**: Created `scripts/publish-data.sh` for exporting + pushing JSON to a GitHub data repo. Created `.github/workflows/update-data.yml` GitHub Actions template for weekly automated data updates (sync → export → publish). Validated export: 246 detachments, 1686 datasheets, 2104 unit costs, 9219 weapons, 1397 stratagems, 63 missions.
+- **Build validation (2026-02-28)**: `pnpm -r build` succeeds for all 16 packages. Data-import app serves all 19 JSON files correctly via local preview. Fixed TS build error in ImportScreen.tsx (readonly ref type).
 
 ### In Progress
 
-- Data Requirements (documenting pipeline, creating GitHub-publishable automation scripts)
+(none)
 
 ### Not Started
 
