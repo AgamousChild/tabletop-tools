@@ -19,6 +19,7 @@ type Tournament = {
   location: string | null
   createdAt: number
   playerCount?: number
+  toName?: string | null
   description?: string | null
   imageUrl?: string | null
   startTime?: string | null
@@ -651,6 +652,9 @@ export function TournamentScreen({ onSignOut }: Props) {
               >
                 Event Link ↗
               </a>
+            )}
+            {tournament?.toName && (
+              <p className="text-slate-500 text-sm mt-1">TO: {tournament.toName}</p>
             )}
           </div>
           <div className="flex flex-col items-end gap-2">

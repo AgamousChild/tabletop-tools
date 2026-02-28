@@ -139,6 +139,9 @@ Update this section every time you update or fix a section of the requirements.
 - **Data pipeline documentation (2026-02-28)**: Created `docs/DATA-PIPELINE.md` documenting the full three-tier data system: source DBs → JSON export → IndexedDB. Covers master database schema (`create-master-db.ts`), export pipeline (`export-wahapedia.ts`), ID mapping strategy, IndexedDB stores (22 stores, 7 indexes), and automation.
 - **Data automation scripts (2026-02-28)**: Created `scripts/publish-data.sh` for exporting + pushing JSON to a GitHub data repo. Created `.github/workflows/update-data.yml` GitHub Actions template for weekly automated data updates (sync → export → publish). Validated export: 246 detachments, 1686 datasheets, 2104 unit costs, 9219 weapons, 1397 stratagems, 63 missions.
 - **Build validation (2026-02-28)**: `pnpm -r build` succeeds for all 16 packages. Data-import app serves all 19 JSON files correctly via local preview. Fixed TS build error in ImportScreen.tsx (readonly ref type).
+- **Tournament TO info display (2026-02-28)**: tournament.get query now joins authUsers table to fetch TO name. Tournament detail view shows "TO: {name}" in header. 73 server + 58 client tests pass.
+- **"Use in Tournament" button verified (2026-02-28)**: Already implemented in MyListsScreen.tsx — sets localStorage `tournament-list` which tournament registration reads. Button shows "Active for Tournament" with amber highlight when active.
+- **Game Tracker dropdown audit (2026-02-28)**: Verified all faction/detachment fields use `<select>` dropdowns (not text inputs). Secondaries use SecondaryPicker dropdown. Stratagems use StratagemPicker dropdown. Text inputs are only for user-entered data (date, location, opponent name, notes).
 
 ### In Progress
 
