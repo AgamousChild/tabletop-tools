@@ -26,6 +26,9 @@ export function UsersPage() {
   return (
     <div>
       <h2 className="text-lg font-semibold text-slate-100 mb-4">Recent Users</h2>
+      <p className="text-xs text-slate-500 mb-4">
+        Most recently registered users. Use the action buttons to revoke sessions or delete accounts.
+      </p>
       <div className="bg-slate-900 border border-slate-800 rounded-lg overflow-hidden">
         <table className="w-full text-sm">
           <thead>

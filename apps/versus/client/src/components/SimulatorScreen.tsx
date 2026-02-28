@@ -460,6 +460,8 @@ export function SimulatorScreen({ onSignOut }: Props) {
       </header>
 
       <div className="max-w-2xl mx-auto p-4 space-y-6">
+        <p className="text-xs text-slate-500 mb-4">Select factions, pick attacker and defender units, then configure weapons and abilities to simulate combat. Click "Run Simulation" to see expected wounds and models removed.</p>
+
         {/* No data warning */}
         {!gameDataAvailable && (
           <div className="bg-slate-900 border border-amber-400/30 rounded-lg p-4 text-center">

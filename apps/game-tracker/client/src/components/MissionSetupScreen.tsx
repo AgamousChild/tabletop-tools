@@ -109,6 +109,7 @@ export function MissionSetupScreen({ onNext, onBack }: Props) {
       </header>
 
       <div className="p-6 space-y-5 max-w-md mx-auto">
+        <p className="text-xs text-slate-500 mb-4">Choose a primary mission, deployment zone, and terrain layout. Tap Next when ready, or Back to change match details.</p>
         <div>
           <label className="block text-sm text-slate-400 mb-1">Primary Mission</label>
           <select

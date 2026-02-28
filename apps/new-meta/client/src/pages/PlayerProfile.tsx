@@ -49,6 +49,9 @@ export function PlayerProfile({ playerId, onBack }: Props) {
           ← Back
         </button>
         <h1 className="text-2xl font-semibold text-slate-100">{player.playerName}</h1>
+        <p className="text-xs text-slate-500 mt-1">
+          Rating history chart and recent event results. Tap "Back" to return to the rankings.
+        </p>
         <div className="flex gap-6 mt-2 text-sm text-slate-400">
           <span>
             Rating:{' '}

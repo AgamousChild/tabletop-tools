@@ -19,6 +19,8 @@ export function BattleSizeScreen({ onSelect, onBack }: Props) {
         <h2 className="text-lg font-semibold text-slate-100">Select Battle Size</h2>
       </div>
 
+      <p className="text-xs text-slate-500 mb-4">Choose a battle size to set your points limit and unit duplicate restrictions. Press "Back" to return to your lists.</p>
+
       <div className="space-y-3">
         {BATTLE_SIZES.map((size, i) => (
           <button

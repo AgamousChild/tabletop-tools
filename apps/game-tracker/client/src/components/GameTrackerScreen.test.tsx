@@ -16,9 +16,8 @@ vi.mock('../lib/auth', () => ({
 }))
 
 vi.mock('@tabletop-tools/game-data-store', () => ({
-  useFactions: () => ({
+  usePrimaryFactions: () => ({
     data: ['Space Marines', 'Orks'],
-    error: null,
     isLoading: false,
   }),
   useDetachments: () => ({

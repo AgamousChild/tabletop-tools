@@ -194,6 +194,8 @@ export function BattleScreen({ matchId, onBack, onClose }: Props) {
         </div>
       </header>
 
+      <p className="text-xs text-slate-500 px-6 pt-4">Record each round's VP, CP, and unit losses below. Tap a completed round to edit it. Use End Game to enter final scores.</p>
+
       <Scoreboard
         roundNumber={nextRound}
         yourVp={yourTotalVp}

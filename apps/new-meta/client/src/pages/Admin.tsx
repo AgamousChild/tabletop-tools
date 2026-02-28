@@ -47,6 +47,9 @@ export function Admin() {
   return (
     <div className="space-y-8 max-w-2xl">
       <h1 className="text-2xl font-semibold text-slate-100">Admin — Import Tournament</h1>
+      <p className="text-xs text-slate-500 mb-4">
+        Paste CSV tournament results below. Select the format, fill in event details, and click Import to add the data and update Glicko-2 ratings.
+      </p>
 
       <form onSubmit={handleSubmit} className="space-y-4">
         <div>

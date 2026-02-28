@@ -14,6 +14,9 @@ export function SourceData({ onTournamentSelect }: Props) {
         <p className="text-slate-400 text-sm mt-1">
           Every imported tournament result — publicly viewable and downloadable.
         </p>
+        <p className="text-xs text-slate-500 mt-1">
+          Click a tournament row to view full results with player lists. You can download data as JSON or CSV.
+        </p>
       </div>
 
       {isLoading ? (

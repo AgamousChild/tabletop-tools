@@ -39,6 +39,10 @@ export function PlayerRanking({ onPlayerSelect }: Props) {
         </div>
       </div>
 
+      <p className="text-xs text-slate-500">
+        Glicko-2 leaderboard based on tournament performance. Click a player to view their profile and rating history.
+      </p>
+
       {/* Player search */}
       <div className="flex gap-2">
         <input

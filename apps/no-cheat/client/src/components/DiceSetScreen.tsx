@@ -79,6 +79,9 @@ export function DiceSetScreen({ onSignOut }: Props) {
         <h2 className="text-slate-400 text-sm font-semibold uppercase tracking-wider mb-3">
           Your Dice Sets
         </h2>
+        <p className="text-xs text-slate-500 mb-4">
+          Select a dice set to view its sessions and start recording, or create a new set below.
+        </p>
 
         <DiceSetList
           diceSets={diceSets}

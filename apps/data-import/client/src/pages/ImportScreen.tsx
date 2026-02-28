@@ -143,6 +143,11 @@ export function ImportScreen() {
   const selectAll = () => setSelected(new Set(catalogs.map((f) => f.name)))
   const selectNone = () => setSelected(new Set())
 
+  // Strip BSData catalog prefixes ("Imperium - ", "Chaos - ") so faction names
+  // match Wahapedia conventions (e.g., "Space Marines" instead of "Imperium - Space Marines").
+  const normalizeFactionName = (name: string): string =>
+    name.replace(/^(Imperium|Chaos)\s*-\s*/, '')
+
   const importFactions = async (toImport: CatalogFile[]) => {
     if (toImport.length === 0) return
 
@@ -168,7 +173,7 @@ export function ImportScreen() {
 
       try {
         const xml = await fetchCatalogXml(file)
-        const { units, errors } = parseBSDataXml(xml, file.faction)
+        const { units, errors } = parseBSDataXml(xml, normalizeFactionName(file.faction))
         if (units.length > 0) {
           await saveUnits(units)
         }
@@ -244,6 +249,10 @@ export function ImportScreen() {
   const handleClearFaction = async (faction: string) => {
     setClearing(true)
     setClearMessage(null)
+    // Optimistically remove faction from UI immediately
+    setStoredFactions(prev => prev.filter(f => f !== faction))
+    setFactionCounts(prev => { const next = { ...prev }; delete next[faction]; return next })
+    setFactionWeaponCounts(prev => { const next = { ...prev }; delete next[faction]; return next })
     try {
       await clearFaction(faction)
       await refreshStoredData()
@@ -254,13 +263,19 @@ export function ImportScreen() {
   }
 
   const handleClearAll = async () => {
-    if (!confirm('Clear all imported unit profiles? This cannot be undone.')) return
+    if (!confirm('Clear all imported data? This cannot be undone.')) return
     setClearing(true)
     setClearMessage(null)
+    // Optimistically clear all UI state immediately
+    setStoredFactions([])
+    setFactionCounts({})
+    setFactionWeaponCounts({})
+    setCurrentMeta(null)
+    setRulesMeta(null)
     try {
       await clearAll()
       await refreshStoredData()
-      setClearMessage('All unit profile data cleared.')
+      setClearMessage('All data cleared successfully.')
     } finally {
       setClearing(false)
     }
@@ -270,6 +285,8 @@ export function ImportScreen() {
     if (!confirm('Clear all imported game rules? This cannot be undone.')) return
     setClearing(true)
     setClearMessage(null)
+    // Optimistically clear rules UI state immediately
+    setRulesMeta(null)
     try {
       await clearGameRules()
       await refreshStoredData()

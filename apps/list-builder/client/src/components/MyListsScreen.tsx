@@ -30,6 +30,7 @@ export function MyListsScreen({ onCreateNew, onSelectList }: Props) {
   return (
     <div className="space-y-6">
       <h2 className="text-lg font-semibold text-slate-100">My Army Lists</h2>
+      <p className="text-xs text-slate-500 mb-4">Tap a list to edit it, or press "+ New List" to start building. Use "Use in Tournament" to set a list as your active tournament roster.</p>
 
       {lists.length === 0 && (
         <p className="text-slate-500 text-sm">No lists yet. Create your first army list to get started.</p>
