@@ -134,6 +134,7 @@ Update this section every time you update or fix a section of the requirements.
 - **Versus leader auto-apply (2026-02-27)**: When a leader is attached, their abilities are parsed for simulation-relevant rules (re-roll hits, lethal hits, sustained hits, etc.) and auto-applied as read-only "From leader" chips in SpecialRulesEditor. 22 new unit tests for ability parsing.
 - **Tournament round start time (2026-02-27)**: Added `startTime` column to rounds DB table. Round creation accepts optional start time. UI shows start time in round detail and provides input when creating rounds. 4 new tests.
 - **Tournament markdown descriptions (2026-02-27)**: Created `SimpleMarkdown` component in packages/ui (handles bold, italic, links, headers, lists, code). Tournament detail view renders descriptions with markdown formatting. 10 new tests.
+- **No-cheat "Not a Dice" button (2026-02-27)**: Added "Not a Dice" button to ClusterLabelingScreen in calibration wizard. When the detected image is a false positive (not a die face), the user can skip it instead of being forced to label it.
 
 ### In Progress
 
@@ -144,6 +145,7 @@ Update this section every time you update or fix a section of the requirements.
 - Dice detection rewrite (detect_dice or OpenCV)
 - Data Requirements (master database plan, client-side code, automated scripts)
 - Tournament features (geocoding, image upload)
+- Detachment unit choice limitations (data exists only as unstructured HTML — requires manual rule extraction)
 
 ---
 
