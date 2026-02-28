@@ -65,6 +65,15 @@ export function ClusterLabelingScreen({ clusters, onComplete }: Props) {
     }
   }
 
+  function handleNotADice() {
+    // Skip this cluster — don't include it in labels (false positive)
+    if (currentIdx + 1 >= clusters.length) {
+      onComplete(labels)
+    } else {
+      setCurrentIdx(currentIdx + 1)
+    }
+  }
+
   return (
     <div className="space-y-4">
       <div className="text-center">
@@ -91,6 +100,13 @@ export function ClusterLabelingScreen({ clusters, onComplete }: Props) {
           </button>
         ))}
       </div>
+
+      <button
+        onClick={handleNotADice}
+        className="w-full py-2 rounded-lg border border-red-400/30 text-red-400 text-sm font-medium hover:border-red-400 hover:bg-red-400/10 transition-colors"
+      >
+        Not a Dice
+      </button>
     </div>
   )
 }
