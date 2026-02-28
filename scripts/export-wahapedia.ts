@@ -343,13 +343,25 @@ async function main() {
   `)
   writeJson('abilities.json', convertDescriptions(abilities as Record<string, unknown>[]))
 
-  // Datasheets (master unit reference — needed for ID mapping to BSData)
+  // Datasheets (master unit reference — includes isLegends flag from sources + primary model stats)
   const datasheets = await query(`
-    SELECT id, name, faction_id AS factionId, role, legend, transport, loadout,
-           damaged_w AS damagedW, damaged_description AS damagedDescription
-    FROM datasheets ORDER BY faction_id, name
+    SELECT d.id, d.name, d.faction_id AS factionId, d.role, d.legend, d.transport, d.loadout,
+           d.damaged_w AS damagedW, d.damaged_description AS damagedDescription,
+           CASE WHEN s.name LIKE '%(Warhammer Legends)%' THEN 1 ELSE 0 END AS isLegends,
+           m.M AS move, m.T AS toughness, m.Sv AS save, m.W AS wounds,
+           m.Ld AS leadership, m.OC AS oc, m.inv_sv AS invSv
+    FROM datasheets d
+    LEFT JOIN sources s ON d.source_id = s.id
+    LEFT JOIN datasheet_models m ON m.datasheet_id = d.id
+      AND m.line = (SELECT MIN(line) FROM datasheet_models WHERE datasheet_id = d.id)
+    ORDER BY d.faction_id, d.name
   `)
-  writeJson('datasheets.json', datasheets)
+  // Convert isLegends from 0/1 to boolean
+  const datasheetsTyped = (datasheets as Array<Record<string, unknown>>).map(d => ({
+    ...d,
+    isLegends: d.isLegends === 1,
+  }))
+  writeJson('datasheets.json', datasheetsTyped)
 
   // Datasheet wargear (weapon profiles with full stats)
   const datasheetWargear = await query(`

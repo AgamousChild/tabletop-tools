@@ -162,7 +162,385 @@ function UnitStatLine({ unitContentId }: { unitContentId: string }) {
 const ROLE_FILTERS = ['All', 'Battleline', 'Character', 'Infantry', 'Vehicle', 'Monster', 'Dedicated Transport'] as const
 type RoleFilter = typeof ROLE_FILTERS[number]
 
+// ── Screen 1: My List (chosen units) ────────────────────────────────────────
+
+function MyArmyView({
+  listUnits,
+  activeList,
+  faction,
+  detachmentName,
+  detachment,
+  totalPts,
+  remaining,
+  battleSize,
+  errors,
+  suggestion,
+  ratingMap,
+  onAddUnit,
+  onRemoveUnit,
+  onToggleWarlord,
+  onSetEnhancement,
+  onExport,
+  onDone,
+  onDeleteList,
+  onBack,
+  exportCopied,
+  editingName,
+  editingDesc,
+  nameValue,
+  descValue,
+  onStartEditName,
+  onChangeName,
+  onSaveName,
+  onStartEditDesc,
+  onChangeDesc,
+  onSaveDesc,
+  detachmentAbilities,
+}: {
+  listUnits: LocalListUnit[]
+  activeList: { name: string; description?: string } | null
+  faction: string
+  detachmentName: string
+  detachment: string
+  totalPts: number
+  remaining: number
+  battleSize: BattleSize
+  errors: ValidationError[]
+  suggestion: {
+    addedName: string
+    addedRating: string | null
+    alternatives: Array<{ unitContentId: string; unitName: string; rating: string; points: number }>
+  } | null
+  ratingMap: Map<string, string>
+  onAddUnit: () => void
+  onRemoveUnit: (id: string, pts: number, count: number) => void
+  onToggleWarlord: (unit: LocalListUnit) => void
+  onSetEnhancement: (unit: LocalListUnit, enhId: string | undefined, enhName: string | undefined, enhCost: number | undefined) => void
+  onExport: () => void
+  onDone: () => void
+  onDeleteList: () => void
+  onBack: () => void
+  exportCopied: boolean
+  editingName: boolean
+  editingDesc: boolean
+  nameValue: string
+  descValue: string
+  onStartEditName: () => void
+  onChangeName: (v: string) => void
+  onSaveName: () => void
+  onStartEditDesc: () => void
+  onChangeDesc: (v: string) => void
+  onSaveDesc: () => void
+  detachmentAbilities: Array<{ id: string; name: string; legend: string; description: string }>
+}) {
+  return (
+    <div className="space-y-4">
+      {/* Header */}
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-3">
+          <button onClick={onBack} className="text-slate-400 hover:text-slate-200 text-sm">&larr; Lists</button>
+          <div>
+            {editingName ? (
+              <input
+                autoFocus
+                value={nameValue}
+                onChange={(e) => onChangeName(e.target.value)}
+                onBlur={onSaveName}
+                onKeyDown={(e) => { if (e.key === 'Enter') onSaveName() }}
+                className="bg-slate-900 border border-amber-400 rounded px-2 py-0.5 text-slate-100 font-semibold focus:outline-none"
+              />
+            ) : (
+              <h2
+                className="font-semibold text-slate-100 cursor-pointer hover:text-amber-400"
+                onClick={onStartEditName}
+                title="Click to rename"
+              >
+                {activeList?.name ?? 'List'}
+              </h2>
+            )}
+            <p className="text-xs text-slate-400">{faction} — {detachmentName}</p>
+          </div>
+        </div>
+        <div className="text-right">
+          <p className="text-2xl font-bold text-amber-400 tabular-nums">{totalPts}<span className="text-sm text-slate-500">/{battleSize.points}pts</span></p>
+          <p className="text-xs text-slate-400">{remaining}pts remaining</p>
+        </div>
+      </div>
+
+      {/* Description */}
+      {editingDesc ? (
+        <textarea
+          autoFocus
+          value={descValue}
+          onChange={(e) => onChangeDesc(e.target.value)}
+          onBlur={onSaveDesc}
+          placeholder="Add notes about this list..."
+          className="w-full px-3 py-2 rounded-lg bg-slate-900 border border-amber-400 text-slate-100 placeholder-slate-500 focus:outline-none text-sm resize-none"
+          rows={2}
+        />
+      ) : (
+        <button
+          onClick={onStartEditDesc}
+          className="text-left w-full text-sm text-slate-500 hover:text-slate-300 py-1"
+        >
+          {descValue || 'Add notes about this list...'}
+        </button>
+      )}
+
+      {/* Detachment rules */}
+      {detachmentAbilities.length > 0 && (
+        <CollapsibleSection title={`${detachmentName} Rules`} count={detachmentAbilities.length}>
+          <div className="space-y-2">
+            {detachmentAbilities.map((ability) => (
+              <div key={ability.id} className="text-xs">
+                <p className="font-semibold text-amber-400">{ability.name}</p>
+                {ability.legend && <p className="text-slate-500 italic">{ability.legend}</p>}
+                <p className="text-slate-400 mt-0.5 whitespace-pre-wrap">{htmlToText(ability.description)}</p>
+              </div>
+            ))}
+          </div>
+        </CollapsibleSection>
+      )}
+
+      {/* Validation errors */}
+      {errors.map((err, i) => (
+        <div key={i} className={`px-3 py-2 rounded-lg text-sm ${err.type === 'NO_WARLORD' ? 'bg-amber-900/20 border border-amber-500/30 text-amber-400' : 'bg-red-900/20 border border-red-500/30 text-red-400'}`}>
+          {err.message}
+        </div>
+      ))}
+
+      {/* Add Unit button */}
+      <button
+        onClick={onAddUnit}
+        disabled={remaining <= 0}
+        className="w-full py-3 rounded-lg border-2 border-dashed border-slate-700 text-slate-400 hover:border-amber-400 hover:text-amber-400 transition-colors font-semibold disabled:opacity-40 disabled:cursor-not-allowed"
+      >
+        + Add Unit
+      </button>
+
+      {/* Suggestion banner */}
+      {suggestion && (
+        <div className="p-3 rounded-lg bg-slate-800 border border-amber-400/30 text-sm">
+          <p className="text-slate-400">Added: <span className="text-slate-100">{suggestion.addedName}</span> <RatingBadge rating={suggestion.addedRating} /></p>
+          <p className="text-amber-400 mt-1 mb-1">Better alternatives at same or lower cost:</p>
+          {suggestion.alternatives.map((alt, i) => (
+            <p key={i} className="text-slate-300 ml-2">
+              {alt.unitName} ({alt.points}pts) <RatingBadge rating={alt.rating} />
+            </p>
+          ))}
+        </div>
+      )}
+
+      {/* Chosen units list */}
+      <div className="space-y-2">
+        {listUnits.length === 0 && (
+          <p className="text-slate-500 text-sm text-center py-8">No units yet. Tap "Add Unit" to get started.</p>
+        )}
+        {listUnits.map((unit: LocalListUnit) => (
+          <div
+            key={unit.id}
+            className={`p-3 rounded-lg bg-slate-900 border ${unit.isWarlord ? 'border-amber-400' : 'border-slate-800'}`}
+          >
+            <div className="flex items-center justify-between">
+              <div className="flex-1">
+                <div className="flex items-center gap-2">
+                  <span className="font-medium text-slate-100">{unit.unitName}</span>
+                  <RatingBadge rating={ratingMap.get(unit.unitContentId) ?? null} />
+                  {unit.isWarlord && (
+                    <span className="text-[10px] px-1.5 py-0.5 rounded bg-amber-400 text-slate-950 font-bold">WARLORD</span>
+                  )}
+                </div>
+                <p className="text-sm text-slate-400 mt-0.5">
+                  {unit.unitPoints * unit.count + (unit.enhancementCost ?? 0)}pts
+                  {unit.count > 1 && ` (${unit.count}x${unit.unitPoints})`}
+                  {unit.modelCount && ` · ${unit.modelCount} models`}
+                  {unit.enhancementName && (
+                    <span className="text-amber-400"> · {unit.enhancementName} +{unit.enhancementCost}pts</span>
+                  )}
+                </p>
+                <UnitStatLine unitContentId={unit.unitContentId} />
+              </div>
+              <div className="flex items-center gap-1 ml-2">
+                <WarlordButton
+                  unit={unit}
+                  onToggle={() => onToggleWarlord(unit)}
+                />
+                <EnhancementPicker
+                  unit={unit}
+                  detachment={detachment}
+                  onSelect={(enhId, enhName, enhCost) => onSetEnhancement(unit, enhId, enhName, enhCost)}
+                />
+                <button
+                  onClick={() => onRemoveUnit(unit.id, unit.unitPoints, unit.count)}
+                  className="px-2 py-1 rounded bg-slate-700 text-slate-400 hover:bg-red-900 hover:text-red-400 text-xs"
+                >
+                  X
+                </button>
+              </div>
+            </div>
+          </div>
+        ))}
+      </div>
+
+      {/* Actions */}
+      <div className="flex gap-3 pt-3 border-t border-slate-800">
+        <button
+          onClick={onExport}
+          className={`flex-1 py-2 rounded-lg font-semibold text-sm ${exportCopied ? 'bg-emerald-400 text-slate-950' : 'bg-amber-400 text-slate-950 hover:bg-amber-300'}`}
+        >
+          {exportCopied ? 'Copied!' : 'Export list'}
+        </button>
+        <button
+          onClick={onDone}
+          className="flex-1 py-2 rounded-lg border border-amber-400 text-amber-400 hover:bg-amber-400/10 font-semibold text-sm"
+        >
+          Done
+        </button>
+        <button
+          onClick={onDeleteList}
+          className="px-4 py-2 rounded-lg bg-slate-800 text-red-400 hover:bg-red-900 text-sm"
+        >
+          Delete
+        </button>
+      </div>
+    </div>
+  )
+}
+
+// ── Screen 2: Add Unit (unit browser) ───────────────────────────────────────
+
+function AddUnitView({
+  units,
+  unitsLoading,
+  searchQuery,
+  onSearchChange,
+  showLegends,
+  onShowLegendsChange,
+  roleFilter,
+  onRoleFilterChange,
+  remaining,
+  ratingMap,
+  unitRoles,
+  onAddUnit,
+  onBack,
+  totalPts,
+  battleSize,
+}: {
+  units: Array<{ id: string; name: string; points: number }>
+  unitsLoading: boolean
+  searchQuery: string
+  onSearchChange: (v: string) => void
+  showLegends: boolean
+  onShowLegendsChange: (v: boolean) => void
+  roleFilter: RoleFilter
+  onRoleFilterChange: (v: RoleFilter) => void
+  remaining: number
+  ratingMap: Map<string, string>
+  unitRoles: Map<string, string>
+  onAddUnit: (unitId: string, unitName: string, unitPoints: number, modelCount?: number) => void
+  onBack: () => void
+  totalPts: number
+  battleSize: BattleSize
+}) {
+  return (
+    <div className="space-y-4">
+      {/* Header */}
+      <div className="flex items-center justify-between">
+        <button onClick={onBack} className="text-slate-400 hover:text-slate-200 text-sm flex items-center gap-1">
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-4 h-4">
+            <path fillRule="evenodd" d="M17 10a.75.75 0 0 1-.75.75H5.612l4.158 3.96a.75.75 0 1 1-1.04 1.08l-5.5-5.25a.75.75 0 0 1 0-1.08l5.5-5.25a.75.75 0 1 1 1.04 1.08L5.612 9.25H16.25A.75.75 0 0 1 17 10Z" clipRule="evenodd" />
+          </svg>
+          Back to List
+        </button>
+        <div className="text-right">
+          <p className="text-lg font-bold text-amber-400 tabular-nums">{totalPts}<span className="text-sm text-slate-500">/{battleSize.points}pts</span></p>
+          <p className="text-xs text-slate-400">{remaining}pts remaining</p>
+        </div>
+      </div>
+
+      <h2 className="text-lg font-semibold text-slate-100">Add Unit</h2>
+
+      {/* Search + Legends toggle */}
+      <div className="flex gap-2">
+        <input
+          type="text"
+          value={searchQuery}
+          onChange={(e) => onSearchChange(e.target.value)}
+          placeholder="Search units..."
+          autoFocus
+          className="flex-1 px-3 py-2 rounded-lg bg-slate-900 border border-slate-800 text-slate-100 placeholder-slate-500 focus:outline-none focus:border-amber-400"
+        />
+        <label className="flex items-center gap-1.5 text-xs text-slate-400 whitespace-nowrap cursor-pointer select-none">
+          <input
+            type="checkbox"
+            checked={showLegends}
+            onChange={(e) => onShowLegendsChange(e.target.checked)}
+            className="w-4 h-4 rounded border-slate-700 bg-slate-900 text-amber-400 focus:ring-amber-400"
+          />
+          Legends
+        </label>
+      </div>
+
+      {/* Role filter pills */}
+      <div className="flex gap-1 flex-wrap">
+        {ROLE_FILTERS.map((role) => (
+          <button
+            key={role}
+            onClick={() => onRoleFilterChange(role)}
+            className={`px-2.5 py-1 rounded-full text-xs font-medium transition-colors ${
+              roleFilter === role
+                ? 'bg-amber-400 text-slate-950'
+                : 'bg-slate-800 text-slate-400 hover:bg-slate-700 hover:text-slate-200'
+            }`}
+          >
+            {role}
+          </button>
+        ))}
+      </div>
+
+      {/* Unit list */}
+      <div className="space-y-2">
+        {unitsLoading && <p className="text-slate-500 text-sm">Loading units...</p>}
+        {!unitsLoading && units.length === 0 && (
+          <p className="text-slate-500 text-sm">No units found.</p>
+        )}
+        {units.map((unit) => (
+          <div
+            key={unit.id}
+            className="flex items-center justify-between p-3 rounded-lg bg-slate-900 border border-slate-800"
+          >
+            <div className="flex-1 min-w-0">
+              <div className="flex items-center gap-2 flex-wrap">
+                <span className="font-medium text-slate-100">{unit.name}</span>
+                <RatingBadge rating={ratingMap.get(unit.id) ?? null} />
+                {unitRoles.get(unit.id) && (
+                  <span className="px-1.5 py-0.5 rounded text-[10px] font-medium bg-slate-800 text-slate-500">
+                    {unitRoles.get(unit.id)}
+                  </span>
+                )}
+                <UnitKeywordBadges unitId={unit.id} />
+              </div>
+              <p className="text-sm text-slate-400 mt-0.5">{unit.points}pts</p>
+              <UnitStatLine unitContentId={unit.id} />
+            </div>
+            <ModelCountPicker
+              unitId={unit.id}
+              unitName={unit.name}
+              defaultPoints={unit.points}
+              remaining={remaining}
+              onSelect={onAddUnit}
+            />
+          </div>
+        ))}
+      </div>
+    </div>
+  )
+}
+
+// ── Main component ──────────────────────────────────────────────────────────
+
 export function UnitSelectionScreen({ listId, faction, detachment, battleSize, onDone, onBack }: Props) {
+  const [subScreen, setSubScreen] = useState<'list' | 'add'>('list')
   const [searchQuery, setSearchQuery] = useState('')
   const [showLegends, setShowLegends] = useState(false)
   const [roleFilter, setRoleFilter] = useState<RoleFilter>('All')
@@ -267,6 +645,9 @@ export function UnitSelectionScreen({ listId, faction, detachment, battleSize, o
     refetchList()
     syncListToServer(listId)
 
+    // Switch back to list view and show the unit
+    setSubScreen('list')
+
     // Fetch alternatives filtered by similar points cost and show suggestions
     try {
       const alternatives = await trpcClient.rating.alternatives.query({})
@@ -311,15 +692,12 @@ export function UnitSelectionScreen({ listId, faction, detachment, battleSize, o
 
   async function handleToggleWarlord(unit: LocalListUnit) {
     if (!activeList) return
-    // If this unit is already warlord, toggle off. Otherwise set it and clear others.
     const newValue = !unit.isWarlord
-    // Clear all warlords first
     for (const u of listUnits) {
       if (u.isWarlord) {
         await updateListUnitInDb(u.id, { isWarlord: false })
       }
     }
-    // Set the new warlord
     if (newValue) {
       await updateListUnitInDb(unit.id, { isWarlord: true })
     }
@@ -411,250 +789,61 @@ export function UnitSelectionScreen({ listId, faction, detachment, battleSize, o
     })
   }
 
+  if (subScreen === 'add') {
+    return (
+      <AddUnitView
+        units={units}
+        unitsLoading={unitsLoading}
+        searchQuery={searchQuery}
+        onSearchChange={setSearchQuery}
+        showLegends={showLegends}
+        onShowLegendsChange={setShowLegends}
+        roleFilter={roleFilter}
+        onRoleFilterChange={setRoleFilter}
+        remaining={remaining}
+        ratingMap={ratingMap}
+        unitRoles={unitRoles}
+        onAddUnit={(id, name, pts, mc) => void handleAddUnit(id, name, pts, mc)}
+        onBack={() => setSubScreen('list')}
+        totalPts={totalPts}
+        battleSize={battleSize}
+      />
+    )
+  }
+
   return (
-    <div className="space-y-4">
-      {/* Header */}
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-3">
-          <button onClick={onBack} className="text-slate-400 hover:text-slate-200 text-sm">Back</button>
-          <div>
-            {editingName ? (
-              <input
-                autoFocus
-                value={nameValue}
-                onChange={(e) => setNameValue(e.target.value)}
-                onBlur={() => void handleSaveName()}
-                onKeyDown={(e) => { if (e.key === 'Enter') void handleSaveName() }}
-                className="bg-slate-900 border border-amber-400 rounded px-2 py-0.5 text-slate-100 font-semibold focus:outline-none"
-              />
-            ) : (
-              <h2
-                className="font-semibold text-slate-100 cursor-pointer hover:text-amber-400"
-                onClick={() => setEditingName(true)}
-                title="Click to rename"
-              >
-                {activeList?.name ?? 'List'}
-              </h2>
-            )}
-            <p className="text-xs text-slate-400">{faction} — {detachmentName}</p>
-          </div>
-        </div>
-        <div className="text-right">
-          <p className="text-2xl font-bold text-amber-400 tabular-nums">{totalPts}<span className="text-sm text-slate-500">/{battleSize.points}pts</span></p>
-          <p className="text-xs text-slate-400">{remaining}pts remaining</p>
-        </div>
-      </div>
-
-      {/* Description */}
-      {editingDesc ? (
-        <textarea
-          autoFocus
-          value={descValue}
-          onChange={(e) => setDescValue(e.target.value)}
-          onBlur={() => void handleSaveDescription()}
-          placeholder="Add notes about this list..."
-          className="w-full px-3 py-2 rounded-lg bg-slate-900 border border-amber-400 text-slate-100 placeholder-slate-500 focus:outline-none text-sm resize-none"
-          rows={2}
-        />
-      ) : (
-        <button
-          onClick={() => setEditingDesc(true)}
-          className="text-left w-full text-sm text-slate-500 hover:text-slate-300 py-1"
-        >
-          {descValue || 'Add notes about this list...'}
-        </button>
-      )}
-
-      <p className="text-xs text-slate-500 mb-4">Browse units on the left and click "Add" to include them in your list. Watch your points total and role limits. Use "Back" to return to your lists or "Done" to save.</p>
-
-      {/* Detachment rules */}
-      {detachmentAbilities.length > 0 && (
-        <CollapsibleSection title={`${detachmentName} Rules`} count={detachmentAbilities.length}>
-          <div className="space-y-2">
-            {detachmentAbilities.map((ability) => (
-              <div key={ability.id} className="text-xs">
-                <p className="font-semibold text-amber-400">{ability.name}</p>
-                {ability.legend && <p className="text-slate-500 italic">{ability.legend}</p>}
-                <p className="text-slate-400 mt-0.5 whitespace-pre-wrap">{htmlToText(ability.description)}</p>
-              </div>
-            ))}
-          </div>
-        </CollapsibleSection>
-      )}
-
-      {/* Validation errors */}
-      {errors.map((err, i) => (
-        <div key={i} className={`px-3 py-2 rounded-lg text-sm ${err.type === 'NO_WARLORD' ? 'bg-amber-900/20 border border-amber-500/30 text-amber-400' : 'bg-red-900/20 border border-red-500/30 text-red-400'}`}>
-          {err.message}
-        </div>
-      ))}
-
-      {/* Two-column layout */}
-      <div className="flex gap-4" style={{ minHeight: 'calc(100vh - 240px)' }}>
-        {/* Left: Unit browser */}
-        <div className="w-1/2 space-y-3">
-          <div className="flex gap-2">
-            <input
-              type="text"
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="Search units..."
-              className="flex-1 px-3 py-2 rounded-lg bg-slate-900 border border-slate-800 text-slate-100 placeholder-slate-500 focus:outline-none focus:border-amber-400"
-            />
-            <label className="flex items-center gap-1.5 text-xs text-slate-400 whitespace-nowrap cursor-pointer select-none">
-              <input
-                type="checkbox"
-                checked={showLegends}
-                onChange={(e) => setShowLegends(e.target.checked)}
-                className="w-4 h-4 rounded border-slate-700 bg-slate-900 text-amber-400 focus:ring-amber-400"
-              />
-              Legends
-            </label>
-          </div>
-
-          {/* Role filter pills */}
-          <div className="flex gap-1 flex-wrap">
-            {ROLE_FILTERS.map((role) => (
-              <button
-                key={role}
-                onClick={() => setRoleFilter(role)}
-                className={`px-2.5 py-1 rounded-full text-xs font-medium transition-colors ${
-                  roleFilter === role
-                    ? 'bg-amber-400 text-slate-950'
-                    : 'bg-slate-800 text-slate-400 hover:bg-slate-700 hover:text-slate-200'
-                }`}
-              >
-                {role}
-              </button>
-            ))}
-          </div>
-
-          <div className="space-y-2 max-h-[60vh] overflow-y-auto">
-            {unitsLoading && <p className="text-slate-500 text-sm">Loading units...</p>}
-            {!unitsLoading && units.length === 0 && (
-              <p className="text-slate-500 text-sm">No units found.</p>
-            )}
-            {units.map((unit) => (
-              <div
-                key={unit.id}
-                className="flex items-center justify-between p-3 rounded-lg bg-slate-900 border border-slate-800"
-              >
-                <div>
-                  <div className="flex items-center gap-2">
-                    <span className="font-medium text-slate-100">{unit.name}</span>
-                    <RatingBadge rating={ratingMap.get(unit.id) ?? null} />
-                    {unitRoles.get(unit.id) && (
-                      <span className="px-1.5 py-0.5 rounded text-[10px] font-medium bg-slate-800 text-slate-500">
-                        {unitRoles.get(unit.id)}
-                      </span>
-                    )}
-                    <UnitKeywordBadges unitId={unit.id} />
-                  </div>
-                  <p className="text-sm text-slate-400 mt-0.5">{unit.points}pts</p>
-                  <UnitStatLine unitContentId={unit.id} />
-                </div>
-                <ModelCountPicker
-                  unitId={unit.id}
-                  unitName={unit.name}
-                  defaultPoints={unit.points}
-                  remaining={remaining}
-                  onSelect={(id, name, pts, mc) => void handleAddUnit(id, name, pts, mc)}
-                />
-              </div>
-            ))}
-          </div>
-        </div>
-
-        {/* Right: Current list */}
-        <div className="w-1/2 space-y-3">
-          {/* Suggestion banner */}
-          {suggestion && (
-            <div className="p-3 rounded-lg bg-slate-800 border border-amber-400/30 text-sm">
-              <p className="text-slate-400">Added: <span className="text-slate-100">{suggestion.addedName}</span> <RatingBadge rating={suggestion.addedRating} /></p>
-              <p className="text-amber-400 mt-1 mb-1">Better alternatives at same or lower cost:</p>
-              {suggestion.alternatives.map((alt, i) => (
-                <p key={i} className="text-slate-300 ml-2">
-                  {alt.unitName} ({alt.points}pts) <RatingBadge rating={alt.rating} />
-                </p>
-              ))}
-            </div>
-          )}
-
-          <div className="space-y-2 max-h-[60vh] overflow-y-auto">
-            {listUnits.length === 0 && (
-              <p className="text-slate-500 text-sm">No units yet. Add units from the left panel.</p>
-            )}
-            {listUnits.map((unit: LocalListUnit) => (
-              <div
-                key={unit.id}
-                className={`p-3 rounded-lg bg-slate-900 border ${unit.isWarlord ? 'border-amber-400' : 'border-slate-800'}`}
-              >
-                <div className="flex items-center justify-between">
-                  <div className="flex-1">
-                    <div className="flex items-center gap-2">
-                      <span className="font-medium text-slate-100">{unit.unitName}</span>
-                      {unit.isWarlord && (
-                        <span className="text-[10px] px-1.5 py-0.5 rounded bg-amber-400 text-slate-950 font-bold">WARLORD</span>
-                      )}
-                    </div>
-                    <p className="text-sm text-slate-400 mt-0.5">
-                      {unit.unitPoints * unit.count + (unit.enhancementCost ?? 0)}pts
-                      {unit.count > 1 && ` (${unit.count}x${unit.unitPoints})`}
-                      {unit.modelCount && ` · ${unit.modelCount} models`}
-                      {unit.enhancementName && (
-                        <span className="text-amber-400"> · {unit.enhancementName} +{unit.enhancementCost}pts</span>
-                      )}
-                    </p>
-                    <UnitStatLine unitContentId={unit.unitContentId} />
-                  </div>
-                  <div className="flex items-center gap-1 ml-2">
-                    <WarlordButton
-                      unit={unit}
-                      onToggle={() => void handleToggleWarlord(unit)}
-                    />
-                    <button
-                      onClick={() => void handleRemoveUnit(unit.id, unit.unitPoints, unit.count)}
-                      className="px-2 py-1 rounded bg-slate-700 text-slate-400 hover:bg-red-900 hover:text-red-400 text-xs"
-                    >
-                      X
-                    </button>
-                  </div>
-                </div>
-                {/* Enhancement picker row */}
-                <div className="mt-1">
-                  <EnhancementPicker
-                    unit={unit}
-                    detachment={detachment}
-                    onSelect={(enhId, enhName, enhCost) => void handleSetEnhancement(unit, enhId, enhName, enhCost)}
-                  />
-                </div>
-              </div>
-            ))}
-          </div>
-
-          {/* Actions */}
-          <div className="flex gap-3 pt-3 border-t border-slate-800">
-            <button
-              onClick={handleExport}
-              className={`flex-1 py-2 rounded-lg font-semibold text-sm ${exportCopied ? 'bg-emerald-400 text-slate-950' : 'bg-amber-400 text-slate-950 hover:bg-amber-300'}`}
-            >
-              {exportCopied ? 'Copied!' : 'Export list'}
-            </button>
-            <button
-              onClick={onDone}
-              className="flex-1 py-2 rounded-lg border border-amber-400 text-amber-400 hover:bg-amber-400/10 font-semibold text-sm"
-            >
-              Done
-            </button>
-            <button
-              onClick={() => void handleDeleteList()}
-              className="px-4 py-2 rounded-lg bg-slate-800 text-red-400 hover:bg-red-900 text-sm"
-            >
-              Delete
-            </button>
-          </div>
-        </div>
-      </div>
-    </div>
+    <MyArmyView
+      listUnits={listUnits}
+      activeList={activeList}
+      faction={faction}
+      detachmentName={detachmentName}
+      detachment={detachment}
+      totalPts={totalPts}
+      remaining={remaining}
+      battleSize={battleSize}
+      errors={errors}
+      suggestion={suggestion}
+      ratingMap={ratingMap}
+      onAddUnit={() => { setSuggestion(null); setSubScreen('add') }}
+      onRemoveUnit={(id, pts, count) => void handleRemoveUnit(id, pts, count)}
+      onToggleWarlord={(u) => void handleToggleWarlord(u)}
+      onSetEnhancement={(u, enhId, enhName, enhCost) => void handleSetEnhancement(u, enhId, enhName, enhCost)}
+      onExport={handleExport}
+      onDone={onDone}
+      onDeleteList={() => void handleDeleteList()}
+      onBack={onBack}
+      exportCopied={exportCopied}
+      editingName={editingName}
+      editingDesc={editingDesc}
+      nameValue={nameValue}
+      descValue={descValue}
+      onStartEditName={() => setEditingName(true)}
+      onChangeName={setNameValue}
+      onSaveName={() => void handleSaveName()}
+      onStartEditDesc={() => setEditingDesc(true)}
+      onChangeDesc={setDescValue}
+      onSaveDesc={() => void handleSaveDescription()}
+      detachmentAbilities={detachmentAbilities}
+    />
   )
 }
