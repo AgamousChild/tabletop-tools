@@ -418,6 +418,55 @@ describe('parseBSDataXml — nested selectionEntry', () => {
     expect(units).toHaveLength(2)
     expect(units.map((u) => u.name).sort()).toEqual(['Squad Alpha', 'Standalone Character'])
   })
+
+  it('extracts characteristics from nested model entries (real BSData format)', () => {
+    // In real BSData XML, many units have their characteristic profile ONLY inside
+    // a nested <selectionEntry type="model">, not at the outer unit level.
+    const xml = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<gameSystem id="test-sys" name="TestGame">
+  <selectionEntries>
+    <selectionEntry id="u1" name="Intercessor Squad" type="unit">
+      <selectionEntries>
+        <selectionEntry id="m1" name="Intercessor" type="model">
+          <profiles>
+            <profile id="p1" name="Intercessor" typeName="Unit">
+              <characteristics>
+                <characteristic name="M">6"</characteristic>
+                <characteristic name="T">4</characteristic>
+                <characteristic name="SV">3+</characteristic>
+                <characteristic name="W">2</characteristic>
+                <characteristic name="LD">6+</characteristic>
+                <characteristic name="OC">2</characteristic>
+              </characteristics>
+            </profile>
+            <profile id="w1" name="Bolt Rifle" typeName="Ranged Weapons">
+              <characteristics>
+                <characteristic name="Range">30"</characteristic>
+                <characteristic name="A">2</characteristic>
+                <characteristic name="BS">3+</characteristic>
+                <characteristic name="S">4</characteristic>
+                <characteristic name="AP">-1</characteristic>
+                <characteristic name="D">1</characteristic>
+              </characteristics>
+            </profile>
+          </profiles>
+        </selectionEntry>
+      </selectionEntries>
+    </selectionEntry>
+  </selectionEntries>
+</gameSystem>`
+    const { units, errors } = parseBSDataXml(xml, 'Test Faction')
+    expect(units).toHaveLength(1)
+    const unit = units[0]!
+    expect(unit.name).toBe('Intercessor Squad')
+    expect(unit.toughness).toBe(4)
+    expect(unit.save).toBe(3)
+    expect(unit.wounds).toBe(2)
+    expect(unit.weapons).toHaveLength(1)
+    expect(unit.weapons[0]!.name).toBe('Bolt Rifle')
+    // No warnings about missing characteristics
+    expect(errors.filter(e => e.includes('missing characteristic data'))).toHaveLength(0)
+  })
 })
 
 describe('parseBSDataXml — additional weapon abilities', () => {
