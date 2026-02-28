@@ -97,3 +97,36 @@ describe('simulate.history', () => {
     await expect(caller.simulate.history()).rejects.toMatchObject({ code: 'UNAUTHORIZED' })
   })
 })
+
+describe('simulate.lookup', () => {
+  it('returns cached result for known configHash', async () => {
+    const caller = createCaller(ctx)
+    // Save with a configHash
+    await caller.simulate.save({
+      attackerId: 'a-lookup',
+      attackerName: 'Lookup Attacker',
+      defenderId: 'd-lookup',
+      defenderName: 'Lookup Defender',
+      result: sampleResult,
+      configHash: 'test-hash-123',
+      weaponConfig: '{"attackType":"ranged"}',
+    })
+    const cached = await caller.simulate.lookup({ configHash: 'test-hash-123' })
+    expect(cached).not.toBeNull()
+    expect(cached!.result.expectedWounds).toBe(2.5)
+    expect(cached!.weaponConfig).toBe('{"attackType":"ranged"}')
+  })
+
+  it('returns null for unknown configHash', async () => {
+    const caller = createCaller(ctx)
+    const cached = await caller.simulate.lookup({ configHash: 'nonexistent-hash' })
+    expect(cached).toBeNull()
+  })
+
+  it('rejects unauthenticated callers', async () => {
+    const caller = createCaller(unauthCtx)
+    await expect(
+      caller.simulate.lookup({ configHash: 'test-hash-123' }),
+    ).rejects.toMatchObject({ code: 'UNAUTHORIZED' })
+  })
+})

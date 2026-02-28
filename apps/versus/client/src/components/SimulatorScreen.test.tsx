@@ -21,6 +21,9 @@ vi.mock('../lib/trpc', () => ({
       history: {
         useQuery: () => ({ data: [] }),
       },
+      lookup: {
+        useQuery: () => ({ data: null }),
+      },
     },
   },
 }))

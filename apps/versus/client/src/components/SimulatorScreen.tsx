@@ -410,6 +410,27 @@ export function SimulatorScreen({ onSignOut }: Props) {
 
   const resultsRef = useRef<HTMLDivElement>(null)
 
+  // Compute config hash for cache lookup
+  const currentConfigHash = useMemo(() => {
+    if (!simData || simData.breakdowns.length === 0) return null
+    const weaponConfig = {
+      attackType,
+      effectiveDefenderModels,
+      invulnSave: invulnSave ?? resolvedDefender?.invulnSave,
+      fnp: fnp ?? resolvedDefender?.fnp,
+      specialRules,
+      selectedWeapons: getSelectedWeapons().map((w) => w.name),
+      leaderContentId: attackerLeaderId ?? undefined,
+    }
+    return simpleHash(JSON.stringify(weaponConfig))
+  }, [simData, attackType, effectiveDefenderModels, invulnSave, fnp, specialRules, getSelectedWeapons, attackerLeaderId, resolvedDefender])
+
+  // Look up cached result from server
+  const cachedResult = trpc.simulate.lookup.useQuery(
+    { configHash: currentConfigHash! },
+    { enabled: !!currentConfigHash },
+  )
+
   const saveMutation = trpc.simulate.save.useMutation()
 
   const attackerName =
@@ -810,6 +831,28 @@ export function SimulatorScreen({ onSignOut }: Props) {
               distribution={distribution}
               onSave={handleSave}
             />
+            {cachedResult.data && (
+              <div className="mt-3 p-3 rounded bg-slate-800 border border-slate-700">
+                <p className="text-xs font-medium text-amber-400 mb-1">Previously Saved Result</p>
+                <div className="grid grid-cols-3 gap-2 text-xs text-slate-400">
+                  <div>
+                    <span className="text-slate-500">Wounds:</span>{' '}
+                    {cachedResult.data.result.expectedWounds.toFixed(2)}
+                  </div>
+                  <div>
+                    <span className="text-slate-500">Models:</span>{' '}
+                    {cachedResult.data.result.expectedModelsRemoved.toFixed(2)}
+                  </div>
+                  <div>
+                    <span className="text-slate-500">Survivors:</span>{' '}
+                    {cachedResult.data.result.survivors.toFixed(2)}
+                  </div>
+                </div>
+                <p className="text-xs text-slate-600 mt-1">
+                  Saved {new Date(cachedResult.data.createdAt).toLocaleDateString()}
+                </p>
+              </div>
+            )}
           </div>
         )}
 

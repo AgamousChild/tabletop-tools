@@ -1,10 +1,37 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { authClient } from '../lib/auth'
 import { HelpTip, SimpleMarkdown } from '@tabletop-tools/ui'
 import { trpc } from '../lib/trpc'
 import { useHashRoute, navigate } from '../lib/router'
 import type { Route } from '../lib/router'
 import { ManageTournament } from './ManageTournament'
+
+/** Formats elapsed time since a given timestamp as HH:MM:SS */
+function useElapsedTime(startTimestamp: number | null): string | null {
+  const [elapsed, setElapsed] = useState<string | null>(null)
+  useEffect(() => {
+    if (!startTimestamp) { setElapsed(null); return }
+    function tick() {
+      const diff = Math.max(0, Math.floor((Date.now() - startTimestamp!) / 1000))
+      const h = Math.floor(diff / 3600)
+      const m = Math.floor((diff % 3600) / 60)
+      const s = diff % 60
+      setElapsed(`${h}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`)
+    }
+    tick()
+    const id = setInterval(tick, 1000)
+    return () => clearInterval(id)
+  }, [startTimestamp])
+  return elapsed
+}
+
+function RoundClock({ createdAt }: { createdAt: number }) {
+  const elapsed = useElapsedTime(createdAt)
+  if (!elapsed) return null
+  return (
+    <p className="text-amber-400 text-sm font-mono">Elapsed: {elapsed}</p>
+  )
+}
 
 type Props = { onSignOut: () => void }
 
@@ -497,6 +524,7 @@ export function TournamentScreen({ onSignOut }: Props) {
             {roundDetail?.startTime && (
               <p className="text-slate-500 text-sm">Start: {roundDetail.startTime}</p>
             )}
+            {roundDetail?.status === 'ACTIVE' && <RoundClock createdAt={roundDetail.createdAt} />}
           </div>
           {isTO && roundDetail?.status === 'PENDING' && (
             <button

@@ -144,6 +144,8 @@ Update this section every time you update or fix a section of the requirements.
 - **Game Tracker dropdown audit (2026-02-28)**: Verified all faction/detachment fields use `<select>` dropdowns (not text inputs). Secondaries use SecondaryPicker dropdown. Stratagems use StratagemPicker dropdown. Text inputs are only for user-entered data (date, location, opponent name, notes).
 - **TO score override UI (2026-02-28)**: Added "TO Override" button on round pairings view — TOs can enter/change VP scores directly for any pairing. Uses `result.override` mutation (auto-confirms, sets `toOverride` flag). Override form pre-fills existing scores. Overridden results show "TO Override" label instead of "Confirmed". 73 server + 58 client tests pass.
 - **Feature audit verified (2026-02-28)**: Comprehensive audit of all app feature requirements. Confirmed: list-builder (army size, faction/detachment flow, creation rules, model count, suggestions, save — all implemented). Versus (weapon count, melee limits, save with units/rules/results — all implemented). Tournament (Play search, My Info, list search, player search — all implemented).
+- **Versus cache lookup (2026-02-28)**: Added `simulate.lookup` endpoint — queries by configHash to find previously saved results. Client computes configHash on-the-fly and shows "Previously Saved Result" comparison alongside live simulation. 11 server + 160 client tests pass.
+- **Tournament round clock (2026-02-28)**: Added elapsed time timer on active rounds. Shows `Elapsed: H:MM:SS` in amber monospace font, updating every second. Uses round `createdAt` timestamp. 73 server + 58 client tests pass.
 
 ### In Progress
 
