@@ -1,50 +1,46 @@
 /**
- * CV pipeline — composes all stages into a single function.
+ * CV pipeline — composes all stages for dice detection and pip counting.
  *
  * Stages:
- *   1. rgbaToLab         — convert RGBA frame to LAB color space
- *   2. absDiffLab        — subtract background → difference image
- *   3. otsuThreshold     — produce binary foreground mask
- *   4. extractRois       — find per-die bounding rectangles
- *   5. (per ROI) extractGray → resizeTo64 → dilate → cluster / detectBlobs
+ *   1. rgbaToGray      — convert RGBA frame to grayscale
+ *   2. gaussianBlur     — smooth to reduce noise
+ *   3. absDiffGray      — subtract background → difference image
+ *   4. otsuThreshold    — produce binary foreground mask
+ *   5. morphClose       — fill gaps → merge pip blobs into solid die shapes
+ *   6. extractRois      — find per-die bounding rectangles
+ *   7. (per ROI) detectPips — count pips directly via blob detection
  *
- * The pipeline holds mutable state (background frame, cluster set) between
- * calls. State is keyed by diceSetId to keep it conceptually associated with
- * the calibrated dice set.
+ * No calibration-time face labeling is needed — pips are counted directly
+ * from the die face image. Only a background capture step is required.
  *
  * No opencv.js dependency — all operations are pure TypeScript.
  */
 
-import { absDiffLab, otsuThreshold, rgbaToLab } from './background'
-import { addToCluster, labelCluster as doLabelCluster } from './cluster'
-import type { Cluster } from './cluster'
-import { detectBlobs } from './blobDetector'
+import { absDiffGray, gaussianBlur, morphClose, otsuThreshold, rgbaToGray } from './background'
+import { detectPips } from './blobDetector'
 import { extractRois } from './isolate'
 import type { Roi } from './isolate'
-import { dilate, resizeTo64 } from './normalize'
+
+export type { Roi }
 
 export interface RoiResult {
-  /** Bounding box of this die face in the original frame */
+  /** Bounding box of this die in the original frame */
   roi: Roi
-  /** Internal cluster identifier (maps to a pip value after labeling) */
-  clusterId: string
-  /** Pip count from the SimpleBlobDetector (null if detection failed) */
-  blobCount: number | null
-  /** The normalized 64×64 grayscale image for this die face */
-  normalized: Uint8Array
+  /** Pip count detected via blob analysis (null if detection failed) */
+  pipCount: number | null
 }
 
 export interface PipelineState {
   diceSetId: string
-  backgroundLab: Uint8Array | null
-  clusters: Cluster[]
+  backgroundGray: Uint8Array | null
+  bgWidth: number
+  bgHeight: number
 }
 
 export interface Pipeline {
   state: PipelineState
   captureBackground(rgba: Uint8ClampedArray, width: number, height: number): void
   processFrame(rgba: Uint8ClampedArray, width: number, height: number): RoiResult[]
-  labelCluster(clusterId: string, pipValue: number): void
 }
 
 /**
@@ -68,71 +64,57 @@ function extractSubImage(
 }
 
 /**
- * Convert an RGBA buffer to a grayscale buffer (luminance channel).
- */
-function rgbaToGray(rgba: Uint8ClampedArray): Uint8Array {
-  const out = new Uint8Array(rgba.length / 4)
-  for (let i = 0; i < out.length; i++) {
-    // Standard luminance coefficients
-    out[i] = Math.round(
-      0.299 * rgba[i * 4]! + 0.587 * rgba[i * 4 + 1]! + 0.114 * rgba[i * 4 + 2]!,
-    )
-  }
-  return out
-}
-
-/**
  * Create a CV pipeline instance for a given dice set.
- * Holds background and cluster state in memory.
+ * Holds background state in memory. No cluster/template state needed.
  */
 export function createPipeline(diceSetId: string): Pipeline {
   const state: PipelineState = {
     diceSetId,
-    backgroundLab: null,
-    clusters: [],
+    backgroundGray: null,
+    bgWidth: 0,
+    bgHeight: 0,
   }
 
   function captureBackground(rgba: Uint8ClampedArray, width: number, height: number): void {
-    state.backgroundLab = rgbaToLab(rgba, width, height)
+    const gray = rgbaToGray(rgba, width, height)
+    state.backgroundGray = gaussianBlur(gray, width, height)
+    state.bgWidth = width
+    state.bgHeight = height
   }
 
   function processFrame(rgba: Uint8ClampedArray, width: number, height: number): RoiResult[] {
-    if (!state.backgroundLab) return []
+    if (!state.backgroundGray) return []
+    if (width !== state.bgWidth || height !== state.bgHeight) return []
 
-    // Stage 1–3: LAB absdiff → binary mask
-    const frameLab = rgbaToLab(rgba, width, height)
-    const diff = absDiffLab(frameLab, state.backgroundLab, width, height)
-    const mask = otsuThreshold(diff)
+    // Stage 1-2: Grayscale + blur
+    const frameGray = rgbaToGray(rgba, width, height)
+    const frameBlurred = gaussianBlur(frameGray, width, height)
 
-    // Stage 4: Find die face ROIs
-    const rois = extractRois(mask, width, height)
+    // Stage 3: Absolute difference
+    const diff = absDiffGray(frameBlurred, state.backgroundGray)
+
+    // Stage 4: Otsu threshold (with min floor to suppress noise)
+    const mask = otsuThreshold(diff, 15)
+
+    // Stage 5: Morphological close — fills gaps between pip detections
+    // to create solid die shapes. Kernel radius scales with image size.
+    const closeRadius = Math.max(2, Math.floor(Math.min(width, height) * 0.015))
+    const closed = morphClose(mask, width, height, closeRadius, 2)
+
+    // Stage 6: Find die ROIs
+    const rois = extractRois(closed, width, height)
     if (rois.length === 0) return []
 
-    // Stage 5: Process each ROI
-    const frameGray = rgbaToGray(rgba)
+    // Stage 7: Count pips in each die ROI using the ORIGINAL (un-blurred) grayscale
     const results: RoiResult[] = []
-
     for (const roi of rois) {
-      // Extract, resize, dilate
       const roiGray = extractSubImage(frameGray, width, roi.x, roi.y, roi.width, roi.height)
-      const resized = resizeTo64(roiGray, roi.width, roi.height)
-      const normalized = dilate(resized, 64, 64, 2)
-
-      // Cluster assignment
-      const { clusters: updated, clusterId } = addToCluster(normalized, state.clusters)
-      state.clusters = updated
-
-      const blobCount = detectBlobs(normalized)
-
-      results.push({ roi, clusterId, blobCount, normalized })
+      const pipCount = detectPips(roiGray, roi.width, roi.height)
+      results.push({ roi, pipCount })
     }
 
     return results
   }
 
-  function labelCluster(clusterId: string, pipValue: number): void {
-    state.clusters = doLabelCluster(state.clusters, clusterId, pipValue)
-  }
-
-  return { state, captureBackground, processFrame, labelCluster }
+  return { state, captureBackground, processFrame }
 }

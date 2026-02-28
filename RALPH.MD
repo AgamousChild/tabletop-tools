@@ -147,6 +147,7 @@ Update this section every time you update or fix a section of the requirements.
 - **Versus cache lookup (2026-02-28)**: Added `simulate.lookup` endpoint — queries by configHash to find previously saved results. Client computes configHash on-the-fly and shows "Previously Saved Result" comparison alongside live simulation. 11 server + 160 client tests pass.
 - **Tournament round clock (2026-02-28)**: Added elapsed time timer on active rounds. Shows `Elapsed: H:MM:SS` in amber monospace font, updating every second. Uses round `createdAt` timestamp. 73 server + 58 client tests pass.
 - **Tournament geocoding (2026-02-28)**: Integrated Nominatim (OpenStreetMap) geocoding — no API key needed. On tournament creation, location string is geocoded to lat/lng and stored. Tournament detail shows "View Map" link to OpenStreetMap. Play search has "Near Me" button using browser geolocation — sorts results by distance (Haversine formula) and shows distance in miles on each card. DB columns already existed from V3 schema. 73 server + 58 client tests pass.
+- **Dice detection rewrite (2026-02-28)**: Complete rewrite of the CV pipeline. Replaced LAB color space + template matching + clustering (required 4-step calibration) with grayscale + Gaussian blur + morphological close + direct pip counting via blob detection. Now only requires 2 steps: capture background + test roll. Scale-aware parameters work at any camera resolution. Removed 10 dead files (cluster.ts, templateMatch.ts, normalize.ts, imageUtils.ts, pipReader.ts, ClusterLabelingScreen.tsx + all tests, exemplarStore). 64 server + 125 client = 189 tests pass.
 
 ### In Progress
 
@@ -154,7 +155,6 @@ Update this section every time you update or fix a section of the requirements.
 
 ### Not Started
 
-- Dice detection rewrite (detect_dice or OpenCV)
 - Detachment unit choice limitations (data exists only as unstructured HTML — requires manual rule extraction)
 
 ---
@@ -170,7 +170,7 @@ Update this section every time you update or fix a section of the requirements.
 | packages/game-data-store | 93 | PASS |
 | packages/ui | 50 | PASS |
 | apps/no-cheat/server | 64 | PASS |
-| apps/no-cheat/client | 178 | PASS |
+| apps/no-cheat/client | 125 | PASS |
 | apps/versus/server | 8 | PASS |
 | apps/versus/client | 160 | PASS |
 | apps/list-builder/server | 35 | PASS |

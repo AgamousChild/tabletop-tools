@@ -52,10 +52,9 @@ vi.mock('../lib/trpc', () => ({
 
 vi.mock('../lib/cv/pipeline', () => ({
   createPipeline: () => ({
-    state: { diceSetId: 'test', backgroundLab: null, clusters: [] },
+    state: { diceSetId: 'test', backgroundGray: null, bgWidth: 0, bgHeight: 0 },
     captureBackground: vi.fn(),
     processFrame: vi.fn(() => []),
-    labelCluster: vi.fn(),
   }),
 }))
 
