@@ -146,6 +146,7 @@ Update this section every time you update or fix a section of the requirements.
 - **Feature audit verified (2026-02-28)**: Comprehensive audit of all app feature requirements. Confirmed: list-builder (army size, faction/detachment flow, creation rules, model count, suggestions, save — all implemented). Versus (weapon count, melee limits, save with units/rules/results — all implemented). Tournament (Play search, My Info, list search, player search — all implemented).
 - **Versus cache lookup (2026-02-28)**: Added `simulate.lookup` endpoint — queries by configHash to find previously saved results. Client computes configHash on-the-fly and shows "Previously Saved Result" comparison alongside live simulation. 11 server + 160 client tests pass.
 - **Tournament round clock (2026-02-28)**: Added elapsed time timer on active rounds. Shows `Elapsed: H:MM:SS` in amber monospace font, updating every second. Uses round `createdAt` timestamp. 73 server + 58 client tests pass.
+- **Tournament geocoding (2026-02-28)**: Integrated Nominatim (OpenStreetMap) geocoding — no API key needed. On tournament creation, location string is geocoded to lat/lng and stored. Tournament detail shows "View Map" link to OpenStreetMap. Play search has "Near Me" button using browser geolocation — sorts results by distance (Haversine formula) and shows distance in miles on each card. DB columns already existed from V3 schema. 73 server + 58 client tests pass.
 
 ### In Progress
 
@@ -154,7 +155,6 @@ Update this section every time you update or fix a section of the requirements.
 ### Not Started
 
 - Dice detection rewrite (detect_dice or OpenCV)
-- Tournament geocoding (latitude/longitude columns exist in DB schema, need geocoding API integration)
 - Detachment unit choice limitations (data exists only as unstructured HTML — requires manual rule extraction)
 
 ---
