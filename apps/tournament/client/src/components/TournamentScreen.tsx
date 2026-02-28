@@ -44,6 +44,8 @@ type Tournament = {
   eventDate: number
   format: string
   location: string | null
+  latitude?: number | null
+  longitude?: number | null
   createdAt: number
   playerCount?: number
   toName?: string | null
@@ -270,12 +272,32 @@ export function TournamentScreen({ onSignOut }: Props) {
     })
   }
 
-  function handleCreateTournament(e: React.FormEvent) {
+  async function handleCreateTournament(e: React.FormEvent) {
     e.preventDefault()
+    // Geocode the location if provided
+    let latitude: number | undefined
+    let longitude: number | undefined
+    if (newLocation) {
+      try {
+        const res = await fetch(
+          `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(newLocation)}&format=json&limit=1`,
+          { headers: { 'User-Agent': 'TabletopTools/1.0' } },
+        )
+        const results = await res.json()
+        if (Array.isArray(results) && results.length > 0) {
+          latitude = parseFloat(results[0].lat)
+          longitude = parseFloat(results[0].lon)
+        }
+      } catch {
+        // Geocoding failure is non-critical — continue without coordinates
+      }
+    }
     createTournament.mutate({
       name: newName,
       eventDate: Date.now(),
       location: newLocation || undefined,
+      latitude,
+      longitude,
       format: newFormat,
       totalRounds: parseInt(newRounds, 10),
       description: newDescription || undefined,
@@ -749,7 +771,19 @@ export function TournamentScreen({ onSignOut }: Props) {
               {tournament?.format} · {tournament?.totalRounds} rounds
             </p>
             {tournament?.location && (
-              <p className="text-slate-500 text-sm">{tournament.location}</p>
+              <p className="text-slate-500 text-sm">
+                {tournament.location}
+                {tournament.latitude != null && tournament.longitude != null && (
+                  <a
+                    href={`https://www.openstreetmap.org/?mlat=${tournament.latitude}&mlon=${tournament.longitude}#map=15/${tournament.latitude}/${tournament.longitude}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="ml-2 text-amber-400 hover:text-amber-300"
+                  >
+                    View Map
+                  </a>
+                )}
+              </p>
             )}
             {tournament?.startTime && (
               <p className="text-slate-500 text-sm">Start: {tournament.startTime}</p>
@@ -1033,9 +1067,22 @@ function NavTabs({ active }: { active: string }) {
   )
 }
 
+/** Haversine distance in miles between two lat/lng points */
+function haversineDistance(lat1: number, lon1: number, lat2: number, lon2: number): number {
+  const R = 3959 // Earth radius in miles
+  const dLat = ((lat2 - lat1) * Math.PI) / 180
+  const dLon = ((lon2 - lon1) * Math.PI) / 180
+  const a =
+    Math.sin(dLat / 2) ** 2 +
+    Math.cos((lat1 * Math.PI) / 180) * Math.cos((lat2 * Math.PI) / 180) * Math.sin(dLon / 2) ** 2
+  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a))
+}
+
 function PlayScreen() {
   const [searchQuery, setSearchQuery] = useState('')
   const [statusFilter, setStatusFilter] = useState<string>('')
+  const [userLocation, setUserLocation] = useState<{ lat: number; lng: number } | null>(null)
+  const [locationError, setLocationError] = useState<string | null>(null)
   const [favorites, setFavorites] = useState<string[]>(() => {
     try {
       return JSON.parse(localStorage.getItem('tournament-favorites') ?? '[]')
@@ -1055,7 +1102,35 @@ function PlayScreen() {
     })
   }
 
-  const results = searchResults.data ?? []
+  function requestLocation() {
+    if (!navigator.geolocation) {
+      setLocationError('Geolocation not supported')
+      return
+    }
+    navigator.geolocation.getCurrentPosition(
+      (pos) => {
+        setUserLocation({ lat: pos.coords.latitude, lng: pos.coords.longitude })
+        setLocationError(null)
+      },
+      () => setLocationError('Location access denied'),
+    )
+  }
+
+  const rawResults = searchResults.data ?? []
+
+  // Sort by distance if user location is available
+  const results = userLocation
+    ? [...rawResults].sort((a, b) => {
+        const distA = a.latitude != null && a.longitude != null
+          ? haversineDistance(userLocation.lat, userLocation.lng, a.latitude, a.longitude)
+          : Infinity
+        const distB = b.latitude != null && b.longitude != null
+          ? haversineDistance(userLocation.lat, userLocation.lng, b.latitude, b.longitude)
+          : Infinity
+        return distA - distB
+      })
+    : rawResults
+
   const favorited = results.filter((t) => favorites.includes(t.id))
   const others = results.filter((t) => !favorites.includes(t.id))
 
@@ -1087,6 +1162,19 @@ function PlayScreen() {
               </button>
             ))}
           </div>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={requestLocation}
+              className={`text-xs px-3 py-1 rounded ${
+                userLocation
+                  ? 'bg-emerald-600 text-white'
+                  : 'bg-slate-800 text-slate-400 hover:text-slate-200'
+              }`}
+            >
+              {userLocation ? 'Sorted by Distance' : 'Near Me'}
+            </button>
+            {locationError && <span className="text-xs text-red-400">{locationError}</span>}
+          </div>
         </div>
 
         {searchResults.isPending && <p className="text-slate-400">Searching…</p>}
@@ -1096,7 +1184,7 @@ function PlayScreen() {
             <h3 className="text-xs font-semibold text-amber-400 uppercase mb-2">Favorites</h3>
             <div className="space-y-2">
               {favorited.map((t) => (
-                <TournamentSearchCard key={t.id} tournament={t} isFavorite onToggleFavorite={() => toggleFavorite(t.id)} />
+                <TournamentSearchCard key={t.id} tournament={t} isFavorite onToggleFavorite={() => toggleFavorite(t.id)} userLocation={userLocation} />
               ))}
             </div>
           </div>
@@ -1106,7 +1194,7 @@ function PlayScreen() {
           <div className="space-y-2">
             {favorited.length > 0 && <h3 className="text-xs font-semibold text-slate-500 uppercase mb-2">All Results</h3>}
             {others.map((t) => (
-              <TournamentSearchCard key={t.id} tournament={t} isFavorite={false} onToggleFavorite={() => toggleFavorite(t.id)} />
+              <TournamentSearchCard key={t.id} tournament={t} isFavorite={false} onToggleFavorite={() => toggleFavorite(t.id)} userLocation={userLocation} />
             ))}
           </div>
         )}
@@ -1128,6 +1216,8 @@ type SearchTournament = {
   status: string
   format: string
   location: string | null
+  latitude: number | null
+  longitude: number | null
   imageUrl: string | null
   eventDate: number
   playerCount: number
@@ -1139,11 +1229,17 @@ function TournamentSearchCard({
   tournament: t,
   isFavorite,
   onToggleFavorite,
+  userLocation,
 }: {
   tournament: SearchTournament
   isFavorite: boolean
   onToggleFavorite: () => void
+  userLocation?: { lat: number; lng: number } | null
 }) {
+  const distance = userLocation && t.latitude != null && t.longitude != null
+    ? haversineDistance(userLocation.lat, userLocation.lng, t.latitude, t.longitude)
+    : null
+
   return (
     <div className="bg-slate-900 rounded p-4 flex justify-between items-start">
       <a href={`#/tournament/${t.id}`} className="flex-1 hover:text-amber-400">
@@ -1151,7 +1247,14 @@ function TournamentSearchCard({
         <p className="text-sm text-slate-400 mt-0.5">
           {t.format} · {new Date(t.eventDate).toLocaleDateString()}
         </p>
-        {t.location && <p className="text-xs text-slate-500">{t.location}</p>}
+        {t.location && (
+          <p className="text-xs text-slate-500">
+            {t.location}
+            {distance != null && (
+              <span className="ml-1 text-amber-400">{distance < 1 ? '< 1' : Math.round(distance)} mi</span>
+            )}
+          </p>
+        )}
         {t.startTime && <p className="text-xs text-slate-500">Start: {t.startTime}</p>}
         <p className="text-xs text-slate-500 mt-1">
           {t.playerCount}{t.maxPlayers ? ` / ${t.maxPlayers}` : ''} players
