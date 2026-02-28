@@ -20,15 +20,16 @@ test.describe('Versus (authed)', () => {
     await page.goto('/versus/')
     await page.waitForLoadState('networkidle')
 
-    // SimulatorScreen has two UnitSelector components labeled "Attacker" and "Defender"
-    await expect(page.locator('text=Attacker')).toBeVisible({ timeout: 15_000 })
-    await expect(page.locator('text=Defender')).toBeVisible()
+    // SimulatorScreen has two UnitSelector components with h2 headings
+    await expect(page.getByRole('heading', { name: 'Attacker' })).toBeVisible({ timeout: 15_000 })
+    await expect(page.getByRole('heading', { name: 'Defender' })).toBeVisible()
   })
 
-  test('run simulation button is present', async ({ page }) => {
+  test('simulate button is present', async ({ page }) => {
     await page.goto('/versus/')
     await page.waitForLoadState('networkidle')
 
-    await expect(page.getByRole('button', { name: /run simulation/i })).toBeVisible({ timeout: 15_000 })
+    // Button shows "Select attacker and defender" when no units selected
+    await expect(page.getByRole('button', { name: /select attacker and defender/i })).toBeVisible({ timeout: 15_000 })
   })
 })

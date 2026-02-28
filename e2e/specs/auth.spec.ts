@@ -10,11 +10,11 @@ test.describe('Auth flow', () => {
     // Should show auth screen with login form by default
     await expect(page.getByPlaceholder('Email')).toBeVisible()
     await expect(page.getByPlaceholder('Password')).toBeVisible()
-    await expect(page.getByRole('button', { name: 'Log in' })).toBeVisible()
+    await expect(page.getByRole('button', { name: 'Sign in' })).toBeVisible()
 
     // Switch to register mode
     await page.getByRole('button', { name: 'Register' }).click()
-    await expect(page.getByPlaceholder('Your name')).toBeVisible()
+    await expect(page.getByPlaceholder('Name')).toBeVisible()
     await expect(page.getByRole('button', { name: 'Create account' })).toBeVisible()
   })
 

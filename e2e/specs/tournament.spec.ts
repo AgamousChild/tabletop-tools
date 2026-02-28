@@ -13,8 +13,8 @@ test.describe('Tournament (authed)', () => {
     await page.goto('/tournament/')
     await page.waitForLoadState('networkidle')
 
-    // TournamentScreen has a "+ New Tournament" button
-    await expect(page.getByRole('button', { name: /new tournament/i })).toBeVisible({ timeout: 15_000 })
+    // TournamentScreen has a "+ New Tournament" link (hash routing)
+    await expect(page.getByRole('link', { name: /new tournament/i })).toBeVisible({ timeout: 15_000 })
   })
 
   test('sign out button is present', async ({ page }) => {

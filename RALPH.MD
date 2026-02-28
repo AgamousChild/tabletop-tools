@@ -110,13 +110,16 @@ Update this section every time you update or fix a section of the requirements.
 
 - [x] Dice detection false positive handling — added `undoLastRoll` server endpoint (deletes last roll, recomputes stats), undo button in recording UI, last capture display with removedPips feedback. 5 new server tests + 1 new client test (64 server + 178 client = 242 no-cheat tests)
 
+- [x] Deploy updated code to production — 6 Workers deployed (no-cheat, versus, list-builder, game-tracker, tournament, new-meta), gateway deployed (all 8 SPAs), 18/18 health checks pass
+- [x] E2E tests updated for new UI — auth button "Sign in" (was "Log in"), name placeholder "Name" (was "Your name"), new-meta tabs are `<a>` links with `exact: true`, list-builder shows "My Army Lists" + "+ New List", versus uses heading roles + "Select attacker and defender" button, tournament "+ New Tournament" is `<a>` link — 36/36 E2E tests pass
+
 ### In Progress
 
-(none — all RALPH.MD requirements implemented)
+(none — all RALPH.MD requirements implemented and deployed)
 
 ### Not Started
 
-- [ ] Deploy updated code to production
+(none)
 
 ---
 

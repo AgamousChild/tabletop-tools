@@ -16,9 +16,9 @@ test.describe('New Meta (public, no auth)', () => {
     await page.goto('/new-meta/')
     await page.waitForLoadState('networkidle')
 
-    await expect(page.getByRole('button', { name: 'Meta' })).toBeVisible()
-    await expect(page.getByRole('button', { name: 'Players' })).toBeVisible()
-    await expect(page.getByRole('button', { name: 'Source Data' })).toBeVisible()
+    await expect(page.getByRole('link', { name: 'Meta', exact: true })).toBeVisible()
+    await expect(page.getByRole('link', { name: 'Players' })).toBeVisible()
+    await expect(page.getByRole('link', { name: 'Source Data' })).toBeVisible()
   })
 
   test('can switch between tabs', async ({ page }) => {
@@ -26,13 +26,13 @@ test.describe('New Meta (public, no auth)', () => {
     await page.waitForLoadState('networkidle')
 
     // Click Players tab
-    await page.getByRole('button', { name: 'Players' }).click()
+    await page.getByRole('link', { name: 'Players' }).click()
 
     // Click Source Data tab
-    await page.getByRole('button', { name: 'Source Data' }).click()
+    await page.getByRole('link', { name: 'Source Data' }).click()
 
     // Click back to Meta tab
-    await page.getByRole('button', { name: 'Meta' }).click()
+    await page.getByRole('link', { name: 'Meta', exact: true }).click()
   })
 
   test('dashboard renders on Meta tab', async ({ page }) => {

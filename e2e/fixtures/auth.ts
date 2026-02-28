@@ -32,7 +32,7 @@ export async function signUp(page: Page, creds: Credentials): Promise<void> {
     }
 
     // Fill register form
-    await page.getByPlaceholder('Your name').fill(creds.name)
+    await page.getByPlaceholder('Name').fill(creds.name)
     await page.getByPlaceholder('Email').fill(creds.email)
     await page.getByPlaceholder('Password').fill(creds.password)
 
@@ -69,17 +69,11 @@ export async function signUp(page: Page, creds: Credentials): Promise<void> {
  * Expects to be on a page showing the AuthScreen in login mode.
  */
 export async function logIn(page: Page, creds: Pick<Credentials, 'email' | 'password'>): Promise<void> {
-  // Ensure we're in login mode
-  const loginLink = page.getByRole('button', { name: 'Log in' })
-  // The form button says "Log in" when in login mode, and there's also a toggle link
-  // We need the toggle link if we're in register mode
-  const logInToggle = page.locator('button:text-is("Log in")').last()
-  if (await logInToggle.isVisible()) {
-    // Check if we're in register mode by seeing if "Your name" field exists
-    const nameField = page.getByPlaceholder('Your name')
-    if (await nameField.isVisible()) {
-      await logInToggle.click()
-    }
+  // Ensure we're in login mode — if register form is showing, switch back
+  const nameField = page.getByPlaceholder('Name')
+  if (await nameField.isVisible()) {
+    // We're in register mode — click "Sign in" toggle to switch to login
+    await page.getByRole('button', { name: 'Sign in' }).click()
   }
 
   // Fill login form
@@ -87,7 +81,7 @@ export async function logIn(page: Page, creds: Pick<Credentials, 'email' | 'pass
   await page.getByPlaceholder('Password').fill(creds.password)
 
   // Submit
-  await page.getByRole('button', { name: 'Log in' }).click()
+  await page.getByRole('button', { name: 'Sign in' }).click()
 }
 
 /**
