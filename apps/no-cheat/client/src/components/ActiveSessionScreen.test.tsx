@@ -50,12 +50,17 @@ vi.mock('../lib/trpc', () => ({
   },
 }))
 
-vi.mock('../lib/cv/pipeline', () => ({
-  createPipeline: () => ({
+vi.mock('../lib/cv/trainedPipeline', () => ({
+  createTrainedPipeline: () => ({
     state: { diceSetId: 'test', backgroundGray: null, bgWidth: 0, bgHeight: 0 },
     captureBackground: vi.fn(),
     processFrame: vi.fn(() => []),
+    setExamples: vi.fn(),
   }),
+}))
+
+vi.mock('../lib/store/trainingStore', () => ({
+  getExamples: vi.fn().mockResolvedValue([]),
 }))
 
 vi.mock('./Camera', () => ({

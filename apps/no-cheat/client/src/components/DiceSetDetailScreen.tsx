@@ -8,9 +8,10 @@ type Props = {
   onBack: () => void
   onStartSession: () => void
   onSelectSession: (sessionId: string) => void
+  onTrainDetection: () => void
 }
 
-export function DiceSetDetailScreen({ diceSet, onBack, onStartSession, onSelectSession }: Props) {
+export function DiceSetDetailScreen({ diceSet, onBack, onStartSession, onSelectSession, onTrainDetection }: Props) {
   const { data: sessions = [], isLoading } = trpc.session.list.useQuery({ diceSetId: diceSet.id })
 
   return (
@@ -40,12 +41,18 @@ export function DiceSetDetailScreen({ diceSet, onBack, onStartSession, onSelectS
           <SessionHistory sessions={sessions} onSelect={onSelectSession} />
         )}
 
-        <div className="mt-6">
+        <div className="mt-6 space-y-3">
           <button
             onClick={onStartSession}
             className="w-full py-3 rounded-lg bg-amber-400 text-slate-950 font-bold text-lg hover:bg-amber-300 transition-colors"
           >
             New Session
+          </button>
+          <button
+            onClick={onTrainDetection}
+            className="w-full py-3 rounded-lg border border-slate-700 text-slate-300 hover:border-amber-400 hover:text-amber-400 transition-colors font-semibold"
+          >
+            Train Detection
           </button>
         </div>
       </div>
