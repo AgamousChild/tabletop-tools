@@ -6,6 +6,8 @@ type Props = {
   roiHeight: number
   guess: number | null
   confidence: number
+  selectedLabel: number | null
+  skipped: boolean
   onCorrect: (label: number) => void
   onSkip: () => void
 }
@@ -22,6 +24,8 @@ export function TrainingRoiCard({
   roiHeight,
   guess,
   confidence,
+  selectedLabel,
+  skipped,
   onCorrect,
   onSkip,
 }: Props) {
@@ -76,27 +80,33 @@ export function TrainingRoiCard({
 
       {/* Pip buttons */}
       <div className="flex gap-1">
-        {[1, 2, 3, 4, 5, 6].map((pip) => (
-          <button
-            key={pip}
-            onClick={() => onCorrect(pip)}
-            className={`w-8 h-8 rounded text-sm font-bold ${
-              pip === guess
-                ? 'bg-amber-400 text-slate-950'
-                : 'bg-slate-800 text-slate-100 hover:bg-slate-700'
-            }`}
-          >
-            {pip}
-          </button>
-        ))}
+        {[1, 2, 3, 4, 5, 6].map((pip) => {
+          const isSelected = pip === selectedLabel
+          const isGuess = pip === guess && selectedLabel === null
+          return (
+            <button
+              key={pip}
+              onClick={() => onCorrect(pip)}
+              className={`w-8 h-8 rounded text-sm font-bold ${
+                isSelected
+                  ? 'bg-emerald-400 text-slate-950'
+                  : isGuess
+                    ? 'bg-amber-400 text-slate-950'
+                    : 'bg-slate-800 text-slate-100 hover:bg-slate-700'
+              }`}
+            >
+              {pip}
+            </button>
+          )
+        })}
       </div>
 
       {/* Skip button */}
       <button
         onClick={onSkip}
-        className="text-sm text-slate-400 hover:text-slate-200"
+        className={`text-sm ${skipped ? 'text-amber-400 font-semibold' : 'text-slate-400 hover:text-slate-200'}`}
       >
-        Skip
+        {skipped ? 'Skipped' : 'Skip'}
       </button>
     </div>
   )

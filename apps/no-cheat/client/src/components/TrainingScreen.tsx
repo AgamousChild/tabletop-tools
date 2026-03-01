@@ -37,7 +37,8 @@ type DetectedRoi = {
 type Phase =
   | { name: 'training'; frozen: boolean; rois: DetectedRoi[] }
 
-const STABLE_FRAMES = 20
+const WINDOW_SIZE = 15
+const STABILITY_RATIO = 0.6
 const COOLDOWN_FRAMES = 10
 
 function extractSubImage(
@@ -73,9 +74,8 @@ export function TrainingScreen({ diceSet, onBack }: Props) {
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const overlayRef = useRef<HTMLCanvasElement>(null)
   const rafRef = useRef<number>(0)
-  const stableCountRef = useRef(0)
+  const recentCountsRef = useRef<number[]>([])
   const cooldownRef = useRef(0)
-  const lastDiceCountRef = useRef(0)
   const phaseRef = useRef(phase)
   phaseRef.current = phase
   const examplesRef = useRef(examples)
@@ -188,56 +188,66 @@ export function TrainingScreen({ diceSet, onBack }: Props) {
           cooldownRef.current--
         }
       } else if (currentCount === 0) {
-        stableCountRef.current = 0
-        lastDiceCountRef.current = 0
-      } else if (currentCount === lastDiceCountRef.current) {
-        stableCountRef.current++
-        if (stableCountRef.current >= STABLE_FRAMES) {
-          // Stable! Freeze and extract ROIs
-          const frameGray = rgbaToGray(
-            frame.imageData.data,
-            frame.canvas.width,
-            frame.canvas.height,
-          )
-
-          const currentExamples = examplesRef.current
-          const trainingExamples: TrainingExample[] = currentExamples.map((e) => ({
-            features: e.features,
-            label: e.label,
-          }))
-
-          const detectedRois: DetectedRoi[] = results.map((r) => {
-            const roiGray = extractSubImage(
-              frameGray,
-              frame.canvas.width,
-              r.roi.x,
-              r.roi.y,
-              r.roi.width,
-              r.roi.height,
-            )
-            const features = extractFeatures(roiGray, r.roi.width, r.roi.height)
-            const knnResult = classifyKnn(features, trainingExamples)
-
-            return {
-              roi: r.roi,
-              roiGray,
-              roiWidth: r.roi.width,
-              roiHeight: r.roi.height,
-              guess: knnResult ? knnResult.label : r.pipCount,
-              confidence: knnResult ? knnResult.confidence : 0,
-              selectedLabel: null,
-              skipped: false,
-            }
-          })
-
-          setPhase({ name: 'training', frozen: true, rois: detectedRois })
-          stableCountRef.current = 0
-          cooldownRef.current = COOLDOWN_FRAMES
-          return // Stop the loop — frozen
-        }
+        recentCountsRef.current = []
       } else {
-        stableCountRef.current = 0
-        lastDiceCountRef.current = currentCount
+        // Sliding window stabilizer: track last N frame counts
+        const counts = recentCountsRef.current
+        counts.push(currentCount)
+        if (counts.length > WINDOW_SIZE) counts.shift()
+
+        // Find mode and its frequency
+        if (counts.length >= WINDOW_SIZE) {
+          const freq = new Map<number, number>()
+          for (const c of counts) freq.set(c, (freq.get(c) ?? 0) + 1)
+          let mode = 0, modeCount = 0
+          for (const [val, count] of freq) {
+            if (count > modeCount) { mode = val; modeCount = count }
+          }
+
+          // Freeze when mode appears in 60%+ of the window and matches current frame
+          if (modeCount / WINDOW_SIZE >= STABILITY_RATIO && currentCount === mode) {
+            const frameGray = rgbaToGray(
+              frame.imageData.data,
+              frame.canvas.width,
+              frame.canvas.height,
+            )
+
+            const currentExamples = examplesRef.current
+            const trainingExamples: TrainingExample[] = currentExamples.map((e) => ({
+              features: e.features,
+              label: e.label,
+            }))
+
+            const detectedRois: DetectedRoi[] = results.map((r) => {
+              const roiGray = extractSubImage(
+                frameGray,
+                frame.canvas.width,
+                r.roi.x,
+                r.roi.y,
+                r.roi.width,
+                r.roi.height,
+              )
+              const features = extractFeatures(roiGray, r.roi.width, r.roi.height)
+              const knnResult = classifyKnn(features, trainingExamples)
+
+              return {
+                roi: r.roi,
+                roiGray,
+                roiWidth: r.roi.width,
+                roiHeight: r.roi.height,
+                guess: knnResult ? knnResult.label : r.pipCount,
+                confidence: knnResult ? knnResult.confidence : 0,
+                selectedLabel: null,
+                skipped: false,
+              }
+            })
+
+            setPhase({ name: 'training', frozen: true, rois: detectedRois })
+            recentCountsRef.current = []
+            cooldownRef.current = COOLDOWN_FRAMES
+            return // Stop the loop — frozen
+          }
+        }
       }
 
       rafRef.current = requestAnimationFrame(processLoop)
@@ -251,17 +261,21 @@ export function TrainingScreen({ diceSet, onBack }: Props) {
   }, [phase.name, phase.name === 'training' ? (phase as Extract<Phase, { name: 'training' }>).frozen : false, pipeline])
 
   function handleCorrect(index: number, label: number) {
-    if (phase.name !== 'training' || !phase.frozen) return
-    const newRois = [...phase.rois]
-    newRois[index] = { ...newRois[index]!, selectedLabel: label, skipped: false }
-    setPhase({ name: 'training', frozen: true, rois: newRois })
+    setPhase((prev) => {
+      if (prev.name !== 'training' || !prev.frozen) return prev
+      const newRois = [...prev.rois]
+      newRois[index] = { ...newRois[index]!, selectedLabel: label, skipped: false }
+      return { name: 'training', frozen: true, rois: newRois }
+    })
   }
 
   function handleSkip(index: number) {
-    if (phase.name !== 'training' || !phase.frozen) return
-    const newRois = [...phase.rois]
-    newRois[index] = { ...newRois[index]!, skipped: true, selectedLabel: null }
-    setPhase({ name: 'training', frozen: true, rois: newRois })
+    setPhase((prev) => {
+      if (prev.name !== 'training' || !prev.frozen) return prev
+      const newRois = [...prev.rois]
+      newRois[index] = { ...newRois[index]!, skipped: true, selectedLabel: null }
+      return { name: 'training', frozen: true, rois: newRois }
+    })
   }
 
   const handleSaveAll = useCallback(async () => {
@@ -431,6 +445,8 @@ export function TrainingScreen({ diceSet, onBack }: Props) {
                   roiHeight={roi.roiHeight}
                   guess={roi.guess}
                   confidence={roi.confidence}
+                  selectedLabel={roi.selectedLabel}
+                  skipped={roi.skipped}
                   onCorrect={(label) => handleCorrect(i, label)}
                   onSkip={() => handleSkip(i)}
                 />

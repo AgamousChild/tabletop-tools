@@ -90,17 +90,17 @@ export function createPipeline(diceSetId: string): Pipeline {
     const frameGray = rgbaToGray(rgba, width, height)
     const frameBlurred = gaussianBlur(frameGray, width, height)
 
-    // Stage 3: Adaptive threshold — detects local contrast features
-    const mask = adaptiveThreshold(frameBlurred, width, height)
+    // Stage 3: Adaptive threshold — detects local contrast features (edges, pips)
+    const mask = adaptiveThreshold(frameBlurred, width, height, undefined, 15)
 
-    // Stage 4: Morphological open (erode) — removes small noise speckles
+    // Stage 4: Morphological open (erode) — removes noise speckles
     const openRadius = Math.max(1, Math.floor(Math.min(width, height) * 0.005))
-    const cleaned = erode(mask, width, height, openRadius, 1)
+    const cleaned = erode(mask, width, height, openRadius, 2)
 
     // Stage 5: Morphological close — fills gaps between pip detections
-    // to create solid die shapes. Kernel radius scales with image size.
-    const closeRadius = Math.max(2, Math.floor(Math.min(width, height) * 0.015))
-    const closed = morphClose(cleaned, width, height, closeRadius, 2)
+    // to create solid die shapes. Single iteration to avoid merging adjacent dice.
+    const closeRadius = Math.max(2, Math.floor(Math.min(width, height) * 0.012))
+    const closed = morphClose(cleaned, width, height, closeRadius, 1)
 
     // Stage 6: Find die ROIs
     const rois = extractRois(closed, width, height)
