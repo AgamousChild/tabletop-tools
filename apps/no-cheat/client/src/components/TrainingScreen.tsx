@@ -35,7 +35,6 @@ type DetectedRoi = {
 }
 
 type Phase =
-  | { name: 'background' }
   | { name: 'training'; frozen: boolean; rois: DetectedRoi[] }
 
 const STABLE_FRAMES = 20
@@ -59,7 +58,7 @@ function extractSubImage(
 }
 
 export function TrainingScreen({ diceSet, onBack }: Props) {
-  const [phase, setPhase] = useState<Phase>({ name: 'background' })
+  const [phase, setPhase] = useState<Phase>({ name: 'training', frozen: false, rois: [] })
   const [error, setError] = useState<string | null>(null)
   const [cameraReady, setCameraReady] = useState(false)
   const [detectedCount, setDetectedCount] = useState(0)
@@ -99,7 +98,7 @@ export function TrainingScreen({ diceSet, onBack }: Props) {
     load()
   }, [diceSet.id, pipeline])
 
-  // Start camera stream
+  // Start camera stream and auto-ready the pipeline
   useEffect(() => {
     let stream: MediaStream | null = null
 
@@ -110,6 +109,11 @@ export function TrainingScreen({ diceSet, onBack }: Props) {
         if (videoRef.current) {
           videoRef.current.srcObject = s
           setCameraReady(true)
+          // Auto-ready the pipeline (just sets ready flag + dimensions)
+          const video = videoRef.current
+          const w = video.videoWidth || 320
+          const h = video.videoHeight || 240
+          pipeline.captureBackground(new Uint8ClampedArray(w * h * 4), w, h)
         }
       })
       .catch(() => setError('Camera unavailable. Please grant camera permission.'))
@@ -117,7 +121,7 @@ export function TrainingScreen({ diceSet, onBack }: Props) {
     return () => {
       stream?.getTracks().forEach((t) => t.stop())
     }
-  }, [])
+  }, [pipeline])
 
   function getFrame(): { imageData: ImageData; canvas: HTMLCanvasElement } | null {
     const video = videoRef.current
@@ -127,14 +131,11 @@ export function TrainingScreen({ diceSet, onBack }: Props) {
     canvas.height = video.videoHeight || 240
     const ctx = canvas.getContext('2d')!
     ctx.drawImage(video, 0, 0, canvas.width, canvas.height)
+    // Ensure pipeline dimensions match current frame
+    if (!pipeline.state.ready || pipeline.state.width !== canvas.width || pipeline.state.height !== canvas.height) {
+      pipeline.captureBackground(new Uint8ClampedArray(canvas.width * canvas.height * 4), canvas.width, canvas.height)
+    }
     return { imageData: ctx.getImageData(0, 0, canvas.width, canvas.height), canvas }
-  }
-
-  function handleCaptureBackground() {
-    const frame = getFrame()
-    if (!frame) return
-    pipeline.captureBackground(frame.imageData.data, frame.canvas.width, frame.canvas.height)
-    setPhase({ name: 'training', frozen: false, rois: [] })
   }
 
   // Training loop - continuous frame processing
@@ -404,22 +405,6 @@ export function TrainingScreen({ diceSet, onBack }: Props) {
         </div>
 
         {/* Phase content */}
-        {phase.name === 'background' && (
-          <div className="space-y-3">
-            <h3 className="text-slate-100 font-semibold text-center">Capture Background</h3>
-            <p className="text-slate-400 text-sm text-center">
-              Point camera at your rolling surface. Remove all dice from the area.
-            </p>
-            <button
-              onClick={handleCaptureBackground}
-              disabled={!cameraReady}
-              className="w-full py-3 rounded-lg bg-amber-400 text-slate-950 font-bold text-lg hover:bg-amber-300 transition-colors disabled:opacity-50"
-            >
-              Capture Background
-            </button>
-          </div>
-        )}
-
         {phase.name === 'training' && !phase.frozen && (
           <div className="space-y-3">
             <p className="text-slate-400 text-sm text-center">

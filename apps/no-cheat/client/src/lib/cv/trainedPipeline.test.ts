@@ -31,9 +31,9 @@ const H = 100
 function makeMockPipeline(): Pipeline {
   const state: PipelineState = {
     diceSetId: 'test-set',
-    backgroundGray: null,
-    bgWidth: 0,
-    bgHeight: 0,
+    ready: false,
+    width: 0,
+    height: 0,
   }
   return {
     state,

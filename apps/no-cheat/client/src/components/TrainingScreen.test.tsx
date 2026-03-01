@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { fireEvent, render, screen, waitFor, act } from '@testing-library/react'
+import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 
 import type { TrainedPipeline } from '../lib/cv/trainedPipeline'
 
@@ -15,7 +15,7 @@ vi.mock('../lib/store/trainingStore', () => ({
 
 vi.mock('../lib/cv/trainedPipeline', () => ({
   createTrainedPipeline: vi.fn(() => ({
-    state: { diceSetId: 'test', backgroundGray: null, bgWidth: 0, bgHeight: 0 },
+    state: { diceSetId: 'test', ready: false, width: 0, height: 0 },
     captureBackground: vi.fn(),
     processFrame: vi.fn().mockReturnValue([]),
     setExamples: vi.fn(),
@@ -65,7 +65,7 @@ beforeEach(() => {
 
   // Reset the mock pipeline to default behavior
   ;(createTrainedPipeline as ReturnType<typeof vi.fn>).mockReturnValue({
-    state: { diceSetId: 'test', backgroundGray: null, bgWidth: 0, bgHeight: 0 },
+    state: { diceSetId: 'test', ready: false, width: 0, height: 0 },
     captureBackground: vi.fn(),
     processFrame: vi.fn().mockReturnValue([]),
     setExamples: vi.fn(),
@@ -91,27 +91,16 @@ describe('TrainingScreen', () => {
     expect(onBack).toHaveBeenCalledOnce()
   })
 
-  it('shows "Capture Background" button initially (background phase)', () => {
+  it('starts directly in training phase with "Roll dice into the frame"', () => {
     render(<TrainingScreen {...defaultProps} />)
-    expect(screen.getByRole('button', { name: /capture background/i })).toBeInTheDocument()
+    expect(screen.getByText(/roll dice into the frame/i)).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /capture background/i })).not.toBeInTheDocument()
   })
 
   it('shows camera feed (video element)', () => {
     render(<TrainingScreen {...defaultProps} />)
     const video = document.querySelector('video')
     expect(video).toBeInTheDocument()
-  })
-
-  it('advances to training phase after background capture', async () => {
-    render(<TrainingScreen {...defaultProps} />)
-    await waitFor(() =>
-      expect(screen.getByRole('button', { name: /capture background/i })).not.toBeDisabled(),
-    )
-    fireEvent.click(screen.getByRole('button', { name: /capture background/i }))
-    // After capturing background, the "Capture Background" button should be gone
-    expect(screen.queryByRole('button', { name: /capture background/i })).not.toBeInTheDocument()
-    // Training phase should show a status message about detection
-    expect(screen.getByText(/roll dice into the frame/i)).toBeInTheDocument()
   })
 
   it('shows TrainingStats component', () => {
@@ -154,10 +143,5 @@ describe('TrainingScreen', () => {
   it('creates pipeline with the dice set id', () => {
     render(<TrainingScreen {...defaultProps} />)
     expect(createTrainedPipeline).toHaveBeenCalledWith('ds-1')
-  })
-
-  it('shows instructions for background phase', () => {
-    render(<TrainingScreen {...defaultProps} />)
-    expect(screen.getByText(/point camera at your rolling surface/i)).toBeInTheDocument()
   })
 })

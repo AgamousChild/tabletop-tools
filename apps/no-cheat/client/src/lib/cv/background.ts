@@ -220,3 +220,82 @@ export function morphClose(
   const dilated = dilate(src, width, height, radius, iterations)
   return erode(dilated, width, height, radius, iterations)
 }
+
+/**
+ * Build a summed area table (integral image) from a grayscale buffer.
+ *
+ * The output has dimensions (width+1) × (height+1). Entry at (x+1, y+1) stores
+ * the sum of all pixel values in the rectangle from (0,0) to (x,y) inclusive.
+ * Row 0 and column 0 are zero-padded for boundary-safe lookups.
+ *
+ * Uses Float64Array to avoid integer overflow on large images.
+ */
+export function buildIntegralImage(gray: Uint8Array, width: number, height: number): Float64Array {
+  const iw = width + 1
+  const ih = height + 1
+  const sat = new Float64Array(iw * ih) // row 0 and col 0 are implicitly 0
+
+  for (let y = 0; y < height; y++) {
+    let rowSum = 0
+    for (let x = 0; x < width; x++) {
+      rowSum += gray[y * width + x]!
+      sat[(y + 1) * iw + (x + 1)] = rowSum + sat[y * iw + (x + 1)]!
+    }
+  }
+
+  return sat
+}
+
+/**
+ * Adaptive threshold using an integral image for O(N) local mean computation.
+ *
+ * For each pixel, compares its value to the mean of its local neighborhood.
+ * Pixels where |value - localMean| > C are marked as foreground (255).
+ * This detects both dark-on-light (pip dots) and light-on-dark features,
+ * and is immune to global brightness shifts from auto-exposure.
+ *
+ * @param gray - Grayscale image buffer
+ * @param width - Image width
+ * @param height - Image height
+ * @param windowSize - Local window size (must be odd). Defaults to ~5% of short dimension.
+ * @param C - Contrast threshold. Higher = less noise, lower = more sensitive. Default 12.
+ */
+export function adaptiveThreshold(
+  gray: Uint8Array,
+  width: number,
+  height: number,
+  windowSize?: number,
+  C = 12,
+): Uint8Array {
+  const ws = windowSize ?? 2 * Math.floor(Math.min(width, height) * 0.05) + 1
+  const half = Math.floor(ws / 2)
+  const sat = buildIntegralImage(gray, width, height)
+  const iw = width + 1
+  const out = new Uint8Array(width * height)
+
+  for (let y = 0; y < height; y++) {
+    for (let x = 0; x < width; x++) {
+      // Window bounds (clamped to image edges)
+      const x1 = Math.max(0, x - half)
+      const y1 = Math.max(0, y - half)
+      const x2 = Math.min(width - 1, x + half)
+      const y2 = Math.min(height - 1, y + half)
+
+      const count = (x2 - x1 + 1) * (y2 - y1 + 1)
+
+      // O(1) rectangle sum from integral image
+      const sum =
+        sat[(y2 + 1) * iw + (x2 + 1)]! -
+        sat[y1 * iw + (x2 + 1)]! -
+        sat[(y2 + 1) * iw + x1]! +
+        sat[y1 * iw + x1]!
+
+      const localMean = sum / count
+      const diff = Math.abs(gray[y * width + x]! - localMean)
+
+      out[y * width + x] = diff > C ? 255 : 0
+    }
+  }
+
+  return out
+}
