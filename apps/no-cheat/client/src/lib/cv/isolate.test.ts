@@ -73,14 +73,14 @@ describe('extractRois', () => {
     expect(roi.y + roi.height).toBeGreaterThanOrEqual(70)
   })
 
-  it('merges two nearby regions into a single ROI', () => {
-    // Two small regions very close to each other → should merge
+  it('merges two adjacent regions into a single ROI', () => {
+    // Two small regions touching (adjacent pixels) → one connected component
     const mask = binaryMask(W, H, [
       { x: 40, y: 40, w: 15, h: 15 },
-      { x: 58, y: 40, w: 15, h: 15 },  // 3px gap from previous
+      { x: 55, y: 40, w: 15, h: 15 },  // adjacent to previous (x=55 touches x=54)
     ])
     const rois = extractRois(mask, W, H)
-    // Should be merged since they are within the proximity threshold
+    // Adjacent regions form one connected component via BFS
     expect(rois).toHaveLength(1)
   })
 

@@ -20,6 +20,8 @@ const defaultProps = {
   roiHeight: 64,
   guess: 3 as number | null,
   confidence: 0.9,
+  selectedLabel: null as number | null,
+  skipped: false,
   onCorrect: vi.fn(),
   onSkip: vi.fn(),
 }
@@ -68,13 +70,25 @@ describe('TrainingRoiCard', () => {
     expect(onSkip).toHaveBeenCalledOnce()
   })
 
-  it('highlights the guessed button differently from others', () => {
-    render(<TrainingRoiCard {...defaultProps} guess={3} />)
+  it('highlights the guessed button in amber when no label selected', () => {
+    render(<TrainingRoiCard {...defaultProps} guess={3} selectedLabel={null} />)
     const guessedButton = screen.getByRole('button', { name: '3' })
     const otherButton = screen.getByRole('button', { name: '5' })
-    // The guessed button should have amber styling, others should not
     expect(guessedButton.className).toContain('amber')
     expect(otherButton.className).not.toContain('amber')
+  })
+
+  it('highlights the selected label in emerald, not the guess', () => {
+    render(<TrainingRoiCard {...defaultProps} guess={3} selectedLabel={5} />)
+    const selectedButton = screen.getByRole('button', { name: '5' })
+    const guessButton = screen.getByRole('button', { name: '3' })
+    expect(selectedButton.className).toContain('emerald')
+    expect(guessButton.className).not.toContain('amber')
+  })
+
+  it('shows "Skipped" text when skipped is true', () => {
+    render(<TrainingRoiCard {...defaultProps} skipped={true} />)
+    expect(screen.getByRole('button', { name: /skipped/i })).toBeInTheDocument()
   })
 
   it('shows green border for high confidence (> 0.8)', () => {

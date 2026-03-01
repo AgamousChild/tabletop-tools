@@ -40,8 +40,10 @@ type Phase =
   | { name: 'result'; sessionId: string; result: CloseResult }
   | { name: 'evidence'; sessionId: string }
 
-/** How many consecutive stable frames before auto-capturing */
-const STABLE_FRAMES = 20 // ~0.7s at 30fps
+/** Sliding window size for stability detection */
+const WINDOW_SIZE = 15
+/** Fraction of window that must agree for stable detection */
+const STABILITY_RATIO = 0.6
 /** How many empty frames after a capture before allowing next detection */
 const COOLDOWN_FRAMES = 10
 
@@ -69,9 +71,8 @@ export function ActiveSessionScreen({ diceSet, onDone }: Props) {
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const overlayRef = useRef<HTMLCanvasElement>(null)
   const rafRef = useRef<number>(0)
-  const stableCountRef = useRef(0)
+  const recentCountsRef = useRef<number[]>([])
   const cooldownRef = useRef(0)
-  const lastDiceCountRef = useRef(0)
   const phaseRef = useRef(phase)
   phaseRef.current = phase
 
@@ -261,7 +262,7 @@ export function ActiveSessionScreen({ diceSet, onDone }: Props) {
         overlayCtx.fillText(String(pip), r.roi.x + r.roi.width / 2, r.roi.y - 4)
       }
 
-      // Auto-capture logic
+      // Auto-capture logic: sliding window stabilizer
       const currentCount = results.length
 
       if (cooldownRef.current > 0) {
@@ -270,24 +271,29 @@ export function ActiveSessionScreen({ diceSet, onDone }: Props) {
           cooldownRef.current--
         }
       } else if (currentCount === 0) {
-        // No dice — reset
-        stableCountRef.current = 0
-        lastDiceCountRef.current = 0
-      } else if (currentCount === lastDiceCountRef.current) {
-        // Same count — increment stability
-        stableCountRef.current++
-        if (stableCountRef.current >= STABLE_FRAMES) {
-          // Stable! Auto-capture
-          const pipValues = results.map((r) => r.pipCount ?? 1)
-          setAutoCapturing(true)
-          submitRoll(pipValues)
-          stableCountRef.current = 0
-          cooldownRef.current = COOLDOWN_FRAMES
-        }
+        recentCountsRef.current = []
       } else {
-        // Count changed — reset
-        stableCountRef.current = 0
-        lastDiceCountRef.current = currentCount
+        const counts = recentCountsRef.current
+        counts.push(currentCount)
+        if (counts.length > WINDOW_SIZE) counts.shift()
+
+        if (counts.length >= WINDOW_SIZE) {
+          const freq = new Map<number, number>()
+          for (const c of counts) freq.set(c, (freq.get(c) ?? 0) + 1)
+          let mode = 0, modeCount = 0
+          for (const [val, count] of freq) {
+            if (count > modeCount) { mode = val; modeCount = count }
+          }
+
+          if (modeCount / WINDOW_SIZE >= STABILITY_RATIO && currentCount === mode) {
+            // Stable! Auto-capture
+            const pipValues = results.map((r) => r.pipCount ?? 1)
+            setAutoCapturing(true)
+            submitRoll(pipValues)
+            recentCountsRef.current = []
+            cooldownRef.current = COOLDOWN_FRAMES
+          }
+        }
       }
 
       rafRef.current = requestAnimationFrame(processLoop)

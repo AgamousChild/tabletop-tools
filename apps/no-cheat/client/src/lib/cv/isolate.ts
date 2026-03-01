@@ -147,18 +147,18 @@ function mergeRegions(regions: BlobRegion[], mergeDistance: number): BlobRegion[
  * Returns an array of bounding rectangles, one per detected die in the scene.
  *
  * Parameters scale with image dimensions:
- * - minArea: 0.1% of image pixels (rejects noise)
- * - mergeDistance: 8% of shorter dimension (merges pip blobs into die shapes)
- * - aspectRatio: 0.25 to 4.0 (dice are roughly square)
- * - maxArea: 30% of image pixels (rejects huge background regions)
+ * - minArea: 0.5% of image pixels (rejects noise)
+ * - mergeDistance: 3% of shorter dimension (merges pip blobs without merging adjacent dice)
+ * - aspectRatio: 0.5 to 2.0 (dice are roughly square)
+ * - maxArea: 15% of image pixels (rejects huge background regions)
  */
 export function extractRois(binary: Uint8Array, width: number, height: number): Roi[] {
   const imageArea = width * height
   const shortDim = Math.min(width, height)
 
   const minArea = Math.max(200, Math.floor(imageArea * 0.005))
-  const maxArea = Math.floor(imageArea * 0.25)
-  const mergeDistance = Math.max(20, Math.floor(shortDim * 0.08))
+  const maxArea = Math.floor(imageArea * 0.15)
+  const mergeDistance = Math.max(10, Math.floor(shortDim * 0.03))
 
   const regions = findRegions(binary, width, height, minArea)
   const merged = mergeRegions(regions, mergeDistance)
@@ -170,7 +170,7 @@ export function extractRois(binary: Uint8Array, width: number, height: number): 
       const aspect = w / h
 
       // Filter by aspect ratio (dice are roughly square)
-      if (aspect < 0.4 || aspect > 2.5) return false
+      if (aspect < 0.5 || aspect > 2.0) return false
 
       // Filter by area (too small = noise, too large = background)
       if (r.area < minArea || r.area > maxArea) return false
