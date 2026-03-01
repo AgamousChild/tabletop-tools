@@ -62,6 +62,7 @@ export function TrainingScreen({ diceSet, onBack }: Props) {
   const [phase, setPhase] = useState<Phase>({ name: 'background' })
   const [error, setError] = useState<string | null>(null)
   const [cameraReady, setCameraReady] = useState(false)
+  const [detectedCount, setDetectedCount] = useState(0)
 
   // Training data state
   const [examples, setExamples] = useState<StoredExample[]>([])
@@ -71,6 +72,7 @@ export function TrainingScreen({ diceSet, onBack }: Props) {
 
   const videoRef = useRef<HTMLVideoElement>(null)
   const canvasRef = useRef<HTMLCanvasElement>(null)
+  const overlayRef = useRef<HTMLCanvasElement>(null)
   const rafRef = useRef<number>(0)
   const stableCountRef = useRef(0)
   const cooldownRef = useRef(0)
@@ -155,6 +157,29 @@ export function TrainingScreen({ diceSet, onBack }: Props) {
         frame.canvas.height,
       )
 
+      // Draw overlay: bounding boxes with pip values
+      const overlay = overlayRef.current
+      if (overlay) {
+        const w = frame.canvas.width
+        const h = frame.canvas.height
+        overlay.width = w
+        overlay.height = h
+        const overlayCtx = overlay.getContext('2d')!
+        overlayCtx.clearRect(0, 0, w, h)
+
+        for (const r of results) {
+          const pip = r.pipCount ?? '?'
+          overlayCtx.strokeStyle = '#fbbf24' // amber-400
+          overlayCtx.lineWidth = 2
+          overlayCtx.strokeRect(r.roi.x, r.roi.y, r.roi.width, r.roi.height)
+          overlayCtx.fillStyle = '#fbbf24'
+          overlayCtx.font = 'bold 16px monospace'
+          overlayCtx.textAlign = 'center'
+          overlayCtx.fillText(String(pip), r.roi.x + r.roi.width / 2, r.roi.y - 4)
+        }
+      }
+
+      setDetectedCount(results.length)
       const currentCount = results.length
 
       if (cooldownRef.current > 0) {
@@ -369,6 +394,10 @@ export function TrainingScreen({ diceSet, onBack }: Props) {
             className="w-full h-full object-cover"
           />
           <canvas ref={canvasRef} className="hidden" />
+          <canvas
+            ref={overlayRef}
+            className="absolute inset-0 w-full h-full pointer-events-none"
+          />
           {phase.name === 'training' && phase.frozen && (
             <div className="absolute inset-0 border-4 border-amber-400 rounded-lg pointer-events-none animate-pulse" />
           )}
@@ -394,7 +423,9 @@ export function TrainingScreen({ diceSet, onBack }: Props) {
         {phase.name === 'training' && !phase.frozen && (
           <div className="space-y-3">
             <p className="text-slate-400 text-sm text-center">
-              Waiting for dice to stabilize... Roll dice into the frame.
+              {detectedCount > 0
+                ? `${detectedCount} ${detectedCount === 1 ? 'die' : 'dice'} detected — hold steady...`
+                : 'Roll dice into the frame.'}
             </p>
           </div>
         )}
