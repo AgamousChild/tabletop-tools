@@ -5,9 +5,9 @@ import { Camera } from './Camera'
 
 // vi.hoisted ensures these objects/fns exist before vi.mock's factory runs
 const mockPipelineState = vi.hoisted(() => ({
-  backgroundGray: null as Uint8Array | null,
-  bgWidth: 0,
-  bgHeight: 0,
+  ready: false,
+  width: 0,
+  height: 0,
 }))
 const mockCaptureBackground = vi.hoisted(() => vi.fn())
 const mockProcessFrame = vi.hoisted(() => vi.fn())
@@ -21,9 +21,9 @@ vi.mock('../lib/cv/pipeline', () => ({
 }))
 
 beforeEach(() => {
-  mockPipelineState.backgroundGray = null
-  mockPipelineState.bgWidth = 0
-  mockPipelineState.bgHeight = 0
+  mockPipelineState.ready = false
+  mockPipelineState.width = 0
+  mockPipelineState.height = 0
   mockCaptureBackground.mockReset()
   mockProcessFrame.mockReset()
   mockProcessFrame.mockReturnValue([

@@ -7,17 +7,17 @@ import { CalibrationWizard } from './CalibrationWizard'
 function createMockPipeline(): Pipeline {
   const state: PipelineState = {
     diceSetId: 'test-set',
-    backgroundGray: null,
-    bgWidth: 0,
-    bgHeight: 0,
+    ready: false,
+    width: 0,
+    height: 0,
   }
 
   return {
     state,
     captureBackground: vi.fn(() => {
-      state.backgroundGray = new Uint8Array(100)
-      state.bgWidth = 10
-      state.bgHeight = 10
+      state.ready = true
+      state.width = 10
+      state.height = 10
     }),
     processFrame: vi.fn(() => [
       {
@@ -52,24 +52,22 @@ beforeEach(() => {
 })
 
 describe('CalibrationWizard', () => {
-  it('starts on step 1 with Capture Background button', () => {
+  it('starts with Test Roll heading and Capture Test Roll button', async () => {
     render(
       <CalibrationWizard pipeline={createMockPipeline()} diceSetId="d1" onComplete={vi.fn()} />,
     )
-    expect(screen.getByText('Step 1: Capture Background')).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: /capture background/i })).toBeInTheDocument()
+    expect(screen.getByText('Test Roll')).toBeInTheDocument()
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: /capture test roll/i })).not.toBeDisabled(),
+    )
   })
 
-  it('advances to step 2 (test roll) after capturing background', async () => {
+  it('auto-calls captureBackground on mount when camera is ready', async () => {
+    const pipeline = createMockPipeline()
     render(
-      <CalibrationWizard pipeline={createMockPipeline()} diceSetId="d1" onComplete={vi.fn()} />,
+      <CalibrationWizard pipeline={pipeline} diceSetId="d1" onComplete={vi.fn()} />,
     )
-    await waitFor(() =>
-      expect(screen.getByRole('button', { name: /capture background/i })).not.toBeDisabled(),
-    )
-    fireEvent.click(screen.getByRole('button', { name: /capture background/i }))
-    expect(screen.getByText('Step 2: Test Roll')).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: /capture test roll/i })).toBeInTheDocument()
+    await waitFor(() => expect(pipeline.captureBackground).toHaveBeenCalled())
   })
 
   it('shows detection results after test roll', async () => {
@@ -77,9 +75,8 @@ describe('CalibrationWizard', () => {
       <CalibrationWizard pipeline={createMockPipeline()} diceSetId="d1" onComplete={vi.fn()} />,
     )
     await waitFor(() =>
-      expect(screen.getByRole('button', { name: /capture background/i })).not.toBeDisabled(),
+      expect(screen.getByRole('button', { name: /capture test roll/i })).not.toBeDisabled(),
     )
-    fireEvent.click(screen.getByRole('button', { name: /capture background/i }))
     fireEvent.click(screen.getByRole('button', { name: /capture test roll/i }))
     expect(screen.getByText(/detected 1 die/i)).toBeInTheDocument()
     expect(screen.getByText(/does this look correct/i)).toBeInTheDocument()
@@ -91,9 +88,8 @@ describe('CalibrationWizard', () => {
 
     render(<CalibrationWizard pipeline={pipeline} diceSetId="d1" onComplete={vi.fn()} />)
     await waitFor(() =>
-      expect(screen.getByRole('button', { name: /capture background/i })).not.toBeDisabled(),
+      expect(screen.getByRole('button', { name: /capture test roll/i })).not.toBeDisabled(),
     )
-    fireEvent.click(screen.getByRole('button', { name: /capture background/i }))
     fireEvent.click(screen.getByRole('button', { name: /capture test roll/i }))
     expect(screen.getByText(/no dice detected/i)).toBeInTheDocument()
   })
@@ -104,33 +100,23 @@ describe('CalibrationWizard', () => {
       <CalibrationWizard pipeline={createMockPipeline()} diceSetId="d1" onComplete={onComplete} />,
     )
     await waitFor(() =>
-      expect(screen.getByRole('button', { name: /capture background/i })).not.toBeDisabled(),
+      expect(screen.getByRole('button', { name: /capture test roll/i })).not.toBeDisabled(),
     )
-    fireEvent.click(screen.getByRole('button', { name: /capture background/i }))
     fireEvent.click(screen.getByRole('button', { name: /capture test roll/i }))
     fireEvent.click(screen.getByRole('button', { name: /start recording/i }))
     expect(onComplete).toHaveBeenCalledOnce()
   })
 
-  it('has Recalibrate button that resets to step 1', async () => {
+  it('Recalibrate button resets to test roll with no results', async () => {
     render(
       <CalibrationWizard pipeline={createMockPipeline()} diceSetId="d1" onComplete={vi.fn()} />,
     )
     await waitFor(() =>
-      expect(screen.getByRole('button', { name: /capture background/i })).not.toBeDisabled(),
+      expect(screen.getByRole('button', { name: /capture test roll/i })).not.toBeDisabled(),
     )
-    fireEvent.click(screen.getByRole('button', { name: /capture background/i }))
     fireEvent.click(screen.getByRole('button', { name: /capture test roll/i }))
     fireEvent.click(screen.getByRole('button', { name: /recalibrate/i }))
-    expect(screen.getByText('Step 1: Capture Background')).toBeInTheDocument()
-  })
-
-  it('shows step indicators with 2 steps', () => {
-    render(
-      <CalibrationWizard pipeline={createMockPipeline()} diceSetId="d1" onComplete={vi.fn()} />,
-    )
-    expect(screen.getByText('1')).toBeInTheDocument()
-    expect(screen.getByText('2')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /capture test roll/i })).toBeInTheDocument()
   })
 
   it('shows camera error when getUserMedia fails', async () => {
@@ -146,9 +132,8 @@ describe('CalibrationWizard', () => {
       <CalibrationWizard pipeline={createMockPipeline()} diceSetId="d1" onComplete={vi.fn()} />,
     )
     await waitFor(() =>
-      expect(screen.getByRole('button', { name: /capture background/i })).not.toBeDisabled(),
+      expect(screen.getByRole('button', { name: /capture test roll/i })).not.toBeDisabled(),
     )
-    fireEvent.click(screen.getByRole('button', { name: /capture background/i }))
     fireEvent.click(screen.getByRole('button', { name: /capture test roll/i }))
     expect(screen.getByRole('button', { name: /retest/i })).toBeInTheDocument()
   })

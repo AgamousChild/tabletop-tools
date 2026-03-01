@@ -4,19 +4,19 @@
  * Stages:
  *   1. rgbaToGray      — convert RGBA frame to grayscale
  *   2. gaussianBlur     — smooth to reduce noise
- *   3. absDiffGray      — subtract background → difference image
- *   4. otsuThreshold    — produce binary foreground mask
+ *   3. adaptiveThreshold — local contrast detection (replaces background subtraction)
+ *   4. erode            — remove noise speckles
  *   5. morphClose       — fill gaps → merge pip blobs into solid die shapes
  *   6. extractRois      — find per-die bounding rectangles
  *   7. (per ROI) detectPips — count pips directly via blob detection
  *
- * No calibration-time face labeling is needed — pips are counted directly
- * from the die face image. Only a background capture step is required.
+ * No background reference frame is needed — adaptive thresholding detects dice
+ * via local contrast, immune to auto-exposure shifts on phone cameras.
  *
  * No opencv.js dependency — all operations are pure TypeScript.
  */
 
-import { absDiffGray, erode, gaussianBlur, morphClose, otsuThreshold, rgbaToGray } from './background'
+import { adaptiveThreshold, erode, gaussianBlur, morphClose, rgbaToGray } from './background'
 import { detectPips } from './blobDetector'
 import { extractRois } from './isolate'
 import type { Roi } from './isolate'
@@ -32,9 +32,9 @@ export interface RoiResult {
 
 export interface PipelineState {
   diceSetId: string
-  backgroundGray: Uint8Array | null
-  bgWidth: number
-  bgHeight: number
+  ready: boolean
+  width: number
+  height: number
 }
 
 export interface Pipeline {
@@ -65,45 +65,39 @@ function extractSubImage(
 
 /**
  * Create a CV pipeline instance for a given dice set.
- * Holds background state in memory. No cluster/template state needed.
+ * Call captureBackground() to set the ready flag and store dimensions.
+ * No background frame is stored — adaptive thresholding works from single frames.
  */
 export function createPipeline(diceSetId: string): Pipeline {
   const state: PipelineState = {
     diceSetId,
-    backgroundGray: null,
-    bgWidth: 0,
-    bgHeight: 0,
+    ready: false,
+    width: 0,
+    height: 0,
   }
 
-  function captureBackground(rgba: Uint8ClampedArray, width: number, height: number): void {
-    const gray = rgbaToGray(rgba, width, height)
-    state.backgroundGray = gaussianBlur(gray, width, height)
-    state.bgWidth = width
-    state.bgHeight = height
+  function captureBackground(_rgba: Uint8ClampedArray, width: number, height: number): void {
+    state.ready = true
+    state.width = width
+    state.height = height
   }
 
   function processFrame(rgba: Uint8ClampedArray, width: number, height: number): RoiResult[] {
-    if (!state.backgroundGray) return []
-    if (width !== state.bgWidth || height !== state.bgHeight) return []
+    if (!state.ready) return []
+    if (width !== state.width || height !== state.height) return []
 
     // Stage 1-2: Grayscale + blur
     const frameGray = rgbaToGray(rgba, width, height)
     const frameBlurred = gaussianBlur(frameGray, width, height)
 
-    // Stage 3: Absolute difference
-    const diff = absDiffGray(frameBlurred, state.backgroundGray)
+    // Stage 3: Adaptive threshold — detects local contrast features
+    const mask = adaptiveThreshold(frameBlurred, width, height)
 
-    // Stage 4: Otsu threshold (with min floor to suppress noise)
-    // Floor of 30 rejects camera sensor noise and auto-exposure drift
-    const mask = otsuThreshold(diff, 30)
-
-    // Stage 5a: Morphological open (erode→dilate via erode first) — removes
-    // small noise speckles before close fills gaps. Without this, noise
-    // pixels get amplified by the subsequent dilation in morphClose.
+    // Stage 4: Morphological open (erode) — removes small noise speckles
     const openRadius = Math.max(1, Math.floor(Math.min(width, height) * 0.005))
     const cleaned = erode(mask, width, height, openRadius, 1)
 
-    // Stage 5b: Morphological close — fills gaps between pip detections
+    // Stage 5: Morphological close — fills gaps between pip detections
     // to create solid die shapes. Kernel radius scales with image size.
     const closeRadius = Math.max(2, Math.floor(Math.min(width, height) * 0.015))
     const closed = morphClose(cleaned, width, height, closeRadius, 2)
@@ -117,7 +111,10 @@ export function createPipeline(diceSetId: string): Pipeline {
     for (const roi of rois) {
       const roiGray = extractSubImage(frameGray, width, roi.x, roi.y, roi.width, roi.height)
       const pipCount = detectPips(roiGray, roi.width, roi.height)
-      results.push({ roi, pipCount })
+      // Post-filter: reject ROIs where pip detection failed (non-dice edges)
+      if (pipCount !== null) {
+        results.push({ roi, pipCount })
+      }
     }
 
     return results

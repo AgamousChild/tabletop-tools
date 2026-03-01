@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
-import { absDiffGray, dilate, erode, gaussianBlur, morphClose, otsuThreshold, rgbaToGray } from './background'
+import { absDiffGray, adaptiveThreshold, buildIntegralImage, dilate, erode, gaussianBlur, morphClose, otsuThreshold, rgbaToGray } from './background'
 
 function solidGray(value: number, count: number): Uint8Array {
   return new Uint8Array(count).fill(value)
@@ -155,5 +155,123 @@ describe('morphClose', () => {
     const closed = morphClose(src, 5, 5, 1)
     // The gap at (2, 2) — center — should be filled
     expect(closed[2 * 5 + 2]).toBe(255)
+  })
+})
+
+describe('buildIntegralImage', () => {
+  it('returns dimensions (width+1) × (height+1)', () => {
+    const gray = solidGray(100, 12) // 4×3
+    const sat = buildIntegralImage(gray, 4, 3)
+    expect(sat.length).toBe(5 * 4) // (4+1) × (3+1)
+  })
+
+  it('top row and left column are all zeros', () => {
+    const gray = solidGray(50, 6) // 3×2
+    const sat = buildIntegralImage(gray, 3, 2)
+    const iw = 4 // width+1
+    // Row 0
+    for (let x = 0; x < iw; x++) expect(sat[x]).toBe(0)
+    // Col 0
+    for (let y = 0; y < 3; y++) expect(sat[y * iw]).toBe(0)
+  })
+
+  it('computes correct values on a known 3×3 grid', () => {
+    // 3×3 grid:
+    //  1  2  3
+    //  4  5  6
+    //  7  8  9
+    const gray = new Uint8Array([1, 2, 3, 4, 5, 6, 7, 8, 9])
+    const sat = buildIntegralImage(gray, 3, 3)
+    const iw = 4 // width+1
+    // sat[y+1][x+1] = sum of rectangle (0,0)→(x,y)
+    expect(sat[1 * iw + 1]).toBe(1)       // sum(0,0→0,0) = 1
+    expect(sat[1 * iw + 2]).toBe(3)       // sum(0,0→1,0) = 1+2
+    expect(sat[1 * iw + 3]).toBe(6)       // sum(0,0→2,0) = 1+2+3
+    expect(sat[2 * iw + 1]).toBe(5)       // sum(0,0→0,1) = 1+4
+    expect(sat[2 * iw + 2]).toBe(12)      // sum(0,0→1,1) = 1+2+4+5
+    expect(sat[3 * iw + 3]).toBe(45)      // sum(0,0→2,2) = all values
+  })
+
+  it('uses Float64Array to avoid overflow', () => {
+    const gray = solidGray(255, 4) // small, but verify type
+    const sat = buildIntegralImage(gray, 2, 2)
+    expect(sat).toBeInstanceOf(Float64Array)
+  })
+})
+
+describe('adaptiveThreshold', () => {
+  it('returns all zeros for a uniform image (no local contrast)', () => {
+    const gray = solidGray(128, 400) // 20×20
+    const mask = adaptiveThreshold(gray, 20, 20)
+    expect(mask.every((v) => v === 0)).toBe(true)
+  })
+
+  it('detects a strong vertical edge', () => {
+    // 20×20 image: left half = 50, right half = 200
+    const gray = new Uint8Array(20 * 20)
+    for (let y = 0; y < 20; y++) {
+      for (let x = 0; x < 20; x++) {
+        gray[y * 20 + x] = x < 10 ? 50 : 200
+      }
+    }
+    const mask = adaptiveThreshold(gray, 20, 20)
+    // Pixels near the edge should be marked as foreground
+    const hasForeground = mask.some((v) => v === 255)
+    expect(hasForeground).toBe(true)
+  })
+
+  it('detects a dark pip-like dot on a light surface', () => {
+    // 30×30 light surface (200) with a dark 5×5 dot centered at (15,15)
+    const gray = solidGray(200, 900) // 30×30
+    for (let y = 13; y <= 17; y++) {
+      for (let x = 13; x <= 17; x++) {
+        gray[y * 30 + x] = 30
+      }
+    }
+    // Use a window large enough to span the dot boundary (> 5px)
+    const mask = adaptiveThreshold(gray, 30, 30, 9)
+    // The dark dot area should have foreground pixels
+    expect(mask[15 * 30 + 15]).toBe(255)
+  })
+
+  it('returns only 0 or 255 values', () => {
+    const gray = new Uint8Array(100)
+    for (let i = 0; i < 100; i++) gray[i] = i * 2
+    const mask = adaptiveThreshold(gray, 10, 10)
+    expect(mask.every((v) => v === 0 || v === 255)).toBe(true)
+  })
+
+  it('output length matches input length', () => {
+    const gray = solidGray(100, 64)
+    expect(adaptiveThreshold(gray, 8, 8).length).toBe(64)
+  })
+
+  it('respects custom C parameter', () => {
+    // 20×20 with subtle contrast: left=120, right=140 (diff=20)
+    const gray = new Uint8Array(20 * 20)
+    for (let y = 0; y < 20; y++) {
+      for (let x = 0; x < 20; x++) {
+        gray[y * 20 + x] = x < 10 ? 120 : 140
+      }
+    }
+    // With C=25, this subtle edge should NOT be detected
+    const maskHigh = adaptiveThreshold(gray, 20, 20, undefined, 25)
+    expect(maskHigh.every((v) => v === 0)).toBe(true)
+
+    // With C=5, the edge SHOULD be detected
+    const maskLow = adaptiveThreshold(gray, 20, 20, undefined, 5)
+    expect(maskLow.some((v) => v === 255)).toBe(true)
+  })
+
+  it('handles all-black image without error', () => {
+    const gray = solidGray(0, 64)
+    expect(() => adaptiveThreshold(gray, 8, 8)).not.toThrow()
+    expect(adaptiveThreshold(gray, 8, 8).every((v) => v === 0)).toBe(true)
+  })
+
+  it('handles all-white image without error', () => {
+    const gray = solidGray(255, 64)
+    expect(() => adaptiveThreshold(gray, 8, 8)).not.toThrow()
+    expect(adaptiveThreshold(gray, 8, 8).every((v) => v === 0)).toBe(true)
   })
 })
