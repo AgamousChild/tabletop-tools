@@ -7,6 +7,7 @@ import { extractFeatures } from '../lib/cv/features'
 import { classifyKnn } from '../lib/cv/knnClassifier'
 import type { TrainingExample } from '../lib/cv/knnClassifier'
 import { rgbaToGray } from '../lib/cv/background'
+import { detectPips } from '../lib/cv/blobDetector'
 import {
   addExample,
   getExamples,
@@ -15,12 +16,23 @@ import {
   clearAll,
 } from '../lib/store/trainingStore'
 import type { StoredExample, TrainingStats as TrainingStatsType } from '../lib/store/trainingStore'
+import { DiceCheckCard } from './DiceCheckCard'
 import { TrainingRoiCard } from './TrainingRoiCard'
 import { TrainingStats } from './TrainingStats'
 
 type Props = {
   diceSet: { id: string; name: string }
   onBack: () => void
+}
+
+type DiceCandidate = {
+  roi: Roi
+  roiGray: Uint8Array
+  roiWidth: number
+  roiHeight: number
+  bestPip: number | null
+  features: number[]
+  dismissed: boolean
 }
 
 type DetectedRoi = {
@@ -35,11 +47,16 @@ type DetectedRoi = {
 }
 
 type Phase =
-  | { name: 'training'; frozen: boolean; rois: DetectedRoi[] }
+  | { name: 'detecting' }
+  | { name: 'confirming'; lockedResults: RoiResult[]; samples: (number | null)[][]; startTime: number }
+  | { name: 'dice_check'; candidates: DiceCandidate[] }
+  | { name: 'labeling'; rois: DetectedRoi[] }
 
 const WINDOW_SIZE = 15
 const STABILITY_RATIO = 0.6
 const COOLDOWN_FRAMES = 10
+const CONFIRM_DURATION = 2000
+const CONFIRM_INTERVAL = 250
 
 function extractSubImage(
   gray: Uint8Array,
@@ -58,11 +75,25 @@ function extractSubImage(
   return out
 }
 
+/** Find the most common value in an array (mode). Returns null for empty arrays. */
+function mode(values: (number | null)[]): number | null {
+  const freq = new Map<number, number>()
+  for (const v of values) {
+    if (v !== null) freq.set(v, (freq.get(v) ?? 0) + 1)
+  }
+  let best: number | null = null, bestCount = 0
+  for (const [val, count] of freq) {
+    if (count > bestCount) { best = val; bestCount = count }
+  }
+  return best
+}
+
 export function TrainingScreen({ diceSet, onBack }: Props) {
-  const [phase, setPhase] = useState<Phase>({ name: 'training', frozen: false, rois: [] })
+  const [phase, setPhase] = useState<Phase>({ name: 'detecting' })
   const [error, setError] = useState<string | null>(null)
   const [cameraReady, setCameraReady] = useState(false)
   const [detectedCount, setDetectedCount] = useState(0)
+  const [confirmProgress, setConfirmProgress] = useState(0)
 
   // Training data state
   const [examples, setExamples] = useState<StoredExample[]>([])
@@ -90,7 +121,6 @@ export function TrainingScreen({ diceSet, onBack }: Props) {
       ])
       setExamples(storedExamples)
       setStats(storedStats)
-      // Feed existing examples to the pipeline
       pipeline.setExamples(
         storedExamples.map((e) => ({ features: e.features, label: e.label })),
       )
@@ -109,7 +139,6 @@ export function TrainingScreen({ diceSet, onBack }: Props) {
         if (videoRef.current) {
           videoRef.current.srcObject = s
           setCameraReady(true)
-          // Auto-ready the pipeline (just sets ready flag + dimensions)
           const video = videoRef.current
           const w = video.videoWidth || 320
           const h = video.videoHeight || 240
@@ -131,20 +160,18 @@ export function TrainingScreen({ diceSet, onBack }: Props) {
     canvas.height = video.videoHeight || 240
     const ctx = canvas.getContext('2d')!
     ctx.drawImage(video, 0, 0, canvas.width, canvas.height)
-    // Ensure pipeline dimensions match current frame
     if (!pipeline.state.ready || pipeline.state.width !== canvas.width || pipeline.state.height !== canvas.height) {
       pipeline.captureBackground(new Uint8ClampedArray(canvas.width * canvas.height * 4), canvas.width, canvas.height)
     }
     return { imageData: ctx.getImageData(0, 0, canvas.width, canvas.height), canvas }
   }
 
-  // Training loop - continuous frame processing
+  // --- Phase 1: Detecting loop ---
   useEffect(() => {
-    if (phase.name !== 'training' || phase.frozen) return
+    if (phase.name !== 'detecting') return
 
     function processLoop() {
-      const p = phaseRef.current
-      if (p.name !== 'training' || p.frozen) return
+      if (phaseRef.current.name !== 'detecting') return
 
       const frame = getFrame()
       if (!frame) {
@@ -158,25 +185,24 @@ export function TrainingScreen({ diceSet, onBack }: Props) {
         frame.canvas.height,
       )
 
-      // Draw overlay: bounding boxes with pip values
+      // Draw live overlay
       const overlay = overlayRef.current
       if (overlay) {
         const w = frame.canvas.width
         const h = frame.canvas.height
         overlay.width = w
         overlay.height = h
-        const overlayCtx = overlay.getContext('2d')!
-        overlayCtx.clearRect(0, 0, w, h)
-
+        const ctx = overlay.getContext('2d')!
+        ctx.clearRect(0, 0, w, h)
         for (const r of results) {
           const pip = r.pipCount ?? '?'
-          overlayCtx.strokeStyle = '#fbbf24' // amber-400
-          overlayCtx.lineWidth = 2
-          overlayCtx.strokeRect(r.roi.x, r.roi.y, r.roi.width, r.roi.height)
-          overlayCtx.fillStyle = '#fbbf24'
-          overlayCtx.font = 'bold 16px monospace'
-          overlayCtx.textAlign = 'center'
-          overlayCtx.fillText(String(pip), r.roi.x + r.roi.width / 2, r.roi.y - 4)
+          ctx.strokeStyle = '#fbbf24'
+          ctx.lineWidth = 2
+          ctx.strokeRect(r.roi.x, r.roi.y, r.roi.width, r.roi.height)
+          ctx.fillStyle = '#fbbf24'
+          ctx.font = 'bold 16px monospace'
+          ctx.textAlign = 'center'
+          ctx.fillText(String(pip), r.roi.x + r.roi.width / 2, r.roi.y - 4)
         }
       }
 
@@ -184,68 +210,33 @@ export function TrainingScreen({ diceSet, onBack }: Props) {
       const currentCount = results.length
 
       if (cooldownRef.current > 0) {
-        if (currentCount === 0) {
-          cooldownRef.current--
-        }
+        if (currentCount === 0) cooldownRef.current--
       } else if (currentCount === 0) {
         recentCountsRef.current = []
       } else {
-        // Sliding window stabilizer: track last N frame counts
         const counts = recentCountsRef.current
         counts.push(currentCount)
         if (counts.length > WINDOW_SIZE) counts.shift()
 
-        // Find mode and its frequency
         if (counts.length >= WINDOW_SIZE) {
           const freq = new Map<number, number>()
           for (const c of counts) freq.set(c, (freq.get(c) ?? 0) + 1)
-          let mode = 0, modeCount = 0
+          let modeVal = 0, modeCount = 0
           for (const [val, count] of freq) {
-            if (count > modeCount) { mode = val; modeCount = count }
+            if (count > modeCount) { modeVal = val; modeCount = count }
           }
 
-          // Freeze when mode appears in 60%+ of the window and matches current frame
-          if (modeCount / WINDOW_SIZE >= STABILITY_RATIO && currentCount === mode) {
-            const frameGray = rgbaToGray(
-              frame.imageData.data,
-              frame.canvas.width,
-              frame.canvas.height,
-            )
-
-            const currentExamples = examplesRef.current
-            const trainingExamples: TrainingExample[] = currentExamples.map((e) => ({
-              features: e.features,
-              label: e.label,
-            }))
-
-            const detectedRois: DetectedRoi[] = results.map((r) => {
-              const roiGray = extractSubImage(
-                frameGray,
-                frame.canvas.width,
-                r.roi.x,
-                r.roi.y,
-                r.roi.width,
-                r.roi.height,
-              )
-              const features = extractFeatures(roiGray, r.roi.width, r.roi.height)
-              const knnResult = classifyKnn(features, trainingExamples)
-
-              return {
-                roi: r.roi,
-                roiGray,
-                roiWidth: r.roi.width,
-                roiHeight: r.roi.height,
-                guess: knnResult ? knnResult.label : r.pipCount,
-                confidence: knnResult ? knnResult.confidence : 0,
-                selectedLabel: null,
-                skipped: false,
-              }
-            })
-
-            setPhase({ name: 'training', frozen: true, rois: detectedRois })
+          if (modeCount / WINDOW_SIZE >= STABILITY_RATIO && currentCount === modeVal) {
+            // Stable → enter confirming phase with locked ROI positions
+            const initialSamples = results.map((r) => [r.pipCount])
             recentCountsRef.current = []
-            cooldownRef.current = COOLDOWN_FRAMES
-            return // Stop the loop — frozen
+            setPhase({
+              name: 'confirming',
+              lockedResults: results,
+              samples: initialSamples,
+              startTime: Date.now(),
+            })
+            return
           }
         }
       }
@@ -254,41 +245,214 @@ export function TrainingScreen({ diceSet, onBack }: Props) {
     }
 
     rafRef.current = requestAnimationFrame(processLoop)
+    return () => cancelAnimationFrame(rafRef.current)
+  }, [phase.name, pipeline])
 
-    return () => {
-      cancelAnimationFrame(rafRef.current)
+  // --- Phase 2: Confirming loop (locked boxes, sample every 250ms for 2s) ---
+  useEffect(() => {
+    if (phase.name !== 'confirming') return
+
+    const lockedResults = phase.lockedResults
+    const startTime = phase.startTime
+    let samples = phase.samples.map((s) => [...s])
+    let lastSampleTime = Date.now()
+
+    function confirmLoop() {
+      if (phaseRef.current.name !== 'confirming') return
+
+      // Draw locked overlay (fixed positions, every frame for smooth display)
+      const overlay = overlayRef.current
+      const frame = getFrame()
+      if (overlay && frame) {
+        const w = frame.canvas.width
+        const h = frame.canvas.height
+        overlay.width = w
+        overlay.height = h
+        const ctx = overlay.getContext('2d')!
+        ctx.clearRect(0, 0, w, h)
+
+        for (let i = 0; i < lockedResults.length; i++) {
+          const r = lockedResults[i]!
+          const bestPip = mode(samples[i]!) ?? r.pipCount ?? '?'
+          ctx.strokeStyle = '#34d399' // emerald-400
+          ctx.lineWidth = 3
+          ctx.strokeRect(r.roi.x, r.roi.y, r.roi.width, r.roi.height)
+          ctx.fillStyle = '#34d399'
+          ctx.font = 'bold 16px monospace'
+          ctx.textAlign = 'center'
+          ctx.fillText(String(bestPip), r.roi.x + r.roi.width / 2, r.roi.y - 4)
+        }
+      }
+
+      const now = Date.now()
+      const elapsed = now - startTime
+
+      // Update progress
+      setConfirmProgress(Math.min(1, elapsed / CONFIRM_DURATION))
+
+      // Sample every 250ms
+      if (frame && now - lastSampleTime >= CONFIRM_INTERVAL) {
+        lastSampleTime = now
+        const frameGray = rgbaToGray(
+          frame.imageData.data,
+          frame.canvas.width,
+          frame.canvas.height,
+        )
+        for (let i = 0; i < lockedResults.length; i++) {
+          const r = lockedResults[i]!
+          const roiGray = extractSubImage(frameGray, frame.canvas.width, r.roi.x, r.roi.y, r.roi.width, r.roi.height)
+          const pip = detectPips(roiGray, r.roi.width, r.roi.height)
+          samples[i]!.push(pip)
+        }
+      }
+
+      // After 2 seconds → build candidates for dice check
+      if (elapsed >= CONFIRM_DURATION) {
+        const frameForSnapshot = getFrame()
+        const frameGray = frameForSnapshot
+          ? rgbaToGray(frameForSnapshot.imageData.data, frameForSnapshot.canvas.width, frameForSnapshot.canvas.height)
+          : null
+
+        const currentExamples = examplesRef.current
+        const trainingExamples: TrainingExample[] = currentExamples.map((e) => ({
+          features: e.features,
+          label: e.label,
+        }))
+
+        const candidates: DiceCandidate[] = lockedResults.map((r, i) => {
+          const bestPip = mode(samples[i]!)
+          const imgWidth = frameForSnapshot?.canvas.width ?? pipeline.state.width
+          const roiGray = frameGray
+            ? extractSubImage(frameGray, imgWidth, r.roi.x, r.roi.y, r.roi.width, r.roi.height)
+            : new Uint8Array(r.roi.width * r.roi.height)
+          const features = extractFeatures(roiGray, r.roi.width, r.roi.height)
+
+          // Auto-dismiss if kNN classifies as "not a die" (label 0)
+          const knnResult = classifyKnn(features, trainingExamples)
+          const autoDismissed = knnResult !== null && knnResult.label === 0 && knnResult.confidence >= 0.6
+
+          return {
+            roi: r.roi,
+            roiGray,
+            roiWidth: r.roi.width,
+            roiHeight: r.roi.height,
+            bestPip,
+            features,
+            dismissed: autoDismissed,
+          }
+        })
+
+        setConfirmProgress(0)
+        cooldownRef.current = COOLDOWN_FRAMES
+        setPhase({ name: 'dice_check', candidates })
+        return
+      }
+
+      rafRef.current = requestAnimationFrame(confirmLoop)
     }
-  }, [phase.name, phase.name === 'training' ? (phase as Extract<Phase, { name: 'training' }>).frozen : false, pipeline])
 
+    rafRef.current = requestAnimationFrame(confirmLoop)
+    return () => cancelAnimationFrame(rafRef.current)
+  }, [phase.name, pipeline])
+
+  // --- Phase 3: Dice check handlers ---
+  function handleToggleDismiss(index: number) {
+    setPhase((prev) => {
+      if (prev.name !== 'dice_check') return prev
+      const newCandidates = [...prev.candidates]
+      newCandidates[index] = { ...newCandidates[index]!, dismissed: !newCandidates[index]!.dismissed }
+      return { name: 'dice_check', candidates: newCandidates }
+    })
+  }
+
+  const handleConfirmDice = useCallback(async () => {
+    if (phase.name !== 'dice_check') return
+
+    const currentExamples = examplesRef.current
+    const trainingExamples: TrainingExample[] = currentExamples.map((e) => ({
+      features: e.features,
+      label: e.label,
+    }))
+
+    // Save dismissed candidates as negative examples (label 0)
+    for (const candidate of phase.candidates) {
+      if (candidate.dismissed) {
+        await addExample({
+          diceSetId: diceSet.id,
+          label: 0, // "not a die"
+          features: candidate.features,
+          roiGray: candidate.roiGray,
+          roiWidth: candidate.roiWidth,
+          roiHeight: candidate.roiHeight,
+        })
+      }
+    }
+
+    // Build DetectedRois from kept candidates
+    const keptCandidates = phase.candidates.filter((c) => !c.dismissed)
+
+    if (keptCandidates.length === 0) {
+      // All dismissed — reload examples and go back to detecting
+      const updatedExamples = await getExamples(diceSet.id)
+      setExamples(updatedExamples)
+      pipeline.setExamples(updatedExamples.map((e) => ({ features: e.features, label: e.label })))
+      setPhase({ name: 'detecting' })
+      return
+    }
+
+    const detectedRois: DetectedRoi[] = keptCandidates.map((c) => {
+      const knnResult = classifyKnn(c.features, trainingExamples)
+      // Filter out label 0 from kNN results — only use pip labels 1-6
+      const pipLabel = knnResult && knnResult.label > 0 ? knnResult.label : null
+
+      return {
+        roi: c.roi,
+        roiGray: c.roiGray,
+        roiWidth: c.roiWidth,
+        roiHeight: c.roiHeight,
+        guess: pipLabel ?? c.bestPip,
+        confidence: knnResult && knnResult.label > 0 ? knnResult.confidence : 0,
+        selectedLabel: null,
+        skipped: false,
+      }
+    })
+
+    // Reload examples (in case negatives were added)
+    const updatedExamples = await getExamples(diceSet.id)
+    setExamples(updatedExamples)
+    pipeline.setExamples(updatedExamples.map((e) => ({ features: e.features, label: e.label })))
+
+    setPhase({ name: 'labeling', rois: detectedRois })
+  }, [phase, diceSet.id, pipeline])
+
+  // --- Phase 4: Labeling handlers ---
   function handleCorrect(index: number, label: number) {
     setPhase((prev) => {
-      if (prev.name !== 'training' || !prev.frozen) return prev
+      if (prev.name !== 'labeling') return prev
       const newRois = [...prev.rois]
       newRois[index] = { ...newRois[index]!, selectedLabel: label, skipped: false }
-      return { name: 'training', frozen: true, rois: newRois }
+      return { name: 'labeling', rois: newRois }
     })
   }
 
   function handleSkip(index: number) {
     setPhase((prev) => {
-      if (prev.name !== 'training' || !prev.frozen) return prev
+      if (prev.name !== 'labeling') return prev
       const newRois = [...prev.rois]
       newRois[index] = { ...newRois[index]!, skipped: true, selectedLabel: null }
-      return { name: 'training', frozen: true, rois: newRois }
+      return { name: 'labeling', rois: newRois }
     })
   }
 
   const handleSaveAll = useCallback(async () => {
-    if (phase.name !== 'training' || !phase.frozen) return
+    if (phase.name !== 'labeling') return
 
     const roisToSave = phase.rois.filter((r) => r.selectedLabel !== null && !r.skipped)
     if (roisToSave.length === 0) {
-      // Nothing to save — just unfreeze
-      setPhase({ name: 'training', frozen: false, rois: [] })
+      setPhase({ name: 'detecting' })
       return
     }
 
-    // Track stats
     let totalGuesses = stats?.totalGuesses ?? 0
     let correctGuesses = stats?.correctGuesses ?? 0
     let corrections = stats?.corrections ?? 0
@@ -322,19 +486,17 @@ export function TrainingScreen({ diceSet, onBack }: Props) {
     await updateStats(newStats)
     setStats(newStats)
 
-    // Reload examples and feed to pipeline
     const updatedExamples = await getExamples(diceSet.id)
     setExamples(updatedExamples)
     pipeline.setExamples(
       updatedExamples.map((e) => ({ features: e.features, label: e.label })),
     )
 
-    // Unfreeze
-    setPhase({ name: 'training', frozen: false, rois: [] })
+    setPhase({ name: 'detecting' })
   }, [phase, stats, diceSet.id, pipeline])
 
   function handleSkipAll() {
-    setPhase({ name: 'training', frozen: false, rois: [] })
+    setPhase({ name: 'detecting' })
   }
 
   const handleClear = useCallback(async () => {
@@ -344,7 +506,6 @@ export function TrainingScreen({ diceSet, onBack }: Props) {
     pipeline.setExamples([])
   }, [diceSet.id, pipeline])
 
-  // Compute stats for TrainingStats component
   const exampleCounts = useMemo(() => {
     const counts = new Map<number, number>()
     for (const e of examples) {
@@ -357,17 +518,10 @@ export function TrainingScreen({ diceSet, onBack }: Props) {
     ? { totalGuesses: stats.totalGuesses, correctGuesses: stats.correctGuesses, corrections: stats.corrections }
     : null
 
-  // Determine if "Save All" should be enabled
   const allRoisHandled =
-    phase.name === 'training' &&
-    phase.frozen &&
+    phase.name === 'labeling' &&
     phase.rois.length > 0 &&
     phase.rois.every((r) => r.selectedLabel !== null || r.skipped)
-
-  const hasAnySave =
-    phase.name === 'training' &&
-    phase.frozen &&
-    phase.rois.some((r) => r.selectedLabel !== null && !r.skipped)
 
   if (error) {
     return (
@@ -413,13 +567,34 @@ export function TrainingScreen({ diceSet, onBack }: Props) {
             ref={overlayRef}
             className="absolute inset-0 w-full h-full pointer-events-none"
           />
-          {phase.name === 'training' && phase.frozen && (
-            <div className="absolute inset-0 border-4 border-amber-400 rounded-lg pointer-events-none animate-pulse" />
+          {phase.name === 'confirming' && (
+            <div className="absolute inset-0 border-4 border-emerald-400 rounded-lg pointer-events-none" />
+          )}
+          {phase.name === 'dice_check' && (
+            <div className="absolute inset-0 border-4 border-amber-400 rounded-lg pointer-events-none" />
+          )}
+          {phase.name === 'labeling' && (
+            <div className="absolute inset-0 border-4 border-amber-400 rounded-lg pointer-events-none" />
           )}
         </div>
 
-        {/* Phase content */}
-        {phase.name === 'training' && !phase.frozen && (
+        {/* Confirming progress bar */}
+        {phase.name === 'confirming' && (
+          <div className="space-y-2">
+            <p className="text-emerald-400 text-sm text-center font-semibold">
+              Locking in {phase.lockedResults.length} {phase.lockedResults.length === 1 ? 'die' : 'dice'}...
+            </p>
+            <div className="h-2 bg-slate-800 rounded-full overflow-hidden">
+              <div
+                className="h-full bg-emerald-400 rounded-full transition-all duration-200"
+                style={{ width: `${confirmProgress * 100}%` }}
+              />
+            </div>
+          </div>
+        )}
+
+        {/* Detecting status */}
+        {phase.name === 'detecting' && (
           <div className="space-y-3">
             <p className="text-slate-400 text-sm text-center">
               {detectedCount > 0
@@ -429,13 +604,51 @@ export function TrainingScreen({ diceSet, onBack }: Props) {
           </div>
         )}
 
-        {phase.name === 'training' && phase.frozen && phase.rois.length > 0 && (
+        {/* Dice check UI */}
+        {phase.name === 'dice_check' && (
+          <div className="space-y-3">
+            <p className="text-slate-100 font-semibold text-center">
+              {phase.candidates.filter((c) => !c.dismissed).length} of {phase.candidates.length} detections — tap to dismiss non-dice
+            </p>
+
+            <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+              {phase.candidates.map((candidate, i) => (
+                <DiceCheckCard
+                  key={i}
+                  roiGray={candidate.roiGray}
+                  roiWidth={candidate.roiWidth}
+                  roiHeight={candidate.roiHeight}
+                  pipGuess={candidate.bestPip}
+                  dismissed={candidate.dismissed}
+                  onToggle={() => handleToggleDismiss(i)}
+                />
+              ))}
+            </div>
+
+            <div className="flex gap-2">
+              <button
+                onClick={() => setPhase({ name: 'detecting' })}
+                className="flex-1 py-3 rounded-lg border border-slate-700 text-slate-300 hover:border-slate-500 transition-colors font-semibold"
+              >
+                Reset
+              </button>
+              <button
+                onClick={handleConfirmDice}
+                className="flex-1 py-3 rounded-lg bg-emerald-500 text-slate-950 font-bold hover:bg-emerald-400 transition-colors"
+              >
+                Confirm {phase.candidates.filter((c) => !c.dismissed).length} dice
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* Labeling UI */}
+        {phase.name === 'labeling' && phase.rois.length > 0 && (
           <div className="space-y-3">
             <p className="text-slate-100 font-semibold text-center">
               {phase.rois.length} {phase.rois.length === 1 ? 'die' : 'dice'} detected — label each face
             </p>
 
-            {/* ROI cards */}
             <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
               {phase.rois.map((roi, i) => (
                 <TrainingRoiCard
@@ -453,7 +666,6 @@ export function TrainingScreen({ diceSet, onBack }: Props) {
               ))}
             </div>
 
-            {/* Save / Skip buttons */}
             <div className="flex gap-2">
               <button
                 onClick={handleSkipAll}
