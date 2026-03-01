@@ -14,7 +14,7 @@
  * All operations are pure TypeScript — no opencv.js dependency.
  */
 
-interface BlobInfo {
+export interface BlobInfo {
   area: number
   perimeter: number
   circularity: number
@@ -24,7 +24,7 @@ interface BlobInfo {
  * Find all 4-connected blob regions in a binary image via BFS.
  * target = the pixel value to search for (0 or 255).
  */
-function findBlobInfo(binary: Uint8Array, width: number, height: number, target = 255): BlobInfo[] {
+export function findBlobInfo(binary: Uint8Array, width: number, height: number, target = 255): BlobInfo[] {
   const visited = new Uint8Array(width * height)
   const blobs: BlobInfo[] = []
 
@@ -77,7 +77,7 @@ function findBlobInfo(binary: Uint8Array, width: number, height: number, target 
 /**
  * Apply Otsu threshold to a grayscale image and return binary mask.
  */
-function otsuBinarize(gray: Uint8Array): Uint8Array {
+export function otsuBinarize(gray: Uint8Array): Uint8Array {
   const N = gray.length
   const hist = new Array<number>(256).fill(0)
   for (let i = 0; i < N; i++) hist[gray[i]!]++

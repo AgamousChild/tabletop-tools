@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 
 import type { RoiResult } from '../lib/cv/pipeline'
-import { createPipeline } from '../lib/cv/pipeline'
+import { createTrainedPipeline } from '../lib/cv/trainedPipeline'
+import { getExamples } from '../lib/store/trainingStore'
 import { HelpTip } from '@tabletop-tools/ui'
 import { trpc } from '../lib/trpc'
 import { CalibrationWizard } from './CalibrationWizard'
@@ -52,7 +53,16 @@ export function ActiveSessionScreen({ diceSet, onDone }: Props) {
   const [lastCapture, setLastCapture] = useState<{ pips: number[]; time: number } | null>(null)
   const [undoFeedback, setUndoFeedback] = useState<string | null>(null)
 
-  const pipeline = useMemo(() => createPipeline(diceSet.id), [diceSet.id])
+  const pipeline = useMemo(() => createTrainedPipeline(diceSet.id), [diceSet.id])
+
+  // Load training examples from IDB on mount
+  useEffect(() => {
+    getExamples(diceSet.id).then((examples) => {
+      if (examples.length > 0) {
+        pipeline.setExamples(examples.map((e) => ({ features: e.features, label: e.label })))
+      }
+    })
+  }, [diceSet.id, pipeline])
 
   // Refs for the recording loop
   const videoRef = useRef<HTMLVideoElement>(null)

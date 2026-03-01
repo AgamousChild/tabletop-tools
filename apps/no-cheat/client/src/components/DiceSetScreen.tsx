@@ -7,6 +7,7 @@ import { CreateDiceSetForm } from './CreateDiceSetForm'
 import { DiceSetDetailScreen } from './DiceSetDetailScreen'
 import { DiceSetList } from './DiceSetList'
 import { SessionDetailScreen } from './SessionDetailScreen'
+import { TrainingScreen } from './TrainingScreen'
 
 type DiceSet = { id: string; name: string }
 
@@ -15,6 +16,7 @@ type Screen =
   | { name: 'detail'; diceSet: DiceSet }
   | { name: 'session'; diceSet: DiceSet }
   | { name: 'sessionDetail'; diceSet: DiceSet; sessionId: string }
+  | { name: 'training'; diceSet: DiceSet }
 
 type Props = {
   onSignOut: () => void
@@ -33,6 +35,15 @@ export function DiceSetScreen({ onSignOut }: Props) {
   async function handleSignOut() {
     await authClient.signOut()
     onSignOut()
+  }
+
+  if (screen.name === 'training') {
+    return (
+      <TrainingScreen
+        diceSet={screen.diceSet}
+        onBack={() => setScreen({ name: 'detail', diceSet: screen.diceSet })}
+      />
+    )
   }
 
   if (screen.name === 'session') {
@@ -62,6 +73,7 @@ export function DiceSetScreen({ onSignOut }: Props) {
         onSelectSession={(sessionId) =>
           setScreen({ name: 'sessionDetail', diceSet: screen.diceSet, sessionId })
         }
+        onTrainDetection={() => setScreen({ name: 'training', diceSet: screen.diceSet })}
       />
     )
   }
