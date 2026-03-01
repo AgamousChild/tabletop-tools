@@ -111,7 +111,7 @@ describe('TrainingScreen', () => {
     // After capturing background, the "Capture Background" button should be gone
     expect(screen.queryByRole('button', { name: /capture background/i })).not.toBeInTheDocument()
     // Training phase should show a status message about detection
-    expect(screen.getByText(/waiting for dice/i)).toBeInTheDocument()
+    expect(screen.getByText(/roll dice into the frame/i)).toBeInTheDocument()
   })
 
   it('shows TrainingStats component', () => {
