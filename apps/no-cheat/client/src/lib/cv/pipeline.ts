@@ -16,7 +16,7 @@
  * No opencv.js dependency — all operations are pure TypeScript.
  */
 
-import { absDiffGray, gaussianBlur, morphClose, otsuThreshold, rgbaToGray } from './background'
+import { absDiffGray, erode, gaussianBlur, morphClose, otsuThreshold, rgbaToGray } from './background'
 import { detectPips } from './blobDetector'
 import { extractRois } from './isolate'
 import type { Roi } from './isolate'
@@ -94,12 +94,19 @@ export function createPipeline(diceSetId: string): Pipeline {
     const diff = absDiffGray(frameBlurred, state.backgroundGray)
 
     // Stage 4: Otsu threshold (with min floor to suppress noise)
-    const mask = otsuThreshold(diff, 15)
+    // Floor of 30 rejects camera sensor noise and auto-exposure drift
+    const mask = otsuThreshold(diff, 30)
 
-    // Stage 5: Morphological close — fills gaps between pip detections
+    // Stage 5a: Morphological open (erode→dilate via erode first) — removes
+    // small noise speckles before close fills gaps. Without this, noise
+    // pixels get amplified by the subsequent dilation in morphClose.
+    const openRadius = Math.max(1, Math.floor(Math.min(width, height) * 0.005))
+    const cleaned = erode(mask, width, height, openRadius, 1)
+
+    // Stage 5b: Morphological close — fills gaps between pip detections
     // to create solid die shapes. Kernel radius scales with image size.
     const closeRadius = Math.max(2, Math.floor(Math.min(width, height) * 0.015))
-    const closed = morphClose(mask, width, height, closeRadius, 2)
+    const closed = morphClose(cleaned, width, height, closeRadius, 2)
 
     // Stage 6: Find die ROIs
     const rois = extractRois(closed, width, height)

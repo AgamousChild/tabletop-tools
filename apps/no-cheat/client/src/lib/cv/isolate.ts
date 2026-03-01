@@ -156,8 +156,8 @@ export function extractRois(binary: Uint8Array, width: number, height: number): 
   const imageArea = width * height
   const shortDim = Math.min(width, height)
 
-  const minArea = Math.max(50, Math.floor(imageArea * 0.001))
-  const maxArea = Math.floor(imageArea * 0.30)
+  const minArea = Math.max(200, Math.floor(imageArea * 0.005))
+  const maxArea = Math.floor(imageArea * 0.25)
   const mergeDistance = Math.max(20, Math.floor(shortDim * 0.08))
 
   const regions = findRegions(binary, width, height, minArea)
@@ -170,7 +170,7 @@ export function extractRois(binary: Uint8Array, width: number, height: number): 
       const aspect = w / h
 
       // Filter by aspect ratio (dice are roughly square)
-      if (aspect < 0.25 || aspect > 4.0) return false
+      if (aspect < 0.4 || aspect > 2.5) return false
 
       // Filter by area (too small = noise, too large = background)
       if (r.area < minArea || r.area > maxArea) return false
