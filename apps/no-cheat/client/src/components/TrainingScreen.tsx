@@ -55,7 +55,7 @@ type Phase =
 const WINDOW_SIZE = 15
 const STABILITY_RATIO = 0.6
 const COOLDOWN_FRAMES = 10
-const CONFIRM_DURATION = 2000
+const CONFIRM_DURATION = 1000
 const CONFIRM_INTERVAL = 250
 
 function extractSubImage(
@@ -196,13 +196,18 @@ export function TrainingScreen({ diceSet, onBack }: Props) {
         ctx.clearRect(0, 0, w, h)
         for (const r of results) {
           const pip = r.pipCount ?? '?'
+          const half = r.roi.width / 2
+          ctx.save()
+          ctx.translate(r.roi.cx, r.roi.cy)
+          ctx.rotate(r.roi.angle)
           ctx.strokeStyle = '#fbbf24'
           ctx.lineWidth = 2
-          ctx.strokeRect(r.roi.x, r.roi.y, r.roi.width, r.roi.height)
+          ctx.strokeRect(-half, -half, r.roi.width, r.roi.width)
           ctx.fillStyle = '#fbbf24'
           ctx.font = 'bold 16px monospace'
           ctx.textAlign = 'center'
-          ctx.fillText(String(pip), r.roi.x + r.roi.width / 2, r.roi.y - 4)
+          ctx.fillText(String(pip), 0, -half - 4)
+          ctx.restore()
         }
       }
 
@@ -274,13 +279,18 @@ export function TrainingScreen({ diceSet, onBack }: Props) {
         for (let i = 0; i < lockedResults.length; i++) {
           const r = lockedResults[i]!
           const bestPip = mode(samples[i]!) ?? r.pipCount ?? '?'
+          const half = r.roi.width / 2
+          ctx.save()
+          ctx.translate(r.roi.cx, r.roi.cy)
+          ctx.rotate(r.roi.angle)
           ctx.strokeStyle = '#34d399' // emerald-400
           ctx.lineWidth = 3
-          ctx.strokeRect(r.roi.x, r.roi.y, r.roi.width, r.roi.height)
+          ctx.strokeRect(-half, -half, r.roi.width, r.roi.width)
           ctx.fillStyle = '#34d399'
           ctx.font = 'bold 16px monospace'
           ctx.textAlign = 'center'
-          ctx.fillText(String(bestPip), r.roi.x + r.roi.width / 2, r.roi.y - 4)
+          ctx.fillText(String(bestPip), 0, -half - 4)
+          ctx.restore()
         }
       }
 
@@ -402,16 +412,17 @@ export function TrainingScreen({ diceSet, onBack }: Props) {
 
     const detectedRois: DetectedRoi[] = keptCandidates.map((c) => {
       const knnResult = classifyKnn(c.features, trainingExamples)
-      // Filter out label 0 from kNN results — only use pip labels 1-6
-      const pipLabel = knnResult && knnResult.label > 0 ? knnResult.label : null
+      // Use bestPip (from direct detection) as primary guess — it's more accurate
+      // kNN confidence is used for border color only
+      const knnConfidence = knnResult && knnResult.label > 0 ? knnResult.confidence : 0
 
       return {
         roi: c.roi,
         roiGray: c.roiGray,
         roiWidth: c.roiWidth,
         roiHeight: c.roiHeight,
-        guess: pipLabel ?? c.bestPip,
-        confidence: knnResult && knnResult.label > 0 ? knnResult.confidence : 0,
+        guess: c.bestPip,
+        confidence: knnConfidence,
         selectedLabel: null,
         skipped: false,
       }
@@ -554,7 +565,7 @@ export function TrainingScreen({ diceSet, onBack }: Props) {
         </div>
 
         {/* Camera feed */}
-        <div className="relative rounded-lg overflow-hidden bg-slate-900 aspect-video">
+        <div className="relative rounded-lg overflow-hidden bg-slate-900 aspect-square">
           <video
             ref={videoRef}
             autoPlay

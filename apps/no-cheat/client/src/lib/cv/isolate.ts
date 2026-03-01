@@ -2,15 +2,16 @@
  * Die face isolation: extract per-die ROIs from a binary foreground mask.
  *
  * Takes the binary mask produced by the pipeline (after morphological close)
- * and returns bounding rectangles for each detected die in the scene.
+ * and returns square bounding boxes with rotation angle for each detected die.
  *
  * Algorithm:
  *   1. Find all connected components (4-connectivity BFS)
  *   2. Filter by minimum area (scale-dependent — rejects noise)
  *   3. Merge components whose centroids are within proximity threshold
  *      (scale-dependent — handles fragmented die-face contours)
- *   4. Filter by aspect ratio (dice are roughly square)
- *   5. Compute final bounding box for each merged group
+ *   4. Filter by aspect ratio of axis-aligned bbox (dice are roughly square)
+ *   5. Compute orientation angle from second moments
+ *   6. Output square bounding box centered on centroid, clamped to image bounds
  *
  * All parameters scale with image dimensions so detection works at any
  * camera resolution (320×240 to 1920×1080+).
@@ -19,10 +20,20 @@
  */
 
 export interface Roi {
+  /** Top-left x of axis-aligned bounding square (clamped to image) */
   x: number
+  /** Top-left y of axis-aligned bounding square (clamped to image) */
   y: number
+  /** Side length (always square: width === height) */
   width: number
+  /** Side length (always square: width === height) */
   height: number
+  /** Center x */
+  cx: number
+  /** Center y */
+  cy: number
+  /** Orientation angle in radians (from image moments) */
+  angle: number
 }
 
 interface BlobRegion {
@@ -31,8 +42,11 @@ interface BlobRegion {
   minY: number
   maxY: number
   area: number
-  centroidX: number
-  centroidY: number
+  sumX: number
+  sumY: number
+  sumXX: number
+  sumYY: number
+  sumXY: number
 }
 
 function findRegions(binary: Uint8Array, width: number, height: number, minArea: number): BlobRegion[] {
@@ -50,6 +64,7 @@ function findRegions(binary: Uint8Array, width: number, height: number, minArea:
     let minY = height, maxY = 0
     let area = 0
     let sumX = 0, sumY = 0
+    let sumXX = 0, sumYY = 0, sumXY = 0
 
     while (queue.length > 0) {
       const idx = queue.shift()!
@@ -59,6 +74,9 @@ function findRegions(binary: Uint8Array, width: number, height: number, minArea:
       area++
       sumX += x
       sumY += y
+      sumXX += x * x
+      sumYY += y * y
+      sumXY += x * y
       if (x < minX) minX = x
       if (x > maxX) maxX = x
       if (y < minY) minY = y
@@ -81,8 +99,7 @@ function findRegions(binary: Uint8Array, width: number, height: number, minArea:
     if (area >= minArea) {
       regions.push({
         minX, maxX, minY, maxY, area,
-        centroidX: sumX / area,
-        centroidY: sumY / area,
+        sumX, sumY, sumXX, sumYY, sumXY,
       })
     }
   }
@@ -110,8 +127,12 @@ function mergeRegions(regions: BlobRegion[], mergeDistance: number): BlobRegion[
 
   for (let i = 0; i < regions.length; i++) {
     for (let j = i + 1; j < regions.length; j++) {
-      const dx = regions[i]!.centroidX - regions[j]!.centroidX
-      const dy = regions[i]!.centroidY - regions[j]!.centroidY
+      const cxI = regions[i]!.sumX / regions[i]!.area
+      const cyI = regions[i]!.sumY / regions[i]!.area
+      const cxJ = regions[j]!.sumX / regions[j]!.area
+      const cyJ = regions[j]!.sumY / regions[j]!.area
+      const dx = cxI - cxJ
+      const dy = cyI - cyJ
       const dist = Math.sqrt(dx * dx + dy * dy)
       if (dist <= mergeDistance) {
         union(i, j)
@@ -119,7 +140,7 @@ function mergeRegions(regions: BlobRegion[], mergeDistance: number): BlobRegion[
     }
   }
 
-  // Aggregate by group
+  // Aggregate by group — sum raw moments for correct angle computation
   const groups = new Map<number, BlobRegion[]>()
   for (let i = 0; i < regions.length; i++) {
     const root = find(i)
@@ -127,24 +148,44 @@ function mergeRegions(regions: BlobRegion[], mergeDistance: number): BlobRegion[
     groups.get(root)!.push(regions[i]!)
   }
 
-  // Compute merged bounding box for each group
   return Array.from(groups.values()).map((group) => {
     const minX = Math.min(...group.map((r) => r.minX))
     const maxX = Math.max(...group.map((r) => r.maxX))
     const minY = Math.min(...group.map((r) => r.minY))
     const maxY = Math.max(...group.map((r) => r.maxY))
     const area = group.reduce((s, r) => s + r.area, 0)
+    const sumX = group.reduce((s, r) => s + r.sumX, 0)
+    const sumY = group.reduce((s, r) => s + r.sumY, 0)
+    const sumXX = group.reduce((s, r) => s + r.sumXX, 0)
+    const sumYY = group.reduce((s, r) => s + r.sumYY, 0)
+    const sumXY = group.reduce((s, r) => s + r.sumXY, 0)
     return {
       minX, maxX, minY, maxY, area,
-      centroidX: (minX + maxX) / 2,
-      centroidY: (minY + maxY) / 2,
+      sumX, sumY, sumXX, sumYY, sumXY,
     }
   })
 }
 
 /**
+ * Compute the orientation angle of a region from its second moments.
+ * Returns angle in radians in [-PI/2, PI/2].
+ */
+function computeAngle(region: BlobRegion): number {
+  const cx = region.sumX / region.area
+  const cy = region.sumY / region.area
+
+  // Central moments
+  const mu20 = region.sumXX / region.area - cx * cx
+  const mu02 = region.sumYY / region.area - cy * cy
+  const mu11 = region.sumXY / region.area - cx * cy
+
+  return 0.5 * Math.atan2(2 * mu11, mu20 - mu02)
+}
+
+/**
  * Extract die face ROIs from a binary foreground mask.
- * Returns an array of bounding rectangles, one per detected die in the scene.
+ * Returns an array of square bounding boxes with rotation angle,
+ * one per detected die in the scene.
  *
  * Parameters scale with image dimensions:
  * - minArea: 0.5% of image pixels (rejects noise)
@@ -177,10 +218,37 @@ export function extractRois(binary: Uint8Array, width: number, height: number): 
 
       return true
     })
-    .map(({ minX, maxX, minY, maxY }) => ({
-      x: minX,
-      y: minY,
-      width: maxX - minX + 1,
-      height: maxY - minY + 1,
-    }))
+    .map((region) => {
+      const bboxW = region.maxX - region.minX + 1
+      const bboxH = region.maxY - region.minY + 1
+      const size = Math.max(bboxW, bboxH)
+
+      const cx = region.sumX / region.area
+      const cy = region.sumY / region.area
+      const angle = computeAngle(region)
+
+      // Square bounding box centered on centroid, clamped to image bounds
+      let x = Math.round(cx - size / 2)
+      let y = Math.round(cy - size / 2)
+
+      // Clamp to image bounds
+      if (x < 0) x = 0
+      if (y < 0) y = 0
+      if (x + size > width) x = width - size
+      if (y + size > height) y = height - size
+      // Final safety clamp
+      if (x < 0) x = 0
+      if (y < 0) y = 0
+      const clampedSize = Math.min(size, width - x, height - y)
+
+      return {
+        x,
+        y,
+        width: clampedSize,
+        height: clampedSize,
+        cx: Math.round(cx),
+        cy: Math.round(cy),
+        angle,
+      }
+    })
 }

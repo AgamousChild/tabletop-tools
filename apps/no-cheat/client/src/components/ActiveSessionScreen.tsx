@@ -65,7 +65,7 @@ type RecordingSubPhase =
 const WINDOW_SIZE = 15
 const STABILITY_RATIO = 0.6
 const COOLDOWN_FRAMES = 10
-const CONFIRM_DURATION = 2000
+const CONFIRM_DURATION = 1000
 const CONFIRM_INTERVAL = 250
 const DICE_CHECK_AUTO_CONFIRM = 5000
 
@@ -327,13 +327,18 @@ export function ActiveSessionScreen({ diceSet, onDone }: Props) {
 
         for (const r of results) {
           const pip = r.pipCount ?? '?'
+          const half = r.roi.width / 2
+          overlayCtx.save()
+          overlayCtx.translate(r.roi.cx, r.roi.cy)
+          overlayCtx.rotate(r.roi.angle)
           overlayCtx.strokeStyle = '#fbbf24' // amber-400
           overlayCtx.lineWidth = 2
-          overlayCtx.strokeRect(r.roi.x, r.roi.y, r.roi.width, r.roi.height)
+          overlayCtx.strokeRect(-half, -half, r.roi.width, r.roi.width)
           overlayCtx.fillStyle = '#fbbf24'
           overlayCtx.font = 'bold 16px monospace'
           overlayCtx.textAlign = 'center'
-          overlayCtx.fillText(String(pip), r.roi.x + r.roi.width / 2, r.roi.y - 4)
+          overlayCtx.fillText(String(pip), 0, -half - 4)
+          overlayCtx.restore()
         }
       }
 
@@ -403,13 +408,18 @@ export function ActiveSessionScreen({ diceSet, onDone }: Props) {
         for (let i = 0; i < lockedResults.length; i++) {
           const r = lockedResults[i]!
           const bestPip = modeValue(samples[i]!) ?? r.pipCount ?? '?'
+          const half = r.roi.width / 2
+          ctx.save()
+          ctx.translate(r.roi.cx, r.roi.cy)
+          ctx.rotate(r.roi.angle)
           ctx.strokeStyle = '#34d399' // emerald-400
           ctx.lineWidth = 3
-          ctx.strokeRect(r.roi.x, r.roi.y, r.roi.width, r.roi.height)
+          ctx.strokeRect(-half, -half, r.roi.width, r.roi.width)
           ctx.fillStyle = '#34d399'
           ctx.font = 'bold 16px monospace'
           ctx.textAlign = 'center'
-          ctx.fillText(String(bestPip), r.roi.x + r.roi.width / 2, r.roi.y - 4)
+          ctx.fillText(String(bestPip), 0, -half - 4)
+          ctx.restore()
         }
       }
 
@@ -677,7 +687,7 @@ export function ActiveSessionScreen({ diceSet, onDone }: Props) {
         <p className="text-[10px] text-slate-500">Roll dice in frame. Auto-captures when stable for ~1 second.<HelpTip text="Remove dice from view between rolls to reset detection" /></p>
 
         {/* Live camera with overlay */}
-        <div className="relative rounded-lg overflow-hidden bg-slate-900 aspect-video">
+        <div className="relative rounded-lg overflow-hidden bg-slate-900 aspect-square">
           <video
             ref={videoRef}
             autoPlay
