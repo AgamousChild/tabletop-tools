@@ -91,7 +91,7 @@ export function CalibrationWizard({ pipeline, diceSetId, onComplete }: Props) {
   return (
     <div className="space-y-4">
       {/* Camera feed */}
-      <div className="relative rounded-lg overflow-hidden bg-slate-900 aspect-video">
+      <div className="relative rounded-lg overflow-hidden bg-slate-900 aspect-square">
         <video
           ref={videoRef}
           autoPlay
@@ -111,6 +111,7 @@ export function CalibrationWizard({ pipeline, diceSetId, onComplete }: Props) {
               const vh = video.videoHeight || 240
               const scaleX = 100 / vw
               const scaleY = 100 / vh
+              const angleDeg = (r.roi.angle * 180) / Math.PI
               return (
                 <div
                   key={i}
@@ -119,7 +120,9 @@ export function CalibrationWizard({ pipeline, diceSetId, onComplete }: Props) {
                     left: `${r.roi.x * scaleX}%`,
                     top: `${r.roi.y * scaleY}%`,
                     width: `${r.roi.width * scaleX}%`,
-                    height: `${r.roi.height * scaleY}%`,
+                    height: `${r.roi.width * scaleY}%`,
+                    transform: `rotate(${angleDeg}deg)`,
+                    transformOrigin: 'center',
                   }}
                 >
                   <span className="absolute -top-5 left-1/2 -translate-x-1/2 bg-emerald-400 text-slate-950 text-xs font-bold px-1.5 py-0.5 rounded">

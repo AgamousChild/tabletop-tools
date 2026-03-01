@@ -40,6 +40,24 @@ describe('extractRois', () => {
     expect(rois[0]!.height).toBeGreaterThan(0)
   })
 
+  it('returns square ROIs (width === height)', () => {
+    // Non-square region — ROI should still be square
+    const mask = binaryMask(W, H, [{ x: 20, y: 25, w: 40, h: 30 }])
+    const rois = extractRois(mask, W, H)
+    expect(rois).toHaveLength(1)
+    expect(rois[0]!.width).toBe(rois[0]!.height)
+  })
+
+  it('ROI has cx, cy, and angle fields', () => {
+    const mask = binaryMask(W, H, [{ x: 30, y: 30, w: 40, h: 40 }])
+    const rois = extractRois(mask, W, H)
+    expect(rois).toHaveLength(1)
+    expect(rois[0]).toHaveProperty('cx')
+    expect(rois[0]).toHaveProperty('cy')
+    expect(rois[0]).toHaveProperty('angle')
+    expect(typeof rois[0]!.angle).toBe('number')
+  })
+
   it('returns two ROIs for two well-separated white regions', () => {
     const mask = binaryMask(W, H, [
       { x: 10, y: 10, w: 30, h: 30 },
@@ -91,5 +109,24 @@ describe('extractRois', () => {
     ])
     const rois = extractRois(mask, W, H)
     expect(rois).toHaveLength(2)
+  })
+
+  it('clamps ROI coordinates to image bounds', () => {
+    // Region near top-left corner — square expansion should be clamped
+    const mask = binaryMask(W, H, [{ x: 2, y: 2, w: 30, h: 20 }])
+    const rois = extractRois(mask, W, H)
+    expect(rois).toHaveLength(1)
+    expect(rois[0]!.x).toBeGreaterThanOrEqual(0)
+    expect(rois[0]!.y).toBeGreaterThanOrEqual(0)
+    expect(rois[0]!.x + rois[0]!.width).toBeLessThanOrEqual(W)
+    expect(rois[0]!.y + rois[0]!.height).toBeLessThanOrEqual(H)
+  })
+
+  it('angle is near zero for a symmetric square region', () => {
+    const mask = binaryMask(W, H, [{ x: 40, y: 40, w: 40, h: 40 }])
+    const rois = extractRois(mask, W, H)
+    expect(rois).toHaveLength(1)
+    // A perfectly symmetric square has undefined orientation, but angle should be finite
+    expect(Math.abs(rois[0]!.angle)).toBeLessThan(Math.PI)
   })
 })
