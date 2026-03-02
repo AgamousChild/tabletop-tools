@@ -63,7 +63,7 @@ export function TrainingRoiCard({
   return (
     <div
       data-testid="training-roi-card"
-      className={`bg-slate-900 border-2 ${borderColor} rounded-lg p-3 flex flex-col items-center gap-2`}
+      className={`bg-slate-900 border-2 ${borderColor} rounded-lg p-2 flex flex-col items-center gap-1`}
     >
       {/* ROI canvas */}
       <canvas
@@ -74,12 +74,12 @@ export function TrainingRoiCard({
       />
 
       {/* Guess display */}
-      <div data-testid="guess-display" className="text-2xl font-bold text-slate-100">
+      <div data-testid="guess-display" className="text-lg font-bold text-slate-100">
         {guess !== null ? guess : '?'}
       </div>
 
       {/* Pip buttons */}
-      <div className="flex gap-1">
+      <div className="flex gap-0.5">
         {[1, 2, 3, 4, 5, 6].map((pip) => {
           const isSelected = pip === selectedLabel
           const isGuess = pip === guess && selectedLabel === null
@@ -87,7 +87,7 @@ export function TrainingRoiCard({
             <button
               key={pip}
               onClick={() => onCorrect(pip)}
-              className={`w-8 h-8 rounded text-sm font-bold ${
+              className={`w-6 h-6 rounded text-xs font-bold ${
                 isSelected
                   ? 'bg-emerald-400 text-slate-950'
                   : isGuess
