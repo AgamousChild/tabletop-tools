@@ -21,6 +21,7 @@ const defaultProps = {
   pipGuess: 3 as number | null,
   dismissed: false,
   onToggle: vi.fn(),
+  onChangePip: vi.fn(),
 }
 
 describe('DiceCheckCard', () => {
@@ -76,5 +77,35 @@ describe('DiceCheckCard', () => {
   it('shows "Keep" button when dismissed', () => {
     render(<DiceCheckCard {...defaultProps} dismissed={true} />)
     expect(screen.getByRole('button', { name: /keep/i })).toBeInTheDocument()
+  })
+
+  it('shows pip correction buttons when not dismissed and onChangePip provided', () => {
+    render(<DiceCheckCard {...defaultProps} />)
+    for (let pip = 1; pip <= 6; pip++) {
+      expect(screen.getByRole('button', { name: `Set pip ${pip}` })).toBeInTheDocument()
+    }
+  })
+
+  it('hides pip correction buttons when dismissed', () => {
+    render(<DiceCheckCard {...defaultProps} dismissed={true} />)
+    expect(screen.queryByRole('button', { name: /set pip/i })).not.toBeInTheDocument()
+  })
+
+  it('highlights the current pip guess in the correction buttons', () => {
+    render(<DiceCheckCard {...defaultProps} pipGuess={4} />)
+    const btn4 = screen.getByRole('button', { name: 'Set pip 4' })
+    expect(btn4.className).toContain('emerald')
+  })
+
+  it('calls onChangePip with the selected pip value', () => {
+    const onChangePip = vi.fn()
+    render(<DiceCheckCard {...defaultProps} onChangePip={onChangePip} />)
+    fireEvent.click(screen.getByRole('button', { name: 'Set pip 5' }))
+    expect(onChangePip).toHaveBeenCalledWith(5)
+  })
+
+  it('does not show pip buttons when onChangePip is not provided', () => {
+    render(<DiceCheckCard {...defaultProps} onChangePip={undefined} />)
+    expect(screen.queryByRole('button', { name: /set pip/i })).not.toBeInTheDocument()
   })
 })

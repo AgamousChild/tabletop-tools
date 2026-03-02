@@ -7,6 +7,7 @@ type Props = {
   pipGuess: number | null
   dismissed: boolean
   onToggle: () => void
+  onChangePip?: (pip: number) => void
 }
 
 export function DiceCheckCard({
@@ -16,6 +17,7 @@ export function DiceCheckCard({
   pipGuess,
   dismissed,
   onToggle,
+  onChangePip,
 }: Props) {
   const canvasRef = useRef<HTMLCanvasElement>(null)
 
@@ -61,6 +63,25 @@ export function DiceCheckCard({
       <div data-testid="pip-guess" className="text-lg font-bold text-slate-100">
         {pipGuess !== null ? pipGuess : '?'}
       </div>
+      {/* Pip correction buttons */}
+      {!dismissed && onChangePip && (
+        <div className="flex gap-0.5">
+          {[1, 2, 3, 4, 5, 6].map((pip) => (
+            <button
+              key={pip}
+              onClick={() => onChangePip(pip)}
+              aria-label={`Set pip ${pip}`}
+              className={`w-6 h-6 rounded text-xs font-bold ${
+                pip === pipGuess
+                  ? 'bg-emerald-400 text-slate-950'
+                  : 'bg-slate-800 text-slate-100 hover:bg-slate-700'
+              }`}
+            >
+              {pip}
+            </button>
+          ))}
+        </div>
+      )}
       <button
         onClick={onToggle}
         className={`text-xs px-2 py-1 rounded ${

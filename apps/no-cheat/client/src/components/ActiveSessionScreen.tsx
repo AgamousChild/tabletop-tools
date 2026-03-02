@@ -519,16 +519,28 @@ export function ActiveSessionScreen({ diceSet, onDone }: Props) {
     })
   }
 
+  function handleChangePip(index: number, pip: number) {
+    setSubPhase((prev) => {
+      if (prev.name !== 'dice_check') return prev
+      const newCandidates = [...prev.candidates]
+      newCandidates[index] = { ...newCandidates[index]!, bestPip: pip }
+      return { name: 'dice_check', candidates: newCandidates }
+    })
+  }
+
   const handleConfirmDice = useCallback(async () => {
     const sp = subPhaseRef.current
     if (sp.name !== 'dice_check') return
 
-    // Save dismissed candidates as negative examples (label 0)
+    // Save all candidates as training examples:
+    // - Dismissed → label 0 (not a die)
+    // - Kept → label = bestPip (1-6), improving future k-NN classification
     for (const candidate of sp.candidates) {
-      if (candidate.dismissed) {
+      const label = candidate.dismissed ? 0 : (candidate.bestPip ?? null)
+      if (label !== null) {
         await addExample({
           diceSetId: diceSet.id,
-          label: 0,
+          label,
           features: candidate.features,
           roiGray: candidate.roiGray,
           roiWidth: candidate.roiWidth,
@@ -537,7 +549,7 @@ export function ActiveSessionScreen({ diceSet, onDone }: Props) {
       }
     }
 
-    // Reload training examples to include new negatives
+    // Reload training examples to include new data
     const updatedExamples = await getExamples(diceSet.id)
     pipeline.setExamples(updatedExamples.map((e) => ({ features: e.features, label: e.label })))
     trainingExamplesRef.current = updatedExamples.map((e) => ({ features: e.features, label: e.label }))
@@ -767,6 +779,7 @@ export function ActiveSessionScreen({ diceSet, onDone }: Props) {
                   pipGuess={candidate.bestPip}
                   dismissed={candidate.dismissed}
                   onToggle={() => handleToggleDismiss(i)}
+                  onChangePip={(pip) => handleChangePip(i, pip)}
                 />
               ))}
             </div>
