@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 
 import { createPipeline } from '../lib/cv/pipeline'
+import { getMainCamera } from '../lib/getMainCamera'
 
 type Props = {
   diceSetId?: string
@@ -29,8 +30,7 @@ export function Camera({
   useEffect(() => {
     let stream: MediaStream | null = null
 
-    navigator.mediaDevices
-      .getUserMedia({ video: { facingMode: 'environment' } })
+    getMainCamera()
       .then((s) => {
         stream = s
         if (videoRef.current) {
