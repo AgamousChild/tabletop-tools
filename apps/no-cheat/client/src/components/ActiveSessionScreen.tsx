@@ -70,6 +70,10 @@ const CONFIRM_DURATION = 1000
 const CONFIRM_INTERVAL = 250
 const DICE_CHECK_AUTO_CONFIRM = 5000
 
+// Time-limit detection: after this many ms of seeing dice, lock in whatever's on screen.
+// Set to 0 or Infinity to disable (falls back to sliding-window stability).
+const DETECT_TIME_LIMIT = 2000
+
 function extractSubImage(
   gray: Uint8Array,
   imgWidth: number,
@@ -128,6 +132,7 @@ export function ActiveSessionScreen({ diceSet, onDone }: Props) {
   const rafRef = useRef<number>(0)
   const recentCountsRef = useRef<number[]>([])
   const cooldownRef = useRef(0)
+  const detectStartRef = useRef<number | null>(null)
   const phaseRef = useRef(phase)
   phaseRef.current = phase
   const subPhaseRef = useRef(subPhase)
@@ -347,9 +352,30 @@ export function ActiveSessionScreen({ diceSet, onDone }: Props) {
 
       if (cooldownRef.current > 0) {
         if (currentCount === 0) cooldownRef.current--
+        detectStartRef.current = null
       } else if (currentCount === 0) {
         recentCountsRef.current = []
+        detectStartRef.current = null
       } else {
+        // Track when we first started seeing dice
+        if (detectStartRef.current === null) detectStartRef.current = Date.now()
+
+        // Time-limit path: if we've seen dice for long enough, lock in immediately
+        if (DETECT_TIME_LIMIT > 0 && DETECT_TIME_LIMIT < Infinity &&
+            Date.now() - detectStartRef.current >= DETECT_TIME_LIMIT) {
+          const initialSamples = results.map((r) => [r.pipCount])
+          recentCountsRef.current = []
+          detectStartRef.current = null
+          setSubPhase({
+            name: 'confirming',
+            lockedResults: results,
+            samples: initialSamples,
+            startTime: Date.now(),
+          })
+          return
+        }
+
+        // Sliding-window stability path (original)
         const counts = recentCountsRef.current
         counts.push(currentCount)
         if (counts.length > WINDOW_SIZE) counts.shift()
@@ -366,6 +392,7 @@ export function ActiveSessionScreen({ diceSet, onDone }: Props) {
             // Stable → enter confirming sub-phase
             const initialSamples = results.map((r) => [r.pipCount])
             recentCountsRef.current = []
+            detectStartRef.current = null
             setSubPhase({
               name: 'confirming',
               lockedResults: results,
