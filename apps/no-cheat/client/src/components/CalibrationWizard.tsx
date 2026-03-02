@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 
 import type { Pipeline, RoiResult } from '../lib/cv/pipeline'
+import { getMainCamera } from '../lib/getMainCamera'
 
 type Props = {
   pipeline: Pipeline
@@ -22,8 +23,7 @@ export function CalibrationWizard({ pipeline, diceSetId, onComplete }: Props) {
   useEffect(() => {
     let stream: MediaStream | null = null
 
-    navigator.mediaDevices
-      .getUserMedia({ video: { facingMode: 'environment' } })
+    getMainCamera()
       .then((s) => {
         stream = s
         if (videoRef.current) {

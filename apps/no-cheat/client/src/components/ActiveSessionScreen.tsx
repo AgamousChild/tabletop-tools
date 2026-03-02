@@ -3,6 +3,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { RoiResult } from '../lib/cv/pipeline'
 import type { Roi } from '../lib/cv/isolate'
 import { createTrainedPipeline } from '../lib/cv/trainedPipeline'
+import { getMainCamera } from '../lib/getMainCamera'
 import { extractFeatures } from '../lib/cv/features'
 import { classifyKnn } from '../lib/cv/knnClassifier'
 import type { TrainingExample } from '../lib/cv/knnClassifier'
@@ -287,8 +288,7 @@ export function ActiveSessionScreen({ diceSet, onDone }: Props) {
 
     let stream: MediaStream | null = null
 
-    navigator.mediaDevices
-      .getUserMedia({ video: { facingMode: 'environment' } })
+    getMainCamera()
       .then((s) => {
         stream = s
         if (videoRef.current) {
