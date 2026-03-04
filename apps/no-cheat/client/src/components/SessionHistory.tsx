@@ -13,6 +13,7 @@ type Session = {
 type Props = {
   sessions: Session[]
   onSelect: (sessionId: string) => void
+  onDelete?: (sessionId: string) => void
 }
 
 function verdict(session: Session): { label: string; color: string } {
@@ -29,7 +30,7 @@ function formatDate(ts: number): string {
   })
 }
 
-export function SessionHistory({ sessions, onSelect }: Props) {
+export function SessionHistory({ sessions, onSelect, onDelete }: Props) {
   if (sessions.length === 0) {
     return <p className="text-slate-400 text-center py-8">No sessions yet. Start one below.</p>
   }
@@ -39,10 +40,10 @@ export function SessionHistory({ sessions, onSelect }: Props) {
       {sessions.map((session) => {
         const { label, color } = verdict(session)
         return (
-          <li key={session.id}>
+          <li key={session.id} className="flex items-center gap-1">
             <button
               onClick={() => onSelect(session.id)}
-              className="w-full text-left px-4 py-3 rounded-lg bg-slate-900 border border-slate-800 hover:border-amber-400 transition-colors space-y-0.5"
+              className="flex-1 text-left px-4 py-3 rounded-lg bg-slate-900 border border-slate-800 hover:border-amber-400 transition-colors space-y-0.5"
             >
               <div className="flex items-center justify-between">
                 <span className={`text-sm font-semibold ${color}`}>{label}</span>
@@ -53,6 +54,15 @@ export function SessionHistory({ sessions, onSelect }: Props) {
                 {session.zScore != null && <span>Z: {session.zScore.toFixed(2)}</span>}
               </div>
             </button>
+            {onDelete && (
+              <button
+                onClick={() => onDelete(session.id)}
+                aria-label="Delete session"
+                className="px-2 py-3 text-red-400/50 hover:text-red-400 transition-colors text-sm"
+              >
+                ×
+              </button>
+            )}
           </li>
         )
       })}

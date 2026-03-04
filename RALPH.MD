@@ -229,9 +229,9 @@ Complete these items in order, and create seperate commits for each item.
 
 10. [DONE 2026-03-04] Save training data to database and images to server. → Added `training_examples` DB table with label, guess, confidence, features, imageUrl. New `training` server router (saveExamples, list, getStats, delete) with R2 image upload. Client syncs to server after IndexedDB save (non-blocking). TrainingHistory component with filter-by-label and my-data-only toggle. 14 new server tests + 6 new client tests.
 
-11. In the training section of no-cheat,  Need to save bad detections so they can be used to filter out false positives.
+11. [DONE 2026-03-04] Save bad detections for false positive filtering. → Dismissed candidates saved as `label: 0` to IndexedDB + server. kNN classifier auto-dismisses future detections matching false positive patterns (confidence ≥ 0.6). TrainingHistory has "Not dice" filter to view/manage false positives.
 
-13. In the session list section of no-cheat, users should be able to delete sessions.
+13. [DONE 2026-03-04] In the session list section of no-cheat, users should be able to delete sessions. → Added `session.delete` route with ownership check. SessionHistory shows × button per session. DiceSetDetailScreen has double-tap delete confirmation. 3 new server tests + 2 new client tests.
 
 14. In the Recording section of no-cheat, dice detection is shaky, the preliminary detection is way off, and can't be adjusted. The detection should use the built code, but also we should be using Computer Vision code like from N3VERS4YDIE/dice-recognition (GitHub): A popular computer vision project for real-time, webcam-based dice detection, counting, and summation. ordovas/dice-scores-recognition (GitHub): Utilizes convolutional neural networks (CNNs) to recognize dice scores in images and live video. nell-byler/dice_detection (GitHub): A project focused on using deep learning to detect and classify six-sided dice. Artefact2/autodice (GitHub): Uses OpenCV and SIFT for image comparison, requiring reference photos for matching.
 

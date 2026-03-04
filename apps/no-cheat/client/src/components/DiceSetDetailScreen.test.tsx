@@ -34,7 +34,10 @@ vi.mock('../lib/trpc', () => ({
   trpc: {
     session: {
       list: {
-        useQuery: () => ({ data: fakeSessions, isLoading: false }),
+        useQuery: () => ({ data: fakeSessions, isLoading: false, refetch: vi.fn() }),
+      },
+      delete: {
+        useMutation: () => ({ mutate: vi.fn(), isPending: false }),
       },
     },
   },
@@ -48,6 +51,7 @@ describe('DiceSetDetailScreen', () => {
         onBack={() => {}}
         onStartSession={() => {}}
         onSelectSession={() => {}}
+        onTrainDetection={() => {}}
       />,
     )
     expect(screen.getByText('Red Dragons')).toBeInTheDocument()
@@ -60,6 +64,7 @@ describe('DiceSetDetailScreen', () => {
         onBack={() => {}}
         onStartSession={() => {}}
         onSelectSession={() => {}}
+        onTrainDetection={() => {}}
       />,
     )
     expect(screen.getByText('Loaded')).toBeInTheDocument()
@@ -74,6 +79,7 @@ describe('DiceSetDetailScreen', () => {
         onBack={() => {}}
         onStartSession={onStartSession}
         onSelectSession={() => {}}
+        onTrainDetection={() => {}}
       />,
     )
     fireEvent.click(screen.getByRole('button', { name: /new session/i }))
@@ -88,6 +94,7 @@ describe('DiceSetDetailScreen', () => {
         onBack={onBack}
         onStartSession={() => {}}
         onSelectSession={() => {}}
+        onTrainDetection={() => {}}
       />,
     )
     fireEvent.click(screen.getByRole('button', { name: /back/i }))
@@ -102,9 +109,39 @@ describe('DiceSetDetailScreen', () => {
         onBack={() => {}}
         onStartSession={() => {}}
         onSelectSession={onSelectSession}
+        onTrainDetection={() => {}}
       />,
     )
     fireEvent.click(screen.getByText('Loaded'))
     expect(onSelectSession).toHaveBeenCalledWith('sess-1')
+  })
+
+  it('shows delete buttons for each session', () => {
+    render(
+      <DiceSetDetailScreen
+        diceSet={diceSet}
+        onBack={() => {}}
+        onStartSession={() => {}}
+        onSelectSession={() => {}}
+        onTrainDetection={() => {}}
+      />,
+    )
+    const deleteButtons = screen.getAllByLabelText('Delete session')
+    expect(deleteButtons).toHaveLength(2)
+  })
+
+  it('shows confirmation message on first delete click', () => {
+    render(
+      <DiceSetDetailScreen
+        diceSet={diceSet}
+        onBack={() => {}}
+        onStartSession={() => {}}
+        onSelectSession={() => {}}
+        onTrainDetection={() => {}}
+      />,
+    )
+    const deleteButtons = screen.getAllByLabelText('Delete session')
+    fireEvent.click(deleteButtons[0]!)
+    expect(screen.getByText(/tap.*again to confirm/i)).toBeInTheDocument()
   })
 })

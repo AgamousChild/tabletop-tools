@@ -9,6 +9,7 @@ const client = createClient({ url: ':memory:' })
 const db = createDbFromClient(client)
 
 beforeAll(async () => {
+  await client.execute('PRAGMA foreign_keys = ON')
   await client.executeMultiple(`
     CREATE TABLE IF NOT EXISTS "user" (
       id TEXT PRIMARY KEY,
@@ -40,7 +41,7 @@ beforeAll(async () => {
     );
     CREATE TABLE IF NOT EXISTS rolls (
       id TEXT PRIMARY KEY,
-      session_id TEXT NOT NULL REFERENCES sessions(id),
+      session_id TEXT NOT NULL REFERENCES sessions(id) ON DELETE CASCADE,
       pip_values TEXT NOT NULL,
       created_at INTEGER NOT NULL
     );
@@ -311,6 +312,38 @@ describe('session.get', () => {
     const session = await aliceCaller.session.start({ diceSetId: 'set-1' })
     await expect(bobCaller.session.get({ sessionId: session.id })).rejects.toMatchObject({
       code: 'FORBIDDEN',
+    })
+  })
+})
+
+// ---------------------------------------------------------------------------
+// session.delete
+// ---------------------------------------------------------------------------
+describe('session.delete', () => {
+  it('deletes a session and its rolls', async () => {
+    const caller = createCaller(alice)
+    const session = await caller.session.start({ diceSetId: 'set-1' })
+    await caller.session.addRoll({ sessionId: session.id, pipValues: [1, 2, 3] })
+    await caller.session.delete({ sessionId: session.id })
+
+    // session.get throws FORBIDDEN when session is not found (existing behavior)
+    await expect(caller.session.get({ sessionId: session.id })).rejects.toThrow()
+  })
+
+  it('rejects deleting another user\'s session', async () => {
+    const aliceCaller = createCaller(alice)
+    const session = await aliceCaller.session.start({ diceSetId: 'set-1' })
+
+    const bobCaller = createCaller(bob)
+    await expect(bobCaller.session.delete({ sessionId: session.id })).rejects.toMatchObject({
+      code: 'FORBIDDEN',
+    })
+  })
+
+  it('rejects deleting nonexistent session', async () => {
+    const caller = createCaller(alice)
+    await expect(caller.session.delete({ sessionId: 'nonexistent' })).rejects.toMatchObject({
+      code: 'NOT_FOUND',
     })
   })
 })
