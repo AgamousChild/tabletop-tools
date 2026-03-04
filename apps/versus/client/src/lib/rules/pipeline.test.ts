@@ -508,6 +508,28 @@ describe('simulateWeapon', () => {
     // No matching keyword, so ANTI should not change anything
     expect(withAnti.expectedWounds).toBeCloseTo(base.expectedWounds, 4)
   })
+
+  it('attackerModelCount=1 gives same results as default', () => {
+    const weapon = { name: 'Bolter', range: 24, attacks: 2, skill: 3, strength: 4, ap: 0, damage: 1, abilities: [] as WeaponAbility[] }
+    const base = simulateWeapon(weapon, 4, 3, 2, 5)
+    const withOne = simulateWeapon(weapon, 4, 3, 2, 5, undefined, undefined, undefined, 1)
+    expect(withOne.expectedWounds).toBeCloseTo(base.expectedWounds, 4)
+  })
+
+  it('attackerModelCount multiplies attacks proportionally', () => {
+    const weapon = { name: 'Bolter', range: 24, attacks: 2, skill: 3, strength: 4, ap: 0, damage: 1, abilities: [] as WeaponAbility[] }
+    const oneModel = simulateWeapon(weapon, 4, 3, 2, 10, undefined, undefined, undefined, 1)
+    const fiveModels = simulateWeapon(weapon, 4, 3, 2, 10, undefined, undefined, undefined, 5)
+    // 5 models = 5× the attacks, so 5× the expected wounds (damage is linear with attacks)
+    expect(fiveModels.expectedWounds).toBeCloseTo(oneModel.expectedWounds * 5, 2)
+  })
+
+  it('attackerModelCount=10 with D6 attacks multiplies expected value', () => {
+    const weapon = { name: 'Flamer', range: 12, attacks: 'D6' as string | number, skill: 3, strength: 4, ap: 0, damage: 1, abilities: [] as WeaponAbility[] }
+    const oneModel = simulateWeapon(weapon, 4, 3, 2, 10, undefined, undefined, undefined, 1)
+    const tenModels = simulateWeapon(weapon, 4, 3, 2, 10, undefined, undefined, undefined, 10)
+    expect(tenModels.expectedWounds).toBeCloseTo(oneModel.expectedWounds * 10, 2)
+  })
 })
 
 // ── runMonteCarlo ─────────────────────────────────────────────────────────────
@@ -559,5 +581,13 @@ describe('runMonteCarlo', () => {
     const dist = runMonteCarlo([melta], 10, 2, 12, 1, undefined, undefined, undefined, 1000)
     expect(dist.histogram.size).toBeGreaterThan(0)
     expect(dist.mean).toBeGreaterThan(0)
+  })
+
+  it('attackerModelCount multiplies Monte Carlo mean proportionally', () => {
+    const oneDist = runMonteCarlo([bolter], 4, 3, 1, 10, undefined, undefined, undefined, 5000, 1)
+    const fiveDist = runMonteCarlo([bolter], 4, 3, 1, 10, undefined, undefined, undefined, 5000, 5)
+    // With 5× models, mean damage should be ~5× higher (within statistical tolerance)
+    expect(fiveDist.mean).toBeGreaterThan(oneDist.mean * 3)
+    expect(fiveDist.mean).toBeLessThan(oneDist.mean * 7)
   })
 })

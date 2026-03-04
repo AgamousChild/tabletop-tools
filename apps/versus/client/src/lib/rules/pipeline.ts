@@ -441,6 +441,7 @@ export function runMonteCarlo(
   defenderFnp?: number,
   defenderKeywords?: string[],
   iterations = 5000,
+  attackerModelCount = 1,
 ): DistributionData {
   const results: number[] = []
 
@@ -448,7 +449,11 @@ export function runMonteCarlo(
     let totalDamage = 0
 
     for (const weapon of weapons) {
-      let attackCount = rollDice(weapon.attacks)
+      // Roll attacks per model and sum (handles dice notation correctly)
+      let attackCount = 0
+      for (let m = 0; m < attackerModelCount; m++) {
+        attackCount += rollDice(weapon.attacks)
+      }
       if (weapon.abilities.some((a) => a.type === 'BLAST') && defenderModelCount >= 6) {
         attackCount = Math.max(attackCount, 3)
       }
@@ -527,6 +532,7 @@ export interface SimResult {
 
 /**
  * Simulate one weapon profile against a defender and return expected outcomes.
+ * attackerModelCount multiplies the number of attacks (each model fires the weapon).
  */
 export function simulateWeapon(
   weapon: WeaponProfile,
@@ -537,9 +543,10 @@ export function simulateWeapon(
   defenderInvulnSave?: number,
   defenderFnp?: number,
   defenderKeywords?: string[],
+  attackerModelCount = 1,
 ): SimResult {
   // BLAST: minimum 3 attacks vs 6+ model unit
-  let attackCount = resolveAttacks(weapon.attacks)
+  let attackCount = resolveAttacks(weapon.attacks) * attackerModelCount
   if (weapon.abilities.some((a) => a.type === 'BLAST') && defenderModelCount >= 6) {
     attackCount = Math.max(attackCount, 3)
   }

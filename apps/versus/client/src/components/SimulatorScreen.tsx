@@ -103,6 +103,7 @@ export function SimulatorScreen({ onSignOut }: Props) {
   const [attackerId, setAttackerId] = useState<string | null>(null)
   const [defenderId, setDefenderId] = useState<string | null>(null)
   const [attackerLeaderId, setAttackerLeaderId] = useState<string | null>(null)
+  const [attackerModelCount, setAttackerModelCount] = useState(-1)
   const [defenderModelCount, setDefenderModelCount] = useState(5)
   const [invulnSave, setInvulnSave] = useState<number | undefined>()
   const [fnp, setFnp] = useState<number | undefined>()
@@ -130,6 +131,7 @@ export function SimulatorScreen({ onSignOut }: Props) {
   const { data: attacker } = useGameUnit(attackerId)
   const { data: defender } = useGameUnit(defenderId)
   const { data: attackerLeader } = useGameUnit(attackerLeaderId)
+  const { data: attackerComps = [] } = useUnitCompositions(attackerId ?? '')
   const { data: defenderComps = [] } = useUnitCompositions(defenderId ?? '')
   const { data: availableLeaders = [] } = useGameLeadersForUnit(attackerId)
   const { data: attackerAbilities = [] } = useGameUnitAbilities(attackerId)
@@ -173,7 +175,12 @@ export function SimulatorScreen({ onSignOut }: Props) {
     return resolveUnitFromModel(defender, model)
   }, [defender, wahapediaDefenderModels])
 
-  // Auto-populate defender model count from composition data
+  // Auto-populate model counts from composition data
+  const defaultAttackerModels = useMemo(() => {
+    if (attackerComps.length === 0) return null
+    return parseModelCount(attackerComps)
+  }, [attackerComps])
+
   const defaultDefenderModels = useMemo(() => {
     if (defenderComps.length === 0) return null
     return parseModelCount(defenderComps)
@@ -183,6 +190,7 @@ export function SimulatorScreen({ onSignOut }: Props) {
   const handleAttackerSelect = useCallback((id: string) => {
     setAttackerId(id)
     setAttackerLeaderId(null)
+    setAttackerModelCount(-1) // sentinel: use composition data if available
     setWeaponOverrides(new Map())
     setSpecialRules([])
   }, [])
@@ -194,7 +202,11 @@ export function SimulatorScreen({ onSignOut }: Props) {
     setFnp(undefined)
   }, [])
 
-  // Resolve effective model count: user override > composition data > default 5
+  // Resolve effective model counts: user override > composition data > default
+  const effectiveAttackerModels = attackerModelCount === -1
+    ? (defaultAttackerModels ?? 1)
+    : attackerModelCount
+
   const effectiveDefenderModels = defenderModelCount === -1
     ? (defaultDefenderModels ?? 5)
     : defenderModelCount
@@ -331,6 +343,7 @@ export function SimulatorScreen({ onSignOut }: Props) {
         effectiveInvuln,
         effectiveFnp,
         defKeywords,
+        effectiveAttackerModels,
       )
       totalExpectedWounds += r.expectedWounds
       totalExpectedModelsRemoved += r.expectedModelsRemoved
@@ -376,7 +389,7 @@ export function SimulatorScreen({ onSignOut }: Props) {
       },
       breakdowns,
     }
-  }, [resolvedAttacker, resolvedDefender, effectiveDefenderModels, invulnSave, fnp, getSelectedWeapons])
+  }, [resolvedAttacker, resolvedDefender, effectiveAttackerModels, effectiveDefenderModels, invulnSave, fnp, getSelectedWeapons])
 
   // Monte Carlo distribution (runs alongside deterministic sim)
   const [distribution, setDistribution] = useState<DistributionData | null>(null)
@@ -400,13 +413,15 @@ export function SimulatorScreen({ onSignOut }: Props) {
       effectiveInvuln,
       effectiveFnp,
       defKeywords,
+      5000,
+      effectiveAttackerModels,
     )
     setDistribution(dist)
 
     if (resultsRef.current && typeof resultsRef.current.scrollIntoView === 'function') {
       resultsRef.current.scrollIntoView({ behavior: 'smooth' })
     }
-  }, [resolvedAttacker, resolvedDefender, effectiveDefenderModels, invulnSave, fnp, getSelectedWeapons, defenderKeywordRecords])
+  }, [resolvedAttacker, resolvedDefender, effectiveAttackerModels, effectiveDefenderModels, invulnSave, fnp, getSelectedWeapons, defenderKeywordRecords])
 
   const resultsRef = useRef<HTMLDivElement>(null)
 
@@ -415,6 +430,7 @@ export function SimulatorScreen({ onSignOut }: Props) {
     if (!simData || simData.breakdowns.length === 0) return null
     const weaponConfig = {
       attackType,
+      effectiveAttackerModels,
       effectiveDefenderModels,
       invulnSave: invulnSave ?? resolvedDefender?.invulnSave,
       fnp: fnp ?? resolvedDefender?.fnp,
@@ -423,7 +439,7 @@ export function SimulatorScreen({ onSignOut }: Props) {
       leaderContentId: attackerLeaderId ?? undefined,
     }
     return simpleHash(JSON.stringify(weaponConfig))
-  }, [simData, attackType, effectiveDefenderModels, invulnSave, fnp, specialRules, getSelectedWeapons, attackerLeaderId, resolvedDefender])
+  }, [simData, attackType, effectiveAttackerModels, effectiveDefenderModels, invulnSave, fnp, specialRules, getSelectedWeapons, attackerLeaderId, resolvedDefender])
 
   // Look up cached result from server
   const cachedResult = trpc.simulate.lookup.useQuery(
@@ -448,6 +464,7 @@ export function SimulatorScreen({ onSignOut }: Props) {
     const weapons = getSelectedWeapons()
     const weaponConfig = {
       attackType,
+      effectiveAttackerModels,
       effectiveDefenderModels,
       invulnSave: invulnSave ?? resolvedDefender?.invulnSave,
       fnp: fnp ?? resolvedDefender?.fnp,
@@ -531,7 +548,27 @@ export function SimulatorScreen({ onSignOut }: Props) {
               onQueryChange={setAttackerQuery}
               onSelect={handleAttackerSelect}
             />
-            {resolvedAttacker && <UnitProfileCard unit={resolvedAttacker} />}
+            {resolvedAttacker && (
+              <>
+                <UnitProfileCard unit={resolvedAttacker} />
+                <div className="flex gap-3">
+                  <div className="flex-1">
+                    <label className="block text-xs text-slate-400 mb-1">
+                      Models{attackerModelCount === -1 && defaultAttackerModels ? ' (from data)' : ''}
+                      <HelpTip text="Number of models in the attacking unit. Each model fires the selected weapons. Auto-filled from unit data when available." />
+                    </label>
+                    <input
+                      type="number"
+                      min={1}
+                      max={30}
+                      value={effectiveAttackerModels}
+                      onChange={(e) => setAttackerModelCount(Math.max(1, parseInt(e.target.value) || 1))}
+                      className="w-full px-3 py-1.5 rounded-lg bg-slate-900 border border-slate-800 text-slate-100 text-sm focus:outline-none focus:border-amber-400"
+                    />
+                  </div>
+                </div>
+              </>
+            )}
             {attackerAbilities.length > 0 && (
               <CollapsibleSection title="Unit Abilities" count={attackerAbilities.length}>
                 <div className="space-y-1.5">
