@@ -233,7 +233,7 @@ Complete these items in order, and create seperate commits for each item.
 
 13. [DONE 2026-03-04] In the session list section of no-cheat, users should be able to delete sessions. → Added `session.delete` route with ownership check. SessionHistory shows × button per session. DiceSetDetailScreen has double-tap delete confirmation. 3 new server tests + 2 new client tests.
 
-14. In the Recording section of no-cheat, dice detection is shaky, the preliminary detection is way off, and can't be adjusted. The detection should use the built code, but also we should be using Computer Vision code like from N3VERS4YDIE/dice-recognition (GitHub): A popular computer vision project for real-time, webcam-based dice detection, counting, and summation. ordovas/dice-scores-recognition (GitHub): Utilizes convolutional neural networks (CNNs) to recognize dice scores in images and live video. nell-byler/dice_detection (GitHub): A project focused on using deep learning to detect and classify six-sided dice. Artefact2/autodice (GitHub): Uses OpenCV and SIFT for image comparison, requiring reference photos for matching.
+14. [DONE 2026-03-04] In the Recording section of no-cheat, dice detection is shaky, the preliminary detection is way off, and can't be adjusted. → Integrated algorithmic ideas from referenced CV repos: center-crop ROIs before pip detection (ordovas), center-weighted blob filtering (autodice), center intensity k-NN feature (autodice), multi-threshold consensus for pip counting. Added adjustable detection sensitivity UI (contrast + edge crop sliders) in recording phase. 253 client + 83 server tests pass.
 
 15. Detachment unit choice limitations (data exists only as unstructured HTML — requires manual rule extraction)
 

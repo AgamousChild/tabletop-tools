@@ -1,5 +1,5 @@
 import { describe, expect, it, vi, beforeEach } from 'vitest'
-import type { Pipeline, RoiResult, PipelineState } from './pipeline'
+import type { Pipeline, RoiResult, PipelineState, PipelineConfig } from './pipeline'
 import type { TrainingExample, KnnResult } from './knnClassifier'
 
 // Mock the dependencies
@@ -35,10 +35,13 @@ function makeMockPipeline(): Pipeline {
     width: 0,
     height: 0,
   }
+  const config: PipelineConfig = { contrast: 10, centerCrop: 0.15 }
   return {
     state,
+    config,
     captureBackground: vi.fn(),
     processFrame: vi.fn().mockReturnValue([]),
+    setConfig: vi.fn(),
   }
 }
 
@@ -59,7 +62,7 @@ describe('trainedPipeline', () => {
 
   it('creates a base pipeline with the given diceSetId', () => {
     createTrainedPipeline('my-dice-set')
-    expect(createPipeline).toHaveBeenCalledWith('my-dice-set')
+    expect(createPipeline).toHaveBeenCalledWith('my-dice-set', undefined)
   })
 
   it('exposes the base pipeline state', () => {
