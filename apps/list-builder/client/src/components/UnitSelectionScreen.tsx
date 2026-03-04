@@ -1,6 +1,8 @@
 import { useState, useMemo, useRef, useEffect } from 'react'
 
 import { htmlToText, CollapsibleSection } from '@tabletop-tools/ui'
+import { parseDetachmentRestrictions, formatRestrictionText } from '../lib/detachmentRestrictions'
+import type { DetachmentRestriction } from '../lib/detachmentRestrictions'
 import { trpc, trpcClient } from '../lib/trpc'
 import { useUnits, useUnitModelOptions, useGameEnhancements, useGameUnitKeywords, useGameDetachmentAbilities, useGameDetachment, useLegendsUnitIds, useUnitRoles } from '../lib/useGameData'
 import {
@@ -196,6 +198,7 @@ function MyArmyView({
   onChangeDesc,
   onSaveDesc,
   detachmentAbilities,
+  restrictions,
 }: {
   listUnits: LocalListUnit[]
   activeList: { name: string; description?: string } | null
@@ -232,6 +235,7 @@ function MyArmyView({
   onChangeDesc: (v: string) => void
   onSaveDesc: () => void
   detachmentAbilities: Array<{ id: string; name: string; legend: string; description: string }>
+  restrictions: DetachmentRestriction[]
 }) {
   return (
     <div className="space-y-4">
@@ -300,6 +304,23 @@ function MyArmyView({
             ))}
           </div>
         </CollapsibleSection>
+      )}
+
+      {/* Detachment restrictions banner — always visible */}
+      {restrictions.length > 0 && (
+        <div className="space-y-2">
+          {restrictions.map((r, i) => (
+            <div key={i} className="px-3 py-2 rounded-lg bg-red-900/20 border border-red-500/30" data-testid="restriction-banner">
+              <div className="flex items-center gap-2 mb-1">
+                <span className="text-xs font-bold text-red-400 uppercase tracking-wider">Restriction</span>
+                {r.chapterName && (
+                  <span className="text-xs px-1.5 py-0.5 rounded bg-red-400/20 text-red-300 font-semibold">{r.chapterName} only</span>
+                )}
+              </div>
+              <p className="text-xs text-slate-300 whitespace-pre-wrap">{formatRestrictionText(r.text)}</p>
+            </div>
+          ))}
+        </div>
       )}
 
       {/* Validation errors */}
@@ -425,6 +446,7 @@ function AddUnitView({
   onBack,
   totalPts,
   battleSize,
+  restrictions,
 }: {
   units: Array<{ id: string; name: string; points: number }>
   unitsLoading: boolean
@@ -441,6 +463,7 @@ function AddUnitView({
   onBack: () => void
   totalPts: number
   battleSize: BattleSize
+  restrictions: DetachmentRestriction[]
 }) {
   return (
     <div className="space-y-4">
@@ -459,6 +482,21 @@ function AddUnitView({
       </div>
 
       <h2 className="text-lg font-semibold text-slate-100">Add Unit</h2>
+
+      {/* Detachment restrictions reminder */}
+      {restrictions.length > 0 && (
+        <div className="space-y-1">
+          {restrictions.map((r, i) => (
+            <div key={i} className="px-3 py-1.5 rounded-lg bg-red-900/20 border border-red-500/30 text-xs text-red-300" data-testid="restriction-reminder">
+              {r.chapterName ? (
+                <span><span className="font-bold text-red-400">{r.chapterName} only</span> — {formatRestrictionText(r.text).slice(0, 100)}{r.text.length > 100 ? '...' : ''}</span>
+              ) : (
+                <span>{formatRestrictionText(r.text).slice(0, 120)}{r.text.length > 120 ? '...' : ''}</span>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
 
       {/* Search + Legends toggle */}
       <div className="flex gap-2">
@@ -577,6 +615,7 @@ export function UnitSelectionScreen({ listId, faction, detachment, battleSize, o
     return filtered
   }, [allUnits, legendsIds, showLegends, roleFilter, unitRoles])
   const { data: detachmentAbilities = [] } = useGameDetachmentAbilities(detachment)
+  const restrictions = useMemo(() => parseDetachmentRestrictions(detachmentAbilities), [detachmentAbilities])
   const { data: activeList, refetch: refetchList } = useList(listId)
 
   // Fetch all ratings for rating badges in the unit browser
@@ -807,6 +846,7 @@ export function UnitSelectionScreen({ listId, faction, detachment, battleSize, o
         onBack={() => setSubScreen('list')}
         totalPts={totalPts}
         battleSize={battleSize}
+        restrictions={restrictions}
       />
     )
   }
@@ -844,6 +884,7 @@ export function UnitSelectionScreen({ listId, faction, detachment, battleSize, o
       onChangeDesc={setDescValue}
       onSaveDesc={() => void handleSaveDescription()}
       detachmentAbilities={detachmentAbilities}
+      restrictions={restrictions}
     />
   )
 }
