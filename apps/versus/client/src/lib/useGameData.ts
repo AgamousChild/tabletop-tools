@@ -4,6 +4,7 @@ import {
   useLeadersForUnit,
   useUnitAbilities,
   useUnitCompositions,
+  useUnitCosts,
   useUnitKeywords,
   useWargearOptions,
   useDatasheetModels,
@@ -17,7 +18,7 @@ import {
   usePrimaryUnit,
   useWargearAsWeapons,
 } from '@tabletop-tools/game-data-store'
-import type { DatasheetModel, Detachment, DetachmentAbility, Enhancement, Stratagem } from '@tabletop-tools/game-data-store'
+import type { DatasheetModel, Detachment, DetachmentAbility, Enhancement, Stratagem, UnitCost } from '@tabletop-tools/game-data-store'
 
 export function useUnits(query: { faction?: string; name?: string }, showLegends = false) {
   const result = usePrimaryUnitSearch(query)
@@ -63,6 +64,12 @@ export function useGameUnitAbilities(datasheetId: string | null) {
 export function useGameUnitCompositions(datasheetId: string | null) {
   const result = useUnitCompositions(datasheetId ?? '')
   if (!datasheetId) return { data: [], isLoading: false }
+  return { data: result.data, isLoading: result.isLoading }
+}
+
+export function useGameUnitCosts(datasheetId: string | null) {
+  const result = useUnitCosts(datasheetId ?? '')
+  if (!datasheetId) return { data: [] as UnitCost[], isLoading: false }
   return { data: result.data, isLoading: result.isLoading }
 }
 
