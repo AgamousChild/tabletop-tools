@@ -332,6 +332,7 @@ function mcRollWounds(
   toughness: number,
   abilities: WeaponAbility[],
   defenderKeywords?: string[],
+  weaponDamage?: number | string,
 ): { wounds: number; mortals: number } {
   const target = woundTarget(strength, toughness)
   const woundMod = abilities
@@ -363,7 +364,8 @@ function mcRollWounds(
     }
     if (roll >= effectiveTarget) {
       if (hasDevWounds && roll === 6) {
-        mortals++
+        // Dev Wound: convert to mortal wounds equal to weapon damage
+        mortals += weaponDamage !== undefined ? rollDice(weaponDamage) : 1
       } else {
         wounds++
       }
@@ -479,7 +481,7 @@ export function runMonteCarlo(
       const { normalHits, lethalHits } = mcRollHits(attackCount, weapon.skill, weapon.abilities)
       const { wounds, mortals } = mcRollWounds(
         normalHits, lethalHits, effectiveStrength, mcEffectiveToughness,
-        weapon.abilities, defenderKeywords,
+        weapon.abilities, defenderKeywords, weapon.damage,
       )
 
       const meltaBonus = weapon.abilities
