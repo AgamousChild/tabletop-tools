@@ -114,12 +114,28 @@ export function otsuBinarize(gray: Uint8Array): Uint8Array {
 
 /**
  * Filter blobs by area and circularity, return count.
+ * circularity threshold lowered to 0.3 for better detection of pips
+ * viewed at angles or slightly oblong shapes.
  */
 function countValidBlobs(blobs: BlobInfo[], minArea: number, maxArea: number): number {
   const pips = blobs.filter(
-    (b) => b.area >= minArea && b.area <= maxArea && b.circularity >= 0.4,
+    (b) => b.area >= minArea && b.area <= maxArea && b.circularity >= 0.3,
   )
   return pips.length
+}
+
+/**
+ * Binarize using a fixed threshold (median of image values).
+ * Fallback for when Otsu gives poor separation.
+ */
+function medianBinarize(gray: Uint8Array): Uint8Array {
+  const sorted = Array.from(gray).sort((a, b) => a - b)
+  const median = sorted[Math.floor(sorted.length / 2)]!
+  const mask = new Uint8Array(gray.length)
+  for (let i = 0; i < gray.length; i++) {
+    mask[i] = gray[i]! > median ? 255 : 0
+  }
+  return mask
 }
 
 /**
@@ -152,9 +168,17 @@ export function detectPips(gray: Uint8Array, width: number, height: number): num
 
   if (lightCount >= 1 && lightCount <= 6) return lightCount
 
-  // If dark pips gave a plausible count despite being >6, try with looser filter
-  if (darkCount > 6) return null // too many blobs, unreliable
-  if (lightCount > 6) return null
+  // Fallback: median-based binarization when Otsu gives poor separation
+  // (e.g., low-contrast dice where Otsu threshold splits the pip region)
+  if (darkCount > 6 || lightCount > 6 || (darkCount === 0 && lightCount === 0)) {
+    const medBinary = medianBinarize(gray)
+    const medDarkBlobs = findBlobInfo(medBinary, width, height, 0)
+    const medDarkCount = countValidBlobs(medDarkBlobs, minArea, maxArea)
+    if (medDarkCount >= 1 && medDarkCount <= 6) return medDarkCount
+    const medLightBlobs = findBlobInfo(medBinary, width, height, 255)
+    const medLightCount = countValidBlobs(medLightBlobs, minArea, maxArea)
+    if (medLightCount >= 1 && medLightCount <= 6) return medLightCount
+  }
 
   return null
 }
@@ -169,7 +193,7 @@ export function detectBlobs(binary: Uint8Array, size = 64): number | null {
 
   const blobs = findBlobInfo(binary, size, size, 255)
   const pips = blobs.filter(
-    (b) => b.area >= minArea && b.area <= maxArea && b.circularity >= 0.4,
+    (b) => b.area >= minArea && b.area <= maxArea && b.circularity >= 0.3,
   )
 
   if (pips.length === 0) return 0

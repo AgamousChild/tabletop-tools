@@ -91,11 +91,13 @@ export function createPipeline(diceSetId: string): Pipeline {
     const frameBlurred = gaussianBlur(frameGray, width, height)
 
     // Stage 3: Adaptive threshold — detects local contrast features (edges, pips)
-    const mask = adaptiveThreshold(frameBlurred, width, height, undefined, 15)
+    // C=10 for better sensitivity to low-contrast dice (lighter dice on light surfaces)
+    const mask = adaptiveThreshold(frameBlurred, width, height, undefined, 10)
 
     // Stage 4: Morphological open (erode) — removes noise speckles
+    // Single iteration preserves more features while still cleaning noise
     const openRadius = Math.max(1, Math.floor(Math.min(width, height) * 0.005))
-    const cleaned = erode(mask, width, height, openRadius, 2)
+    const cleaned = erode(mask, width, height, openRadius, 1)
 
     // Stage 5: Morphological close — fills gaps between pip detections
     // to create solid die shapes. Single iteration to avoid merging adjacent dice.
