@@ -429,9 +429,63 @@ export interface DistributionData {
   iterations: number
 }
 
+/** Character profile for Precision damage allocation. */
+export interface CharacterProfile {
+  wounds: number
+  save: number
+  invulnSave?: number
+  fnp?: number
+}
+
+/**
+ * Roll saves and return raw damage (no HP cap).
+ * Used internally by runMonteCarlo for per-weapon damage.
+ */
+function mcRollRawDamage(
+  wounds: number,
+  mortals: number,
+  ap: number,
+  save: number,
+  damage: number | string,
+  meltaBonus: number,
+  invulnSave?: number,
+  fnp?: number,
+): number {
+  const saveTarget = effectiveSave(save, ap, invulnSave)
+  let totalDamage = 0
+
+  for (let i = 0; i < wounds; i++) {
+    const roll = rollD6()
+    if (roll < saveTarget) {
+      let dmg = rollDice(damage) + meltaBonus
+      if (fnp !== undefined && fnp <= 6) {
+        let survived = 0
+        for (let d = 0; d < dmg; d++) {
+          if (rollD6() < fnp) survived++
+        }
+        dmg = survived
+      }
+      totalDamage += dmg
+    }
+  }
+
+  for (let i = 0; i < mortals; i++) {
+    if (fnp !== undefined && fnp <= 6) {
+      if (rollD6() < fnp) totalDamage++
+    } else {
+      totalDamage++
+    }
+  }
+
+  return totalDamage
+}
+
 /**
  * Run Monte Carlo simulation to generate a damage distribution.
  * Returns a histogram of total damage outcomes and key percentiles.
+ *
+ * When characterProfile is provided, Precision weapons target the character
+ * first (bypassing Look Out, Sir). Non-Precision damage goes to bodyguards first.
  */
 export function runMonteCarlo(
   weapons: WeaponProfile[],
@@ -445,17 +499,24 @@ export function runMonteCarlo(
   iterations = 5000,
   attackerModelCount = 1,
   weaponModelCounts?: number[],
+  characterProfile?: CharacterProfile,
 ): DistributionData {
   const results: number[] = []
+  const hasCharacter = characterProfile !== undefined
 
   for (let iter = 0; iter < iterations; iter++) {
+    // Track two wound pools when character is attached
+    let bodyguardHp = hasCharacter
+      ? defenderModelCount * defenderWoundsPerModel
+      : defenderModelCount * defenderWoundsPerModel
+    let characterHp = characterProfile?.wounds ?? 0
+    const maxHp = bodyguardHp + characterHp
+
     let totalDamage = 0
 
     for (let wi = 0; wi < weapons.length; wi++) {
       const weapon = weapons[wi]!
-      // Per-weapon model count overrides the global attackerModelCount
       const modelCount = weaponModelCounts?.[wi] ?? attackerModelCount
-      // Roll attacks per model and sum (handles dice notation correctly)
       let attackCount = 0
       for (let m = 0; m < modelCount; m++) {
         attackCount += rollDice(weapon.attacks)
@@ -488,12 +549,48 @@ export function runMonteCarlo(
         .filter((a): a is { type: 'MELTA'; value: number } => a.type === 'MELTA')
         .reduce((sum, a) => sum + a.value, 0)
 
-      totalDamage += mcRollSaves(
-        wounds, mortals, weapon.ap, defenderSave,
-        weapon.damage, meltaBonus,
-        defenderWoundsPerModel, defenderModelCount,
-        defenderInvulnSave, defenderFnp,
-      )
+      const hasPrecision = weapon.abilities.some((a) => a.type === 'PRECISION')
+
+      if (hasCharacter && characterProfile) {
+        // Use character save profile for Precision, bodyguard save for normal
+        const useSave = hasPrecision ? characterProfile.save : defenderSave
+        const useInvuln = hasPrecision ? characterProfile.invulnSave : defenderInvulnSave
+        const useFnp = hasPrecision ? characterProfile.fnp : defenderFnp
+
+        const dmg = mcRollRawDamage(
+          wounds, mortals, weapon.ap, useSave,
+          weapon.damage, meltaBonus, useInvuln, useFnp,
+        )
+
+        if (hasPrecision) {
+          // Precision: target character first, cascade to bodyguards
+          const toChar = Math.min(dmg, characterHp)
+          characterHp -= toChar
+          const overflow = dmg - toChar
+          if (overflow > 0) {
+            bodyguardHp = Math.max(0, bodyguardHp - overflow)
+          }
+        } else {
+          // Look Out, Sir: bodyguards absorb first, cascade to character
+          const toBody = Math.min(dmg, bodyguardHp)
+          bodyguardHp -= toBody
+          const overflow = dmg - toBody
+          if (overflow > 0) {
+            characterHp = Math.max(0, characterHp - overflow)
+          }
+        }
+      } else {
+        totalDamage += mcRollSaves(
+          wounds, mortals, weapon.ap, defenderSave,
+          weapon.damage, meltaBonus,
+          defenderWoundsPerModel, defenderModelCount,
+          defenderInvulnSave, defenderFnp,
+        )
+      }
+    }
+
+    if (hasCharacter) {
+      totalDamage = maxHp - bodyguardHp - characterHp
     }
 
     results.push(totalDamage)

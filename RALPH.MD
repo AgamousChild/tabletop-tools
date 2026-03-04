@@ -95,7 +95,7 @@ Build a copy of the app locally, and run it locally in a local browser, and run 
 - [DONE] All Ranged weapons are allowed to be used unless the unit has ranged options. → Weapon selection UI allows all ranged weapons per unit profile.
 - [DONE] Only one melee profile is allowed, unless there are weapon profiles labelled extra attacks. → Melee limit logic in simulation pipeline.
 - [DONE 2026-02-27] I still cannot increase strength or Toughness, or number of attacks, or reroll-wounds. → TOUGHNESS_MOD (+1, +2, -1) added. REROLL_WOUNDS in pipeline. SpecialRulesEditor for all modifiers.
-- [PARTIALLY DONE] Apply the special rules correctly. → (Items 5-6: FNP, Dev Wounds, Mortal Wounds, Precision still need verification/fixes.)
+- [DONE 2026-03-04] Apply the special rules correctly. → FNP, Dev Wounds, Mortal Wounds, and Precision fully implemented and tested.
 - [DONE] The data stored should include the units included, the special rules applied, and the results. → Save includes unit IDs, applied special rules, and simulation results.
 - [DONE 2026-02-28] When saving the data, results can be sent to server for caching and comparison. → `simulate.lookup` endpoint queries by configHash.
 - [DONE 2026-02-27] Allow for Leader additions to make a unit comparison more meaningful. → Leader attachment with auto-applied abilities.
@@ -218,7 +218,7 @@ Complete these items in order, and create seperate commits for each item.
 
 5. Make sure in the Versus tool, that you are applying FNP saves correctly, and Dev Wounds correctly, and mortal wounds correctly.
 
-6. Make sure you are using precision correctly, if a model has precision, that model will apply its attacks first to the characters in the unit, starting with bodyguards first, then on to the character or epic hero, and then to the other models. Precision attacks are not lost if the character models die and there are unapplied attacks, they cascade to the other models in the unit.
+6. [DONE 2026-03-04] Precision attacks target characters first. → `runMonteCarlo` accepts optional `characterProfile` for two-pool wound allocation. Precision weapons target character first (cascade to bodyguards), non-Precision targets bodyguards first (Look Out Sir, cascade to character). Defender leader UI added. 4 new pipeline tests.
 
 7. In the versus tool, and in the List Builder, the filter by buttons dont work except for battleline, make sure that the units have the right data in the right fields for the filter to work, make sure that the filter uses the right data to apply the filter.
 

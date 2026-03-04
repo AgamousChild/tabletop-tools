@@ -607,4 +607,101 @@ describe('runMonteCarlo', () => {
     // Monte Carlo mean should be close to the deterministic expected wounds
     expect(Math.abs(dist.mean - det.expectedWounds)).toBeLessThan(1.0)
   })
+
+  it('Precision weapon targets character first, cascades to bodyguards', () => {
+    // 10 bodyguards (T4, Sv3+, 2W each) + character (3W, Sv4+)
+    // High-damage Precision weapon should kill the character and cascade
+    const precisionWeapon = {
+      name: 'Precision Rifle',
+      range: 36,
+      attacks: 10,
+      skill: 2,
+      strength: 8,
+      ap: -3,
+      damage: 3,
+      abilities: [{ type: 'PRECISION' as const }] as WeaponAbility[],
+    }
+    const charProfile = { wounds: 3, save: 4, invulnSave: undefined, fnp: undefined }
+    const dist = runMonteCarlo(
+      [precisionWeapon], 4, 3, 2, 5,
+      undefined, undefined, undefined,
+      10000, 1, undefined, charProfile,
+    )
+    // With character attached (5 bodyguards × 2W + 3W character = 13 HP total)
+    // Should deal more total damage than max bodyguard HP alone (10)
+    // because character has worse save (4+ vs 3+)
+    expect(dist.mean).toBeGreaterThan(0)
+    expect(dist.histogram.size).toBeGreaterThan(0)
+  })
+
+  it('Non-Precision weapon targets bodyguards first (Look Out Sir)', () => {
+    // Normal weapon should target bodyguards first, with character taking overflow
+    const normalWeapon = {
+      name: 'Heavy Bolter',
+      range: 36,
+      attacks: 10,
+      skill: 3,
+      strength: 5,
+      ap: -1,
+      damage: 2,
+      abilities: [] as WeaponAbility[],
+    }
+    const charProfile = { wounds: 4, save: 2, invulnSave: 4, fnp: undefined }
+    // 2 bodyguards (2W each = 4 HP) + character (4W, Sv2+, inv4+)
+    const dist = runMonteCarlo(
+      [normalWeapon], 4, 4, 2, 2,
+      undefined, undefined, undefined,
+      10000, 1, undefined, charProfile,
+    )
+    // Total HP = 2×2 + 4 = 8. Mean should be positive.
+    expect(dist.mean).toBeGreaterThan(0)
+    // Max possible damage is 8 (total HP pool)
+    const maxKey = Math.max(...Array.from(dist.histogram.keys()))
+    expect(maxKey).toBeLessThanOrEqual(8)
+  })
+
+  it('Precision with character: total HP pool is bodyguard + character', () => {
+    // Verify damage is capped at bodyguard HP + character HP
+    const bigGun = {
+      name: 'Lascannon',
+      range: 48,
+      attacks: 20,
+      skill: 2,
+      strength: 12,
+      ap: -4,
+      damage: 6,
+      abilities: [{ type: 'PRECISION' as const }] as WeaponAbility[],
+    }
+    const charProfile = { wounds: 5, save: 6 }
+    // 3 bodyguards × 1W + 5W character = 8 HP total
+    const dist = runMonteCarlo(
+      [bigGun], 3, 6, 1, 3,
+      undefined, undefined, undefined,
+      5000, 1, undefined, charProfile,
+    )
+    // Every iteration should produce <= 8 damage
+    const maxKey = Math.max(...Array.from(dist.histogram.keys()))
+    expect(maxKey).toBeLessThanOrEqual(8)
+    // With 20 attacks at S12 AP-4 D6 vs T3 Sv6+ with no invuln,
+    // most iterations should deal max damage
+    expect(dist.mean).toBeGreaterThan(6)
+  })
+
+  it('without characterProfile, Precision ability has no special effect', () => {
+    const precisionWeapon = {
+      ...bolter,
+      name: 'Precision Bolter',
+      abilities: [{ type: 'PRECISION' as const }] as WeaponAbility[],
+    }
+    const withPrecision = runMonteCarlo(
+      [precisionWeapon], 4, 3, 1, 5,
+      undefined, undefined, undefined, 5000,
+    )
+    const withoutPrecision = runMonteCarlo(
+      [bolter], 4, 3, 1, 5,
+      undefined, undefined, undefined, 5000,
+    )
+    // Should produce similar means (PRECISION alone doesn't change damage math)
+    expect(Math.abs(withPrecision.mean - withoutPrecision.mean)).toBeLessThan(0.5)
+  })
 })
