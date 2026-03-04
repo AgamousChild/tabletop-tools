@@ -17,6 +17,7 @@ import {
   usePrimaryUnitSearch,
   usePrimaryUnit,
   useWargearAsWeapons,
+  useAllDatasheets,
 } from '@tabletop-tools/game-data-store'
 import type { DatasheetModel, Detachment, DetachmentAbility, Enhancement, Stratagem, UnitCost } from '@tabletop-tools/game-data-store'
 
@@ -123,4 +124,16 @@ export function useGameStratagems(factionId: string | undefined, detachmentId: s
   const result = useStratagems({ factionId: factionId ?? '', detachmentId: detachmentId ?? undefined })
   if (!factionId) return { data: [] as Stratagem[], isLoading: false }
   return { data: result.data, isLoading: result.isLoading }
+}
+
+/** Returns a Map of unit ID → role (e.g. "Battleline", "Characters") */
+export function useUnitRoles(): Map<string, string> {
+  const { data: datasheets } = useAllDatasheets()
+  return useMemo(() => {
+    const map = new Map<string, string>()
+    for (const ds of datasheets) {
+      if (ds.role) map.set(ds.id, ds.role)
+    }
+    return map
+  }, [datasheets])
 }

@@ -159,7 +159,7 @@ function UnitStatLine({ unitContentId }: { unitContentId: string }) {
   )
 }
 
-const ROLE_FILTERS = ['All', 'Battleline', 'Character', 'Infantry', 'Vehicle', 'Monster', 'Dedicated Transport'] as const
+const ROLE_FILTERS = ['All', 'Battleline', 'Characters', 'Other', 'Dedicated Transports', 'Fortifications'] as const
 type RoleFilter = typeof ROLE_FILTERS[number]
 
 // ── Screen 1: My List (chosen units) ────────────────────────────────────────
