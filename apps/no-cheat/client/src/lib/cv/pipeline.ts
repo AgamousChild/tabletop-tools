@@ -30,6 +30,19 @@ export interface RoiResult {
   pipCount: number | null
 }
 
+/** Configurable detection parameters (adjustable by user at runtime). */
+export interface PipelineConfig {
+  /** Adaptive threshold contrast (C value). Higher = fewer detections. Default: 10 */
+  contrast: number
+  /** Center-crop: fraction of each edge to trim before pip detection (0-0.3). Default: 0.15 */
+  centerCrop: number
+}
+
+export const DEFAULT_CONFIG: PipelineConfig = {
+  contrast: 10,
+  centerCrop: 0.15,
+}
+
 export interface PipelineState {
   diceSetId: string
   ready: boolean
@@ -39,8 +52,10 @@ export interface PipelineState {
 
 export interface Pipeline {
   state: PipelineState
+  config: PipelineConfig
   captureBackground(rgba: Uint8ClampedArray, width: number, height: number): void
   processFrame(rgba: Uint8ClampedArray, width: number, height: number): RoiResult[]
+  setConfig(config: Partial<PipelineConfig>): void
 }
 
 /**
@@ -64,11 +79,42 @@ function extractSubImage(
 }
 
 /**
+ * Center-crop a grayscale sub-image: trim `ratio` fraction from each edge.
+ * Inspired by ordovas/dice-scores-recognition which trims outer 20% to
+ * eliminate table surface bleed at ROI boundaries.
+ */
+function centerCropSubImage(
+  gray: Uint8Array,
+  w: number,
+  h: number,
+  ratio: number,
+): { cropped: Uint8Array; cw: number; ch: number } {
+  if (ratio <= 0 || ratio >= 0.5) return { cropped: gray, cw: w, ch: h }
+
+  const marginX = Math.floor(w * ratio)
+  const marginY = Math.floor(h * ratio)
+  const cw = w - 2 * marginX
+  const ch = h - 2 * marginY
+  if (cw < 4 || ch < 4) return { cropped: gray, cw: w, ch: h }
+
+  const cropped = new Uint8Array(cw * ch)
+  for (let row = 0; row < ch; row++) {
+    for (let col = 0; col < cw; col++) {
+      cropped[row * cw + col] = gray[(row + marginY) * w + (col + marginX)]!
+    }
+  }
+  return { cropped, cw, ch }
+}
+
+/**
  * Create a CV pipeline instance for a given dice set.
  * Call captureBackground() to set the ready flag and store dimensions.
  * No background frame is stored — adaptive thresholding works from single frames.
+ *
+ * @param diceSetId - Dice set identifier
+ * @param initialConfig - Optional initial configuration overrides
  */
-export function createPipeline(diceSetId: string): Pipeline {
+export function createPipeline(diceSetId: string, initialConfig?: Partial<PipelineConfig>): Pipeline {
   const state: PipelineState = {
     diceSetId,
     ready: false,
@@ -76,10 +122,16 @@ export function createPipeline(diceSetId: string): Pipeline {
     height: 0,
   }
 
+  const config: PipelineConfig = { ...DEFAULT_CONFIG, ...initialConfig }
+
   function captureBackground(_rgba: Uint8ClampedArray, width: number, height: number): void {
     state.ready = true
     state.width = width
     state.height = height
+  }
+
+  function setConfig(updates: Partial<PipelineConfig>): void {
+    Object.assign(config, updates)
   }
 
   function processFrame(rgba: Uint8ClampedArray, width: number, height: number): RoiResult[] {
@@ -91,8 +143,8 @@ export function createPipeline(diceSetId: string): Pipeline {
     const frameBlurred = gaussianBlur(frameGray, width, height)
 
     // Stage 3: Adaptive threshold — detects local contrast features (edges, pips)
-    // C=10 for better sensitivity to low-contrast dice (lighter dice on light surfaces)
-    const mask = adaptiveThreshold(frameBlurred, width, height, undefined, 10)
+    // Contrast C is configurable by user for different dice/surface combinations
+    const mask = adaptiveThreshold(frameBlurred, width, height, undefined, config.contrast)
 
     // Stage 4: Morphological open (erode) — removes noise speckles
     // Single iteration preserves more features while still cleaning noise
@@ -108,11 +160,14 @@ export function createPipeline(diceSetId: string): Pipeline {
     const rois = extractRois(closed, width, height)
     if (rois.length === 0) return []
 
-    // Stage 7: Count pips in each die ROI using the ORIGINAL (un-blurred) grayscale
+    // Stage 7: Count pips in each die ROI using the ORIGINAL (un-blurred) grayscale.
+    // Center-crop each ROI before analysis (inspired by ordovas/dice-scores-recognition)
+    // to remove table surface bleed at bounding box edges.
     const results: RoiResult[] = []
     for (const roi of rois) {
       const roiGray = extractSubImage(frameGray, width, roi.x, roi.y, roi.width, roi.height)
-      const pipCount = detectPips(roiGray, roi.width, roi.height)
+      const { cropped, cw, ch } = centerCropSubImage(roiGray, roi.width, roi.height, config.centerCrop)
+      const pipCount = detectPips(cropped, cw, ch)
       // Post-filter: reject ROIs where pip detection failed (non-dice edges)
       if (pipCount !== null) {
         results.push({ roi, pipCount })
@@ -122,5 +177,5 @@ export function createPipeline(diceSetId: string): Pipeline {
     return results
   }
 
-  return { state, captureBackground, processFrame }
+  return { state, config, captureBackground, processFrame, setConfig }
 }

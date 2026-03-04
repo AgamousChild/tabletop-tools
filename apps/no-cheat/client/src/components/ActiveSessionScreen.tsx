@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 
 import type { RoiResult } from '../lib/cv/pipeline'
+import { DEFAULT_CONFIG } from '../lib/cv/pipeline'
 import type { Roi } from '../lib/cv/isolate'
 import { createTrainedPipeline } from '../lib/cv/trainedPipeline'
 import { getMainCamera } from '../lib/getMainCamera'
@@ -111,6 +112,9 @@ export function ActiveSessionScreen({ diceSet, onDone }: Props) {
   const [confirmProgress, setConfirmProgress] = useState(0)
   const [lastCapture, setLastCapture] = useState<{ pips: number[]; time: number } | null>(null)
   const [undoFeedback, setUndoFeedback] = useState<string | null>(null)
+  const [showSettings, setShowSettings] = useState(false)
+  const [contrast, setContrast] = useState(DEFAULT_CONFIG.contrast)
+  const [centerCrop, setCenterCrop] = useState(DEFAULT_CONFIG.centerCrop)
 
   const pipeline = useMemo(() => createTrainedPipeline(diceSet.id), [diceSet.id])
 
@@ -723,7 +727,76 @@ export function ActiveSessionScreen({ diceSet, onDone }: Props) {
           </button>
         </div>
 
-        <p className="text-[10px] text-slate-500">Roll dice in frame. Auto-captures when stable for ~1 second.<HelpTip text="Remove dice from view between rolls to reset detection" /></p>
+        <div className="flex items-center gap-2">
+          <p className="text-[10px] text-slate-500 flex-1">Roll dice in frame. Auto-captures when stable for ~1 second.<HelpTip text="Remove dice from view between rolls to reset detection" /></p>
+          <button
+            onClick={() => setShowSettings(!showSettings)}
+            className="text-xs px-2 py-1 rounded border border-slate-700 text-slate-400 hover:text-slate-200 hover:border-slate-500 transition-colors"
+            aria-label="Detection settings"
+          >
+            {showSettings ? 'Hide' : 'Settings'}
+          </button>
+        </div>
+
+        {/* Detection sensitivity controls */}
+        {showSettings && (
+          <div className="bg-slate-900 rounded-lg p-3 space-y-3 border border-slate-800">
+            <p className="text-xs text-slate-400 font-semibold uppercase tracking-wider">Detection Settings</p>
+
+            <div className="space-y-1">
+              <div className="flex items-center justify-between">
+                <label className="text-xs text-slate-400">Contrast Sensitivity</label>
+                <span className="text-xs text-slate-500 font-mono">{contrast}</span>
+              </div>
+              <input
+                type="range"
+                min={3}
+                max={25}
+                step={1}
+                value={contrast}
+                onChange={(e) => {
+                  const v = Number(e.target.value)
+                  setContrast(v)
+                  pipeline.setConfig({ contrast: v })
+                }}
+                className="w-full accent-amber-400"
+              />
+              <p className="text-[10px] text-slate-600">Lower = more sensitive (catches faint dice). Higher = fewer false detections.</p>
+            </div>
+
+            <div className="space-y-1">
+              <div className="flex items-center justify-between">
+                <label className="text-xs text-slate-400">Edge Crop</label>
+                <span className="text-xs text-slate-500 font-mono">{Math.round(centerCrop * 100)}%</span>
+              </div>
+              <input
+                type="range"
+                min={0}
+                max={30}
+                step={5}
+                value={centerCrop * 100}
+                onChange={(e) => {
+                  const v = Number(e.target.value) / 100
+                  setCenterCrop(v)
+                  pipeline.setConfig({ centerCrop: v })
+                }}
+                className="w-full accent-amber-400"
+              />
+              <p className="text-[10px] text-slate-600">Trims edges before pip counting. Higher = ignores more table bleed.</p>
+            </div>
+
+            <button
+              onClick={() => {
+                setContrast(DEFAULT_CONFIG.contrast)
+                setCenterCrop(DEFAULT_CONFIG.centerCrop)
+                pipeline.setConfig({ ...DEFAULT_CONFIG })
+              }}
+              className="text-xs text-slate-500 hover:text-slate-300 transition-colors"
+            >
+              Reset to defaults
+            </button>
+          </div>
+        )}
 
         {/* Live camera with overlay */}
         <div className="relative rounded-lg overflow-hidden bg-slate-900 aspect-square">

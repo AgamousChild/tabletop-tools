@@ -8,7 +8,7 @@
  */
 
 import { createPipeline } from './pipeline'
-import type { Pipeline, RoiResult } from './pipeline'
+import type { Pipeline, PipelineConfig, RoiResult } from './pipeline'
 import { extractFeatures } from './features'
 import { classifyKnn } from './knnClassifier'
 import type { TrainingExample } from './knnClassifier'
@@ -16,6 +16,7 @@ import { rgbaToGray } from './background'
 
 export interface TrainedPipeline extends Pipeline {
   setExamples(examples: TrainingExample[]): void
+  setConfig(config: Partial<PipelineConfig>): void
 }
 
 const DEFAULT_CONFIDENCE_THRESHOLD = 0.6
@@ -46,13 +47,14 @@ function extractSubImage(
  * @param diceSetId - Dice set identifier passed to the base pipeline
  * @param options - Optional configuration
  * @param options.confidenceThreshold - Minimum k-NN confidence to override detectPips (default 0.6)
+ * @param options.pipelineConfig - Initial pipeline config overrides (contrast, centerCrop)
  */
 export function createTrainedPipeline(
   diceSetId: string,
-  options?: { confidenceThreshold?: number },
+  options?: { confidenceThreshold?: number; pipelineConfig?: Partial<PipelineConfig> },
 ): TrainedPipeline {
   const threshold = options?.confidenceThreshold ?? DEFAULT_CONFIDENCE_THRESHOLD
-  const base = createPipeline(diceSetId)
+  const base = createPipeline(diceSetId, options?.pipelineConfig)
   let examples: TrainingExample[] = []
 
   function processFrame(
@@ -90,8 +92,12 @@ export function createTrainedPipeline(
     get state() {
       return base.state
     },
+    get config() {
+      return base.config
+    },
     captureBackground: base.captureBackground,
     processFrame,
     setExamples,
+    setConfig: base.setConfig,
   }
 }

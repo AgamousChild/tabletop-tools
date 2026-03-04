@@ -1,11 +1,12 @@
 /**
  * Feature extraction for k-NN dice pip classification.
  *
- * Extracts a 12-element feature vector from a grayscale die ROI:
+ * Extracts a 13-element feature vector from a grayscale die ROI:
  *   [0-3]  Blob counts at 4 threshold levels
  *   [4-6]  Aggregate blob geometry (area ratio, mean circularity, area variance)
  *   [7-9]  Intensity stats (mean, stddev, dark pixel ratio)
  *   [10-11] Shape (aspect ratio, normalized ROI size)
+ *   [12]   Center intensity (mean of central 33% — inspired by Artefact2/autodice)
  *
  * All operations are pure TypeScript — no external CV dependencies.
  */
@@ -48,17 +49,17 @@ function manualBinarize(gray: Uint8Array, threshold: number): Uint8Array {
 }
 
 /**
- * Extract a 12-element feature vector from a grayscale die ROI.
+ * Extract a 13-element feature vector from a grayscale die ROI.
  *
  * @param roiGray - Grayscale pixel values for the ROI
  * @param w - ROI width
  * @param h - ROI height
- * @returns 12-element feature vector
+ * @returns 13-element feature vector
  */
 export function extractFeatures(roiGray: Uint8Array, w: number, h: number): number[] {
   const roiArea = w * h
   if (roiArea === 0) {
-    return new Array(12).fill(0)
+    return new Array(13).fill(0)
   }
 
   // --- Threshold levels ---
@@ -146,6 +147,20 @@ export function extractFeatures(roiGray: Uint8Array, w: number, h: number): numb
   const aspectRatio = h > 0 ? w / h : 1
   const normalizedSize = Math.sqrt(roiArea) / 100
 
+  // --- Center intensity (inspired by Artefact2/autodice scoreCenterDiff) ---
+  // Mean intensity of the central 33% of the ROI.
+  // Die faces with more pips have darker centers; fewer pips have lighter centers.
+  const cropMargin = Math.floor(Math.min(w, h) / 3)
+  let centerSum = 0
+  let centerCount = 0
+  for (let row = cropMargin; row < h - cropMargin; row++) {
+    for (let col = cropMargin; col < w - cropMargin; col++) {
+      centerSum += roiGray[row * w + col]!
+      centerCount++
+    }
+  }
+  const centerIntensity = centerCount > 0 ? centerSum / centerCount / 255 : meanIntensity
+
   return [
     blobCountOtsuDark,   // [0]
     blobCountOtsuLight,  // [1]
@@ -159,5 +174,6 @@ export function extractFeatures(roiGray: Uint8Array, w: number, h: number): numb
     darkPixelRatio,      // [9]
     aspectRatio,         // [10]
     normalizedSize,      // [11]
+    centerIntensity,     // [12] — center 33% mean intensity
   ]
 }

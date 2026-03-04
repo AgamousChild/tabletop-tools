@@ -49,7 +49,7 @@ describe('extractFeatures', () => {
   it('returns a 12-element array', () => {
     const img = createDieFace(3)
     const features = extractFeatures(img, W, H)
-    expect(features).toHaveLength(12)
+    expect(features).toHaveLength(13)
   })
 
   it('returns all finite numbers', () => {
@@ -94,7 +94,7 @@ describe('extractFeatures', () => {
   it('handles blank (uniform) ROI without crashing', () => {
     const blank = uniformImage(128)
     const features = extractFeatures(blank, W, H)
-    expect(features).toHaveLength(12)
+    expect(features).toHaveLength(13)
     for (let i = 0; i < features.length; i++) {
       expect(Number.isFinite(features[i])).toBe(true)
     }
@@ -103,7 +103,7 @@ describe('extractFeatures', () => {
   it('handles all-black uniform ROI', () => {
     const black = uniformImage(0)
     const features = extractFeatures(black, W, H)
-    expect(features).toHaveLength(12)
+    expect(features).toHaveLength(13)
     for (let i = 0; i < features.length; i++) {
       expect(Number.isFinite(features[i])).toBe(true)
     }
@@ -114,7 +114,7 @@ describe('extractFeatures', () => {
   it('handles all-white uniform ROI', () => {
     const white = uniformImage(255)
     const features = extractFeatures(white, W, H)
-    expect(features).toHaveLength(12)
+    expect(features).toHaveLength(13)
     for (let i = 0; i < features.length; i++) {
       expect(Number.isFinite(features[i])).toBe(true)
     }
@@ -127,7 +127,7 @@ describe('extractFeatures', () => {
   it('handles very small ROI (2x2)', () => {
     const tiny = new Uint8Array([100, 200, 50, 150])
     const features = extractFeatures(tiny, 2, 2)
-    expect(features).toHaveLength(12)
+    expect(features).toHaveLength(13)
     for (let i = 0; i < features.length; i++) {
       expect(Number.isFinite(features[i])).toBe(true)
     }
@@ -136,7 +136,7 @@ describe('extractFeatures', () => {
   it('handles single pixel ROI (1x1)', () => {
     const pixel = new Uint8Array([128])
     const features = extractFeatures(pixel, 1, 1)
-    expect(features).toHaveLength(12)
+    expect(features).toHaveLength(13)
     for (let i = 0; i < features.length; i++) {
       expect(Number.isFinite(features[i])).toBe(true)
     }
