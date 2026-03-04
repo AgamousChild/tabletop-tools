@@ -77,6 +77,8 @@ function formatAbility(a: WeaponAbility): string {
     case 'ANTI': return `Anti-${a.keyword} ${a.value}+`
     case 'MELTA': return `Melta ${a.value}`
     case 'IGNORES_COVER': return 'Ignores Cover'
+    case 'PRECISION': return 'Precision'
+    case 'TOUGHNESS_MOD': return `Toughness ${a.value > 0 ? '+' : ''}${a.value}`
     default: return a.type
   }
 }
@@ -111,6 +113,7 @@ export function SimulatorScreen({ onSignOut }: Props) {
   const [attackType, setAttackType] = useState<AttackType>('ranged')
   const [weaponOverrides, setWeaponOverrides] = useState<Map<number, boolean>>(new Map())
   const [specialRules, setSpecialRules] = useState<WeaponAbility[]>([])
+  const [defenderLeaderId, setDefenderLeaderId] = useState<string | null>(null)
   const [attackerDetachmentId, setAttackerDetachmentId] = useState<string | null>(null)
   const [attackerEnhancementId, setAttackerEnhancementId] = useState<string | null>(null)
   const [defenderDetachmentId, setDefenderDetachmentId] = useState<string | null>(null)
@@ -137,6 +140,9 @@ export function SimulatorScreen({ onSignOut }: Props) {
   const { data: attackerCosts = [] } = useGameUnitCosts(attackerId)
   const { data: defenderCosts = [] } = useGameUnitCosts(defenderId)
   const { data: availableLeaders = [] } = useGameLeadersForUnit(attackerId)
+  const { data: availableDefenderLeaders = [] } = useGameLeadersForUnit(defenderId)
+  const { data: defenderLeader } = useGameUnit(defenderLeaderId)
+  const { data: wahapediaDefenderLeaderModels = [] } = useGameDatasheetModels(defenderLeaderId)
   const { data: attackerAbilities = [] } = useGameUnitAbilities(attackerId)
   const { data: defenderAbilities = [] } = useGameUnitAbilities(defenderId)
   const { data: attackerWargear = [] } = useGameWargearOptions(attackerId)
@@ -178,6 +184,13 @@ export function SimulatorScreen({ onSignOut }: Props) {
     return resolveUnitFromModel(defender, model)
   }, [defender, wahapediaDefenderModels])
 
+  const resolvedDefenderLeader = useMemo(() => {
+    if (!defenderLeader) return null
+    const model = wahapediaDefenderLeaderModels[0]
+    if (!model) return defenderLeader
+    return resolveUnitFromModel(defenderLeader, model)
+  }, [defenderLeader, wahapediaDefenderLeaderModels])
+
   // Parse model count options from unit costs (gives selectable options with points)
   const attackerModelOptions = useMemo(
     () => parseModelOptions(attackerComps, attackerCosts),
@@ -212,6 +225,7 @@ export function SimulatorScreen({ onSignOut }: Props) {
 
   const handleDefenderSelect = useCallback((id: string) => {
     setDefenderId(id)
+    setDefenderLeaderId(null)
     setDefenderModelCount(-1) // sentinel: use composition data if available
     setInvulnSave(undefined)
     setFnp(undefined)
@@ -436,6 +450,16 @@ export function SimulatorScreen({ onSignOut }: Props) {
       leaderWeaponIndices.has(idx) ? 1 : effectiveAttackerModels,
     )
 
+    // Build character profile when defender has an attached leader
+    const charProfile = resolvedDefenderLeader
+      ? {
+          wounds: resolvedDefenderLeader.wounds,
+          save: resolvedDefenderLeader.save,
+          invulnSave: resolvedDefenderLeader.invulnSave,
+          fnp: resolvedDefenderLeader.fnp,
+        }
+      : undefined
+
     const dist = runMonteCarlo(
       weapons,
       resolvedDefender.toughness,
@@ -448,13 +472,14 @@ export function SimulatorScreen({ onSignOut }: Props) {
       5000,
       effectiveAttackerModels,
       perWeaponModelCounts,
+      charProfile,
     )
     setDistribution(dist)
 
     if (resultsRef.current && typeof resultsRef.current.scrollIntoView === 'function') {
       resultsRef.current.scrollIntoView({ behavior: 'smooth' })
     }
-  }, [resolvedAttacker, resolvedDefender, effectiveAttackerModels, effectiveDefenderModels, invulnSave, fnp, getSelectedWeapons, getSelectedWeaponIndices, leaderWeaponIndices, defenderKeywordRecords])
+  }, [resolvedAttacker, resolvedDefender, resolvedDefenderLeader, effectiveAttackerModels, effectiveDefenderModels, invulnSave, fnp, getSelectedWeapons, getSelectedWeaponIndices, leaderWeaponIndices, defenderKeywordRecords])
 
   const resultsRef = useRef<HTMLDivElement>(null)
 
@@ -776,6 +801,24 @@ export function SimulatorScreen({ onSignOut }: Props) {
               ))}
             </select>
             {attackerLeader && <UnitProfileCard unit={attackerLeader} />}
+          </div>
+        )}
+
+        {/* Defender leader attachment (for Precision targeting) */}
+        {resolvedDefender && availableDefenderLeaders.length > 0 && (
+          <div className="rounded-lg border border-slate-800 bg-slate-900 p-4">
+            <label className="block text-xs text-slate-400 mb-2">Defender Leader<HelpTip text="Attach a leader to the defender. Precision weapons will target the character, while other attacks hit bodyguards first (Look Out, Sir)." /></label>
+            <select
+              value={defenderLeaderId ?? ''}
+              onChange={(e) => setDefenderLeaderId(e.target.value || null)}
+              className="w-full px-3 py-1.5 rounded-lg bg-slate-800 border border-slate-700 text-slate-100 text-sm focus:outline-none focus:border-amber-400"
+            >
+              <option value="">No leader</option>
+              {availableDefenderLeaders.map((la) => (
+                <LeaderSelectOption key={la.leaderId} leaderId={la.leaderId} />
+              ))}
+            </select>
+            {resolvedDefenderLeader && <UnitProfileCard unit={resolvedDefenderLeader} />}
           </div>
         )}
 
