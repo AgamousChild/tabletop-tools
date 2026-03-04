@@ -249,4 +249,24 @@ export const sessionRouter = router({
 
       return { photoUrl }
     }),
+
+  delete: protectedProcedure
+    .input(z.object({ sessionId: z.string() }))
+    .mutation(async ({ ctx, input }) => {
+      const [session] = await ctx.db
+        .select()
+        .from(diceRollingSessions)
+        .where(eq(diceRollingSessions.id, input.sessionId))
+
+      if (!session) {
+        throw new TRPCError({ code: 'NOT_FOUND', message: 'Session not found' })
+      }
+      if (session.userId !== ctx.user.id) {
+        throw new TRPCError({ code: 'FORBIDDEN', message: 'Not your session' })
+      }
+
+      // Cascade: rolls deleted automatically by FK constraint
+      await ctx.db.delete(diceRollingSessions).where(eq(diceRollingSessions.id, input.sessionId))
+      return { success: true }
+    }),
 })

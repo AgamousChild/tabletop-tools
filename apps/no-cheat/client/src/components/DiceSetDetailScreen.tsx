@@ -1,3 +1,4 @@
+import { useState } from 'react'
 import { trpc } from '../lib/trpc'
 import { SessionHistory } from './SessionHistory'
 
@@ -12,7 +13,18 @@ type Props = {
 }
 
 export function DiceSetDetailScreen({ diceSet, onBack, onStartSession, onSelectSession, onTrainDetection }: Props) {
-  const { data: sessions = [], isLoading } = trpc.session.list.useQuery({ diceSetId: diceSet.id })
+  const { data: sessions = [], isLoading, refetch } = trpc.session.list.useQuery({ diceSetId: diceSet.id })
+  const deleteMutation = trpc.session.delete.useMutation({ onSuccess: () => refetch() })
+  const [confirmDelete, setConfirmDelete] = useState<string | null>(null)
+
+  function handleDelete(sessionId: string) {
+    if (confirmDelete === sessionId) {
+      deleteMutation.mutate({ sessionId })
+      setConfirmDelete(null)
+    } else {
+      setConfirmDelete(sessionId)
+    }
+  }
 
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100 p-4">
@@ -38,7 +50,12 @@ export function DiceSetDetailScreen({ diceSet, onBack, onStartSession, onSelectS
         {isLoading ? (
           <p className="text-slate-400 text-center py-8">Loading…</p>
         ) : (
-          <SessionHistory sessions={sessions} onSelect={onSelectSession} />
+          <>
+            <SessionHistory sessions={sessions} onSelect={onSelectSession} onDelete={handleDelete} />
+            {confirmDelete && (
+              <p className="text-xs text-red-400 text-center mt-1">Tap × again to confirm deletion</p>
+            )}
+          </>
         )}
 
         <div className="mt-6 space-y-3">
