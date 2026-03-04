@@ -53,11 +53,12 @@ type Phase =
   | { name: 'dice_check'; candidates: DiceCandidate[] }
   | { name: 'labeling'; rois: DetectedRoi[] }
 
-const WINDOW_SIZE = 15
-const STABILITY_RATIO = 0.6
-const COOLDOWN_FRAMES = 10
-const CONFIRM_DURATION = 1000
-const CONFIRM_INTERVAL = 250
+const WINDOW_SIZE = 10
+const STABILITY_RATIO = 0.4
+const COOLDOWN_FRAMES = 8
+const CONFIRM_DURATION = 800
+const CONFIRM_INTERVAL = 200
+const AUTO_LOCK_TIMEOUT = 4000 // ms — auto-lock after this long even if unstable
 
 function extractSubImage(
   gray: Uint8Array,
@@ -170,6 +171,9 @@ export function TrainingScreen({ diceSet, onBack }: Props) {
   useEffect(() => {
     if (phase.name !== 'detecting') return
 
+    const detectStartTime = Date.now()
+    let lastNonZeroResults: RoiResult[] = []
+
     function processLoop() {
       if (phaseRef.current.name !== 'detecting') return
 
@@ -214,6 +218,8 @@ export function TrainingScreen({ diceSet, onBack }: Props) {
       setDetectedCount(results.length)
       const currentCount = results.length
 
+      if (currentCount > 0) lastNonZeroResults = results
+
       if (cooldownRef.current > 0) {
         if (currentCount === 0) cooldownRef.current--
       } else if (currentCount === 0) {
@@ -222,6 +228,9 @@ export function TrainingScreen({ diceSet, onBack }: Props) {
         const counts = recentCountsRef.current
         counts.push(currentCount)
         if (counts.length > WINDOW_SIZE) counts.shift()
+
+        // Check if we should lock: stability OR timeout with dice present
+        let shouldLock = false
 
         if (counts.length >= WINDOW_SIZE) {
           const freq = new Map<number, number>()
@@ -232,17 +241,27 @@ export function TrainingScreen({ diceSet, onBack }: Props) {
           }
 
           if (modeCount / WINDOW_SIZE >= STABILITY_RATIO && currentCount === modeVal) {
-            // Stable → enter confirming phase with locked ROI positions
-            const initialSamples = results.map((r) => [r.pipCount])
-            recentCountsRef.current = []
-            setPhase({
-              name: 'confirming',
-              lockedResults: results,
-              samples: initialSamples,
-              startTime: Date.now(),
-            })
-            return
+            shouldLock = true
           }
+        }
+
+        // Auto-lock timeout: if we've been detecting for too long and have dice,
+        // lock with current results to avoid indefinite "hold steady" stall
+        if (!shouldLock && Date.now() - detectStartTime > AUTO_LOCK_TIMEOUT && currentCount > 0) {
+          shouldLock = true
+        }
+
+        if (shouldLock) {
+          const lockResults = results.length > 0 ? results : lastNonZeroResults
+          const initialSamples = lockResults.map((r) => [r.pipCount])
+          recentCountsRef.current = []
+          setPhase({
+            name: 'confirming',
+            lockedResults: lockResults,
+            samples: initialSamples,
+            startTime: Date.now(),
+          })
+          return
         }
       }
 
