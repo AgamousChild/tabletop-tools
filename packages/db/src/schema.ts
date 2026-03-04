@@ -104,6 +104,27 @@ export const rolls = sqliteTable('rolls', {
   index('idx_rolls_session_id').on(table.sessionId),
 ])
 
+export const trainingExamples = sqliteTable('training_examples', {
+  id: text('id').primaryKey(),
+  userId: text('user_id')
+    .notNull()
+    .references(() => authUsers.id, { onDelete: 'cascade' }),
+  diceSetId: text('dice_set_id')
+    .notNull()
+    .references(() => diceSets.id, { onDelete: 'cascade' }),
+  label: integer('label').notNull(), // 1-6 pip count, 0 = not a die
+  guess: integer('guess'), // what the CV pipeline guessed (null if no guess)
+  confidence: real('confidence'), // kNN confidence 0-1
+  features: text('features').notNull(), // JSON array of feature vector
+  imageUrl: text('image_url'), // R2 URL for ROI image
+  isCorrect: integer('is_correct'), // 1 if label === guess, 0 otherwise
+  createdAt: integer('created_at').notNull(),
+}, (table) => [
+  index('idx_training_examples_user_id').on(table.userId),
+  index('idx_training_examples_dice_set_id').on(table.diceSetId),
+  index('idx_training_examples_label').on(table.label),
+])
+
 // === Versus tables ===
 //
 // IMPORTANT: No foreign keys into game content.

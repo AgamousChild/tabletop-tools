@@ -42,6 +42,18 @@ beforeAll(async () => {
       pip_values TEXT NOT NULL,
       created_at INTEGER NOT NULL
     );
+    CREATE TABLE IF NOT EXISTS training_examples (
+      id TEXT PRIMARY KEY,
+      user_id TEXT NOT NULL REFERENCES "user"(id),
+      dice_set_id TEXT NOT NULL REFERENCES dice_sets(id),
+      label INTEGER NOT NULL,
+      guess INTEGER,
+      confidence REAL,
+      features TEXT NOT NULL,
+      image_url TEXT,
+      is_correct INTEGER,
+      created_at INTEGER NOT NULL
+    );
   `)
 })
 

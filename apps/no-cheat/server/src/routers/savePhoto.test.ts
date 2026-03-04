@@ -35,6 +35,13 @@ beforeAll(async () => {
       id TEXT PRIMARY KEY, session_id TEXT NOT NULL REFERENCES sessions(id),
       pip_values TEXT NOT NULL, created_at INTEGER NOT NULL
     );
+    CREATE TABLE IF NOT EXISTS training_examples (
+      id TEXT PRIMARY KEY, user_id TEXT NOT NULL REFERENCES "user"(id),
+      dice_set_id TEXT NOT NULL REFERENCES dice_sets(id),
+      label INTEGER NOT NULL, guess INTEGER, confidence REAL,
+      features TEXT NOT NULL, image_url TEXT, is_correct INTEGER,
+      created_at INTEGER NOT NULL
+    );
     INSERT INTO "user" (id, name, email, email_verified, created_at, updated_at)
     VALUES ('user-1', 'Alice', 'alice@example.com', 0, 0, 0);
     INSERT INTO "user" (id, name, email, email_verified, created_at, updated_at)

@@ -34,6 +34,25 @@ vi.mock('../lib/cv/background', () => ({
   rgbaToGray: vi.fn().mockReturnValue(new Uint8Array(4)),
 }))
 
+vi.mock('../lib/trpc', () => ({
+  trpc: {
+    training: {
+      saveExamples: {
+        useMutation: () => ({ mutate: vi.fn(), isPending: false }),
+      },
+      list: {
+        useQuery: () => ({ data: null, isLoading: false, refetch: vi.fn() }),
+      },
+      getStats: {
+        useQuery: () => ({ data: null }),
+      },
+      delete: {
+        useMutation: () => ({ mutate: vi.fn(), isPending: false }),
+      },
+    },
+  },
+}))
+
 import { TrainingScreen } from './TrainingScreen'
 import { createTrainedPipeline } from '../lib/cv/trainedPipeline'
 import { getExamples, addExample, getStats, updateStats, clearAll } from '../lib/store/trainingStore'

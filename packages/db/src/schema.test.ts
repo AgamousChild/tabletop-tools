@@ -20,6 +20,7 @@ import {
   rolls,
   rounds,
   simulations,
+  trainingExamples,
   stratagemLog,
   tournamentAwards,
   tournamentCards,
@@ -113,6 +114,19 @@ beforeAll(async () => {
     id TEXT PRIMARY KEY,
     session_id TEXT NOT NULL REFERENCES sessions(id) ON DELETE CASCADE,
     pip_values TEXT NOT NULL,
+    created_at INTEGER NOT NULL
+  )`)
+
+  await client.execute(`CREATE TABLE training_examples (
+    id TEXT PRIMARY KEY,
+    user_id TEXT NOT NULL REFERENCES "user"(id) ON DELETE CASCADE,
+    dice_set_id TEXT NOT NULL REFERENCES dice_sets(id) ON DELETE CASCADE,
+    label INTEGER NOT NULL,
+    guess INTEGER,
+    confidence REAL,
+    features TEXT NOT NULL,
+    image_url TEXT,
+    is_correct INTEGER,
     created_at INTEGER NOT NULL
   )`)
 
@@ -362,6 +376,10 @@ beforeAll(async () => {
   await client.execute('CREATE INDEX idx_sessions_user_id ON sessions(user_id)')
   await client.execute('CREATE INDEX idx_sessions_dice_set_id ON sessions(dice_set_id)')
   await client.execute('CREATE INDEX idx_rolls_session_id ON rolls(session_id)')
+  // Training
+  await client.execute('CREATE INDEX idx_training_examples_user_id ON training_examples(user_id)')
+  await client.execute('CREATE INDEX idx_training_examples_dice_set_id ON training_examples(dice_set_id)')
+  await client.execute('CREATE INDEX idx_training_examples_label ON training_examples(label)')
   // Versus
   await client.execute('CREATE INDEX idx_simulations_user_id ON simulations(user_id)')
   // List Builder
@@ -579,6 +597,45 @@ describe('rolls', () => {
     await db.delete(rolls).where(eq(rolls.id, 'roll-1'))
 
     const result = await db.select().from(rolls).where(eq(rolls.id, 'roll-1'))
+    expect(result).toHaveLength(0)
+  })
+})
+
+describe('trainingExamples', () => {
+  it('inserts and retrieves a training example', async () => {
+    await db.insert(diceSets).values({
+      id: 'ds-train',
+      userId: 'user-1',
+      name: 'Training Dice',
+      createdAt: Date.now(),
+    })
+
+    const features = [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6]
+
+    await db.insert(trainingExamples).values({
+      id: 'train-1',
+      userId: 'user-1',
+      diceSetId: 'ds-train',
+      label: 4,
+      guess: 3,
+      confidence: 0.75,
+      features: JSON.stringify(features),
+      imageUrl: 'https://cdn.example.com/training/train-1.png',
+      isCorrect: 0,
+      createdAt: Date.now(),
+    })
+
+    const result = await db.select().from(trainingExamples).where(eq(trainingExamples.id, 'train-1'))
+    expect(result).toHaveLength(1)
+    expect(result[0]?.label).toBe(4)
+    expect(result[0]?.guess).toBe(3)
+    expect(result[0]?.isCorrect).toBe(0)
+    expect(JSON.parse(result[0]?.features ?? '[]')).toEqual(features)
+  })
+
+  it('cascades delete when dice set is deleted', async () => {
+    await db.delete(diceSets).where(eq(diceSets.id, 'ds-train'))
+    const result = await db.select().from(trainingExamples).where(eq(trainingExamples.id, 'train-1'))
     expect(result).toHaveLength(0)
   })
 })
@@ -1120,6 +1177,7 @@ describe('V2: Index existence', () => {
       dice_sets: ['idx_dice_sets_user_id'],
       sessions: ['idx_sessions_user_id', 'idx_sessions_dice_set_id'],
       rolls: ['idx_rolls_session_id'],
+      training_examples: ['idx_training_examples_user_id', 'idx_training_examples_dice_set_id', 'idx_training_examples_label'],
       simulations: ['idx_simulations_user_id'],
       lists: ['idx_lists_user_id'],
       list_units: ['idx_list_units_list_id'],

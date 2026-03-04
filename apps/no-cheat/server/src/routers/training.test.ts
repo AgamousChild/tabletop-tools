@@ -1,0 +1,199 @@
+import { createClient } from '@libsql/client'
+import { createDbFromClient } from '@tabletop-tools/db'
+import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest'
+
+import { createCallerFactory } from '../trpc'
+import { appRouter } from './index'
+import type { R2Storage } from '../lib/storage/r2'
+
+const mockStorage: R2Storage = {
+  upload: vi.fn().mockResolvedValue('https://cdn.example.com/training/test.png'),
+}
+
+const client = createClient({ url: ':memory:' })
+const db = createDbFromClient(client)
+
+beforeAll(async () => {
+  await client.executeMultiple(`
+    CREATE TABLE IF NOT EXISTS "user" (
+      id TEXT PRIMARY KEY, name TEXT NOT NULL, email TEXT UNIQUE NOT NULL,
+      email_verified INTEGER NOT NULL DEFAULT 0, image TEXT,
+      username TEXT UNIQUE, display_username TEXT UNIQUE,
+      created_at INTEGER NOT NULL, updated_at INTEGER NOT NULL
+    );
+    CREATE TABLE IF NOT EXISTS dice_sets (
+      id TEXT PRIMARY KEY, user_id TEXT NOT NULL REFERENCES "user"(id),
+      name TEXT NOT NULL, created_at INTEGER NOT NULL
+    );
+    CREATE TABLE IF NOT EXISTS sessions (
+      id TEXT PRIMARY KEY, user_id TEXT NOT NULL REFERENCES "user"(id),
+      dice_set_id TEXT NOT NULL REFERENCES dice_sets(id),
+      opponent_name TEXT, z_score REAL, is_loaded INTEGER,
+      photo_url TEXT, created_at INTEGER NOT NULL, closed_at INTEGER
+    );
+    CREATE TABLE IF NOT EXISTS rolls (
+      id TEXT PRIMARY KEY, session_id TEXT NOT NULL REFERENCES sessions(id),
+      pip_values TEXT NOT NULL, created_at INTEGER NOT NULL
+    );
+    CREATE TABLE IF NOT EXISTS training_examples (
+      id TEXT PRIMARY KEY, user_id TEXT NOT NULL REFERENCES "user"(id),
+      dice_set_id TEXT NOT NULL REFERENCES dice_sets(id),
+      label INTEGER NOT NULL, guess INTEGER, confidence REAL,
+      features TEXT NOT NULL, image_url TEXT, is_correct INTEGER,
+      created_at INTEGER NOT NULL
+    );
+    INSERT INTO "user" (id, name, email, email_verified, created_at, updated_at)
+    VALUES ('user-1', 'Alice', 'alice@example.com', 0, 0, 0);
+    INSERT INTO "user" (id, name, email, email_verified, created_at, updated_at)
+    VALUES ('user-2', 'Bob', 'bob@example.com', 0, 0, 0);
+    INSERT INTO dice_sets (id, user_id, name, created_at)
+    VALUES ('set-1', 'user-1', 'Red Dragons', 0);
+    INSERT INTO dice_sets (id, user_id, name, created_at)
+    VALUES ('set-2', 'user-2', 'Blue Dice', 0);
+  `)
+})
+
+afterAll(() => client.close())
+
+const createCaller = createCallerFactory(appRouter)
+const req = new Request('http://localhost')
+const alice = { user: { id: 'user-1', email: 'alice@example.com', name: 'Alice' }, req, db, storage: mockStorage }
+const bob = { user: { id: 'user-2', email: 'bob@example.com', name: 'Bob' }, req, db, storage: mockStorage }
+const anon = { user: null, req, db, storage: mockStorage }
+
+// Fake base64 for a tiny grayscale image
+const fakeImageBase64 = Buffer.from(new Uint8Array(64 * 64).fill(128)).toString('base64')
+const fakeFeatures = [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6]
+
+describe('training.saveExamples', () => {
+  it('saves multiple training examples with images', async () => {
+    const caller = createCaller(alice)
+    const result = await caller.training.saveExamples({
+      diceSetId: 'set-1',
+      examples: [
+        { label: 4, guess: 4, confidence: 0.9, features: fakeFeatures, imageBase64: fakeImageBase64 },
+        { label: 2, guess: 3, confidence: 0.6, features: fakeFeatures, imageBase64: fakeImageBase64 },
+      ],
+    })
+    expect(result.saved).toBe(2)
+    expect(mockStorage.upload).toHaveBeenCalled()
+  })
+
+  it('marks correct guesses with isCorrect=1', async () => {
+    const caller = createCaller(alice)
+    const list = await caller.training.list({ diceSetId: 'set-1' })
+    const correct = list.examples.find((e) => e.label === 4 && e.guess === 4)
+    expect(correct?.isCorrect).toBe(1)
+  })
+
+  it('marks incorrect guesses with isCorrect=0', async () => {
+    const caller = createCaller(alice)
+    const list = await caller.training.list({ diceSetId: 'set-1' })
+    const incorrect = list.examples.find((e) => e.label === 2 && e.guess === 3)
+    expect(incorrect?.isCorrect).toBe(0)
+  })
+
+  it('rejects if dice set belongs to another user', async () => {
+    const caller = createCaller(bob)
+    await expect(
+      caller.training.saveExamples({
+        diceSetId: 'set-1',
+        examples: [{ label: 1, guess: 1, confidence: 0.8, features: fakeFeatures, imageBase64: fakeImageBase64 }],
+      }),
+    ).rejects.toMatchObject({ code: 'FORBIDDEN' })
+  })
+
+  it('rejects unauthenticated callers', async () => {
+    const caller = createCaller(anon)
+    await expect(
+      caller.training.saveExamples({
+        diceSetId: 'set-1',
+        examples: [{ label: 1, guess: 1, confidence: 0.8, features: fakeFeatures, imageBase64: fakeImageBase64 }],
+      }),
+    ).rejects.toMatchObject({ code: 'UNAUTHORIZED' })
+  })
+})
+
+describe('training.list', () => {
+  it('returns examples for a dice set', async () => {
+    const caller = createCaller(alice)
+    const result = await caller.training.list({ diceSetId: 'set-1' })
+    expect(result.examples.length).toBeGreaterThanOrEqual(2)
+    expect(result.examples[0]?.userId).toBe('user-1')
+  })
+
+  it('filters by label', async () => {
+    const caller = createCaller(alice)
+    const result = await caller.training.list({ diceSetId: 'set-1', label: 4 })
+    expect(result.examples.every((e) => e.label === 4)).toBe(true)
+  })
+
+  it('supports myOnly filter', async () => {
+    // Bob saves some training data to his own set
+    const bobCaller = createCaller(bob)
+    await bobCaller.training.saveExamples({
+      diceSetId: 'set-2',
+      examples: [{ label: 6, guess: 6, confidence: 0.99, features: fakeFeatures, imageBase64: fakeImageBase64 }],
+    })
+
+    // Bob can only see his own with myOnly
+    const result = await bobCaller.training.list({ myOnly: true })
+    expect(result.examples.every((e) => e.userId === 'user-2')).toBe(true)
+  })
+
+  it('returns all examples when no filter', async () => {
+    const caller = createCaller(alice)
+    const result = await caller.training.list({})
+    expect(result.examples.length).toBeGreaterThanOrEqual(3)
+  })
+
+  it('supports pagination with limit and offset', async () => {
+    const caller = createCaller(alice)
+    const page1 = await caller.training.list({ limit: 1, offset: 0 })
+    expect(page1.examples).toHaveLength(1)
+    const page2 = await caller.training.list({ limit: 1, offset: 1 })
+    expect(page2.examples).toHaveLength(1)
+    expect(page1.examples[0]?.id).not.toBe(page2.examples[0]?.id)
+  })
+})
+
+describe('training.getStats', () => {
+  it('returns aggregate stats for a dice set', async () => {
+    const caller = createCaller(alice)
+    const stats = await caller.training.getStats({ diceSetId: 'set-1' })
+    expect(stats.total).toBeGreaterThanOrEqual(2)
+    expect(stats.correct).toBeGreaterThanOrEqual(1)
+    expect(typeof stats.accuracy).toBe('number')
+    expect(stats.perLabel).toBeDefined()
+  })
+
+  it('returns zero stats for empty dice set', async () => {
+    // Create a new set with no training data
+    const caller = createCaller(alice)
+    const stats = await caller.training.getStats({ diceSetId: 'nonexistent' })
+    expect(stats.total).toBe(0)
+    expect(stats.accuracy).toBe(0)
+  })
+})
+
+describe('training.delete', () => {
+  it('deletes own training example', async () => {
+    const caller = createCaller(alice)
+    const list = await caller.training.list({ diceSetId: 'set-1' })
+    const firstId = list.examples[0]!.id
+    await caller.training.delete({ id: firstId })
+    const after = await caller.training.list({ diceSetId: 'set-1' })
+    expect(after.examples.find((e) => e.id === firstId)).toBeUndefined()
+  })
+
+  it('rejects deleting another user\'s example', async () => {
+    const aliceCaller = createCaller(alice)
+    const aliceList = await aliceCaller.training.list({ myOnly: true })
+    if (aliceList.examples.length === 0) return // skip if no examples left
+
+    const bobCaller = createCaller(bob)
+    await expect(
+      bobCaller.training.delete({ id: aliceList.examples[0]!.id }),
+    ).rejects.toMatchObject({ code: 'FORBIDDEN' })
+  })
+})
