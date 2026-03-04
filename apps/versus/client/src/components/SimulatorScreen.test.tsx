@@ -85,6 +85,7 @@ vi.mock('../lib/useGameData', () => ({
   useGameEnhancements: () => ({ data: [], isLoading: false }),
   useGameStratagems: () => ({ data: [], isLoading: false }),
   useGameUnitCosts: () => ({ data: [], isLoading: false }),
+  useUnitRoles: () => new Map(),
 }))
 
 beforeEach(() => {
