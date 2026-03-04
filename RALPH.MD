@@ -54,7 +54,7 @@ Build a copy of the app locally, and run it locally in a local browser, and run 
 - [DONE] Then the faction should be chosen on the next screen, with the detachment then chosen. → Faction → Detachment flow in wizard.
 - [DONE 2026-02-27] In the unit selector, no legends shown unless the legends checkbox is selected. → Legends filter with shared `useLegendsUnitIds()` hook.
 - [DONE] There are rules in army creation, limited choices for 500 pt games, 2 of any in 1000 pt games, and 3 of any in 2000 pt games, plus warlords must be chosen. → Army creation rules enforced per battle size, point cap enforced.
-- [NOT STARTED] Some detachments have unit choice limitations, use them if they exist. → (Item 15: data exists only as unstructured HTML — requires manual rule extraction.)
+- [DONE 2026-03-04] Some detachments have unit choice limitations, use them if they exist. → Detachment restriction parser extracts and classifies restrictions from ability descriptions. Restriction banners displayed in list-builder unit selection UI.
 - [DONE] During unit selection, after each unit is chosen, choose the number of models selected, there are usually different levels allowed, with different point costs and then show the statistical information about that unit, and in a popup, show units that have the same or fewer points in the same role that have higher win rates. → Model count selection, point costs, and suggestion popup implemented.
 - [DONE] There should be a done button, and then the list selections should be saved back to the server, associated with the user and the list name. → Lists saved to IndexedDB (client-side) and server.
 - [DONE 2026-02-27] The export should export in full text format, stored in clipboard with a note. → Export button with "Copied!" notification.
@@ -235,7 +235,7 @@ Complete these items in order, and create seperate commits for each item.
 
 14. [DONE 2026-03-04] In the Recording section of no-cheat, dice detection is shaky, the preliminary detection is way off, and can't be adjusted. → Integrated algorithmic ideas from referenced CV repos: center-crop ROIs before pip detection (ordovas), center-weighted blob filtering (autodice), center intensity k-NN feature (autodice), multi-threshold consensus for pip counting. Added adjustable detection sensitivity UI (contrast + edge crop sliders) in recording phase. 253 client + 83 server tests pass.
 
-15. Detachment unit choice limitations (data exists only as unstructured HTML — requires manual rule extraction)
+15. [DONE 2026-03-04] Detachment unit choice limitations. → Created `detachmentRestrictions.ts` parser that extracts restriction text from detachment ability descriptions. Classifies restrictions as chapter/points_cap/keyword/other, extracts chapter names. Restriction banners displayed in both MyArmyView (full detail) and AddUnitView (compact reminder). 11 parser tests + 63 client tests pass.
 
 ---
 
@@ -254,7 +254,7 @@ Complete these items in order, and create seperate commits for each item.
 | apps/versus/server | 11 | PASS |
 | apps/versus/client | 160 | PASS |
 | apps/list-builder/server | 35 | PASS |
-| apps/list-builder/client | 52 | PASS |
+| apps/list-builder/client | 63 | PASS |
 | apps/game-tracker/server | 58 | PASS |
 | apps/game-tracker/client | 158 | PASS |
 | apps/tournament/server | 73 | PASS |
@@ -264,7 +264,7 @@ Complete these items in order, and create seperate commits for each item.
 | apps/admin/server | 46 | PASS |
 | apps/admin/client | 47 | PASS |
 | apps/data-import/client | 57 | PASS |
-| **Total** | **1,435** | **ALL PASS** |
+| **Total** | **1,446** | **ALL PASS** |
 
 ---
 
