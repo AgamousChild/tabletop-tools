@@ -590,4 +590,21 @@ describe('runMonteCarlo', () => {
     expect(fiveDist.mean).toBeGreaterThan(oneDist.mean * 3)
     expect(fiveDist.mean).toBeLessThan(oneDist.mean * 7)
   })
+
+  it('DEVASTATING_WOUNDS with multi-damage weapon: MC mean matches deterministic', () => {
+    // Damage 3 weapon with Dev Wounds: each 6 to wound should deal 3 mortal wounds
+    const devWeapon = {
+      ...bolter,
+      name: 'Dev Gun',
+      attacks: 10,
+      strength: 8,
+      ap: -4,
+      damage: 3,
+      abilities: [{ type: 'DEVASTATING_WOUNDS' as const }],
+    }
+    const det = simulateWeapon(devWeapon, 4, 3, 3, 10)
+    const dist = runMonteCarlo([devWeapon], 4, 3, 3, 10, undefined, undefined, undefined, 10000)
+    // Monte Carlo mean should be close to the deterministic expected wounds
+    expect(Math.abs(dist.mean - det.expectedWounds)).toBeLessThan(1.0)
+  })
 })
