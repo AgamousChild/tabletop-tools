@@ -84,6 +84,7 @@ vi.mock('../lib/useGameData', () => ({
   useGameDetachmentAbilities: () => ({ data: [], isLoading: false }),
   useGameEnhancements: () => ({ data: [], isLoading: false }),
   useGameStratagems: () => ({ data: [], isLoading: false }),
+  useGameUnitCosts: () => ({ data: [], isLoading: false }),
 }))
 
 beforeEach(() => {

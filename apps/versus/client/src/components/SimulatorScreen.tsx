@@ -6,9 +6,10 @@ import type { DatasheetModel } from '@tabletop-tools/game-data-store'
 import { HelpTip, CollapsibleSection, htmlToText } from '@tabletop-tools/ui'
 import { authClient } from '../lib/auth'
 import { trpc } from '../lib/trpc'
-import { useUnits, useGameFactions, useGameUnit, useGameLeadersForUnit, useGameUnitAbilities, useGameUnitKeywords, useGameWargearOptions, useGameDatasheetWeapons, useGameDatasheetModels, useGameDetachments, useGameDetachmentAbilities, useGameEnhancements, useGameStratagems } from '../lib/useGameData'
+import { useUnits, useGameFactions, useGameUnit, useGameLeadersForUnit, useGameUnitAbilities, useGameUnitKeywords, useGameWargearOptions, useGameDatasheetWeapons, useGameDatasheetModels, useGameDetachments, useGameDetachmentAbilities, useGameEnhancements, useGameStratagems, useGameUnitCosts } from '../lib/useGameData'
 import { extractLeaderRules } from '../lib/leaderAbilities'
-import { parseModelCount } from '../lib/modelCount'
+import { parseModelCount, parseModelOptions } from '../lib/modelCount'
+import type { ModelOption } from '../lib/modelCount'
 import { simulateWeapon, runMonteCarlo } from '../lib/rules/pipeline'
 import type { SimResult, DistributionData } from '../lib/rules/pipeline'
 import { SimulationResult } from './SimulationResult'
@@ -133,6 +134,8 @@ export function SimulatorScreen({ onSignOut }: Props) {
   const { data: attackerLeader } = useGameUnit(attackerLeaderId)
   const { data: attackerComps = [] } = useUnitCompositions(attackerId ?? '')
   const { data: defenderComps = [] } = useUnitCompositions(defenderId ?? '')
+  const { data: attackerCosts = [] } = useGameUnitCosts(attackerId)
+  const { data: defenderCosts = [] } = useGameUnitCosts(defenderId)
   const { data: availableLeaders = [] } = useGameLeadersForUnit(attackerId)
   const { data: attackerAbilities = [] } = useGameUnitAbilities(attackerId)
   const { data: defenderAbilities = [] } = useGameUnitAbilities(defenderId)
@@ -175,16 +178,28 @@ export function SimulatorScreen({ onSignOut }: Props) {
     return resolveUnitFromModel(defender, model)
   }, [defender, wahapediaDefenderModels])
 
-  // Auto-populate model counts from composition data
+  // Parse model count options from unit costs (gives selectable options with points)
+  const attackerModelOptions = useMemo(
+    () => parseModelOptions(attackerComps, attackerCosts),
+    [attackerComps, attackerCosts],
+  )
+  const defenderModelOptions = useMemo(
+    () => parseModelOptions(defenderComps, defenderCosts),
+    [defenderComps, defenderCosts],
+  )
+
+  // Auto-populate model counts: prefer cost-based options, fall back to composition parsing
   const defaultAttackerModels = useMemo(() => {
+    if (attackerModelOptions.length > 0) return attackerModelOptions[0]!.modelCount
     if (attackerComps.length === 0) return null
     return parseModelCount(attackerComps)
-  }, [attackerComps])
+  }, [attackerModelOptions, attackerComps])
 
   const defaultDefenderModels = useMemo(() => {
+    if (defenderModelOptions.length > 0) return defenderModelOptions[0]!.modelCount
     if (defenderComps.length === 0) return null
     return parseModelCount(defenderComps)
-  }, [defenderComps])
+  }, [defenderModelOptions, defenderComps])
 
   // When attacker changes, clear overrides and leader so defaults kick in from data
   const handleAttackerSelect = useCallback((id: string) => {
@@ -573,16 +588,30 @@ export function SimulatorScreen({ onSignOut }: Props) {
                   <div className="flex-1">
                     <label className="block text-xs text-slate-400 mb-1">
                       Models{attackerModelCount === -1 && defaultAttackerModels ? ' (from data)' : ''}
-                      <HelpTip text="Number of models in the attacking unit. Each model fires the selected weapons. Auto-filled from unit data when available." />
+                      <HelpTip text="Number of models in the attacking unit. Each model fires the selected weapons." />
                     </label>
-                    <input
-                      type="number"
-                      min={1}
-                      max={30}
-                      value={effectiveAttackerModels}
-                      onChange={(e) => setAttackerModelCount(Math.max(1, parseInt(e.target.value) || 1))}
-                      className="w-full px-3 py-1.5 rounded-lg bg-slate-900 border border-slate-800 text-slate-100 text-sm focus:outline-none focus:border-amber-400"
-                    />
+                    {attackerModelOptions.length > 0 ? (
+                      <select
+                        value={effectiveAttackerModels}
+                        onChange={(e) => setAttackerModelCount(parseInt(e.target.value) || 1)}
+                        className="w-full px-3 py-1.5 rounded-lg bg-slate-900 border border-slate-800 text-slate-100 text-sm focus:outline-none focus:border-amber-400"
+                      >
+                        {attackerModelOptions.map((opt) => (
+                          <option key={opt.modelCount} value={opt.modelCount}>
+                            {opt.modelCount} models — {opt.points}pts
+                          </option>
+                        ))}
+                      </select>
+                    ) : (
+                      <input
+                        type="number"
+                        min={1}
+                        max={30}
+                        value={effectiveAttackerModels}
+                        onChange={(e) => setAttackerModelCount(Math.max(1, parseInt(e.target.value) || 1))}
+                        className="w-full px-3 py-1.5 rounded-lg bg-slate-900 border border-slate-800 text-slate-100 text-sm focus:outline-none focus:border-amber-400"
+                      />
+                    )}
                   </div>
                 </div>
               </>
@@ -638,16 +667,30 @@ export function SimulatorScreen({ onSignOut }: Props) {
                   <div className="flex-1">
                     <label className="block text-xs text-slate-400 mb-1">
                       Models{defenderModelCount === -1 && defaultDefenderModels ? ' (from data)' : ''}
-                      <HelpTip text="Number of models in the defending unit. Auto-filled from unit data when available." />
+                      <HelpTip text="Number of models in the defending unit." />
                     </label>
-                    <input
-                      type="number"
-                      min={1}
-                      max={30}
-                      value={effectiveDefenderModels}
-                      onChange={(e) => setDefenderModelCount(Math.max(1, parseInt(e.target.value) || 1))}
-                      className="w-full px-3 py-1.5 rounded-lg bg-slate-900 border border-slate-800 text-slate-100 text-sm focus:outline-none focus:border-amber-400"
-                    />
+                    {defenderModelOptions.length > 0 ? (
+                      <select
+                        value={effectiveDefenderModels}
+                        onChange={(e) => setDefenderModelCount(parseInt(e.target.value) || 1)}
+                        className="w-full px-3 py-1.5 rounded-lg bg-slate-900 border border-slate-800 text-slate-100 text-sm focus:outline-none focus:border-amber-400"
+                      >
+                        {defenderModelOptions.map((opt) => (
+                          <option key={opt.modelCount} value={opt.modelCount}>
+                            {opt.modelCount} models — {opt.points}pts
+                          </option>
+                        ))}
+                      </select>
+                    ) : (
+                      <input
+                        type="number"
+                        min={1}
+                        max={30}
+                        value={effectiveDefenderModels}
+                        onChange={(e) => setDefenderModelCount(Math.max(1, parseInt(e.target.value) || 1))}
+                        className="w-full px-3 py-1.5 rounded-lg bg-slate-900 border border-slate-800 text-slate-100 text-sm focus:outline-none focus:border-amber-400"
+                      />
+                    )}
                   </div>
                   <div className="flex-1">
                     <label className="block text-xs text-slate-400 mb-1">Invuln<HelpTip text="Invulnerable save. Ignores AP. Overrides unit data if set." /></label>
