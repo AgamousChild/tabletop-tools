@@ -121,40 +121,16 @@ export function otsuBinarize(gray: Uint8Array): Uint8Array {
 }
 
 /**
- * Filter blobs by area, circularity, and center proximity, return count.
- *
- * Center-weighting (inspired by Artefact2/autodice): pips near the die center
- * are more reliable than edge features. Blobs whose centroid is beyond 85% of
- * half-width from center are rejected as likely table noise bleeding in.
- *
- * circularity threshold at 0.3 for better detection of pips viewed at angles.
+ * Filter blobs by area and circularity, return count.
  */
 function countValidBlobs(
   blobs: BlobInfo[],
   minArea: number,
   maxArea: number,
-  roiWidth?: number,
-  roiHeight?: number,
 ): number {
-  const centerX = roiWidth ? roiWidth / 2 : undefined
-  const centerY = roiHeight ? roiHeight / 2 : undefined
-  const maxDist = centerX && centerY
-    ? Math.sqrt(centerX * centerX + centerY * centerY) * 0.85
-    : undefined
-
-  const pips = blobs.filter((b) => {
-    if (b.area < minArea || b.area > maxArea || b.circularity < 0.3) return false
-
-    // Center-weighting: reject blobs too far from ROI center
-    if (centerX !== undefined && centerY !== undefined && maxDist !== undefined) {
-      const dx = b.cx - centerX
-      const dy = b.cy - centerY
-      if (Math.sqrt(dx * dx + dy * dy) > maxDist) return false
-    }
-
-    return true
-  })
-  return pips.length
+  return blobs.filter((b) =>
+    b.area >= minArea && b.area <= maxArea && b.circularity >= 0.4,
+  ).length
 }
 
 /**
@@ -174,9 +150,9 @@ function medianBinarize(gray: Uint8Array): Uint8Array {
 /**
  * Count the number of pip dots in a die face image.
  *
- * Uses multi-threshold consensus (inspired by ordovas/dice-scores-recognition):
- * tries multiple binarization methods and uses the most-agreed-upon count.
- * This is more robust than the previous sequential fallback approach.
+ * Sequential fallback: tries Otsu dark pips first (most common case for
+ * white dice), then Otsu light pips, then median-based binarization.
+ * Returns the first valid 1–6 count found.
  *
  * @param gray - Grayscale image of a single die face
  * @param width - Image width
@@ -191,47 +167,29 @@ export function detectPips(gray: Uint8Array, width: number, height: number): num
   const minArea = Math.max(3, Math.floor(imageArea * 0.005))
   const maxArea = Math.floor(imageArea * 0.15)
 
-  // Collect pip counts from multiple threshold methods
-  const candidates: number[] = []
-
   const binary = otsuBinarize(gray)
 
-  // Otsu dark pips
+  // Try dark pips on light background (most common)
   const darkBlobs = findBlobInfo(binary, width, height, 0)
-  const darkCount = countValidBlobs(darkBlobs, minArea, maxArea, width, height)
-  if (darkCount >= 1 && darkCount <= 6) candidates.push(darkCount)
+  const darkCount = countValidBlobs(darkBlobs, minArea, maxArea)
+  if (darkCount >= 1 && darkCount <= 6) return darkCount
 
-  // Otsu light pips
+  // Try light pips on dark background
   const lightBlobs = findBlobInfo(binary, width, height, 255)
-  const lightCount = countValidBlobs(lightBlobs, minArea, maxArea, width, height)
-  if (lightCount >= 1 && lightCount <= 6) candidates.push(lightCount)
+  const lightCount = countValidBlobs(lightBlobs, minArea, maxArea)
+  if (lightCount >= 1 && lightCount <= 6) return lightCount
 
-  // Median-based binarization
+  // Median fallback when Otsu gives poor separation
   const medBinary = medianBinarize(gray)
   const medDarkBlobs = findBlobInfo(medBinary, width, height, 0)
-  const medDarkCount = countValidBlobs(medDarkBlobs, minArea, maxArea, width, height)
-  if (medDarkCount >= 1 && medDarkCount <= 6) candidates.push(medDarkCount)
+  const medDarkCount = countValidBlobs(medDarkBlobs, minArea, maxArea)
+  if (medDarkCount >= 1 && medDarkCount <= 6) return medDarkCount
 
   const medLightBlobs = findBlobInfo(medBinary, width, height, 255)
-  const medLightCount = countValidBlobs(medLightBlobs, minArea, maxArea, width, height)
-  if (medLightCount >= 1 && medLightCount <= 6) candidates.push(medLightCount)
+  const medLightCount = countValidBlobs(medLightBlobs, minArea, maxArea)
+  if (medLightCount >= 1 && medLightCount <= 6) return medLightCount
 
-  if (candidates.length === 0) return null
-
-  // Multi-threshold consensus: use the count that appears most frequently
-  const freq = new Map<number, number>()
-  for (const c of candidates) freq.set(c, (freq.get(c) ?? 0) + 1)
-
-  let bestCount = 0
-  let bestValue = candidates[0]!
-  for (const [val, count] of freq) {
-    if (count > bestCount) {
-      bestCount = count
-      bestValue = val
-    }
-  }
-
-  return bestValue
+  return null
 }
 
 /**
@@ -244,7 +202,7 @@ export function detectBlobs(binary: Uint8Array, size = 64): number | null {
 
   const blobs = findBlobInfo(binary, size, size, 255)
   const pips = blobs.filter(
-    (b) => b.area >= minArea && b.area <= maxArea && b.circularity >= 0.3,
+    (b) => b.area >= minArea && b.area <= maxArea && b.circularity >= 0.4,
   )
 
   if (pips.length === 0) return 0

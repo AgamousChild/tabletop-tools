@@ -39,8 +39,8 @@ export interface PipelineConfig {
 }
 
 export const DEFAULT_CONFIG: PipelineConfig = {
-  contrast: 10,
-  centerCrop: 0.15,
+  contrast: 15,
+  centerCrop: 0,
 }
 
 export interface PipelineState {
@@ -147,9 +147,8 @@ export function createPipeline(diceSetId: string, initialConfig?: Partial<Pipeli
     const mask = adaptiveThreshold(frameBlurred, width, height, undefined, config.contrast)
 
     // Stage 4: Morphological open (erode) — removes noise speckles
-    // Single iteration preserves more features while still cleaning noise
     const openRadius = Math.max(1, Math.floor(Math.min(width, height) * 0.005))
-    const cleaned = erode(mask, width, height, openRadius, 1)
+    const cleaned = erode(mask, width, height, openRadius, 2)
 
     // Stage 5: Morphological close — fills gaps between pip detections
     // to create solid die shapes. Single iteration to avoid merging adjacent dice.
