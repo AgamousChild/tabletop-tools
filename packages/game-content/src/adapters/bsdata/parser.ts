@@ -1,7 +1,7 @@
 import type { UnitProfile, WeaponAbility, WeaponProfile } from '../../types.js'
 
 /** Bump when parser output changes in a way that invalidates previously-imported data. */
-export const PARSER_VERSION = 6
+export const PARSER_VERSION = 7
 
 // ============================================================
 // BSData XML → UnitProfile parser
@@ -25,6 +25,12 @@ export function parseBSDataXml(xml: string, faction: string): ParseResult {
   const units: UnitProfile[] = []
   const errors: string[] = []
 
+  // Build reference maps for resolving <infoLink> and <entryLink> references.
+  // BSData XML uses these to point to shared definitions (profiles, weapons, models)
+  // defined elsewhere in the file (e.g. in <sharedProfiles> or <sharedSelectionEntries>).
+  const profileMap = buildProfileMap(xml)
+  const entryMap = buildEntryMap(xml)
+
   // Stack-based extraction of <selectionEntry> to handle nested entries correctly.
   // The regex approach fails when <selectionEntry> elements are nested (the non-greedy
   // match captures the inner closing tag instead of the outer one).
@@ -37,7 +43,10 @@ export function parseBSDataXml(xml: string, faction: string): ParseResult {
     if (!id || !name) continue
 
     try {
-      const unit = parseUnitEntry(id, name, faction, entry.body, entry.fullBody)
+      // Enrich the body by resolving <infoLink> and <entryLink> references
+      const enrichedBody = enrichBody(entry.fullBody, profileMap, entryMap)
+      const enrichedStripped = stripNestedSelectionEntries(enrichedBody)
+      const unit = parseUnitEntry(id, name, faction, enrichedStripped, enrichedBody)
       // Validate parsed data and add warnings for suspicious values
       validateUnit(unit, errors)
       units.push(unit)
@@ -71,6 +80,117 @@ function validateUnit(unit: UnitProfile, errors: string[]): void {
       errors.push(`${unit.name}: Weapon "${w.name}" has 0 attacks (missing data)`)
     }
   }
+}
+
+// ---- Link resolution ----
+// BSData XML uses <infoLink> and <entryLink> to reference shared definitions
+// (profiles, weapons, models) elsewhere in the file. These must be resolved
+// to find characteristics and weapons for units whose data is not inline.
+
+/**
+ * Build a map of all <profile> elements by ID from the full XML.
+ * Includes the full <profile>...</profile> XML for injection.
+ */
+function buildProfileMap(xml: string): Map<string, string> {
+  const map = new Map<string, string>()
+  const pattern = /<profile\b([^>]*)>([\s\S]*?)<\/profile>/gi
+  let m: RegExpExecArray | null
+  while ((m = pattern.exec(xml)) !== null) {
+    const id = extractStandaloneAttr(m[1] ?? '', 'id')
+    if (id) {
+      map.set(id, m[0])
+    }
+  }
+  return map
+}
+
+/**
+ * Build a map of all <selectionEntry> bodies by ID from the full XML.
+ * Uses stack-based matching to correctly handle nesting.
+ * Maps entry ID → inner body content (between open/close tags).
+ */
+function buildEntryMap(xml: string): Map<string, string> {
+  const map = new Map<string, string>()
+  const openTag = /<selectionEntry\b([^>]*)>/g
+  const closeTag = /<\/selectionEntry>/g
+
+  type TagPos = { type: 'open'; index: number; end: number; attrs: string } | { type: 'close'; index: number; end: number }
+  const tags: TagPos[] = []
+
+  let m: RegExpExecArray | null
+  while ((m = openTag.exec(xml)) !== null) {
+    const fullMatch = xml.slice(m.index, m.index + m[0].length + 1)
+    if (fullMatch.endsWith('/>')) continue
+    tags.push({ type: 'open', index: m.index, end: m.index + m[0].length, attrs: m[1] ?? '' })
+  }
+  while ((m = closeTag.exec(xml)) !== null) {
+    tags.push({ type: 'close', index: m.index, end: m.index + m[0].length })
+  }
+
+  tags.sort((a, b) => a.index - b.index)
+
+  const stack: Array<{ attrs: string; bodyStart: number }> = []
+  for (const tag of tags) {
+    if (tag.type === 'open') {
+      stack.push({ attrs: tag.attrs, bodyStart: tag.end })
+    } else if (tag.type === 'close' && stack.length > 0) {
+      const entry = stack.pop()!
+      const id = extractAttr(entry.attrs, 'id')
+      if (id && !map.has(id)) {
+        map.set(id, xml.slice(entry.bodyStart, tag.index))
+      }
+    }
+  }
+
+  return map
+}
+
+/**
+ * Enrich a unit's body by resolving <infoLink> and <entryLink> references.
+ * Appends resolved profile/entry content so that extractCharacteristics and
+ * extractWeapons can find stats and weapons from shared definitions.
+ */
+function enrichBody(
+  body: string,
+  profileMap: Map<string, string>,
+  entryMap: Map<string, string>,
+  depth = 0,
+): string {
+  if (depth > 3) return body // prevent infinite recursion
+
+  const resolved = new Set<string>() // track resolved IDs to avoid cycles
+  let extra = ''
+
+  // Resolve <infoLink type="profile" targetId="X"> → inject the profile XML
+  const infoLinkPattern = /<infoLink\b[^>]*type="profile"[^>]*>/gi
+  let m: RegExpExecArray | null
+  while ((m = infoLinkPattern.exec(body)) !== null) {
+    const targetId = extractAttr(m[0], 'targetId')
+    if (targetId && !resolved.has(targetId)) {
+      resolved.add(targetId)
+      const profileXml = profileMap.get(targetId)
+      if (profileXml) {
+        extra += '\n' + profileXml
+      }
+    }
+  }
+
+  // Resolve <entryLink ... targetId="X"> → inject the target entry's body
+  const entryLinkPattern = /<entryLink\b[^>]*>/gi
+  while ((m = entryLinkPattern.exec(body)) !== null) {
+    const targetId = extractAttr(m[0], 'targetId')
+    if (targetId && !resolved.has(targetId)) {
+      resolved.add(targetId)
+      const entryBody = entryMap.get(targetId)
+      if (entryBody) {
+        // Recursively enrich the entry's body to resolve nested references
+        const enrichedEntry = enrichBody(entryBody, profileMap, entryMap, depth + 1)
+        extra += '\n' + enrichedEntry
+      }
+    }
+  }
+
+  return body + extra
 }
 
 /**
@@ -490,6 +610,12 @@ function mapAbilityNames(names: string[]): WeaponAbility[] {
 
 function extractAttr(attrs: string, name: string): string {
   const pattern = new RegExp(`${name}="([^"]*)"`, 'i')
+  return pattern.exec(attrs)?.[1] ?? ''
+}
+
+/** Like extractAttr but uses word boundary to avoid matching 'typeId' when searching for 'id'. */
+function extractStandaloneAttr(attrs: string, name: string): string {
+  const pattern = new RegExp(`\\b${name}="([^"]*)"`, 'i')
   return pattern.exec(attrs)?.[1] ?? ''
 }
 

@@ -1012,3 +1012,241 @@ describe('parseBSDataXml — empty / malformed input', () => {
     expect(units).toHaveLength(0)
   })
 })
+
+// ---- Link resolution tests ----
+// BSData XML uses <infoLink> and <entryLink> to reference shared definitions.
+// These tests verify that the parser resolves these references correctly.
+
+const INFOLINK_PROFILE_XML = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<catalogue id="test" name="Test">
+  <sharedSelectionEntries>
+    <selectionEntry type="unit" import="true" name="Alpha Squad" hidden="false" id="unit-alpha">
+      <selectionEntries>
+        <selectionEntry type="model" name="Alpha Trooper" id="model-alpha">
+          <infoLinks>
+            <infoLink name="Alpha Trooper" hidden="false" type="profile" id="il-1" targetId="profile-alpha"/>
+          </infoLinks>
+          <entryLinks>
+            <entryLink import="true" name="Pulse Rifle" hidden="false" type="selectionEntry" id="el-1" targetId="weapon-pulse"/>
+            <entryLink import="true" name="Combat Blade" hidden="false" type="selectionEntry" id="el-2" targetId="weapon-blade"/>
+          </entryLinks>
+        </selectionEntry>
+      </selectionEntries>
+    </selectionEntry>
+    <selectionEntry type="upgrade" name="Pulse Rifle" id="weapon-pulse">
+      <profiles>
+        <profile name="Pulse Rifle" typeName="Ranged Weapons" hidden="false" id="wp-pulse">
+          <characteristics>
+            <characteristic name="Range">30</characteristic>
+            <characteristic name="A">2</characteristic>
+            <characteristic name="BS">4+</characteristic>
+            <characteristic name="S">5</characteristic>
+            <characteristic name="AP">-1</characteristic>
+            <characteristic name="D">1</characteristic>
+            <characteristic name="Keywords">Rapid Fire 1</characteristic>
+          </characteristics>
+        </profile>
+      </profiles>
+    </selectionEntry>
+    <selectionEntry type="upgrade" name="Combat Blade" id="weapon-blade">
+      <profiles>
+        <profile name="Combat Blade" typeName="Melee Weapons" hidden="false" id="wp-blade">
+          <characteristics>
+            <characteristic name="Range">Melee</characteristic>
+            <characteristic name="A">3</characteristic>
+            <characteristic name="WS">3+</characteristic>
+            <characteristic name="S">4</characteristic>
+            <characteristic name="AP">0</characteristic>
+            <characteristic name="D">1</characteristic>
+            <characteristic name="Keywords">-</characteristic>
+          </characteristics>
+        </profile>
+      </profiles>
+    </selectionEntry>
+  </sharedSelectionEntries>
+  <sharedProfiles>
+    <profile name="Alpha Trooper" typeId="c547" typeName="Unit" hidden="false" id="profile-alpha">
+      <characteristics>
+        <characteristic name="M">6"</characteristic>
+        <characteristic name="T">3</characteristic>
+        <characteristic name="SV">5+</characteristic>
+        <characteristic name="W">1</characteristic>
+        <characteristic name="LD">7+</characteristic>
+        <characteristic name="OC">2</characteristic>
+      </characteristics>
+    </profile>
+  </sharedProfiles>
+</catalogue>`
+
+const ENTRYLINK_MODEL_XML = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<catalogue id="test" name="Test">
+  <selectionEntries>
+    <selectionEntry type="unit" import="true" name="Bravo Team" hidden="false" id="unit-bravo">
+      <costs>
+        <cost name="pts" typeId="pts" value="65"/>
+      </costs>
+      <profiles>
+        <profile name="Resilience" typeName="Abilities" hidden="false" id="abil-1">
+          <characteristics>
+            <characteristic name="Description">Objective Secured</characteristic>
+          </characteristics>
+        </profile>
+      </profiles>
+      <selectionEntryGroups>
+        <selectionEntryGroup name="Unit Composition" hidden="false" id="seg-1">
+          <entryLinks>
+            <entryLink import="true" name="Bravo Sergeant" hidden="false" type="selectionEntry" id="el-sgt" targetId="model-sgt"/>
+            <entryLink import="true" name="Bravo Trooper" hidden="false" type="selectionEntry" id="el-trp" targetId="model-trp"/>
+          </entryLinks>
+        </selectionEntryGroup>
+      </selectionEntryGroups>
+    </selectionEntry>
+  </selectionEntries>
+  <sharedSelectionEntries>
+    <selectionEntry type="model" name="Bravo Trooper" id="model-trp">
+      <infoLinks>
+        <infoLink name="Bravo Trooper" type="profile" id="il-trp" targetId="profile-bravo"/>
+      </infoLinks>
+      <entryLinks>
+        <entryLink import="true" name="Autogun" type="selectionEntry" id="el-auto" targetId="weapon-auto"/>
+        <entryLink import="true" name="Bayonet" type="selectionEntry" id="el-bayo" targetId="weapon-bayo"/>
+      </entryLinks>
+    </selectionEntry>
+    <selectionEntry type="model" name="Bravo Sergeant" id="model-sgt">
+      <infoLinks>
+        <infoLink name="Bravo Sergeant" type="profile" id="il-sgt" targetId="profile-bravo"/>
+      </infoLinks>
+      <entryLinks>
+        <entryLink import="true" name="Pistol" type="selectionEntry" id="el-pist" targetId="weapon-pistol"/>
+        <entryLink import="true" name="Bayonet" type="selectionEntry" id="el-bayo2" targetId="weapon-bayo"/>
+      </entryLinks>
+    </selectionEntry>
+    <selectionEntry type="upgrade" name="Autogun" id="weapon-auto">
+      <profiles>
+        <profile name="Autogun" typeName="Ranged Weapons" hidden="false" id="wp-auto">
+          <characteristics>
+            <characteristic name="Range">24</characteristic>
+            <characteristic name="A">1</characteristic>
+            <characteristic name="BS">4+</characteristic>
+            <characteristic name="S">3</characteristic>
+            <characteristic name="AP">0</characteristic>
+            <characteristic name="D">1</characteristic>
+            <characteristic name="Keywords">Rapid Fire 1</characteristic>
+          </characteristics>
+        </profile>
+      </profiles>
+    </selectionEntry>
+    <selectionEntry type="upgrade" name="Pistol" id="weapon-pistol">
+      <profiles>
+        <profile name="Pistol" typeName="Ranged Weapons" hidden="false" id="wp-pistol">
+          <characteristics>
+            <characteristic name="Range">12</characteristic>
+            <characteristic name="A">1</characteristic>
+            <characteristic name="BS">4+</characteristic>
+            <characteristic name="S">3</characteristic>
+            <characteristic name="AP">0</characteristic>
+            <characteristic name="D">1</characteristic>
+            <characteristic name="Keywords">Pistol</characteristic>
+          </characteristics>
+        </profile>
+      </profiles>
+    </selectionEntry>
+    <selectionEntry type="upgrade" name="Bayonet" id="weapon-bayo">
+      <profiles>
+        <profile name="Bayonet" typeName="Melee Weapons" hidden="false" id="wp-bayo">
+          <characteristics>
+            <characteristic name="Range">Melee</characteristic>
+            <characteristic name="A">2</characteristic>
+            <characteristic name="WS">4+</characteristic>
+            <characteristic name="S">3</characteristic>
+            <characteristic name="AP">0</characteristic>
+            <characteristic name="D">1</characteristic>
+            <characteristic name="Keywords">-</characteristic>
+          </characteristics>
+        </profile>
+      </profiles>
+    </selectionEntry>
+  </sharedSelectionEntries>
+  <sharedProfiles>
+    <profile name="Bravo Trooper" typeName="Unit" hidden="false" id="profile-bravo">
+      <characteristics>
+        <characteristic name="M">6"</characteristic>
+        <characteristic name="T">3</characteristic>
+        <characteristic name="SV">5+</characteristic>
+        <characteristic name="W">1</characteristic>
+        <characteristic name="LD">7+</characteristic>
+        <characteristic name="OC">2</characteristic>
+      </characteristics>
+    </profile>
+  </sharedProfiles>
+</catalogue>`
+
+describe('parseBSDataXml — infoLink/entryLink resolution', () => {
+  it('resolves infoLink to shared profile for characteristics', () => {
+    const { units, errors } = parseBSDataXml(INFOLINK_PROFILE_XML, 'Test')
+    const unit = units.find(u => u.name === 'Alpha Squad')
+    expect(unit).toBeDefined()
+    expect(unit!.toughness).toBe(3)
+    expect(unit!.save).toBe(5)
+    expect(unit!.wounds).toBe(1)
+    expect(unit!.leadership).toBe(7)
+    expect(unit!.oc).toBe(2)
+    // Should not have toughness/save warnings
+    const charErrors = errors.filter(e => e.includes('Alpha Squad') && e.includes('missing characteristic'))
+    expect(charErrors).toHaveLength(0)
+  })
+
+  it('resolves entryLink to shared weapon definitions', () => {
+    const { units, errors } = parseBSDataXml(INFOLINK_PROFILE_XML, 'Test')
+    const unit = units.find(u => u.name === 'Alpha Squad')
+    expect(unit).toBeDefined()
+    expect(unit!.weapons.length).toBeGreaterThanOrEqual(2)
+    const pulse = unit!.weapons.find(w => w.name === 'Pulse Rifle')
+    expect(pulse).toBeDefined()
+    expect(pulse!.strength).toBe(5)
+    expect(pulse!.range).toBe(30)
+    const blade = unit!.weapons.find(w => w.name === 'Combat Blade')
+    expect(blade).toBeDefined()
+    expect(blade!.range).toBe('melee')
+    // Should not have "no weapons" warning for this unit
+    const weaponErrors = errors.filter(e => e.includes('Alpha Squad') && e.includes('No weapons'))
+    expect(weaponErrors).toHaveLength(0)
+  })
+
+  it('resolves nested entryLink → model → infoLink → profile chain', () => {
+    const { units, errors } = parseBSDataXml(ENTRYLINK_MODEL_XML, 'Test')
+    const unit = units.find(u => u.name === 'Bravo Team')
+    expect(unit).toBeDefined()
+    // Characteristics resolved via: unit → entryLink(model) → infoLink(profile) → shared profile
+    expect(unit!.toughness).toBe(3)
+    expect(unit!.save).toBe(5)
+    const charErrors = errors.filter(e => e.includes('Bravo Team') && e.includes('missing characteristic'))
+    expect(charErrors).toHaveLength(0)
+  })
+
+  it('resolves weapons from entryLink → model → entryLink → weapon chain', () => {
+    const { units, errors } = parseBSDataXml(ENTRYLINK_MODEL_XML, 'Test')
+    const unit = units.find(u => u.name === 'Bravo Team')
+    expect(unit).toBeDefined()
+    // Weapons resolved via: unit → entryLink(model) → entryLink(weapon) → profile
+    const autogun = unit!.weapons.find(w => w.name === 'Autogun')
+    expect(autogun).toBeDefined()
+    expect(autogun!.strength).toBe(3)
+    const pistol = unit!.weapons.find(w => w.name === 'Pistol')
+    expect(pistol).toBeDefined()
+    const bayonet = unit!.weapons.find(w => w.name === 'Bayonet')
+    expect(bayonet).toBeDefined()
+    expect(bayonet!.range).toBe('melee')
+    const weaponErrors = errors.filter(e => e.includes('Bravo Team') && e.includes('No weapons'))
+    expect(weaponErrors).toHaveLength(0)
+  })
+
+  it('deduplicates weapons referenced by multiple models', () => {
+    const { units } = parseBSDataXml(ENTRYLINK_MODEL_XML, 'Test')
+    const unit = units.find(u => u.name === 'Bravo Team')
+    expect(unit).toBeDefined()
+    // Both Sergeant and Trooper reference Bayonet, but it should appear only once
+    const bayonets = unit!.weapons.filter(w => w.name === 'Bayonet')
+    expect(bayonets).toHaveLength(1)
+  })
+})
