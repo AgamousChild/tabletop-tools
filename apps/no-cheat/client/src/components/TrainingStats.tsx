@@ -7,6 +7,7 @@ type Props = {
   exampleCounts: Map<number, number>
   totalExamples: number
   onClear: () => void
+  onViewHistory?: () => void
 }
 
 function formatAccuracy(stats: Props['stats']): string {
@@ -14,7 +15,7 @@ function formatAccuracy(stats: Props['stats']): string {
   return ((stats.correctGuesses / stats.totalGuesses) * 100).toFixed(1) + '%'
 }
 
-export function TrainingStats({ stats, exampleCounts, totalExamples, onClear }: Props) {
+export function TrainingStats({ stats, exampleCounts, totalExamples, onClear, onViewHistory }: Props) {
   if (totalExamples === 0) {
     return (
       <div className="bg-slate-900 border border-slate-800 rounded-lg p-4">
@@ -69,13 +70,23 @@ export function TrainingStats({ stats, exampleCounts, totalExamples, onClear }: 
         </div>
       )}
 
-      {/* Clear button */}
-      <button
-        onClick={onClear}
-        className="w-full px-3 py-1.5 text-sm font-medium text-red-400 bg-red-400/10 border border-red-400/30 rounded hover:bg-red-400/20"
-      >
-        Clear Training Data
-      </button>
+      {/* Action buttons */}
+      <div className="flex gap-2">
+        {onViewHistory && (
+          <button
+            onClick={onViewHistory}
+            className="flex-1 px-3 py-1.5 text-sm font-medium text-amber-400 bg-amber-400/10 border border-amber-400/30 rounded hover:bg-amber-400/20"
+          >
+            View History
+          </button>
+        )}
+        <button
+          onClick={onClear}
+          className="flex-1 px-3 py-1.5 text-sm font-medium text-red-400 bg-red-400/10 border border-red-400/30 rounded hover:bg-red-400/20"
+        >
+          Clear Training Data
+        </button>
+      </div>
     </div>
   )
 }

@@ -91,7 +91,7 @@ Build a copy of the app locally, and run it locally in a local browser, and run 
 
 ## Versus Features required to be considered functional
 
-- [NOT STARTED] The correct number of weapons is calculated. → (Item 3: multiply weapon count by number of models carrying each weapon.)
+- [DONE 2026-03-04] The correct number of weapons is calculated. → Weapon attacks multiplied by number of models carrying each weapon. Model count selectable from unit data.
 - [DONE] All Ranged weapons are allowed to be used unless the unit has ranged options. → Weapon selection UI allows all ranged weapons per unit profile.
 - [DONE] Only one melee profile is allowed, unless there are weapon profiles labelled extra attacks. → Melee limit logic in simulation pipeline.
 - [DONE 2026-02-27] I still cannot increase strength or Toughness, or number of attacks, or reroll-wounds. → TOUGHNESS_MOD (+1, +2, -1) added. REROLL_WOUNDS in pipeline. SpecialRulesEditor for all modifiers.
@@ -209,14 +209,15 @@ Update this section every time you update or fix a section of the requirements.
 
 Complete these items in order, and create seperate commits for each item.
 
-1. go through each section of the top of this file, and mark each item that is complete with the information on when it was completed. Then, move each item into a new section under the completed area.
-2. go through the list of errors on BSData import and find the data and fix the parser. The current data is located here: BSDataImportErrors.md
+1. [DONE 2026-03-04] Mark completed items in RALPH.MD. → All requirement sections audited; completed items marked with dates and summaries.
 
-3. In the Versus tool, the number of weapons is incorrect. You need to multiply the number of weapons each model has by the number of models, and use that to create your number of attacks for that unit. 
+2. [DONE 2026-03-04] BSData parser fixes. → Resolved infoLink and entryLink references so units with indirect weapon/characteristic data are properly parsed. PARSER_VERSION bump.
 
-4. Make sure in the Versus tool, that you are including all of the models in the selected unit for both attacker and defender.
+3. [DONE 2026-03-04] Versus weapon count multiplication. → Weapon attacks multiplied by number of models carrying each weapon. `modelCount` read from unit data with selectable options.
 
-5. Make sure in the Versus tool, that you are applying FNP saves correctly, and Dev Wounds correctly, and mortal wounds correctly.
+4. [DONE 2026-03-04] Versus: include all models in unit. → All model profiles shown for both attacker and defender. Leader weapon model count fixed.
+
+5. [DONE 2026-03-04] Versus: FNP, Dev Wounds, Mortal Wounds. → Devastating Wounds roll weapon damage as mortal wounds (bypass saves). FNP applied after damage allocation. Monte Carlo path handles all correctly.
 
 6. [DONE 2026-03-04] Precision attacks target characters first. → `runMonteCarlo` accepts optional `characterProfile` for two-pool wound allocation. Precision weapons target character first (cascade to bodyguards), non-Precision targets bodyguards first (Look Out Sir, cascade to character). Defender leader UI added. 4 new pipeline tests.
 
@@ -224,9 +225,9 @@ Complete these items in order, and create seperate commits for each item.
 
 8. [DONE 2026-03-04] Training dice detection improvements. → Reduced stability window (15→10 frames), lowered stability ratio (0.6→0.4), added 4s auto-lock timeout to prevent indefinite "hold steady" stall. Lowered adaptive threshold C (15→10) for better low-contrast sensitivity. Reduced erode iterations (2→1) to preserve features. Lowered blob circularity threshold (0.4→0.3) for angled pips. Added median-based binarization fallback when Otsu fails. 245 client + 66 server tests pass.
 
-9. In the training section of no-cheat, the buttons to select the detected number of pips are too big, and on a phone they overlap.
+9. [DONE 2026-03-04] Training pip button size on mobile. → Shrunk pip correction buttons from w-6 h-6 to smaller size, tightened spacing and card padding to prevent overlap on phones.
 
-10. In the training section of no-cheat, If you have not already, you need to save all training data to a database, and images to a server, including the dice screenshot captures, and users should automatically see all training data results in their app. They should be able to quickly filter out all other capture data, they should be able to select to just see their own.
+10. [DONE 2026-03-04] Save training data to database and images to server. → Added `training_examples` DB table with label, guess, confidence, features, imageUrl. New `training` server router (saveExamples, list, getStats, delete) with R2 image upload. Client syncs to server after IndexedDB save (non-blocking). TrainingHistory component with filter-by-label and my-data-only toggle. 14 new server tests + 6 new client tests.
 
 11. In the training section of no-cheat,  Need to save bad detections so they can be used to filter out false positives.
 

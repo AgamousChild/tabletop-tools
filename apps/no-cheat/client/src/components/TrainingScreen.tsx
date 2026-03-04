@@ -17,7 +17,9 @@ import {
   clearAll,
 } from '../lib/store/trainingStore'
 import type { StoredExample, TrainingStats as TrainingStatsType } from '../lib/store/trainingStore'
+import { trpc } from '../lib/trpc'
 import { DiceCheckCard } from './DiceCheckCard'
+import { TrainingHistory } from './TrainingHistory'
 import { TrainingRoiCard } from './TrainingRoiCard'
 import { TrainingStats } from './TrainingStats'
 
@@ -77,6 +79,15 @@ function extractSubImage(
   return out
 }
 
+/** Convert Uint8Array to base64 string for server upload. */
+function uint8ToBase64(bytes: Uint8Array): string {
+  let binary = ''
+  for (let i = 0; i < bytes.length; i++) {
+    binary += String.fromCharCode(bytes[i]!)
+  }
+  return btoa(binary)
+}
+
 /** Find the most common value in an array (mode). Returns null for empty arrays. */
 function mode(values: (number | null)[]): number | null {
   const freq = new Map<number, number>()
@@ -91,6 +102,7 @@ function mode(values: (number | null)[]): number | null {
 }
 
 export function TrainingScreen({ diceSet, onBack }: Props) {
+  const [showHistory, setShowHistory] = useState(false)
   const [phase, setPhase] = useState<Phase>({ name: 'detecting' })
   const [error, setError] = useState<string | null>(null)
   const [cameraReady, setCameraReady] = useState(false)
@@ -102,6 +114,7 @@ export function TrainingScreen({ diceSet, onBack }: Props) {
   const [stats, setStats] = useState<TrainingStatsType | null>(null)
 
   const pipeline = useMemo(() => createTrainedPipeline(diceSet.id), [diceSet.id])
+  const saveToServer = trpc.training.saveExamples.useMutation()
 
   const videoRef = useRef<HTMLVideoElement>(null)
   const canvasRef = useRef<HTMLCanvasElement>(null)
@@ -404,6 +417,11 @@ export function TrainingScreen({ diceSet, onBack }: Props) {
     }))
 
     // Save dismissed candidates as negative examples (label 0)
+    const dismissedServerExamples: Array<{
+      label: number; guess: number | null; confidence: number | null;
+      features: number[]; imageBase64: string
+    }> = []
+
     for (const candidate of phase.candidates) {
       if (candidate.dismissed) {
         await addExample({
@@ -414,7 +432,22 @@ export function TrainingScreen({ diceSet, onBack }: Props) {
           roiWidth: candidate.roiWidth,
           roiHeight: candidate.roiHeight,
         })
+        dismissedServerExamples.push({
+          label: 0,
+          guess: candidate.bestPip,
+          confidence: null,
+          features: candidate.features,
+          imageBase64: uint8ToBase64(candidate.roiGray),
+        })
       }
+    }
+
+    // Sync dismissed (false positive) examples to server
+    if (dismissedServerExamples.length > 0) {
+      saveToServer.mutate(
+        { diceSetId: diceSet.id, examples: dismissedServerExamples },
+        { onError: (err) => console.warn('[training sync] Server save failed:', err.message) },
+      )
     }
 
     // Build DetectedRois from kept candidates
@@ -453,7 +486,7 @@ export function TrainingScreen({ diceSet, onBack }: Props) {
     pipeline.setExamples(updatedExamples.map((e) => ({ features: e.features, label: e.label })))
 
     setPhase({ name: 'labeling', rois: detectedRois })
-  }, [phase, diceSet.id, pipeline])
+  }, [phase, diceSet.id, pipeline, saveToServer])
 
   // --- Phase 4: Labeling handlers ---
   function handleCorrect(index: number, label: number) {
@@ -487,6 +520,11 @@ export function TrainingScreen({ diceSet, onBack }: Props) {
     let correctGuesses = stats?.correctGuesses ?? 0
     let corrections = stats?.corrections ?? 0
 
+    const serverExamples: Array<{
+      label: number; guess: number | null; confidence: number | null;
+      features: number[]; imageBase64: string
+    }> = []
+
     for (const roi of roisToSave) {
       const features = extractFeatures(roi.roiGray, roi.roiWidth, roi.roiHeight)
       await addExample({
@@ -496,6 +534,16 @@ export function TrainingScreen({ diceSet, onBack }: Props) {
         roiGray: roi.roiGray,
         roiWidth: roi.roiWidth,
         roiHeight: roi.roiHeight,
+      })
+
+      // Collect for server sync
+      const imageBase64 = uint8ToBase64(roi.roiGray)
+      serverExamples.push({
+        label: roi.selectedLabel!,
+        guess: roi.guess,
+        confidence: roi.confidence,
+        features,
+        imageBase64,
       })
 
       totalGuesses++
@@ -522,8 +570,14 @@ export function TrainingScreen({ diceSet, onBack }: Props) {
       updatedExamples.map((e) => ({ features: e.features, label: e.label })),
     )
 
+    // Non-blocking server sync
+    saveToServer.mutate(
+      { diceSetId: diceSet.id, examples: serverExamples },
+      { onError: (err) => console.warn('[training sync] Server save failed:', err.message) },
+    )
+
     setPhase({ name: 'detecting' })
-  }, [phase, stats, diceSet.id, pipeline])
+  }, [phase, stats, diceSet.id, pipeline, saveToServer])
 
   function handleSkipAll() {
     setPhase({ name: 'detecting' })
@@ -552,6 +606,10 @@ export function TrainingScreen({ diceSet, onBack }: Props) {
     phase.name === 'labeling' &&
     phase.rois.length > 0 &&
     phase.rois.every((r) => r.selectedLabel !== null || r.skipped)
+
+  if (showHistory) {
+    return <TrainingHistory diceSetId={diceSet.id} onBack={() => setShowHistory(false)} />
+  }
 
   if (error) {
     return (
@@ -720,6 +778,7 @@ export function TrainingScreen({ diceSet, onBack }: Props) {
           exampleCounts={exampleCounts}
           totalExamples={examples.length}
           onClear={handleClear}
+          onViewHistory={() => setShowHistory(true)}
         />
       </div>
     </div>
