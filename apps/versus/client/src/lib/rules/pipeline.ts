@@ -442,16 +442,20 @@ export function runMonteCarlo(
   defenderKeywords?: string[],
   iterations = 5000,
   attackerModelCount = 1,
+  weaponModelCounts?: number[],
 ): DistributionData {
   const results: number[] = []
 
   for (let iter = 0; iter < iterations; iter++) {
     let totalDamage = 0
 
-    for (const weapon of weapons) {
+    for (let wi = 0; wi < weapons.length; wi++) {
+      const weapon = weapons[wi]!
+      // Per-weapon model count overrides the global attackerModelCount
+      const modelCount = weaponModelCounts?.[wi] ?? attackerModelCount
       // Roll attacks per model and sum (handles dice notation correctly)
       let attackCount = 0
-      for (let m = 0; m < attackerModelCount; m++) {
+      for (let m = 0; m < modelCount; m++) {
         attackCount += rollDice(weapon.attacks)
       }
       if (weapon.abilities.some((a) => a.type === 'BLAST') && defenderModelCount >= 6) {

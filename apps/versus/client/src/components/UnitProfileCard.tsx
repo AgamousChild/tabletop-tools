@@ -1,10 +1,12 @@
 import { useState } from 'react'
 import type { UnitProfile } from '@tabletop-tools/game-content'
+import type { DatasheetModel } from '@tabletop-tools/game-data-store'
 
 type Props = {
   unit: UnitProfile
   invulnSave?: number
   fnp?: number
+  additionalModels?: DatasheetModel[]
 }
 
 function StatBox({ label, value }: { label: string; value: string | number }) {
@@ -16,7 +18,13 @@ function StatBox({ label, value }: { label: string; value: string | number }) {
   )
 }
 
-export function UnitProfileCard({ unit, invulnSave, fnp }: Props) {
+function parseModelStatStr(val: string): number {
+  if (!val || val === '-' || val === '\u2013') return 0
+  const n = parseInt(val.replace(/[+"'″"]/g, ''), 10)
+  return isNaN(n) ? 0 : n
+}
+
+export function UnitProfileCard({ unit, invulnSave, fnp, additionalModels }: Props) {
   const [expandedAbility, setExpandedAbility] = useState<string | null>(null)
 
   // Use data-driven invuln/fnp from unit if available, allow override
@@ -55,6 +63,28 @@ export function UnitProfileCard({ unit, invulnSave, fnp }: Props) {
         <StatBox label="OC" value={unit.oc} />
         <StatBox label="Inv" value={displayInvuln ? `${displayInvuln}+` : '-'} />
       </div>
+      {additionalModels && additionalModels.length > 1 && (
+        <div className="mt-2 border-t border-slate-700 pt-2 space-y-1.5">
+          {additionalModels.map((model, i) => {
+            const invSv = model.invSv && model.invSv !== '-' && model.invSv !== '\u2013'
+              ? parseModelStatStr(model.invSv) : 0
+            return (
+              <div key={i}>
+                <p className="text-[10px] text-slate-500 uppercase mb-0.5">{model.name}</p>
+                <div className="grid grid-cols-7 gap-1">
+                  <StatBox label="M" value={model.move} />
+                  <StatBox label="T" value={parseModelStatStr(model.toughness)} />
+                  <StatBox label="Sv" value={`${parseModelStatStr(model.save)}+`} />
+                  <StatBox label="W" value={parseModelStatStr(model.wounds)} />
+                  <StatBox label="Ld" value={`${parseModelStatStr(model.leadership)}+`} />
+                  <StatBox label="OC" value={parseModelStatStr(model.oc)} />
+                  <StatBox label="Inv" value={invSv ? `${invSv}+` : '-'} />
+                </div>
+              </div>
+            )
+          })}
+        </div>
+      )}
       {displayFnp && (
         <div className="mt-1 text-xs text-slate-400">
           Feel No Pain: {displayFnp}+

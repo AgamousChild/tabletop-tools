@@ -213,23 +213,26 @@ export function SimulatorScreen({ onSignOut }: Props) {
 
   // Combine attacker weapons with leader weapons.
   // Prefers Wahapedia weapon profiles when available (cleaner, normalized data).
-  const combinedWeapons = useMemo((): WeaponProfile[] => {
-    if (!resolvedAttacker) return []
+  // Tracks which indices are leader weapons (fired by 1 model, not the full unit).
+  const { combinedWeapons, leaderWeaponIndices } = useMemo(() => {
+    if (!resolvedAttacker) return { combinedWeapons: [] as WeaponProfile[], leaderWeaponIndices: new Set<number>() }
     // Use Wahapedia weapons if available, fall back to BSData-parsed weapons
     const baseWeapons = wahapediaAttackerWeapons.length > 0
       ? wahapediaAttackerWeapons
       : resolvedAttacker.weapons
     const weapons = [...baseWeapons]
+    const leaderIndices = new Set<number>()
     // Merge leader weapons
     const leaderWeapons = wahapediaLeaderWeapons.length > 0
       ? wahapediaLeaderWeapons
       : (attackerLeader?.weapons ?? [])
     for (const w of leaderWeapons) {
       if (!weapons.some(ew => ew.name === w.name)) {
+        leaderIndices.add(weapons.length)
         weapons.push(w)
       }
     }
-    return weapons
+    return { combinedWeapons: weapons, leaderWeaponIndices: leaderIndices }
   }, [resolvedAttacker, attackerLeader, wahapediaAttackerWeapons, wahapediaLeaderWeapons])
 
   // Derive selected weapons from loaded data — no useEffect.
@@ -304,11 +307,17 @@ export function SimulatorScreen({ onSignOut }: Props) {
       }))
   }, [combinedWeapons, selectedWeapons, specialRules, leaderWeaponAbilities])
 
+  // Get selected weapon indices to check if each is a leader weapon
+  const getSelectedWeaponIndices = useCallback((): number[] => {
+    return Array.from(selectedWeapons).sort((a, b) => a - b)
+  }, [selectedWeapons])
+
   // Compute simulation locally
   const simData = useMemo((): { result: SimResult; breakdowns: WeaponBreakdown[] } | null => {
     if (!resolvedAttacker || !resolvedDefender) return null
 
     const weapons = getSelectedWeapons()
+    const weaponIndices = getSelectedWeaponIndices()
     if (weapons.length === 0) {
       return {
         result: {
@@ -332,8 +341,11 @@ export function SimulatorScreen({ onSignOut }: Props) {
     const effectiveInvuln = invulnSave ?? resolvedDefender.invulnSave
     const effectiveFnp = fnp ?? resolvedDefender.fnp
 
-    for (const weapon of weapons) {
+    for (let wi = 0; wi < weapons.length; wi++) {
+      const weapon = weapons[wi]!
       const defKeywords = defenderKeywordRecords.map((k) => k.keyword)
+      // Leader weapons fire once (1 model), unit weapons fire × model count
+      const weaponModelCount = leaderWeaponIndices.has(weaponIndices[wi]!) ? 1 : effectiveAttackerModels
       const r = simulateWeapon(
         weapon,
         resolvedDefender.toughness,
@@ -343,7 +355,7 @@ export function SimulatorScreen({ onSignOut }: Props) {
         effectiveInvuln,
         effectiveFnp,
         defKeywords,
-        effectiveAttackerModels,
+        weaponModelCount,
       )
       totalExpectedWounds += r.expectedWounds
       totalExpectedModelsRemoved += r.expectedModelsRemoved
@@ -389,7 +401,7 @@ export function SimulatorScreen({ onSignOut }: Props) {
       },
       breakdowns,
     }
-  }, [resolvedAttacker, resolvedDefender, effectiveAttackerModels, effectiveDefenderModels, invulnSave, fnp, getSelectedWeapons])
+  }, [resolvedAttacker, resolvedDefender, effectiveAttackerModels, effectiveDefenderModels, invulnSave, fnp, getSelectedWeapons, getSelectedWeaponIndices, leaderWeaponIndices, defenderKeywordRecords])
 
   // Monte Carlo distribution (runs alongside deterministic sim)
   const [distribution, setDistribution] = useState<DistributionData | null>(null)
@@ -398,11 +410,16 @@ export function SimulatorScreen({ onSignOut }: Props) {
     // Run Monte Carlo in the background when user clicks Run
     if (!resolvedAttacker || !resolvedDefender) return
     const weapons = getSelectedWeapons()
+    const weaponIndices = getSelectedWeaponIndices()
     if (weapons.length === 0) { setDistribution(null); return }
 
     const effectiveInvuln = invulnSave ?? resolvedDefender.invulnSave
     const effectiveFnp = fnp ?? resolvedDefender.fnp
     const defKeywords = defenderKeywordRecords.map((k) => k.keyword)
+    // Per-weapon model counts: leader weapons fire once, unit weapons fire × model count
+    const perWeaponModelCounts = weaponIndices.map((idx) =>
+      leaderWeaponIndices.has(idx) ? 1 : effectiveAttackerModels,
+    )
 
     const dist = runMonteCarlo(
       weapons,
@@ -415,13 +432,14 @@ export function SimulatorScreen({ onSignOut }: Props) {
       defKeywords,
       5000,
       effectiveAttackerModels,
+      perWeaponModelCounts,
     )
     setDistribution(dist)
 
     if (resultsRef.current && typeof resultsRef.current.scrollIntoView === 'function') {
       resultsRef.current.scrollIntoView({ behavior: 'smooth' })
     }
-  }, [resolvedAttacker, resolvedDefender, effectiveAttackerModels, effectiveDefenderModels, invulnSave, fnp, getSelectedWeapons, defenderKeywordRecords])
+  }, [resolvedAttacker, resolvedDefender, effectiveAttackerModels, effectiveDefenderModels, invulnSave, fnp, getSelectedWeapons, getSelectedWeaponIndices, leaderWeaponIndices, defenderKeywordRecords])
 
   const resultsRef = useRef<HTMLDivElement>(null)
 
@@ -550,7 +568,7 @@ export function SimulatorScreen({ onSignOut }: Props) {
             />
             {resolvedAttacker && (
               <>
-                <UnitProfileCard unit={resolvedAttacker} />
+                <UnitProfileCard unit={resolvedAttacker} additionalModels={wahapediaAttackerModels} />
                 <div className="flex gap-3">
                   <div className="flex-1">
                     <label className="block text-xs text-slate-400 mb-1">
@@ -615,7 +633,7 @@ export function SimulatorScreen({ onSignOut }: Props) {
             />
             {resolvedDefender && (
               <>
-                <UnitProfileCard unit={resolvedDefender} invulnSave={invulnSave} fnp={fnp} />
+                <UnitProfileCard unit={resolvedDefender} invulnSave={invulnSave} fnp={fnp} additionalModels={wahapediaDefenderModels} />
                 <div className="flex gap-3">
                   <div className="flex-1">
                     <label className="block text-xs text-slate-400 mb-1">
