@@ -54,6 +54,16 @@ beforeAll(async () => {
       is_correct INTEGER,
       created_at INTEGER NOT NULL
     );
+    CREATE TABLE IF NOT EXISTS training_frames (
+      id TEXT PRIMARY KEY,
+      user_id TEXT NOT NULL REFERENCES "user"(id),
+      dice_set_id TEXT NOT NULL REFERENCES dice_sets(id),
+      image_url TEXT NOT NULL,
+      frame_width INTEGER NOT NULL,
+      frame_height INTEGER NOT NULL,
+      boxes_json TEXT NOT NULL,
+      created_at INTEGER NOT NULL
+    );
   `)
 })
 
