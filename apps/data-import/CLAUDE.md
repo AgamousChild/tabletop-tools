@@ -6,10 +6,11 @@
 
 ## What data-import Is
 
-data-import is a client-only SPA that fetches BSData XML from GitHub, parses it in the
-browser, and stores `UnitProfile[]` in IndexedDB. No server, no Worker, no auth required.
+data-import has a server Worker that fetches game data from external sources (BSData, Wahapedia),
+processes it into JSON, and stores it in R2. The client SPA downloads pre-processed JSON from
+the Worker API and saves it to IndexedDB. Other apps (versus, list-builder) read from IndexedDB.
 
-Other apps (versus, list-builder) read from the same IndexedDB store.
+**Port:** No dev port (server is a Cloudflare Worker with cron trigger)
 
 ---
 
@@ -17,54 +18,78 @@ Other apps (versus, list-builder) read from the same IndexedDB store.
 
 ```
 apps/data-import/
+  server/
+    src/
+      worker.ts                    <- Hono app: HTTP endpoints + cron handler
+      types.ts                     <- Env, Manifest types
+      lib/
+        sync.ts                    <- runSync(): orchestrates all sources
+        id-mapping.ts              <- Wahapedia↔BSData ID mapping (server-side)
+        parsers/
+          wahapedia-csv.ts         <- parsePipeCsv(), htmlToMarkdown(), stripHtml()
+        sources/
+          wahapedia.ts             <- fetchAndProcessWahapedia(): CSV→JSON
+          bsdata.ts                <- fetchAndProcessBSData(): XML→JSON
+          missions.ts              <- fetchAndProcessMissions(): stub (via Wahapedia)
+    wrangler.toml                  <- R2 binding + cron trigger (Monday 3am UTC)
   client/
     src/
-      App.tsx                  <- renders ImportScreen
-      main.tsx                 <- Vite entry (renderApp from packages/ui)
+      App.tsx                      <- renders ImportScreen
+      main.tsx                     <- Vite entry (renderApp from packages/ui)
       pages/
-        ImportScreen.tsx       <- all UI: source config, catalog list, import, stored data
-        ImportScreen.test.tsx
+        ImportScreen.tsx           <- 2 tabs: Sync, Stored Data
       lib/
-        github.ts             <- listCatalogFiles() + fetchCatalogXml() with rate limit handling
-        github.test.ts
+        sync.ts                    <- checkForUpdates(), syncAllData()
       test/
-        setup.ts              <- fake-indexeddb/auto
+        setup.ts                   <- fake-indexeddb/auto
 ```
 
-**No server directory.** This app has no tRPC router, no Hono server, no Worker.
+### Server Worker
+
+Hono app with three endpoints (no tRPC, no auth):
+- `GET /manifest.json` — returns manifest from R2
+- `GET /data/:file` — returns JSON data file from R2
+- `POST /sync` — manual trigger (protected by SYNC_SECRET bearer token)
+- `scheduled` handler — weekly cron (Monday 3am UTC)
 
 ### Data Flow
 
-1. User enters repo + branch (defaults: `BSData/wh40k-10e`, `main`)
-2. `listCatalogFiles()` hits GitHub API -> returns `.cat` file list with rate limit info
-3. User selects factions, clicks Import
-4. For each catalog: `fetchCatalogXml()` -> `parseBSDataXml()` -> `saveUnits()` to IndexedDB
-5. Per-faction status tracking (pending/importing/success/failed) with "Retry Failed" support
-6. `setImportMeta()` records timestamp, faction count, unit count
-7. Consumer apps call `searchUnits()` / `listFactions()` from `@tabletop-tools/game-data-store`
+1. **Weekly cron** (or manual POST /sync):
+   - Fetch Wahapedia CSVs → parse, transform columns, HTML→markdown → JSON
+   - Fetch BSData catalog XMLs from GitHub → parse with `parseBSDataXml()` → JSON
+   - Build ID mapping (Wahapedia name → BSData unit ID)
+   - Re-key all Wahapedia files with BSData IDs and full faction names
+   - Write all JSON files + manifest to R2
+
+2. **Client sync** (user-triggered):
+   - Fetch `/data-import/api/manifest.json` → compare version
+   - If newer: download each JSON file → save to IndexedDB via game-data-store
+   - Consumer apps unchanged (read from IndexedDB via hooks)
 
 ### Key Dependencies
 
-- `@tabletop-tools/game-content/src/adapters/bsdata/parser` -- BSData XML parser
-  (import from this path directly, NOT the barrel export)
-- `@tabletop-tools/game-data-store` -- IndexedDB CRUD
-- `@tabletop-tools/ui` -- renderApp, Tailwind preset
+Server:
+- `@tabletop-tools/game-content/src/adapters/bsdata/parser` — BSData XML parser
+- `hono` — HTTP framework
 
-### Rate Limiting
+Client:
+- `@tabletop-tools/game-data-store` — IndexedDB CRUD
+- `@tabletop-tools/ui` — renderApp, Tailwind preset
 
-GitHub's unauthenticated API limit is 60 req/hour. `listCatalogFiles()` parses
-`X-RateLimit-Remaining` and `X-RateLimit-Reset` headers, returns `RateLimitInfo` alongside
-catalog data, and throws `RateLimitError` on 403. UI shows warnings when approaching limit.
+### Gateway Routing
+
+- Service binding: `DATA_IMPORT_API` → `tabletop-tools-data-import`
+- Pages Function: `functions/data-import/api/[[path]].ts`
+- Client fetches: `/data-import/api/manifest.json`, `/data-import/api/data/:file`
 
 ---
 
 ## Testing
 
-**24 tests**, all passing.
-
 ```bash
-cd apps/data-import/client && pnpm test
+cd apps/data-import/server && pnpm test   # server tests
+cd apps/data-import/client && pnpm test   # client tests
 ```
 
-Covers: GitHub API helpers (rate limit parsing, catalog listing, XML fetching),
-ImportScreen rendering and interactions, IndexedDB integration via fake-indexeddb.
+Server tests: parsers (27), ID mapping (20), Wahapedia source (5), BSData source (4) = 56 tests
+Client tests: sync module (8), ImportScreen UI (14) = 22 tests

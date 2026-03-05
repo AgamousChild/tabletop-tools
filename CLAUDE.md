@@ -48,7 +48,7 @@ tabletop-tools/
   apps/
     auth-server/     ← central auth Worker (CORS lockdown, caching)
     gateway/         ← unified Cloudflare Pages project (landing + tRPC proxies)
-    data-import/     ← BSData importer (client-only SPA, no server)
+    data-import/     ← game data pipeline (Worker fetches sources → R2, client syncs to IndexedDB)
     no-cheat/        ← dice cheat detection        (port 3001)
     versus/          ← combat simulator             (port 3002)
     list-builder/    ← meta list builder            (port 3003)
@@ -76,7 +76,7 @@ at `tabletop-tools.net/auth/*`.
 | game-tracker | 3004 | 214 | Deployed | Track matches turn-by-turn with photos |
 | tournament | 3005 | 127 | Deployed | Swiss events: pairings, results, standings, ELO |
 | new-meta | 3006 | 140 | Deployed | Meta analytics: win rates, Glicko-2 ratings |
-| data-import | — | 57 | Deployed (client-only) | BSData importer: fetch + parse XML → IndexedDB |
+| data-import | — | 78 | Deployed | Game data pipeline: Worker fetches BSData+Wahapedia → R2 → client IndexedDB |
 | admin | 3007 | 93 | Deployed | Platform dashboard: users, sessions, app stats |
 
 Each app has its own `CLAUDE.md` with full spec, architecture, and V2 implementation detail.
