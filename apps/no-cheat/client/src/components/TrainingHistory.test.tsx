@@ -49,6 +49,32 @@ vi.mock('../lib/trpc', () => ({
       delete: {
         useMutation: vi.fn().mockReturnValue({ mutate: vi.fn(), isPending: false }),
       },
+      listFrames: {
+        useQuery: vi.fn().mockReturnValue({
+          data: {
+            frames: [
+              {
+                id: 'frame-1',
+                userId: 'user-1',
+                diceSetId: 'ds-1',
+                imageUrl: 'https://cdn.example.com/frames/frame-1.png',
+                frameWidth: 640,
+                frameHeight: 480,
+                boxes: [
+                  { x: 0.2, y: 0.3, w: 0.1, h: 0.1, label: 4 },
+                  { x: 0.6, y: 0.5, w: 0.12, h: 0.12, label: 2 },
+                ],
+                createdAt: Date.now(),
+              },
+            ],
+          },
+          isLoading: false,
+          refetch: vi.fn(),
+        }),
+      },
+      deleteFrame: {
+        useMutation: vi.fn().mockReturnValue({ mutate: vi.fn(), isPending: false }),
+      },
     },
   },
 }))
@@ -79,7 +105,7 @@ describe('TrainingHistory', () => {
     expect(screen.getByText('70.0%')).toBeInTheDocument() // accuracy
   })
 
-  it('shows training examples', () => {
+  it('shows training examples on examples tab', () => {
     render(<TrainingHistory {...defaultProps} />)
     expect(screen.getByText('Label: 4')).toBeInTheDocument()
     expect(screen.getByText('Not a die')).toBeInTheDocument()
@@ -96,5 +122,32 @@ describe('TrainingHistory', () => {
     render(<TrainingHistory {...defaultProps} />)
     const deleteButtons = screen.getAllByText('×')
     expect(deleteButtons.length).toBe(2)
+  })
+
+  it('shows tab navigation with Examples and Frames', () => {
+    render(<TrainingHistory {...defaultProps} />)
+    expect(screen.getByText('Examples')).toBeInTheDocument()
+    expect(screen.getByText('Frames (1)')).toBeInTheDocument()
+  })
+
+  it('switches to frames tab and shows frame data', () => {
+    render(<TrainingHistory {...defaultProps} />)
+    fireEvent.click(screen.getByText('Frames (1)'))
+    expect(screen.getByText('2 dice')).toBeInTheDocument()
+    expect(screen.getByText('[4, 2]')).toBeInTheDocument()
+    expect(screen.getByText(/640×480/)).toBeInTheDocument()
+  })
+
+  it('shows export button on frames tab', () => {
+    render(<TrainingHistory {...defaultProps} />)
+    fireEvent.click(screen.getByText('Frames (1)'))
+    expect(screen.getByText('Export YOLO Dataset (1 frames)')).toBeInTheDocument()
+  })
+
+  it('shows delete button for each frame', () => {
+    render(<TrainingHistory {...defaultProps} />)
+    fireEvent.click(screen.getByText('Frames (1)'))
+    const deleteButtons = screen.getAllByText('×')
+    expect(deleteButtons.length).toBe(1)
   })
 })

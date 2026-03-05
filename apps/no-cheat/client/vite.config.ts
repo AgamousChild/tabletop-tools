@@ -16,6 +16,9 @@ function loadCerts() {
 export default defineConfig(({ command }) => ({
   base: command === 'build' ? '/no-cheat/' : '/',
   plugins: [react(), tsconfigPaths()],
+  optimizeDeps: {
+    exclude: ['onnxruntime-web'],
+  },
   server: {
     host: true,
     https: command === 'serve' ? loadCerts() : undefined,

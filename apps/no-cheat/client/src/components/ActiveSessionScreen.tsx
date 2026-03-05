@@ -4,6 +4,7 @@ import type { RoiResult } from '../lib/cv/pipeline'
 import { DEFAULT_CONFIG } from '../lib/cv/pipeline'
 import type { Roi } from '../lib/cv/isolate'
 import { createTrainedPipeline } from '../lib/cv/trainedPipeline'
+import { createMlPipeline } from '../lib/cv/mlPipeline'
 import { getMainCamera } from '../lib/getMainCamera'
 import { extractFeatures } from '../lib/cv/features'
 import { classifyKnn } from '../lib/cv/knnClassifier'
@@ -118,6 +119,8 @@ export function ActiveSessionScreen({ diceSet, onDone }: Props) {
 
   const pipeline = useMemo(() => createTrainedPipeline(diceSet.id), [diceSet.id])
 
+  const [mlModelLoaded, setMlModelLoaded] = useState(false)
+
   // Load training examples from IDB on mount
   const trainingExamplesRef = useRef<TrainingExample[]>([])
   useEffect(() => {
@@ -128,6 +131,21 @@ export function ActiveSessionScreen({ diceSet, onDone }: Props) {
       }
     })
   }, [diceSet.id, pipeline])
+
+  // Attempt to load ML model (non-blocking)
+  useEffect(() => {
+    const ml = createMlPipeline()
+    ml.load().then(() => {
+      pipeline.setMlPipeline(ml)
+      setMlModelLoaded(true)
+    }).catch(() => {
+      // Model file doesn't exist yet — use traditional pipeline only
+    })
+    return () => {
+      ml.dispose()
+      pipeline.setMlPipeline(null)
+    }
+  }, [pipeline])
 
   // Refs for the recording loop
   const videoRef = useRef<HTMLVideoElement>(null)
@@ -532,6 +550,8 @@ export function ActiveSessionScreen({ diceSet, onDone }: Props) {
     })
   }
 
+  const saveFrameMutation = trpc.training.saveFrame.useMutation()
+
   const handleConfirmDice = useCallback(async () => {
     const sp = subPhaseRef.current
     if (sp.name !== 'dice_check') return
@@ -553,12 +573,48 @@ export function ActiveSessionScreen({ diceSet, onDone }: Props) {
       }
     }
 
+    // Capture full frame for YOLO training data (non-blocking)
+    const keptCandidates = sp.candidates.filter((c) => !c.dismissed)
+    if (keptCandidates.length > 0) {
+      const frame = getFrame()
+      if (frame) {
+        // Convert RGBA ImageData to PNG via canvas
+        const tempCanvas = document.createElement('canvas')
+        tempCanvas.width = frame.w
+        tempCanvas.height = frame.h
+        const tempCtx = tempCanvas.getContext('2d')!
+        tempCtx.putImageData(frame.imageData, 0, 0)
+        tempCanvas.toBlob((blob) => {
+          if (!blob) return
+          const reader = new FileReader()
+          reader.onloadend = () => {
+            const base64 = (reader.result as string).replace(/^data:image\/\w+;base64,/, '')
+            // Build normalized bounding box annotations
+            const boxes = keptCandidates.map((c) => ({
+              x: (c.roi.cx) / frame.w,
+              y: (c.roi.cy) / frame.h,
+              w: c.roi.width / frame.w,
+              h: c.roi.height / frame.h,
+              label: c.bestPip ?? 1,
+            }))
+            // Fire and forget — don't block the recording flow
+            saveFrameMutation.mutate({
+              diceSetId: diceSet.id,
+              imageBase64: base64,
+              frameWidth: frame.w,
+              frameHeight: frame.h,
+              boxes,
+            })
+          }
+          reader.readAsDataURL(blob)
+        }, 'image/png')
+      }
+    }
+
     // Reload training examples to include new data
     const updatedExamples = await getExamples(diceSet.id)
     pipeline.setExamples(updatedExamples.map((e) => ({ features: e.features, label: e.label })))
     trainingExamplesRef.current = updatedExamples.map((e) => ({ features: e.features, label: e.label }))
-
-    const keptCandidates = sp.candidates.filter((c) => !c.dismissed)
 
     if (keptCandidates.length === 0) {
       // All dismissed — go back to detecting
@@ -572,7 +628,7 @@ export function ActiveSessionScreen({ diceSet, onDone }: Props) {
     cooldownRef.current = COOLDOWN_FRAMES
     setSubPhase({ name: 'detecting' })
     submitRoll(pipValues)
-  }, [diceSet.id, pipeline, submitRoll])
+  }, [diceSet.id, pipeline, submitRoll, saveFrameMutation])
 
   // Auto-confirm dice check after timeout
   useEffect(() => {
@@ -728,6 +784,9 @@ export function ActiveSessionScreen({ diceSet, onDone }: Props) {
         </div>
 
         <div className="flex items-center gap-2">
+          {mlModelLoaded && (
+            <span className="text-[10px] text-emerald-400 font-medium whitespace-nowrap">AI</span>
+          )}
           <p className="text-[10px] text-slate-500 flex-1">Roll dice in frame. Auto-captures when stable for ~1 second.<HelpTip text="Remove dice from view between rolls to reset detection" /></p>
           <button
             onClick={() => setShowSettings(!showSettings)}

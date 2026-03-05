@@ -47,6 +47,14 @@ vi.mock('../lib/trpc', () => ({
         }),
       },
     },
+    training: {
+      saveFrame: {
+        useMutation: () => ({
+          mutate: vi.fn(),
+          isPending: false,
+        }),
+      },
+    },
   },
 }))
 
@@ -56,6 +64,18 @@ vi.mock('../lib/cv/trainedPipeline', () => ({
     captureBackground: vi.fn(),
     processFrame: vi.fn(() => []),
     setExamples: vi.fn(),
+    setMlPipeline: vi.fn(),
+    mlResults: null,
+    mlReady: false,
+  }),
+}))
+
+vi.mock('../lib/cv/mlPipeline', () => ({
+  createMlPipeline: () => ({
+    ready: false,
+    load: vi.fn().mockRejectedValue(new Error('no model')),
+    detect: vi.fn().mockResolvedValue([]),
+    dispose: vi.fn(),
   }),
 }))
 
