@@ -1,12 +1,9 @@
-import { useState, useEffect, useCallback, useRef } from 'react'
-import { parseBSDataXml, PARSER_VERSION } from '@tabletop-tools/game-content/src/adapters/bsdata/parser'
+import { useState, useEffect, useCallback } from 'react'
+import { PARSER_VERSION } from '@tabletop-tools/game-content/src/adapters/bsdata/parser'
 import {
-  saveUnits,
-  setImportMeta,
   getImportMeta,
   listFactions as listStoredFactions,
   searchUnits,
-  clearFaction,
   clearAll,
   clearGameRules,
   getRulesImportMeta,
@@ -14,55 +11,22 @@ import {
   setIncludeLegends,
 } from '@tabletop-tools/game-data-store'
 import type { ImportMeta, RulesImportMeta } from '@tabletop-tools/game-data-store'
-import { listCatalogFiles, fetchCatalogXml, getLatestCommitSha, RateLimitError } from '../lib/github'
-import type { CatalogFile, RateLimitInfo } from '../lib/github'
-import { importWahapediaRules, isWahapediaAvailable } from '../lib/wahapedia'
-import type { RulesImportProgress, RulesImportResult } from '../lib/wahapedia'
+import { checkForUpdates, syncAllData } from '../lib/sync'
+import type { Manifest, SyncProgress, SyncResult } from '../lib/sync'
 
-interface ImportProgress {
-  current: number
-  total: number
-  currentFaction: string
-}
-
-interface FactionImportDetail {
-  faction: string
-  unitCount: number
-  weaponCount: number
-  warnings: string[]
-}
-
-interface ImportResult {
-  totalUnits: number
-  factions: number
-  errors: string[]
-  details: FactionImportDetail[]
-}
-
-type FactionStatus = 'pending' | 'importing' | 'success' | 'failed'
-type Tab = 'units' | 'rules' | 'stored'
+type Tab = 'sync' | 'stored'
 
 export function ImportScreen() {
-  const [activeTab, setActiveTab] = useState<Tab>('units')
+  const [activeTab, setActiveTab] = useState<Tab>('sync')
 
-  // Unit import state
-  const [repo, setRepo] = useState('BSData/wh40k-10e')
-  const [branch, setBranch] = useState('main')
-  const [catalogs, setCatalogs] = useState<CatalogFile[]>([])
-  const [selected, setSelected] = useState<Set<string>>(new Set())
-  const [loading, setLoading] = useState(false)
-  const [loadError, setLoadError] = useState<string | null>(null)
-  const [importing, setImporting] = useState(false)
-  const [progress, setProgress] = useState<ImportProgress | null>(null)
-  const [result, setResult] = useState<ImportResult | null>(null)
-  const [factionStatuses, setFactionStatuses] = useState<Record<string, FactionStatus>>({})
-  const [rateLimit, setRateLimit] = useState<RateLimitInfo | null>(null)
-
-  // Rules import state
-  const [rulesAvailable, setRulesAvailable] = useState(false)
-  const [importingRules, setImportingRules] = useState(false)
-  const [rulesProgress, setRulesProgress] = useState<RulesImportProgress | null>(null)
-  const [rulesResult, setRulesResult] = useState<RulesImportResult | null>(null)
+  // Sync state
+  const [checking, setChecking] = useState(false)
+  const [updateAvailable, setUpdateAvailable] = useState(false)
+  const [manifest, setManifest] = useState<Manifest | null>(null)
+  const [checkError, setCheckError] = useState<string | null>(null)
+  const [syncing, setSyncing] = useState(false)
+  const [syncProgress, setSyncProgress] = useState<SyncProgress | null>(null)
+  const [syncResult, setSyncResult] = useState<SyncResult | null>(null)
 
   // Stored data state
   const [currentMeta, setCurrentMeta] = useState<ImportMeta | null>(null)
@@ -73,8 +37,6 @@ export function ImportScreen() {
   const [clearing, setClearing] = useState(false)
   const [clearMessage, setClearMessage] = useState<string | null>(null)
   const [includeLegends, setIncludeLegendsState] = useState(false)
-  const [copiedWarnings, setCopiedWarnings] = useState(false)
-  const copiedWarningsTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   const refreshStoredData = useCallback(async () => {
     const [meta, rmeta, factions] = await Promise.all([
@@ -99,176 +61,53 @@ export function ImportScreen() {
 
   useEffect(() => {
     refreshStoredData()
-    isWahapediaAvailable().then(setRulesAvailable)
     getIncludeLegends().then(setIncludeLegendsState)
   }, [refreshStoredData])
 
-  // ── Unit import handlers ──────────────────────────────────────────────────
+  // ── Sync handlers ───────────────────────────────────────────────────────
 
-  const handleLoadCatalogs = async () => {
-    setLoading(true)
-    setLoadError(null)
-    setCatalogs([])
-    setSelected(new Set())
-    setResult(null)
-    setFactionStatuses({})
-    setRateLimit(null)
-
+  const handleCheckForUpdates = async () => {
+    setChecking(true)
+    setCheckError(null)
+    setSyncResult(null)
     try {
-      const { files, rateLimit: rl } = await listCatalogFiles(repo, branch)
-      setCatalogs(files)
-      setSelected(new Set(files.map((f) => f.name)))
-      setRateLimit(rl)
+      const currentVersion = currentMeta ? undefined : undefined // always check
+      const { available, manifest: m } = await checkForUpdates(currentVersion)
+      setUpdateAvailable(available)
+      setManifest(m)
+      if (!available && m) {
+        setCheckError(null)
+      } else if (!m) {
+        setCheckError('Could not reach the data server. Try again later.')
+      }
     } catch (err) {
-      if (err instanceof RateLimitError) {
-        setLoadError(`Rate limited. Try again at ${err.resetAt.toLocaleTimeString()}.`)
-      } else {
-        setLoadError(err instanceof Error ? err.message : String(err))
-      }
+      setCheckError(err instanceof Error ? err.message : String(err))
     } finally {
-      setLoading(false)
+      setChecking(false)
     }
   }
 
-  const toggleFaction = (name: string) => {
-    setSelected((prev) => {
-      const next = new Set(prev)
-      if (next.has(name)) {
-        next.delete(name)
-      } else {
-        next.add(name)
-      }
-      return next
-    })
-  }
-
-  const selectAll = () => setSelected(new Set(catalogs.map((f) => f.name)))
-  const selectNone = () => setSelected(new Set())
-
-  // Strip BSData catalog prefixes ("Imperium - ", "Chaos - ") so faction names
-  // match Wahapedia conventions (e.g., "Space Marines" instead of "Imperium - Space Marines").
-  const normalizeFactionName = (name: string): string =>
-    name.replace(/^(Imperium|Chaos)\s*-\s*/, '')
-
-  const importFactions = async (toImport: CatalogFile[]) => {
-    if (toImport.length === 0) return
-
-    setImporting(true)
-    setResult(null)
-    const allErrors: string[] = []
-    const details: FactionImportDetail[] = []
-    let totalUnits = 0
-    const successfulFactions: string[] = []
-
-    setFactionStatuses((prev) => {
-      const next = { ...prev }
-      for (const file of toImport) {
-        next[file.faction] = 'pending'
-      }
-      return next
-    })
-
-    for (let i = 0; i < toImport.length; i++) {
-      const file = toImport[i]!
-      setProgress({ current: i + 1, total: toImport.length, currentFaction: file.faction })
-      setFactionStatuses((prev) => ({ ...prev, [file.faction]: 'importing' }))
-
-      try {
-        const xml = await fetchCatalogXml(file)
-        const { units, errors } = parseBSDataXml(xml, normalizeFactionName(file.faction))
-        if (units.length > 0) {
-          await saveUnits(units)
-        }
-        totalUnits += units.length
-        allErrors.push(...errors)
-        successfulFactions.push(file.faction)
-
-        const weaponCount = units.reduce((sum, u) => sum + u.weapons.length, 0)
-        details.push({
-          faction: file.faction,
-          unitCount: units.length,
-          weaponCount,
-          warnings: errors.filter(e => e.startsWith(file.faction) || units.some(u => e.startsWith(u.name))),
-        })
-
-        setFactionStatuses((prev) => ({ ...prev, [file.faction]: 'success' }))
-      } catch (err) {
-        allErrors.push(`${file.faction}: ${err instanceof Error ? err.message : String(err)}`)
-        details.push({ faction: file.faction, unitCount: 0, weaponCount: 0, warnings: [] })
-        setFactionStatuses((prev) => ({ ...prev, [file.faction]: 'failed' }))
-      }
-    }
-
-    if (successfulFactions.length > 0) {
-      const commitSha = await getLatestCommitSha(repo, branch)
-      await setImportMeta({
-        lastImport: Date.now(),
-        factions: successfulFactions,
-        totalUnits,
-        parserVersion: PARSER_VERSION,
-        ...(commitSha ? { commitSha } : {}),
-      })
-    }
-
-    setResult({ totalUnits, factions: successfulFactions.length, errors: allErrors, details })
-    setImporting(false)
-    setProgress(null)
-    await refreshStoredData()
-  }
-
-  const handleImport = () => {
-    const toImport = catalogs.filter((c) => selected.has(c.name))
-    return importFactions(toImport)
-  }
-
-  const handleRetryFailed = () => {
-    const failedFactions = Object.entries(factionStatuses)
-      .filter(([, status]) => status === 'failed')
-      .map(([faction]) => faction)
-    const toRetry = catalogs.filter((c) => failedFactions.includes(c.faction))
-    return importFactions(toRetry)
-  }
-
-  const hasFailedFactions = Object.values(factionStatuses).some((s) => s === 'failed')
-
-  // ── Rules import handlers ─────────────────────────────────────────────────
-
-  const handleImportRules = async () => {
-    setImportingRules(true)
-    setRulesResult(null)
+  const handleSync = async () => {
+    if (!manifest) return
+    setSyncing(true)
+    setSyncResult(null)
     try {
-      const result = await importWahapediaRules((p) => setRulesProgress(p))
-      setRulesResult(result)
+      const result = await syncAllData(manifest, (p) => setSyncProgress(p))
+      setSyncResult(result)
+      setUpdateAvailable(false)
     } finally {
-      setImportingRules(false)
-      setRulesProgress(null)
+      setSyncing(false)
+      setSyncProgress(null)
       await refreshStoredData()
     }
   }
 
-  // ── Stored data handlers ──────────────────────────────────────────────────
-
-  const handleClearFaction = async (faction: string) => {
-    setClearing(true)
-    setClearMessage(null)
-    // Optimistically remove faction from UI immediately
-    setStoredFactions(prev => prev.filter(f => f !== faction))
-    setFactionCounts(prev => { const next = { ...prev }; delete next[faction]; return next })
-    setFactionWeaponCounts(prev => { const next = { ...prev }; delete next[faction]; return next })
-    try {
-      await clearFaction(faction)
-      await refreshStoredData()
-      setClearMessage(`Removed ${faction} data.`)
-    } finally {
-      setClearing(false)
-    }
-  }
+  // ── Stored data handlers ────────────────────────────────────────────────
 
   const handleClearAll = async () => {
     if (!confirm('Clear all imported data? This cannot be undone.')) return
     setClearing(true)
     setClearMessage(null)
-    // Optimistically clear all UI state immediately
     setStoredFactions([])
     setFactionCounts({})
     setFactionWeaponCounts({})
@@ -287,7 +126,6 @@ export function ImportScreen() {
     if (!confirm('Clear all imported game rules? This cannot be undone.')) return
     setClearing(true)
     setClearMessage(null)
-    // Optimistically clear rules UI state immediately
     setRulesMeta(null)
     try {
       await clearGameRules()
@@ -298,26 +136,7 @@ export function ImportScreen() {
     }
   }
 
-  // ── Helpers ───────────────────────────────────────────────────────────────
-
-  const formatSize = (bytes: number): string => {
-    if (bytes < 1024) return `${bytes} B`
-    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`
-    return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
-  }
-
-  const statusIcon = (status: FactionStatus) => {
-    switch (status) {
-      case 'success':
-        return <span className="text-emerald-400">✓</span>
-      case 'failed':
-        return <span className="text-red-400">✕</span>
-      case 'importing':
-        return <span className="text-amber-400 animate-pulse">●</span>
-      default:
-        return null
-    }
-  }
+  // ── Helpers ─────────────────────────────────────────────────────────────
 
   const totalRulesCount = rulesMeta
     ? Object.values(rulesMeta.counts).reduce((a, b) => a + b, 0)
@@ -346,8 +165,7 @@ export function ImportScreen() {
         {/* Tab bar */}
         <div className="mb-6 flex gap-1 rounded-lg border border-slate-800 bg-slate-900 p-1">
           {([
-            { key: 'units' as Tab, label: 'Unit Profiles' },
-            { key: 'rules' as Tab, label: 'Game Rules' },
+            { key: 'sync' as Tab, label: 'Sync' },
             { key: 'stored' as Tab, label: 'Stored Data' },
           ]).map(({ key, label }) => (
             <button
@@ -364,314 +182,109 @@ export function ImportScreen() {
           ))}
         </div>
 
-        {/* ── Unit Profiles Tab ── */}
-        {activeTab === 'units' && (
+        {/* ── Sync Tab ── */}
+        {activeTab === 'sync' && (
           <>
             <p className="mb-4 text-xs text-slate-500">
-              Import unit stat lines and weapons from BSData (community-maintained XML). Data stays in your browser.
+              Sync all game data (unit profiles, rules, weapons, missions) from the server.
+              Data stays in your browser.
             </p>
-            {/* Rate limit warning */}
-            {rateLimit && rateLimit.remaining < 10 && (
-              <div className="mb-4 rounded-lg border border-amber-800 bg-amber-900/20 px-4 py-3 text-sm text-amber-300">
-                GitHub API: {rateLimit.remaining}/{rateLimit.limit} requests remaining.
-                {rateLimit.remaining === 0 && (
-                  <> Resets at {rateLimit.resetAt.toLocaleTimeString()}.</>
-                )}
-              </div>
-            )}
 
-            {/* Summary of stored units */}
+            {/* Current data status */}
             {currentMeta && (
               <div className="mb-4 rounded-lg border border-slate-800 bg-slate-900 px-4 py-3 text-sm text-slate-300">
-                {currentMeta.totalUnits} units across {storedFactions.length} factions imported.
+                <div className="flex items-center justify-between">
+                  <span>
+                    {currentMeta.totalUnits} units across {storedFactions.length} factions
+                    {rulesMeta && <> + {totalRulesCount.toLocaleString()} rules items</>}
+                  </span>
+                  <span className="text-xs text-slate-500">
+                    Last sync: {new Date(currentMeta.lastImport).toLocaleDateString()}
+                  </span>
+                </div>
                 {(currentMeta.parserVersion ?? 0) < PARSER_VERSION && (
-                  <span className="ml-2 text-amber-400">Outdated parser — re-import recommended.</span>
+                  <p className="mt-1 text-amber-400 text-xs">Outdated parser — re-sync recommended.</p>
                 )}
               </div>
             )}
 
-            {/* Source configuration */}
+            {/* Sync actions */}
             <section className="mb-6 rounded-lg border border-slate-800 bg-slate-900 p-4">
-              <h2 className="mb-3 text-lg font-semibold text-slate-100">Source</h2>
-              <div className="mb-3 flex gap-3">
-                <div className="flex-1">
-                  <label className="mb-1 block text-sm text-slate-400">Repository</label>
-                  <input
-                    type="text"
-                    value={repo}
-                    onChange={(e) => setRepo(e.target.value)}
-                    className="w-full rounded border border-slate-700 bg-slate-800 px-3 py-2 text-sm text-slate-100 focus:border-amber-400 focus:outline-none"
-                    placeholder="BSData/wh40k-10e"
-                  />
-                </div>
-                <div className="w-32">
-                  <label className="mb-1 block text-sm text-slate-400">Branch</label>
-                  <input
-                    type="text"
-                    value={branch}
-                    onChange={(e) => setBranch(e.target.value)}
-                    className="w-full rounded border border-slate-700 bg-slate-800 px-3 py-2 text-sm text-slate-100 focus:border-amber-400 focus:outline-none"
-                    placeholder="main"
-                  />
-                </div>
-              </div>
-              <button
-                onClick={handleLoadCatalogs}
-                disabled={loading || importing}
-                className="rounded bg-amber-400 px-4 py-2 text-sm font-medium text-slate-900 hover:bg-amber-300 disabled:opacity-50"
-              >
-                {loading ? 'Loading...' : 'Load Catalog List'}
-              </button>
-              {loadError && <p className="mt-2 text-sm text-red-400">{loadError}</p>}
-            </section>
-
-            {/* Faction selection */}
-            {catalogs.length > 0 && (
-              <section className="mb-6 rounded-lg border border-slate-800 bg-slate-900 p-4">
-                <div className="mb-3 flex items-center justify-between">
-                  <h2 className="text-lg font-semibold text-slate-100">
-                    Select Factions ({selected.size}/{catalogs.length})
-                  </h2>
-                  <div className="flex gap-2">
-                    <button onClick={selectAll} className="text-sm text-amber-400 hover:text-amber-300">
-                      All
-                    </button>
-                    <button onClick={selectNone} className="text-sm text-slate-400 hover:text-slate-300">
-                      None
-                    </button>
-                  </div>
-                </div>
-                <div className="max-h-80 space-y-1 overflow-y-auto">
-                  {catalogs.map((cat) => (
-                    <label
-                      key={cat.name}
-                      className="flex cursor-pointer items-center gap-3 rounded px-3 py-2 hover:bg-slate-800"
-                    >
-                      <input
-                        type="checkbox"
-                        checked={selected.has(cat.name)}
-                        onChange={() => toggleFaction(cat.name)}
-                        className="accent-amber-400"
-                      />
-                      <span className="flex-1 text-sm text-slate-200">
-                        {cat.faction}
-                        {factionStatuses[cat.faction] && (
-                          <span className="ml-2">{statusIcon(factionStatuses[cat.faction]!)}</span>
-                        )}
-                      </span>
-                      <span className="text-xs text-slate-500">{formatSize(cat.size)}</span>
-                    </label>
-                  ))}
-                </div>
-                <div className="mt-4 flex gap-3">
-                  <button
-                    onClick={handleImport}
-                    disabled={importing || selected.size === 0}
-                    className="flex-1 rounded bg-amber-400 px-4 py-2 text-sm font-medium text-slate-900 hover:bg-amber-300 disabled:opacity-50"
-                  >
-                    {importing ? 'Importing...' : `Import ${selected.size} Faction${selected.size !== 1 ? 's' : ''}`}
-                  </button>
-                  {hasFailedFactions && !importing && (
-                    <button
-                      onClick={handleRetryFailed}
-                      className="rounded border border-amber-400 px-4 py-2 text-sm font-medium text-amber-400 hover:bg-amber-400/10"
-                    >
-                      Retry Failed
-                    </button>
-                  )}
-                </div>
-              </section>
-            )}
-
-            {/* Progress */}
-            {progress && (
-              <section className="mb-6 rounded-lg border border-slate-800 bg-slate-900 p-4">
-                <p className="mb-2 text-sm text-slate-200">
-                  Loading {progress.currentFaction}... ({progress.current}/{progress.total})
-                </p>
-                <div className="h-2 overflow-hidden rounded-full bg-slate-700">
-                  <div
-                    className="h-full rounded-full bg-amber-400 transition-all"
-                    style={{ width: `${(progress.current / progress.total) * 100}%` }}
-                  />
-                </div>
-              </section>
-            )}
-
-            {/* Result */}
-            {result && (
-              <section className="mb-6 rounded-lg border border-emerald-800 bg-emerald-900/20 p-4">
-                <h2 className="mb-2 text-lg font-semibold text-emerald-400">Import Complete</h2>
-                <p className="text-sm text-slate-200">
-                  Imported {result.totalUnits} units from {result.factions} faction{result.factions !== 1 ? 's' : ''}.
-                  {result.errors.length > 0 && (
-                    <span className="ml-1 text-amber-400">
-                      {result.errors.length} warning{result.errors.length !== 1 ? 's' : ''} — review below.
-                    </span>
-                  )}
-                </p>
-
-                {/* Per-faction breakdown */}
-                {result.details.length > 0 && (
-                  <div className="mt-3 space-y-1">
-                    <p className="text-xs font-medium text-slate-400">Per-faction breakdown:</p>
-                    <div className="max-h-48 space-y-1 overflow-y-auto">
-                      {result.details.map((d) => (
-                        <div key={d.faction} className="flex items-center gap-2 rounded px-2 py-1 text-xs">
-                          <span className={d.unitCount > 0 ? 'text-emerald-400' : 'text-red-400'}>
-                            {d.unitCount > 0 ? '✓' : '✕'}
-                          </span>
-                          <span className="flex-1 text-slate-200">{d.faction}</span>
-                          <span className="text-slate-400">{d.unitCount} units</span>
-                          <span className="text-slate-500">{d.weaponCount} weapons</span>
-                          {d.warnings.length > 0 && (
-                            <span className="text-amber-400">{d.warnings.length} warn</span>
-                          )}
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                )}
-
-                {result.errors.length > 0 && (
-                  <details className="mt-3">
-                    <summary className="cursor-pointer text-sm text-amber-400">
-                      Show all {result.errors.length} warning{result.errors.length !== 1 ? 's' : ''}
-                    </summary>
-                    <div className="mt-1 flex justify-end">
-                      <button
-                        type="button"
-                        onClick={() => {
-                          void navigator.clipboard.writeText(result.errors.join('\n')).then(() => {
-                            setCopiedWarnings(true)
-                            if (copiedWarningsTimer.current) clearTimeout(copiedWarningsTimer.current)
-                            copiedWarningsTimer.current = setTimeout(() => setCopiedWarnings(false), 2000)
-                          })
-                        }}
-                        className="text-xs text-amber-400 hover:text-amber-300 border border-slate-700 rounded px-2 py-0.5"
-                      >
-                        {copiedWarnings ? 'Copied!' : 'Copy to clipboard'}
-                      </button>
-                    </div>
-                    <ul className="mt-1 max-h-48 space-y-1 overflow-y-auto text-xs text-slate-500">
-                      {result.errors.map((err, i) => (
-                        <li key={i}>{err}</li>
-                      ))}
-                    </ul>
-                  </details>
-                )}
-              </section>
-            )}
-          </>
-        )}
-
-        {/* ── Game Rules Tab ── */}
-        {activeTab === 'rules' && (
-          <>
-            <section className="mb-6 rounded-lg border border-slate-800 bg-slate-900 p-4">
-              <h2 className="mb-3 text-lg font-semibold text-slate-100">Game Rules Data</h2>
+              <h2 className="mb-3 text-lg font-semibold text-slate-100">Game Data Sync</h2>
               <p className="mb-4 text-sm text-slate-400">
-                Import detachments, stratagems, enhancements, leader attachments, unit compositions,
-                costs, wargear options, keywords, abilities, weapon profiles, and model stats.
-                IDs are automatically mapped to your imported unit profiles.
+                Check for updates from BSData (unit profiles) and Wahapedia (game rules, stratagems, enhancements, weapons).
+                All data is pre-processed on the server — just click sync.
               </p>
-              {!currentMeta && (
-                <div className="mb-4 rounded-lg border border-amber-800 bg-amber-900/20 px-4 py-3 text-sm text-amber-300">
-                  Import Unit Profiles first so game rules data can be linked to your units.
-                </div>
+
+              <div className="flex gap-3">
+                <button
+                  onClick={handleCheckForUpdates}
+                  disabled={checking || syncing}
+                  className="rounded bg-slate-700 px-4 py-2 text-sm font-medium text-slate-200 hover:bg-slate-600 disabled:opacity-50"
+                >
+                  {checking ? 'Checking...' : 'Check for Updates'}
+                </button>
+
+                {(updateAvailable || !currentMeta) && manifest && (
+                  <button
+                    onClick={handleSync}
+                    disabled={syncing}
+                    className="rounded bg-amber-400 px-4 py-2 text-sm font-medium text-slate-900 hover:bg-amber-300 disabled:opacity-50"
+                  >
+                    {syncing ? 'Syncing...' : currentMeta ? 'Sync Updates' : 'Sync All Data'}
+                  </button>
+                )}
+              </div>
+
+              {checkError && (
+                <p className="mt-3 text-sm text-red-400">{checkError}</p>
               )}
 
-              {rulesMeta && (
-                <div className="mb-4 rounded-lg border border-slate-700 bg-slate-800 px-4 py-3 text-sm text-slate-300">
-                  {totalRulesCount.toLocaleString()} rules items imported on{' '}
-                  {new Date(rulesMeta.lastImport).toLocaleDateString()}.
-                </div>
+              {manifest && !updateAvailable && !syncing && !syncResult && (
+                <p className="mt-3 text-sm text-emerald-400">
+                  Data is up to date (v{manifest.version}, updated {new Date(manifest.updatedAt).toLocaleDateString()}).
+                </p>
               )}
 
-              {!rulesAvailable && (
-                <div className="mb-4 rounded-lg border border-amber-800 bg-amber-900/20 px-4 py-3 text-sm text-amber-300">
-                  Game rules data not found. Run the export script first:
-                  <code className="ml-2 rounded bg-slate-800 px-2 py-0.5 text-xs">
-                    npx tsx scripts/export-wahapedia.ts
-                  </code>
+              {manifest && updateAvailable && (
+                <div className="mt-3 rounded border border-amber-800 bg-amber-900/20 px-3 py-2 text-sm text-amber-300">
+                  Update available (v{manifest.version}, updated {new Date(manifest.updatedAt).toLocaleDateString()}).
+                  {manifest.bsdata && <> {manifest.bsdata.unitCount} units across {manifest.bsdata.factionCount} factions.</>}
+                  {manifest.wahapedia && <> {Object.values(manifest.wahapedia.recordCounts).reduce((a, b) => a + b, 0).toLocaleString()} rules records.</>}
                 </div>
               )}
-
-              <button
-                onClick={handleImportRules}
-                disabled={importingRules || !rulesAvailable}
-                className="rounded bg-amber-400 px-4 py-2 text-sm font-medium text-slate-900 hover:bg-amber-300 disabled:opacity-50"
-              >
-                {importingRules ? 'Importing...' : rulesMeta ? 'Re-import Game Rules' : 'Import Game Rules'}
-              </button>
             </section>
 
-            {/* Rules progress */}
-            {rulesProgress && (
+            {/* Sync progress */}
+            {syncProgress && (
               <section className="mb-6 rounded-lg border border-slate-800 bg-slate-900 p-4">
                 <p className="mb-2 text-sm text-slate-200">
-                  Loading {rulesProgress.currentStep}... ({rulesProgress.current}/{rulesProgress.total})
+                  {syncProgress.currentStep}... ({syncProgress.current}/{syncProgress.total})
                 </p>
                 <div className="h-2 overflow-hidden rounded-full bg-slate-700">
                   <div
                     className="h-full rounded-full bg-amber-400 transition-all"
-                    style={{ width: `${(rulesProgress.current / rulesProgress.total) * 100}%` }}
+                    style={{ width: `${(syncProgress.current / syncProgress.total) * 100}%` }}
                   />
                 </div>
               </section>
             )}
 
-            {/* Rules result */}
-            {rulesResult && (
+            {/* Sync result */}
+            {syncResult && (
               <section className="mb-6 rounded-lg border border-emerald-800 bg-emerald-900/20 p-4">
-                <h2 className="mb-2 text-lg font-semibold text-emerald-400">Import Complete</h2>
-
-                {rulesResult.idMappingStats && (
-                  <div className="mb-3 rounded border border-slate-700 bg-slate-800 px-3 py-2 text-sm">
-                    <span className="text-emerald-400">
-                      {rulesResult.idMappingStats.matched.toLocaleString()} datasheets matched
-                    </span>
-                    {rulesResult.idMappingStats.unmatched > 0 && (
-                      <span className="ml-2 text-amber-400">
-                        ({rulesResult.idMappingStats.unmatched} unmatched — import more factions in Unit Profiles)
-                      </span>
-                    )}
-                  </div>
-                )}
-
-                <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-sm text-slate-200">
-                  <span className="text-slate-400">Datasheets</span>
-                  <span>{(rulesResult.counts.datasheets ?? 0).toLocaleString()}</span>
-                  <span className="text-slate-400">Weapon Profiles</span>
-                  <span>{(rulesResult.counts.datasheetWargear ?? 0).toLocaleString()}</span>
-                  <span className="text-slate-400">Model Stats</span>
-                  <span>{(rulesResult.counts.datasheetModels ?? 0).toLocaleString()}</span>
-                  <span className="text-slate-400">Detachments</span>
-                  <span>{(rulesResult.counts.detachments ?? 0).toLocaleString()}</span>
-                  <span className="text-slate-400">Stratagems</span>
-                  <span>{(rulesResult.counts.stratagems ?? 0).toLocaleString()}</span>
-                  <span className="text-slate-400">Enhancements</span>
-                  <span>{(rulesResult.counts.enhancements ?? 0).toLocaleString()}</span>
-                  <span className="text-slate-400">Leader Attachments</span>
-                  <span>{(rulesResult.counts.leaderAttachments ?? 0).toLocaleString()}</span>
-                  <span className="text-slate-400">Unit Compositions</span>
-                  <span>{(rulesResult.counts.unitCompositions ?? 0).toLocaleString()}</span>
-                  <span className="text-slate-400">Unit Costs</span>
-                  <span>{(rulesResult.counts.unitCosts ?? 0).toLocaleString()}</span>
-                  <span className="text-slate-400">Wargear Options</span>
-                  <span>{(rulesResult.counts.wargearOptions ?? 0).toLocaleString()}</span>
-                  <span className="text-slate-400">Unit Keywords</span>
-                  <span>{(rulesResult.counts.unitKeywords ?? 0).toLocaleString()}</span>
-                  <span className="text-slate-400">Unit Abilities</span>
-                  <span>{(rulesResult.counts.unitAbilities ?? 0).toLocaleString()}</span>
+                <h2 className="mb-2 text-lg font-semibold text-emerald-400">Sync Complete</h2>
+                <div className="text-sm text-slate-200">
+                  {syncResult.unitCount > 0 && <p>{syncResult.unitCount.toLocaleString()} unit profiles synced.</p>}
+                  {syncResult.rulesCount > 0 && <p>{syncResult.rulesCount.toLocaleString()} rules items synced.</p>}
                 </div>
-                {rulesResult.errors.length > 0 && (
+                {syncResult.errors.length > 0 && (
                   <details className="mt-2">
                     <summary className="cursor-pointer text-sm text-red-400">
-                      {rulesResult.errors.length} error{rulesResult.errors.length !== 1 ? 's' : ''}
+                      {syncResult.errors.length} error{syncResult.errors.length !== 1 ? 's' : ''}
                     </summary>
                     <ul className="mt-1 space-y-1 text-xs text-slate-500">
-                      {rulesResult.errors.map((err, i) => (
+                      {syncResult.errors.map((err, i) => (
                         <li key={i}>{err}</li>
                       ))}
                     </ul>
@@ -686,12 +299,11 @@ export function ImportScreen() {
         {activeTab === 'stored' && (
           <>
             <p className="mb-4 text-xs text-slate-500">
-              View and manage imported data. Remove individual factions or clear everything. Data is stored locally in your browser.
+              View and manage imported data. Data is stored locally in your browser.
             </p>
-            {/* Status messages */}
             {clearing && (
               <div className="mb-4 rounded-lg bg-slate-900 border border-slate-700 px-4 py-2 text-sm text-slate-400">
-                Clearing data…
+                Clearing data...
               </div>
             )}
             {clearMessage && !clearing && (
@@ -716,11 +328,8 @@ export function ImportScreen() {
               </div>
               {currentMeta && (
                 <p className="mb-3 text-sm text-slate-400">
-                  Last import: {new Date(currentMeta.lastImport).toLocaleDateString()} —{' '}
+                  Last sync: {new Date(currentMeta.lastImport).toLocaleDateString()} —{' '}
                   {currentMeta.totalUnits} units across {storedFactions.length} factions
-                  {(currentMeta.parserVersion ?? 0) < PARSER_VERSION && (
-                    <span className="ml-2 text-amber-400">(outdated parser)</span>
-                  )}
                 </p>
               )}
               {storedFactions.length === 0 && (
@@ -739,12 +348,6 @@ export function ImportScreen() {
                           ({factionCounts[faction] ?? 0} units, {factionWeaponCounts[faction] ?? 0} weapons)
                         </span>
                       </span>
-                      <button
-                        onClick={() => handleClearFaction(faction)}
-                        className="text-xs text-red-400 hover:text-red-300"
-                      >
-                        Remove
-                      </button>
                     </div>
                   ))}
                 </div>
@@ -791,7 +394,7 @@ export function ImportScreen() {
               {rulesMeta ? (
                 <>
                   <p className="mb-3 text-sm text-slate-400">
-                    Last import: {new Date(rulesMeta.lastImport).toLocaleDateString()} —{' '}
+                    Last sync: {new Date(rulesMeta.lastImport).toLocaleDateString()} —{' '}
                     {totalRulesCount.toLocaleString()} total items
                   </p>
                   <div className="grid grid-cols-2 gap-2 text-sm">
@@ -823,7 +426,7 @@ export function ImportScreen() {
         )}
 
         <footer className="mt-8 text-center text-sm text-slate-600">
-          Data sourced from BSData (community-maintained). Not affiliated with Games Workshop.
+          Data sourced from BSData and Wahapedia (community-maintained). Not affiliated with Games Workshop.
         </footer>
       </div>
     </div>

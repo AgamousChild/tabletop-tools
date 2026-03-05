@@ -20,36 +20,19 @@ const mockGetRulesImportMeta = vi.mocked(getRulesImportMeta)
 const mockListStoredFactions = vi.mocked(listStoredFactions)
 const mockSearchUnits = vi.mocked(searchUnits)
 
-// Mock the github module
-vi.mock('../lib/github', () => ({
-  listCatalogFiles: vi.fn(),
-  fetchCatalogXml: vi.fn(),
-  getLatestCommitSha: vi.fn().mockResolvedValue('abc123'),
-  RateLimitError: class RateLimitError extends Error {
-    resetAt: Date
-    constructor(resetAt: Date, message?: string) {
-      super(message ?? `Rate limited. Try again at ${resetAt.toLocaleTimeString()}.`)
-      this.name = 'RateLimitError'
-      this.resetAt = resetAt
-    }
-  },
+// Mock sync module
+vi.mock('../lib/sync', () => ({
+  checkForUpdates: vi.fn(),
+  syncAllData: vi.fn(),
 }))
 
-// Mock wahapedia module
-vi.mock('../lib/wahapedia', () => ({
-  importWahapediaRules: vi.fn(),
-  isWahapediaAvailable: vi.fn().mockResolvedValue(false),
-}))
-
-import { listCatalogFiles, fetchCatalogXml } from '../lib/github'
-
-const mockListCatalogFiles = vi.mocked(listCatalogFiles)
-const _mockFetchCatalogXml = vi.mocked(fetchCatalogXml)
+import { checkForUpdates, syncAllData } from '../lib/sync'
+const mockCheckForUpdates = vi.mocked(checkForUpdates)
+const mockSyncAllData = vi.mocked(syncAllData)
 
 beforeEach(() => {
-  mockListCatalogFiles.mockReset()
-  _mockFetchCatalogXml.mockReset()
-  // Clear IndexedDB
+  mockCheckForUpdates.mockReset()
+  mockSyncAllData.mockReset()
   const dbs = indexedDB.databases ? indexedDB.databases() : Promise.resolve([])
   dbs.then((databases: IDBDatabaseInfo[]) => {
     for (const db of databases) {
@@ -58,10 +41,6 @@ beforeEach(() => {
   })
 })
 
-function catalogResult(files: Array<{ name: string; faction: string; downloadUrl: string; size: number }>) {
-  return { files, rateLimit: null }
-}
-
 describe('ImportScreen', () => {
   it('renders the import screen with title', () => {
     render(<ImportScreen />)
@@ -69,102 +48,15 @@ describe('ImportScreen', () => {
     expect(screen.getByText('Data')).toBeInTheDocument()
   })
 
-  it('shows tab bar with three tabs', () => {
+  it('shows tab bar with two tabs', () => {
     render(<ImportScreen />)
-    expect(screen.getByText('Unit Profiles')).toBeInTheDocument()
-    expect(screen.getByText('Game Rules')).toBeInTheDocument()
+    expect(screen.getByText('Sync')).toBeInTheDocument()
     expect(screen.getByText('Stored Data')).toBeInTheDocument()
   })
 
-  it('shows source input with default repo on unit profiles tab', () => {
+  it('shows Check for Updates button on sync tab', () => {
     render(<ImportScreen />)
-    const input = screen.getByDisplayValue('BSData/wh40k-10e')
-    expect(input).toBeInTheDocument()
-  })
-
-  it('shows Load Catalog List button', () => {
-    render(<ImportScreen />)
-    expect(screen.getByText('Load Catalog List')).toBeInTheDocument()
-  })
-
-  it('loads catalog files when Load button clicked', async () => {
-    mockListCatalogFiles.mockResolvedValueOnce(
-      catalogResult([
-        { name: 'Orks.cat', faction: 'Orks', downloadUrl: 'https://example.com/orks.cat', size: 200000 },
-        { name: 'Aeldari.cat', faction: 'Aeldari', downloadUrl: 'https://example.com/aeldari.cat', size: 150000 },
-      ]),
-    )
-
-    render(<ImportScreen />)
-    fireEvent.click(screen.getByText('Load Catalog List'))
-
-    await waitFor(() => {
-      expect(screen.getByText('Orks')).toBeInTheDocument()
-      expect(screen.getByText('Aeldari')).toBeInTheDocument()
-    })
-  })
-
-  it('shows error when catalog loading fails', async () => {
-    mockListCatalogFiles.mockRejectedValueOnce(new Error('GitHub API error: 403 Forbidden'))
-
-    render(<ImportScreen />)
-    fireEvent.click(screen.getByText('Load Catalog List'))
-
-    await waitFor(() => {
-      expect(screen.getByText('GitHub API error: 403 Forbidden')).toBeInTheDocument()
-    })
-  })
-
-  it('shows faction count in select header', async () => {
-    mockListCatalogFiles.mockResolvedValueOnce(
-      catalogResult([
-        { name: 'Orks.cat', faction: 'Orks', downloadUrl: 'https://example.com/orks.cat', size: 200000 },
-      ]),
-    )
-
-    render(<ImportScreen />)
-    fireEvent.click(screen.getByText('Load Catalog List'))
-
-    await waitFor(() => {
-      expect(screen.getByText('Select Factions (1/1)')).toBeInTheDocument()
-    })
-  })
-
-  it('shows file sizes', async () => {
-    mockListCatalogFiles.mockResolvedValueOnce(
-      catalogResult([
-        { name: 'Orks.cat', faction: 'Orks', downloadUrl: 'https://example.com/orks.cat', size: 200000 },
-      ]),
-    )
-
-    render(<ImportScreen />)
-    fireEvent.click(screen.getByText('Load Catalog List'))
-
-    await waitFor(() => {
-      expect(screen.getByText('195.3 KB')).toBeInTheDocument()
-    })
-  })
-
-  it('toggles faction selection with All/None', async () => {
-    mockListCatalogFiles.mockResolvedValueOnce(
-      catalogResult([
-        { name: 'Orks.cat', faction: 'Orks', downloadUrl: 'https://example.com/orks.cat', size: 200000 },
-        { name: 'Aeldari.cat', faction: 'Aeldari', downloadUrl: 'https://example.com/aeldari.cat', size: 150000 },
-      ]),
-    )
-
-    render(<ImportScreen />)
-    fireEvent.click(screen.getByText('Load Catalog List'))
-
-    await waitFor(() => {
-      expect(screen.getByText('Select Factions (2/2)')).toBeInTheDocument()
-    })
-
-    fireEvent.click(screen.getByText('None'))
-    expect(screen.getByText('Select Factions (0/2)')).toBeInTheDocument()
-
-    fireEvent.click(screen.getByText('All'))
-    expect(screen.getByText('Select Factions (2/2)')).toBeInTheDocument()
+    expect(screen.getByText('Check for Updates')).toBeInTheDocument()
   })
 
   it('shows BSData disclaimer in footer', () => {
@@ -174,29 +66,116 @@ describe('ImportScreen', () => {
     ).toBeInTheDocument()
   })
 
-  it('toggles individual faction checkbox', async () => {
-    mockListCatalogFiles.mockResolvedValueOnce(
-      catalogResult([
-        { name: 'Orks.cat', faction: 'Orks', downloadUrl: 'https://example.com/orks.cat', size: 200000 },
-        { name: 'Aeldari.cat', faction: 'Aeldari', downloadUrl: 'https://example.com/aeldari.cat', size: 150000 },
-      ]),
-    )
+  // ── Sync tab tests ──────────────────────────────────────────────────────
 
-    render(<ImportScreen />)
-    fireEvent.click(screen.getByText('Load Catalog List'))
-
-    await waitFor(() => {
-      expect(screen.getByText('Select Factions (2/2)')).toBeInTheDocument()
+  it('checks for updates and shows availability', async () => {
+    mockCheckForUpdates.mockResolvedValueOnce({
+      available: true,
+      manifest: {
+        version: 2,
+        updatedAt: '2024-01-15T03:00:00Z',
+        bsdata: { commitSha: 'abc', unitCount: 500, factionCount: 20 },
+        wahapedia: { lastUpdate: '2024-01-15', recordCounts: { datasheets: 300 } },
+        files: [],
+      },
     })
 
-    const checkboxes = screen.getAllByRole('checkbox')
-    fireEvent.click(checkboxes[0])
-    expect(screen.getByText('Select Factions (1/2)')).toBeInTheDocument()
+    render(<ImportScreen />)
+    fireEvent.click(screen.getByText('Check for Updates'))
+
+    await waitFor(() => {
+      expect(screen.getByText(/Update available/)).toBeInTheDocument()
+      expect(screen.getByText(/500 units/)).toBeInTheDocument()
+    })
   })
 
-  it('shows previously imported data info', async () => {
-    mockGetImportMeta.mockResolvedValue({ lastImport: 1700000000000, factions: ['Orks', 'Aeldari'], totalUnits: 42, parserVersion: 999 })
-    mockListStoredFactions.mockResolvedValue(['Orks', 'Aeldari'])
+  it('shows up-to-date message when no updates', async () => {
+    mockCheckForUpdates.mockResolvedValueOnce({
+      available: false,
+      manifest: {
+        version: 1,
+        updatedAt: '2024-01-15T03:00:00Z',
+        files: [],
+      },
+    })
+
+    render(<ImportScreen />)
+    fireEvent.click(screen.getByText('Check for Updates'))
+
+    await waitFor(() => {
+      expect(screen.getByText(/Data is up to date/)).toBeInTheDocument()
+    })
+  })
+
+  it('shows error when check fails', async () => {
+    mockCheckForUpdates.mockResolvedValueOnce({
+      available: false,
+      manifest: null,
+    })
+
+    render(<ImportScreen />)
+    fireEvent.click(screen.getByText('Check for Updates'))
+
+    await waitFor(() => {
+      expect(screen.getByText(/Could not reach the data server/)).toBeInTheDocument()
+    })
+  })
+
+  it('syncs data when Sync button clicked', async () => {
+    const manifest = {
+      version: 2,
+      updatedAt: '2024-01-15T03:00:00Z',
+      files: ['bsdata-units.json', 'datasheets.json'],
+    }
+    mockCheckForUpdates.mockResolvedValueOnce({
+      available: true,
+      manifest,
+    })
+    mockSyncAllData.mockResolvedValueOnce({
+      unitCount: 500,
+      rulesCount: 1200,
+      errors: [],
+    })
+
+    render(<ImportScreen />)
+    fireEvent.click(screen.getByText('Check for Updates'))
+
+    await waitFor(() => {
+      expect(screen.getByText(/Sync All Data/)).toBeInTheDocument()
+    })
+
+    fireEvent.click(screen.getByText('Sync All Data'))
+
+    await waitFor(() => {
+      expect(screen.getByText('Sync Complete')).toBeInTheDocument()
+      expect(screen.getByText(/500 unit profiles/)).toBeInTheDocument()
+      expect(screen.getByText(/1,200 rules items/)).toBeInTheDocument()
+    })
+  })
+
+  it('shows sync errors in collapsible details', async () => {
+    const manifest = { version: 1, updatedAt: '2024-01-15T03:00:00Z', files: [] }
+    mockCheckForUpdates.mockResolvedValueOnce({ available: true, manifest })
+    mockSyncAllData.mockResolvedValueOnce({
+      unitCount: 0,
+      rulesCount: 0,
+      errors: ['Failed to fetch datasheets.json'],
+    })
+
+    render(<ImportScreen />)
+    fireEvent.click(screen.getByText('Check for Updates'))
+
+    await waitFor(() => expect(screen.getByText(/Sync All Data/)).toBeInTheDocument())
+    fireEvent.click(screen.getByText('Sync All Data'))
+
+    await waitFor(() => {
+      expect(screen.getByText('1 error')).toBeInTheDocument()
+    })
+  })
+
+  it('shows current data status when meta exists', async () => {
+    mockGetImportMeta.mockResolvedValue({ lastImport: 1700000000000, factions: ['Orks'], totalUnits: 42, parserVersion: 999 })
+    mockListStoredFactions.mockResolvedValue(['Orks'])
     mockSearchUnits.mockResolvedValue([])
 
     render(<ImportScreen />)
@@ -206,109 +185,7 @@ describe('ImportScreen', () => {
     })
   })
 
-  it('shows rate limit info when returned', async () => {
-    mockListCatalogFiles.mockResolvedValueOnce({
-      files: [{ name: 'Orks.cat', faction: 'Orks', downloadUrl: 'https://example.com/orks.cat', size: 200000 }],
-      rateLimit: { remaining: 5, limit: 60, resetAt: new Date(Date.now() + 3600000) },
-    })
-
-    render(<ImportScreen />)
-    fireEvent.click(screen.getByText('Load Catalog List'))
-
-    await waitFor(() => {
-      expect(screen.getByText(/5.*remaining/i)).toBeInTheDocument()
-    })
-  })
-
-  it('shows per-faction breakdown in import results', async () => {
-    mockListCatalogFiles.mockResolvedValueOnce(
-      catalogResult([
-        { name: 'Orks.cat', faction: 'Orks', downloadUrl: 'https://example.com/orks.cat', size: 200000 },
-      ]),
-    )
-
-    // Minimal XML that produces a parseable unit
-    const fakeXml = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
-<gameSystem id="test-sys" name="TestGame">
-  <selectionEntries>
-    <selectionEntry id="unit-001" name="Test Unit" type="unit">
-      <profiles>
-        <profile id="p1" name="Test Unit" typeName="Unit Characteristics">
-          <characteristics>
-            <characteristic name="M">6</characteristic>
-            <characteristic name="T">4</characteristic>
-            <characteristic name="Sv">3+</characteristic>
-            <characteristic name="W">2</characteristic>
-            <characteristic name="Ld">6</characteristic>
-            <characteristic name="OC">1</characteristic>
-          </characteristics>
-        </profile>
-        <profile id="w1" name="Test Gun" typeName="Ranged Weapons">
-          <characteristics>
-            <characteristic name="Range">24</characteristic>
-            <characteristic name="A">2</characteristic>
-            <characteristic name="BS">3+</characteristic>
-            <characteristic name="S">4</characteristic>
-            <characteristic name="AP">-1</characteristic>
-            <characteristic name="D">1</characteristic>
-          </characteristics>
-        </profile>
-      </profiles>
-    </selectionEntry>
-  </selectionEntries>
-</gameSystem>`
-    _mockFetchCatalogXml.mockResolvedValueOnce(fakeXml)
-
-    render(<ImportScreen />)
-    fireEvent.click(screen.getByText('Load Catalog List'))
-
-    await waitFor(() => {
-      expect(screen.getByText('Orks')).toBeInTheDocument()
-    })
-
-    fireEvent.click(screen.getByText(/Import 1 Faction/))
-
-    await waitFor(() => {
-      expect(screen.getByText('Import Complete')).toBeInTheDocument()
-    })
-
-    // Should show per-faction breakdown
-    expect(screen.getByText('Per-faction breakdown:')).toBeInTheDocument()
-    expect(screen.getByText('1 units')).toBeInTheDocument()
-    expect(screen.getByText('1 weapons')).toBeInTheDocument()
-  })
-
-  it('shows weapon counts in stored data tab', async () => {
-    mockGetImportMeta.mockResolvedValue({ lastImport: 1700000000000, factions: ['Orks'], totalUnits: 10, parserVersion: 999 })
-    mockListStoredFactions.mockResolvedValue(['Orks'])
-    // Return mock units with weapons
-    mockSearchUnits.mockResolvedValue([
-      { id: '1', faction: 'Orks', name: 'U1', move: 6, toughness: 4, save: 3, wounds: 2, leadership: 6, oc: 1, weapons: [{ name: 'Gun', range: 24, attacks: 2, skill: 3, strength: 4, ap: 0, damage: 1, abilities: [] }, { name: 'Blade', range: 'melee' as const, attacks: 3, skill: 3, strength: 4, ap: 0, damage: 1, abilities: [] }], abilities: [], points: 50 },
-    ])
-
-    render(<ImportScreen />)
-    fireEvent.click(screen.getByText('Stored Data'))
-
-    await waitFor(() => {
-      expect(screen.getByText(/2 weapons/)).toBeInTheDocument()
-    })
-  })
-
-  // ── Game Rules tab tests ──────────────────────────────────────────────────
-
-  it('shows game rules content when Game Rules tab clicked', () => {
-    render(<ImportScreen />)
-    fireEvent.click(screen.getByText('Game Rules'))
-    expect(screen.getByText('Game Rules Data')).toBeInTheDocument()
-  })
-
-  it('shows warning when wahapedia data not available', () => {
-    render(<ImportScreen />)
-    fireEvent.click(screen.getByText('Game Rules'))
-    expect(screen.getByText(/Game rules data not found/)).toBeInTheDocument()
-  })
-
-  // ── Stored Data tab tests ─────────────────────────────────────────────────
+  // ── Stored Data tab tests ───────────────────────────────────────────────
 
   it('shows stored data tab with empty state', () => {
     render(<ImportScreen />)
@@ -333,5 +210,26 @@ describe('ImportScreen', () => {
       expect(screen.getByText(/42 units/)).toBeInTheDocument()
       expect(screen.getByText(/295 total items/)).toBeInTheDocument()
     })
+  })
+
+  it('shows weapon counts in stored data tab', async () => {
+    mockGetImportMeta.mockResolvedValue({ lastImport: 1700000000000, factions: ['Orks'], totalUnits: 10, parserVersion: 999 })
+    mockListStoredFactions.mockResolvedValue(['Orks'])
+    mockSearchUnits.mockResolvedValue([
+      { id: '1', faction: 'Orks', name: 'U1', move: 6, toughness: 4, save: 3, wounds: 2, leadership: 6, oc: 1, weapons: [{ name: 'Gun', range: 24, attacks: 2, skill: 3, strength: 4, ap: 0, damage: 1, abilities: [] }, { name: 'Blade', range: 'melee' as const, attacks: 3, skill: 3, strength: 4, ap: 0, damage: 1, abilities: [] }], abilities: [], points: 50 },
+    ])
+
+    render(<ImportScreen />)
+    fireEvent.click(screen.getByText('Stored Data'))
+
+    await waitFor(() => {
+      expect(screen.getByText(/2 weapons/)).toBeInTheDocument()
+    })
+  })
+
+  it('shows legends toggle in settings', () => {
+    render(<ImportScreen />)
+    fireEvent.click(screen.getByText('Stored Data'))
+    expect(screen.getByText('Include Legends units')).toBeInTheDocument()
   })
 })

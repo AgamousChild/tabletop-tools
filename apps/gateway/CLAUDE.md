@@ -21,7 +21,7 @@ app's Worker via service bindings.
 apps/gateway/
   build.sh              <- builds all 8 client SPAs into dist/ (set -e, validates outputs)
   _redirects            <- Cloudflare Pages SPA fallback rules (8 entries)
-  wrangler.toml         <- Pages project config + 7 service bindings
+  wrangler.toml         <- Pages project config + 8 service bindings
   landing/
     index.html          <- landing page with 8 app cards
   functions/
@@ -32,6 +32,7 @@ apps/gateway/
     tournament/trpc/[[path]].ts    <- proxy -> tabletop-tools-tournament Worker
     new-meta/trpc/[[path]].ts      <- proxy -> tabletop-tools-new-meta Worker
     admin/trpc/[[path]].ts         <- proxy -> tabletop-tools-admin Worker
+    data-import/api/[[path]].ts    <- proxy -> tabletop-tools-data-import Worker
   dist/                 <- build output (not committed)
 ```
 
@@ -39,8 +40,6 @@ apps/gateway/
 
 Each Pages Function strips the app prefix from the URL path and forwards to the bound Worker.
 Error handling returns structured JSON on Worker failure (503 with `{ error: { message } }`).
-
-**data-import has no Pages Function** -- it's client-only with no server Worker.
 
 ### Service Bindings (wrangler.toml)
 
@@ -53,6 +52,7 @@ Error handling returns structured JSON on Worker failure (503 with `{ error: { m
 | TOURNAMENT_API | tabletop-tools-tournament |
 | NEW_META_API | tabletop-tools-new-meta |
 | ADMIN_API | tabletop-tools-admin |
+| DATA_IMPORT_API | tabletop-tools-data-import |
 
 ### build.sh
 

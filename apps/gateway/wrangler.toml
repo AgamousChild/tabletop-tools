@@ -28,3 +28,7 @@ service = "tabletop-tools-new-meta"
 [[services]]
 binding = "ADMIN_API"
 service = "tabletop-tools-admin"
+
+[[services]]
+binding = "DATA_IMPORT_API"
+service = "tabletop-tools-data-import"

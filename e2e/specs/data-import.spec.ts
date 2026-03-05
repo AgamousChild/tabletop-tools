@@ -13,28 +13,26 @@ test.describe('Data Import (public, no auth)', () => {
     await expect(page.locator('h1')).toContainText('Import')
   })
 
-  test('repo input shows default BSData/wh40k-10e', async ({ page }) => {
+  test('shows Sync and Stored Data tabs', async ({ page }) => {
     await page.goto('/data-import/')
     await page.waitForLoadState('networkidle')
 
-    const repoInput = page.locator('input[placeholder="BSData/wh40k-10e"]')
-    await expect(repoInput).toBeVisible()
-    await expect(repoInput).toHaveValue('BSData/wh40k-10e')
+    await expect(page.getByRole('button', { name: 'Sync' })).toBeVisible()
+    await expect(page.getByRole('button', { name: 'Stored Data' })).toBeVisible()
   })
 
-  test('Load Catalog List button is present', async ({ page }) => {
+  test('Check for Updates button is present on Sync tab', async ({ page }) => {
     await page.goto('/data-import/')
     await page.waitForLoadState('networkidle')
 
-    await expect(page.getByRole('button', { name: 'Load Catalog List' })).toBeVisible()
+    await expect(page.getByRole('button', { name: 'Check for Updates' })).toBeVisible()
   })
 
-  test('branch input defaults to main', async ({ page }) => {
+  test('Stored Data tab shows empty state', async ({ page }) => {
     await page.goto('/data-import/')
     await page.waitForLoadState('networkidle')
 
-    const branchInput = page.locator('input[placeholder="main"]')
-    await expect(branchInput).toBeVisible()
-    await expect(branchInput).toHaveValue('main')
+    await page.getByRole('button', { name: 'Stored Data' }).click()
+    await expect(page.getByText('No unit profiles imported yet.')).toBeVisible()
   })
 })
