@@ -1250,3 +1250,305 @@ describe('parseBSDataXml — infoLink/entryLink resolution', () => {
     expect(bayonets).toHaveLength(1)
   })
 })
+
+describe('parseBSDataXml — selectionEntryGroup resolution', () => {
+  // BSData XML commonly defines weapons inside <selectionEntryGroup> elements
+  // in <sharedSelectionEntryGroups>, then references them via <entryLink type="selectionEntryGroup">.
+  // This is how most real units (Space Marines, Orks, Tau, etc.) define their weapon options.
+  const SEG_XML = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<catalogue id="test" name="Test">
+  <selectionEntries>
+    <selectionEntry type="unit" name="Vanguard Squad" id="unit-van">
+      <selectionEntries>
+        <selectionEntry type="model" name="Vanguard Trooper" id="model-van">
+          <infoLinks>
+            <infoLink name="Vanguard Trooper" type="profile" id="il-van" targetId="profile-van"/>
+          </infoLinks>
+          <entryLinks>
+            <entryLink import="true" name="Ranged Weapons" type="selectionEntryGroup" id="el-seg1" targetId="seg-ranged"/>
+            <entryLink import="true" name="Melee Weapons" type="selectionEntryGroup" id="el-seg2" targetId="seg-melee"/>
+          </entryLinks>
+        </selectionEntry>
+      </selectionEntries>
+    </selectionEntry>
+  </selectionEntries>
+  <sharedSelectionEntryGroups>
+    <selectionEntryGroup name="Ranged Weapons" id="seg-ranged">
+      <selectionEntries>
+        <selectionEntry type="upgrade" name="Plasma Gun" id="weapon-plasma-entry">
+          <profiles>
+            <profile name="Plasma Gun" typeName="Ranged Weapons" id="wp-plasma">
+              <characteristics>
+                <characteristic name="Range">24</characteristic>
+                <characteristic name="A">2</characteristic>
+                <characteristic name="BS">3+</characteristic>
+                <characteristic name="S">7</characteristic>
+                <characteristic name="AP">-2</characteristic>
+                <characteristic name="D">1</characteristic>
+                <characteristic name="Keywords">Rapid Fire 1</characteristic>
+              </characteristics>
+            </profile>
+          </profiles>
+        </selectionEntry>
+      </selectionEntries>
+    </selectionEntryGroup>
+    <selectionEntryGroup name="Melee Weapons" id="seg-melee">
+      <entryLinks>
+        <entryLink import="true" name="Chain Sword" type="selectionEntry" id="el-chain" targetId="weapon-chain"/>
+      </entryLinks>
+    </selectionEntryGroup>
+  </sharedSelectionEntryGroups>
+  <sharedSelectionEntries>
+    <selectionEntry type="upgrade" name="Chain Sword" id="weapon-chain">
+      <profiles>
+        <profile name="Chain Sword" typeName="Melee Weapons" id="wp-chain">
+          <characteristics>
+            <characteristic name="Range">Melee</characteristic>
+            <characteristic name="A">4</characteristic>
+            <characteristic name="WS">3+</characteristic>
+            <characteristic name="S">4</characteristic>
+            <characteristic name="AP">0</characteristic>
+            <characteristic name="D">1</characteristic>
+            <characteristic name="Keywords">-</characteristic>
+          </characteristics>
+        </profile>
+      </profiles>
+    </selectionEntry>
+  </sharedSelectionEntries>
+  <sharedProfiles>
+    <profile name="Vanguard Trooper" typeName="Unit" id="profile-van">
+      <characteristics>
+        <characteristic name="M">6"</characteristic>
+        <characteristic name="T">4</characteristic>
+        <characteristic name="SV">3+</characteristic>
+        <characteristic name="W">2</characteristic>
+        <characteristic name="LD">6+</characteristic>
+        <characteristic name="OC">2</characteristic>
+      </characteristics>
+    </profile>
+  </sharedProfiles>
+</catalogue>`
+
+  it('resolves entryLink type="selectionEntryGroup" to find weapons in shared groups', () => {
+    const { units, errors } = parseBSDataXml(SEG_XML, 'Test')
+    const unit = units.find(u => u.name === 'Vanguard Squad')
+    expect(unit).toBeDefined()
+    const plasma = unit!.weapons.find(w => w.name === 'Plasma Gun')
+    expect(plasma).toBeDefined()
+    expect(plasma!.strength).toBe(7)
+    expect(plasma!.ap).toBe(-2)
+    const weaponErrors = errors.filter(e => e.includes('Vanguard Squad') && e.includes('No weapons'))
+    expect(weaponErrors).toHaveLength(0)
+  })
+
+  it('resolves nested entryLink inside selectionEntryGroup to shared weapon definitions', () => {
+    const { units } = parseBSDataXml(SEG_XML, 'Test')
+    const unit = units.find(u => u.name === 'Vanguard Squad')
+    expect(unit).toBeDefined()
+    const chain = unit!.weapons.find(w => w.name === 'Chain Sword')
+    expect(chain).toBeDefined()
+    expect(chain!.range).toBe('melee')
+    expect(chain!.attacks).toBe(4)
+  })
+
+  it('resolves characteristics from shared profile via infoLink alongside selectionEntryGroup weapons', () => {
+    const { units, errors } = parseBSDataXml(SEG_XML, 'Test')
+    const unit = units.find(u => u.name === 'Vanguard Squad')
+    expect(unit).toBeDefined()
+    expect(unit!.toughness).toBe(4)
+    expect(unit!.save).toBe(3)
+    const charErrors = errors.filter(e => e.includes('Vanguard Squad') && e.includes('missing characteristic'))
+    expect(charErrors).toHaveLength(0)
+  })
+})
+
+describe('parseBSDataXml — infoGroup resolution', () => {
+  // BSData XML sometimes defines unit characteristics inside an <infoGroup> in <sharedInfoGroups>,
+  // then references it via <infoLink type="infoGroup">. The infoGroup may contain nested
+  // <infoLink type="profile"> references that need further resolution.
+  const INFOGROUP_XML = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<catalogue id="test" name="Test">
+  <selectionEntries>
+    <selectionEntry type="unit" name="Echo Squad" id="unit-echo">
+      <selectionEntries>
+        <selectionEntry type="model" name="Echo Trooper" id="model-echo">
+          <infoLinks>
+            <infoLink name="Echo Stats" type="infoGroup" id="il-ig1" targetId="ig-echo"/>
+          </infoLinks>
+          <entryLinks>
+            <entryLink import="true" name="Lasgun" type="selectionEntry" id="el-las" targetId="weapon-las"/>
+          </entryLinks>
+        </selectionEntry>
+      </selectionEntries>
+    </selectionEntry>
+  </selectionEntries>
+  <sharedInfoGroups>
+    <infoGroup name="Echo Stats" id="ig-echo">
+      <infoLinks>
+        <infoLink name="Echo Trooper" type="profile" id="il-echo-prof" targetId="profile-echo"/>
+      </infoLinks>
+      <profiles>
+        <profile name="Shield Wall" typeName="Abilities" id="ab-shield">
+          <characteristics>
+            <characteristic name="Description">+1 to save rolls.</characteristic>
+          </characteristics>
+        </profile>
+      </profiles>
+    </infoGroup>
+  </sharedInfoGroups>
+  <sharedSelectionEntries>
+    <selectionEntry type="upgrade" name="Lasgun" id="weapon-las">
+      <profiles>
+        <profile name="Lasgun" typeName="Ranged Weapons" id="wp-las">
+          <characteristics>
+            <characteristic name="Range">24</characteristic>
+            <characteristic name="A">1</characteristic>
+            <characteristic name="BS">4+</characteristic>
+            <characteristic name="S">3</characteristic>
+            <characteristic name="AP">0</characteristic>
+            <characteristic name="D">1</characteristic>
+            <characteristic name="Keywords">Rapid Fire 1</characteristic>
+          </characteristics>
+        </profile>
+      </profiles>
+    </selectionEntry>
+  </sharedSelectionEntries>
+  <sharedProfiles>
+    <profile name="Echo Trooper" typeName="Unit" id="profile-echo">
+      <characteristics>
+        <characteristic name="M">6"</characteristic>
+        <characteristic name="T">3</characteristic>
+        <characteristic name="SV">5+</characteristic>
+        <characteristic name="W">1</characteristic>
+        <characteristic name="LD">7+</characteristic>
+        <characteristic name="OC">2</characteristic>
+      </characteristics>
+    </profile>
+  </sharedProfiles>
+</catalogue>`
+
+  it('resolves infoLink type="infoGroup" → infoGroup → infoLink type="profile" for characteristics', () => {
+    const { units, errors } = parseBSDataXml(INFOGROUP_XML, 'Test')
+    const unit = units.find(u => u.name === 'Echo Squad')
+    expect(unit).toBeDefined()
+    expect(unit!.toughness).toBe(3)
+    expect(unit!.save).toBe(5)
+    expect(unit!.wounds).toBe(1)
+    const charErrors = errors.filter(e => e.includes('Echo Squad') && e.includes('missing characteristic'))
+    expect(charErrors).toHaveLength(0)
+  })
+
+  it('resolves abilities defined inline within the infoGroup', () => {
+    const { units } = parseBSDataXml(INFOGROUP_XML, 'Test')
+    const unit = units.find(u => u.name === 'Echo Squad')
+    expect(unit).toBeDefined()
+    expect(unit!.abilities).toContain('Shield Wall')
+  })
+
+  it('resolves weapons alongside infoGroup-based characteristics', () => {
+    const { units, errors } = parseBSDataXml(INFOGROUP_XML, 'Test')
+    const unit = units.find(u => u.name === 'Echo Squad')
+    expect(unit).toBeDefined()
+    const lasgun = unit!.weapons.find(w => w.name === 'Lasgun')
+    expect(lasgun).toBeDefined()
+    expect(lasgun!.strength).toBe(3)
+    const weaponErrors = errors.filter(e => e.includes('Echo Squad') && e.includes('No weapons'))
+    expect(weaponErrors).toHaveLength(0)
+  })
+})
+
+describe('parseBSDataXml — shared sub-model filtering', () => {
+  // In BSData XML, <sharedSelectionEntries> contains reusable sub-models (type="model")
+  // that are referenced by units via <entryLink>. These should NOT be extracted as
+  // standalone units — they produce false "No weapons"/"Toughness 0" validation errors.
+  // However, type="unit" entries in shared sections ARE legitimate standalone units.
+  const SHARED_MODEL_XML = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<catalogue id="test" name="Test">
+  <selectionEntries>
+    <selectionEntry type="unit" name="Foxtrot Squad" id="unit-fox">
+      <entryLinks>
+        <entryLink import="true" name="Foxtrot Trooper" type="selectionEntry" id="el-fox" targetId="model-fox"/>
+      </entryLinks>
+    </selectionEntry>
+  </selectionEntries>
+  <sharedSelectionEntries>
+    <selectionEntry type="model" name="Foxtrot Trooper" id="model-fox">
+      <profiles>
+        <profile name="Foxtrot Trooper" typeName="Unit" id="prof-fox">
+          <characteristics>
+            <characteristic name="M">6</characteristic>
+            <characteristic name="T">3</characteristic>
+            <characteristic name="SV">5+</characteristic>
+            <characteristic name="W">1</characteristic>
+            <characteristic name="LD">7+</characteristic>
+            <characteristic name="OC">2</characteristic>
+          </characteristics>
+        </profile>
+        <profile name="Lasgun" typeName="Ranged Weapons" id="wp-fox-las">
+          <characteristics>
+            <characteristic name="Range">24</characteristic>
+            <characteristic name="A">1</characteristic>
+            <characteristic name="BS">4+</characteristic>
+            <characteristic name="S">3</characteristic>
+            <characteristic name="AP">0</characteristic>
+            <characteristic name="D">1</characteristic>
+            <characteristic name="Keywords">-</characteristic>
+          </characteristics>
+        </profile>
+      </profiles>
+    </selectionEntry>
+    <selectionEntry type="unit" name="Shared Reusable Unit" id="shared-unit-1">
+      <profiles>
+        <profile name="Shared Reusable Unit" typeName="Unit" id="prof-shared">
+          <characteristics>
+            <characteristic name="M">8</characteristic>
+            <characteristic name="T">5</characteristic>
+            <characteristic name="SV">3+</characteristic>
+            <characteristic name="W">4</characteristic>
+            <characteristic name="LD">6+</characteristic>
+            <characteristic name="OC">2</characteristic>
+          </characteristics>
+        </profile>
+        <profile name="Bolt Rifle" typeName="Ranged Weapons" id="wp-shared-bolt">
+          <characteristics>
+            <characteristic name="Range">24</characteristic>
+            <characteristic name="A">2</characteristic>
+            <characteristic name="BS">3+</characteristic>
+            <characteristic name="S">4</characteristic>
+            <characteristic name="AP">-1</characteristic>
+            <characteristic name="D">1</characteristic>
+            <characteristic name="Keywords">-</characteristic>
+          </characteristics>
+        </profile>
+      </profiles>
+    </selectionEntry>
+  </sharedSelectionEntries>
+</catalogue>`
+
+  it('does not extract type="model" entries from sharedSelectionEntries as standalone units', () => {
+    const { units } = parseBSDataXml(SHARED_MODEL_XML, 'Test')
+    const foxTrooper = units.find(u => u.name === 'Foxtrot Trooper')
+    expect(foxTrooper).toBeUndefined()
+  })
+
+  it('still extracts the parent unit that references the shared model', () => {
+    const { units } = parseBSDataXml(SHARED_MODEL_XML, 'Test')
+    const foxSquad = units.find(u => u.name === 'Foxtrot Squad')
+    expect(foxSquad).toBeDefined()
+  })
+
+  it('keeps type="unit" entries from sharedSelectionEntries as legitimate units', () => {
+    const { units } = parseBSDataXml(SHARED_MODEL_XML, 'Test')
+    const sharedUnit = units.find(u => u.name === 'Shared Reusable Unit')
+    expect(sharedUnit).toBeDefined()
+    expect(sharedUnit!.toughness).toBe(5)
+  })
+
+  it('resolves weapons from shared model into parent unit via entryLink', () => {
+    const { units } = parseBSDataXml(SHARED_MODEL_XML, 'Test')
+    const foxSquad = units.find(u => u.name === 'Foxtrot Squad')
+    expect(foxSquad).toBeDefined()
+    const lasgun = foxSquad!.weapons.find(w => w.name === 'Lasgun')
+    expect(lasgun).toBeDefined()
+  })
+})
