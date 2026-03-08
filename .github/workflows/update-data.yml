@@ -53,8 +53,11 @@ jobs:
       # Clone sync-data tools (contains wahapedia-sync, bsdata-sync)
       - name: Clone sync-data tools
         if: ${{ !inputs.skip_sync }}
+        env:
+          DATA_REPO_TOKEN: ${{ secrets.DATA_REPO_TOKEN }}
         run: |
-          git clone --depth 1 https://github.com/${{ secrets.SYNC_DATA_REPO || 'AgamousChild/sync-data' }}.git ../sync-data
+          SYNC_REPO="${{ secrets.SYNC_DATA_REPO || 'AgamousChild/sync-data' }}"
+          git clone --depth 1 "https://x-access-token:${DATA_REPO_TOKEN}@github.com/${SYNC_REPO}.git" ../sync-data
           cd ../sync-data/tools/wahapedia-sync && pnpm install --no-frozen-lockfile
           cd ../sync-data/tools/bsdata-sync && pnpm install --no-frozen-lockfile
 
