@@ -68,7 +68,9 @@ jobs:
 
       - name: Sync BSData
         if: ${{ !inputs.skip_sync }}
-        run: cd ../sync-data/tools/bsdata-sync && pnpm start
+        run: |
+          mkdir -p ../sync-data/tools/bsdata-sync/.local/bsdata
+          cd ../sync-data/tools/bsdata-sync && pnpm start
 
       # Export Wahapedia DB to JSON
       - name: Export Wahapedia to JSON
