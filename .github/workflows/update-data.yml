@@ -58,8 +58,8 @@ jobs:
         run: |
           SYNC_REPO="${{ secrets.SYNC_DATA_REPO || 'AgamousChild/sync-data' }}"
           git clone --depth 1 "https://x-access-token:${DATA_REPO_TOKEN}@github.com/${SYNC_REPO}.git" ../sync-data
-          cd ../sync-data/tools/wahapedia-sync && pnpm install --no-frozen-lockfile
-          cd ../sync-data/tools/bsdata-sync && pnpm install --no-frozen-lockfile
+          (cd ../sync-data/tools/wahapedia-sync && pnpm install --no-frozen-lockfile)
+          (cd ../sync-data/tools/bsdata-sync && pnpm install --no-frozen-lockfile)
 
       # Run sync tools to fetch fresh data
       - name: Sync Wahapedia
