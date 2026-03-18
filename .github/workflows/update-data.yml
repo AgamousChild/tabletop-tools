@@ -1,122 +1,51 @@
-# update-data.yml — Automated game data pipeline
+# update-data.yml — Trigger game data sync via Worker API
 #
-# Fetches fresh Wahapedia + BSData data, exports to JSON, and pushes
-# to the tabletop-tools-data repo for consumption by the app.
+# Calls the data-import Worker's /sync endpoint to fetch fresh
+# Wahapedia + BSData data, process it, and store in R2.
 #
-# Triggers:
-#   - Weekly schedule (Sunday midnight UTC)
-#   - Manual dispatch (workflow_dispatch)
+# The Worker also has its own cron trigger (Monday 3am UTC).
+# This workflow serves as a manual trigger and backup schedule.
 #
 # Prerequisites:
-#   - DATA_REPO_TOKEN secret: PAT with push access to the data repo
-#   - SYNC_DATA_REPO: URL of the sync-data tools repo (with wahapedia-sync, bsdata-sync)
+#   - SYNC_SECRET secret: Bearer token matching the Worker's SYNC_SECRET
 
 name: Update Game Data
 
 on:
   schedule:
-    # Weekly on Sunday at midnight UTC
+    # Weekly on Sunday at midnight UTC (backup — Worker cron runs Monday 3am)
     - cron: '0 0 * * 0'
   workflow_dispatch:
-    inputs:
-      skip_sync:
-        description: 'Skip sync and only re-export existing data'
-        type: boolean
-        default: false
 
 env:
-  NODE_VERSION: '20'
-  DATA_REPO: AgamousChild/tabletop-tools-data
+  SYNC_URL: https://tabletop-tools.net/data-import/api/sync
 
 jobs:
   update-data:
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 10
 
     steps:
-      - name: Checkout tabletop-tools
-        uses: actions/checkout@v4
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: ${{ env.NODE_VERSION }}
-
-      - name: Install pnpm
-        uses: pnpm/action-setup@v4
-        with:
-          version: 9
-
-      - name: Install dependencies
-        run: pnpm install --no-frozen-lockfile
-
-      # Clone sync-data tools (contains wahapedia-sync, bsdata-sync)
-      - name: Clone sync-data tools
-        if: ${{ !inputs.skip_sync }}
+      - name: Trigger data sync
         env:
-          DATA_REPO_TOKEN: ${{ secrets.DATA_REPO_TOKEN }}
+          SYNC_SECRET: ${{ secrets.SYNC_SECRET }}
         run: |
-          SYNC_REPO="${{ secrets.SYNC_DATA_REPO || 'AgamousChild/sync-data' }}"
-          SYNC_DIR="${GITHUB_WORKSPACE}/../sync-data"
-          git clone --depth 1 "https://x-access-token:${DATA_REPO_TOKEN}@github.com/${SYNC_REPO}.git" "$SYNC_DIR"
-          ls "$SYNC_DIR/tools/"
-          (cd "$SYNC_DIR/tools/wahapedia-sync" && pnpm install --no-frozen-lockfile)
-          (cd "$SYNC_DIR/tools/bsdata-sync" && pnpm install --no-frozen-lockfile)
-
-      # Run sync tools to fetch fresh data
-      - name: Sync Wahapedia
-        if: ${{ !inputs.skip_sync }}
-        run: cd "${GITHUB_WORKSPACE}/../sync-data/tools/wahapedia-sync" && pnpm start
-
-      - name: Sync BSData
-        if: ${{ !inputs.skip_sync }}
-        run: |
-          SYNC_DIR="${GITHUB_WORKSPACE}/../sync-data"
-          mkdir -p "$SYNC_DIR/tools/bsdata-sync/.local/bsdata"
-          cd "$SYNC_DIR/tools/bsdata-sync" && pnpm start
-
-      # Export Wahapedia DB to JSON
-      - name: Export Wahapedia to JSON
-        env:
-          WAHAPEDIA_DB: ${{ github.workspace }}/../sync-data/tools/wahapedia-sync/.local/wahapedia/data.db
-        run: npx tsx scripts/export-wahapedia.ts "$WAHAPEDIA_DB"
-
-      # Validate export
-      - name: Validate export
-        run: |
-          echo "Exported files:"
-          ls -la apps/data-import/client/public/wahapedia/
-          FILE_COUNT=$(ls -1 apps/data-import/client/public/wahapedia/*.json | wc -l)
-          echo "Total: $FILE_COUNT JSON files"
-          if [ "$FILE_COUNT" -lt 15 ]; then
-            echo "ERROR: Expected at least 15 JSON files, got $FILE_COUNT"
+          echo "Triggering sync at $SYNC_URL"
+          RESPONSE=$(curl -sf -X POST "$SYNC_URL" \
+            -H "Authorization: Bearer ${SYNC_SECRET}" \
+            -H "Content-Type: application/json" \
+            -w "\n%{http_code}" \
+            --max-time 300)
+          HTTP_CODE=$(echo "$RESPONSE" | tail -1)
+          BODY=$(echo "$RESPONSE" | head -n -1)
+          echo "HTTP $HTTP_CODE"
+          echo "$BODY" | jq . 2>/dev/null || echo "$BODY"
+          if [ "$HTTP_CODE" -ne 200 ]; then
+            echo "Sync failed with HTTP $HTTP_CODE"
             exit 1
           fi
 
-      # Clone data repo and publish
-      - name: Publish to data repo
-        env:
-          DATA_REPO_TOKEN: ${{ secrets.DATA_REPO_TOKEN }}
+      - name: Verify manifest
         run: |
-          # Clone data repo
-          git clone "https://x-access-token:${DATA_REPO_TOKEN}@github.com/${DATA_REPO}.git" ../tabletop-tools-data
-
-          # Copy JSON files
-          mkdir -p ../tabletop-tools-data/wahapedia
-          cp apps/data-import/client/public/wahapedia/*.json ../tabletop-tools-data/wahapedia/
-
-          # Write manifest
-          cd ../tabletop-tools-data
-          echo "{\"exportedAt\": \"$(date -u +%Y-%m-%dT%H:%M:%SZ)\", \"commit\": \"$GITHUB_SHA\"}" > manifest.json
-
-          # Commit and push
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add -A
-          if git diff --staged --quiet; then
-            echo "No changes — data is up to date"
-          else
-            git commit -m "Update game data $(date -u +%Y-%m-%d)"
-            git push
-            echo "Data published successfully"
-          fi
+          echo "Checking manifest..."
+          curl -sf "${SYNC_URL%/sync}/manifest.json" | jq .
