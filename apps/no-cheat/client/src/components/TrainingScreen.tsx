@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 
 import type { RoiResult } from '../lib/cv/pipeline'
+import { DEFAULT_CONFIG } from '../lib/cv/pipeline'
 import type { Roi } from '../lib/cv/isolate'
 import { createTrainedPipeline } from '../lib/cv/trainedPipeline'
 import { getMainCamera } from '../lib/getMainCamera'
@@ -108,6 +109,9 @@ export function TrainingScreen({ diceSet, onBack }: Props) {
   const [cameraReady, setCameraReady] = useState(false)
   const [detectedCount, setDetectedCount] = useState(0)
   const [confirmProgress, setConfirmProgress] = useState(0)
+  const [showSettings, setShowSettings] = useState(false)
+  const [contrast, setContrast] = useState(DEFAULT_CONFIG.contrast)
+  const [centerCrop, setCenterCrop] = useState(DEFAULT_CONFIG.centerCrop)
 
   // Training data state
   const [examples, setExamples] = useState<StoredExample[]>([])
@@ -235,46 +239,55 @@ export function TrainingScreen({ diceSet, onBack }: Props) {
 
       if (cooldownRef.current > 0) {
         if (currentCount === 0) cooldownRef.current--
-      } else if (currentCount === 0) {
-        recentCountsRef.current = []
       } else {
+        // Include all frames (including zeros) in the sliding window so
+        // intermittent frame drops don't reset stability progress.
         const counts = recentCountsRef.current
         counts.push(currentCount)
         if (counts.length > WINDOW_SIZE) counts.shift()
 
-        // Check if we should lock: stability OR timeout with dice present
         let shouldLock = false
 
         if (counts.length >= WINDOW_SIZE) {
+          // Find mode of non-zero counts (ignore empty frames)
           const freq = new Map<number, number>()
-          for (const c of counts) freq.set(c, (freq.get(c) ?? 0) + 1)
+          for (const c of counts) {
+            if (c > 0) freq.set(c, (freq.get(c) ?? 0) + 1)
+          }
           let modeVal = 0, modeCount = 0
           for (const [val, count] of freq) {
             if (count > modeCount) { modeVal = val; modeCount = count }
           }
 
-          if (modeCount / WINDOW_SIZE >= STABILITY_RATIO && currentCount === modeVal) {
+          if (modeVal > 0 && modeCount / WINDOW_SIZE >= STABILITY_RATIO && currentCount === modeVal) {
             shouldLock = true
           }
         }
 
-        // Auto-lock timeout: if we've been detecting for too long and have dice,
-        // lock with current results to avoid indefinite "hold steady" stall
-        if (!shouldLock && Date.now() - detectStartTime > AUTO_LOCK_TIMEOUT && currentCount > 0) {
+        // Auto-lock timeout: if we've been detecting long enough and have
+        // seen dice at some point, lock with best available results.
+        if (!shouldLock && lastNonZeroResults.length > 0 && Date.now() - detectStartTime > AUTO_LOCK_TIMEOUT) {
           shouldLock = true
         }
 
         if (shouldLock) {
           const lockResults = results.length > 0 ? results : lastNonZeroResults
-          const initialSamples = lockResults.map((r) => [r.pipCount])
+          if (lockResults.length > 0) {
+            const initialSamples = lockResults.map((r) => [r.pipCount])
+            recentCountsRef.current = []
+            setPhase({
+              name: 'confirming',
+              lockedResults: lockResults,
+              samples: initialSamples,
+              startTime: Date.now(),
+            })
+            return
+          }
+        }
+
+        // Reset if no dice seen in the entire window
+        if (currentCount === 0 && lastNonZeroResults.length === 0) {
           recentCountsRef.current = []
-          setPhase({
-            name: 'confirming',
-            lockedResults: lockResults,
-            samples: initialSamples,
-            startTime: Date.now(),
-          })
-          return
         }
       }
 
@@ -640,6 +653,76 @@ export function TrainingScreen({ diceSet, onBack }: Props) {
           <h2 className="text-lg font-semibold text-slate-100">{diceSet.name}</h2>
           <span className="ml-auto text-sm text-slate-400">Training</span>
         </div>
+
+        {/* Settings toggle */}
+        <div className="flex justify-end">
+          <button
+            onClick={() => setShowSettings(!showSettings)}
+            className="text-xs px-2 py-1 rounded border border-slate-700 text-slate-400 hover:text-slate-200 hover:border-slate-500 transition-colors"
+            aria-label="Detection settings"
+          >
+            {showSettings ? 'Hide Settings' : 'Settings'}
+          </button>
+        </div>
+
+        {showSettings && (
+          <div className="bg-slate-900 rounded-lg p-3 space-y-3 border border-slate-800">
+            <p className="text-xs text-slate-400 font-semibold uppercase tracking-wider">Detection Settings</p>
+
+            <div className="space-y-1">
+              <div className="flex items-center justify-between">
+                <label className="text-xs text-slate-400">Contrast Sensitivity</label>
+                <span className="text-xs text-slate-500 font-mono">{contrast}</span>
+              </div>
+              <input
+                type="range"
+                min={3}
+                max={25}
+                step={1}
+                value={contrast}
+                onChange={(e) => {
+                  const v = Number(e.target.value)
+                  setContrast(v)
+                  pipeline.setConfig({ contrast: v })
+                }}
+                className="w-full accent-amber-400"
+              />
+              <p className="text-[10px] text-slate-600">Lower = more sensitive (catches faint dice). Higher = fewer false detections.</p>
+            </div>
+
+            <div className="space-y-1">
+              <div className="flex items-center justify-between">
+                <label className="text-xs text-slate-400">Edge Crop</label>
+                <span className="text-xs text-slate-500 font-mono">{Math.round(centerCrop * 100)}%</span>
+              </div>
+              <input
+                type="range"
+                min={0}
+                max={30}
+                step={5}
+                value={centerCrop * 100}
+                onChange={(e) => {
+                  const v = Number(e.target.value) / 100
+                  setCenterCrop(v)
+                  pipeline.setConfig({ centerCrop: v })
+                }}
+                className="w-full accent-amber-400"
+              />
+              <p className="text-[10px] text-slate-600">Trims edges before pip counting. Higher = ignores more table bleed.</p>
+            </div>
+
+            <button
+              onClick={() => {
+                setContrast(DEFAULT_CONFIG.contrast)
+                setCenterCrop(DEFAULT_CONFIG.centerCrop)
+                pipeline.setConfig({ ...DEFAULT_CONFIG })
+              }}
+              className="text-xs text-slate-500 hover:text-slate-300 transition-colors"
+            >
+              Reset to defaults
+            </button>
+          </div>
+        )}
 
         {/* Camera feed */}
         <div className="relative rounded-lg overflow-hidden bg-slate-900 aspect-square">
