@@ -79,7 +79,7 @@ export function TrainingRoiCard({
       </div>
 
       {/* Pip buttons */}
-      <div className="flex gap-0.5">
+      <div className="flex gap-px">
         {[1, 2, 3, 4, 5, 6].map((pip) => {
           const isSelected = pip === selectedLabel
           const isGuess = pip === guess && selectedLabel === null
@@ -87,7 +87,7 @@ export function TrainingRoiCard({
             <button
               key={pip}
               onClick={() => onCorrect(pip)}
-              className={`w-6 h-6 rounded text-xs font-bold ${
+              className={`w-5 h-5 rounded text-[10px] font-bold ${
                 isSelected
                   ? 'bg-emerald-400 text-slate-950'
                   : isGuess

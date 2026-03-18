@@ -36,6 +36,13 @@
       "when": 1772128783498,
       "tag": "0004_tranquil_kang",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "6",
+      "when": 1772727940894,
+      "tag": "0005_smart_mojo",
+      "breakpoints": true
     }
   ]
 }

@@ -217,6 +217,10 @@ Update this section every time you update or fix a section of the requirements.
 
 Complete these items in order, and create seperate commits for each item.
 
+- Collect YOLO training data: Use the no-cheat app to roll dice across multiple sessions. Each confirmed dice detection auto-saves a full frame + bounding box annotations to R2/Turso. Target: at least 100 frames with balanced distribution across all 6 pip classes, various lighting, angles, dice colors. Document the collection process.
+- Export YOLO dataset and train model locally: Use the TrainingHistory → Frames tab → "Export YOLO Dataset" button to generate a ZIP. Run `python apps/no-cheat/scripts/train-dice-model.py` to train YOLOv8n. Validate metrics (mAP, precision, recall). Copy the resulting `dice-yolov8n.onnx` to `apps/no-cheat/client/public/models/`.
+- Add model validation and metrics: After training, add an endpoint or UI section that compares ML pipeline detection accuracy vs. the traditional CV pipeline on a held-out test set. Show precision/recall per pip class.
+- Deploy trained model: Include the ONNX model in the build, deploy to production. Verify the "AI" badge appears in recording phase and ML detections override traditional pipeline when confident.
 
 ---
 

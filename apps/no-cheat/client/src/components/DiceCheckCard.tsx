@@ -65,13 +65,13 @@ export function DiceCheckCard({
       </div>
       {/* Pip correction buttons */}
       {!dismissed && onChangePip && (
-        <div className="flex gap-0.5">
+        <div className="flex gap-px">
           {[1, 2, 3, 4, 5, 6].map((pip) => (
             <button
               key={pip}
               onClick={() => onChangePip(pip)}
               aria-label={`Set pip ${pip}`}
-              className={`w-6 h-6 rounded text-xs font-bold ${
+              className={`w-5 h-5 rounded text-[10px] font-bold ${
                 pip === pipGuess
                   ? 'bg-emerald-400 text-slate-950'
                   : 'bg-slate-800 text-slate-100 hover:bg-slate-700'
