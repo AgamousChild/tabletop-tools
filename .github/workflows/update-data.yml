@@ -18,7 +18,7 @@ on:
   workflow_dispatch:
 
 env:
-  SYNC_URL: https://tabletop-tools.net/data-import/api/sync
+  SYNC_URL: https://tabletop-tools-data-import.micah-ec2.workers.dev/sync
 
 jobs:
   update-data:

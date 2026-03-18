@@ -44,7 +44,7 @@ app.post('/sync', async (c) => {
     }
   }
 
-  const result = await runSync(c.env.GAME_DATA_BUCKET)
+  const result = await runSync(c.env.GAME_DATA_BUCKET, c.env.GITHUB_TOKEN)
   return c.json(result)
 })
 
@@ -56,6 +56,6 @@ export default {
     env: Env,
     ctx: ExecutionContext,
   ) {
-    ctx.waitUntil(runSync(env.GAME_DATA_BUCKET))
+    ctx.waitUntil(runSync(env.GAME_DATA_BUCKET, env.GITHUB_TOKEN))
   },
 }

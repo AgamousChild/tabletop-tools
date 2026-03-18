@@ -14,16 +14,16 @@ const CSV_FILES = [
   'Datasheets_unit_composition',
   'Datasheets_models_cost',
   'Datasheets_options',
-  'Datasheets_leaders',
+  'Datasheets_leader',
   'Detachments',
-  'Detachments_abilities',
+  'Detachment_abilities',
   'Stratagems',
   'Enhancements',
   'Abilities',
   'Source',
   'Datasheets_stratagems',
   'Datasheets_enhancements',
-  'Datasheets_detachments_abilities',
+  'Datasheets_detachment_abilities',
 ] as const
 
 export interface WahapediaResult {
@@ -101,7 +101,7 @@ export async function fetchAndProcessWahapedia(
 
   // detachment_abilities
   data['detachment_abilities'] = convertDescriptions(
-    (csvData['Detachments_abilities'] ?? []).map(r => ({
+    (csvData['Detachment_abilities'] ?? []).map(r => ({
       id: r['id'] ?? '',
       detachmentId: r['detachment_id'] ?? '',
       factionId: r['faction_id'] ?? '',
@@ -141,7 +141,7 @@ export async function fetchAndProcessWahapedia(
   )
 
   // leader_attachments (from datasheet_leaders)
-  data['leader_attachments'] = (csvData['Datasheets_leaders'] ?? []).map(r => ({
+  data['leader_attachments'] = (csvData['Datasheets_leader'] ?? []).map(r => ({
     id: r['id'] ?? '',
     leaderId: r['leader_id'] ?? '',
     attachedId: r['attached_id'] ?? '',
@@ -283,7 +283,7 @@ export async function fetchAndProcessWahapedia(
     enhancementId: r['enhancement_id'] ?? '',
   }))
 
-  data['datasheet_detachment_abilities'] = (csvData['Datasheets_detachments_abilities'] ?? []).map(r => ({
+  data['datasheet_detachment_abilities'] = (csvData['Datasheets_detachment_abilities'] ?? []).map(r => ({
     id: r['id'] ?? '',
     datasheetId: r['datasheet_id'] ?? '',
     detachmentAbilityId: r['detachment_ability_id'] ?? '',

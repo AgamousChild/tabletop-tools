@@ -26,11 +26,18 @@ export async function fetchAndProcessBSData(
   previousCommitSha?: string,
   repo = DEFAULT_REPO,
   branch = DEFAULT_BRANCH,
+  githubToken?: string,
 ): Promise<BSDataResult> {
+  const ghHeaders: Record<string, string> = {
+    'Accept': 'application/vnd.github.v3+json',
+    'User-Agent': 'tabletop-tools',
+  }
+  if (githubToken) ghHeaders['Authorization'] = `token ${githubToken}`
+
   // Get latest commit SHA
   const commitResp = await fetch(
     `https://api.github.com/repos/${repo}/commits/${branch}`,
-    { headers: { 'Accept': 'application/vnd.github.v3+json', 'User-Agent': 'tabletop-tools' } },
+    { headers: ghHeaders },
   )
   if (!commitResp.ok) throw new Error(`GitHub commit API: HTTP ${commitResp.status}`)
   const commitData = await commitResp.json() as { sha: string }
@@ -43,7 +50,7 @@ export async function fetchAndProcessBSData(
   // Get file tree
   const treeResp = await fetch(
     `https://api.github.com/repos/${repo}/git/trees/${commitSha}?recursive=1`,
-    { headers: { 'Accept': 'application/vnd.github.v3+json', 'User-Agent': 'tabletop-tools' } },
+    { headers: ghHeaders },
   )
   if (!treeResp.ok) throw new Error(`GitHub tree API: HTTP ${treeResp.status}`)
   const treeData = await treeResp.json() as { tree: GitHubTreeItem[] }
