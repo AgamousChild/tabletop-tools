@@ -25,7 +25,7 @@ async function writeDataFile(bucket: R2Bucket, filename: string, data: unknown):
   await bucket.put(`data/${filename}`, JSON.stringify(data))
 }
 
-export async function runSync(bucket: R2Bucket): Promise<SyncResult> {
+export async function runSync(bucket: R2Bucket, githubToken?: string): Promise<SyncResult> {
   const errors: string[] = []
   const skipped: string[] = []
   const existing = await readManifest(bucket)
@@ -56,7 +56,7 @@ export async function runSync(bucket: R2Bucket): Promise<SyncResult> {
   let bsdataUnits: Array<{ id: string; name: string; faction: string }> = []
   let bsdataMeta: Manifest['bsdata'] = existing?.bsdata
   try {
-    const result = await fetchAndProcessBSData(existing?.bsdata?.commitSha)
+    const result = await fetchAndProcessBSData(existing?.bsdata?.commitSha, undefined, undefined, githubToken)
     if (result.skipped) {
       skipped.push('bsdata (unchanged)')
     } else {

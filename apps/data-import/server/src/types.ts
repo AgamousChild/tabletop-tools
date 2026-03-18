@@ -2,6 +2,7 @@ export interface Env {
   GAME_DATA_BUCKET: R2Bucket
   SYNC_SECRET?: string
   CORS_ORIGIN?: string
+  GITHUB_TOKEN?: string
 }
 
 export interface Manifest {
