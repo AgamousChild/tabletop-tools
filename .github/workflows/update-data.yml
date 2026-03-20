@@ -16,6 +16,11 @@ on:
     # Weekly on Sunday at midnight UTC (backup — Worker cron runs Monday 3am)
     - cron: '0 0 * * 0'
   workflow_dispatch:
+    inputs:
+      force:
+        description: 'Force re-fetch all sources (ignore cache)'
+        type: boolean
+        default: false
 
 env:
   SYNC_URL: https://tabletop-tools-data-import.micah-ec2.workers.dev/sync
@@ -31,9 +36,11 @@ jobs:
           SYNC_SECRET: ${{ secrets.SYNC_SECRET }}
         run: |
           echo "Triggering sync at $SYNC_URL"
+          FORCE="${{ inputs.force || 'false' }}"
           RESPONSE=$(curl -sf -X POST "$SYNC_URL" \
             -H "Authorization: Bearer ${SYNC_SECRET}" \
             -H "Content-Type: application/json" \
+            -d "{\"force\": $FORCE}" \
             -w "\n%{http_code}" \
             --max-time 300)
           HTTP_CODE=$(echo "$RESPONSE" | tail -1)
