@@ -14,7 +14,7 @@ bash build.sh
 echo ""
 echo "=== Step 2: Deploy to Cloudflare Pages ==="
 cd "$GATEWAY_DIR"
-wrangler pages deploy dist --project-name tabletop-tools
+wrangler pages deploy dist --project-name tabletop-tools --branch main
 
 echo ""
 echo "=== Done ==="
