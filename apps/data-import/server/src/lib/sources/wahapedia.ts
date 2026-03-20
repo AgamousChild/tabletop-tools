@@ -240,7 +240,7 @@ export async function fetchAndProcessWahapedia(
   // datasheet_wargear (weapon profiles)
   data['datasheet_wargear'] = convertDescriptions(
     (csvData['Datasheets_wargear'] ?? []).map(r => ({
-      id: r['id'] ?? '',
+      id: `${r['datasheet_id'] ?? ''}-${r['line'] ?? '0'}-${r['line_in_wargear'] ?? '0'}`,
       datasheetId: r['datasheet_id'] ?? '',
       name: r['name'] ?? '',
       description: r['description'] ?? '',
@@ -256,7 +256,7 @@ export async function fetchAndProcessWahapedia(
 
   // datasheet_models (model stat lines)
   data['datasheet_models'] = (csvData['Datasheets_models'] ?? []).map(r => ({
-    id: r['id'] ?? '',
+    id: `${r['datasheet_id'] ?? ''}-${r['line'] ?? '0'}`,
     datasheetId: r['datasheet_id'] ?? '',
     name: r['name'] ?? '',
     move: r['M'] ?? '',
@@ -272,19 +272,19 @@ export async function fetchAndProcessWahapedia(
 
   // Junction tables
   data['datasheet_stratagems'] = (csvData['Datasheets_stratagems'] ?? []).map(r => ({
-    id: r['id'] ?? '',
+    id: `${r['datasheet_id'] ?? ''}-${r['stratagem_id'] ?? ''}`,
     datasheetId: r['datasheet_id'] ?? '',
     stratagemId: r['stratagem_id'] ?? '',
   }))
 
   data['datasheet_enhancements'] = (csvData['Datasheets_enhancements'] ?? []).map(r => ({
-    id: r['id'] ?? '',
+    id: `${r['datasheet_id'] ?? ''}-${r['enhancement_id'] ?? ''}`,
     datasheetId: r['datasheet_id'] ?? '',
     enhancementId: r['enhancement_id'] ?? '',
   }))
 
   data['datasheet_detachment_abilities'] = (csvData['Datasheets_detachment_abilities'] ?? []).map(r => ({
-    id: r['id'] ?? '',
+    id: `${r['datasheet_id'] ?? ''}-${r['detachment_ability_id'] ?? ''}`,
     datasheetId: r['datasheet_id'] ?? '',
     detachmentAbilityId: r['detachment_ability_id'] ?? '',
   }))

@@ -44,7 +44,12 @@ app.post('/sync', async (c) => {
     }
   }
 
-  const result = await runSync(c.env.GAME_DATA_BUCKET, c.env.GITHUB_TOKEN)
+  let force = false
+  try {
+    const body = await c.req.json<{ force?: boolean }>()
+    force = body.force === true
+  } catch { /* no body or not JSON — that's fine */ }
+  const result = await runSync(c.env.GAME_DATA_BUCKET, c.env.GITHUB_TOKEN, force)
   return c.json(result)
 })
 
