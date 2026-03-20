@@ -47,6 +47,9 @@ export function parseBSDataXml(xml: string, faction: string): ParseResult {
     const name = extractAttr(entry.attrs, 'name')
     if (!id || !name) continue
 
+    // Skip Crucible (narrative/Crusade) entries — not playable units
+    if (name.includes('[Crucible]')) continue
+
     try {
       // Enrich the body by resolving <infoLink> and <entryLink> references
       const enrichedBody = enrichBody(entry.fullBody, profileMap, entryMap, selectionEntryGroupMap, infoGroupMap)
@@ -476,6 +479,7 @@ function parseUnitEntry(
   if (invulnSave !== undefined) unit.invulnSave = invulnSave
   if (fnp !== undefined) unit.fnp = fnp
   if (Object.keys(abilityDescriptions).length > 0) unit.abilityDescriptions = abilityDescriptions
+  if (name.includes('[Legends]')) unit.isLegends = true
 
   return unit
 }
