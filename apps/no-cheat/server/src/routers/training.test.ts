@@ -42,6 +42,13 @@ beforeAll(async () => {
       features TEXT NOT NULL, image_url TEXT, is_correct INTEGER,
       created_at INTEGER NOT NULL
     );
+    CREATE TABLE IF NOT EXISTS training_frames (
+      id TEXT PRIMARY KEY, user_id TEXT NOT NULL REFERENCES "user"(id),
+      dice_set_id TEXT NOT NULL REFERENCES dice_sets(id),
+      image_url TEXT NOT NULL, frame_width INTEGER NOT NULL,
+      frame_height INTEGER NOT NULL, boxes_json TEXT NOT NULL,
+      created_at INTEGER NOT NULL
+    );
     INSERT INTO "user" (id, name, email, email_verified, created_at, updated_at)
     VALUES ('user-1', 'Alice', 'alice@example.com', 0, 0, 0);
     INSERT INTO "user" (id, name, email, email_verified, created_at, updated_at)
@@ -63,6 +70,8 @@ const anon = { user: null, req, db, storage: mockStorage }
 
 // Fake base64 for a tiny grayscale image
 const fakeImageBase64 = Buffer.from(new Uint8Array(64 * 64).fill(128)).toString('base64')
+// Fake base64 for a full-frame image (small for tests)
+const fakeFrameBase64 = Buffer.from(new Uint8Array(100 * 100 * 4).fill(200)).toString('base64')
 const fakeFeatures = [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6]
 
 describe('training.saveExamples', () => {
@@ -195,5 +204,122 @@ describe('training.delete', () => {
     await expect(
       bobCaller.training.delete({ id: aliceList.examples[0]!.id }),
     ).rejects.toMatchObject({ code: 'FORBIDDEN' })
+  })
+})
+
+// --- Full-frame training data for YOLO ---
+
+describe('training.saveFrame', () => {
+  it('saves a full-frame with bounding boxes', async () => {
+    const caller = createCaller(alice)
+    const result = await caller.training.saveFrame({
+      diceSetId: 'set-1',
+      imageBase64: fakeFrameBase64,
+      frameWidth: 640,
+      frameHeight: 480,
+      boxes: [
+        { x: 0.2, y: 0.3, w: 0.1, h: 0.1, label: 4 },
+        { x: 0.6, y: 0.5, w: 0.12, h: 0.12, label: 2 },
+      ],
+    })
+    expect(result.id).toBeDefined()
+    expect(result.imageUrl).toBeDefined()
+    expect(mockStorage.upload).toHaveBeenCalled()
+  })
+
+  it('rejects if dice set belongs to another user', async () => {
+    const caller = createCaller(bob)
+    await expect(
+      caller.training.saveFrame({
+        diceSetId: 'set-1',
+        imageBase64: fakeFrameBase64,
+        frameWidth: 640,
+        frameHeight: 480,
+        boxes: [{ x: 0.5, y: 0.5, w: 0.1, h: 0.1, label: 3 }],
+      }),
+    ).rejects.toMatchObject({ code: 'FORBIDDEN' })
+  })
+
+  it('rejects unauthenticated callers', async () => {
+    const caller = createCaller(anon)
+    await expect(
+      caller.training.saveFrame({
+        diceSetId: 'set-1',
+        imageBase64: fakeFrameBase64,
+        frameWidth: 640,
+        frameHeight: 480,
+        boxes: [{ x: 0.5, y: 0.5, w: 0.1, h: 0.1, label: 1 }],
+      }),
+    ).rejects.toMatchObject({ code: 'UNAUTHORIZED' })
+  })
+})
+
+describe('training.listFrames', () => {
+  it('returns frames for authenticated user', async () => {
+    const caller = createCaller(alice)
+    const result = await caller.training.listFrames({ diceSetId: 'set-1' })
+    expect(result.frames.length).toBeGreaterThanOrEqual(1)
+    expect(result.frames[0]?.boxes).toBeInstanceOf(Array)
+    expect(result.frames[0]?.frameWidth).toBe(640)
+  })
+
+  it('filters by dice set', async () => {
+    const caller = createCaller(alice)
+    const result = await caller.training.listFrames({ diceSetId: 'nonexistent' })
+    expect(result.frames).toHaveLength(0)
+  })
+
+  it('supports pagination', async () => {
+    const caller = createCaller(alice)
+    const page1 = await caller.training.listFrames({ limit: 1, offset: 0 })
+    expect(page1.frames).toHaveLength(1)
+  })
+})
+
+describe('training.exportDataset', () => {
+  it('returns YOLO-format dataset', async () => {
+    const caller = createCaller(alice)
+    const result = await caller.training.exportDataset({ diceSetId: 'set-1' })
+    expect(result.totalFrames).toBeGreaterThanOrEqual(1)
+    expect(result.classNames).toEqual({ 0: '1', 1: '2', 2: '3', 3: '4', 4: '5', 5: '6' })
+    expect(result.dataset[0]?.imageUrl).toBeDefined()
+    // Box labels should be 0-indexed (pip 4 → class 3)
+    const firstBox = result.dataset[0]?.boxes[0]
+    expect(firstBox?.classId).toBe(3) // pip 4 → class 3
+  })
+})
+
+describe('training.deleteFrame', () => {
+  it('deletes own frame', async () => {
+    const caller = createCaller(alice)
+    const list = await caller.training.listFrames({ diceSetId: 'set-1' })
+    const frameId = list.frames[0]!.id
+    await caller.training.deleteFrame({ id: frameId })
+    const after = await caller.training.listFrames({ diceSetId: 'set-1' })
+    expect(after.frames.find((f) => f.id === frameId)).toBeUndefined()
+  })
+
+  it('rejects deleting another user\'s frame', async () => {
+    // Bob saves a frame to his own set
+    const bobCaller = createCaller(bob)
+    const saved = await bobCaller.training.saveFrame({
+      diceSetId: 'set-2',
+      imageBase64: fakeFrameBase64,
+      frameWidth: 320,
+      frameHeight: 240,
+      boxes: [{ x: 0.5, y: 0.5, w: 0.2, h: 0.2, label: 6 }],
+    })
+
+    const aliceCaller = createCaller(alice)
+    await expect(
+      aliceCaller.training.deleteFrame({ id: saved.id }),
+    ).rejects.toMatchObject({ code: 'FORBIDDEN' })
+  })
+
+  it('returns NOT_FOUND for nonexistent frame', async () => {
+    const caller = createCaller(alice)
+    await expect(
+      caller.training.deleteFrame({ id: 'nonexistent' }),
+    ).rejects.toMatchObject({ code: 'NOT_FOUND' })
   })
 })

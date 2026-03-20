@@ -21,6 +21,7 @@ import {
   rounds,
   simulations,
   trainingExamples,
+  trainingFrames,
   stratagemLog,
   tournamentAwards,
   tournamentCards,
@@ -127,6 +128,17 @@ beforeAll(async () => {
     features TEXT NOT NULL,
     image_url TEXT,
     is_correct INTEGER,
+    created_at INTEGER NOT NULL
+  )`)
+
+  await client.execute(`CREATE TABLE training_frames (
+    id TEXT PRIMARY KEY,
+    user_id TEXT NOT NULL REFERENCES "user"(id) ON DELETE CASCADE,
+    dice_set_id TEXT NOT NULL REFERENCES dice_sets(id) ON DELETE CASCADE,
+    image_url TEXT NOT NULL,
+    frame_width INTEGER NOT NULL,
+    frame_height INTEGER NOT NULL,
+    boxes_json TEXT NOT NULL,
     created_at INTEGER NOT NULL
   )`)
 
@@ -636,6 +648,41 @@ describe('trainingExamples', () => {
   it('cascades delete when dice set is deleted', async () => {
     await db.delete(diceSets).where(eq(diceSets.id, 'ds-train'))
     const result = await db.select().from(trainingExamples).where(eq(trainingExamples.id, 'train-1'))
+    expect(result).toHaveLength(0)
+  })
+})
+
+describe('trainingFrames', () => {
+  it('inserts and retrieves a training frame', async () => {
+    await db.insert(diceSets).values({
+      id: 'ds-frame',
+      userId: 'user-1',
+      name: 'Frame Dice',
+      createdAt: Date.now(),
+    })
+
+    const boxes = [{ x: 0.2, y: 0.3, w: 0.1, h: 0.1, label: 4 }]
+    await db.insert(trainingFrames).values({
+      id: 'frame-1',
+      userId: 'user-1',
+      diceSetId: 'ds-frame',
+      imageUrl: 'https://cdn.example.com/frames/frame-1.png',
+      frameWidth: 640,
+      frameHeight: 480,
+      boxesJson: JSON.stringify(boxes),
+      createdAt: Date.now(),
+    })
+
+    const result = await db.select().from(trainingFrames).where(eq(trainingFrames.id, 'frame-1'))
+    expect(result).toHaveLength(1)
+    expect(result[0]?.frameWidth).toBe(640)
+    expect(result[0]?.frameHeight).toBe(480)
+    expect(JSON.parse(result[0]?.boxesJson ?? '[]')).toEqual(boxes)
+  })
+
+  it('cascades delete when dice set is deleted', async () => {
+    await db.delete(diceSets).where(eq(diceSets.id, 'ds-frame'))
+    const result = await db.select().from(trainingFrames).where(eq(trainingFrames.id, 'frame-1'))
     expect(result).toHaveLength(0)
   })
 })
