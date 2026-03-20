@@ -125,6 +125,24 @@ export const trainingExamples = sqliteTable('training_examples', {
   index('idx_training_examples_label').on(table.label),
 ])
 
+export const trainingFrames = sqliteTable('training_frames', {
+  id: text('id').primaryKey(),
+  userId: text('user_id')
+    .notNull()
+    .references(() => authUsers.id, { onDelete: 'cascade' }),
+  diceSetId: text('dice_set_id')
+    .notNull()
+    .references(() => diceSets.id, { onDelete: 'cascade' }),
+  imageUrl: text('image_url').notNull(),
+  frameWidth: integer('frame_width').notNull(),
+  frameHeight: integer('frame_height').notNull(),
+  boxesJson: text('boxes_json').notNull(), // JSON: [{x, y, w, h, label}] normalized 0-1
+  createdAt: integer('created_at').notNull(),
+}, (table) => [
+  index('idx_training_frames_user_id').on(table.userId),
+  index('idx_training_frames_dice_set_id').on(table.diceSetId),
+])
+
 // === Versus tables ===
 //
 // IMPORTANT: No foreign keys into game content.

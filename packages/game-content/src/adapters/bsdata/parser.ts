@@ -1,7 +1,7 @@
 import type { UnitProfile, WeaponAbility, WeaponProfile } from '../../types.js'
 
 /** Bump when parser output changes in a way that invalidates previously-imported data. */
-export const PARSER_VERSION = 7
+export const PARSER_VERSION = 8
 
 // ============================================================
 // BSData XML → UnitProfile parser
@@ -30,6 +30,8 @@ export function parseBSDataXml(xml: string, faction: string): ParseResult {
   // defined elsewhere in the file (e.g. in <sharedProfiles> or <sharedSelectionEntries>).
   const profileMap = buildProfileMap(xml)
   const entryMap = buildEntryMap(xml)
+  const selectionEntryGroupMap = buildSelectionEntryGroupMap(xml)
+  const infoGroupMap = buildInfoGroupMap(xml)
 
   // Stack-based extraction of <selectionEntry> to handle nested entries correctly.
   // The regex approach fails when <selectionEntry> elements are nested (the non-greedy
@@ -37,6 +39,9 @@ export function parseBSDataXml(xml: string, faction: string): ParseResult {
   for (const entry of extractSelectionEntries(xml)) {
     const type = extractAttr(entry.attrs, 'type')
     if (type !== 'unit' && type !== 'model') continue
+    // Skip shared sub-models — these are components referenced by units via entryLink,
+    // not standalone units. Keep type="unit" from shared sections (legitimate reusable units).
+    if (type === 'model' && entry.isShared) continue
 
     const id = extractAttr(entry.attrs, 'id')
     const name = extractAttr(entry.attrs, 'name')
@@ -44,7 +49,7 @@ export function parseBSDataXml(xml: string, faction: string): ParseResult {
 
     try {
       // Enrich the body by resolving <infoLink> and <entryLink> references
-      const enrichedBody = enrichBody(entry.fullBody, profileMap, entryMap)
+      const enrichedBody = enrichBody(entry.fullBody, profileMap, entryMap, selectionEntryGroupMap, infoGroupMap)
       const enrichedStripped = stripNestedSelectionEntries(enrichedBody)
       const unit = parseUnitEntry(id, name, faction, enrichedStripped, enrichedBody)
       // Validate parsed data and add warnings for suspicious values
@@ -146,25 +151,108 @@ function buildEntryMap(xml: string): Map<string, string> {
 }
 
 /**
- * Enrich a unit's body by resolving <infoLink> and <entryLink> references.
- * Appends resolved profile/entry content so that extractCharacteristics and
+ * Build a map of all <selectionEntryGroup> bodies by ID from the full XML.
+ * Uses stack-based matching to correctly handle nesting.
+ * Maps group ID → inner body content (between open/close tags).
+ */
+function buildSelectionEntryGroupMap(xml: string): Map<string, string> {
+  const map = new Map<string, string>()
+  const openTag = /<selectionEntryGroup\b([^>]*)>/g
+  const closeTag = /<\/selectionEntryGroup>/g
+
+  type TagPos = { type: 'open'; index: number; end: number; attrs: string } | { type: 'close'; index: number; end: number }
+  const tags: TagPos[] = []
+
+  let m: RegExpExecArray | null
+  while ((m = openTag.exec(xml)) !== null) {
+    const fullMatch = xml.slice(m.index, m.index + m[0].length + 1)
+    if (fullMatch.endsWith('/>')) continue
+    tags.push({ type: 'open', index: m.index, end: m.index + m[0].length, attrs: m[1] ?? '' })
+  }
+  while ((m = closeTag.exec(xml)) !== null) {
+    tags.push({ type: 'close', index: m.index, end: m.index + m[0].length })
+  }
+
+  tags.sort((a, b) => a.index - b.index)
+
+  const stack: Array<{ attrs: string; bodyStart: number }> = []
+  for (const tag of tags) {
+    if (tag.type === 'open') {
+      stack.push({ attrs: tag.attrs, bodyStart: tag.end })
+    } else if (tag.type === 'close' && stack.length > 0) {
+      const entry = stack.pop()!
+      const id = extractAttr(entry.attrs, 'id')
+      if (id && !map.has(id)) {
+        map.set(id, xml.slice(entry.bodyStart, tag.index))
+      }
+    }
+  }
+
+  return map
+}
+
+/**
+ * Build a map of all <infoGroup> bodies by ID from the full XML.
+ * Maps group ID → inner content (between open/close tags).
+ */
+function buildInfoGroupMap(xml: string): Map<string, string> {
+  const map = new Map<string, string>()
+  const openTag = /<infoGroup\b([^>]*)>/g
+  const closeTag = /<\/infoGroup>/g
+
+  type TagPos = { type: 'open'; index: number; end: number; attrs: string } | { type: 'close'; index: number; end: number }
+  const tags: TagPos[] = []
+
+  let m: RegExpExecArray | null
+  while ((m = openTag.exec(xml)) !== null) {
+    const fullMatch = xml.slice(m.index, m.index + m[0].length + 1)
+    if (fullMatch.endsWith('/>')) continue
+    tags.push({ type: 'open', index: m.index, end: m.index + m[0].length, attrs: m[1] ?? '' })
+  }
+  while ((m = closeTag.exec(xml)) !== null) {
+    tags.push({ type: 'close', index: m.index, end: m.index + m[0].length })
+  }
+
+  tags.sort((a, b) => a.index - b.index)
+
+  const stack: Array<{ attrs: string; bodyStart: number }> = []
+  for (const tag of tags) {
+    if (tag.type === 'open') {
+      stack.push({ attrs: tag.attrs, bodyStart: tag.end })
+    } else if (tag.type === 'close' && stack.length > 0) {
+      const entry = stack.pop()!
+      const id = extractAttr(entry.attrs, 'id')
+      if (id && !map.has(id)) {
+        map.set(id, xml.slice(entry.bodyStart, tag.index))
+      }
+    }
+  }
+
+  return map
+}
+
+/**
+ * Enrich a unit's body by resolving <infoLink>, <entryLink>, and group references.
+ * Appends resolved profile/entry/group content so that extractCharacteristics and
  * extractWeapons can find stats and weapons from shared definitions.
  */
 function enrichBody(
   body: string,
   profileMap: Map<string, string>,
   entryMap: Map<string, string>,
+  selectionEntryGroupMap: Map<string, string>,
+  infoGroupMap: Map<string, string>,
   depth = 0,
 ): string {
-  if (depth > 3) return body // prevent infinite recursion
+  if (depth > 5) return body // prevent infinite recursion
 
   const resolved = new Set<string>() // track resolved IDs to avoid cycles
   let extra = ''
 
   // Resolve <infoLink type="profile" targetId="X"> → inject the profile XML
-  const infoLinkPattern = /<infoLink\b[^>]*type="profile"[^>]*>/gi
+  const infoLinkProfilePattern = /<infoLink\b[^>]*type="profile"[^>]*>/gi
   let m: RegExpExecArray | null
-  while ((m = infoLinkPattern.exec(body)) !== null) {
+  while ((m = infoLinkProfilePattern.exec(body)) !== null) {
     const targetId = extractAttr(m[0], 'targetId')
     if (targetId && !resolved.has(targetId)) {
       resolved.add(targetId)
@@ -175,16 +263,32 @@ function enrichBody(
     }
   }
 
-  // Resolve <entryLink ... targetId="X"> → inject the target entry's body
+  // Resolve <infoLink type="infoGroup" targetId="X"> → inject the infoGroup content
+  const infoLinkGroupPattern = /<infoLink\b[^>]*type="infoGroup"[^>]*>/gi
+  while ((m = infoLinkGroupPattern.exec(body)) !== null) {
+    const targetId = extractAttr(m[0], 'targetId')
+    if (targetId && !resolved.has(targetId)) {
+      resolved.add(targetId)
+      const groupContent = infoGroupMap.get(targetId)
+      if (groupContent) {
+        // Recursively enrich — infoGroups may contain <infoLink type="profile">
+        const enrichedGroup = enrichBody(groupContent, profileMap, entryMap, selectionEntryGroupMap, infoGroupMap, depth + 1)
+        extra += '\n' + enrichedGroup
+      }
+    }
+  }
+
+  // Resolve <entryLink ... targetId="X"> → inject the target entry's body or group body
   const entryLinkPattern = /<entryLink\b[^>]*>/gi
   while ((m = entryLinkPattern.exec(body)) !== null) {
     const targetId = extractAttr(m[0], 'targetId')
     if (targetId && !resolved.has(targetId)) {
       resolved.add(targetId)
-      const entryBody = entryMap.get(targetId)
+      // Check entryMap first, then selectionEntryGroupMap as fallback
+      const entryBody = entryMap.get(targetId) ?? selectionEntryGroupMap.get(targetId)
       if (entryBody) {
         // Recursively enrich the entry's body to resolve nested references
-        const enrichedEntry = enrichBody(entryBody, profileMap, entryMap, depth + 1)
+        const enrichedEntry = enrichBody(entryBody, profileMap, entryMap, selectionEntryGroupMap, infoGroupMap, depth + 1)
         extra += '\n' + enrichedEntry
       }
     }
@@ -194,14 +298,39 @@ function enrichBody(
 }
 
 /**
+ * Find all <sharedSelectionEntries> ranges in the XML.
+ * Returns an array of { start, end } positions.
+ */
+function findSharedSelectionEntryRanges(xml: string): Array<{ start: number; end: number }> {
+  const ranges: Array<{ start: number; end: number }> = []
+  const openTag = /<sharedSelectionEntries\b[^>]*>/gi
+  const closeTag = /<\/sharedSelectionEntries>/gi
+
+  const opens: number[] = []
+  const closes: number[] = []
+
+  let m: RegExpExecArray | null
+  while ((m = openTag.exec(xml)) !== null) opens.push(m.index)
+  while ((m = closeTag.exec(xml)) !== null) closes.push(m.index + m[0].length)
+
+  for (let i = 0; i < opens.length && i < closes.length; i++) {
+    ranges.push({ start: opens[i]!, end: closes[i]! })
+  }
+  return ranges
+}
+
+/**
  * Stack-based extraction of top-level <selectionEntry> elements from XML.
  * Nested entries (e.g. type="model" inside a type="unit") are excluded — only
  * entries pushed when the stack is empty (depth 0) are emitted.
  * Nested <selectionEntry> blocks are stripped from the body so that
  * extractWeapons() only finds the outer unit's own weapons.
+ *
+ * Returns `isShared` flag indicating whether the entry is within <sharedSelectionEntries>.
  */
-function extractSelectionEntries(xml: string): Array<{ attrs: string; body: string; fullBody: string }> {
-  const results: Array<{ attrs: string; body: string; fullBody: string }> = []
+function extractSelectionEntries(xml: string): Array<{ attrs: string; body: string; fullBody: string; isShared: boolean }> {
+  const results: Array<{ attrs: string; body: string; fullBody: string; isShared: boolean }> = []
+  const sharedRanges = findSharedSelectionEntryRanges(xml)
   const openTag = /<selectionEntry\b([^>]*)>/g
   const closeTag = /<\/selectionEntry>/g
 
@@ -225,19 +354,21 @@ function extractSelectionEntries(xml: string): Array<{ attrs: string; body: stri
 
   // Stack-based matching: pair each open tag with its matching close tag.
   // Only emit entries that were opened at depth 0 (stack empty before push).
-  const stack: Array<{ attrs: string; bodyStart: number; depth: number }> = []
+  const stack: Array<{ attrs: string; bodyStart: number; depth: number; position: number }> = []
   for (const tag of tags) {
     if (tag.type === 'open') {
       const depth = stack.length
-      stack.push({ attrs: tag.attrs, bodyStart: tag.end, depth })
+      stack.push({ attrs: tag.attrs, bodyStart: tag.end, depth, position: tag.index })
     } else if (tag.type === 'close' && stack.length > 0) {
       const entry = stack.pop()!
       if (entry.depth === 0) {
         const fullBody = xml.slice(entry.bodyStart, tag.index)
+        const isShared = sharedRanges.some(r => entry.position >= r.start && entry.position < r.end)
         results.push({
           attrs: entry.attrs,
           body: stripNestedSelectionEntries(fullBody),
           fullBody,
+          isShared,
         })
       }
     }
