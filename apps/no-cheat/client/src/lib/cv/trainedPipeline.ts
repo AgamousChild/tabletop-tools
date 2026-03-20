@@ -1,10 +1,15 @@
 /**
- * Trained pipeline — wraps the base CV pipeline with k-NN classification.
+ * Trained pipeline — wraps the base CV pipeline with k-NN classification
+ * and optional ML (YOLO) inference.
  *
- * For each ROI detected by the base pipeline, extracts features from the
- * grayscale sub-image and classifies via k-NN against stored training examples.
- * When k-NN confidence is high enough, the k-NN label overrides the base
- * pipeline's detectPips result.
+ * Detection layers (highest priority first):
+ * 1. ML pipeline (YOLO) — if loaded, overrides pip counts with model predictions
+ * 2. k-NN classifier — if high confidence, overrides base pipeline
+ * 3. Base pipeline — blob detection fallback
+ *
+ * The ML pipeline runs async (doesn't block frame processing).
+ * Traditional pipeline runs every frame for responsive bounding boxes.
+ * ML results override pip counts when available.
  */
 
 import { createPipeline } from './pipeline'
@@ -13,10 +18,17 @@ import { extractFeatures } from './features'
 import { classifyKnn } from './knnClassifier'
 import type { TrainingExample } from './knnClassifier'
 import { rgbaToGray } from './background'
+import type { MlPipeline } from './mlPipeline'
 
 export interface TrainedPipeline extends Pipeline {
   setExamples(examples: TrainingExample[]): void
   setConfig(config: Partial<PipelineConfig>): void
+  /** Set an ML pipeline for YOLO-based detection. */
+  setMlPipeline(ml: MlPipeline | null): void
+  /** Last ML detection results (async, may be from previous frame). */
+  readonly mlResults: RoiResult[] | null
+  /** Whether ML pipeline is loaded and ready. */
+  readonly mlReady: boolean
 }
 
 const DEFAULT_CONFIDENCE_THRESHOLD = 0.6
@@ -56,6 +68,9 @@ export function createTrainedPipeline(
   const threshold = options?.confidenceThreshold ?? DEFAULT_CONFIDENCE_THRESHOLD
   const base = createPipeline(diceSetId, options?.pipelineConfig)
   let examples: TrainingExample[] = []
+  let mlPipeline: MlPipeline | null = null
+  let lastMlResults: RoiResult[] | null = null
+  let mlRunning = false
 
   function processFrame(
     rgba: Uint8ClampedArray,
@@ -63,6 +78,23 @@ export function createTrainedPipeline(
     height: number,
   ): RoiResult[] {
     const baseResults = base.processFrame(rgba, width, height)
+
+    // If ML pipeline is available, run it async (non-blocking)
+    if (mlPipeline?.ready && !mlRunning) {
+      mlRunning = true
+      mlPipeline.detect(rgba, width, height).then((results) => {
+        lastMlResults = results
+        mlRunning = false
+      }).catch(() => {
+        mlRunning = false
+      })
+    }
+
+    // If we have fresh ML results, use them instead of base pipeline
+    if (lastMlResults && lastMlResults.length > 0) {
+      return lastMlResults
+    }
+
     if (baseResults.length === 0 || examples.length === 0) {
       return baseResults
     }
@@ -88,6 +120,11 @@ export function createTrainedPipeline(
     examples = newExamples
   }
 
+  function setMlPipeline(ml: MlPipeline | null): void {
+    mlPipeline = ml
+    lastMlResults = null
+  }
+
   return {
     get state() {
       return base.state
@@ -95,9 +132,16 @@ export function createTrainedPipeline(
     get config() {
       return base.config
     },
+    get mlResults() {
+      return lastMlResults
+    },
+    get mlReady() {
+      return mlPipeline?.ready ?? false
+    },
     captureBackground: base.captureBackground,
     processFrame,
     setExamples,
     setConfig: base.setConfig,
+    setMlPipeline,
   }
 }

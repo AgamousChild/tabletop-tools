@@ -1,0 +1,15 @@
+{
+  "cookies": [
+    {
+      "name": "__Secure-better-auth.session_token",
+      "value": "JakoR1DOe36C9l1YbYjt9BgMriBbkbVx.X4%2BJ4oMR%2FtG75XtWaPcE%2FajfCUUd48TtRxckf4pYn18%3D",
+      "domain": "tabletop-tools.net",
+      "path": "/",
+      "expires": 1772844455.689465,
+      "httpOnly": true,
+      "secure": true,
+      "sameSite": "Lax"
+    }
+  ],
+  "origins": []
+}

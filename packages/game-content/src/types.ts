@@ -58,6 +58,7 @@ export interface UnitProfile {
   abilities: string[]  // free-text ability names; mapped to typed rules separately
   abilityDescriptions?: Record<string, string>  // ability name -> rule text
   points: number
+  isLegends?: boolean  // true if unit name contains [Legends]
 }
 
 // ============================================================
