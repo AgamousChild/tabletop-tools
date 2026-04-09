@@ -652,14 +652,11 @@ Source files: `C:\R\sync-data\tools\gw-sync\.local\gw\markdown\`
 
 ---
 
-## Open Questions (Remaining)
+## Scope Decisions
 
-1. **Combat Patrol rules**: Include as their own layer/category, or treat as a variant
-   game mode outside the brain's scope for now?
-
-2. **Crusade rules**: Same question — separate game mode with its own rules that interact
-   with core mechanics.
-
-3. **Munitorum Field Manual (points)**: Points values change frequently. Include as
-   balance-layer nodes, or keep them in game-data-store only since they're purely
-   structured data with no rules context?
+1. **Combat Patrol**: Out of scope. Separate game mode with its own datasheets and rules.
+2. **Crusade**: Out of scope. Narrative play mode — not relevant to competitive rules Q&A.
+3. **Munitorum Field Manual (points)**: Included as balance-layer nodes. Points change
+   with every dataslate update and are a frequent source of questions ("how much does X
+   cost now?"). Each faction's points table becomes a balance-layer node with `modifies`
+   refs to the affected datasheet nodes.
