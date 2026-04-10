@@ -212,29 +212,31 @@ app.post('/index-vectors', async (c) => {
     }
   }
 
+  // Accept optional ?file= param to index one file at a time
+  const targetFile = c.req.query('file')
+
   const manifestObj = await c.env.BRAIN_BUCKET.get('manifest.json')
   if (!manifestObj) {
     return c.json({ error: 'No manifest found - upload graph to R2 first' }, 404)
   }
 
   const manifest = await manifestObj.json() as { files: Record<string, string> }
-  const nodeFiles = Object.keys(manifest.files).filter(f => f.startsWith('nodes/'))
+  const allNodeFiles = Object.keys(manifest.files).filter(f => f.startsWith('nodes/'))
+  const nodeFiles = targetFile ? [targetFile] : allNodeFiles
 
   let indexed = 0
   let errors = 0
-  const BATCH_SIZE = 100 // Vectorize upsert limit
+  const BATCH_SIZE = 50 // Keep batches small for Workers CPU limits
 
   for (const file of nodeFiles) {
     const obj = await c.env.BRAIN_BUCKET.get(file)
     if (!obj) continue
     const nodes = await obj.json() as Node[]
 
-    // Process in batches
     for (let i = 0; i < nodes.length; i += BATCH_SIZE) {
       const batch = nodes.slice(i, i + BATCH_SIZE)
-
-      // Generate embeddings for the batch
       const texts = batch.map(n => `${n.title}. ${n.summary}`)
+
       try {
         const embResult = await c.env.AI.run('@cf/baai/bge-base-en-v1.5', {
           text: texts,
@@ -245,7 +247,7 @@ app.post('/index-vectors', async (c) => {
           values: embResult.data[idx]!,
           metadata: {
             title: node.title,
-            summary: node.summary.substring(0, 500), // Vectorize metadata limit
+            summary: node.summary.substring(0, 500),
             layer: node.layer,
             category: node.category,
             factionId: node.factionId ?? '',
@@ -265,6 +267,7 @@ app.post('/index-vectors', async (c) => {
     indexed,
     errors,
     totalFiles: nodeFiles.length,
+    allFiles: allNodeFiles, // return full list so caller can iterate
   })
 })
 
