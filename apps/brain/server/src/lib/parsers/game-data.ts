@@ -503,7 +503,41 @@ export function convertGameData(input: GameDataInput, retrievedAt?: string): Gam
     }
   }
 
-  // ── 7. Leader attachments → interacts_with refs ───────────────────────────
+  // ── 7. Weapon ability → core rule requires refs ────────────────────────────
+
+  const WEAPON_ABILITY_CORE_NODES: Array<{ pattern: string; coreSlug: string; label: string }> = [
+    { pattern: 'sustained hits', coreSlug: 'sustained-hits', label: 'Sustained Hits' },
+    { pattern: 'lethal hits', coreSlug: 'lethal-hits', label: 'Lethal Hits' },
+    { pattern: 'devastating wounds', coreSlug: 'devastating-wounds', label: 'Devastating Wounds' },
+    { pattern: 'hazardous', coreSlug: 'hazardous', label: 'Hazardous' },
+    { pattern: 'blast', coreSlug: 'blast', label: 'Blast' },
+    { pattern: 'torrent', coreSlug: 'torrent', label: 'Torrent' },
+    { pattern: 'twin-linked', coreSlug: 'twin-linked', label: 'Twin-linked' },
+    { pattern: 'rapid fire', coreSlug: 'rapid-fire', label: 'Rapid Fire' },
+    { pattern: 'pistol', coreSlug: 'pistol', label: 'Pistol' },
+    { pattern: 'melta', coreSlug: 'melta', label: 'Melta' },
+    { pattern: 'lance', coreSlug: 'lance', label: 'Lance' },
+    { pattern: 'anti-', coreSlug: 'anti', label: 'Anti' },
+    { pattern: 'ignores cover', coreSlug: 'ignores-cover', label: 'Ignores Cover' },
+    { pattern: 'indirect fire', coreSlug: 'indirect-fire', label: 'Indirect Fire' },
+  ]
+
+  for (const wg of input.datasheetWargear) {
+    const weaponNodeId = `weapon:${wg.datasheetId}:${slugify(wg.name)}`
+    const desc = (wg.description ?? '').toLowerCase()
+
+    for (const { pattern, coreSlug, label } of WEAPON_ABILITY_CORE_NODES) {
+      if (desc.includes(pattern)) {
+        refs.push({
+          targetId: `core:${coreSlug}`,
+          rel: 'requires',
+          context: `${wg.name} has the ${label} ability. See the core rules for how ${label} works.`,
+        })
+      }
+    }
+  }
+
+  // ── 8. Leader attachments → interacts_with refs ───────────────────────────
 
   for (const la of input.leaderAttachments) {
     refs.push({
