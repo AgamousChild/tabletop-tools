@@ -54,7 +54,7 @@ describe('convertGameData', () => {
     expect(ds!.layer).toBe('unit')
     expect(ds!.category).toBe('datasheet')
     expect(ds!.title).toBe('Intercessor Squad')
-    expect(ds!.factionId).toBe('SM')
+    expect(ds!.factionId).toBe('space-marines')
     expect(ds!.content).toContain('M6"')
     expect(ds!.content).toContain('Infantry')
     expect(ds!.keywords).toContain('infantry')
@@ -127,7 +127,7 @@ describe('convertGameData', () => {
     const armyRule = nodes.find(n => n.title === 'Oath of Moment' && n.layer === 'faction')
     expect(armyRule).toBeDefined()
     expect(armyRule!.category).toBe('faction-ability')
-    expect(armyRule!.factionId).toBe('SM')
+    expect(armyRule!.factionId).toBe('space-marines')
     expect(armyRule!.content).toContain('Command phase')
   })
 
@@ -162,7 +162,7 @@ describe('convertGameData', () => {
     const det = nodes.find(n => n.category === 'detachment-rule')
     expect(det).toBeDefined()
     expect(det!.title).toBe('Gladius Task Force')
-    expect(det!.id).toBe('det:SM:gladius-task-force')
+    expect(det!.id).toBe('det:space-marines:gladius-task-force')
 
     // Detachment ability
     const da = nodes.find(n => n.title === 'Combat Doctrines' && n.category === 'faction-ability')
@@ -283,7 +283,7 @@ describe('convertGameData', () => {
       r.rel === 'interacts_with' && r.targetId === 'core:sustained-hits'
     )
     expect(susRef).toBeDefined()
-    expect(susRef!.sourceId).toBe('det:SM:gladius:adaptive-strategy')
+    expect(susRef!.sourceId).toBe('det:space-marines:gladius:adaptive-strategy')
     expect(susRef!.context).toContain('Adaptive Strategy')
     expect(susRef!.context).toContain('Sustained Hits')
   })
@@ -306,7 +306,7 @@ describe('convertGameData', () => {
       r.rel === 'interacts_with' && r.targetId === 'core:lethal-hits'
     )
     expect(lhRef).toBeDefined()
-    expect(lhRef!.sourceId).toBe('det:SM:firestorm:close-range-eradication')
+    expect(lhRef!.sourceId).toBe('det:space-marines:firestorm:close-range-eradication')
   })
 
   it('handles empty input gracefully', () => {

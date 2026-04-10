@@ -2,19 +2,34 @@ import type { Node, NodeRef, Source } from '../model'
 import { slugify, balanceId } from '../slugify'
 import type { ParseResult } from './core-rules'
 
+function truncate(text: string, maxLen: number): string {
+  const clean = text.replace(/\n+/g, ' ').trim()
+  return clean.length > maxLen ? clean.substring(0, maxLen - 3) + '...' : clean
+}
+
 /**
  * Parse balance dataslate markdown into balance-change nodes.
- * Each faction section with actual changes becomes one or more nodes.
- * "No changes" factions are skipped.
+ *
+ * Structure from the new structured PDF parser:
+ * - ## = top-level (BALANCE DATASLATE, CONTENTS)
+ * - #### = faction headers (CORE RULES, ADEPTA SORORITAS, etc.)
+ * - ##### = individual changes (ARMY RULE, DETACHMENT entries, DATASHEETS, etc.)
  */
 export function parseBalanceDataslate(normalizedMarkdown: string, retrievedAt: string): ParseResult {
   const nodes: Node[] = []
   const refs: NodeRef[] = []
+  const seenIds = new Map<string, number>()
 
   const source: Source = {
     type: 'balance-dataslate',
     title: 'Balance Dataslate',
     retrievedAt,
+  }
+
+  function makeId(base: string): string {
+    const count = seenIds.get(base) ?? 0
+    seenIds.set(base, count + 1)
+    return count === 0 ? base : `${base}-${count}`
   }
 
   const lines = normalizedMarkdown.split('\n')
@@ -31,22 +46,28 @@ export function parseBalanceDataslate(normalizedMarkdown: string, retrievedAt: s
     currentBody = []
     if (!body) return
 
+    // Skip meta headings
+    const upper = title.toUpperCase()
+    if (upper.includes('VERSION') || upper.includes('PRODUCED BY') || upper === 'CONTENTS') return
+
     // Skip "no changes" entries
-    if (/no\s+changes?\s+at\s+this\s+time/i.test(body)) return
+    if (/no\s+(further\s+)?changes?\s+(at\s+this\s+time|to\s+this)/i.test(body)) return
+    if (body.length < 30 && /no\s+changes/i.test(body)) return
 
     const isCoreChange = !currentFaction || currentFaction.toUpperCase() === 'CORE RULES'
     const fSlug = isCoreChange ? undefined : currentFactionSlug
-    const nodeId = isCoreChange
+    const baseId = isCoreChange
       ? balanceId('core', title)
       : balanceId(fSlug!, title)
+    const nodeId = makeId(baseId)
 
     const node: Node = {
       id: nodeId,
       layer: 'balance',
       category: 'balance-change',
-      title,
+      title: isCoreChange ? title : `${currentFaction}: ${title}`,
       content: body,
-      summary: body.split(/[.!?]\s/)[0]?.trim()?.replace(/[.!?]?$/, '.') || title,
+      summary: truncate(body, 150),
       factionId: fSlug || undefined,
       sources: [source],
       refs: [],
@@ -63,7 +84,7 @@ export function parseBalanceDataslate(normalizedMarkdown: string, retrievedAt: s
         rel: 'modifies',
         context: `Balance dataslate change to ${title} for ${currentFaction}.`,
       })
-    } else if (isCoreChange) {
+    } else {
       refs.push({
         sourceId: nodeId,
         targetId: `core:${slugify(title)}`,
@@ -74,22 +95,32 @@ export function parseBalanceDataslate(normalizedMarkdown: string, retrievedAt: s
   }
 
   for (const line of lines) {
-    const h2 = line.match(/^##\s+(.+)$/)
-    const h3 = line.match(/^###\s+(.+)$/)
-
-    if (h2) {
+    // #### = faction header
+    const h4 = line.match(/^####\s+(.+)$/)
+    if (h4) {
       flushNode()
-      const heading = h2[1]!.trim()
+      const heading = h4[1]!.trim()
       currentFaction = heading
       currentFactionSlug = slugify(heading)
-      currentTitle = heading
+      currentTitle = ''
       currentBody = []
       continue
     }
 
-    if (h3) {
+    // ##### = individual change entry
+    const h5 = line.match(/^#{3,5}\s+(.+)$/)
+    if (h5 && !h4) {
       flushNode()
-      currentTitle = h3[1]!.trim()
+      currentTitle = h5[1]!.trim()
+      currentBody = []
+      continue
+    }
+
+    // ## = top-level section (skip)
+    const h2 = line.match(/^##\s+(.+)$/)
+    if (h2) {
+      flushNode()
+      currentTitle = ''
       currentBody = []
       continue
     }
