@@ -69,7 +69,27 @@ async function main() {
     errors.push(`Balance dataslate: ${err}`)
   }
 
-  // ── 4. Wahapedia/BSData Game Data ──────────────────────────────────────────
+  // ── 4. Faction Packs (errata/FAQ sections) ─────────────────────────────────
+  console.log('4. Faction Packs')
+  const mdFiles = readdirSync(MD_DIR).filter(f => f.startsWith('faction-pack-') && f.endsWith('.md'))
+  let fpNodes = 0, fpRefs = 0, fpErrors = 0
+  for (const file of mdFiles) {
+    const factionSlug = file.replace('faction-pack-', '').replace('.md', '')
+    try {
+      const raw = readFileSync(join(MD_DIR, file), 'utf-8')
+      const result = parseFactionPack(raw, factionSlug, RETRIEVED_AT)
+      allNodes.push(...result.nodes)
+      allRefs.push(...result.refs)
+      fpNodes += result.nodes.length
+      fpRefs += result.refs.length
+    } catch (err) {
+      fpErrors++
+      errors.push(`Faction ${factionSlug}: ${err}`)
+    }
+  }
+  console.log(`   ${mdFiles.length} faction packs → ${fpNodes} nodes, ${fpRefs} refs, ${fpErrors} errors`)
+
+  // ── 5. Wahapedia/BSData Game Data ──────────────────────────────────────────
   console.log('4. Wahapedia/BSData Game Data')
   const gameData: GameDataInput = {
     datasheets: loadJson('datasheets.json'),

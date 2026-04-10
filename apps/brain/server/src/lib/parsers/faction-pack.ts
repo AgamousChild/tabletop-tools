@@ -93,6 +93,16 @@ export function parseFactionPack(
 
     if (!body && sectionType !== 'detachment') return
 
+    // Errata and FAQ blocks need to be split into individual entries
+    if (sectionType === 'errata' && body) {
+      splitErrataBlock(body, factionSlug)
+      return
+    }
+    if (sectionType === 'faq' && body) {
+      splitFaqBlock(body, factionSlug)
+      return
+    }
+
     let category: Node['category']
     let phase: GamePhase | undefined
     let layer: Node['layer'] = 'faction'
@@ -108,14 +118,6 @@ export function parseFactionPack(
         break
       case 'enhancement':
         category = 'enhancement'
-        break
-      case 'faq':
-        category = 'faq'
-        layer = 'errata'
-        break
-      case 'errata':
-        category = 'commentary'
-        layer = 'errata'
         break
       default:
         category = 'faction-ability'
@@ -156,6 +158,76 @@ export function parseFactionPack(
         rel: 'part_of',
         context: `"${title}" belongs to the ${currentDetachment} detachment.`,
         bidirectional: true,
+      })
+    }
+  }
+
+  // Pre-process: split errata and FAQ blocks into individual entries.
+  // The PDF parser outputs these as one giant text block. We need to split
+  // errata on "Page NNN" boundaries and FAQs on "Q:" boundaries.
+  function splitErrataBlock(body: string, fSlug: string): void {
+    // Split on "Page NNN" or "Pages NNN" pattern
+    const entries = body.split(/(?=Pages?\s+\d+)/i).filter(s => s.trim())
+    for (const entry of entries) {
+      const pageMatch = entry.match(/Pages?\s+(\d+)/i)
+      const page = pageMatch ? parseInt(pageMatch[1]!, 10) : undefined
+      // Extract a title from the page ref
+      const titleMatch = entry.match(/Pages?\s+\d+(?:\s*,\s*\d+)*\s*[—–-]\s*([^,\n]+)/i)
+      const title = titleMatch ? titleMatch[1]!.trim() : `Page ${page ?? '?'} errata`
+
+      const id = makeId(`errata:${fSlug}:p${page ?? 0}:${slugify(title)}`)
+      const nodeSource: Source = { ...source, page }
+
+      nodes.push({
+        id,
+        layer: 'errata',
+        category: 'commentary',
+        title: `${fSlug}: ${title}`,
+        content: entry.trim(),
+        summary: truncate(entry, 150),
+        phase: undefined,
+        factionId: fSlug,
+        sources: [nodeSource],
+        refs: [],
+        version: 1,
+        keywords: extractKeywords(title, entry),
+      })
+
+      // Try to create a supersedes ref to the relevant Wahapedia node
+      // The title often names the unit or stratagem being changed
+      const targetSlug = slugify(title)
+      if (targetSlug) {
+        refs.push({
+          sourceId: id,
+          targetId: `det:${fSlug}:*:${targetSlug}`, // approximate — may not match exactly
+          rel: 'supersedes',
+          context: `Faction pack errata for ${title}. ${truncate(entry, 100)}`,
+        })
+      }
+    }
+  }
+
+  function splitFaqBlock(body: string, fSlug: string): void {
+    const entries = body.split(/(?=Q:\s)/i).filter(s => s.trim())
+    for (const entry of entries) {
+      const qMatch = entry.match(/Q:\s*(.+?)(?:\s*A:|$)/is)
+      const question = qMatch ? qMatch[1]!.trim() : entry.substring(0, 60)
+
+      const id = makeId(`faq:${fSlug}:${slugify(question.substring(0, 60))}`)
+
+      nodes.push({
+        id,
+        layer: 'errata',
+        category: 'faq',
+        title: question.length > 80 ? question.substring(0, 77) + '...' : question,
+        content: entry.trim(),
+        summary: truncate(entry, 150),
+        phase: undefined,
+        factionId: fSlug,
+        sources: [source],
+        refs: [],
+        version: 1,
+        keywords: extractKeywords(question, entry),
       })
     }
   }
@@ -213,7 +285,29 @@ export function parseFactionPack(
         continue
       }
 
+      // Legends datasheets section — exit errata/faq zone
+      if (upper.includes('LEGEND') || upper.includes('WA R HA M M E R')) {
+        inFaqZone = false
+        inErrataZone = false
+        sectionType = 'skip'
+        continue
+      }
+
       // Detect section zones from heading text
+      if (upper.includes('FAQ') || upper.includes('FREQUENTLY ASKED')) {
+        inFaqZone = true
+        inErrataZone = false
+        inEnhancementZone = false
+        sectionType = 'skip'
+        continue
+      }
+      if (upper.includes('ERRATA') || upper.includes('UPDATE')) {
+        inErrataZone = true
+        inFaqZone = false
+        inEnhancementZone = false
+        sectionType = 'skip'
+        continue
+      }
       if (upper === 'ENHANCEMENTS' || upper.startsWith('ENHANCEMENT')) {
         inEnhancementZone = true
         sectionType = 'skip'
@@ -286,9 +380,14 @@ export function parseFactionPack(
       inEnhancementZone = true
     }
 
-    // Accumulate body
+    // Accumulate body — if we're in a zone without a section title, create one
     if (sectionTitle) {
       sectionBody.push(line)
+    } else if ((inErrataZone || inFaqZone) && line.trim()) {
+      // Body text in errata/faq zone without a heading — accumulate directly
+      sectionTitle = inFaqZone ? 'FAQ entries' : 'Errata entries'
+      sectionType = inFaqZone ? 'faq' : 'errata'
+      sectionBody = [line]
     }
   }
   flushSection()
