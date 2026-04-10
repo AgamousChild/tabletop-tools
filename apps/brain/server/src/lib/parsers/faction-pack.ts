@@ -103,6 +103,7 @@ export function parseFactionPack(
     // Generate part_of ref to detachment
     if (currentDetachmentNodeId && id !== currentDetachmentNodeId) {
       refs.push({
+        sourceId: id,
         targetId: currentDetachmentNodeId,
         rel: 'part_of',
         context: `${title} belongs to the ${currentDetachment} detachment.`,

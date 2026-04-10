@@ -231,6 +231,7 @@ export function parseCoreRules(normalizedMarkdown: string, retrievedAt: string):
     if (parentStack.length > 0) {
       const parent = parentStack[parentStack.length - 1]!
       refs.push({
+        sourceId: id,
         targetId: parent.id,
         rel: 'part_of',
         context: `"${section.heading}" is a sub-topic within "${parent.heading}".`,
@@ -257,6 +258,7 @@ export function parseCoreRules(normalizedMarkdown: string, retrievedAt: string):
     const current = uniquePhases[i]!
     const next = uniquePhases[i + 1]!
     refs.push({
+      sourceId: current.id,
       targetId: next.id,
       rel: 'sequence_adjacent',
       context: `${current.heading} is followed by ${next.heading} in the battle round sequence.`,
