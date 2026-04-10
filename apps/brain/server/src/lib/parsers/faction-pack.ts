@@ -1,5 +1,5 @@
 import type { Node, NodeRef, Source, GamePhase } from '../model'
-import { slugify, factionId, detachmentId } from '../slugify'
+import { slugify } from '../slugify'
 import type { ParseResult } from './core-rules'
 
 /** Detect phase from stratagem WHEN clause. */
@@ -14,28 +14,36 @@ function detectPhaseFromWhen(whenText: string): GamePhase | undefined {
   return undefined
 }
 
-/** Convert faction slug to human-readable name for source attribution. */
 function factionDisplayName(factionSlug: string): string {
-  return factionSlug
-    .split('-')
-    .map(w => w.charAt(0).toUpperCase() + w.slice(1))
-    .join(' ')
+  return factionSlug.split('-').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ')
 }
 
-function extractFactionKeywords(title: string, content: string): string[] {
+function extractKeywords(title: string, content: string): string[] {
   const combined = `${title} ${content}`.toLowerCase()
   const terms = [
     'stratagem', 'enhancement', 'detachment', 'ability', 'aura',
     'shoot', 'fight', 'charge', 'movement', 'command',
     'wound', 'hit', 'save', 'damage', 'mortal',
     'feel no pain', 'invulnerable', 'leader', 'attached',
+    'sustained hits', 'lethal hits', 'devastating wounds',
+    'battle-shock', 'deep strike', 'overwatch',
   ]
   return terms.filter(t => combined.includes(t))
 }
 
+function truncate(text: string, maxLen: number): string {
+  const clean = text.replace(/\n+/g, ' ').trim()
+  return clean.length > maxLen ? clean.substring(0, maxLen - 3) + '...' : clean
+}
+
 /**
  * Parse a normalized faction pack into nodes and refs.
- * Detects detachment blocks, stratagems (WHEN/TARGET/EFFECT), and enhancements.
+ *
+ * Structure from the new structured PDF parser:
+ * - ## DETACHMENT_NAME       → detachment heading
+ * - ##### RULE_NAME          → individual rules, enhancements, detachment rules
+ * - *DET — TYPE STRATAGEM*   → stratagem label (italic line)
+ * - Body text with **WHEN:** **TARGET:** **EFFECT:** for stratagems
  */
 export function parseFactionPack(
   normalizedMarkdown: string,
@@ -44,6 +52,7 @@ export function parseFactionPack(
 ): ParseResult {
   const nodes: Node[] = []
   const refs: NodeRef[] = []
+  const seenIds = new Map<string, number>()
 
   const source: Source = {
     type: 'pdf',
@@ -51,118 +60,238 @@ export function parseFactionPack(
     retrievedAt,
   }
 
+  function makeId(base: string): string {
+    const count = seenIds.get(base) ?? 0
+    seenIds.set(base, count + 1)
+    return count === 0 ? base : `${base}-${count}`
+  }
+
   const lines = normalizedMarkdown.split('\n')
+
   let currentDetachment: string | null = null
-  let currentDetachmentSlug: string | null = null
-  let currentDetachmentNodeId: string | null = null
-  let inStratagems = false
-  let inEnhancements = false
-  let currentTitle = ''
-  let currentBody: string[] = []
+  let currentDetachmentId: string | null = null
 
-  function flushNode() {
-    if (!currentTitle) return
-    const title = currentTitle.trim()
-    const body = currentBody.join('\n').trim()
-    currentTitle = ''
-    currentBody = []
-    if (!body) return
+  // State machine: collect sections between headings
+  let sectionTitle = ''
+  let sectionBody: string[] = []
+  let sectionType: 'detachment' | 'rule' | 'stratagem' | 'enhancement' | 'faq' | 'errata' | 'skip' = 'skip'
+  let inEnhancementZone = false
+  let inFaqZone = false
+  let inErrataZone = false
 
-    let category: Node['category'] = 'detachment-rule'
-    let phase: GamePhase | undefined
-
-    if (inStratagems) {
-      category = 'stratagem'
-      const whenMatch = body.match(/\*\*WHEN:\*\*\s*([^\n]+)/i) || body.match(/WHEN:\s*([^\n]+)/i)
-      if (whenMatch) phase = detectPhaseFromWhen(whenMatch[1]!)
-    } else if (inEnhancements) {
-      category = 'enhancement'
+  function flushSection() {
+    if (!sectionTitle || sectionType === 'skip') {
+      sectionTitle = ''
+      sectionBody = []
+      return
     }
 
-    const id = currentDetachmentSlug
-      ? detachmentId(factionSlug, currentDetachmentSlug, title)
-      : factionId(factionSlug, title)
+    const title = sectionTitle.trim()
+    const body = sectionBody.join('\n').trim()
+    sectionTitle = ''
+    sectionBody = []
+
+    if (!body && sectionType !== 'detachment') return
+
+    let category: Node['category']
+    let phase: GamePhase | undefined
+    let layer: Node['layer'] = 'faction'
+
+    switch (sectionType) {
+      case 'detachment':
+        category = 'detachment-rule'
+        break
+      case 'stratagem':
+        category = 'stratagem'
+        const whenMatch = body.match(/\*\*WHEN:\*\*\s*([^\n]+)/i)
+        if (whenMatch) phase = detectPhaseFromWhen(whenMatch[1]!)
+        break
+      case 'enhancement':
+        category = 'enhancement'
+        break
+      case 'faq':
+        category = 'faq'
+        layer = 'errata'
+        break
+      case 'errata':
+        category = 'commentary'
+        layer = 'errata'
+        break
+      default:
+        category = 'faction-ability'
+        break
+    }
+
+    const baseId = currentDetachmentId
+      ? `${currentDetachmentId}:${slugify(title)}`
+      : `faction:${factionSlug}:${slugify(title)}`
+    const id = makeId(baseId)
+
+    const summary = body
+      ? truncate(body.split(/[.!?]\s/)[0] ?? title, 150)
+      : title
 
     const node: Node = {
       id,
-      layer: 'faction',
+      layer,
       category,
       title,
       content: body,
-      summary: body.split(/[.!?]\s/)[0]?.trim()?.replace(/[.!?]?$/, '.') || title,
+      summary,
       phase,
       factionId: factionSlug,
-      detachmentId: currentDetachmentSlug || undefined,
+      detachmentId: currentDetachment ? slugify(currentDetachment) : undefined,
       sources: [source],
       refs: [],
       version: 1,
-      keywords: extractFactionKeywords(title, body),
+      keywords: extractKeywords(title, body),
     }
     nodes.push(node)
 
-    // Generate part_of ref to detachment
-    if (currentDetachmentNodeId && id !== currentDetachmentNodeId) {
+    // part_of ref to detachment
+    if (currentDetachmentId && id !== currentDetachmentId) {
       refs.push({
         sourceId: id,
-        targetId: currentDetachmentNodeId,
+        targetId: currentDetachmentId,
         rel: 'part_of',
-        context: `${title} belongs to the ${currentDetachment} detachment.`,
+        context: `"${title}" belongs to the ${currentDetachment} detachment.`,
         bidirectional: true,
       })
     }
   }
 
-  for (const line of lines) {
-    const h2 = line.match(/^##\s+(.+)$/)
-    const h3 = line.match(/^###\s+(.+)$/)
-    const h4 = line.match(/^####\s+(.+)$/)
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i]!
 
+    // ## = detachment heading
+    const h2 = line.match(/^##\s+(.+)$/)
     if (h2) {
-      flushNode()
-      currentDetachment = h2[1]!.trim()
-      currentDetachmentSlug = slugify(currentDetachment)
-      currentDetachmentNodeId = factionId(factionSlug, currentDetachment)
-      inStratagems = false
-      inEnhancements = false
-      currentTitle = currentDetachment
-      currentBody = []
+      flushSection()
+      const heading = h2[1]!.trim()
+
+      // Detect special sections
+      const upper = heading.toUpperCase()
+      if (upper.includes('FAQ') || upper.includes('FREQUENTLY ASKED')) {
+        inFaqZone = true
+        inErrataZone = false
+        inEnhancementZone = false
+        sectionType = 'skip'
+        continue
+      }
+      if (upper.includes('ERRATA') || upper.includes('UPDATE')) {
+        inErrataZone = true
+        inFaqZone = false
+        inEnhancementZone = false
+        sectionType = 'skip'
+        continue
+      }
+
+      // Reset zones
+      inFaqZone = false
+      inErrataZone = false
+      inEnhancementZone = false
+
+      currentDetachment = heading
+      const detBaseId = `det:${factionSlug}:${slugify(heading)}`
+      currentDetachmentId = makeId(detBaseId)
+      sectionTitle = heading
+      sectionBody = []
+      sectionType = 'detachment'
       continue
     }
 
-    if (h3) {
-      flushNode()
-      const heading = h3[1]!.trim().toUpperCase()
-      if (heading === 'STRATAGEMS') {
-        inStratagems = true
-        inEnhancements = false
-        currentTitle = ''
-        currentBody = []
-      } else if (heading === 'ENHANCEMENTS') {
-        inEnhancements = true
-        inStratagems = false
-        currentTitle = ''
-        currentBody = []
+    // ##### = individual item (rule, enhancement, etc.)
+    const h5 = line.match(/^#{3,5}\s+(.+)$/)
+    if (h5) {
+      flushSection()
+      const heading = h5[1]!.trim()
+      const upper = heading.toUpperCase()
+
+      // Skip meta headings
+      if (upper.includes('FACTION PACK') || upper.includes('VERSION') || upper.includes("WHAT'S NEW")) {
+        sectionType = 'skip'
+        continue
+      }
+
+      // Detect section zones from heading text
+      if (upper === 'ENHANCEMENTS' || upper.startsWith('ENHANCEMENT')) {
+        inEnhancementZone = true
+        sectionType = 'skip'
+        continue
+      }
+      if (upper === 'DETACHMENT RULE' || upper === 'DETACHMENT RULES') {
+        sectionTitle = heading
+        sectionBody = []
+        sectionType = 'rule'
+        continue
+      }
+
+      sectionTitle = heading
+      sectionBody = []
+
+      if (inFaqZone) {
+        sectionType = 'faq'
+      } else if (inErrataZone) {
+        sectionType = 'errata'
+      } else if (inEnhancementZone) {
+        sectionType = 'enhancement'
       } else {
-        inStratagems = false
-        inEnhancements = false
-        currentTitle = h3[1]!.trim()
-        currentBody = []
+        // Could be an enhancement, ability, or other rule
+        sectionType = 'rule'
       }
       continue
     }
 
-    if (h4) {
-      flushNode()
-      currentTitle = h4[1]!.trim()
-      currentBody = []
+    // *DETACHMENT — TYPE STRATAGEM* = stratagem label
+    const stratagemLabel = line.match(/^\*(.+STRATAGEM.*)\*$/i)
+    if (stratagemLabel) {
+      flushSection()
+      // The stratagem title is usually in the body that follows (after the label)
+      // Look ahead for a title-like line
+      const labelText = stratagemLabel[1]!.trim()
+
+      // Collect the stratagem body until the next heading or label
+      sectionBody = [labelText]
+      sectionType = 'stratagem'
+
+      // Find the stratagem name from the body that follows
+      // Usually the next non-empty line after the label has the name + flavor text
+      let j = i + 1
+      const bodyLines: string[] = []
+      while (j < lines.length) {
+        const nextLine = lines[j]!
+        // Stop at next heading or stratagem label
+        if (/^#{2,5}\s/.test(nextLine) || /^\*.*STRATAGEM.*\*$/i.test(nextLine)) break
+        bodyLines.push(nextLine)
+        j++
+      }
+
+      const fullBody = bodyLines.join('\n').trim()
+      // Extract the name: first sentence or line before **WHEN:**
+      const nameMatch = fullBody.match(/^([^*\n]+?)(?:\s*\*\*WHEN|\.\s)/i)
+      const stratName = nameMatch
+        ? nameMatch[1]!.trim()
+        : labelText.replace(/\s*—\s*.*STRATAGEM.*/i, '').trim()
+
+      sectionTitle = stratName || labelText
+      sectionBody = [labelText, '', fullBody]
+
+      // Skip the lines we consumed
+      i = j - 1
       continue
     }
 
-    if (currentTitle) {
-      currentBody.push(line)
+    // Check for inline "ENHANCEMENTS" keyword in body text
+    if (/\bENHANCEMENTS\b/.test(line) && !line.startsWith('#')) {
+      inEnhancementZone = true
+    }
+
+    // Accumulate body
+    if (sectionTitle) {
+      sectionBody.push(line)
     }
   }
-  flushNode()
+  flushSection()
 
   return { nodes, refs }
 }
