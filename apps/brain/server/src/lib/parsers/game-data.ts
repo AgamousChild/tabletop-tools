@@ -504,6 +504,14 @@ export function convertGameData(input: GameDataInput, retrievedAt?: string): Gam
   }
 
   // ── 7. Weapon ability → core rule requires refs ────────────────────────────
+  //
+  // Weapon abilities (Sustained Hits, Lethal Hits, etc.) are properties of
+  // each unit's specific weapon records. The link chain is:
+  //   datasheet ←[part_of]— weapon —[requires]→ core mechanic
+  //
+  // Each weapon node already has a part_of ref to its datasheet (created in
+  // section 2). Here we add the requires ref from the weapon to the core
+  // rules node that defines the mechanic.
 
   const WEAPON_ABILITY_CORE_NODES: Array<{ pattern: string; coreSlug: string; label: string }> = [
     { pattern: 'sustained hits', coreSlug: 'sustained-hits', label: 'Sustained Hits' },
