@@ -223,6 +223,27 @@ describe('convertGameData', () => {
     expect(weapon!.keywords).toContain('melta')
   })
 
+  it('creates requires refs from weapon abilities to core rules nodes', () => {
+    const input = makeInput({
+      datasheets: [{
+        id: 'abc', name: 'Unit', factionId: 'SM', role: 'Infantry',
+        legend: '', transport: '', loadout: '', damagedW: '', damagedDescription: '',
+      }],
+      datasheetWargear: [{
+        id: 1, datasheetId: 'abc', name: 'Heavy Bolter',
+        description: 'heavy, sustained hits 1', range: '36"', type: 'Ranged',
+        attacks: '3', skill: '4+', strength: '5', ap: '-1', damage: '2',
+      }],
+    })
+
+    const { refs } = convertGameData(input, '2026-04-08')
+
+    const sustainedRef = refs.find(r => r.rel === 'requires' && r.targetId === 'core:sustained-hits')
+    expect(sustainedRef).toBeDefined()
+    expect(sustainedRef!.context).toContain('Sustained Hits')
+    expect(sustainedRef!.context).toContain('Heavy Bolter')
+  })
+
   it('handles empty input gracefully', () => {
     const { nodes, refs } = convertGameData(makeInput(), '2026-04-08')
     expect(nodes).toHaveLength(0)
