@@ -1,0 +1,21 @@
+name = "tabletop-tools-brain"
+main = "src/worker.ts"
+compatibility_date = "2024-09-23"
+
+[vars]
+CORS_ORIGIN = "https://tabletop-tools.net"
+
+[[r2_buckets]]
+binding = "BRAIN_BUCKET"
+bucket_name = "tabletop-tools-brain"
+
+[[vectorize]]
+binding = "BRAIN_INDEX"
+index_name = "brain-nodes"
+
+[ai]
+binding = "AI"
+
+# Secrets (set via wrangler secret put):
+# SYNC_SECRET - bearer token for manual sync trigger
+# ANTHROPIC_API_KEY - Claude API key for Q&A
