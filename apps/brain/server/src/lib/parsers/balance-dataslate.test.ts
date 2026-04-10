@@ -1,64 +1,86 @@
 import { describe, it, expect } from 'vitest'
 import { parseBalanceDataslate } from './balance-dataslate'
 
-const SAMPLE_BALANCE = `
-## CORE RULES
+const SAMPLE_DATASLATE = `
+## BALANCE DATASLATE
 
-Amend the Devastating Wounds ability as follows:
-Weapons with this ability that score a Critical Wound inflict mortal wounds.
+#### VERSION 3.4
 
-## AELDARI
+Welcome to the Balance Dataslate.
 
-### Fate Dice
+#### CORE RULES
 
-Change the Strands of Fate faction rule so that players generate Fate dice at the start of each battle round, not the Command phase.
+##### STRATAGEMS THAT ALLOW A CLOSER SET UP RANGE
 
-### Points Changes
+Some Stratagems allow units to be set up closer to enemy models than normal. Units set up using such Stratagems can be set up as close as 3" to enemy units.
 
-Wraithguard: Was 170 pts, now 180 pts.
-Wraithblades: Was 170 pts, now 175 pts.
+##### MODIFYING A STRATAGEM'S CP COST
 
-## SPACE MARINES
+When a rule modifies the CP cost of a Stratagem, the modified cost is the cost you pay.
 
-No changes at this time.
+#### ADEPTA SORORITAS
+
+##### ARMY RULE
+
+Miracle dice: Change the second bullet point to read as follows. Once per phase, instead of rolling a D6, you can use one or more Miracle dice.
+
+##### BRINGERS OF FLAME DETACHMENT
+
+Cleansing Flames Enhancement: Change to read: The bearer has the Torrent ability on all ranged weapons.
+
+#### ADEPTUS CUSTODES
+
+No further changes at this time.
+
+#### AELDARI
+
+##### ARMY RULE
+
+Strands of Fate: Change to read: At the start of each turn, roll 4 D6.
 `.trim()
 
 describe('parseBalanceDataslate', () => {
-  const result = parseBalanceDataslate(SAMPLE_BALANCE, '2026-04-08')
+  const result = parseBalanceDataslate(SAMPLE_DATASLATE, '2026-04-08')
 
-  it('creates balance-change nodes', () => {
-    const changes = result.nodes.filter(n => n.layer === 'balance')
-    expect(changes.length).toBeGreaterThanOrEqual(2)
+  it('creates balance-change nodes for core rules entries', () => {
+    const core = result.nodes.filter(n => !n.factionId)
+    expect(core.length).toBe(2)
   })
 
-  it('sets factionId on faction-specific nodes', () => {
-    const aeldari = result.nodes.find(n => n.factionId === 'aeldari')
-    expect(aeldari).toBeTruthy()
+  it('creates balance-change nodes for faction entries', () => {
+    const sororitas = result.nodes.filter(n => n.factionId === 'adepta-sororitas')
+    expect(sororitas.length).toBe(2)
   })
 
-  it('core changes have no factionId', () => {
-    const coreChange = result.nodes.find(n => n.title === 'CORE RULES')
-    expect(coreChange?.factionId).toBeUndefined()
+  it('skips factions with no changes', () => {
+    const custodes = result.nodes.filter(n => n.factionId === 'adeptus-custodes')
+    expect(custodes.length).toBe(0)
+  })
+
+  it('creates aeldari entry', () => {
+    const aeldari = result.nodes.filter(n => n.factionId === 'aeldari')
+    expect(aeldari.length).toBe(1)
+    expect(aeldari[0]!.content).toContain('Strands of Fate')
+  })
+
+  it('sets layer to balance on all nodes', () => {
+    for (const node of result.nodes) {
+      expect(node.layer).toBe('balance')
+    }
   })
 
   it('generates modifies refs', () => {
-    const modifies = result.refs.filter(r => r.rel === 'modifies')
-    expect(modifies.length).toBeGreaterThan(0)
+    const modRefs = result.refs.filter(r => r.rel === 'modifies')
+    expect(modRefs.length).toBeGreaterThan(0)
   })
 
-  it('skips "no changes" factions', () => {
-    const smNodes = result.nodes.filter(n => n.factionId === 'space-marines')
-    expect(smNodes.length).toBe(0)
+  it('skips version meta headings', () => {
+    const version = result.nodes.find(n => n.title.includes('VERSION'))
+    expect(version).toBeUndefined()
   })
 
   it('is idempotent', () => {
-    const result2 = parseBalanceDataslate(SAMPLE_BALANCE, '2026-04-08')
+    const result2 = parseBalanceDataslate(SAMPLE_DATASLATE, '2026-04-08')
     expect(result2.nodes.map(n => n.id)).toEqual(result.nodes.map(n => n.id))
-  })
-
-  it('sets version to 1 on all nodes', () => {
-    for (const node of result.nodes) {
-      expect(node.version).toBe(1)
-    }
   })
 })

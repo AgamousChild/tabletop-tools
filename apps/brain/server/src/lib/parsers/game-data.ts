@@ -181,6 +181,43 @@ export interface JunctionRecord {
   detachmentAbilityId?: string
 }
 
+// ── Faction ID Normalization ─────────────────────────────────────────────────
+
+/** Map Wahapedia short codes to kebab-case slugs matching faction pack filenames. */
+const FACTION_CODE_TO_SLUG: Record<string, string> = {
+  AS: 'adepta-sororitas',
+  AC: 'adeptus-custodes',
+  AdM: 'adeptus-mechanicus',
+  TL: 'adeptus-titanicus',
+  AE: 'aeldari',
+  AM: 'astra-militarum',
+  CD: 'chaos-daemons',
+  QT: 'chaos-knights',
+  CSM: 'chaos-space-marines',
+  DG: 'death-guard',
+  DRU: 'drukhari',
+  EC: 'emperors-children',
+  GC: 'genestealer-cults',
+  GK: 'grey-knights',
+  AoI: 'imperial-agents',
+  QI: 'imperial-knights',
+  LoV: 'leagues-of-votann',
+  NEC: 'necrons',
+  ORK: 'orks',
+  SM: 'space-marines',
+  TS: 'thousand-sons',
+  TYR: 'tyranids',
+  TAU: 't-au-empire',
+  UN: 'unaligned',
+  UA: 'unbound-adversaries',
+  WE: 'world-eaters',
+}
+
+/** Normalize a faction ID from Wahapedia short code to slug. */
+function normalizeFactionId(code: string): string {
+  return FACTION_CODE_TO_SLUG[code] ?? slugify(code)
+}
+
 // ── HTML Stripping ──────────────────────────────────────────────────────────
 
 /** Strip HTML tags and convert basic HTML to markdown. */
@@ -284,7 +321,7 @@ export function convertGameData(input: GameDataInput, retrievedAt?: string): Gam
       title: ds.name,
       content,
       summary: `${ds.name} — ${ds.role}${costs.length ? `, ${costText}` : ''}.`,
-      factionId: ds.factionId,
+      factionId: normalizeFactionId(ds.factionId),
       datasheetId: ds.id,
       sources: [source],
       refs: [],
@@ -380,9 +417,9 @@ export function convertGameData(input: GameDataInput, retrievedAt?: string): Gam
 
   const seenFactionAbIds = new Set<string>()
   for (const ab of input.abilities) {
-    let factionAbId = `faction:${ab.factionId}:${slugify(ab.name)}`
+    let factionAbId = `faction:${normalizeFactionId(ab.factionId)}:${slugify(ab.name)}`
     if (seenFactionAbIds.has(factionAbId)) {
-      factionAbId = `faction:${ab.factionId}:${slugify(ab.name)}-${ab.id}`
+      factionAbId = `faction:${normalizeFactionId(ab.factionId)}:${slugify(ab.name)}-${ab.id}`
     }
     seenFactionAbIds.add(factionAbId)
     const cleanFaDesc = stripHtml(ab.description)
@@ -393,8 +430,8 @@ export function convertGameData(input: GameDataInput, retrievedAt?: string): Gam
       category: 'faction-ability',
       title: ab.name,
       content: cleanFaDesc,
-      summary: `${ab.name} — army rule for ${ab.factionId}. ${truncate(cleanFaDesc, 100)}`,
-      factionId: ab.factionId,
+      summary: `${ab.name} — army rule for ${normalizeFactionId(ab.factionId)}. ${truncate(cleanFaDesc, 100)}`,
+      factionId: normalizeFactionId(ab.factionId),
       sources: [source],
       refs: [],
       version: 1,
@@ -406,9 +443,9 @@ export function convertGameData(input: GameDataInput, retrievedAt?: string): Gam
 
   const seenDetIds = new Set<string>()
   for (const det of input.detachments) {
-    let detNodeId = `det:${det.factionId}:${slugify(det.name)}`
+    let detNodeId = `det:${normalizeFactionId(det.factionId)}:${slugify(det.name)}`
     if (seenDetIds.has(detNodeId)) {
-      detNodeId = `det:${det.factionId}:${slugify(det.name)}-${det.id}`
+      detNodeId = `det:${normalizeFactionId(det.factionId)}:${slugify(det.name)}-${det.id}`
     }
     seenDetIds.add(detNodeId)
     const detAbilities = abilitiesByDetachment.get(det.id) ?? []
@@ -428,8 +465,8 @@ export function convertGameData(input: GameDataInput, retrievedAt?: string): Gam
       category: 'detachment-rule',
       title: det.name,
       content,
-      summary: `${det.name} detachment for ${det.factionId}. ${detAbilities[0]?.name ?? ''}`,
-      factionId: det.factionId,
+      summary: `${det.name} detachment for ${normalizeFactionId(det.factionId)}. ${detAbilities[0]?.name ?? ''}`,
+      factionId: normalizeFactionId(det.factionId),
       detachmentId: det.id,
       sources: [source],
       refs: [],
@@ -440,7 +477,7 @@ export function convertGameData(input: GameDataInput, retrievedAt?: string): Gam
     // ── 5a. Detachment abilities → faction/faction-ability ─────────────────
 
     for (const da of detAbilities) {
-      const daNodeId = `det:${det.factionId}:${slugify(det.name)}:${slugify(da.name)}`
+      const daNodeId = `det:${normalizeFactionId(det.factionId)}:${slugify(det.name)}:${slugify(da.name)}`
 
       const cleanDaDesc = stripHtml(da.description)
       nodes.push({
@@ -450,7 +487,7 @@ export function convertGameData(input: GameDataInput, retrievedAt?: string): Gam
         title: da.name,
         content: cleanDaDesc,
         summary: `${da.name} — detachment ability for ${det.name}. ${truncate(cleanDaDesc, 100)}`,
-        factionId: det.factionId,
+        factionId: normalizeFactionId(det.factionId),
         detachmentId: det.id,
         sources: [source],
         refs: [],
@@ -470,7 +507,7 @@ export function convertGameData(input: GameDataInput, retrievedAt?: string): Gam
     // ── 5b. Stratagems → faction/stratagem ────────────────────────────────
 
     for (const strat of detStratagems) {
-      const stratNodeId = `det:${det.factionId}:${slugify(det.name)}:${slugify(strat.name)}`
+      const stratNodeId = `det:${normalizeFactionId(det.factionId)}:${slugify(det.name)}:${slugify(strat.name)}`
 
       const cleanStratDesc = stripHtml(strat.description)
       nodes.push({
@@ -480,7 +517,7 @@ export function convertGameData(input: GameDataInput, retrievedAt?: string): Gam
         title: strat.name,
         content: `**Type:** ${strat.type}\n**CP:** ${strat.cpCost}\n**Turn:** ${strat.turn}\n**Phase:** ${strat.phase}\n\n${cleanStratDesc}`,
         summary: `${strat.name} (${strat.cpCost}CP, ${strat.phase}) — ${truncate(cleanStratDesc, 100)}`,
-        factionId: det.factionId,
+        factionId: normalizeFactionId(det.factionId),
         detachmentId: det.id,
         phase: mapPhase(strat.phase),
         sources: [source],
@@ -501,7 +538,7 @@ export function convertGameData(input: GameDataInput, retrievedAt?: string): Gam
     // ── 5c. Enhancements → faction/enhancement ───────────────────────────
 
     for (const enh of detEnhancements) {
-      const enhNodeId = `det:${det.factionId}:${slugify(det.name)}:${slugify(enh.name)}`
+      const enhNodeId = `det:${normalizeFactionId(det.factionId)}:${slugify(det.name)}:${slugify(enh.name)}`
 
       const cleanEnhDesc = stripHtml(enh.description)
       nodes.push({
@@ -511,7 +548,7 @@ export function convertGameData(input: GameDataInput, retrievedAt?: string): Gam
         title: enh.name,
         content: `**Cost:** ${enh.cost}\n\n${cleanEnhDesc}`,
         summary: `${enh.name} (${enh.cost}pts) — ${truncate(cleanEnhDesc, 100)}`,
-        factionId: det.factionId,
+        factionId: normalizeFactionId(det.factionId),
         detachmentId: det.id,
         sources: [source],
         refs: [],
@@ -538,7 +575,7 @@ export function convertGameData(input: GameDataInput, retrievedAt?: string): Gam
       if (strat) {
         const det = input.detachments.find(d => d.id === strat.detachmentId)
         if (det) {
-          const stratNodeId = `det:${det.factionId}:${slugify(det.name)}:${slugify(strat.name)}`
+          const stratNodeId = `det:${normalizeFactionId(det.factionId)}:${slugify(det.name)}:${slugify(strat.name)}`
           refs.push({
             sourceId: stratNodeId,
             targetId: j.datasheetId,
@@ -556,7 +593,7 @@ export function convertGameData(input: GameDataInput, retrievedAt?: string): Gam
       if (enh) {
         const det = input.detachments.find(d => d.id === enh.detachmentId)
         if (det) {
-          const enhNodeId = `det:${det.factionId}:${slugify(det.name)}:${slugify(enh.name)}`
+          const enhNodeId = `det:${normalizeFactionId(det.factionId)}:${slugify(det.name)}:${slugify(enh.name)}`
           refs.push({
             sourceId: enhNodeId,
             targetId: j.datasheetId,
@@ -659,7 +696,7 @@ export function convertGameData(input: GameDataInput, retrievedAt?: string): Gam
   for (const strat of input.stratagems) {
     const det = input.detachments.find(d => d.id === strat.detachmentId)
     if (!det) continue
-    const stratNodeId = `det:${det.factionId}:${slugify(det.name)}:${slugify(strat.name)}`
+    const stratNodeId = `det:${normalizeFactionId(det.factionId)}:${slugify(det.name)}:${slugify(strat.name)}`
     const text = `${strat.name} ${strat.description}`.toLowerCase()
 
     for (const { pattern, coreSlug, label } of ALL_MECHANIC_PATTERNS) {
@@ -677,7 +714,7 @@ export function convertGameData(input: GameDataInput, retrievedAt?: string): Gam
   for (const enh of input.enhancements) {
     const det = input.detachments.find(d => d.id === enh.detachmentId)
     if (!det) continue
-    const enhNodeId = `det:${det.factionId}:${slugify(det.name)}:${slugify(enh.name)}`
+    const enhNodeId = `det:${normalizeFactionId(det.factionId)}:${slugify(det.name)}:${slugify(enh.name)}`
     const text = `${enh.name} ${enh.description}`.toLowerCase()
 
     for (const { pattern, coreSlug, label } of ALL_MECHANIC_PATTERNS) {
@@ -696,7 +733,7 @@ export function convertGameData(input: GameDataInput, retrievedAt?: string): Gam
   for (const da of input.detachmentAbilities) {
     const det = input.detachments.find(d => d.id === da.detachmentId)
     if (!det) continue
-    const daNodeId = `det:${det.factionId}:${slugify(det.name)}:${slugify(da.name)}`
+    const daNodeId = `det:${normalizeFactionId(det.factionId)}:${slugify(det.name)}:${slugify(da.name)}`
     const text = `${da.name} ${da.description}`.toLowerCase()
 
     for (const { pattern, coreSlug, label } of ALL_MECHANIC_PATTERNS) {

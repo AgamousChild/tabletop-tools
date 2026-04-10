@@ -115,6 +115,22 @@ async function main() {
   allRefs.push(...gameResult.refs)
   console.log(`   ${gameResult.nodes.length} nodes, ${gameResult.refs.length} refs`)
 
+  // ── Deduplicate nodes (game data takes precedence over faction pack PDFs) ──
+  const seenNodeIds = new Set<string>()
+  const dedupedNodes: Node[] = []
+  for (const node of allNodes) {
+    if (!seenNodeIds.has(node.id)) {
+      seenNodeIds.add(node.id)
+      dedupedNodes.push(node)
+    }
+  }
+  const dupeCount = allNodes.length - dedupedNodes.length
+  if (dupeCount > 0) {
+    console.log(`   Deduplicated: removed ${dupeCount} duplicate nodes (game data takes precedence)`)
+  }
+  allNodes.length = 0
+  allNodes.push(...dedupedNodes)
+
   // ── Summary ────────────────────────────────────────────────────────────────
   console.log(`\n=== TOTAL: ${allNodes.length} nodes, ${allRefs.length} refs ===`)
 

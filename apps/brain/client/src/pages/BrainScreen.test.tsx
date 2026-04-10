@@ -16,18 +16,6 @@ const testNodes: BrainNode[] = [
     version: 1,
     keywords: ['wound', 'roll'],
   },
-  {
-    id: 'core:hit-roll',
-    layer: 'core',
-    category: 'core-mechanic',
-    title: 'Hit Roll',
-    content: 'Roll dice to determine hits.',
-    summary: 'How hit rolls work.',
-    sources: [{ type: 'pdf', title: 'Core Rules', retrievedAt: '2026-04-08' }],
-    refs: [],
-    version: 1,
-    keywords: ['hit', 'roll'],
-  },
 ]
 
 describe('BrainScreen', () => {
@@ -41,27 +29,29 @@ describe('BrainScreen', () => {
     expect(screen.getByText('40K Brain')).toBeInTheDocument()
   })
 
-  it('renders layer navigation', () => {
+  it('renders tab navigation', () => {
     render(<BrainScreen />)
-    expect(screen.getByText('Core Rules')).toBeInTheDocument()
-    expect(screen.getByText('Faction')).toBeInTheDocument()
+    expect(screen.getAllByText('Ask').length).toBeGreaterThanOrEqual(1)
+    expect(screen.getByText('Search')).toBeInTheDocument()
+    expect(screen.getByText('Browse')).toBeInTheDocument()
   })
 
-  it('shows initial instruction text', () => {
+  it('shows Ask tab by default with prompt', () => {
     render(<BrainScreen />)
-    expect(screen.getByText(/Select a layer or search/)).toBeInTheDocument()
+    expect(screen.getByPlaceholderText(/Ask a 40K rules question/)).toBeInTheDocument()
   })
 
-  it('shows nodes when a layer is selected', async () => {
+  it('shows Search tab when clicked', () => {
     render(<BrainScreen />)
-    fireEvent.click(screen.getByText('Core Rules'))
+    fireEvent.click(screen.getByText('Search'))
+    expect(screen.getByPlaceholderText(/Semantic search/)).toBeInTheDocument()
+  })
+
+  it('shows Browse tab with layer nav when clicked', async () => {
+    render(<BrainScreen />)
+    fireEvent.click(screen.getByText('Browse'))
     await waitFor(() => {
-      expect(screen.getByText('Wound Roll')).toBeInTheDocument()
+      expect(screen.getByText('Core Rules')).toBeInTheDocument()
     })
-  })
-
-  it('has a search input', () => {
-    render(<BrainScreen />)
-    expect(screen.getByPlaceholderText('Search rules...')).toBeInTheDocument()
   })
 })
