@@ -244,6 +244,71 @@ describe('convertGameData', () => {
     expect(sustainedRef!.context).toContain('Heavy Bolter')
   })
 
+  it('creates requires refs from unit abilities to core rules nodes', () => {
+    const input = makeInput({
+      datasheets: [{
+        id: 'abc', name: 'Unit', factionId: 'SM', role: 'Infantry',
+        legend: '', transport: '', loadout: '', damagedW: '', damagedDescription: '',
+      }],
+      unitAbilities: [{
+        id: 'ua1', datasheetId: 'abc', name: 'Deep Strike',
+        description: 'This unit can be set up using the Deep Strike ability.',
+        type: 'Core',
+      }],
+    })
+
+    const { refs } = convertGameData(input, '2026-04-08')
+    const dsRef = refs.find(r => r.rel === 'requires' && r.targetId === 'core:deep-strike')
+    expect(dsRef).toBeDefined()
+    expect(dsRef!.sourceId).toBe('ability:abc:deep-strike')
+  })
+
+  it('creates interacts_with refs from stratagems that grant abilities', () => {
+    const input = makeInput({
+      detachments: [{
+        id: 'det-1', factionId: 'SM', name: 'Gladius',
+        legend: '', type: 'Standard',
+      }],
+      stratagems: [{
+        id: 'str-1', factionId: 'SM', detachmentId: 'det-1',
+        name: 'Adaptive Strategy', type: 'Battle Tactic',
+        cpCost: '1CP', turn: 'Your', phase: 'Shooting',
+        legend: '',
+        description: 'Until the end of the phase, ranged weapons equipped by models in your unit have the [SUSTAINED HITS 1] ability.',
+      }],
+    })
+
+    const { refs } = convertGameData(input, '2026-04-08')
+    const susRef = refs.find(r =>
+      r.rel === 'interacts_with' && r.targetId === 'core:sustained-hits'
+    )
+    expect(susRef).toBeDefined()
+    expect(susRef!.sourceId).toBe('det:SM:gladius:adaptive-strategy')
+    expect(susRef!.context).toContain('Adaptive Strategy')
+    expect(susRef!.context).toContain('Sustained Hits')
+  })
+
+  it('creates interacts_with refs from detachment abilities that reference mechanics', () => {
+    const input = makeInput({
+      detachments: [{
+        id: 'det-1', factionId: 'SM', name: 'Firestorm',
+        legend: '', type: 'Standard',
+      }],
+      detachmentAbilities: [{
+        id: 'da-1', detachmentId: 'det-1', factionId: 'SM',
+        name: 'Close-range Eradication', legend: '',
+        description: 'Ranged weapons equipped by models in your army have the [LETHAL HITS] ability while targeting units within 12".',
+      }],
+    })
+
+    const { refs } = convertGameData(input, '2026-04-08')
+    const lhRef = refs.find(r =>
+      r.rel === 'interacts_with' && r.targetId === 'core:lethal-hits'
+    )
+    expect(lhRef).toBeDefined()
+    expect(lhRef!.sourceId).toBe('det:SM:firestorm:close-range-eradication')
+  })
+
   it('handles empty input gracefully', () => {
     const { nodes, refs } = convertGameData(makeInput(), '2026-04-08')
     expect(nodes).toHaveLength(0)

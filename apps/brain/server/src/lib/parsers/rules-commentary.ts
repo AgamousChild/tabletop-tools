@@ -85,6 +85,7 @@ export function parseRulesCommentary(normalizedMarkdown: string, retrievedAt: st
         if (sectionMatch) {
           const sectionName = sectionMatch[1]!.replace(/,\s*\d+\w+\s+paragraph/i, '').trim()
           refs.push({
+            sourceId: node.id,
             targetId: coreId(sectionName),
             rel: 'clarifies',
             context: `${title}: ${body.slice(0, 100)}...`,

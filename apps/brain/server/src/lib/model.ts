@@ -59,6 +59,7 @@ export type Source = z.infer<typeof SourceSchema>
 // ── NodeRef ────────────────────────────────────────────────────────────────
 
 export const NodeRefSchema = z.object({
+  sourceId: z.string().min(1),
   targetId: z.string().min(1),
   rel: RefTypeSchema,
   context: z.string().min(1),

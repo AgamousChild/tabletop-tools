@@ -297,6 +297,7 @@ export function convertGameData(input: GameDataInput, retrievedAt?: string): Gam
 
     // part_of ref to datasheet
     refs.push({
+      sourceId: weaponNodeId,
       targetId: wg.datasheetId,
       rel: 'part_of',
       context: `${wg.name} is a weapon equipped by this unit.`,
@@ -324,6 +325,7 @@ export function convertGameData(input: GameDataInput, retrievedAt?: string): Gam
     })
 
     refs.push({
+      sourceId: abilityNodeId,
       targetId: ab.datasheetId,
       rel: 'part_of',
       context: `${ab.name} is a ${ab.type} ability of this unit.`,
@@ -402,6 +404,7 @@ export function convertGameData(input: GameDataInput, retrievedAt?: string): Gam
       })
 
       refs.push({
+        sourceId: daNodeId,
         targetId: detNodeId,
         rel: 'part_of',
         context: `${da.name} is the detachment ability of ${det.name}.`,
@@ -431,6 +434,7 @@ export function convertGameData(input: GameDataInput, retrievedAt?: string): Gam
       })
 
       refs.push({
+        sourceId: stratNodeId,
         targetId: detNodeId,
         rel: 'part_of',
         context: `${strat.name} is a ${strat.type} stratagem in the ${det.name} detachment.`,
@@ -459,6 +463,7 @@ export function convertGameData(input: GameDataInput, retrievedAt?: string): Gam
       })
 
       refs.push({
+        sourceId: enhNodeId,
         targetId: detNodeId,
         rel: 'part_of',
         context: `${enh.name} is an enhancement in the ${det.name} detachment.`,
@@ -478,6 +483,7 @@ export function convertGameData(input: GameDataInput, retrievedAt?: string): Gam
         if (det) {
           const stratNodeId = `det:${det.factionId}:${slugify(det.name)}:${slugify(strat.name)}`
           refs.push({
+            sourceId: stratNodeId,
             targetId: j.datasheetId,
             rel: 'modifies',
             context: `${strat.name} stratagem can be used with this unit.`,
@@ -493,7 +499,9 @@ export function convertGameData(input: GameDataInput, retrievedAt?: string): Gam
       if (enh) {
         const det = input.detachments.find(d => d.id === enh.detachmentId)
         if (det) {
+          const enhNodeId = `det:${det.factionId}:${slugify(det.name)}:${slugify(enh.name)}`
           refs.push({
+            sourceId: enhNodeId,
             targetId: j.datasheetId,
             rel: 'modifies',
             context: `${enh.name} enhancement can be given to a model in this unit.`,
@@ -537,6 +545,7 @@ export function convertGameData(input: GameDataInput, retrievedAt?: string): Gam
     for (const { pattern, coreSlug, label } of WEAPON_ABILITY_CORE_NODES) {
       if (desc.includes(pattern)) {
         refs.push({
+          sourceId: weaponNodeId,
           targetId: `core:${coreSlug}`,
           rel: 'requires',
           context: `${wg.name} has the ${label} ability. See the core rules for how ${label} works.`,
@@ -545,10 +554,111 @@ export function convertGameData(input: GameDataInput, retrievedAt?: string): Gam
     }
   }
 
-  // ── 8. Leader attachments → interacts_with refs ───────────────────────────
+  // ── 8. Unit ability → core rule requires refs ─────────────────────────────
+  //
+  // Unit abilities like Feel No Pain, Deep Strike, Stealth, etc. are on the
+  // datasheet, not the weapon. Scan unitAbilities descriptions for refs to
+  // core mechanic nodes.
+
+  const UNIT_ABILITY_CORE_NODES: Array<{ pattern: string; coreSlug: string; label: string }> = [
+    { pattern: 'feel no pain', coreSlug: 'feel-no-pain', label: 'Feel No Pain' },
+    { pattern: 'deadly demise', coreSlug: 'deadly-demise', label: 'Deadly Demise' },
+    { pattern: 'deep strike', coreSlug: 'deep-strike', label: 'Deep Strike' },
+    { pattern: 'lone operative', coreSlug: 'lone-operative', label: 'Lone Operative' },
+    { pattern: 'stealth', coreSlug: 'stealth', label: 'Stealth' },
+    { pattern: 'scouts', coreSlug: 'scouts', label: 'Scouts' },
+    { pattern: 'infiltrator', coreSlug: 'infiltrators', label: 'Infiltrators' },
+    { pattern: 'battle-shock', coreSlug: 'battle-shock', label: 'Battle-shock' },
+    { pattern: 'fights first', coreSlug: 'fights-first', label: 'Fights First' },
+    { pattern: 'overwatch', coreSlug: 'fire-overwatch', label: 'Fire Overwatch' },
+    { pattern: 'firing deck', coreSlug: 'firing-deck', label: 'Firing Deck' },
+  ]
+
+  for (const ab of input.unitAbilities) {
+    const abilityNodeId = `ability:${ab.datasheetId}:${slugify(ab.name)}`
+    const text = `${ab.name} ${ab.description}`.toLowerCase()
+
+    for (const { pattern, coreSlug, label } of UNIT_ABILITY_CORE_NODES) {
+      if (text.includes(pattern)) {
+        refs.push({
+          sourceId: abilityNodeId,
+          targetId: `core:${coreSlug}`,
+          rel: 'requires',
+          context: `${ab.name} references ${label}. See the core rules for how ${label} works.`,
+        })
+      }
+    }
+  }
+
+  // ── 9. Stratagem/enhancement → core rule requires refs ────────────────────
+  //
+  // Stratagems and enhancements that grant abilities (e.g., "weapons in this
+  // unit gain [SUSTAINED HITS 1]") need refs to those core mechanic nodes.
+  // This is how you answer "who has sustained hits" — not just weapons that
+  // natively have it, but stratagems that can grant it.
+
+  const ALL_MECHANIC_PATTERNS = [...WEAPON_ABILITY_CORE_NODES, ...UNIT_ABILITY_CORE_NODES]
+
+  for (const strat of input.stratagems) {
+    const det = input.detachments.find(d => d.id === strat.detachmentId)
+    if (!det) continue
+    const stratNodeId = `det:${det.factionId}:${slugify(det.name)}:${slugify(strat.name)}`
+    const text = `${strat.name} ${strat.description}`.toLowerCase()
+
+    for (const { pattern, coreSlug, label } of ALL_MECHANIC_PATTERNS) {
+      if (text.includes(pattern)) {
+        refs.push({
+          sourceId: stratNodeId,
+          targetId: `core:${coreSlug}`,
+          rel: 'interacts_with',
+          context: `${strat.name} stratagem references ${label}. It may grant or interact with this ability.`,
+        })
+      }
+    }
+  }
+
+  for (const enh of input.enhancements) {
+    const det = input.detachments.find(d => d.id === enh.detachmentId)
+    if (!det) continue
+    const enhNodeId = `det:${det.factionId}:${slugify(det.name)}:${slugify(enh.name)}`
+    const text = `${enh.name} ${enh.description}`.toLowerCase()
+
+    for (const { pattern, coreSlug, label } of ALL_MECHANIC_PATTERNS) {
+      if (text.includes(pattern)) {
+        refs.push({
+          sourceId: enhNodeId,
+          targetId: `core:${coreSlug}`,
+          rel: 'interacts_with',
+          context: `${enh.name} enhancement references ${label}. It may grant or interact with this ability.`,
+        })
+      }
+    }
+  }
+
+  // Detachment abilities too
+  for (const da of input.detachmentAbilities) {
+    const det = input.detachments.find(d => d.id === da.detachmentId)
+    if (!det) continue
+    const daNodeId = `det:${det.factionId}:${slugify(det.name)}:${slugify(da.name)}`
+    const text = `${da.name} ${da.description}`.toLowerCase()
+
+    for (const { pattern, coreSlug, label } of ALL_MECHANIC_PATTERNS) {
+      if (text.includes(pattern)) {
+        refs.push({
+          sourceId: daNodeId,
+          targetId: `core:${coreSlug}`,
+          rel: 'interacts_with',
+          context: `${da.name} detachment ability references ${label}. It may grant or interact with this ability.`,
+        })
+      }
+    }
+  }
+
+  // ── 10. Leader attachments → interacts_with refs ──────────────────────────
 
   for (const la of input.leaderAttachments) {
     refs.push({
+      sourceId: la.leaderId,
       targetId: la.attachedId,
       rel: 'interacts_with',
       context: `This leader can be attached to this unit as a Bodyguard.`,

@@ -47,6 +47,7 @@ describe('model schemas', () => {
   describe('NodeRefSchema', () => {
     it('validates a ref with context', () => {
       const ref: NodeRef = {
+        sourceId: 'core:saving-throw',
         targetId: 'core:wound-roll',
         rel: 'requires',
         context: 'Must understand wound roll to resolve saves',
@@ -56,6 +57,7 @@ describe('model schemas', () => {
 
     it('validates a bidirectional ref', () => {
       const ref: NodeRef = {
+        sourceId: 'core:wound-roll',
         targetId: 'core:shooting-phase',
         rel: 'part_of',
         context: 'Wound roll is a step within the shooting phase',
@@ -66,6 +68,7 @@ describe('model schemas', () => {
 
     it('rejects ref without context', () => {
       expect(() => NodeRefSchema.parse({
+        sourceId: 'core:a',
         targetId: 'core:wound-roll',
         rel: 'requires',
       })).toThrow()
@@ -73,6 +76,15 @@ describe('model schemas', () => {
 
     it('rejects ref without targetId', () => {
       expect(() => NodeRefSchema.parse({
+        sourceId: 'core:a',
+        rel: 'requires',
+        context: 'some context',
+      })).toThrow()
+    })
+
+    it('rejects ref without sourceId', () => {
+      expect(() => NodeRefSchema.parse({
+        targetId: 'core:wound-roll',
         rel: 'requires',
         context: 'some context',
       })).toThrow()
@@ -80,6 +92,7 @@ describe('model schemas', () => {
 
     it('rejects invalid rel type', () => {
       expect(() => NodeRefSchema.parse({
+        sourceId: 'core:a',
         targetId: 'core:wound-roll',
         rel: 'invalid_rel',
         context: 'some context',
@@ -127,6 +140,7 @@ describe('model schemas', () => {
           retrievedAt: '2026-04-08',
         }],
         refs: [{
+          sourceId: 'faction:space-marines:oath-of-moment',
           targetId: 'core:command-phase',
           rel: 'part_of',
           context: 'Resolved at the start of the Command phase',

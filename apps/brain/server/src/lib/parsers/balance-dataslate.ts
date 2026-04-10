@@ -58,12 +58,14 @@ export function parseBalanceDataslate(normalizedMarkdown: string, retrievedAt: s
     // Generate modifies ref
     if (fSlug) {
       refs.push({
+        sourceId: nodeId,
         targetId: `faction:${fSlug}:${slugify(title)}`,
         rel: 'modifies',
         context: `Balance dataslate change to ${title} for ${currentFaction}.`,
       })
     } else if (isCoreChange) {
       refs.push({
+        sourceId: nodeId,
         targetId: `core:${slugify(title)}`,
         rel: 'modifies',
         context: `Balance dataslate amendment to ${title}.`,

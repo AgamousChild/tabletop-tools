@@ -52,7 +52,7 @@ describe('partitionRefs', () => {
       ['core:shooting-phase', 'nodes/core.json'],
     ])
     const refs: NodeRef[] = [
-      { targetId: 'core:wound-roll', rel: 'part_of', context: 'test' },
+      { sourceId: 'core:shooting-phase', targetId: 'core:wound-roll', rel: 'part_of', context: 'test' },
     ]
     const files = partitionRefs(refs, nodeFileMap)
     expect(files['refs/core-refs.json']).toHaveLength(1)
@@ -61,7 +61,7 @@ describe('partitionRefs', () => {
   it('puts unlinked refs in unlinked-refs.json', () => {
     const nodeFileMap = new Map<string, string>()
     const refs: NodeRef[] = [
-      { targetId: 'unknown:ref', rel: 'part_of', context: 'test' },
+      { sourceId: 'unknown:source', targetId: 'unknown:ref', rel: 'part_of', context: 'test' },
     ]
     const files = partitionRefs(refs, nodeFileMap)
     expect(files['refs/unlinked-refs.json']).toHaveLength(1)
@@ -72,7 +72,7 @@ describe('buildManifest', () => {
   it('creates a manifest with file hashes', () => {
     const files: Record<string, unknown> = {
       'nodes/core.json': [{ id: 'core:test' }],
-      'refs/core-refs.json': [{ targetId: 'x', rel: 'part_of', context: 'y' }],
+      'refs/core-refs.json': [{ sourceId: 'a', targetId: 'x', rel: 'part_of', context: 'y' }],
     }
     const manifest = buildManifest(files, null)
     expect(manifest.version).toBe(1)
