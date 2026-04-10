@@ -101,11 +101,13 @@ export interface BrainSyncResult {
 
 /**
  * Run the full brain sync pipeline.
- * Reads normalized markdown from provided content map, runs parsers, writes to R2.
+ * Combines PDF-sourced data (core rules, faction packs, commentary, dataslate)
+ * with Wahapedia/BSData game data. Writes partitioned JSON to R2.
  */
 export async function runBrainSync(
   bucket: R2Bucket,
   markdownFiles: Record<string, string>,
+  gameData: import('./parsers/game-data').GameDataInput | null,
   retrievedAt: string,
 ): Promise<BrainSyncResult> {
   const errors: string[] = []
@@ -160,6 +162,18 @@ export async function runBrainSync(
       allRefs.push(...result.refs)
     } catch (err) {
       errors.push(`Faction ${factionSlug}: ${err instanceof Error ? err.message : String(err)}`)
+    }
+  }
+
+  // Convert Wahapedia/BSData game data
+  if (gameData) {
+    try {
+      const { convertGameData } = await import('./parsers/game-data')
+      const result = convertGameData(gameData, retrievedAt)
+      allNodes.push(...result.nodes)
+      allRefs.push(...result.refs)
+    } catch (err) {
+      errors.push(`Game data: ${err instanceof Error ? err.message : String(err)}`)
     }
   }
 
