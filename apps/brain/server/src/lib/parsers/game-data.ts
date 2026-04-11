@@ -397,6 +397,35 @@ export function convertGameData(input: GameDataInput, retrievedAt?: string): Gam
       }
     }
 
+    // Elevate key weapon capabilities to datasheet level
+    const unitWeapons = wargearByDatasheet.get(ds.id) ?? []
+    const allWeaponDescs = unitWeapons.map(w => (w.description ?? '').toLowerCase()).join(' ')
+    if (allWeaponDescs.includes('indirect fire')) node.keywords.push('indirect fire')
+    if (allWeaponDescs.includes('torrent')) node.keywords.push('torrent')
+    if (allWeaponDescs.includes('blast')) node.keywords.push('blast')
+    if (allWeaponDescs.includes('melta')) node.keywords.push('melta')
+    if (allWeaponDescs.includes('sustained hits')) node.keywords.push('sustained hits')
+    if (allWeaponDescs.includes('lethal hits')) node.keywords.push('lethal hits')
+    if (allWeaponDescs.includes('devastating wounds')) node.keywords.push('devastating wounds')
+    if (allWeaponDescs.includes('anti-')) node.keywords.push('anti')
+    if (allWeaponDescs.includes('hazardous')) node.keywords.push('hazardous')
+    if (allWeaponDescs.includes('twin-linked')) node.keywords.push('twin-linked')
+    if (allWeaponDescs.includes('ignores cover')) node.keywords.push('ignores cover')
+    if (allWeaponDescs.includes('one shot')) node.keywords.push('one shot')
+
+    // Unit-level ability capabilities
+    const unitAbs = abilitiesByDatasheet.get(ds.id) ?? []
+    const allAbilityText = unitAbs.map(a => `${a.name} ${a.description}`.toLowerCase()).join(' ')
+    if (allAbilityText.includes('deep strike')) node.keywords.push('deep strike')
+    if (allAbilityText.includes('lone operative')) node.keywords.push('lone operative')
+    if (allAbilityText.includes('stealth')) node.keywords.push('stealth')
+    if (allAbilityText.includes('scouts')) node.keywords.push('scouts')
+    if (allAbilityText.includes('infiltrator')) node.keywords.push('infiltrators')
+    if (allAbilityText.includes('deadly demise')) node.keywords.push('deadly demise')
+    if (allAbilityText.includes('feel no pain')) node.keywords.push('feel no pain')
+    if (allAbilityText.includes('fights first')) node.keywords.push('fights first')
+    if (allAbilityText.includes('firing deck')) node.keywords.push('firing deck')
+
     if (ds.isLegends) {
       node.keywords.push('legends')
     }
