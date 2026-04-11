@@ -258,7 +258,7 @@ app.post('/index-vectors', async (c) => {
 
     for (let i = 0; i < nodes.length; i += BATCH_SIZE) {
       const batch = nodes.slice(i, i + BATCH_SIZE)
-      const texts = batch.map(n => `${n.title}. ${n.summary}`)
+      const texts = batch.map(n => `${n.title}. ${n.summary}. ${n.keywords.join(', ')}`)
 
       try {
         const embResult = await c.env.AI.run('@cf/baai/bge-base-en-v1.5', {
