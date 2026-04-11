@@ -336,6 +336,12 @@ export function convertGameData(input: GameDataInput, retrievedAt?: string): Gam
 
   // ── 2. Weapons → unit/weapon nodes ────────────────────────────────────────
 
+  // Build datasheet → factionId lookup for weapon and ability nodes
+  const dsFactionMap = new Map<string, string>()
+  for (const ds of input.datasheets) {
+    dsFactionMap.set(ds.id, normalizeFactionId(ds.factionId))
+  }
+
   const seenWeaponIds = new Set<string>()
   for (const wg of input.datasheetWargear) {
     // Differentiate melee/ranged profiles with the same name on the same datasheet
@@ -363,6 +369,7 @@ export function convertGameData(input: GameDataInput, retrievedAt?: string): Gam
       title: wg.name,
       content,
       summary: `${wg.name} (${wg.type}) — ${wg.range}, ${wg.attacks}A, S${wg.strength}, AP${wg.ap}, D${wg.damage}.`,
+      factionId: dsFactionMap.get(wg.datasheetId),
       datasheetId: wg.datasheetId,
       sources: [source],
       refs: [],
@@ -397,6 +404,7 @@ export function convertGameData(input: GameDataInput, retrievedAt?: string): Gam
       title: ab.name,
       content: cleanAbDesc,
       summary: `${ab.name} (${ab.type}) — ${truncate(cleanAbDesc, 150)}`,
+      factionId: dsFactionMap.get(ab.datasheetId),
       datasheetId: ab.datasheetId,
       sources: [source],
       refs: [],

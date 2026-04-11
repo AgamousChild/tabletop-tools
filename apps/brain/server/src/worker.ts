@@ -9,7 +9,10 @@ const app = new Hono<HonoEnv>()
 
 app.use('*', async (c, next) => {
   const origin = c.env.CORS_ORIGIN || 'https://tabletop-tools.net'
-  return cors({ origin, allowMethods: ['GET', 'POST'] })(c, next)
+  return cors({
+    origin: [origin, 'http://localhost:3008', 'http://localhost:3009', 'http://localhost:3010', 'http://localhost:3011'],
+    allowMethods: ['GET', 'POST'],
+  })(c, next)
 })
 
 // ── Data endpoints (serve from R2) ──────────────────────────────────────────
@@ -113,40 +116,60 @@ app.post('/ask', async (c) => {
     return c.json({ error: 'Q&A not configured - ANTHROPIC_API_KEY not set' }, 503)
   }
 
-  // 1. Embed the question
+  // 1. Generate embeddings — one for the full question, one for extracted keywords
+  //    Full questions dilute keyword signal ("space marine player get sustained hits"
+  //    matches "space marine" more than "sustained hits"). Searching for just the
+  //    mechanic keyword separately ensures we find the core rule node.
+  const keywords = extractMechanicKeywords(body.question)
+  const textsToEmbed = [body.question, ...(keywords.length > 0 ? [keywords.join(' ')] : [])]
+
   const embeddingResult = await c.env.AI.run('@cf/baai/bge-base-en-v1.5', {
-    text: [body.question],
+    text: textsToEmbed,
   })
 
-  const queryVector = embeddingResult.data[0]
-  if (!queryVector) {
+  const questionVector = embeddingResult.data[0]
+  if (!questionVector) {
     return c.json({ error: 'Failed to generate embedding' }, 500)
   }
 
-  // 2. Search Vectorize for relevant nodes
-  const filter: Record<string, string> = {}
-  if (body.factionId) filter.factionId = body.factionId
-
-  const searchResults = await c.env.BRAIN_INDEX.query(queryVector, {
+  // 2. Search Vectorize — question embedding + keyword embedding
+  const questionResults = await c.env.BRAIN_INDEX.query(questionVector, {
     topK: 10,
-    filter: Object.keys(filter).length > 0 ? filter : undefined,
     returnMetadata: 'all',
   })
 
+  let keywordResults = { matches: [] as typeof questionResults.matches }
+  if (embeddingResult.data[1]) {
+    keywordResults = await c.env.BRAIN_INDEX.query(embeddingResult.data[1], {
+      topK: 5,
+      returnMetadata: 'all',
+    })
+  }
+
+  // Merge and deduplicate (keyword results first — they're more targeted)
+  const seenIds = new Set<string>()
+  const allMatches = [...keywordResults.matches, ...questionResults.matches].filter(m => {
+    if (seenIds.has(m.id)) return false
+    seenIds.add(m.id)
+    return true
+  })
+
   // 3. Fetch full node content from R2 for the top results
-  const nodeIds = searchResults.matches.map(m => m.id)
+  const nodeIds = allMatches.map(m => m.id)
   const nodeContent = await fetchNodesFromR2(c.env.BRAIN_BUCKET, nodeIds)
 
-  // 4. Traverse refs to gather connected context (1 level deep by default)
+  // 4. Traverse reverse index to gather connected context
   const depth = body.depth ?? 1
-  const connectedNodes = await fetchConnectedNodes(
+  const factionHint = body.factionId || detectFactionFromQuestion(body.question)
+  const connected = await fetchConnectedNodes(
     c.env.BRAIN_BUCKET,
     nodeIds,
     depth,
+    factionHint,
   )
 
   // 5. Assemble context for Claude
-  const context = assembleContext(nodeContent, connectedNodes)
+  const context = assembleContext(nodeContent, connected.nodes, connected.refs)
 
   // 6. Call Claude API
   const response = await fetch('https://api.anthropic.com/v1/messages', {
@@ -197,7 +220,7 @@ Be precise about game mechanics. If a rule has been errata'd or FAQ'd, mention t
       category: n.category,
       sources: n.sources,
     })),
-    connectedCount: connectedNodes.length,
+    connectedCount: connected.nodes.length,
   })
 })
 
@@ -287,6 +310,66 @@ app.post('/sync', async (c) => {
 
 // ── Helpers ─────────────────────────────────────────────────────────────────
 
+/** Detect faction from question text. */
+function detectFactionFromQuestion(question: string): string | undefined {
+  const lower = question.toLowerCase()
+  const factions: Array<{ pattern: string; slug: string }> = [
+    { pattern: 'space marine', slug: 'space-marines' },
+    { pattern: 'ork', slug: 'orks' },
+    { pattern: 'necron', slug: 'necrons' },
+    { pattern: 'tyranid', slug: 'tyranids' },
+    { pattern: 'aeldari', slug: 'aeldari' },
+    { pattern: 'eldar', slug: 'aeldari' },
+    { pattern: 'tau', slug: 't-au-empire' },
+    { pattern: 't\'au', slug: 't-au-empire' },
+    { pattern: 'chaos space marine', slug: 'chaos-space-marines' },
+    { pattern: 'death guard', slug: 'death-guard' },
+    { pattern: 'thousand sons', slug: 'thousand-sons' },
+    { pattern: 'world eater', slug: 'world-eaters' },
+    { pattern: 'custodes', slug: 'adeptus-custodes' },
+    { pattern: 'sororitas', slug: 'adepta-sororitas' },
+    { pattern: 'sisters of battle', slug: 'adepta-sororitas' },
+    { pattern: 'mechanicus', slug: 'adeptus-mechanicus' },
+    { pattern: 'imperial guard', slug: 'astra-militarum' },
+    { pattern: 'astra militarum', slug: 'astra-militarum' },
+    { pattern: 'imperial knight', slug: 'imperial-knights' },
+    { pattern: 'chaos knight', slug: 'chaos-knights' },
+    { pattern: 'genestealer', slug: 'genestealer-cults' },
+    { pattern: 'grey knight', slug: 'grey-knights' },
+    { pattern: 'drukhari', slug: 'drukhari' },
+    { pattern: 'dark eldar', slug: 'drukhari' },
+    { pattern: 'votann', slug: 'leagues-of-votann' },
+    { pattern: 'blood angel', slug: 'blood-angels' },
+    { pattern: 'dark angel', slug: 'dark-angels' },
+    { pattern: 'space wolf', slug: 'space-wolves' },
+    { pattern: 'space wolves', slug: 'space-wolves' },
+    { pattern: 'black templar', slug: 'black-templars' },
+    { pattern: 'deathwatch', slug: 'deathwatch' },
+    { pattern: 'daemon', slug: 'chaos-daemons' },
+  ]
+  for (const { pattern, slug } of factions) {
+    if (lower.includes(pattern)) return slug
+  }
+  return undefined
+}
+
+/** Extract game mechanic keywords from a question. */
+function extractMechanicKeywords(question: string): string[] {
+  const lower = question.toLowerCase()
+  const mechanics = [
+    'sustained hits', 'lethal hits', 'devastating wounds', 'hazardous',
+    'blast', 'torrent', 'twin-linked', 'rapid fire', 'pistol', 'melta',
+    'lance', 'anti-', 'ignores cover', 'indirect fire',
+    'feel no pain', 'deadly demise', 'deep strike', 'lone operative',
+    'stealth', 'scouts', 'infiltrators', 'battle-shock', 'fights first',
+    'overwatch', 'wound roll', 'hit roll', 'saving throw',
+    'engagement range', 'coherency', 'visibility', 'cover',
+    'advance', 'fall back', 'charge', 'mortal wound',
+    'invulnerable', 'firing deck', 'transport',
+  ]
+  return mechanics.filter(m => lower.includes(m))
+}
+
 /** Fetch full node objects from R2 by their IDs. */
 async function fetchNodesFromR2(bucket: R2Bucket, nodeIds: string[]): Promise<Node[]> {
   // Get the manifest to know which files to look in
@@ -317,49 +400,66 @@ async function fetchNodesFromR2(bucket: R2Bucket, nodeIds: string[]): Promise<No
   return nodes
 }
 
-/** Fetch nodes connected to the given IDs via refs, up to N levels deep. */
+/** Fetch nodes connected to the given IDs via the reverse index. */
 async function fetchConnectedNodes(
   bucket: R2Bucket,
   nodeIds: string[],
   depth: number,
-): Promise<Node[]> {
-  if (depth <= 0) return []
+  factionHint?: string,
+): Promise<{ nodes: Node[]; refs: Array<{ sourceId: string; rel: string; context: string }> }> {
+  if (depth <= 0) return { nodes: [], refs: [] }
 
-  const manifestObj = await bucket.get('manifest.json')
-  if (!manifestObj) return []
+  // Load the reverse index (single file, cached by R2)
+  const revObj = await bucket.get('refs/reverse-index.json')
+  if (!revObj) return { nodes: [], refs: [] }
 
-  const manifest = await manifestObj.json() as { files: Record<string, string> }
-  const refFiles = Object.keys(manifest.files).filter(f => f.startsWith('refs/'))
+  const reverseIndex = await revObj.json() as Record<string, Array<{ sourceId: string; rel: string; context: string; factionId?: string }>>
 
-  // Collect all connected node IDs from refs
-  const connectedIds = new Set<string>()
-  const sourceSet = new Set(nodeIds)
+  const allRefs: Array<{ sourceId: string; rel: string; context: string; factionId?: string }> = []
 
-  for (const file of refFiles) {
-    const obj = await bucket.get(file)
-    if (!obj) continue
-    const refs = await obj.json() as NodeRef[]
-    for (const ref of refs) {
-      if (sourceSet.has(ref.sourceId)) {
-        connectedIds.add(ref.targetId)
-      }
-      if (sourceSet.has(ref.targetId) && ref.bidirectional) {
-        connectedIds.add(ref.sourceId)
+  for (const nodeId of nodeIds) {
+    const inbound = reverseIndex[nodeId]
+    if (inbound) {
+      for (const ref of inbound) {
+        allRefs.push(ref)
       }
     }
   }
 
-  // Remove already-known IDs
-  for (const id of nodeIds) connectedIds.delete(id)
+  if (allRefs.length === 0) return { nodes: [], refs: [] }
 
-  if (connectedIds.size === 0) return []
+  // If we have a faction hint, prioritize refs whose sourceId contains the faction slug
+  // This is a heuristic — faction nodes have IDs like det:space-marines:... or weapon IDs
+  // that we can't check without loading. So we also fetch from the faction-specific node file.
+  let prioritizedIds: string[]
+  if (factionHint) {
+    const factionRefs = allRefs.filter(r => r.factionId === factionHint)
+    const otherRefs = allRefs.filter(r => r.factionId !== factionHint)
 
-  // Fetch the connected nodes
-  return fetchNodesFromR2(bucket, [...connectedIds])
+    const factionIds = [...new Set(factionRefs.map(r => r.sourceId))]
+    const otherIds = [...new Set(otherRefs.map(r => r.sourceId))]
+
+    // Remove already-known IDs
+    const known = new Set(nodeIds)
+    prioritizedIds = [
+      ...factionIds.filter(id => !known.has(id)).slice(0, 30),
+      ...otherIds.filter(id => !known.has(id)).slice(0, 10),
+    ]
+  } else {
+    const known = new Set(nodeIds)
+    prioritizedIds = [...new Set(allRefs.map(r => r.sourceId))]
+      .filter(id => !known.has(id))
+      .slice(0, 30)
+  }
+
+  if (prioritizedIds.length === 0) return { nodes: [], refs: allRefs }
+
+  const nodes = await fetchNodesFromR2(bucket, prioritizedIds)
+  return { nodes, refs: allRefs }
 }
 
 /** Assemble node content into a context string for the LLM. */
-function assembleContext(primaryNodes: Node[], connectedNodes: Node[]): string {
+function assembleContext(primaryNodes: Node[], connectedNodes: Node[], refs?: NodeRef[]): string {
   const parts: string[] = []
 
   // Primary results first
@@ -375,11 +475,30 @@ function assembleContext(primaryNodes: Node[], connectedNodes: Node[]): string {
     parts.push('')
   }
 
+  // Ref summary — shows what connects to what
+  if (refs && refs.length > 0) {
+    parts.push('--- Graph connections ---')
+    const refsByTarget = new Map<string, NodeRef[]>()
+    for (const r of refs) {
+      const arr = refsByTarget.get(r.targetId) ?? []
+      arr.push(r)
+      refsByTarget.set(r.targetId, arr)
+    }
+    for (const [targetId, targetRefs] of refsByTarget) {
+      const count = targetRefs.length
+      const sample = targetRefs.slice(0, 5).map(r => `${r.rel}: ${r.context.substring(0, 80)}`).join('\n  ')
+      parts.push(`${targetId} has ${count} connections:`)
+      parts.push(`  ${sample}`)
+      if (count > 5) parts.push(`  ... and ${count - 5} more`)
+    }
+    parts.push('')
+  }
+
   // Connected context (more concise)
   if (connectedNodes.length > 0) {
     parts.push('--- Related rules ---')
-    for (const node of connectedNodes.slice(0, 10)) {
-      parts.push(`### ${node.title} [${node.layer}/${node.category}]`)
+    for (const node of connectedNodes.slice(0, 15)) {
+      parts.push(`### ${node.title} [${node.layer}/${node.category}${node.factionId ? `, ${node.factionId}` : ''}]`)
       parts.push(node.summary)
       parts.push('')
     }

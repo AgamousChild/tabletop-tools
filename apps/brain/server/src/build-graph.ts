@@ -184,8 +184,28 @@ async function main() {
     totalBytes += json.length
   }
 
+  // Build reverse index with factionId for faction-aware queries
+  const nodeMap = new Map<string, Node>()
+  for (const n of allNodes) nodeMap.set(n.id, n)
+
+  const reverseIndex: Record<string, Array<{ sourceId: string; rel: string; context: string; factionId?: string }>> = {}
+  for (const ref of allRefs) {
+    if (!reverseIndex[ref.targetId]) reverseIndex[ref.targetId] = []
+    const sourceNode = nodeMap.get(ref.sourceId)
+    reverseIndex[ref.targetId]!.push({
+      sourceId: ref.sourceId,
+      rel: ref.rel,
+      context: ref.context.substring(0, 120),
+      factionId: sourceNode?.factionId,
+    })
+  }
+  const revJson = JSON.stringify(reverseIndex)
+  writeFileSync(join(OUTPUT_DIR, 'refs', 'reverse-index.json'), revJson)
+  totalBytes += revJson.length
+  console.log(`Reverse index: ${Object.keys(reverseIndex).length} targets, ${(revJson.length / 1024 / 1024).toFixed(1)} MB`)
+
   // Write manifest
-  const allFiles = { ...nodeFiles, ...refFiles }
+  const allFiles: Record<string, unknown> = { ...nodeFiles, ...refFiles, 'refs/reverse-index.json': reverseIndex }
   const manifest = buildManifest(allFiles, null)
   writeFileSync(join(OUTPUT_DIR, 'manifest.json'), JSON.stringify(manifest, null, 2))
 

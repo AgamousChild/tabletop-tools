@@ -191,8 +191,25 @@ export async function runBrainSync(
   // Partition refs
   const refFiles = partitionRefs(allRefs, nodeFileMap)
 
+  // Build reverse index: targetId → [{sourceId, rel, context, factionId}]
+  // Include factionId so queries can filter by faction without loading nodes
+  const nodeMap = new Map<string, Node>()
+  for (const node of allNodes) nodeMap.set(node.id, node)
+
+  const reverseIndex: Record<string, Array<{ sourceId: string; rel: string; context: string; factionId?: string }>> = {}
+  for (const ref of allRefs) {
+    if (!reverseIndex[ref.targetId]) reverseIndex[ref.targetId] = []
+    const sourceNode = nodeMap.get(ref.sourceId)
+    reverseIndex[ref.targetId]!.push({
+      sourceId: ref.sourceId,
+      rel: ref.rel,
+      context: ref.context.substring(0, 120),
+      factionId: sourceNode?.factionId,
+    })
+  }
+
   // Combine all files
-  const allFiles: Record<string, unknown> = { ...nodeFiles, ...refFiles }
+  const allFiles: Record<string, unknown> = { ...nodeFiles, ...refFiles, 'refs/reverse-index.json': reverseIndex }
 
   // Read existing manifest
   let existingManifest: BrainManifest | null = null
