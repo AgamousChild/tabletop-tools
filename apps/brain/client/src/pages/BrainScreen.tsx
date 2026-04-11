@@ -5,7 +5,7 @@ import { RefList } from '../components/RefList'
 import { useNode, useNodesByLayer, useNodeSearch, useNodeRefs } from '../lib/hooks'
 import type { BrainNode } from '../lib/store'
 
-const API_BASE = import.meta.env.VITE_BRAIN_API_URL || 'https://tabletop-tools-brain.micah-ec2.workers.dev'
+const API_BASE = import.meta.env.VITE_BRAIN_API_URL || '/brain/api'
 
 interface QASource {
   id: string
