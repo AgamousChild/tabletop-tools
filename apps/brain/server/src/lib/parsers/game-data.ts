@@ -370,6 +370,33 @@ export function convertGameData(input: GameDataInput, retrievedAt?: string): Gam
       }
     }
 
+    // Points cost — from unit_costs data
+    const unitCosts = costsByDatasheet.get(ds.id) ?? []
+    if (unitCosts.length > 0) {
+      // Parse the lowest cost option (minimum squad size)
+      const costValues = unitCosts.map(c => parseInt(c.cost)).filter(c => !isNaN(c))
+      if (costValues.length > 0) {
+        const minCost = Math.min(...costValues)
+        const maxCost = Math.max(...costValues)
+        node.keywords.push(`pts-${minCost}`)
+
+        // Points tier for budget queries
+        if (minCost <= 50) node.keywords.push('cheap')
+        else if (minCost <= 100) node.keywords.push('moderate-cost')
+        else if (minCost <= 200) node.keywords.push('expensive')
+        else node.keywords.push('premium')
+
+        // Points per wound efficiency (using primary model)
+        const w = parseInt(primaryModel?.wounds ?? '0')
+        const modelCount = compositions.length > 0 ? parseInt(compositions[0]!.description) || 1 : 1
+        if (w > 0 && modelCount > 0) {
+          const totalWounds = w * modelCount
+          const ptsPerWound = Math.round(minCost / totalWounds)
+          node.keywords.push(`ppw-${ptsPerWound}`)
+        }
+      }
+    }
+
     if (ds.isLegends) {
       node.keywords.push('legends')
     }
