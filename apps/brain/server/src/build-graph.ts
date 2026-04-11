@@ -12,6 +12,7 @@ import { parseFactionPack } from './lib/parsers/faction-pack'
 import { parseRulesCommentary } from './lib/parsers/rules-commentary'
 import { parseBalanceDataslate } from './lib/parsers/balance-dataslate'
 import { convertGameData } from './lib/parsers/game-data'
+import { buildCommunityNodes } from './lib/combat-knowledge'
 import { partitionNodes, partitionRefs, buildManifest } from './lib/sync'
 import type { Node, NodeRef } from './lib/model'
 import type { GameDataInput } from './lib/parsers/game-data'
@@ -114,6 +115,13 @@ async function main() {
   allNodes.push(...gameResult.nodes)
   allRefs.push(...gameResult.refs)
   console.log(`   ${gameResult.nodes.length} nodes, ${gameResult.refs.length} refs`)
+
+  // ── 6. Community Knowledge ─────────────────────────────────────────────────
+  console.log('6. Community Knowledge')
+  const communityResult = buildCommunityNodes()
+  allNodes.push(...communityResult.nodes)
+  allRefs.push(...communityResult.refs)
+  console.log(`   ${communityResult.nodes.length} nodes, ${communityResult.refs.length} refs`)
 
   // ── Deduplicate nodes (game data takes precedence over faction pack PDFs) ──
   const seenNodeIds = new Set<string>()
