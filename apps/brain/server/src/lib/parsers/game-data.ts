@@ -218,7 +218,7 @@ function normalizeFactionId(code: string): string {
   return FACTION_CODE_TO_SLUG[code] ?? slugify(code)
 }
 
-import { getToughnessTier, getStrengthTier } from '../combat-tiers'
+import { getToughnessTier, getStrengthTier, getSaveTier, usefulApCap } from '../combat-tiers'
 
 // ── HTML Stripping ──────────────────────────────────────────────────────────
 
@@ -331,7 +331,7 @@ export function convertGameData(input: GameDataInput, retrievedAt?: string): Gam
       keywords: [...keywords.map(k => k.keyword.toLowerCase()), ds.role.toLowerCase()].filter(Boolean),
     }
 
-    // Add toughness tier to keywords for combat-relevant queries
+    // Add combat profile to keywords for combat-relevant queries
     const primaryModel = models[0]
     if (primaryModel) {
       const t = parseInt(primaryModel.toughness)
@@ -340,6 +340,33 @@ export function convertGameData(input: GameDataInput, retrievedAt?: string): Gam
         if (tier) {
           node.keywords.push(`t${t}`, tier.name, `toughness-${t}`)
         }
+      }
+
+      const sv = parseInt(primaryModel.save)
+      if (!isNaN(sv)) {
+        const saveTier = getSaveTier(sv)
+        if (saveTier) {
+          node.keywords.push(`sv${sv}+`, saveTier.name, `save-${sv}`)
+        }
+      }
+
+      // Invulnerable save — critical for AP effectiveness
+      const invSv = parseInt(primaryModel.invSv)
+      if (!isNaN(invSv) && invSv > 0) {
+        node.keywords.push(`invuln-${invSv}++`, `invulnerable`)
+        // Calculate AP cap — AP beyond this is wasted
+        if (!isNaN(sv)) {
+          const apCap = usefulApCap(sv, invSv)
+          if (apCap > 0) {
+            node.keywords.push(`ap-cap-${apCap}`)
+          }
+        }
+      }
+
+      // Wounds — relevant for bracket/degradation and kill efficiency
+      const w = parseInt(primaryModel.wounds)
+      if (!isNaN(w)) {
+        node.keywords.push(`w${w}`, `wounds-${w}`)
       }
     }
 
@@ -403,6 +430,11 @@ export function convertGameData(input: GameDataInput, retrievedAt?: string): Gam
     const d = parseInt(wg.damage)
     if (!isNaN(d) && d > 1) {
       nodes[nodes.length - 1]!.keywords.push(`damage-${d}`, `d${d}`)
+    }
+    const ap = parseInt(wg.ap)
+    if (!isNaN(ap) && ap !== 0) {
+      const absAp = Math.abs(ap)
+      nodes[nodes.length - 1]!.keywords.push(`ap-${absAp}`, `ap${absAp}`)
     }
 
     // part_of ref to datasheet

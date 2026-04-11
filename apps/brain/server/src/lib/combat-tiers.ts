@@ -144,6 +144,40 @@ export const STRENGTH_TIERS: StrengthTier[] = [
   },
 ]
 
+export interface SaveTier {
+  name: string
+  save: number        // the characteristic (2, 3, 4, 5, 6)
+  description: string
+  /** AP needed to degrade to 4+ (the "break even" point) */
+  apBreakpoint: number
+}
+
+export const SAVE_TIERS: SaveTier[] = [
+  { name: 'heavy-armour', save: 2, description: '2+ save — needs AP-1+ to degrade, AP-4 to seriously threaten', apBreakpoint: 2 },
+  { name: 'power-armour', save: 3, description: '3+ save — standard elite save, AP-1 brings to 4+', apBreakpoint: 1 },
+  { name: 'medium-armour', save: 4, description: '4+ save — moderate protection, already at the break point', apBreakpoint: 0 },
+  { name: 'light-armour', save: 5, description: '5+ save — minimal protection, AP is mostly wasted', apBreakpoint: -1 },
+  { name: 'no-armour', save: 6, description: '6+ or worse — effectively no save, AP irrelevant', apBreakpoint: -2 },
+]
+
+/**
+ * Invulnerable save analysis.
+ * The invuln caps effective save, making AP above a certain value wasted.
+ * For example: 3+ save with 4++ invuln → AP-2 gets you to 5+ (below invuln),
+ * but AP-3 would get you to 6+ which is worse than the 4++ invuln,
+ * so the model uses the 4++ instead. AP-2 is the "useful AP cap".
+ */
+export function usefulApCap(baseSave: number, invuln: number): number {
+  // AP that would degrade base save to exactly the invuln value
+  // Beyond this, extra AP is wasted because invuln kicks in
+  return baseSave - invuln
+}
+
+/** Get the save tier for a given save characteristic. */
+export function getSaveTier(save: number): SaveTier | undefined {
+  return SAVE_TIERS.find(t => t.save === save) ?? SAVE_TIERS[SAVE_TIERS.length - 1]
+}
+
 /** Get the toughness tier for a given toughness value. */
 export function getToughnessTier(toughness: number): ToughnessTier | undefined {
   return TOUGHNESS_TIERS.find(t => toughness >= t.range[0] && toughness <= t.range[1])
