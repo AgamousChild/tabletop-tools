@@ -218,6 +218,8 @@ function normalizeFactionId(code: string): string {
   return FACTION_CODE_TO_SLUG[code] ?? slugify(code)
 }
 
+import { getToughnessTier, getStrengthTier } from '../combat-tiers'
+
 // ── HTML Stripping ──────────────────────────────────────────────────────────
 
 /** Strip HTML tags and convert basic HTML to markdown. */
@@ -328,6 +330,19 @@ export function convertGameData(input: GameDataInput, retrievedAt?: string): Gam
       version: 1,
       keywords: [...keywords.map(k => k.keyword.toLowerCase()), ds.role.toLowerCase()].filter(Boolean),
     }
+
+    // Add toughness tier to keywords for combat-relevant queries
+    const primaryModel = models[0]
+    if (primaryModel) {
+      const t = parseInt(primaryModel.toughness)
+      if (!isNaN(t)) {
+        const tier = getToughnessTier(t)
+        if (tier) {
+          node.keywords.push(`t${t}`, tier.name, `toughness-${t}`)
+        }
+      }
+    }
+
     if (ds.isLegends) {
       node.keywords.push('legends')
     }
@@ -368,7 +383,7 @@ export function convertGameData(input: GameDataInput, retrievedAt?: string): Gam
       category: 'weapon',
       title: wg.name,
       content,
-      summary: `${wg.name} (${wg.type}) — ${wg.range}, ${wg.attacks}A, S${wg.strength}, AP${wg.ap}, D${wg.damage}.`,
+      summary: `${wg.name} (${wg.type}) — ${wg.range}, ${wg.attacks}A, S${wg.strength}, AP${wg.ap}, D${wg.damage}.${cleanDesc ? ` [${cleanDesc}]` : ''}`,
       factionId: dsFactionMap.get(wg.datasheetId),
       datasheetId: wg.datasheetId,
       sources: [source],
@@ -376,6 +391,19 @@ export function convertGameData(input: GameDataInput, retrievedAt?: string): Gam
       version: 1,
       keywords: extractWeaponKeywords(wg),
     })
+
+    // Add strength tier and damage info to weapon keywords
+    const s = parseInt(wg.strength)
+    if (!isNaN(s)) {
+      const tier = getStrengthTier(s)
+      if (tier) {
+        nodes[nodes.length - 1]!.keywords.push(`s${s}`, tier.name, `strength-${s}`)
+      }
+    }
+    const d = parseInt(wg.damage)
+    if (!isNaN(d) && d > 1) {
+      nodes[nodes.length - 1]!.keywords.push(`damage-${d}`, `d${d}`)
+    }
 
     // part_of ref to datasheet
     refs.push({
