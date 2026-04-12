@@ -192,11 +192,13 @@ async function main() {
     totalBytes += json.length
   }
 
-  // Build reverse index with factionId for faction-aware queries
+  // Build graph indexes for traversal
   const nodeMap = new Map<string, Node>()
   for (const n of allNodes) nodeMap.set(n.id, n)
 
   const reverseIndex: Record<string, Array<{ sourceId: string; rel: string; context: string; factionId?: string }>> = {}
+  const forwardIndex: Record<string, Array<{ targetId: string; rel: string; context: string }>> = {}
+
   for (const ref of allRefs) {
     if (!reverseIndex[ref.targetId]) reverseIndex[ref.targetId] = []
     const sourceNode = nodeMap.get(ref.sourceId)
@@ -206,14 +208,27 @@ async function main() {
       context: ref.context.substring(0, 120),
       factionId: sourceNode?.factionId,
     })
+
+    if (!forwardIndex[ref.sourceId]) forwardIndex[ref.sourceId] = []
+    forwardIndex[ref.sourceId]!.push({
+      targetId: ref.targetId,
+      rel: ref.rel,
+      context: ref.context.substring(0, 120),
+    })
   }
   const revJson = JSON.stringify(reverseIndex)
   writeFileSync(join(OUTPUT_DIR, 'refs', 'reverse-index.json'), revJson)
   totalBytes += revJson.length
+
+  const fwdJson = JSON.stringify(forwardIndex)
+  writeFileSync(join(OUTPUT_DIR, 'refs', 'forward-index.json'), fwdJson)
+  totalBytes += fwdJson.length
+
   console.log(`Reverse index: ${Object.keys(reverseIndex).length} targets, ${(revJson.length / 1024 / 1024).toFixed(1)} MB`)
+  console.log(`Forward index: ${Object.keys(forwardIndex).length} sources, ${(fwdJson.length / 1024 / 1024).toFixed(1)} MB`)
 
   // Write manifest
-  const allFiles: Record<string, unknown> = { ...nodeFiles, ...refFiles, 'refs/reverse-index.json': reverseIndex }
+  const allFiles: Record<string, unknown> = { ...nodeFiles, ...refFiles, 'refs/reverse-index.json': reverseIndex, 'refs/forward-index.json': forwardIndex }
   const manifest = buildManifest(allFiles, null)
   writeFileSync(join(OUTPUT_DIR, 'manifest.json'), JSON.stringify(manifest, null, 2))
 
