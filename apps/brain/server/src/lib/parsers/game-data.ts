@@ -276,6 +276,15 @@ export function convertGameData(input: GameDataInput, retrievedAt?: string): Gam
   const refs: NodeRef[] = []
   const source: Source = { ...wahapediaSource, retrievedAt: retrievedAt ?? new Date().toISOString() }
 
+  // Filter out Boarding Actions — different game mode
+  const boardingDetIds = new Set(
+    input.detachments.filter(d => d.name.toLowerCase().includes('boarding')).map(d => d.id)
+  )
+  const filteredDetachments = input.detachments.filter(d => !boardingDetIds.has(d.id))
+  const filteredStratagems = input.stratagems.filter(s => !boardingDetIds.has(s.detachmentId))
+  const filteredEnhancements = input.enhancements.filter(e => !boardingDetIds.has(e.detachmentId))
+  const filteredDetAbilities = input.detachmentAbilities.filter(da => !boardingDetIds.has(da.detachmentId))
+
   // Build lookup maps
   const modelsByDatasheet = groupBy(input.datasheetModels, r => r.datasheetId)
   const keywordsByDatasheet = groupBy(input.unitKeywords, r => r.datasheetId)
@@ -283,9 +292,9 @@ export function convertGameData(input: GameDataInput, retrievedAt?: string): Gam
   const costsByDatasheet = groupBy(input.unitCosts, r => r.datasheetId)
   const wargearByDatasheet = groupBy(input.datasheetWargear, r => r.datasheetId)
   const abilitiesByDatasheet = groupBy(input.unitAbilities, r => r.datasheetId)
-  const abilitiesByDetachment = groupBy(input.detachmentAbilities, r => r.detachmentId)
-  const stratagemsByDetachment = groupBy(input.stratagems, r => r.detachmentId)
-  const enhancementsByDetachment = groupBy(input.enhancements, r => r.detachmentId)
+  const stratagemsByDetachment = groupBy(filteredStratagems, r => r.detachmentId)
+  const enhancementsByDetachment = groupBy(filteredEnhancements, r => r.detachmentId)
+  const abilitiesByDetachment = groupBy(filteredDetAbilities, r => r.detachmentId)
 
   // ── 1. Datasheets → unit/datasheet nodes ──────────────────────────────────
 
@@ -566,7 +575,7 @@ export function convertGameData(input: GameDataInput, retrievedAt?: string): Gam
   // ── 5. Detachments → faction/detachment-rule nodes ────────────────────────
 
   const seenDetIds = new Set<string>()
-  for (const det of input.detachments) {
+  for (const det of filteredDetachments) {
     let detNodeId = `det:${normalizeFactionId(det.factionId)}:${slugify(det.name)}`
     if (seenDetIds.has(detNodeId)) {
       detNodeId = `det:${normalizeFactionId(det.factionId)}:${slugify(det.name)}-${det.id}`
@@ -695,7 +704,7 @@ export function convertGameData(input: GameDataInput, retrievedAt?: string): Gam
   for (const j of input.datasheetStratagems) {
     if (j.stratagemId) {
       // Find the stratagem node
-      const strat = input.stratagems.find(s => s.id === j.stratagemId)
+      const strat = filteredStratagems.find(s => s.id === j.stratagemId)
       if (strat) {
         const det = input.detachments.find(d => d.id === strat.detachmentId)
         if (det) {
@@ -713,7 +722,7 @@ export function convertGameData(input: GameDataInput, retrievedAt?: string): Gam
 
   for (const j of input.datasheetEnhancements) {
     if (j.enhancementId) {
-      const enh = input.enhancements.find(e => e.id === j.enhancementId)
+      const enh = filteredEnhancements.find(e => e.id === j.enhancementId)
       if (enh) {
         const det = input.detachments.find(d => d.id === enh.detachmentId)
         if (det) {
@@ -792,11 +801,13 @@ export function convertGameData(input: GameDataInput, retrievedAt?: string): Gam
     { pattern: 'firing deck', coreSlug: 'firing-deck', label: 'Firing Deck' },
   ]
 
+  const ALL_CORE_PATTERNS = [...WEAPON_ABILITY_CORE_NODES, ...UNIT_ABILITY_CORE_NODES]
+
   for (const ab of input.unitAbilities) {
     const abilityNodeId = `ability:${ab.datasheetId}:${slugify(ab.name)}`
     const text = `${ab.name} ${ab.description}`.toLowerCase()
 
-    for (const { pattern, coreSlug, label } of UNIT_ABILITY_CORE_NODES) {
+    for (const { pattern, coreSlug, label } of ALL_CORE_PATTERNS) {
       if (text.includes(pattern)) {
         refs.push({
           sourceId: abilityNodeId,
@@ -815,15 +826,15 @@ export function convertGameData(input: GameDataInput, retrievedAt?: string): Gam
   // This is how you answer "who has sustained hits" — not just weapons that
   // natively have it, but stratagems that can grant it.
 
-  const ALL_MECHANIC_PATTERNS = [...WEAPON_ABILITY_CORE_NODES, ...UNIT_ABILITY_CORE_NODES]
+  // ALL_CORE_PATTERNS already defined above
 
-  for (const strat of input.stratagems) {
+  for (const strat of filteredStratagems) {
     const det = input.detachments.find(d => d.id === strat.detachmentId)
     if (!det) continue
     const stratNodeId = `det:${normalizeFactionId(det.factionId)}:${slugify(det.name)}:${slugify(strat.name)}`
     const text = `${strat.name} ${strat.description}`.toLowerCase()
 
-    for (const { pattern, coreSlug, label } of ALL_MECHANIC_PATTERNS) {
+    for (const { pattern, coreSlug, label } of ALL_CORE_PATTERNS) {
       if (text.includes(pattern)) {
         refs.push({
           sourceId: stratNodeId,
@@ -835,13 +846,13 @@ export function convertGameData(input: GameDataInput, retrievedAt?: string): Gam
     }
   }
 
-  for (const enh of input.enhancements) {
+  for (const enh of filteredEnhancements) {
     const det = input.detachments.find(d => d.id === enh.detachmentId)
     if (!det) continue
     const enhNodeId = `det:${normalizeFactionId(det.factionId)}:${slugify(det.name)}:${slugify(enh.name)}`
     const text = `${enh.name} ${enh.description}`.toLowerCase()
 
-    for (const { pattern, coreSlug, label } of ALL_MECHANIC_PATTERNS) {
+    for (const { pattern, coreSlug, label } of ALL_CORE_PATTERNS) {
       if (text.includes(pattern)) {
         refs.push({
           sourceId: enhNodeId,
@@ -854,13 +865,13 @@ export function convertGameData(input: GameDataInput, retrievedAt?: string): Gam
   }
 
   // Detachment abilities too
-  for (const da of input.detachmentAbilities) {
+  for (const da of filteredDetAbilities) {
     const det = input.detachments.find(d => d.id === da.detachmentId)
     if (!det) continue
     const daNodeId = `det:${normalizeFactionId(det.factionId)}:${slugify(det.name)}:${slugify(da.name)}`
     const text = `${da.name} ${da.description}`.toLowerCase()
 
-    for (const { pattern, coreSlug, label } of ALL_MECHANIC_PATTERNS) {
+    for (const { pattern, coreSlug, label } of ALL_CORE_PATTERNS) {
       if (text.includes(pattern)) {
         refs.push({
           sourceId: daNodeId,

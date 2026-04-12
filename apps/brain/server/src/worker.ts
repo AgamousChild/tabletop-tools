@@ -168,8 +168,8 @@ app.post('/ask', async (c) => {
     factionHint,
   )
 
-  // 5. Assemble context for Claude
-  const context = assembleContext(nodeContent, connected.nodes, connected.refs)
+  // 5. Assemble context for Claude — parentMap resolves unit names from graph
+  const context = assembleContext(nodeContent, connected.nodes, connected.parentMap)
 
   // 6. Call Claude API
   const response = await fetch('https://api.anthropic.com/v1/messages', {
@@ -182,11 +182,19 @@ app.post('/ask', async (c) => {
     body: JSON.stringify({
       model: 'claude-sonnet-4-20250514',
       max_tokens: 1024,
-      system: `You are a Warhammer 40,000 rules expert. Answer questions using ONLY the rules context provided below. Always cite your sources. If the context doesn't contain enough information to answer confidently, say so.
+      system: `You are a Warhammer 40,000 rules expert. Answer questions using ONLY the rules context provided below. Always cite your sources.
 
-When citing sources, use the format: (Source: [title], [page/section if available])
+CRITICAL RULES FOR ANSWERS:
+1. ALWAYS name the specific unit/datasheet that has each ability or weapon. Never say "Keep Counting!" without saying which unit has it (e.g., "Uriel Ventris has Keep Counting!").
+2. For unit abilities from characters/leaders, explain that the ability is conferred by ATTACHING the character to a unit — not an "aura". Leader abilities affect ONLY the unit the character is attached to. Aura abilities have a range and affect multiple nearby units — these are different mechanics.
+3. For faction/detachment abilities, explain which detachment grants it and any activation conditions.
+4. For weapons, name the unit(s) that carry them.
+5. Prioritize by impact: army-wide rules first, then detachment rules, then leader/character abilities (these affect entire attached units), then individual unit abilities, then native weapon abilities last.
+6. When a context entry says "[unit-ability, ON UNIT: X]" or "[weapon, ON UNIT: X]", use X as the unit name.
+7. Be precise about game mechanics. If a rule has been errata'd or FAQ'd, mention the correction.
+8. If the context doesn't contain enough information to answer confidently, say so.
 
-Be precise about game mechanics. If a rule has been errata'd or FAQ'd, mention the correction.`,
+When citing sources, use the format: (Source: [title])`,
       messages: [
         {
           role: 'user',
@@ -400,66 +408,109 @@ async function fetchNodesFromR2(bucket: R2Bucket, nodeIds: string[]): Promise<No
   return nodes
 }
 
-/** Fetch nodes connected to the given IDs via the reverse index. */
+/**
+ * Walk the graph from the given node IDs using both indexes.
+ * Reverse index: find what points TO these nodes
+ * Forward index: resolve part_of parents (ability → datasheet name)
+ */
 async function fetchConnectedNodes(
   bucket: R2Bucket,
   nodeIds: string[],
   depth: number,
   factionHint?: string,
-): Promise<{ nodes: Node[]; refs: Array<{ sourceId: string; rel: string; context: string }> }> {
-  if (depth <= 0) return { nodes: [], refs: [] }
+): Promise<{ nodes: Node[]; parentMap: Map<string, string> }> {
+  if (depth <= 0) return { nodes: [], parentMap: new Map() }
 
-  // Load the reverse index (single file, cached by R2)
-  const revObj = await bucket.get('refs/reverse-index.json')
-  if (!revObj) return { nodes: [], refs: [] }
+  // Load both indexes in parallel
+  const [revObj, fwdObj] = await Promise.all([
+    bucket.get('refs/reverse-index.json'),
+    bucket.get('refs/forward-index.json'),
+  ])
+  if (!revObj) return { nodes: [], parentMap: new Map() }
 
-  const reverseIndex = await revObj.json() as Record<string, Array<{ sourceId: string; rel: string; context: string; factionId?: string }>>
+  type RevEntry = { sourceId: string; rel: string; context: string; factionId?: string }
+  type FwdEntry = { targetId: string; rel: string; context: string }
 
-  const allRefs: Array<{ sourceId: string; rel: string; context: string; factionId?: string }> = []
+  const reverseIndex = await revObj.json() as Record<string, RevEntry[]>
+  const forwardIndex = fwdObj
+    ? await fwdObj.json() as Record<string, FwdEntry[]>
+    : {} as Record<string, FwdEntry[]>
 
+  // Step 1: Reverse lookup — find all nodes that reference our search results
+  const inboundRefs: RevEntry[] = []
   for (const nodeId of nodeIds) {
-    const inbound = reverseIndex[nodeId]
-    if (inbound) {
-      for (const ref of inbound) {
-        allRefs.push(ref)
-      }
-    }
+    const refs = reverseIndex[nodeId]
+    if (refs) inboundRefs.push(...refs)
   }
 
-  if (allRefs.length === 0) return { nodes: [], refs: [] }
+  if (inboundRefs.length === 0) return { nodes: [], parentMap: new Map() }
 
-  // If we have a faction hint, prioritize refs whose sourceId contains the faction slug
-  // This is a heuristic — faction nodes have IDs like det:space-marines:... or weapon IDs
-  // that we can't check without loading. So we also fetch from the faction-specific node file.
-  let prioritizedIds: string[]
+  // Step 2: Select which connected nodes to fetch (faction-prioritized)
+  const known = new Set(nodeIds)
+  let selectedIds: string[]
+
   if (factionHint) {
-    const factionRefs = allRefs.filter(r => r.factionId === factionHint)
-    const otherRefs = allRefs.filter(r => r.factionId !== factionHint)
-
-    const factionIds = [...new Set(factionRefs.map(r => r.sourceId))]
-    const otherIds = [...new Set(otherRefs.map(r => r.sourceId))]
-
-    // Remove already-known IDs
-    const known = new Set(nodeIds)
-    prioritizedIds = [
+    const factionIds = [...new Set(inboundRefs.filter(r => r.factionId === factionHint).map(r => r.sourceId))]
+    const otherIds = [...new Set(inboundRefs.filter(r => r.factionId !== factionHint).map(r => r.sourceId))]
+    selectedIds = [
       ...factionIds.filter(id => !known.has(id)).slice(0, 30),
       ...otherIds.filter(id => !known.has(id)).slice(0, 10),
     ]
   } else {
-    const known = new Set(nodeIds)
-    prioritizedIds = [...new Set(allRefs.map(r => r.sourceId))]
+    selectedIds = [...new Set(inboundRefs.map(r => r.sourceId))]
       .filter(id => !known.has(id))
-      .slice(0, 30)
+      .slice(0, 40)
   }
 
-  if (prioritizedIds.length === 0) return { nodes: [], refs: allRefs }
+  if (selectedIds.length === 0) return { nodes: [], parentMap: new Map() }
 
-  const nodes = await fetchNodesFromR2(bucket, prioritizedIds)
-  return { nodes, refs: allRefs }
+  // Step 3: Forward lookup — for each connected node, find its part_of parent
+  // This resolves: ability → datasheet, weapon → datasheet, stratagem → detachment
+  const parentMap = new Map<string, string>() // child nodeId → parent nodeId
+  const parentIdsToFetch = new Set<string>()
+
+  for (const id of selectedIds) {
+    const fwdRefs = forwardIndex[id]
+    if (!fwdRefs) continue
+    for (const ref of fwdRefs) {
+      if (ref.rel === 'part_of') {
+        parentMap.set(id, ref.targetId)
+        if (!known.has(ref.targetId)) {
+          parentIdsToFetch.add(ref.targetId)
+        }
+        break // first parent only
+      }
+    }
+  }
+
+  // Step 4: Fetch connected nodes + their parents in one batch
+  const allToFetch = [...new Set([...selectedIds, ...parentIdsToFetch])]
+    .filter(id => !known.has(id))
+
+  const nodes = await fetchNodesFromR2(bucket, allToFetch)
+
+  // Step 5: Resolve parentMap IDs to titles
+  const nodeById = new Map<string, Node>()
+  for (const n of nodes) nodeById.set(n.id, n)
+
+  const resolvedParentMap = new Map<string, string>()
+  for (const [childId, parentId] of parentMap) {
+    const parent = nodeById.get(parentId)
+    if (parent) resolvedParentMap.set(childId, parent.title)
+  }
+
+  return { nodes, parentMap: resolvedParentMap }
 }
 
-/** Assemble node content into a context string for the LLM. */
-function assembleContext(primaryNodes: Node[], connectedNodes: Node[], refs?: NodeRef[]): string {
+/**
+ * Assemble node content into a structured context string for the LLM.
+ * Uses parentMap from graph traversal to resolve unit/detachment names.
+ */
+function assembleContext(
+  primaryNodes: Node[],
+  connectedNodes: Node[],
+  parentMap: Map<string, string>,
+): string {
   const parts: string[] = []
 
   // Primary results first
@@ -475,31 +526,76 @@ function assembleContext(primaryNodes: Node[], connectedNodes: Node[], refs?: No
     parts.push('')
   }
 
-  // Ref summary — shows what connects to what
-  if (refs && refs.length > 0) {
-    parts.push('--- Graph connections ---')
-    const refsByTarget = new Map<string, NodeRef[]>()
-    for (const r of refs) {
-      const arr = refsByTarget.get(r.targetId) ?? []
-      arr.push(r)
-      refsByTarget.set(r.targetId, arr)
-    }
-    for (const [targetId, targetRefs] of refsByTarget) {
-      const count = targetRefs.length
-      const sample = targetRefs.slice(0, 5).map(r => `${r.rel}: ${r.context.substring(0, 80)}`).join('\n  ')
-      parts.push(`${targetId} has ${count} connections:`)
-      parts.push(`  ${sample}`)
-      if (count > 5) parts.push(`  ... and ${count - 5} more`)
-    }
-    parts.push('')
-  }
-
-  // Connected context (more concise)
+  // Connected nodes — grouped by category, sorted by impact
   if (connectedNodes.length > 0) {
-    parts.push('--- Related rules ---')
-    for (const node of connectedNodes.slice(0, 15)) {
-      parts.push(`### ${node.title} [${node.layer}/${node.category}${node.factionId ? `, ${node.factionId}` : ''}]`)
-      parts.push(node.summary)
+    const groups: Record<string, Node[]> = {
+      'faction-ability': [],
+      'detachment-rule': [],
+      'stratagem': [],
+      'enhancement': [],
+      'unit-ability': [],
+      'weapon': [],
+      'datasheet': [],
+      'other': [],
+    }
+    for (const n of connectedNodes) {
+      const key = groups[n.category] ? n.category : 'other'
+      groups[key]!.push(n)
+    }
+
+    parts.push('--- Connected rules (ordered by impact: army-wide → detachment → leader/unit → weapon) ---')
+    parts.push('')
+
+    for (const n of groups['faction-ability']!) {
+      const parent = parentMap.get(n.id)
+      parts.push(`### ${n.title} [faction-ability${n.factionId ? `, ${n.factionId}` : ''}${parent ? `, from detachment: ${parent}` : ''}]`)
+      parts.push(n.content || n.summary)
+      parts.push('')
+    }
+
+    for (const n of groups['detachment-rule']!) {
+      parts.push(`### ${n.title} [detachment-rule${n.factionId ? `, ${n.factionId}` : ''}]`)
+      parts.push(n.content || n.summary)
+      parts.push('')
+    }
+
+    for (const n of groups['stratagem']!) {
+      const parent = parentMap.get(n.id)
+      parts.push(`### ${n.title} [stratagem${n.factionId ? `, ${n.factionId}` : ''}${parent ? `, detachment: ${parent}` : ''}]`)
+      parts.push(n.content || n.summary)
+      parts.push('')
+    }
+
+    for (const n of groups['enhancement']!) {
+      const parent = parentMap.get(n.id)
+      parts.push(`### ${n.title} [enhancement${n.factionId ? `, ${n.factionId}` : ''}${parent ? `, detachment: ${parent}` : ''}]`)
+      parts.push(n.content || n.summary)
+      parts.push('')
+    }
+
+    for (const n of groups['unit-ability']!) {
+      const parent = parentMap.get(n.id)
+      parts.push(`### ${n.title} [unit-ability, ON UNIT: ${parent || 'unknown unit'}${n.factionId ? `, ${n.factionId}` : ''}]`)
+      parts.push(n.content || n.summary)
+      parts.push('')
+    }
+
+    for (const n of groups['weapon']!) {
+      const parent = parentMap.get(n.id)
+      parts.push(`### ${n.title} [weapon, ON UNIT: ${parent || 'unknown unit'}${n.factionId ? `, ${n.factionId}` : ''}]`)
+      parts.push(n.summary)
+      parts.push('')
+    }
+
+    for (const n of groups['datasheet']!) {
+      parts.push(`### ${n.title} [datasheet${n.factionId ? `, ${n.factionId}` : ''}]`)
+      parts.push(n.summary)
+      parts.push('')
+    }
+
+    for (const n of groups['other']!) {
+      parts.push(`### ${n.title} [${n.category}]`)
+      parts.push(n.summary)
       parts.push('')
     }
   }
