@@ -248,6 +248,25 @@ When citing sources, use the format: (Source: [title])`
         const factionNodes = connected.nodes.filter(n => n.factionId === factionHint || !n.factionId)
         relevantNodes = factionNodes.length > 0 ? factionNodes : connected.nodes
       }
+
+      // Filter out false positives — only include nodes whose content
+      // actually mentions the searched mechanic keywords
+      if (keywords.length > 0) {
+        relevantNodes = relevantNodes.filter(n => {
+          const text = `${n.title} ${n.content} ${n.summary}`.toLowerCase()
+          return keywords.some(k => text.includes(k))
+        })
+      }
+
+      // Deduplicate — nodes with same title + same content are redundant
+      const seen = new Map<string, boolean>()
+      relevantNodes = relevantNodes.filter(n => {
+        const key = `${n.title}::${n.content.substring(0, 100)}`
+        if (seen.has(key)) return false
+        seen.set(key, true)
+        return true
+      })
+
       answer = formatDeterministicAnswer(body.question, relevantNodes, connected.parentMap)
     }
   }
