@@ -222,6 +222,18 @@ import { getToughnessTier, getStrengthTier, getSaveTier, usefulApCap } from '../
 
 // ── HTML Stripping ──────────────────────────────────────────────────────────
 
+/** Extract targeting keywords from rules text (CAPS words that are unit type keywords). */
+function extractTargetingKeywords(text: string): string[] {
+  const TARGETING_KEYWORDS = [
+    'infantry', 'vehicle', 'monster', 'character', 'mounted', 'beast',
+    'fly', 'walker', 'dreadnought', 'terminator', 'battleline', 'psyker',
+    'titanic', 'transport', 'aircraft', 'jump pack', 'grenades', 'smoke',
+    'epic hero', 'daemon', 'swarm', 'cavalry',
+  ]
+  const lower = text.toLowerCase()
+  return TARGETING_KEYWORDS.filter(k => lower.includes(k))
+}
+
 /** Strip HTML tags and convert basic HTML to markdown. */
 function stripHtml(text: string): string {
   if (!text) return ''
@@ -576,7 +588,7 @@ export function convertGameData(input: GameDataInput, retrievedAt?: string): Gam
       sources: [source],
       refs: [],
       version: 1,
-      keywords: [ab.type.toLowerCase(), ...extractTerms(ab.description)],
+      keywords: [ab.type.toLowerCase(), ...extractTerms(ab.description), ...extractTargetingKeywords(ab.description)],
     })
 
     refs.push({
@@ -604,7 +616,7 @@ export function convertGameData(input: GameDataInput, retrievedAt?: string): Gam
           sources: [source],
           refs: [],
           version: 1,
-          keywords: [ab.type.toLowerCase(), slugify(sub.name), ...extractTerms(sub.text)],
+          keywords: [ab.type.toLowerCase(), slugify(sub.name), ...extractTerms(sub.text), ...extractTargetingKeywords(sub.text)],
         })
 
         refs.push({
@@ -748,7 +760,7 @@ export function convertGameData(input: GameDataInput, retrievedAt?: string): Gam
         sources: [source],
         refs: [],
         version: 1,
-        keywords: extractTerms(da.description),
+        keywords: [...extractTerms(da.description), ...extractTargetingKeywords(da.description)],
       })
 
       refs.push({
@@ -779,7 +791,7 @@ export function convertGameData(input: GameDataInput, retrievedAt?: string): Gam
         sources: [source],
         refs: [],
         version: 1,
-        keywords: ['stratagem', strat.type.toLowerCase(), ...extractTerms(strat.description)],
+        keywords: ['stratagem', strat.type.toLowerCase(), ...extractTerms(strat.description), ...extractTargetingKeywords(strat.description)],
       })
 
       refs.push({
@@ -809,7 +821,7 @@ export function convertGameData(input: GameDataInput, retrievedAt?: string): Gam
         sources: [source],
         refs: [],
         version: 1,
-        keywords: ['enhancement', ...extractTerms(enh.description)],
+        keywords: ['enhancement', ...extractTerms(enh.description), ...extractTargetingKeywords(enh.description)],
       })
 
       refs.push({
