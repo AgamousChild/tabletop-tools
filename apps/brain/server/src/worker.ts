@@ -445,22 +445,46 @@ async function fetchConnectedNodes(
 
   if (inboundRefs.length === 0) return { nodes: [], parentMap: new Map() }
 
-  // Step 2: Select which connected nodes to fetch (faction-prioritized)
+  // Step 2: Select which connected nodes to fetch
+  // Priority: abilities/stratagems first (high impact), weapons last (high volume, low info)
+  // Within each priority, faction-matching nodes come first
   const known = new Set(nodeIds)
-  let selectedIds: string[]
-
-  if (factionHint) {
-    const factionIds = [...new Set(inboundRefs.filter(r => r.factionId === factionHint).map(r => r.sourceId))]
-    const otherIds = [...new Set(inboundRefs.filter(r => r.factionId !== factionHint).map(r => r.sourceId))]
-    selectedIds = [
-      ...factionIds.filter(id => !known.has(id)).slice(0, 30),
-      ...otherIds.filter(id => !known.has(id)).slice(0, 10),
-    ]
-  } else {
-    selectedIds = [...new Set(inboundRefs.map(r => r.sourceId))]
-      .filter(id => !known.has(id))
-      .slice(0, 40)
+  const uniqueRefs = new Map<string, RevEntry>()
+  for (const r of inboundRefs) {
+    if (!known.has(r.sourceId) && !uniqueRefs.has(r.sourceId)) {
+      uniqueRefs.set(r.sourceId, r)
+    }
   }
+
+  // Categorize by ID prefix to determine priority without loading nodes
+  // ability: = unit ability, det: = detachment/stratagem/enhancement, faction: = faction ability, weapon: = weapon
+  function refPriority(id: string): number {
+    if (id.startsWith('faction:')) return 0  // army-wide abilities — highest impact
+    if (id.startsWith('det:')) return 1      // detachment rules, stratagems, enhancements
+    if (id.startsWith('ability:')) return 2  // unit abilities (leader grants)
+    if (id.startsWith('weapon:')) return 4   // weapons — lowest priority (high volume)
+    return 3
+  }
+
+  const sortedRefs = [...uniqueRefs.entries()]
+    .sort((a, b) => {
+      // Priority first
+      const pa = refPriority(a[0])
+      const pb = refPriority(b[0])
+      if (pa !== pb) return pa - pb
+      // Then faction match
+      const fa = a[1].factionId === factionHint ? 0 : 1
+      const fb = b[1].factionId === factionHint ? 0 : 1
+      return fa - fb
+    })
+
+  // Take ALL high-priority nodes (abilities, stratagems), cap weapons
+  const highPriority = sortedRefs.filter(([id]) => refPriority(id) <= 3)
+  const weapons = sortedRefs.filter(([id]) => refPriority(id) === 4)
+  const selectedIds = [
+    ...highPriority.map(([id]) => id),
+    ...weapons.map(([id]) => id).slice(0, 15), // representative weapon sample
+  ]
 
   if (selectedIds.length === 0) return { nodes: [], parentMap: new Map() }
 
