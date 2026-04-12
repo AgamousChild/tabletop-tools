@@ -514,6 +514,33 @@ export function convertGameData(input: GameDataInput, retrievedAt?: string): Gam
 
   // ── 3. Unit abilities → unit/unit-ability nodes ───────────────────────────
 
+  /** Split multi-option abilities into separate sub-entries. */
+  function splitSubRules(description: string): Array<{ name: string; text: string }> {
+    const lines = description.split('\n')
+    const subRules: Array<{ name: string; text: string }> = []
+    let currentName = ''
+    let currentLines: string[] = []
+
+    for (const line of lines) {
+      const trimmed = line.trim()
+      if (/^[A-Z][A-Z\s']{4,}$/.test(trimmed) &&
+          !trimmed.includes('ADEPTUS') && !trimmed.includes('ASTARTES') &&
+          !trimmed.includes('HERETIC') && !trimmed.includes('INFANTRY')) {
+        if (currentName && currentLines.length > 0) {
+          subRules.push({ name: currentName, text: currentLines.join('\n').trim() })
+        }
+        currentName = trimmed
+        currentLines = []
+      } else {
+        currentLines.push(line)
+      }
+    }
+    if (currentName && currentLines.length > 0) {
+      subRules.push({ name: currentName, text: currentLines.join('\n').trim() })
+    }
+    return subRules
+  }
+
   const seenAbilityIds = new Map<string, number>()
   for (const ab of input.unitAbilities) {
     const baseId = `ability:${ab.datasheetId}:${slugify(ab.name)}`
@@ -522,13 +549,24 @@ export function convertGameData(input: GameDataInput, retrievedAt?: string): Gam
     const abilityNodeId = count === 0 ? baseId : `${baseId}-${count}`
 
     const cleanAbDesc = stripHtml(ab.description)
+    const dsName = input.datasheets.find(d => d.id === ab.datasheetId)?.name ?? ''
+
+    // Split multi-option abilities
+    const subRules = splitSubRules(cleanAbDesc)
+    const hasSubRules = subRules.length >= 2
+
+    const preamble = hasSubRules
+      ? cleanAbDesc.substring(0, cleanAbDesc.indexOf(subRules[0]!.name)).trim()
+      : cleanAbDesc
+
+    // Main ability node
     nodes.push({
       id: abilityNodeId,
       layer: 'unit',
       category: 'unit-ability',
       title: ab.name,
-      content: cleanAbDesc,
-      summary: `${ab.name} (${ab.type}) — ${truncate(cleanAbDesc, 150)}`,
+      content: hasSubRules ? preamble : cleanAbDesc,
+      summary: `${ab.name} (${ab.type}) on ${dsName} — ${truncate(preamble || cleanAbDesc, 120)}`,
       factionId: dsFactionMap.get(ab.datasheetId),
       datasheetId: ab.datasheetId,
       sources: [source],
@@ -541,9 +579,39 @@ export function convertGameData(input: GameDataInput, retrievedAt?: string): Gam
       sourceId: abilityNodeId,
       targetId: ab.datasheetId,
       rel: 'part_of',
-      context: `${ab.name} is a ${ab.type} ability of this unit.`,
+      context: `${ab.name} is a ${ab.type} ability of ${dsName}.`,
       bidirectional: true,
     })
+
+    // Sub-rule nodes for each option
+    if (hasSubRules) {
+      for (const sub of subRules) {
+        const subId = `${abilityNodeId}:${slugify(sub.name)}`
+
+        nodes.push({
+          id: subId,
+          layer: 'unit',
+          category: 'unit-ability',
+          title: `${sub.name} (${ab.name})`,
+          content: sub.text,
+          summary: `${sub.name}, option of ${ab.name} on ${dsName} — ${truncate(sub.text, 120)}`,
+          factionId: dsFactionMap.get(ab.datasheetId),
+          datasheetId: ab.datasheetId,
+          sources: [source],
+          refs: [],
+          version: 1,
+          keywords: [ab.type.toLowerCase(), slugify(sub.name), ...extractTerms(sub.text)],
+        })
+
+        refs.push({
+          sourceId: subId,
+          targetId: abilityNodeId,
+          rel: 'part_of',
+          context: `${sub.name} is an option within ${ab.name} on ${dsName}.`,
+          bidirectional: true,
+        })
+      }
+    }
   }
 
   // ── 4. Faction abilities (army rules) → faction/faction-ability nodes ─────
@@ -556,20 +624,54 @@ export function convertGameData(input: GameDataInput, retrievedAt?: string): Gam
     }
     seenFactionAbIds.add(factionAbId)
     const cleanFaDesc = stripHtml(ab.description)
+    const fSlug = normalizeFactionId(ab.factionId)
+
+    // Split multi-option faction abilities
+    const subRules = splitSubRules(cleanFaDesc)
+    const hasSubRules = subRules.length >= 2
+    const preamble = hasSubRules
+      ? cleanFaDesc.substring(0, cleanFaDesc.indexOf(subRules[0]!.name)).trim()
+      : cleanFaDesc
 
     nodes.push({
       id: factionAbId,
       layer: 'faction',
       category: 'faction-ability',
       title: ab.name,
-      content: cleanFaDesc,
-      summary: `${ab.name} — army rule for ${normalizeFactionId(ab.factionId)}. ${truncate(cleanFaDesc, 100)}`,
-      factionId: normalizeFactionId(ab.factionId),
+      content: hasSubRules ? preamble : cleanFaDesc,
+      summary: `${ab.name} — army rule for ${fSlug}. ${truncate(preamble || cleanFaDesc, 100)}`,
+      factionId: fSlug,
       sources: [source],
       refs: [],
       version: 1,
       keywords: extractTerms(ab.description),
     })
+
+    if (hasSubRules) {
+      for (const sub of subRules) {
+        const subId = `${factionAbId}:${slugify(sub.name)}`
+        nodes.push({
+          id: subId,
+          layer: 'faction',
+          category: 'faction-ability',
+          title: `${sub.name} (${ab.name})`,
+          content: sub.text,
+          summary: `${sub.name}, option of ${ab.name} for ${fSlug} — ${truncate(sub.text, 120)}`,
+          factionId: fSlug,
+          sources: [source],
+          refs: [],
+          version: 1,
+          keywords: [slugify(sub.name), ...extractTerms(sub.text)],
+        })
+        refs.push({
+          sourceId: subId,
+          targetId: factionAbId,
+          rel: 'part_of',
+          context: `${sub.name} is an option within ${ab.name}.`,
+          bidirectional: true,
+        })
+      }
+    }
   }
 
   // ── 5. Detachments → faction/detachment-rule nodes ────────────────────────
@@ -804,7 +906,11 @@ export function convertGameData(input: GameDataInput, retrievedAt?: string): Gam
   const ALL_CORE_PATTERNS = [...WEAPON_ABILITY_CORE_NODES, ...UNIT_ABILITY_CORE_NODES]
 
   for (const ab of input.unitAbilities) {
-    const abilityNodeId = `ability:${ab.datasheetId}:${slugify(ab.name)}`
+    // Use the deduplicated ID from section 3
+    const baseId = `ability:${ab.datasheetId}:${slugify(ab.name)}`
+    const existingCount = seenAbilityIds.get(baseId) ?? 0
+    const abilityNodeId = existingCount <= 1 ? baseId : `${baseId}-${existingCount - 1}`
+
     const text = `${ab.name} ${ab.description}`.toLowerCase()
 
     for (const { pattern, coreSlug, label } of ALL_CORE_PATTERNS) {
