@@ -136,11 +136,11 @@ app.post('/search', async (c) => {
     })
     if (factionMatches.length > 0) matches = factionMatches
   }
-  // Chapter filter: within SM results, prefer those mentioning the specific chapter
+  // Chapter/subfaction filter: prefer results with matching subfaction or no subfaction (generic)
   if (chapterFilter) {
     const chapterMatches = matches.filter(m => {
-      const text = `${m.metadata?.summary ?? ''} ${m.metadata?.title ?? ''}`.toLowerCase()
-      return text.includes(chapterFilter!)
+      const sub = (m.metadata?.subfaction ?? '') as string
+      return sub === chapterFilter || sub === ''
     })
     if (chapterMatches.length >= 3) {
       matches = chapterMatches
@@ -426,6 +426,7 @@ app.post('/index-vectors', async (c) => {
             layer: node.layer,
             category: node.category,
             factionId: node.factionId ?? '',
+            subfaction: node.subfaction ?? '',
             phase: node.phase ?? '',
           },
         }))
@@ -510,6 +511,7 @@ const FACTION_PATTERNS: Array<{ pattern: string; slug: string }> = [
   { pattern: 'death guard', slug: 'death-guard' },
   { pattern: 'thousand sons', slug: 'thousand-sons' },
   { pattern: 'world eater', slug: 'world-eaters' },
+  { pattern: 'imperial agent', slug: 'imperial-agents' },
   { pattern: 'imperial knight', slug: 'imperial-knights' },
   { pattern: 'chaos knight', slug: 'chaos-knights' },
   { pattern: 'imperial guard', slug: 'astra-militarum' },
@@ -552,9 +554,39 @@ function detectAllFactions(question: string): string[] {
   return [...found]
 }
 
-/** Extract game mechanic keywords from a question. */
+/** Common aliases for game mechanics. */
+const MECHANIC_ALIASES: Array<{ alias: string; canonical: string }> = [
+  { alias: 'dev wounds', canonical: 'devastating wounds' },
+  { alias: 'devs', canonical: 'devastating wounds' },
+  { alias: 'sus hits', canonical: 'sustained hits' },
+  { alias: 'exploding 6s', canonical: 'sustained hits' },
+  { alias: 'exploding 6', canonical: 'sustained hits' },
+  { alias: 'critical hit', canonical: 'sustained hits' },
+  { alias: 'crit', canonical: 'sustained hits' },
+  { alias: 'auto wound', canonical: 'lethal hits' },
+  { alias: 'auto-wound', canonical: 'lethal hits' },
+  { alias: 'fnp', canonical: 'feel no pain' },
+  { alias: 'mortal', canonical: 'mortal wound' },
+  { alias: 'mortals', canonical: 'mortal wound' },
+  { alias: 'ap', canonical: 'armour penetration' },
+  { alias: 'invuln', canonical: 'invulnerable' },
+  { alias: 'obs sec', canonical: 'objective control' },
+  { alias: 'ob sec', canonical: 'objective control' },
+  { alias: 'obsec', canonical: 'objective control' },
+]
+
+/** Extract game mechanic keywords from a question, expanding aliases. */
 function extractMechanicKeywords(question: string): string[] {
   const lower = question.toLowerCase()
+
+  // Expand aliases first
+  let expanded = lower
+  for (const { alias, canonical } of MECHANIC_ALIASES) {
+    if (expanded.includes(alias)) {
+      expanded = expanded.replace(alias, canonical)
+    }
+  }
+
   const mechanics = [
     'sustained hits', 'lethal hits', 'devastating wounds', 'hazardous',
     'blast', 'torrent', 'twin-linked', 'rapid fire', 'pistol', 'melta',
@@ -564,9 +596,10 @@ function extractMechanicKeywords(question: string): string[] {
     'overwatch', 'wound roll', 'hit roll', 'saving throw',
     'engagement range', 'coherency', 'visibility', 'cover',
     'advance', 'fall back', 'charge', 'mortal wound',
-    'invulnerable', 'firing deck', 'transport',
+    'invulnerable', 'firing deck', 'transport', 'objective control',
+    'armour penetration',
   ]
-  return mechanics.filter(m => lower.includes(m))
+  return mechanics.filter(m => expanded.includes(m))
 }
 
 /** Fetch full node objects from R2 by their IDs. */
