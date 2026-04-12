@@ -156,14 +156,25 @@ app.post('/ask', async (c) => {
   }
 
   const apiKey = c.env.ANTHROPIC_API_KEY
-  if (!apiKey) {
-    return c.json({ error: 'Q&A not configured - ANTHROPIC_API_KEY not set' }, 503)
+
+  // 1. Detect faction/chapter from question — same logic as search endpoint
+  const factionHint = body.factionId || detectFactionFromQuestion(body.question)
+  let askChapterFilter: string | undefined
+  let askFactionFilter: string | undefined
+
+  if (factionHint) {
+    const SM_CHAPTERS = ['blood-angels', 'dark-angels', 'space-wolves', 'black-templars',
+      'deathwatch', 'iron-hands', 'ultramarines', 'salamanders', 'raven-guard',
+      'imperial-fists', 'white-scars', 'crimson-fists']
+    if (SM_CHAPTERS.includes(factionHint)) {
+      askFactionFilter = 'space-marines'
+      askChapterFilter = factionHint.replace(/-/g, ' ')
+    } else {
+      askFactionFilter = factionHint
+    }
   }
 
-  // 1. Generate embeddings — one for the full question, one for extracted keywords
-  //    Full questions dilute keyword signal ("space marine player get sustained hits"
-  //    matches "space marine" more than "sustained hits"). Searching for just the
-  //    mechanic keyword separately ensures we find the core rule node.
+  // 2. Generate embeddings — one for the full question, one for extracted keywords
   const keywords = extractMechanicKeywords(body.question)
   const textsToEmbed = [body.question, ...(keywords.length > 0 ? [keywords.join(' ')] : [])]
 
@@ -176,9 +187,9 @@ app.post('/ask', async (c) => {
     return c.json({ error: 'Failed to generate embedding' }, 500)
   }
 
-  // 2. Search Vectorize — question embedding + keyword embedding
+  // 3. Search Vectorize — with faction post-filtering
   const questionResults = await c.env.BRAIN_INDEX.query(questionVector, {
-    topK: 10,
+    topK: askFactionFilter ? 30 : 10,
     returnMetadata: 'all',
   })
 
@@ -190,13 +201,30 @@ app.post('/ask', async (c) => {
     })
   }
 
-  // Merge and deduplicate (keyword results first — they're more targeted)
+  // Merge, deduplicate, and filter by faction
   const seenIds = new Set<string>()
-  const allMatches = [...keywordResults.matches, ...questionResults.matches].filter(m => {
+  let allMatches = [...keywordResults.matches, ...questionResults.matches].filter(m => {
     if (seenIds.has(m.id)) return false
     seenIds.add(m.id)
     return true
   })
+
+  // Post-filter by faction
+  if (askFactionFilter) {
+    const factionMatches = allMatches.filter(m => {
+      const mFaction = (m.metadata?.factionId ?? '') as string
+      return mFaction === askFactionFilter || mFaction === ''
+    })
+    if (factionMatches.length > 0) allMatches = factionMatches
+  }
+  // Chapter filter
+  if (askChapterFilter) {
+    const chapterMatches = allMatches.filter(m => {
+      const text = `${m.metadata?.summary ?? ''} ${m.metadata?.title ?? ''}`.toLowerCase()
+      return text.includes(askChapterFilter!)
+    })
+    if (chapterMatches.length >= 3) allMatches = chapterMatches
+  }
 
   // 3. Fetch full node content from R2 for the top results
   const nodeIds = allMatches.map(m => m.id)
@@ -204,7 +232,6 @@ app.post('/ask', async (c) => {
 
   // 4. Traverse reverse index to gather connected context
   const depth = body.depth ?? 1
-  const factionHint = body.factionId || detectFactionFromQuestion(body.question)
   const connected = await fetchConnectedNodes(
     c.env.BRAIN_BUCKET,
     nodeIds,
