@@ -223,14 +223,33 @@ When citing sources, use the format: (Source: [title])`
       .join('\n')
   } else {
     // Workers AI — free tier LLM
-    const aiResult = await c.env.AI.run('@cf/meta/llama-3.1-8b-instruct', {
-      messages: [
-        { role: 'system', content: systemPrompt },
-        { role: 'user', content: userMessage },
-      ],
-      max_tokens: 2048,
-    })
-    answer = (aiResult as any).response ?? 'No response from model'
+    // If context is small enough, use the LLM. Otherwise, format deterministically.
+    const MAX_LLM_CONTEXT = 20000
+
+    if (userMessage.length <= MAX_LLM_CONTEXT) {
+      try {
+        const aiResult = await c.env.AI.run('@cf/meta/llama-3.1-8b-instruct', {
+          messages: [
+            { role: 'system', content: systemPrompt },
+            { role: 'user', content: userMessage },
+          ],
+          max_tokens: 2048,
+        })
+        answer = (aiResult as any).response ?? 'No response from model'
+      } catch {
+        // Fallback to deterministic formatting
+        answer = formatDeterministicAnswer(body.question, connected.nodes, connected.parentMap)
+      }
+    } else {
+      // Large context — format deterministically from graph data
+      // Filter to faction-relevant nodes if a faction was detected
+      let relevantNodes = connected.nodes
+      if (factionHint) {
+        const factionNodes = connected.nodes.filter(n => n.factionId === factionHint || !n.factionId)
+        relevantNodes = factionNodes.length > 0 ? factionNodes : connected.nodes
+      }
+      answer = formatDeterministicAnswer(body.question, relevantNodes, connected.parentMap)
+    }
   }
 
   // 7. Return attributed answer
@@ -639,6 +658,86 @@ function assembleContext(
     }
   }
 
+  return parts.join('\n')
+}
+
+/**
+ * Format an answer directly from graph data without an LLM.
+ * For data-lookup queries where the graph traversal already found everything.
+ */
+function formatDeterministicAnswer(
+  question: string,
+  nodes: Node[],
+  parentMap: Map<string, string>,
+): string {
+  const groups: Record<string, Array<{ title: string; unit: string; content: string; faction: string }>> = {
+    'Faction/Army-Wide Abilities': [],
+    'Detachment Rules': [],
+    'Stratagems': [],
+    'Enhancements': [],
+    'Character/Leader Abilities (affect attached unit)': [],
+    'Unit Abilities': [],
+    'Weapons': [],
+    'Other': [],
+  }
+
+  for (const n of nodes) {
+    const parent = parentMap.get(n.id) ?? ''
+    const entry = {
+      title: n.title,
+      unit: parent,
+      content: (n.content || n.summary).substring(0, 200),
+      faction: n.factionId ?? '',
+    }
+
+    switch (n.category) {
+      case 'faction-ability':
+        groups['Faction/Army-Wide Abilities']!.push(entry)
+        break
+      case 'detachment-rule':
+        groups['Detachment Rules']!.push(entry)
+        break
+      case 'stratagem':
+        groups['Stratagems']!.push(entry)
+        break
+      case 'enhancement':
+        groups['Enhancements']!.push(entry)
+        break
+      case 'unit-ability': {
+        // Determine if this is a leader ability (conferred to attached unit)
+        const desc = (n.content || '').toLowerCase()
+        if (desc.includes('leading a unit') || desc.includes('this model is leading') || desc.includes("model's unit")) {
+          groups['Character/Leader Abilities (affect attached unit)']!.push(entry)
+        } else {
+          groups['Unit Abilities']!.push(entry)
+        }
+        break
+      }
+      case 'weapon':
+        groups['Weapons']!.push(entry)
+        break
+      case 'datasheet':
+        break // skip datasheets in the answer
+      default:
+        groups['Other']!.push(entry)
+    }
+  }
+
+  const parts: string[] = []
+  parts.push(`Results for: "${question}"\n`)
+
+  for (const [groupName, entries] of Object.entries(groups)) {
+    if (entries.length === 0) continue
+    parts.push(`## ${groupName} (${entries.length})`)
+    for (const e of entries) {
+      const unitInfo = e.unit ? ` — on **${e.unit}**` : ''
+      const factionInfo = e.faction ? ` (${e.faction})` : ''
+      parts.push(`- **${e.title}**${unitInfo}${factionInfo}: ${e.content}`)
+    }
+    parts.push('')
+  }
+
+  parts.push(`\n*${nodes.length} total results from the knowledge graph. Source: Wahapedia 10th Edition, Core Rules.*`)
   return parts.join('\n')
 }
 
