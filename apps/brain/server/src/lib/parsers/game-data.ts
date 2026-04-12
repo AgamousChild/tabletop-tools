@@ -680,6 +680,20 @@ export function convertGameData(input: GameDataInput, retrievedAt?: string): Gam
 
   // ── 5. Detachments → faction/detachment-rule nodes ────────────────────────
 
+  // Build detachment → chapter restriction map
+  // Scan detachment ability text for chapter names to determine which are chapter-locked
+  const CHAPTERS = ['Ultramarines', 'Space Wolves', 'Dark Angels', 'Blood Angels',
+    'Black Templars', 'Deathwatch', 'Iron Hands', 'White Scars', 'Raven Guard',
+    'Salamanders', 'Imperial Fists', 'Crimson Fists']
+  const detChapterMap = new Map<string, string>() // detachmentId → chapter name
+
+  for (const det of filteredDetachments) {
+    const detAbilities = filteredDetAbilities.filter(a => a.detachmentId === det.id)
+    const allText = detAbilities.map(a => a.description).join(' ')
+    const chapter = CHAPTERS.find(c => allText.includes(c))
+    if (chapter) detChapterMap.set(det.id, chapter)
+  }
+
   const seenDetIds = new Set<string>()
   for (const det of filteredDetachments) {
     let detNodeId = `det:${normalizeFactionId(det.factionId)}:${slugify(det.name)}`
@@ -704,13 +718,16 @@ export function convertGameData(input: GameDataInput, retrievedAt?: string): Gam
       category: 'detachment-rule',
       title: det.name,
       content,
-      summary: `${det.name} detachment for ${normalizeFactionId(det.factionId)}. ${detAbilities[0]?.name ?? ''}`,
+      summary: `${det.name} detachment for ${normalizeFactionId(det.factionId)}${detChapterMap.has(det.id) ? ` [${detChapterMap.get(det.id)} only]` : ' [any chapter]'}. ${detAbilities[0]?.name ?? ''}`,
       factionId: normalizeFactionId(det.factionId),
       detachmentId: det.id,
       sources: [source],
       refs: [],
       version: 1,
-      keywords: extractTerms(content),
+      keywords: [
+        ...extractTerms(content),
+        ...(detChapterMap.has(det.id) ? [detChapterMap.get(det.id)!.toLowerCase()] : ['any chapter']),
+      ],
     })
 
     // ── 5a. Detachment abilities → faction/faction-ability ─────────────────
