@@ -60,6 +60,26 @@ app.post('/search', async (c) => {
 
   const limit = Math.min(body.limit ?? 10, 50)
 
+  // Auto-detect faction/chapter from query if not explicitly filtered
+  let chapterFilter: string | undefined
+  if (!body.filter?.factionId) {
+    const detected = detectFactionFromQuestion(body.query)
+    if (detected) {
+      // SM sub-factions (Blood Angels, Dark Angels, etc.) share factionId 'space-marines'
+      const SM_CHAPTERS = ['blood-angels', 'dark-angels', 'space-wolves', 'black-templars',
+        'deathwatch', 'iron-hands', 'ultramarines', 'salamanders', 'raven-guard',
+        'imperial-fists', 'white-scars', 'crimson-fists']
+      if (SM_CHAPTERS.includes(detected)) {
+        if (!body.filter) body.filter = {}
+        body.filter.factionId = 'space-marines'
+        chapterFilter = detected.replace(/-/g, ' ')
+      } else {
+        if (!body.filter) body.filter = {}
+        body.filter.factionId = detected
+      }
+    }
+  }
+
   // Generate embedding for the query using Workers AI
   const embeddingResult = await c.env.AI.run('@cf/baai/bge-base-en-v1.5', {
     text: [body.query],
@@ -77,15 +97,39 @@ app.post('/search', async (c) => {
   if (body.filter?.factionId) filter.factionId = body.filter.factionId
   if (body.filter?.phase) filter.phase = body.filter.phase
 
-  // Query Vectorize
+  // Query Vectorize — fetch extra to allow post-filtering
+  const fetchLimit = body.filter?.factionId ? limit * 3 : limit
   const results = await c.env.BRAIN_INDEX.query(queryVector, {
-    topK: limit,
+    topK: fetchLimit,
     filter: Object.keys(filter).length > 0 ? filter : undefined,
     returnMetadata: 'all',
   })
 
+  // Post-filter: strictly remove results from wrong factions
+  let matches = results.matches
+  if (body.filter?.factionId) {
+    const fid = body.filter.factionId
+    // Also accept faction pack slug variants (space-marines matches both 'space-marines' and 'SM')
+    const factionMatches = matches.filter(m => {
+      const mFaction = (m.metadata?.factionId ?? '') as string
+      return mFaction === fid || mFaction === ''
+    })
+    if (factionMatches.length > 0) matches = factionMatches
+  }
+  // Chapter filter: within SM results, prefer those mentioning the specific chapter
+  if (chapterFilter) {
+    const chapterMatches = matches.filter(m => {
+      const text = `${m.metadata?.summary ?? ''} ${m.metadata?.title ?? ''}`.toLowerCase()
+      return text.includes(chapterFilter!)
+    })
+    if (chapterMatches.length >= 3) {
+      matches = chapterMatches
+    }
+  }
+  matches = matches.slice(0, limit)
+
   return c.json({
-    results: results.matches.map(m => ({
+    results: matches.map(m => ({
       id: m.id,
       score: m.score,
       title: m.metadata?.title,
