@@ -1,6 +1,10 @@
-import { tailwindPreset } from '@tabletop-tools/ui'
+import type { Config } from 'tailwindcss'
+import tailwindPreset from '@tabletop-tools/ui/tailwind-preset'
 
-export default {
-  presets: [tailwindPreset],
+const config: Config = {
+  presets: [tailwindPreset as Config],
   content: ['./index.html', './src/**/*.{ts,tsx}'],
+  plugins: [],
 }
+
+export default config
