@@ -710,7 +710,7 @@ function formatDeterministicAnswer(
     const entry = {
       title: n.title,
       unit: parent,
-      content: (n.content || n.summary).substring(0, 200),
+      content: n.content || n.summary,
       faction: n.factionId ?? '',
     }
 
