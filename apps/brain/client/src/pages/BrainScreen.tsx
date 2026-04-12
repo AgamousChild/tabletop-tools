@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useMemo } from 'react'
 import { LayerNav } from '../components/LayerNav'
 import { NodeCard } from '../components/NodeCard'
 import { RefList } from '../components/RefList'
@@ -6,6 +6,35 @@ import { useNode, useNodesByLayer, useNodeSearch, useNodeRefs } from '../lib/hoo
 import type { BrainNode } from '../lib/store'
 
 const API_BASE = import.meta.env.VITE_BRAIN_API_URL || '/brain/api'
+
+/** Simple markdown to HTML — handles ##, **, -, ` */
+function renderMarkdown(text: string): string {
+  return text
+    .split('\n')
+    .map(line => {
+      // Headings
+      if (line.startsWith('## ')) return `<h2 class="text-lg font-bold text-amber-400 mt-4 mb-2">${line.slice(3)}</h2>`
+      if (line.startsWith('### ')) return `<h3 class="text-base font-semibold text-amber-300 mt-3 mb-1">${line.slice(4)}</h3>`
+      // Bullet points
+      if (line.startsWith('- ')) {
+        const content = line.slice(2)
+          .replace(/\*\*([^*]+)\*\*/g, '<strong class="text-slate-100">$1</strong>')
+          .replace(/\[([^\]]+)\]/g, '<span class="text-amber-400 text-xs">[$1]</span>')
+        return `<div class="pl-4 py-0.5 text-sm text-slate-300 border-l border-slate-700 ml-2">${content}</div>`
+      }
+      // Italic line
+      if (line.startsWith('*') && line.endsWith('*') && !line.startsWith('**')) {
+        return `<p class="text-xs text-slate-500 italic mt-2">${line.slice(1, -1)}</p>`
+      }
+      // Empty line
+      if (!line.trim()) return ''
+      // Regular text with bold
+      const formatted = line
+        .replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>')
+      return `<p class="text-sm text-slate-300 my-1">${formatted}</p>`
+    })
+    .join('\n')
+}
 
 interface QASource {
   id: string
@@ -81,10 +110,11 @@ function AskTab() {
 
       {answer && (
         <div className="space-y-4">
-          <div className="bg-slate-900 border border-slate-700 rounded p-4">
-            <div className="prose prose-invert prose-sm max-w-none whitespace-pre-wrap">
-              {answer.answer}
-            </div>
+          <div className="bg-slate-900 border border-slate-700 rounded p-4 overflow-auto max-h-[70vh]">
+            <div
+              className="max-w-none"
+              dangerouslySetInnerHTML={{ __html: renderMarkdown(answer.answer) }}
+            />
           </div>
 
           {answer.sources.length > 0 && (
