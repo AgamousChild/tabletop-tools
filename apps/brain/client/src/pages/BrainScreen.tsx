@@ -1,5 +1,6 @@
 import { useState, useMemo } from 'react'
 import { LayerNav } from '../components/LayerNav'
+import { GraphView } from '../components/GraphView'
 import { NodeCard } from '../components/NodeCard'
 import { RefList } from '../components/RefList'
 import { useNode, useNodesByLayer, useNodeSearch, useNodeRefs } from '../lib/hooks'
@@ -211,7 +212,7 @@ function SearchTab() {
 }
 
 export function BrainScreen() {
-  const [tab, setTab] = useState<'ask' | 'search' | 'browse'>('ask')
+  const [tab, setTab] = useState<'ask' | 'search' | 'graph' | 'browse'>('ask')
   const [selectedLayer, setSelectedLayer] = useState<string | null>(null)
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null)
 
@@ -225,7 +226,7 @@ export function BrainScreen() {
         <div className="flex items-center justify-between">
           <h1 className="text-xl font-bold text-amber-400">40K Brain</h1>
           <div className="flex gap-1">
-            {(['ask', 'search', 'browse'] as const).map((t) => (
+            {(['ask', 'search', 'graph', 'browse'] as const).map((t) => (
               <button
                 key={t}
                 onClick={() => setTab(t)}
@@ -235,7 +236,7 @@ export function BrainScreen() {
                     : 'text-slate-400 hover:text-slate-200'
                 }`}
               >
-                {t === 'ask' ? 'Ask' : t === 'search' ? 'Search' : 'Browse'}
+                {t === 'ask' ? 'Ask' : t === 'search' ? 'Search' : t === 'graph' ? 'Graph' : 'Browse'}
               </button>
             ))}
           </div>
@@ -252,6 +253,7 @@ export function BrainScreen() {
         <main className="flex-1 p-4 max-w-4xl mx-auto">
           {tab === 'ask' && <AskTab />}
           {tab === 'search' && <SearchTab />}
+          {tab === 'graph' && <GraphView />}
           {tab === 'browse' && (
             <>
               {selectedNode ? (
