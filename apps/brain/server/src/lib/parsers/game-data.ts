@@ -243,6 +243,10 @@ function stripHtml(text: string): string {
     .replace(/&gt;/g, '>')
     .replace(/&quot;/g, '"')
     .replace(/&#39;/g, "'")
+    // Fix adjacent bold spans: **word****word** → **word** **word**
+    .replace(/\*\*\*\*/g, '** **')
+    // Remove bold markers entirely for cleaner display
+    .replace(/\*\*/g, '')
     .replace(/\n{3,}/g, '\n\n')
     .trim()
 }
