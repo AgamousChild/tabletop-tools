@@ -32,3 +32,7 @@ service = "tabletop-tools-admin"
 [[services]]
 binding = "DATA_IMPORT_API"
 service = "tabletop-tools-data-import"
+
+[[services]]
+binding = "BRAIN_API"
+service = "tabletop-tools-brain"

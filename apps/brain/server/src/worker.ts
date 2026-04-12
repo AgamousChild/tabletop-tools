@@ -168,47 +168,108 @@ app.post('/ask', async (c) => {
     factionHint,
   )
 
-  // 5. Assemble context for Claude
-  const context = assembleContext(nodeContent, connected.nodes, connected.refs)
+  // 5. Assemble context for Claude — parentMap resolves unit names from graph
+  const context = assembleContext(nodeContent, connected.nodes, connected.parentMap)
 
-  // 6. Call Claude API
-  const response = await fetch('https://api.anthropic.com/v1/messages', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'x-api-key': apiKey,
-      'anthropic-version': '2023-06-01',
-    },
-    body: JSON.stringify({
-      model: 'claude-sonnet-4-20250514',
-      max_tokens: 1024,
-      system: `You are a Warhammer 40,000 rules expert. Answer questions using ONLY the rules context provided below. Always cite your sources. If the context doesn't contain enough information to answer confidently, say so.
+  // 6. Call LLM — use Workers AI (free) by default, Claude as optional upgrade
+  const useClaudeParam = c.req.query('model') === 'claude'
+  const useClaude = useClaudeParam && apiKey
 
-When citing sources, use the format: (Source: [title], [page/section if available])
+  const systemPrompt = `You are a Warhammer 40,000 rules expert. Answer questions using ONLY the rules context provided below. Always cite your sources.
 
-Be precise about game mechanics. If a rule has been errata'd or FAQ'd, mention the correction.`,
-      messages: [
-        {
-          role: 'user',
-          content: `Rules context:\n\n${context}\n\n---\n\nQuestion: ${body.question}`,
-        },
-      ],
-    }),
-  })
+CRITICAL RULES FOR ANSWERS:
+1. ALWAYS name the specific unit/datasheet that has each ability or weapon. Never say "Keep Counting!" without saying which unit has it (e.g., "Uriel Ventris has Keep Counting!").
+2. For unit abilities from characters/leaders, explain that the ability is conferred by ATTACHING the character to a unit — not an "aura". Leader abilities affect ONLY the unit the character is attached to. Aura abilities have a range and affect multiple nearby units — these are different mechanics.
+3. For faction/detachment abilities, explain which detachment grants it and any activation conditions.
+4. For weapons, name the unit(s) that carry them.
+5. Prioritize by impact: army-wide rules first, then detachment rules, then leader/character abilities (these affect entire attached units), then individual unit abilities, then native weapon abilities last.
+6. When a context entry says "[unit-ability, ON UNIT: X]" or "[weapon, ON UNIT: X]", use X as the unit name.
+7. Be precise about game mechanics. If a rule has been errata'd or FAQ'd, mention the correction.
+8. If the context doesn't contain enough information to answer confidently, say so.
 
-  if (!response.ok) {
-    const err = await response.text()
-    return c.json({ error: `Claude API error: ${response.status}`, details: err }, 502)
+When citing sources, use the format: (Source: [title])`
+
+  const userMessage = `Rules context:\n\n${context}\n\n---\n\nQuestion: ${body.question}`
+
+  let answer: string
+
+  if (useClaude) {
+    const response = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-api-key': apiKey!,
+        'anthropic-version': '2023-06-01',
+      },
+      body: JSON.stringify({
+        model: 'claude-sonnet-4-20250514',
+        max_tokens: 1024,
+        system: systemPrompt,
+        messages: [{ role: 'user', content: userMessage }],
+      }),
+    })
+
+    if (!response.ok) {
+      const err = await response.text()
+      return c.json({ error: `Claude API error: ${response.status}`, details: err }, 502)
+    }
+
+    const claudeResponse = await response.json() as {
+      content: Array<{ type: string; text: string }>
+    }
+    answer = claudeResponse.content
+      .filter(c => c.type === 'text')
+      .map(c => c.text)
+      .join('\n')
+  } else {
+    // Workers AI — free tier LLM
+    // If context is small enough, use the LLM. Otherwise, format deterministically.
+    const MAX_LLM_CONTEXT = 20000
+
+    if (userMessage.length <= MAX_LLM_CONTEXT) {
+      try {
+        const aiResult = await c.env.AI.run('@cf/meta/llama-3.1-8b-instruct', {
+          messages: [
+            { role: 'system', content: systemPrompt },
+            { role: 'user', content: userMessage },
+          ],
+          max_tokens: 2048,
+        })
+        answer = (aiResult as any).response ?? 'No response from model'
+      } catch {
+        // Fallback to deterministic formatting
+        answer = formatDeterministicAnswer(body.question, connected.nodes, connected.parentMap)
+      }
+    } else {
+      // Large context — format deterministically from graph data
+      // Filter to faction-relevant nodes if a faction was detected
+      let relevantNodes = connected.nodes
+      if (factionHint) {
+        const factionNodes = connected.nodes.filter(n => n.factionId === factionHint || !n.factionId)
+        relevantNodes = factionNodes.length > 0 ? factionNodes : connected.nodes
+      }
+
+      // Filter out false positives — only include nodes whose content
+      // actually mentions the searched mechanic keywords
+      if (keywords.length > 0) {
+        relevantNodes = relevantNodes.filter(n => {
+          const text = `${n.title} ${n.content} ${n.summary}`.toLowerCase()
+          return keywords.some(k => text.includes(k))
+        })
+      }
+
+      // Deduplicate — nodes with same title + same content are redundant
+      const seen = new Map<string, boolean>()
+      relevantNodes = relevantNodes.filter(n => {
+        const key = `${n.title}::${n.content.substring(0, 100)}`
+        if (seen.has(key)) return false
+        seen.set(key, true)
+        return true
+      })
+
+      answer = formatDeterministicAnswer(body.question, relevantNodes, connected.parentMap)
+    }
   }
-
-  const claudeResponse = await response.json() as {
-    content: Array<{ type: string; text: string }>
-  }
-
-  const answer = claudeResponse.content
-    .filter(c => c.type === 'text')
-    .map(c => c.text)
-    .join('\n')
 
   // 7. Return attributed answer
   return c.json({
@@ -400,66 +461,146 @@ async function fetchNodesFromR2(bucket: R2Bucket, nodeIds: string[]): Promise<No
   return nodes
 }
 
-/** Fetch nodes connected to the given IDs via the reverse index. */
+/**
+ * Walk the graph from the given node IDs using both indexes.
+ * Reverse index: find what points TO these nodes
+ * Forward index: resolve part_of parents (ability → datasheet name)
+ */
 async function fetchConnectedNodes(
   bucket: R2Bucket,
   nodeIds: string[],
   depth: number,
   factionHint?: string,
-): Promise<{ nodes: Node[]; refs: Array<{ sourceId: string; rel: string; context: string }> }> {
-  if (depth <= 0) return { nodes: [], refs: [] }
+): Promise<{ nodes: Node[]; parentMap: Map<string, string> }> {
+  if (depth <= 0) return { nodes: [], parentMap: new Map() }
 
-  // Load the reverse index (single file, cached by R2)
-  const revObj = await bucket.get('refs/reverse-index.json')
-  if (!revObj) return { nodes: [], refs: [] }
+  // Load both indexes in parallel
+  const [revObj, fwdObj] = await Promise.all([
+    bucket.get('refs/reverse-index.json'),
+    bucket.get('refs/forward-index.json'),
+  ])
+  if (!revObj) return { nodes: [], parentMap: new Map() }
 
-  const reverseIndex = await revObj.json() as Record<string, Array<{ sourceId: string; rel: string; context: string; factionId?: string }>>
+  type RevEntry = { sourceId: string; rel: string; context: string; factionId?: string }
+  type FwdEntry = { targetId: string; rel: string; context: string }
 
-  const allRefs: Array<{ sourceId: string; rel: string; context: string; factionId?: string }> = []
+  const reverseIndex = await revObj.json() as Record<string, RevEntry[]>
+  const forwardIndex = fwdObj
+    ? await fwdObj.json() as Record<string, FwdEntry[]>
+    : {} as Record<string, FwdEntry[]>
 
+  // Step 1: Reverse lookup — find all nodes that reference our search results
+  const inboundRefs: RevEntry[] = []
   for (const nodeId of nodeIds) {
-    const inbound = reverseIndex[nodeId]
-    if (inbound) {
-      for (const ref of inbound) {
-        allRefs.push(ref)
+    const refs = reverseIndex[nodeId]
+    if (refs) inboundRefs.push(...refs)
+  }
+
+  if (inboundRefs.length === 0) return { nodes: [], parentMap: new Map() }
+
+  // Step 2: Select which connected nodes to fetch
+  // Priority: abilities/stratagems first (high impact), weapons last (high volume, low info)
+  // Within each priority, faction-matching nodes come first
+  const known = new Set(nodeIds)
+  const uniqueRefs = new Map<string, RevEntry>()
+  for (const r of inboundRefs) {
+    if (!known.has(r.sourceId) && !uniqueRefs.has(r.sourceId)) {
+      uniqueRefs.set(r.sourceId, r)
+    }
+  }
+
+  // Categorize by ID prefix to determine priority without loading nodes
+  // ability: = unit ability, det: = detachment/stratagem/enhancement, faction: = faction ability, weapon: = weapon
+  function refPriority(id: string): number {
+    if (id.startsWith('faction:')) return 0  // army-wide abilities — highest impact
+    if (id.startsWith('det:')) return 1      // detachment rules, stratagems, enhancements
+    if (id.startsWith('ability:')) return 2  // unit abilities (leader grants)
+    if (id.startsWith('weapon:')) return 4   // weapons — lowest priority (high volume)
+    return 3
+  }
+
+  const sortedRefs = [...uniqueRefs.entries()]
+    .sort((a, b) => {
+      // Priority first
+      const pa = refPriority(a[0])
+      const pb = refPriority(b[0])
+      if (pa !== pb) return pa - pb
+      // Then faction match
+      const fa = a[1].factionId === factionHint ? 0 : 1
+      const fb = b[1].factionId === factionHint ? 0 : 1
+      return fa - fb
+    })
+
+  // Take ALL high-priority nodes (abilities, stratagems), cap weapons
+  const highPriority = sortedRefs.filter(([id]) => refPriority(id) <= 3)
+  const weapons = sortedRefs.filter(([id]) => refPriority(id) === 4)
+  const selectedIds = [
+    ...highPriority.map(([id]) => id),
+    ...weapons.map(([id]) => id).slice(0, 15), // representative weapon sample
+  ]
+
+  if (selectedIds.length === 0) return { nodes: [], parentMap: new Map() }
+
+  // Step 3: Forward lookup — for each connected node, find its part_of parent
+  // This resolves: ability → datasheet, weapon → datasheet, stratagem → detachment
+  const parentMap = new Map<string, string>() // child nodeId → parent nodeId
+  const parentIdsToFetch = new Set<string>()
+
+  for (const id of selectedIds) {
+    const fwdRefs = forwardIndex[id]
+    if (!fwdRefs) continue
+    for (const ref of fwdRefs) {
+      if (ref.rel === 'part_of') {
+        parentMap.set(id, ref.targetId)
+        if (!known.has(ref.targetId)) {
+          parentIdsToFetch.add(ref.targetId)
+        }
+        break // first parent only
       }
     }
   }
 
-  if (allRefs.length === 0) return { nodes: [], refs: [] }
+  // Step 4: Fetch connected nodes + their parents in one batch
+  const allToFetch = [...new Set([...selectedIds, ...parentIdsToFetch])]
+    .filter(id => !known.has(id))
 
-  // If we have a faction hint, prioritize refs whose sourceId contains the faction slug
-  // This is a heuristic — faction nodes have IDs like det:space-marines:... or weapon IDs
-  // that we can't check without loading. So we also fetch from the faction-specific node file.
-  let prioritizedIds: string[]
-  if (factionHint) {
-    const factionRefs = allRefs.filter(r => r.factionId === factionHint)
-    const otherRefs = allRefs.filter(r => r.factionId !== factionHint)
+  const nodes = await fetchNodesFromR2(bucket, allToFetch)
 
-    const factionIds = [...new Set(factionRefs.map(r => r.sourceId))]
-    const otherIds = [...new Set(otherRefs.map(r => r.sourceId))]
+  // Step 5: Resolve parentMap IDs to titles
+  const nodeById = new Map<string, Node>()
+  for (const n of nodes) nodeById.set(n.id, n)
 
-    // Remove already-known IDs
-    const known = new Set(nodeIds)
-    prioritizedIds = [
-      ...factionIds.filter(id => !known.has(id)).slice(0, 30),
-      ...otherIds.filter(id => !known.has(id)).slice(0, 10),
-    ]
-  } else {
-    const known = new Set(nodeIds)
-    prioritizedIds = [...new Set(allRefs.map(r => r.sourceId))]
-      .filter(id => !known.has(id))
-      .slice(0, 30)
+  const CHAPTER_KEYWORDS = ['space wolves', 'dark angels', 'blood angels', 'black templars',
+    'deathwatch', 'iron hands', 'ultramarines', 'salamanders', 'raven guard',
+    'imperial fists', 'white scars', 'crimson fists', 'any chapter']
+
+  const resolvedParentMap = new Map<string, string>()
+  for (const [childId, parentId] of parentMap) {
+    const parent = nodeById.get(parentId)
+    if (parent) {
+      const chapter = parent.keywords?.find(k => CHAPTER_KEYWORDS.includes(k))
+      let chapterSuffix = ''
+      if (chapter && chapter !== 'any chapter') {
+        chapterSuffix = ` [${chapter.split(' ').map(w => w[0]!.toUpperCase() + w.slice(1)).join(' ')} only]`
+      } else if (chapter === 'any chapter') {
+        chapterSuffix = ' [any chapter]'
+      }
+      resolvedParentMap.set(childId, `${parent.title}${chapterSuffix}`)
+    }
   }
 
-  if (prioritizedIds.length === 0) return { nodes: [], refs: allRefs }
-
-  const nodes = await fetchNodesFromR2(bucket, prioritizedIds)
-  return { nodes, refs: allRefs }
+  return { nodes, parentMap: resolvedParentMap }
 }
 
-/** Assemble node content into a context string for the LLM. */
-function assembleContext(primaryNodes: Node[], connectedNodes: Node[], refs?: NodeRef[]): string {
+/**
+ * Assemble node content into a structured context string for the LLM.
+ * Uses parentMap from graph traversal to resolve unit/detachment names.
+ */
+function assembleContext(
+  primaryNodes: Node[],
+  connectedNodes: Node[],
+  parentMap: Map<string, string>,
+): string {
   const parts: string[] = []
 
   // Primary results first
@@ -475,35 +616,190 @@ function assembleContext(primaryNodes: Node[], connectedNodes: Node[], refs?: No
     parts.push('')
   }
 
-  // Ref summary — shows what connects to what
-  if (refs && refs.length > 0) {
-    parts.push('--- Graph connections ---')
-    const refsByTarget = new Map<string, NodeRef[]>()
-    for (const r of refs) {
-      const arr = refsByTarget.get(r.targetId) ?? []
-      arr.push(r)
-      refsByTarget.set(r.targetId, arr)
-    }
-    for (const [targetId, targetRefs] of refsByTarget) {
-      const count = targetRefs.length
-      const sample = targetRefs.slice(0, 5).map(r => `${r.rel}: ${r.context.substring(0, 80)}`).join('\n  ')
-      parts.push(`${targetId} has ${count} connections:`)
-      parts.push(`  ${sample}`)
-      if (count > 5) parts.push(`  ... and ${count - 5} more`)
-    }
-    parts.push('')
-  }
-
-  // Connected context (more concise)
+  // Connected nodes — grouped by category, sorted by impact
   if (connectedNodes.length > 0) {
-    parts.push('--- Related rules ---')
-    for (const node of connectedNodes.slice(0, 15)) {
-      parts.push(`### ${node.title} [${node.layer}/${node.category}${node.factionId ? `, ${node.factionId}` : ''}]`)
-      parts.push(node.summary)
+    const groups: Record<string, Node[]> = {
+      'faction-ability': [],
+      'detachment-rule': [],
+      'stratagem': [],
+      'enhancement': [],
+      'unit-ability': [],
+      'weapon': [],
+      'datasheet': [],
+      'other': [],
+    }
+    for (const n of connectedNodes) {
+      const key = groups[n.category] ? n.category : 'other'
+      groups[key]!.push(n)
+    }
+
+    parts.push('--- Connected rules (ordered by impact: army-wide → detachment → leader/unit → weapon) ---')
+    parts.push('')
+
+    for (const n of groups['faction-ability']!) {
+      const parent = parentMap.get(n.id)
+      parts.push(`### ${n.title} [faction-ability${n.factionId ? `, ${n.factionId}` : ''}${parent ? `, from detachment: ${parent}` : ''}]`)
+      parts.push(n.content || n.summary)
+      parts.push('')
+    }
+
+    for (const n of groups['detachment-rule']!) {
+      parts.push(`### ${n.title} [detachment-rule${n.factionId ? `, ${n.factionId}` : ''}]`)
+      parts.push(n.content || n.summary)
+      parts.push('')
+    }
+
+    for (const n of groups['stratagem']!) {
+      const parent = parentMap.get(n.id)
+      parts.push(`### ${n.title} [stratagem${n.factionId ? `, ${n.factionId}` : ''}${parent ? `, detachment: ${parent}` : ''}]`)
+      parts.push(n.content || n.summary)
+      parts.push('')
+    }
+
+    for (const n of groups['enhancement']!) {
+      const parent = parentMap.get(n.id)
+      parts.push(`### ${n.title} [enhancement${n.factionId ? `, ${n.factionId}` : ''}${parent ? `, detachment: ${parent}` : ''}]`)
+      parts.push(n.content || n.summary)
+      parts.push('')
+    }
+
+    for (const n of groups['unit-ability']!) {
+      const parent = parentMap.get(n.id)
+      parts.push(`### ${n.title} [unit-ability, ON UNIT: ${parent || 'unknown unit'}${n.factionId ? `, ${n.factionId}` : ''}]`)
+      parts.push(n.content || n.summary)
+      parts.push('')
+    }
+
+    for (const n of groups['weapon']!) {
+      const parent = parentMap.get(n.id)
+      parts.push(`### ${n.title} [weapon, ON UNIT: ${parent || 'unknown unit'}${n.factionId ? `, ${n.factionId}` : ''}]`)
+      parts.push(n.summary)
+      parts.push('')
+    }
+
+    for (const n of groups['datasheet']!) {
+      parts.push(`### ${n.title} [datasheet${n.factionId ? `, ${n.factionId}` : ''}]`)
+      parts.push(n.summary)
+      parts.push('')
+    }
+
+    for (const n of groups['other']!) {
+      parts.push(`### ${n.title} [${n.category}]`)
+      parts.push(n.summary)
       parts.push('')
     }
   }
 
+  return parts.join('\n')
+}
+
+/** Strip flavor/lore text, keep only mechanical rules content. */
+function stripFlavorText(text: string): string {
+  return text
+    // Remove italic blocks (lore/flavor)
+    .replace(/\*[^*]{20,}\*/g, '')
+    // Remove lines that are pure lore (no rules keywords)
+    .split('\n')
+    .filter(line => {
+      const l = line.trim()
+      if (!l) return false
+      // Keep lines with game mechanics indicators
+      if (/\*\*(WHEN|TARGET|EFFECT|Type|CP|Turn|Phase|Cost|Range|Role|Keywords|Composition|Points|Transport|Loadout|Damaged):/i.test(l)) return true
+      if (/\[SUSTAINED|LETHAL|DEVASTATING|HAZARDOUS|BLAST|TORRENT|MELTA|LANCE|ANTI-|IGNORES|INDIRECT|TWIN|RAPID|PISTOL|HEAVY|ASSAULT|ONE SHOT/i.test(l)) return true
+      if (/\d\+|D\d|re-roll|wound|hit|save|attack|model|unit|phase|turn|Engagement Range|Battle-shock/i.test(l)) return true
+      if (/Detachment Ability:|Ability:|Enhancement:/i.test(l)) return true
+      // Skip pure narrative (long text without mechanical keywords)
+      if (l.length > 80 && !/\d/.test(l) && !/\[/.test(l)) return false
+      return true
+    })
+    .join('\n')
+    .replace(/\n{3,}/g, '\n')
+    .trim()
+}
+
+/**
+ * Format an answer directly from graph data without an LLM.
+ * For data-lookup queries where the graph traversal already found everything.
+ */
+function formatDeterministicAnswer(
+  question: string,
+  nodes: Node[],
+  parentMap: Map<string, string>,
+): string {
+  const groups: Record<string, Array<{ title: string; unit: string; content: string; faction: string }>> = {
+    'Faction/Army-Wide Abilities': [],
+    'Detachment Rules': [],
+    'Stratagems': [],
+    'Enhancements': [],
+    'Character/Leader Abilities (affect attached unit)': [],
+    'Unit Abilities': [],
+    'Weapons': [],
+    'Other': [],
+  }
+
+  for (const n of nodes) {
+    const parent = parentMap.get(n.id) ?? ''
+    const entry = {
+      title: n.title,
+      unit: parent,
+      content: n.content || n.summary,
+      faction: n.factionId ?? '',
+    }
+
+    // Strip flavor text — only keep mechanical rules content
+    // Flavor text is usually italicized (*text*) or is the first paragraph before any rules keywords
+    entry.content = stripFlavorText(entry.content)
+
+    switch (n.category) {
+      case 'faction-ability':
+        groups['Faction/Army-Wide Abilities']!.push(entry)
+        break
+      case 'detachment-rule':
+        entry.content = '' // detachment rules are context — just the name matters
+        groups['Detachment Rules']!.push(entry)
+        break
+      case 'stratagem':
+        groups['Stratagems']!.push(entry)
+        break
+      case 'enhancement':
+        groups['Enhancements']!.push(entry)
+        break
+      case 'unit-ability': {
+        // Determine if this is a leader ability (conferred to attached unit)
+        const desc = (n.content || '').toLowerCase()
+        if (desc.includes('leading a unit') || desc.includes('this model is leading') || desc.includes("model's unit")) {
+          groups['Character/Leader Abilities (affect attached unit)']!.push(entry)
+        } else {
+          groups['Unit Abilities']!.push(entry)
+        }
+        break
+      }
+      case 'weapon':
+        groups['Weapons']!.push(entry)
+        break
+      case 'datasheet':
+        break // skip datasheets in the answer
+      default:
+        groups['Other']!.push(entry)
+    }
+  }
+
+  const parts: string[] = []
+  parts.push(`Results for: "${question}"\n`)
+
+  for (const [groupName, entries] of Object.entries(groups)) {
+    if (entries.length === 0) continue
+    parts.push(`## ${groupName} (${entries.length})`)
+    for (const e of entries) {
+      const unitInfo = e.unit ? ` — on **${e.unit}**` : ''
+      const factionInfo = e.faction ? ` (${e.faction})` : ''
+      const contentInfo = e.content ? `: ${e.content}` : ''
+      parts.push(`- **${e.title}**${unitInfo}${factionInfo}${contentInfo}`)
+    }
+    parts.push('')
+  }
+
+  parts.push(`\n*${nodes.length} total results from the knowledge graph. Source: Wahapedia 10th Edition, Core Rules.*`)
   return parts.join('\n')
 }
 
