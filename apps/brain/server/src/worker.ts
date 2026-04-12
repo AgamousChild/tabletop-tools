@@ -572,14 +572,19 @@ async function fetchConnectedNodes(
 
   const CHAPTER_KEYWORDS = ['space wolves', 'dark angels', 'blood angels', 'black templars',
     'deathwatch', 'iron hands', 'ultramarines', 'salamanders', 'raven guard',
-    'imperial fists', 'white scars', 'crimson fists']
+    'imperial fists', 'white scars', 'crimson fists', 'any chapter']
 
   const resolvedParentMap = new Map<string, string>()
   for (const [childId, parentId] of parentMap) {
     const parent = nodeById.get(parentId)
     if (parent) {
       const chapter = parent.keywords?.find(k => CHAPTER_KEYWORDS.includes(k))
-      const chapterSuffix = chapter ? ` [${chapter.split(' ').map(w => w[0]!.toUpperCase() + w.slice(1)).join(' ')}]` : ''
+      let chapterSuffix = ''
+      if (chapter && chapter !== 'any chapter') {
+        chapterSuffix = ` [${chapter.split(' ').map(w => w[0]!.toUpperCase() + w.slice(1)).join(' ')} only]`
+      } else if (chapter === 'any chapter') {
+        chapterSuffix = ' [any chapter]'
+      }
       resolvedParentMap.set(childId, `${parent.title}${chapterSuffix}`)
     }
   }
