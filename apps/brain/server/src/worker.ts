@@ -570,10 +570,18 @@ async function fetchConnectedNodes(
   const nodeById = new Map<string, Node>()
   for (const n of nodes) nodeById.set(n.id, n)
 
+  const CHAPTER_KEYWORDS = ['space wolves', 'dark angels', 'blood angels', 'black templars',
+    'deathwatch', 'iron hands', 'ultramarines', 'salamanders', 'raven guard',
+    'imperial fists', 'white scars', 'crimson fists']
+
   const resolvedParentMap = new Map<string, string>()
   for (const [childId, parentId] of parentMap) {
     const parent = nodeById.get(parentId)
-    if (parent) resolvedParentMap.set(childId, parent.title)
+    if (parent) {
+      const chapter = parent.keywords?.find(k => CHAPTER_KEYWORDS.includes(k))
+      const chapterSuffix = chapter ? ` [${chapter.split(' ').map(w => w[0]!.toUpperCase() + w.slice(1)).join(' ')}]` : ''
+      resolvedParentMap.set(childId, `${parent.title}${chapterSuffix}`)
+    }
   }
 
   return { nodes, parentMap: resolvedParentMap }
