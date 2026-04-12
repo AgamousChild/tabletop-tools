@@ -171,18 +171,11 @@ app.post('/ask', async (c) => {
   // 5. Assemble context for Claude — parentMap resolves unit names from graph
   const context = assembleContext(nodeContent, connected.nodes, connected.parentMap)
 
-  // 6. Call Claude API
-  const response = await fetch('https://api.anthropic.com/v1/messages', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'x-api-key': apiKey,
-      'anthropic-version': '2023-06-01',
-    },
-    body: JSON.stringify({
-      model: 'claude-sonnet-4-20250514',
-      max_tokens: 1024,
-      system: `You are a Warhammer 40,000 rules expert. Answer questions using ONLY the rules context provided below. Always cite your sources.
+  // 6. Call LLM — use Workers AI (free) by default, Claude as optional upgrade
+  const useClaudeParam = c.req.query('model') === 'claude'
+  const useClaude = useClaudeParam && apiKey
+
+  const systemPrompt = `You are a Warhammer 40,000 rules expert. Answer questions using ONLY the rules context provided below. Always cite your sources.
 
 CRITICAL RULES FOR ANSWERS:
 1. ALWAYS name the specific unit/datasheet that has each ability or weapon. Never say "Keep Counting!" without saying which unit has it (e.g., "Uriel Ventris has Keep Counting!").
@@ -194,29 +187,51 @@ CRITICAL RULES FOR ANSWERS:
 7. Be precise about game mechanics. If a rule has been errata'd or FAQ'd, mention the correction.
 8. If the context doesn't contain enough information to answer confidently, say so.
 
-When citing sources, use the format: (Source: [title])`,
+When citing sources, use the format: (Source: [title])`
+
+  const userMessage = `Rules context:\n\n${context}\n\n---\n\nQuestion: ${body.question}`
+
+  let answer: string
+
+  if (useClaude) {
+    const response = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-api-key': apiKey!,
+        'anthropic-version': '2023-06-01',
+      },
+      body: JSON.stringify({
+        model: 'claude-sonnet-4-20250514',
+        max_tokens: 1024,
+        system: systemPrompt,
+        messages: [{ role: 'user', content: userMessage }],
+      }),
+    })
+
+    if (!response.ok) {
+      const err = await response.text()
+      return c.json({ error: `Claude API error: ${response.status}`, details: err }, 502)
+    }
+
+    const claudeResponse = await response.json() as {
+      content: Array<{ type: string; text: string }>
+    }
+    answer = claudeResponse.content
+      .filter(c => c.type === 'text')
+      .map(c => c.text)
+      .join('\n')
+  } else {
+    // Workers AI — free tier LLM
+    const aiResult = await c.env.AI.run('@cf/meta/llama-3.1-8b-instruct', {
       messages: [
-        {
-          role: 'user',
-          content: `Rules context:\n\n${context}\n\n---\n\nQuestion: ${body.question}`,
-        },
+        { role: 'system', content: systemPrompt },
+        { role: 'user', content: userMessage },
       ],
-    }),
-  })
-
-  if (!response.ok) {
-    const err = await response.text()
-    return c.json({ error: `Claude API error: ${response.status}`, details: err }, 502)
+      max_tokens: 2048,
+    })
+    answer = (aiResult as any).response ?? 'No response from model'
   }
-
-  const claudeResponse = await response.json() as {
-    content: Array<{ type: string; text: string }>
-  }
-
-  const answer = claudeResponse.content
-    .filter(c => c.type === 'text')
-    .map(c => c.text)
-    .join('\n')
 
   // 7. Return attributed answer
   return c.json({
