@@ -661,6 +661,30 @@ function assembleContext(
   return parts.join('\n')
 }
 
+/** Strip flavor/lore text, keep only mechanical rules content. */
+function stripFlavorText(text: string): string {
+  return text
+    // Remove italic blocks (lore/flavor)
+    .replace(/\*[^*]{20,}\*/g, '')
+    // Remove lines that are pure lore (no rules keywords)
+    .split('\n')
+    .filter(line => {
+      const l = line.trim()
+      if (!l) return false
+      // Keep lines with game mechanics indicators
+      if (/\*\*(WHEN|TARGET|EFFECT|Type|CP|Turn|Phase|Cost|Range|Role|Keywords|Composition|Points|Transport|Loadout|Damaged):/i.test(l)) return true
+      if (/\[SUSTAINED|LETHAL|DEVASTATING|HAZARDOUS|BLAST|TORRENT|MELTA|LANCE|ANTI-|IGNORES|INDIRECT|TWIN|RAPID|PISTOL|HEAVY|ASSAULT|ONE SHOT/i.test(l)) return true
+      if (/\d\+|D\d|re-roll|wound|hit|save|attack|model|unit|phase|turn|Engagement Range|Battle-shock/i.test(l)) return true
+      if (/Detachment Ability:|Ability:|Enhancement:/i.test(l)) return true
+      // Skip pure narrative (long text without mechanical keywords)
+      if (l.length > 80 && !/\d/.test(l) && !/\[/.test(l)) return false
+      return true
+    })
+    .join('\n')
+    .replace(/\n{3,}/g, '\n')
+    .trim()
+}
+
 /**
  * Format an answer directly from graph data without an LLM.
  * For data-lookup queries where the graph traversal already found everything.
@@ -690,11 +714,16 @@ function formatDeterministicAnswer(
       faction: n.factionId ?? '',
     }
 
+    // Strip flavor text — only keep mechanical rules content
+    // Flavor text is usually italicized (*text*) or is the first paragraph before any rules keywords
+    entry.content = stripFlavorText(entry.content)
+
     switch (n.category) {
       case 'faction-ability':
         groups['Faction/Army-Wide Abilities']!.push(entry)
         break
       case 'detachment-rule':
+        entry.content = '' // detachment rules are context — just the name matters
         groups['Detachment Rules']!.push(entry)
         break
       case 'stratagem':
@@ -732,7 +761,8 @@ function formatDeterministicAnswer(
     for (const e of entries) {
       const unitInfo = e.unit ? ` — on **${e.unit}**` : ''
       const factionInfo = e.faction ? ` (${e.faction})` : ''
-      parts.push(`- **${e.title}**${unitInfo}${factionInfo}: ${e.content}`)
+      const contentInfo = e.content ? `: ${e.content}` : ''
+      parts.push(`- **${e.title}**${unitInfo}${factionInfo}${contentInfo}`)
     }
     parts.push('')
   }
