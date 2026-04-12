@@ -61,14 +61,21 @@ app.post('/search', async (c) => {
   const limit = Math.min(body.limit ?? 10, 50)
 
   // Auto-detect faction/chapter from query if not explicitly filtered
+  const SM_CHAPTERS = ['blood-angels', 'dark-angels', 'space-wolves', 'black-templars',
+    'deathwatch', 'iron-hands', 'ultramarines', 'salamanders', 'raven-guard',
+    'imperial-fists', 'white-scars', 'crimson-fists']
+
   let chapterFilter: string | undefined
+  let multiFactionFilter: string[] | undefined
+
   if (!body.filter?.factionId) {
-    const detected = detectFactionFromQuestion(body.query)
-    if (detected) {
-      // SM sub-factions (Blood Angels, Dark Angels, etc.) share factionId 'space-marines'
-      const SM_CHAPTERS = ['blood-angels', 'dark-angels', 'space-wolves', 'black-templars',
-        'deathwatch', 'iron-hands', 'ultramarines', 'salamanders', 'raven-guard',
-        'imperial-fists', 'white-scars', 'crimson-fists']
+    const allFactions = detectAllFactions(body.query)
+
+    if (allFactions.length > 1) {
+      // Multiple factions detected — OR filter
+      multiFactionFilter = allFactions.map(f => SM_CHAPTERS.includes(f) ? 'space-marines' : f)
+    } else if (allFactions.length === 1) {
+      const detected = allFactions[0]!
       if (SM_CHAPTERS.includes(detected)) {
         if (!body.filter) body.filter = {}
         body.filter.factionId = 'space-marines'
@@ -80,9 +87,16 @@ app.post('/search', async (c) => {
     }
   }
 
-  // Generate embedding for the query using Workers AI
+  // Strip faction name from query for better semantic search
+  const searchQuery = chapterFilter
+    ? stripFactionFromQuery(body.query, body.filter?.factionId === 'space-marines' ? chapterFilter.replace(/ /g, '-') : (body.filter?.factionId ?? ''))
+    : body.filter?.factionId
+      ? stripFactionFromQuery(body.query, body.filter.factionId)
+      : body.query
+
+  // Generate embedding for the cleaned query
   const embeddingResult = await c.env.AI.run('@cf/baai/bge-base-en-v1.5', {
-    text: [body.query],
+    text: [searchQuery || body.query],
   })
 
   const queryVector = embeddingResult.data[0]
@@ -107,9 +121,15 @@ app.post('/search', async (c) => {
 
   // Post-filter: strictly remove results from wrong factions
   let matches = results.matches
-  if (body.filter?.factionId) {
+  if (multiFactionFilter) {
+    const fids = new Set(multiFactionFilter)
+    const factionMatches = matches.filter(m => {
+      const mFaction = (m.metadata?.factionId ?? '') as string
+      return fids.has(mFaction) || mFaction === ''
+    })
+    if (factionMatches.length > 0) matches = factionMatches
+  } else if (body.filter?.factionId) {
     const fid = body.filter.factionId
-    // Also accept faction pack slug variants (space-marines matches both 'space-marines' and 'SM')
     const factionMatches = matches.filter(m => {
       const mFaction = (m.metadata?.factionId ?? '') as string
       return mFaction === fid || mFaction === ''
@@ -442,47 +462,94 @@ app.post('/sync', async (c) => {
 
 // ── Helpers ─────────────────────────────────────────────────────────────────
 
-/** Detect faction from question text. */
+/** Strip detected faction name from query so it doesn't pollute semantic search. */
+function stripFactionFromQuery(question: string, factionSlug: string): string {
+  const lower = question.toLowerCase()
+  // Find the faction pattern that matched and remove it
+  const patterns: Array<{ pattern: string; slug: string }> = [
+    { pattern: 'in blood angels', slug: 'blood-angels' },
+    { pattern: 'blood angels', slug: 'blood-angels' },
+    { pattern: 'in dark angels', slug: 'dark-angels' },
+    { pattern: 'dark angels', slug: 'dark-angels' },
+    { pattern: 'in space wolves', slug: 'space-wolves' },
+    { pattern: 'space wolves', slug: 'space-wolves' },
+    { pattern: 'in space marines', slug: 'space-marines' },
+    { pattern: 'space marines', slug: 'space-marines' },
+    { pattern: 'space marine', slug: 'space-marines' },
+    { pattern: 'in necrons', slug: 'necrons' },
+    { pattern: 'necrons', slug: 'necrons' },
+    { pattern: 'necron', slug: 'necrons' },
+    { pattern: 'in orks', slug: 'orks' },
+    { pattern: 'orks', slug: 'orks' },
+    { pattern: 'ork', slug: 'orks' },
+    { pattern: 'in tyranids', slug: 'tyranids' },
+    { pattern: 'tyranids', slug: 'tyranids' },
+    { pattern: 'tyranid', slug: 'tyranids' },
+    { pattern: 'in aeldari', slug: 'aeldari' },
+    { pattern: 'aeldari', slug: 'aeldari' },
+    { pattern: 'in tau', slug: 't-au-empire' },
+    { pattern: 'tau', slug: 't-au-empire' },
+  ]
+  for (const { pattern, slug } of patterns) {
+    if (slug === factionSlug && lower.includes(pattern)) {
+      return question.replace(new RegExp(pattern, 'i'), '').replace(/^[\s,]+|[\s,]+$/g, '').trim()
+    }
+  }
+  return question
+}
+
+const FACTION_PATTERNS: Array<{ pattern: string; slug: string }> = [
+  { pattern: 'chaos space marine', slug: 'chaos-space-marines' },
+  { pattern: 'space marine', slug: 'space-marines' },
+  { pattern: 'blood angel', slug: 'blood-angels' },
+  { pattern: 'dark angel', slug: 'dark-angels' },
+  { pattern: 'space wolf', slug: 'space-wolves' },
+  { pattern: 'space wolves', slug: 'space-wolves' },
+  { pattern: 'black templar', slug: 'black-templars' },
+  { pattern: 'grey knight', slug: 'grey-knights' },
+  { pattern: 'death guard', slug: 'death-guard' },
+  { pattern: 'thousand sons', slug: 'thousand-sons' },
+  { pattern: 'world eater', slug: 'world-eaters' },
+  { pattern: 'imperial knight', slug: 'imperial-knights' },
+  { pattern: 'chaos knight', slug: 'chaos-knights' },
+  { pattern: 'imperial guard', slug: 'astra-militarum' },
+  { pattern: 'astra militarum', slug: 'astra-militarum' },
+  { pattern: 'sisters of battle', slug: 'adepta-sororitas' },
+  { pattern: 'dark eldar', slug: 'drukhari' },
+  { pattern: 'ork', slug: 'orks' },
+  { pattern: 'necron', slug: 'necrons' },
+  { pattern: 'tyranid', slug: 'tyranids' },
+  { pattern: 'aeldari', slug: 'aeldari' },
+  { pattern: 'eldar', slug: 'aeldari' },
+  { pattern: 'tau', slug: 't-au-empire' },
+  { pattern: 't\'au', slug: 't-au-empire' },
+  { pattern: 'custodes', slug: 'adeptus-custodes' },
+  { pattern: 'sororitas', slug: 'adepta-sororitas' },
+  { pattern: 'mechanicus', slug: 'adeptus-mechanicus' },
+  { pattern: 'genestealer', slug: 'genestealer-cults' },
+  { pattern: 'drukhari', slug: 'drukhari' },
+  { pattern: 'votann', slug: 'leagues-of-votann' },
+  { pattern: 'deathwatch', slug: 'deathwatch' },
+  { pattern: 'daemon', slug: 'chaos-daemons' },
+]
+
+/** Detect faction from question text. Returns first match. */
 function detectFactionFromQuestion(question: string): string | undefined {
   const lower = question.toLowerCase()
-  const factions: Array<{ pattern: string; slug: string }> = [
-    { pattern: 'space marine', slug: 'space-marines' },
-    { pattern: 'ork', slug: 'orks' },
-    { pattern: 'necron', slug: 'necrons' },
-    { pattern: 'tyranid', slug: 'tyranids' },
-    { pattern: 'aeldari', slug: 'aeldari' },
-    { pattern: 'eldar', slug: 'aeldari' },
-    { pattern: 'tau', slug: 't-au-empire' },
-    { pattern: 't\'au', slug: 't-au-empire' },
-    { pattern: 'chaos space marine', slug: 'chaos-space-marines' },
-    { pattern: 'death guard', slug: 'death-guard' },
-    { pattern: 'thousand sons', slug: 'thousand-sons' },
-    { pattern: 'world eater', slug: 'world-eaters' },
-    { pattern: 'custodes', slug: 'adeptus-custodes' },
-    { pattern: 'sororitas', slug: 'adepta-sororitas' },
-    { pattern: 'sisters of battle', slug: 'adepta-sororitas' },
-    { pattern: 'mechanicus', slug: 'adeptus-mechanicus' },
-    { pattern: 'imperial guard', slug: 'astra-militarum' },
-    { pattern: 'astra militarum', slug: 'astra-militarum' },
-    { pattern: 'imperial knight', slug: 'imperial-knights' },
-    { pattern: 'chaos knight', slug: 'chaos-knights' },
-    { pattern: 'genestealer', slug: 'genestealer-cults' },
-    { pattern: 'grey knight', slug: 'grey-knights' },
-    { pattern: 'drukhari', slug: 'drukhari' },
-    { pattern: 'dark eldar', slug: 'drukhari' },
-    { pattern: 'votann', slug: 'leagues-of-votann' },
-    { pattern: 'blood angel', slug: 'blood-angels' },
-    { pattern: 'dark angel', slug: 'dark-angels' },
-    { pattern: 'space wolf', slug: 'space-wolves' },
-    { pattern: 'space wolves', slug: 'space-wolves' },
-    { pattern: 'black templar', slug: 'black-templars' },
-    { pattern: 'deathwatch', slug: 'deathwatch' },
-    { pattern: 'daemon', slug: 'chaos-daemons' },
-  ]
-  for (const { pattern, slug } of factions) {
+  for (const { pattern, slug } of FACTION_PATTERNS) {
     if (lower.includes(pattern)) return slug
   }
   return undefined
+}
+
+/** Detect ALL factions mentioned in question text. */
+function detectAllFactions(question: string): string[] {
+  const lower = question.toLowerCase()
+  const found = new Set<string>()
+  for (const { pattern, slug } of FACTION_PATTERNS) {
+    if (lower.includes(pattern)) found.add(slug)
+  }
+  return [...found]
 }
 
 /** Extract game mechanic keywords from a question. */
