@@ -92,7 +92,9 @@ export async function retrieve(options: RetrieveOptions, env: RetrieveEnv): Prom
   }
 
   // Build Vectorize query options — include faction filter if detected
-  const vectorizeOpts: any = { topK: limit * 3, returnMetadata: 'all' }
+  // Fetch extra results when faction-filtering to compensate for post-filter loss
+  const fetchMultiplier = detected.factions.length > 0 ? 6 : 3
+  const vectorizeOpts: any = { topK: limit * fetchMultiplier, returnMetadata: 'all' }
   if (detected.factions.length > 0 || filter) {
     const filterObj: Record<string, any> = {}
     if (filter?.layer) filterObj.layer = filter.layer
