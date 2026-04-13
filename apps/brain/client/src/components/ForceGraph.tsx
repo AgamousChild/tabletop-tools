@@ -95,6 +95,7 @@ export function ForceGraph() {
             rel: e.rel,
           })),
         })
+        setLoading(false)
         return
       }
     } catch {
