@@ -115,31 +115,44 @@ export function detectFactions(query: string): { factions: string[]; subfaction?
   const found = new Set<string>()
   let subfaction: string | undefined
 
+  // Track consumed text ranges to prevent double-matching substrings
+  const consumed: Array<[number, number]> = []
+
   // Check subfaction keywords first — they imply a parent faction
+  // Also consume the matched text range so FACTION_PATTERNS doesn't re-match
   for (const [sf, parent] of Object.entries(SUBFACTION_TO_PARENT)) {
-    if (lower.includes(sf)) {
+    const idx = lower.indexOf(sf)
+    if (idx !== -1) {
       found.add(parent)
       subfaction = sf
+      consumed.push([idx, idx + sf.length])
       break // only one subfaction
     }
   }
 
-  // Track consumed text ranges to prevent double-matching substrings
-  // e.g. once "chaos space marine" matches, "space marine" should not.
-  const consumed: Array<[number, number]> = []
+  // Build a set of slugs that are subfaction entries (e.g. blood-angels, deathwatch)
+  // to suppress them when already detected via subfaction
+  const subfactionSlugs = new Set<string>()
+  if (subfaction) {
+    for (const { pattern, slug } of FACTION_PATTERNS) {
+      // If the pattern text matches or is contained in the subfaction name, suppress this slug
+      if (subfaction.includes(pattern) || pattern.includes(subfaction.replace(/ /g, ' '))) {
+        subfactionSlugs.add(slug)
+      }
+    }
+  }
 
   for (const { pattern, slug } of FACTION_PATTERNS) {
-    // Use a word boundary at the start (to block false matches like "cork"
-    // matching "ork"), but NOT at the end — patterns like "necron" must match
-    // inside "necrons", "tyranid" inside "tyranids", etc.
-    const startAnchor = /\w/.test(pattern[0]) ? '\\b' : ''
+    // Skip slugs that are already covered by subfaction detection
+    if (subfactionSlugs.has(slug)) continue
+
+    const startAnchor = /\w/.test(pattern[0]!) ? '\\b' : ''
     const re = new RegExp(`${startAnchor}${escapeRegex(pattern)}`, 'gi')
     let m: RegExpExecArray | null
     let matched = false
     while ((m = re.exec(lower)) !== null) {
       const start = m.index
       const end = start + m[0].length
-      // Skip if this range overlaps a previously consumed range
       const overlaps = consumed.some(([cs, ce]) => start < ce && end > cs)
       if (!overlaps) {
         consumed.push([start, end])
@@ -170,7 +183,6 @@ export function stripFactionFromQuery(query: string, detectedFactions: string[])
   const patternsToRemove = FACTION_PATTERNS
     .filter(({ slug }) => detectedFactions.includes(slug))
     .map(({ pattern }) => pattern)
-    .sort((a, b) => b.length - a.length) // longest first to avoid partial removal
 
   // Also remove subfaction names that appear in SUBFACTION_TO_PARENT
   for (const [sf, parent] of Object.entries(SUBFACTION_TO_PARENT)) {
@@ -179,10 +191,14 @@ export function stripFactionFromQuery(query: string, detectedFactions: string[])
     }
   }
 
+  // Sort longest first — "blood angels" before "blood angel" to avoid leaving trailing "s"
+  patternsToRemove.sort((a, b) => b.length - a.length)
+
   for (const pattern of patternsToRemove) {
     // Remove "in <pattern>" phrases too, then bare pattern
-    result = result.replace(new RegExp(`\\bin\\s+${escapeRegex(pattern)}`, 'gi'), '')
-    result = result.replace(new RegExp(escapeRegex(pattern), 'gi'), '')
+    // Use word boundary + optional trailing 's' to catch plurals
+    result = result.replace(new RegExp(`\\bin\\s+${escapeRegex(pattern)}s?\\b`, 'gi'), '')
+    result = result.replace(new RegExp(`${escapeRegex(pattern)}s?\\b`, 'gi'), '')
   }
 
   return result.replace(/\s{2,}/g, ' ').replace(/^[\s,]+|[\s,]+$/g, '').trim()
