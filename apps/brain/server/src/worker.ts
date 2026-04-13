@@ -207,7 +207,7 @@ When citing sources, use the format: (Source: [title])`
   return c.json({
     detected,
     answer,
-    answerPath: useClaude ? 'claude' : contextPath,
+    answerPath,
     contextLength: userMessage.length,
     reference: results,
     sources: results.map(n => ({
