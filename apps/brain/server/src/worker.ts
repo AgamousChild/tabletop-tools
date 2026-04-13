@@ -247,33 +247,42 @@ app.post('/graph-data', async (c) => {
     bucket,
   }
 
-  const { detected, results } = await retrieve(
+  const { detected, results, connected } = await retrieve(
     {
       query: body.query,
       limit: body.limit || 20,
       filter: body.filter,
-      includeConnected: false,
-      dualEmbedding: false,
+      includeConnected: true,
+      dualEmbedding: true,
     },
     env,
   )
 
-  // Fetch forward/reverse indexes for edge building
+  // Combine primary results + connected nodes for the graph
+  const allNodes = [...results, ...connected]
+  const seenIds = new Set<string>()
+  const dedupedNodes = allNodes.filter(n => {
+    if (seenIds.has(n.id)) return false
+    seenIds.add(n.id)
+    return true
+  })
+
+  // Build edges from forward/reverse indexes — only between nodes in our set
   const [revObj, fwdObj] = await Promise.all([
     bucket.get('refs/reverse-index.json'),
     bucket.get('refs/forward-index.json'),
   ])
 
-  const resultIds = new Set(results.map(r => r.id))
+  const nodeIdSet = new Set(dedupedNodes.map(n => n.id))
   const edges: Array<{ source: string; target: string; rel: string }> = []
 
   if (fwdObj) {
     const fwdIndex = await fwdObj.json() as Record<string, Array<{ targetId: string; rel: string }>>
-    for (const nodeId of resultIds) {
+    for (const nodeId of nodeIdSet) {
       const fwd = fwdIndex[nodeId]
       if (fwd) {
         for (const ref of fwd) {
-          if (resultIds.has(ref.targetId)) {
+          if (nodeIdSet.has(ref.targetId)) {
             edges.push({ source: nodeId, target: ref.targetId, rel: ref.rel })
           }
         }
@@ -281,7 +290,24 @@ app.post('/graph-data', async (c) => {
     }
   }
 
-  return c.json({ detected, nodes: results, edges })
+  if (revObj) {
+    const revIndex = await revObj.json() as Record<string, Array<{ sourceId: string; rel: string }>>
+    const edgeSet = new Set(edges.map(e => `${e.source}|${e.target}|${e.rel}`))
+    for (const nodeId of nodeIdSet) {
+      const rev = revIndex[nodeId]
+      if (rev) {
+        for (const ref of rev) {
+          const key = `${ref.sourceId}|${nodeId}|${ref.rel}`
+          if (nodeIdSet.has(ref.sourceId) && !edgeSet.has(key)) {
+            edges.push({ source: ref.sourceId, target: nodeId, rel: ref.rel })
+            edgeSet.add(key)
+          }
+        }
+      }
+    }
+  }
+
+  return c.json({ detected, nodes: dedupedNodes, edges })
 })
 
 // ── Index vectors endpoint ──────────────────────────────────────────────────
