@@ -121,8 +121,8 @@ app.post('/ask', async (c) => {
   const primaryNodes = results as unknown as Node[]
   const connectedNodes = connected as unknown as Node[]
 
-  // Assemble LLM context
-  const context = assembleContext(primaryNodes, connectedNodes, parentMap)
+  // Assemble LLM context — pass subfaction so context is structured with subfaction-specific content first
+  const context = assembleContext(primaryNodes, connectedNodes, parentMap, detected.subfaction)
 
   const systemPrompt = `You are a Warhammer 40,000 rules expert. Answer questions using ONLY the rules context provided below. Always cite your sources.
 
@@ -135,6 +135,7 @@ CRITICAL RULES FOR ANSWERS:
 6. When a context entry says "[unit-ability, ON UNIT: X]" or "[weapon, ON UNIT: X]", use X as the unit name.
 7. Be precise about game mechanics. If a rule has been errata'd or FAQ'd, mention the correction.
 8. If the context doesn't contain enough information to answer confidently, say so.
+9. When a subfaction is specified (e.g., Blood Angels, Space Wolves), ALWAYS present subfaction-specific results FIRST, then generic faction results. The context is already ordered this way — preserve that ordering in your answer.
 
 When citing sources, use the format: (Source: [title])`
 
