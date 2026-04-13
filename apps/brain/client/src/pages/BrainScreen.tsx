@@ -513,12 +513,15 @@ export function BrainScreen() {
         </div>
       </header>
 
-      <main className="flex-1 p-4 max-w-4xl mx-auto">
-        {tab === 'ask' && <AskTab />}
-        {tab === 'search' && <SearchTab />}
-        {tab === 'graph' && <ForceGraph />}
-      </main>
-      {tab === 'browse' && <BrowseTab />}
+      {tab === 'browse' ? (
+        <BrowseTab />
+      ) : (
+        <main className="flex-1 p-4 max-w-4xl mx-auto">
+          {tab === 'ask' && <AskTab />}
+          {tab === 'search' && <SearchTab />}
+          {tab === 'graph' && <ForceGraph />}
+        </main>
+      )}
     </div>
   )
 }
