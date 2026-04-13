@@ -1,7 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, screen, fireEvent, waitFor } from '@testing-library/react'
 import { BrainScreen } from './BrainScreen'
-import { saveNodes, clearBrainData, setBrainMeta, type BrainNode } from '../lib/store'
 
 vi.mock('react-force-graph-2d', () => ({
   default: (props: any) => (
@@ -13,27 +12,18 @@ vi.mock('react-force-graph-2d', () => ({
   ),
 }))
 
-const testNodes: BrainNode[] = [
-  {
-    id: 'core:wound-roll',
-    layer: 'core',
-    category: 'core-mechanic',
-    title: 'Wound Roll',
-    content: 'Compare Strength to Toughness.',
-    summary: 'How wound rolls work.',
-    sources: [{ type: 'pdf', title: 'Core Rules', retrievedAt: '2026-04-08' }],
-    refs: [],
-    version: 1,
-    keywords: ['wound', 'roll'],
-  },
-]
+// Mock fetch for Browse tab API calls
+const mockFetch = vi.fn()
+beforeEach(() => {
+  mockFetch.mockReset()
+  mockFetch.mockResolvedValue({
+    ok: true,
+    json: async () => ({ layers: [{ id: 'core', label: 'Core Rules', count: 42 }] }),
+  })
+  global.fetch = mockFetch
+})
 
 describe('BrainScreen', () => {
-  beforeEach(async () => {
-    await clearBrainData()
-    await saveNodes(testNodes)
-  })
-
   it('renders the header', () => {
     render(<BrainScreen />)
     expect(screen.getByText('40K Brain')).toBeInTheDocument()
@@ -64,20 +54,21 @@ describe('BrainScreen', () => {
     expect(screen.getByPlaceholderText(/Search to visualize/i)).toBeInTheDocument()
   })
 
-  it('shows Browse tab sync prompt when no brain meta', async () => {
+  it('shows Browse tab and fetches layers from API', async () => {
     render(<BrainScreen />)
     fireEvent.click(screen.getByText('Browse'))
     await waitFor(() => {
-      expect(screen.getByText(/No brain data synced yet/)).toBeInTheDocument()
+      expect(screen.getByText(/Core Rules/)).toBeInTheDocument()
     })
+    // Should have called the browse/layers API
+    expect(mockFetch).toHaveBeenCalledWith(expect.stringContaining('/browse/layers'))
   })
 
-  it('shows Browse tab with layer nav when brain data exists', async () => {
-    await setBrainMeta({ lastSync: Date.now(), fileHashes: {} })
+  it('Browse tab shows "Select a layer" prompt before selection', async () => {
     render(<BrainScreen />)
     fireEvent.click(screen.getByText('Browse'))
     await waitFor(() => {
-      expect(screen.getByText('Core Rules')).toBeInTheDocument()
+      expect(screen.getByText(/Select a layer/)).toBeInTheDocument()
     })
   })
 })

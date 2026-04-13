@@ -21,6 +21,90 @@ app.use('*', async (c, next) => {
 
 app.get('/version', (c) => c.json({ version: c.env.BUILD_VERSION || 'dev' }))
 
+// ── Browse endpoints ────────────────────────────────────────────────────────
+
+app.get('/browse/layers', async (c) => {
+  const bucket = c.env.BRAIN_BUCKET
+  const manifestObj = await bucket.get('manifest.json')
+  if (!manifestObj) return c.json({ layers: [] })
+  const manifest = await manifestObj.json() as { files: Record<string, string> }
+
+  // Count nodes per layer by reading each node file
+  const layers: Array<{ id: string; label: string; count: number }> = []
+  const layerLabels: Record<string, string> = {
+    core: 'Core Rules', faction: 'Faction', unit: 'Units',
+    errata: 'Errata', balance: 'Balance', community: 'Community',
+  }
+
+  for (const file of Object.keys(manifest.files)) {
+    if (!file.startsWith('nodes/')) continue
+    const obj = await bucket.get(file)
+    if (!obj) continue
+    const nodes = await obj.json() as Node[]
+    for (const node of nodes) {
+      const existing = layers.find(l => l.id === node.layer)
+      if (existing) existing.count++
+      else layers.push({ id: node.layer, label: layerLabels[node.layer] || node.layer, count: 1 })
+    }
+  }
+
+  return c.json({ layers })
+})
+
+app.get('/browse/nodes', async (c) => {
+  const layer = c.req.query('layer')
+  if (!layer) return c.json({ error: 'layer query param required' }, 400)
+
+  const limit = Math.min(parseInt(c.req.query('limit') || '100'), 500)
+  const offset = parseInt(c.req.query('offset') || '0')
+
+  const bucket = c.env.BRAIN_BUCKET
+  const manifestObj = await bucket.get('manifest.json')
+  if (!manifestObj) return c.json({ nodes: [], total: 0 })
+  const manifest = await manifestObj.json() as { files: Record<string, string> }
+
+  const allNodes: Node[] = []
+  for (const file of Object.keys(manifest.files)) {
+    if (!file.startsWith('nodes/')) continue
+    const obj = await bucket.get(file)
+    if (!obj) continue
+    const nodes = await obj.json() as Node[]
+    for (const node of nodes) {
+      if (node.layer === layer) allNodes.push(node)
+    }
+  }
+
+  // Sort by category then title
+  allNodes.sort((a, b) => {
+    if (a.category !== b.category) return a.category.localeCompare(b.category)
+    return a.title.localeCompare(b.title)
+  })
+
+  return c.json({
+    nodes: allNodes.slice(offset, offset + limit),
+    total: allNodes.length,
+  })
+})
+
+app.get('/browse/node/:id', async (c) => {
+  const id = decodeURIComponent(c.req.param('id'))
+  const bucket = c.env.BRAIN_BUCKET
+  const manifestObj = await bucket.get('manifest.json')
+  if (!manifestObj) return c.json({ error: 'No data' }, 404)
+  const manifest = await manifestObj.json() as { files: Record<string, string> }
+
+  for (const file of Object.keys(manifest.files)) {
+    if (!file.startsWith('nodes/')) continue
+    const obj = await bucket.get(file)
+    if (!obj) continue
+    const nodes = await obj.json() as Node[]
+    const found = nodes.find(n => n.id === id)
+    if (found) return c.json({ node: found })
+  }
+
+  return c.json({ error: 'Node not found' }, 404)
+})
+
 // ── Data endpoints (serve from R2) ──────────────────────────────────────────
 
 app.get('/manifest.json', async (c) => {
