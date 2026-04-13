@@ -12,9 +12,9 @@
   },
   "dependencies": {
     "@tabletop-tools/ui": "workspace:*",
-    "cytoscape": "^3.33.2",
     "react": "^18.3.1",
-    "react-dom": "^18.3.1"
+    "react-dom": "^18.3.1",
+    "react-force-graph-2d": "^1.29.1"
   },
   "devDependencies": {
     "@testing-library/jest-dom": "^6.9.1",

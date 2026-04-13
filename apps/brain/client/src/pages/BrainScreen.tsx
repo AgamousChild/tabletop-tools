@@ -1,6 +1,6 @@
 import { useState, useMemo } from 'react'
 import { LayerNav } from '../components/LayerNav'
-import { GraphView } from '../components/GraphView'
+import { ForceGraph } from '../components/ForceGraph'
 import { NodeCard } from '../components/NodeCard'
 import { RefList } from '../components/RefList'
 import { useNode, useNodesByLayer, useNodeSearch, useNodeRefs } from '../lib/hooks'
@@ -253,7 +253,7 @@ export function BrainScreen() {
         <main className="flex-1 p-4 max-w-4xl mx-auto">
           {tab === 'ask' && <AskTab />}
           {tab === 'search' && <SearchTab />}
-          {tab === 'graph' && <GraphView />}
+          {tab === 'graph' && <ForceGraph />}
           {tab === 'browse' && (
             <>
               {selectedNode ? (
