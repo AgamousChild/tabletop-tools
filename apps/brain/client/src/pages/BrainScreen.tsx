@@ -281,7 +281,7 @@ function SearchTab() {
         </button>
       </div>
 
-      {detected && detected.factions.length > 0 && (
+      {factionFilter && detected && detected.factions.length > 0 && (
         <FactionBanner
           factions={detected.factions}
           subfaction={detected.subfaction}
