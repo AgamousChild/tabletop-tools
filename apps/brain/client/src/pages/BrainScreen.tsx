@@ -1,3 +1,5 @@
+declare const __APP_VERSION__: string
+
 import { useState, useEffect } from 'react'
 import { LayerNav } from '../components/LayerNav'
 import { ForceGraph } from '../components/ForceGraph'
@@ -335,7 +337,10 @@ export function BrainScreen() {
     <div className="min-h-screen bg-slate-950 text-slate-100">
       <header className="border-b border-slate-800 px-4 py-3">
         <div className="flex items-center justify-between">
-          <h1 className="text-xl font-bold text-amber-400">40K Brain</h1>
+          <div className="flex items-baseline gap-2">
+            <h1 className="text-xl font-bold text-amber-400">40K Brain</h1>
+            <span className="text-xs text-slate-600" data-testid="app-version">{__APP_VERSION__}</span>
+          </div>
           <div className="flex gap-1">
             {(['ask', 'search', 'browse', 'graph'] as const).map((t) => (
               <button

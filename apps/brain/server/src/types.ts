@@ -5,6 +5,7 @@ export interface Env {
   SYNC_SECRET?: string
   CORS_ORIGIN?: string
   ANTHROPIC_API_KEY?: string
+  BUILD_VERSION?: string
 }
 
 export interface BrainManifest {

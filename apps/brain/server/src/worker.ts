@@ -17,6 +17,10 @@ app.use('*', async (c, next) => {
   })(c, next)
 })
 
+// ── Version ────────────────────────────────────────────────────────────────
+
+app.get('/version', (c) => c.json({ version: c.env.BUILD_VERSION || 'dev' }))
+
 // ── Data endpoints (serve from R2) ──────────────────────────────────────────
 
 app.get('/manifest.json', async (c) => {

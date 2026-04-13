@@ -20,7 +20,7 @@ cd apps/brain/server && npx tsx src/upload-graph.ts
 
 ## 4. Deploy Worker
 ```bash
-cd apps/brain/server && npx wrangler deploy
+cd apps/brain/server && npx wrangler deploy --var BUILD_VERSION:"$(date +%Y%m%d-%H%M%S)"
 ```
 
 ## 5. Re-index vectors (if node data changed)
