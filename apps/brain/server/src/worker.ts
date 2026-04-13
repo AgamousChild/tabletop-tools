@@ -101,15 +101,21 @@ app.post('/ask', async (c) => {
     bucket: c.env.BRAIN_BUCKET,
   }
 
-  const { detected, results, connected, parentMap } = await retrieve(
-    {
-      query: body.question,
-      limit: 10,
-      includeConnected: true,
-      dualEmbedding: true,
-    },
-    env,
-  )
+  let retrieveResult
+  try {
+    retrieveResult = await retrieve(
+      {
+        query: body.question,
+        limit: 10,
+        includeConnected: true,
+        dualEmbedding: true,
+      },
+      env,
+    )
+  } catch (err) {
+    return c.json({ error: 'Retrieval failed', details: err instanceof Error ? err.message : String(err) }, 500)
+  }
+  const { detected, results, connected, parentMap } = retrieveResult
 
   // Build Node arrays for assembleContext (results are EnrichedNode, compatible with Node shape)
   const primaryNodes = results as unknown as Node[]
