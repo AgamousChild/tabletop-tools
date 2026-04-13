@@ -79,6 +79,20 @@ export async function retrieve(options: RetrieveOptions, env: RetrieveEnv): Prom
   // Step 3: Extract mechanic keywords
   const keywords = extractMechanicKeywords(query)
 
+  // ── Faction browse mode ──────────────────────────────────────────────────
+  // When the user typed just a faction/subfaction name (stripped query is empty
+  // or very short) and no mechanic keywords, skip Vectorize entirely.
+  // Fetch all nodes for that faction from R2 and return them sorted.
+  const isFactionBrowse = detected.factions.length > 0
+    && strippedQuery.trim().length <= 3
+    && keywords.length === 0
+
+  if (isFactionBrowse) {
+    return await factionBrowse(detected, strippedQuery, keywords, limit, includeConnected, connectedDepth, env)
+  }
+
+  // ── Semantic search mode (normal path) ───────────────────────────────────
+
   // Step 4: Generate primary embedding
   const embeddingText = strippedQuery || query
   const aiResult = await env.ai.run('@cf/baai/bge-base-en-v1.5', { text: [embeddingText] })
@@ -226,6 +240,97 @@ function matchRank(
   if (mFaction && detectedFactions.includes(mFaction)) return 1
   // Generic (no faction)
   return 2
+}
+
+// ── Faction browse ──────────────────────────────────────────────────────────
+
+/**
+ * When the user typed just a faction name with no mechanic query,
+ * fetch all nodes for that faction from R2 directly.
+ * Sort: subfaction-specific first, then generic, grouped by category impact.
+ */
+async function factionBrowse(
+  detected: { factions: string[]; subfaction?: string },
+  strippedQuery: string,
+  keywords: string[],
+  limit: number,
+  includeConnected: boolean,
+  connectedDepth: number,
+  env: RetrieveEnv,
+): Promise<RetrieveResult> {
+  const factionId = detected.factions[0]!
+  const subfaction = detected.subfaction
+
+  // Load the faction's node file from R2 via the manifest
+  // Faction nodes are stored as nodes/faction-{slug}.json
+  const manifestObj = await env.bucket.get('manifest.json')
+  if (!manifestObj) {
+    return { detected: { factions: detected.factions, subfaction, strippedQuery, keywords }, results: [], connected: [], parentMap: new Map() }
+  }
+  const manifest = await manifestObj.json() as { files: Record<string, string> }
+
+  // Collect all nodes for this faction from both faction and unit layer files
+  const factionFile = `nodes/faction-${factionId}.json`
+  const allNodes: Node[] = []
+
+  for (const file of Object.keys(manifest.files)) {
+    if (!file.startsWith('nodes/')) continue
+    // Load faction-specific file always
+    // Also load core.json for generic rules
+    if (file === factionFile || file === 'nodes/core.json') {
+      const obj = await env.bucket.get(file)
+      if (obj) {
+        const nodes = await obj.json() as Node[]
+        allNodes.push(...nodes)
+      }
+    }
+  }
+
+  // Filter: keep nodes matching factionId or generic (no factionId)
+  let filtered = allNodes.filter(n => n.factionId === factionId || !n.factionId)
+
+  // Subfaction filter: remove other chapters' content
+  if (subfaction) {
+    filtered = filtered.filter(n => {
+      if (!n.subfaction) return true // generic — keep
+      return n.subfaction === subfaction // same subfaction — keep; other subfactions — drop
+    })
+  }
+
+  // Sort: subfaction first, then faction, then generic. Within each: datasheets before abilities before weapons.
+  const CATEGORY_ORDER: Record<string, number> = {
+    'detachment-rule': 0,
+    'faction-ability': 1,
+    'stratagem': 2,
+    'enhancement': 3,
+    'datasheet': 4,
+    'unit-ability': 5,
+    'weapon': 6,
+  }
+
+  filtered.sort((a, b) => {
+    // Subfaction first
+    const aSubRank = (subfaction && a.subfaction === subfaction) ? 0 : (!a.subfaction ? 1 : 2)
+    const bSubRank = (subfaction && b.subfaction === subfaction) ? 0 : (!b.subfaction ? 1 : 2)
+    if (aSubRank !== bSubRank) return aSubRank - bSubRank
+    // Then by category
+    const aCat = CATEGORY_ORDER[a.category] ?? 7
+    const bCat = CATEGORY_ORDER[b.category] ?? 7
+    if (aCat !== bCat) return aCat - bCat
+    // Then alphabetical
+    return a.title.localeCompare(b.title)
+  })
+
+  // No hard limit for faction browse — return all faction content
+  // (limit only applies to Vectorize searches)
+  const results: EnrichedNode[] = filtered.map(n => enrichNode(n, 1.0, new Map()))
+
+  return {
+    detected: { factions: detected.factions, subfaction, strippedQuery, keywords },
+    results,
+    connected: [],
+    parentMap: new Map(),
+  }
 }
 
 function enrichNode(node: Node, score: number, parentMap: Map<string, string>): EnrichedNode {

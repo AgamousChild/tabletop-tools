@@ -438,6 +438,105 @@ describe('retrieve', () => {
     expect(queryCall[1]).toHaveProperty('filter')
   })
 
+  // ── Faction browse mode ──────────────────────────────────────────────────
+
+  it('uses faction browse when query is just a faction name (stripped query empty)', async () => {
+    const baNode = makeNode({
+      id: 'faction:space-marines:ba-detachment',
+      layer: 'faction',
+      category: 'detachment-rule',
+      title: 'Rage-cursed Onslaught',
+      factionId: 'space-marines',
+      subfaction: 'blood angels',
+    })
+    const smNode = makeNode({
+      id: 'faction:space-marines:gladius',
+      layer: 'faction',
+      category: 'detachment-rule',
+      title: 'Gladius Task Force',
+      factionId: 'space-marines',
+    })
+    const orkNode = makeNode({
+      id: 'faction:orks:waaagh',
+      layer: 'faction',
+      category: 'faction-ability',
+      title: 'Waaagh',
+      factionId: 'orks',
+    })
+    const ai = createMockAI()
+    const vectorize = createMockVectorize([]) // should NOT be called
+    const bucket = createMockBucket({
+      'manifest.json': { files: { 'nodes/faction-space-marines.json': 'h', 'nodes/faction-orks.json': 'h', 'nodes/core.json': 'h' } },
+      'nodes/faction-space-marines.json': [baNode, smNode],
+      'nodes/faction-orks.json': [orkNode],
+      'nodes/core.json': [coreNode],
+    })
+
+    const env: RetrieveEnv = { ai, vectorize, bucket }
+    const result = await retrieve({ query: 'blood angels', limit: 50 }, env)
+
+    // Should NOT call Vectorize — this is a direct R2 fetch
+    expect((vectorize.query as ReturnType<typeof vi.fn>).mock.calls.length).toBe(0)
+    // Should return BA and generic SM content, not orks
+    const ids = result.results.map(r => r.id)
+    expect(ids).toContain(baNode.id)
+    expect(ids).toContain(smNode.id)
+    expect(ids).not.toContain(orkNode.id)
+    // BA-specific should come before generic SM
+    const baIdx = result.results.findIndex(r => r.id === baNode.id)
+    const smIdx = result.results.findIndex(r => r.id === smNode.id)
+    expect(baIdx).toBeLessThan(smIdx)
+  })
+
+  it('faction browse excludes other subfactions', async () => {
+    const baNode = makeNode({
+      id: 'ba:1',
+      layer: 'faction',
+      category: 'detachment-rule',
+      title: 'BA Detachment',
+      factionId: 'space-marines',
+      subfaction: 'blood angels',
+    })
+    const swNode = makeNode({
+      id: 'sw:1',
+      layer: 'faction',
+      category: 'detachment-rule',
+      title: 'SW Detachment',
+      factionId: 'space-marines',
+      subfaction: 'space wolves',
+    })
+    const ai = createMockAI()
+    const vectorize = createMockVectorize([])
+    const bucket = createMockBucket({
+      'manifest.json': { files: { 'nodes/faction-space-marines.json': 'h', 'nodes/core.json': 'h' } },
+      'nodes/faction-space-marines.json': [baNode, swNode],
+      'nodes/core.json': [],
+    })
+
+    const env: RetrieveEnv = { ai, vectorize, bucket }
+    const result = await retrieve({ query: 'blood angels', limit: 50 }, env)
+
+    const ids = result.results.map(r => r.id)
+    expect(ids).toContain(baNode.id)
+    expect(ids).not.toContain(swNode.id)
+  })
+
+  it('faction browse still works for non-subfaction factions like necrons', async () => {
+    const ai = createMockAI()
+    const vectorize = createMockVectorize([])
+    const bucket = createMockBucket({
+      'manifest.json': { files: { 'nodes/faction-necrons.json': 'h', 'nodes/core.json': 'h' } },
+      'nodes/faction-necrons.json': [factionNode],
+      'nodes/core.json': [coreNode],
+    })
+
+    const env: RetrieveEnv = { ai, vectorize, bucket }
+    const result = await retrieve({ query: 'necrons', limit: 50 }, env)
+
+    expect((vectorize.query as ReturnType<typeof vi.fn>).mock.calls.length).toBe(0)
+    expect(result.results.map(r => r.id)).toContain(factionNode.id)
+  })
+
   it('post-filters results by faction: keeps faction-match and generic, drops other-faction', async () => {
     const necronNode = makeNode({
       id: 'faction:necrons:rp',
