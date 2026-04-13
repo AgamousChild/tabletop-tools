@@ -84,6 +84,16 @@ test.describe('Brain — Search tab', () => {
     await expect(page.getByText(/space wolves/i).first()).toBeVisible()
   })
 
+  test('clicking a search result shows full content', async ({ page }) => {
+    await page.getByPlaceholder(/Semantic search/).fill('sustained hits')
+    await page.getByPlaceholder(/Semantic search/).press('Enter')
+    await expect(page.getByText('%').first()).toBeVisible({ timeout: 15000 })
+    // Click first result
+    await page.locator('button').filter({ has: page.getByText('%') }).first().click()
+    // Should show detail panel with close button
+    await expect(page.getByText(/Close/)).toBeVisible({ timeout: 5000 })
+  })
+
   test('faction banner dismiss shows all results but keeps sort', async ({ page }) => {
     await page.getByPlaceholder(/Semantic search/).fill('blood angels')
     await page.getByPlaceholder(/Semantic search/).press('Enter')
@@ -133,15 +143,53 @@ test.describe('Brain — Ask tab', () => {
 // ── Browse tab ──────────────────────────────────────────────────────────────
 
 test.describe('Brain — Browse tab', () => {
-  test('Browse tab loads and shows layer navigation or sync prompt', async ({ page }) => {
+  test.beforeEach(async ({ page }) => {
     await page.goto('/brain/')
     await page.waitForLoadState('networkidle')
-    await page.getByRole('button', { name: 'Browse' }).click()
+    await page.locator('header').getByRole('button', { name: 'Browse' }).click()
+  })
 
-    // Should show either the layer nav or a sync prompt — not nothing
-    const hasLayerNav = await page.getByText('Core Rules').isVisible().catch(() => false)
-    const hasSyncPrompt = await page.getByText(/sync/i).isVisible().catch(() => false)
-    expect(hasLayerNav || hasSyncPrompt).toBe(true)
+  test('shows layer navigation with counts', async ({ page }) => {
+    // Layers API takes 3-5 seconds
+    await expect(page.getByText(/Core Rules/)).toBeVisible({ timeout: 10000 })
+    await expect(page.getByText(/Faction/)).toBeVisible()
+    await expect(page.getByText(/Units/)).toBeVisible()
+    // Should show counts in parentheses
+    await expect(page.getByText(/\(\d+\)/).first()).toBeVisible()
+  })
+
+  test('shows "Select a layer" before selection', async ({ page }) => {
+    await expect(page.getByText(/Select a layer/)).toBeVisible()
+  })
+
+  test('clicking a layer loads nodes', async ({ page }) => {
+    await expect(page.getByText(/Core Rules/)).toBeVisible({ timeout: 10000 })
+    await page.getByText(/Core Rules/).click()
+    // Nodes API takes a few seconds
+    await expect(page.getByText(/Showing \d+ of/).first()).toBeVisible({ timeout: 10000 })
+  })
+
+  test('clicking a node shows detail view with content', async ({ page }) => {
+    await expect(page.getByText(/Core Rules/)).toBeVisible({ timeout: 10000 })
+    await page.getByText(/Core Rules/).click()
+    await expect(page.getByText(/Showing \d+ of/).first()).toBeVisible({ timeout: 10000 })
+    // Click first node
+    await page.locator('button h3').first().click()
+    // Should show detail view with back button
+    await expect(page.getByText(/Back to list/)).toBeVisible({ timeout: 5000 })
+    // Should show source attribution
+    await expect(page.getByText(/Sources:/)).toBeVisible()
+  })
+
+  test('back button returns to node list', async ({ page }) => {
+    await expect(page.getByText(/Core Rules/)).toBeVisible({ timeout: 10000 })
+    await page.getByText(/Core Rules/).click()
+    await expect(page.getByText(/Showing \d+ of/).first()).toBeVisible({ timeout: 10000 })
+    await page.locator('button h3').first().click()
+    await expect(page.getByText(/Back to list/)).toBeVisible({ timeout: 5000 })
+    await page.getByText(/Back to list/).click()
+    // Should return to the node list
+    await expect(page.getByText(/Showing \d+ of/).first()).toBeVisible()
   })
 })
 
