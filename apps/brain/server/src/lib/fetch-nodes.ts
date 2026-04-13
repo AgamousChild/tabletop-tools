@@ -103,12 +103,15 @@ export async function fetchConnectedNodes(
   if (inboundRefs.length === 0) return { nodes: [], parentMap: new Map() }
 
   // Step 2: Collect unique candidate refs (excluding already-known nodes)
+  // Pre-filter by factionId if a faction filter is set — this prevents pulling in
+  // hundreds of nodes from other factions that reference generic core rules like
+  // "sustained hits". Keep refs that match the faction OR have no faction (generic).
   const known = new Set(nodeIds)
   const uniqueRefs = new Map<string, RevEntry>()
   for (const r of inboundRefs) {
-    if (!known.has(r.sourceId) && !uniqueRefs.has(r.sourceId)) {
-      uniqueRefs.set(r.sourceId, r)
-    }
+    if (known.has(r.sourceId) || uniqueRefs.has(r.sourceId)) continue
+    if (factionFilter?.factionId && r.factionId && r.factionId !== factionFilter.factionId) continue
+    uniqueRefs.set(r.sourceId, r)
   }
 
   // Priority by ID prefix: abilities/stratagems first, weapons last
