@@ -72,52 +72,77 @@ export function formatConversationalAnswer(
   question: string,
   nodes: Node[],
   parentMap: Map<string, string>,
+  subfaction?: string,
 ): string {
   // Build entries with stripped content
-  const entries: Entry[] = nodes.map(node => {
+  const allEntries: Entry[] = nodes.map(node => {
     const parent = parentMap.get(node.id) ?? ''
     const rawContent = node.content || node.summary
     const stripped = stripFlavorText(rawContent)
     return { node, tier: getTier(node), parent, content: stripped }
   })
 
-  // Group by tier
-  const groups = new Map<ImpactTier, Entry[]>()
-  for (const tier of IMPACT_ORDER) {
-    groups.set(tier, [])
-  }
-  for (const entry of entries) {
-    groups.get(entry.tier)!.push(entry)
+  // When subfaction is detected, split into subfaction-specific and generic,
+  // format each as its own section
+  if (subfaction) {
+    const sfLabel = subfaction.split(' ').map(w => w[0]!.toUpperCase() + w.slice(1)).join(' ')
+    const sfEntries = allEntries.filter(e => e.node.subfaction === subfaction)
+    const genericEntries = allEntries.filter(e => e.node.subfaction !== subfaction)
+
+    const parts: string[] = []
+    parts.push(`Results for: "${question}"\n`)
+
+    if (sfEntries.length > 0) {
+      parts.push(`## ${sfLabel} Specific\n`)
+      parts.push(formatEntriesAsProse(sfEntries))
+      parts.push('')
+    }
+
+    if (genericEntries.length > 0) {
+      parts.push(`## Available to All Space Marines\n`)
+      parts.push(formatEntriesAsProse(genericEntries))
+      parts.push('')
+    }
+
+    parts.push(formatReferenceSection(allEntries))
+    parts.push(`\n*${nodes.length} total result${nodes.length !== 1 ? 's' : ''} from the knowledge graph. Source: Wahapedia 10th Edition, Core Rules.*`)
+    return parts.join('\n')
   }
 
+  // No subfaction — original single-section format
   const parts: string[] = []
   parts.push(`Results for: "${question}"\n`)
+  parts.push(formatEntriesAsProse(allEntries))
+  parts.push('')
+  parts.push(formatReferenceSection(allEntries))
+  parts.push(`\n*${nodes.length} total result${nodes.length !== 1 ? 's' : ''} from the knowledge graph. Source: Wahapedia 10th Edition, Core Rules.*`)
+  return parts.join('\n')
+}
 
-  // Prose sections per tier
+/** Format a list of entries as prose paragraphs grouped by impact tier. */
+function formatEntriesAsProse(entries: Entry[]): string {
+  const groups = new Map<ImpactTier, Entry[]>()
+  for (const tier of IMPACT_ORDER) groups.set(tier, [])
+  for (const entry of entries) groups.get(entry.tier)!.push(entry)
+
+  const parts: string[] = []
   for (const tier of IMPACT_ORDER) {
     const tierEntries = groups.get(tier)!
     if (tierEntries.length === 0) continue
 
-    const heading = TIER_HEADING[tier]
-    parts.push(`### ${heading}`)
-
-    // Build prose paragraph: intro sentence + one sentence per entry
+    parts.push(`### ${TIER_HEADING[tier]}`)
     const intro = buildIntroSentence(tier, tierEntries.length)
-    const sentences: string[] = [intro]
-
-    for (const e of tierEntries) {
-      sentences.push(buildEntrySentence(e))
-    }
-
+    const sentences = [intro, ...tierEntries.map(e => buildEntrySentence(e))]
     parts.push(sentences.join(' '))
     parts.push('')
   }
+  return parts.join('\n')
+}
 
-  // Reference section
-  parts.push('## Reference')
-  parts.push('')
-  for (const entry of entries) {
-    const { node, parent } = entry
+/** Format structured reference section from entries. */
+function formatReferenceSection(entries: Entry[]): string {
+  const parts: string[] = ['## Reference', '']
+  for (const { node, parent } of entries) {
     const unitLine = parent ? `\n  - Unit: ${parent}` : ''
     const factionLine = node.factionId ? `\n  - Faction: ${node.factionId}` : ''
     const sourceLine = node.sources.length > 0
@@ -126,11 +151,6 @@ export function formatConversationalAnswer(
     const summaryLine = `\n  - Summary: ${node.summary}`
     parts.push(`**${node.title}** [${node.category}]${unitLine}${factionLine}${summaryLine}${sourceLine}`)
   }
-  parts.push('')
-
-  // Footer
-  parts.push(`*${nodes.length} total result${nodes.length !== 1 ? 's' : ''} from the knowledge graph. Source: Wahapedia 10th Edition, Core Rules.*`)
-
   return parts.join('\n')
 }
 

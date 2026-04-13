@@ -144,11 +144,13 @@ When citing sources, use the format: (Source: [title])`
   const userMessage = `Rules context:\n\n${context}\n\n---\n\nQuestion: ${body.question}`
 
   let answer: string
+  let answerPath = 'unknown'
 
   const useClaudeParam = c.req.query('model') === 'claude'
   const useClaude = useClaudeParam && apiKey
 
   if (useClaude) {
+    answerPath = 'claude'
     const response = await fetch('https://api.anthropic.com/v1/messages', {
       method: 'POST',
       headers: {
@@ -182,6 +184,7 @@ When citing sources, use the format: (Source: [title])`
     const MAX_LLM_CONTEXT = 40000
 
     if (userMessage.length <= MAX_LLM_CONTEXT) {
+      answerPath = 'llm'
       try {
         const aiResult = await (c.env.AI as any).run('@cf/meta/llama-3.1-8b-instruct', {
           messages: [
@@ -192,18 +195,20 @@ When citing sources, use the format: (Source: [title])`
         })
         answer = (aiResult as any).response ?? 'No response from model'
       } catch {
-        // Fallback to conversational formatting
-        answer = formatConversationalAnswer(body.question, connectedNodes, parentMap)
+        answerPath = 'deterministic-fallback'
+        answer = formatConversationalAnswer(body.question, connectedNodes, parentMap, detected.subfaction)
       }
     } else {
-      // Large context — format conversationally from graph data
-      answer = formatConversationalAnswer(body.question, connectedNodes, parentMap)
+      answerPath = 'deterministic'
+      answer = formatConversationalAnswer(body.question, connectedNodes, parentMap, detected.subfaction)
     }
   }
 
   return c.json({
     detected,
     answer,
+    answerPath: useClaude ? 'claude' : contextPath,
+    contextLength: userMessage.length,
     reference: results,
     sources: results.map(n => ({
       id: n.id,
