@@ -1,0 +1,40 @@
+node_modules
+dist
+.env
+.env.local
+*.local
+SECRET_MANAGEMENT.md
+.turbo
+.wrangler
+
+# Local databases
+*.db
+*.db-shm
+*.db-wal
+
+# TypeScript build artifacts
+*.tsbuildinfo
+*.d.ts.map
+dist-node/
+
+# Debug artifacts
+debug-images/
+
+# Local SSL certs
+certs/
+
+# Claude session files
+.claude/
+
+# Local sync tool output
+.local/
+
+# Game content data — never commit GW IP
+# Use /bsdata/ (root-anchored) to avoid matching packages/game-content/src/adapters/bsdata/
+/bsdata/
+wahapedia-export/
+game-content-data/
+*.cat
+*.gst
+apps/data-import/client/public/wahapedia/
+scripts/.local/
