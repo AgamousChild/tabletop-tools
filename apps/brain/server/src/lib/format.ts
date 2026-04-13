@@ -224,89 +224,99 @@ export function assembleContext(
     parts.push('')
   }
 
-  // Connected nodes — grouped by category, sorted by impact
-  // When a subfaction is detected, split each group into subfaction-specific and generic,
-  // presenting subfaction-specific content first.
+  // Connected nodes — when subfaction is detected, split into two hard sections:
+  // SECTION 1: subfaction-specific content only
+  // SECTION 2: generic content (available to all chapters/variants)
+  // Within each section, group by category in impact order.
   if (connectedNodes.length > 0) {
-    const categories = [
-      'faction-ability', 'detachment-rule', 'stratagem', 'enhancement',
-      'unit-ability', 'weapon', 'datasheet',
-    ] as const
+    let sfSpecific: Node[]
+    let generic: Node[]
 
-    const groups: Record<string, Node[]> = {}
-    for (const cat of categories) groups[cat] = []
-    groups['other'] = []
-
-    for (const n of connectedNodes) {
-      const key = groups[n.category] !== undefined ? n.category : 'other'
-      groups[key]!.push(n)
-    }
-
-    // Sort each group: subfaction-specific first, then generic
     if (subfaction) {
-      for (const nodes of Object.values(groups)) {
-        nodes.sort((a, b) => {
-          const aMatch = a.subfaction === subfaction ? 0 : 1
-          const bMatch = b.subfaction === subfaction ? 0 : 1
-          return aMatch - bMatch
-        })
-      }
+      sfSpecific = connectedNodes.filter(n => n.subfaction === subfaction)
+      generic = connectedNodes.filter(n => n.subfaction !== subfaction)
+    } else {
+      sfSpecific = []
+      generic = connectedNodes
     }
 
     const sfLabel = subfaction
       ? subfaction.split(' ').map(w => w[0]!.toUpperCase() + w.slice(1)).join(' ')
       : null
 
-    if (sfLabel) {
-      parts.push(`--- IMPORTANT: Present ${sfLabel}-specific results FIRST, then generic Space Marines results. ---`)
+    if (sfLabel && sfSpecific.length > 0) {
+      parts.push(`========================================`)
+      parts.push(`SECTION 1: ${sfLabel.toUpperCase()} SPECIFIC`)
+      parts.push(`These rules are ONLY available to ${sfLabel}. Present these FIRST in your answer.`)
+      parts.push(`========================================`)
       parts.push('')
+      renderNodeGroup(sfSpecific, parentMap, parts)
     }
 
-    parts.push('--- Connected rules (ordered by impact: army-wide → detachment → leader/unit → weapon) ---')
-    parts.push('')
-
-    for (const cat of [...categories, 'other' as const]) {
-      const nodes = groups[cat]!
-      if (nodes.length === 0) continue
-
-      // Insert subfaction boundary markers within each category
-      let inSubfaction = true
-      for (const n of nodes) {
-        if (subfaction && inSubfaction && n.subfaction !== subfaction) {
-          inSubfaction = false
-          parts.push(`--- Generic (available to all chapters) ---`)
-          parts.push('')
-        }
-
-        const parent = parentMap.get(n.id)
-        const sfTag = n.subfaction ? `, subfaction: ${n.subfaction}` : ''
-
-        if (cat === 'weapon') {
-          parts.push(`### ${n.title} [weapon, ON UNIT: ${parent || 'unknown unit'}${n.factionId ? `, ${n.factionId}` : ''}${sfTag}]`)
-          parts.push(n.summary)
-        } else if (cat === 'unit-ability') {
-          parts.push(`### ${n.title} [unit-ability, ON UNIT: ${parent || 'unknown unit'}${n.factionId ? `, ${n.factionId}` : ''}${sfTag}]`)
-          parts.push(n.content || n.summary)
-        } else if (cat === 'datasheet') {
-          parts.push(`### ${n.title} [datasheet${n.factionId ? `, ${n.factionId}` : ''}${sfTag}]`)
-          parts.push(n.summary)
-        } else if (cat === 'faction-ability') {
-          parts.push(`### ${n.title} [faction-ability${n.factionId ? `, ${n.factionId}` : ''}${parent ? `, from detachment: ${parent}` : ''}${sfTag}]`)
-          parts.push(n.content || n.summary)
-        } else if (cat === 'stratagem' || cat === 'enhancement') {
-          parts.push(`### ${n.title} [${cat}${n.factionId ? `, ${n.factionId}` : ''}${parent ? `, detachment: ${parent}` : ''}${sfTag}]`)
-          parts.push(n.content || n.summary)
-        } else if (cat === 'detachment-rule') {
-          parts.push(`### ${n.title} [detachment-rule${n.factionId ? `, ${n.factionId}` : ''}${sfTag}]`)
-          parts.push(n.content || n.summary)
-        } else {
-          parts.push(`### ${n.title} [${n.category}${sfTag}]`)
-          parts.push(n.summary)
-        }
+    if (generic.length > 0) {
+      if (sfLabel) {
+        parts.push(`========================================`)
+        parts.push(`SECTION 2: GENERIC SPACE MARINES (available to all chapters including ${sfLabel})`)
+        parts.push(`Present these AFTER the ${sfLabel}-specific results above.`)
+        parts.push(`========================================`)
+        parts.push('')
+      } else {
+        parts.push('--- Connected rules (ordered by impact: army-wide → detachment → leader/unit → weapon) ---')
         parts.push('')
       }
+      renderNodeGroup(generic, parentMap, parts)
     }
   }
 
   return parts.join('\n')
+}
+
+/** Render a group of nodes into parts, grouped by category in impact order. */
+function renderNodeGroup(nodes: Node[], parentMap: Map<string, string>, parts: string[]): void {
+  const categories = [
+    'faction-ability', 'detachment-rule', 'stratagem', 'enhancement',
+    'unit-ability', 'weapon', 'datasheet',
+  ] as const
+
+  const groups: Record<string, Node[]> = {}
+  for (const cat of categories) groups[cat] = []
+  groups['other'] = []
+
+  for (const n of nodes) {
+    const key = groups[n.category] !== undefined ? n.category : 'other'
+    groups[key]!.push(n)
+  }
+
+  for (const cat of [...categories, 'other' as const]) {
+    const catNodes = groups[cat]!
+    if (catNodes.length === 0) continue
+
+    for (const n of catNodes) {
+      const parent = parentMap.get(n.id)
+
+      if (cat === 'weapon') {
+        parts.push(`### ${n.title} [weapon, ON UNIT: ${parent || 'unknown unit'}${n.factionId ? `, ${n.factionId}` : ''}]`)
+        parts.push(n.summary)
+      } else if (cat === 'unit-ability') {
+        parts.push(`### ${n.title} [unit-ability, ON UNIT: ${parent || 'unknown unit'}${n.factionId ? `, ${n.factionId}` : ''}]`)
+        parts.push(n.content || n.summary)
+      } else if (cat === 'datasheet') {
+        parts.push(`### ${n.title} [datasheet${n.factionId ? `, ${n.factionId}` : ''}]`)
+        parts.push(n.summary)
+      } else if (cat === 'faction-ability') {
+        parts.push(`### ${n.title} [faction-ability${n.factionId ? `, ${n.factionId}` : ''}${parent ? `, from detachment: ${parent}` : ''}]`)
+        parts.push(n.content || n.summary)
+      } else if (cat === 'stratagem' || cat === 'enhancement') {
+        parts.push(`### ${n.title} [${cat}${n.factionId ? `, ${n.factionId}` : ''}${parent ? `, detachment: ${parent}` : ''}]`)
+        parts.push(n.content || n.summary)
+      } else if (cat === 'detachment-rule') {
+        parts.push(`### ${n.title} [detachment-rule${n.factionId ? `, ${n.factionId}` : ''}]`)
+        parts.push(n.content || n.summary)
+      } else {
+        parts.push(`### ${n.title} [${n.category}]`)
+        parts.push(n.summary)
+      }
+      parts.push('')
+    }
+  }
 }

@@ -135,7 +135,7 @@ CRITICAL RULES FOR ANSWERS:
 6. When a context entry says "[unit-ability, ON UNIT: X]" or "[weapon, ON UNIT: X]", use X as the unit name.
 7. Be precise about game mechanics. If a rule has been errata'd or FAQ'd, mention the correction.
 8. If the context doesn't contain enough information to answer confidently, say so.
-9. When a subfaction is specified (e.g., Blood Angels, Space Wolves), ALWAYS present subfaction-specific results FIRST, then generic faction results. The context is already ordered this way — preserve that ordering in your answer.
+9. When the context has two sections (SECTION 1 and SECTION 2), your answer MUST follow the same structure. First present everything from SECTION 1 under a heading like "## Blood Angels Specific". Then present SECTION 2 under "## Available to All Space Marines". Never mix content from the two sections together.
 
 When citing sources, use the format: (Source: [title])`
 
