@@ -8,14 +8,12 @@
 
 // ── Faction patterns ──────────────────────────────────────────────────────────
 
+// FACTION_PATTERNS maps text patterns to TOP-LEVEL faction slugs only.
+// SM chapters (blood angels, dark angels, space wolves, etc.) are NOT factions —
+// they're subfactions handled by SUBFACTION_TO_PARENT. Do NOT add them here.
 export const FACTION_PATTERNS: Array<{ pattern: string; slug: string }> = [
   { pattern: 'chaos space marine', slug: 'chaos-space-marines' },
   { pattern: 'space marine', slug: 'space-marines' },
-  { pattern: 'blood angel', slug: 'blood-angels' },
-  { pattern: 'dark angel', slug: 'dark-angels' },
-  { pattern: 'space wolf', slug: 'space-wolves' },
-  { pattern: 'space wolves', slug: 'space-wolves' },
-  { pattern: 'black templar', slug: 'black-templars' },
   { pattern: 'grey knight', slug: 'grey-knights' },
   { pattern: 'death guard', slug: 'death-guard' },
   { pattern: 'thousand sons', slug: 'thousand-sons' },
@@ -40,7 +38,6 @@ export const FACTION_PATTERNS: Array<{ pattern: string; slug: string }> = [
   { pattern: 'genestealer', slug: 'genestealer-cults' },
   { pattern: 'drukhari', slug: 'drukhari' },
   { pattern: 'votann', slug: 'leagues-of-votann' },
-  { pattern: 'deathwatch', slug: 'deathwatch' },
   { pattern: 'daemon', slug: 'chaos-daemons' },
 ]
 
@@ -130,22 +127,7 @@ export function detectFactions(query: string): { factions: string[]; subfaction?
     }
   }
 
-  // Build a set of slugs that are subfaction entries (e.g. blood-angels, deathwatch)
-  // to suppress them when already detected via subfaction
-  const subfactionSlugs = new Set<string>()
-  if (subfaction) {
-    for (const { pattern, slug } of FACTION_PATTERNS) {
-      // If the pattern text matches or is contained in the subfaction name, suppress this slug
-      if (subfaction.includes(pattern) || pattern.includes(subfaction.replace(/ /g, ' '))) {
-        subfactionSlugs.add(slug)
-      }
-    }
-  }
-
   for (const { pattern, slug } of FACTION_PATTERNS) {
-    // Skip slugs that are already covered by subfaction detection
-    if (subfactionSlugs.has(slug)) continue
-
     const startAnchor = /\w/.test(pattern[0]!) ? '\\b' : ''
     const re = new RegExp(`${startAnchor}${escapeRegex(pattern)}`, 'gi')
     let m: RegExpExecArray | null
