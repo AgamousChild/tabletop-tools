@@ -312,6 +312,32 @@ export function convertGameData(input: GameDataInput, retrievedAt?: string): Gam
   const enhancementsByDetachment = groupBy(filteredEnhancements, r => r.detachmentId)
   const abilitiesByDetachment = groupBy(filteredDetAbilities, r => r.detachmentId)
 
+  // Build datasheet → factionId and subfaction lookups
+  const dsFactionMap = new Map<string, string>()
+  for (const ds of input.datasheets) {
+    dsFactionMap.set(ds.id, normalizeFactionId(ds.factionId))
+  }
+
+  const SUBFACTION_KEYWORDS = [
+    'Blood Angels', 'Dark Angels', 'Space Wolves', 'Black Templars', 'Ultramarines',
+    'Deathwatch', 'Imperial Fists', 'Iron Hands', 'Salamanders', 'Raven Guard',
+    'White Scars', 'Crimson Fists', 'Blood Ravens',
+    'Ynnari', 'Harlequins', 'Asuryani',
+    'Plague Legions', 'Scintillating Legions', 'Legions of Excess', 'Blood Legions',
+    'Damned',
+  ]
+  const dsSubfactionMap = new Map<string, string>()
+  const keywordsByDs = groupBy(input.unitKeywords.filter(k => k.isFactionKeyword), k => k.datasheetId)
+  for (const [dsId, kws] of keywordsByDs) {
+    for (const kw of kws) {
+      const match = SUBFACTION_KEYWORDS.find(sf => sf === kw.keyword)
+      if (match) {
+        dsSubfactionMap.set(dsId, match.toLowerCase())
+        break
+      }
+    }
+  }
+
   // ── 1. Datasheets → unit/datasheet nodes ──────────────────────────────────
 
   for (const ds of input.datasheets) {
@@ -349,6 +375,7 @@ export function convertGameData(input: GameDataInput, retrievedAt?: string): Gam
       content,
       summary: `${ds.name} — ${ds.role}${costs.length ? `, ${costText}` : ''}.`,
       factionId: normalizeFactionId(ds.factionId),
+      subfaction: dsSubfactionMap.get(ds.id),
       datasheetId: ds.id,
       sources: [source],
       refs: [],
@@ -458,13 +485,6 @@ export function convertGameData(input: GameDataInput, retrievedAt?: string): Gam
   }
 
   // ── 2. Weapons → unit/weapon nodes ────────────────────────────────────────
-
-  // Build datasheet → factionId lookup for weapon and ability nodes
-  const dsFactionMap = new Map<string, string>()
-  for (const ds of input.datasheets) {
-    dsFactionMap.set(ds.id, normalizeFactionId(ds.factionId))
-  }
-
   const seenWeaponIds = new Set<string>()
   for (const wg of input.datasheetWargear) {
     // Differentiate melee/ranged profiles with the same name on the same datasheet
@@ -493,6 +513,7 @@ export function convertGameData(input: GameDataInput, retrievedAt?: string): Gam
       content,
       summary: `${wg.name} (${wg.type}) — ${wg.range}, ${wg.attacks}A, S${wg.strength}, AP${wg.ap}, D${wg.damage}.${cleanDesc ? ` [${cleanDesc}]` : ''}`,
       factionId: dsFactionMap.get(wg.datasheetId),
+      subfaction: dsSubfactionMap.get(wg.datasheetId),
       datasheetId: wg.datasheetId,
       sources: [source],
       refs: [],
@@ -584,6 +605,7 @@ export function convertGameData(input: GameDataInput, retrievedAt?: string): Gam
       content: hasSubRules ? preamble : cleanAbDesc,
       summary: `${ab.name} (${ab.type}) on ${dsName} — ${truncate(preamble || cleanAbDesc, 120)}`,
       factionId: dsFactionMap.get(ab.datasheetId),
+      subfaction: dsSubfactionMap.get(ab.datasheetId),
       datasheetId: ab.datasheetId,
       sources: [source],
       refs: [],
@@ -612,6 +634,7 @@ export function convertGameData(input: GameDataInput, retrievedAt?: string): Gam
           content: sub.text,
           summary: `${sub.name}, option of ${ab.name} on ${dsName} — ${truncate(sub.text, 120)}`,
           factionId: dsFactionMap.get(ab.datasheetId),
+      subfaction: dsSubfactionMap.get(ab.datasheetId),
           datasheetId: ab.datasheetId,
           sources: [source],
           refs: [],
@@ -732,6 +755,7 @@ export function convertGameData(input: GameDataInput, retrievedAt?: string): Gam
       content,
       summary: `${det.name} detachment for ${normalizeFactionId(det.factionId)}${detChapterMap.has(det.id) ? ` [${detChapterMap.get(det.id)} only]` : ' [any chapter]'}. ${detAbilities[0]?.name ?? ''}`,
       factionId: normalizeFactionId(det.factionId),
+      subfaction: detChapterMap.has(det.id) ? detChapterMap.get(det.id)!.toLowerCase() : undefined,
       detachmentId: det.id,
       sources: [source],
       refs: [],

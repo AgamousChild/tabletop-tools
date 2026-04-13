@@ -96,6 +96,9 @@ export const NodeSchema = z.object({
   supersededBy: z.string().optional(),
   version: z.number().int().positive(),
 
+  // Sub-faction (chapter, legion, craftworld, etc.)
+  subfaction: z.string().optional(),
+
   // Search
   keywords: z.array(z.string()),
 })
