@@ -250,9 +250,14 @@ function SearchTab() {
   const detected = response?.detected
   const allResults = response?.results ?? []
 
-  const visibleResults = factionFilter && detected && detected.factions.length > 0
+  const filteredResults = factionFilter && detected && detected.factions.length > 0
     ? allResults.filter(r => r.factionId && detected.factions.includes(r.factionId))
     : allResults
+
+  // Cap displayed results to prevent browser hang on faction browse (3000+ nodes)
+  const MAX_DISPLAY = 100
+  const visibleResults = filteredResults.slice(0, MAX_DISPLAY)
+  const totalCount = filteredResults.length
 
   return (
     <div className="space-y-4">
@@ -286,7 +291,7 @@ function SearchTab() {
         <div className="space-y-2">
           {visibleResults.map((r, i) => (
             <ResultCard
-              key={r.id}
+              key={r.id + '-' + i}
               index={i + 1}
               title={r.title}
               summary={r.summary}
@@ -299,6 +304,11 @@ function SearchTab() {
               parentUnit={r.parentUnit}
             />
           ))}
+          {totalCount > MAX_DISPLAY && (
+            <p className="text-xs text-slate-500 text-center py-2">
+              Showing {MAX_DISPLAY} of {totalCount} results
+            </p>
+          )}
         </div>
       )}
     </div>
