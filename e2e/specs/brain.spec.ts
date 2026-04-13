@@ -312,7 +312,8 @@ test.describe('Brain — API endpoints', () => {
     expect(data.connectedCount).toBeDefined()
   })
 
-  test('/ask with subfaction returns two-section answer', async ({ request }) => {
+  test('/ask with subfaction returns two-section answer', async ({ request, page }) => {
+    test.setTimeout(60000) // Workers AI LLM is slow on cold start
     const res = await request.post('/brain/api/ask', {
       data: { question: 'blood angels sustained hits' },
     })
