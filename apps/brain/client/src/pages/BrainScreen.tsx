@@ -1,10 +1,16 @@
-import { useState, useMemo } from 'react'
+import { useState, useEffect } from 'react'
 import { LayerNav } from '../components/LayerNav'
 import { ForceGraph } from '../components/ForceGraph'
 import { NodeCard } from '../components/NodeCard'
 import { RefList } from '../components/RefList'
-import { useNode, useNodesByLayer, useNodeSearch, useNodeRefs } from '../lib/hooks'
+import { ResultCard } from '../components/ResultCard'
+import { FactionBanner } from '../components/FactionBanner'
+import { useNode, useNodesByLayer, useNodeRefs } from '../lib/hooks'
+import { getBrainMeta, setBrainMeta } from '../lib/store'
 import type { BrainNode } from '../lib/store'
+
+// Re-export for tests
+export { setBrainMeta }
 
 const API_BASE = import.meta.env.VITE_BRAIN_API_URL || '/brain/api'
 
@@ -37,15 +43,45 @@ function renderMarkdown(text: string): string {
     .join('\n')
 }
 
+// ── Shared result type ───────────────────────────────────────────────────────
+
+interface ResultNode {
+  id: string
+  score: number
+  title: string
+  summary: string
+  content: string
+  layer: string
+  category: string
+  factionId?: string
+  subfaction?: string
+  phase?: string
+  parentUnit?: string
+  sources: any[]
+  keywords: string[]
+}
+
+interface DetectedFactions {
+  factions: string[]
+  subfaction?: string
+  strippedQuery: string
+  keywords: string[]
+}
+
+// ── AskTab ───────────────────────────────────────────────────────────────────
+
 interface QASource {
   id: string
   title: string
   layer: string
   category: string
+  sources?: any[]
 }
 
 interface QAResponse {
+  detected: DetectedFactions
   answer: string
+  reference: ResultNode[]
   sources: QASource[]
   connectedCount: number
 }
@@ -55,12 +91,14 @@ function AskTab() {
   const [answer, setAnswer] = useState<QAResponse | null>(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [factionFilter, setFactionFilter] = useState(true)
 
   async function handleAsk() {
     if (!question.trim()) return
     setLoading(true)
     setError(null)
     setAnswer(null)
+    setFactionFilter(true)
 
     try {
       const res = await fetch(`${API_BASE}/ask`, {
@@ -111,12 +149,41 @@ function AskTab() {
 
       {answer && (
         <div className="space-y-4">
+          {answer.detected?.factions?.length > 0 && (
+            <FactionBanner
+              factions={answer.detected.factions}
+              subfaction={answer.detected.subfaction}
+              onDismiss={() => setFactionFilter(false)}
+            />
+          )}
+
           <div className="bg-slate-900 border border-slate-700 rounded p-4 overflow-auto max-h-[70vh]">
             <div
               className="max-w-none"
               dangerouslySetInnerHTML={{ __html: renderMarkdown(answer.answer) }}
             />
           </div>
+
+          {answer.reference && answer.reference.length > 0 && (
+            <div className="mt-4">
+              <h4 className="text-sm font-medium text-slate-400 uppercase mb-2">Reference</h4>
+              {answer.reference.map((r, i) => (
+                <ResultCard
+                  key={r.id}
+                  index={i + 1}
+                  title={r.title}
+                  summary={r.summary}
+                  layer={r.layer}
+                  category={r.category}
+                  score={r.score}
+                  factionId={r.factionId}
+                  subfaction={r.subfaction}
+                  phase={r.phase}
+                  parentUnit={r.parentUnit}
+                />
+              ))}
+            </div>
+          )}
 
           {answer.sources.length > 0 && (
             <div className="bg-slate-900/50 border border-slate-800 rounded p-3">
@@ -148,14 +215,23 @@ function AskTab() {
   )
 }
 
+// ── SearchTab ────────────────────────────────────────────────────────────────
+
+interface SearchResponse {
+  detected: DetectedFactions
+  results: ResultNode[]
+}
+
 function SearchTab() {
   const [query, setQuery] = useState('')
-  const [results, setResults] = useState<Array<{ id: string; score: number; title: string; summary: string; layer: string; category: string; factionId: string }>>([])
+  const [response, setResponse] = useState<SearchResponse | null>(null)
   const [loading, setLoading] = useState(false)
+  const [factionFilter, setFactionFilter] = useState(true)
 
   async function handleSearch() {
     if (!query.trim()) return
     setLoading(true)
+    setFactionFilter(true)
     try {
       const res = await fetch(`${API_BASE}/search`, {
         method: 'POST',
@@ -163,13 +239,20 @@ function SearchTab() {
         body: JSON.stringify({ query, limit: 20 }),
       })
       const data = await res.json()
-      setResults(data.results || [])
+      setResponse(data)
     } catch {
-      setResults([])
+      setResponse(null)
     } finally {
       setLoading(false)
     }
   }
+
+  const detected = response?.detected
+  const allResults = response?.results ?? []
+
+  const visibleResults = factionFilter && detected && detected.factions.length > 0
+    ? allResults.filter(r => r.factionId && detected.factions.includes(r.factionId))
+    : allResults
 
   return (
     <div className="space-y-4">
@@ -191,19 +274,30 @@ function SearchTab() {
         </button>
       </div>
 
-      {results.length > 0 && (
+      {detected && detected.factions.length > 0 && (
+        <FactionBanner
+          factions={detected.factions}
+          subfaction={detected.subfaction}
+          onDismiss={() => setFactionFilter(false)}
+        />
+      )}
+
+      {visibleResults.length > 0 && (
         <div className="space-y-2">
-          {results.map((r) => (
-            <div key={r.id} className="bg-slate-900 border border-slate-800 rounded p-3">
-              <div className="flex items-center gap-2 mb-1">
-                <span className="text-xs bg-slate-800 text-amber-400 px-1.5 py-0.5 rounded">{r.layer}</span>
-                <span className="text-xs text-slate-500">{r.category}</span>
-                {r.factionId && <span className="text-xs text-slate-500">{r.factionId}</span>}
-                <span className="text-xs text-slate-600 ml-auto">{(r.score * 100).toFixed(0)}%</span>
-              </div>
-              <h3 className="text-sm font-medium text-slate-200">{r.title}</h3>
-              <p className="text-xs text-slate-400 mt-1 line-clamp-2">{r.summary}</p>
-            </div>
+          {visibleResults.map((r, i) => (
+            <ResultCard
+              key={r.id}
+              index={i + 1}
+              title={r.title}
+              summary={r.summary}
+              layer={r.layer}
+              category={r.category}
+              score={r.score}
+              factionId={r.factionId}
+              subfaction={r.subfaction}
+              phase={r.phase}
+              parentUnit={r.parentUnit}
+            />
           ))}
         </div>
       )}
@@ -211,14 +305,21 @@ function SearchTab() {
   )
 }
 
+// ── BrainScreen ──────────────────────────────────────────────────────────────
+
 export function BrainScreen() {
-  const [tab, setTab] = useState<'ask' | 'search' | 'graph' | 'browse'>('ask')
+  const [tab, setTab] = useState<'ask' | 'search' | 'browse' | 'graph'>('ask')
   const [selectedLayer, setSelectedLayer] = useState<string | null>(null)
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null)
+  const [hasBrainData, setHasBrainData] = useState<boolean | null>(null)
 
   const { data: layerNodes, isLoading: layerLoading } = useNodesByLayer(selectedLayer || '')
   const { data: selectedNode } = useNode(selectedNodeId || '')
   const { data: nodeRefs } = useNodeRefs(selectedNodeId || '')
+
+  useEffect(() => {
+    getBrainMeta().then(meta => setHasBrainData(meta !== null))
+  }, [])
 
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100">
@@ -226,7 +327,7 @@ export function BrainScreen() {
         <div className="flex items-center justify-between">
           <h1 className="text-xl font-bold text-amber-400">40K Brain</h1>
           <div className="flex gap-1">
-            {(['ask', 'search', 'graph', 'browse'] as const).map((t) => (
+            {(['ask', 'search', 'browse', 'graph'] as const).map((t) => (
               <button
                 key={t}
                 onClick={() => setTab(t)}
@@ -236,7 +337,7 @@ export function BrainScreen() {
                     : 'text-slate-400 hover:text-slate-200'
                 }`}
               >
-                {t === 'ask' ? 'Ask' : t === 'search' ? 'Search' : t === 'graph' ? 'Graph' : 'Browse'}
+                {t === 'ask' ? 'Ask' : t === 'search' ? 'Search' : t === 'browse' ? 'Browse' : 'Graph'}
               </button>
             ))}
           </div>
@@ -256,41 +357,51 @@ export function BrainScreen() {
           {tab === 'graph' && <ForceGraph />}
           {tab === 'browse' && (
             <>
-              {selectedNode ? (
-                <div className="space-y-4">
-                  <button
-                    onClick={() => setSelectedNodeId(null)}
-                    className="text-sm text-amber-400 hover:underline"
-                  >
-                    &larr; Back to list
-                  </button>
-                  <NodeCard node={selectedNode} />
-                  <div className="mt-4">
-                    <h3 className="text-sm font-medium text-slate-300 mb-2">Connections</h3>
-                    <RefList
-                      refs={[...nodeRefs.from, ...nodeRefs.to]}
-                      onNodeClick={setSelectedNodeId}
-                    />
-                  </div>
-                </div>
-              ) : (
-                <div className="space-y-3">
-                  {!selectedLayer && (
-                    <p className="text-slate-400">Select a layer to browse rules.</p>
+              {hasBrainData === null && (
+                <p className="text-slate-400">Loading...</p>
+              )}
+              {hasBrainData === false && (
+                <p className="text-slate-400">No brain data synced yet. Visit the Sync tab to download the knowledge graph.</p>
+              )}
+              {hasBrainData === true && (
+                <>
+                  {selectedNode ? (
+                    <div className="space-y-4">
+                      <button
+                        onClick={() => setSelectedNodeId(null)}
+                        className="text-sm text-amber-400 hover:underline"
+                      >
+                        &larr; Back to list
+                      </button>
+                      <NodeCard node={selectedNode} />
+                      <div className="mt-4">
+                        <h3 className="text-sm font-medium text-slate-300 mb-2">Connections</h3>
+                        <RefList
+                          refs={[...nodeRefs.from, ...nodeRefs.to]}
+                          onNodeClick={setSelectedNodeId}
+                        />
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="space-y-3">
+                      {!selectedLayer && (
+                        <p className="text-slate-400">Select a layer to browse rules.</p>
+                      )}
+                      {layerLoading && selectedLayer && (
+                        <p className="text-slate-400">Loading...</p>
+                      )}
+                      {(selectedLayer ? layerNodes : []).map((node: BrainNode) => (
+                        <button
+                          key={node.id}
+                          onClick={() => setSelectedNodeId(node.id)}
+                          className="w-full text-left"
+                        >
+                          <NodeCard node={node} />
+                        </button>
+                      ))}
+                    </div>
                   )}
-                  {layerLoading && selectedLayer && (
-                    <p className="text-slate-400">Loading...</p>
-                  )}
-                  {(selectedLayer ? layerNodes : []).map((node: BrainNode) => (
-                    <button
-                      key={node.id}
-                      onClick={() => setSelectedNodeId(node.id)}
-                      className="w-full text-left"
-                    >
-                      <NodeCard node={node} />
-                    </button>
-                  ))}
-                </div>
+                </>
               )}
             </>
           )}
