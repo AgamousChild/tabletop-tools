@@ -48,10 +48,12 @@ export interface RetrieveResult {
 }
 
 // Environment dependencies (injected for testability)
+// Uses `any` for ai/vectorize to avoid coupling to Cloudflare Workers types
+// which have complex union return types that don't match our simplified interface.
 export interface RetrieveEnv {
-  ai: { run(model: string, input: { text: string[] }): Promise<{ data: number[][] }> }
-  vectorize: { query(vector: number[], opts: any): Promise<{ matches: Array<{ id: string; score: number; metadata?: Record<string, any> }> }> }
-  bucket: any  // R2Bucket
+  ai: any       // Cloudflare AI binding — we call .run('@cf/baai/bge-base-en-v1.5', { text })
+  vectorize: any // Cloudflare Vectorize binding — we call .query(vector, opts)
+  bucket: any    // R2Bucket
 }
 
 // ── VectorizeMatch type ───────────────────────────────────────────────────────

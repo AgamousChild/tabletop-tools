@@ -174,7 +174,7 @@ When citing sources, use the format: (Source: [title])`
 
     if (userMessage.length <= MAX_LLM_CONTEXT) {
       try {
-        const aiResult = await c.env.AI.run('@cf/meta/llama-3.1-8b-instruct', {
+        const aiResult = await (c.env.AI as any).run('@cf/meta/llama-3.1-8b-instruct', {
           messages: [
             { role: 'system', content: systemPrompt },
             { role: 'user', content: userMessage },
@@ -309,7 +309,7 @@ app.post('/index-vectors', async (c) => {
       try {
         const embResult = await c.env.AI.run('@cf/baai/bge-base-en-v1.5', {
           text: texts,
-        })
+        }) as { data: number[][] }
 
         const vectors = batch.map((node, idx) => ({
           id: node.id,
