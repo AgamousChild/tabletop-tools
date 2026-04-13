@@ -383,7 +383,7 @@ function BrowseTab() {
         </nav>
       </aside>
 
-      <main className="flex-1 p-4 max-w-4xl">
+      <div className="flex-1 p-4 max-w-4xl">
         {selectedNode ? (
           <div className="space-y-4">
             <button
@@ -454,7 +454,7 @@ function BrowseTab() {
             )}
           </div>
         )}
-      </main>
+      </div>
     </div>
   )
 }
