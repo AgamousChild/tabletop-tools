@@ -14,10 +14,24 @@ bash build.sh
 echo ""
 echo "=== Step 2: Deploy to Cloudflare Pages ==="
 cd "$GATEWAY_DIR"
-wrangler pages deploy dist --project-name tabletop-tools --branch main
+wrangler pages deploy dist --project-name tabletop-tools --branch main --commit-dirty=true
+
+echo ""
+echo "=== Step 3: Purge CDN cache ==="
+# Cloudflare Pages CDN caches HTML and assets aggressively.
+# Without purging, users may get stale JS bundles even after a deploy.
+if [ -n "$CF_ZONE_ID" ] && [ -n "$CF_API_TOKEN" ]; then
+  echo "Purging cache for zone $CF_ZONE_ID..."
+  curl -s -X POST "https://api.cloudflare.com/client/v4/zones/$CF_ZONE_ID/purge_cache" \
+    -H "Authorization: Bearer $CF_API_TOKEN" \
+    -H "Content-Type: application/json" \
+    --data '{"purge_everything":true}' | python3 -c "import sys,json; d=json.load(sys.stdin); print('  Cache purged' if d.get('success') else f'  Purge failed: {d}')" 2>/dev/null || echo "  Purge request sent (couldn't parse response)"
+else
+  echo "  Skipping cache purge (set CF_ZONE_ID and CF_API_TOKEN env vars to enable)"
+  echo "  Without purge, CDN may serve stale HTML/JS for up to 5 minutes"
+fi
 
 echo ""
 echo "=== Done ==="
 echo "Verify: https://tabletop-tools.net/"
-echo "Verify: https://tabletop-tools.net/versus/"
-echo "Verify: https://tabletop-tools.net/no-cheat/"
+echo "Verify: https://tabletop-tools.net/brain/"

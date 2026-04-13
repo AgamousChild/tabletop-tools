@@ -52,8 +52,9 @@ cd apps/brain/server && pnpm test && npx wrangler deploy
 
 ## Quick deploy (client only)
 ```bash
-cd apps/brain/client && npx vite build
-cd apps/gateway && rm -rf dist && bash build.sh && npx wrangler pages deploy dist --project-name tabletop-tools
+# IMPORTANT: clean tsc cache to prevent stale builds
+cd apps/brain/client && rm -f tsconfig.tsbuildinfo && rm -rf node_modules/.vite && npx vite build
+cd apps/gateway && rm -rf dist && bash build.sh && npx wrangler pages deploy dist --project-name tabletop-tools --commit-dirty=true
 ```
 
 ## Full deploy (everything)
