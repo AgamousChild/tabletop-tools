@@ -302,20 +302,37 @@ export function convertGameData(input: GameDataInput, retrievedAt?: string): Gam
   const filteredEnhancements = input.enhancements.filter(e => !boardingDetIds.has(e.detachmentId))
   const filteredDetAbilities = input.detachmentAbilities.filter(da => !boardingDetIds.has(da.detachmentId))
 
-  // Build lookup maps
-  const modelsByDatasheet = groupBy(input.datasheetModels, r => r.datasheetId)
-  const keywordsByDatasheet = groupBy(input.unitKeywords, r => r.datasheetId)
-  const compositionsByDatasheet = groupBy(input.unitCompositions, r => r.datasheetId)
-  const costsByDatasheet = groupBy(input.unitCosts, r => r.datasheetId)
-  const wargearByDatasheet = groupBy(input.datasheetWargear, r => r.datasheetId)
-  const abilitiesByDatasheet = groupBy(input.unitAbilities, r => r.datasheetId)
+  // Filter out Legends — discontinued units not legal in matched play
+  const legendsIds = new Set(
+    input.datasheets.filter(d => d.isLegends).map(d => d.id)
+  )
+  const filteredDatasheets = input.datasheets.filter(d => !d.isLegends)
+  const filteredWargear = input.datasheetWargear.filter(w => !legendsIds.has(w.datasheetId))
+  const filteredModels = input.datasheetModels.filter(m => !legendsIds.has(m.datasheetId))
+  const filteredUnitAbilities = input.unitAbilities.filter(a => !legendsIds.has(a.datasheetId))
+  const filteredUnitKeywords = input.unitKeywords.filter(k => !legendsIds.has(k.datasheetId))
+  const filteredCompositions = input.unitCompositions.filter(c => !legendsIds.has(c.datasheetId))
+  const filteredCosts = input.unitCosts.filter(c => !legendsIds.has(c.datasheetId))
+  const filteredWargearOptions = input.wargearOptions.filter(w => !legendsIds.has(w.datasheetId))
+  const filteredLeaderAttachments = input.leaderAttachments.filter(l => !legendsIds.has(l.leaderId) && !legendsIds.has(l.attachedId))
+  const filteredDsStratagems = input.datasheetStratagems.filter(j => !legendsIds.has(j.datasheetId))
+  const filteredDsEnhancements = input.datasheetEnhancements.filter(j => !legendsIds.has(j.datasheetId))
+  const filteredDsDetAbilities = input.datasheetDetachmentAbilities.filter(j => !legendsIds.has(j.datasheetId))
+
+  // Build lookup maps (using filtered data — no legends, no boarding)
+  const modelsByDatasheet = groupBy(filteredModels, r => r.datasheetId)
+  const keywordsByDatasheet = groupBy(filteredUnitKeywords, r => r.datasheetId)
+  const compositionsByDatasheet = groupBy(filteredCompositions, r => r.datasheetId)
+  const costsByDatasheet = groupBy(filteredCosts, r => r.datasheetId)
+  const wargearByDatasheet = groupBy(filteredWargear, r => r.datasheetId)
+  const abilitiesByDatasheet = groupBy(filteredUnitAbilities, r => r.datasheetId)
   const stratagemsByDetachment = groupBy(filteredStratagems, r => r.detachmentId)
   const enhancementsByDetachment = groupBy(filteredEnhancements, r => r.detachmentId)
   const abilitiesByDetachment = groupBy(filteredDetAbilities, r => r.detachmentId)
 
   // Build datasheet → factionId and subfaction lookups
   const dsFactionMap = new Map<string, string>()
-  for (const ds of input.datasheets) {
+  for (const ds of filteredDatasheets) {
     dsFactionMap.set(ds.id, normalizeFactionId(ds.factionId))
   }
 
@@ -328,7 +345,7 @@ export function convertGameData(input: GameDataInput, retrievedAt?: string): Gam
     'Damned',
   ]
   const dsSubfactionMap = new Map<string, string>()
-  const keywordsByDs = groupBy(input.unitKeywords.filter(k => k.isFactionKeyword), k => k.datasheetId)
+  const keywordsByDs = groupBy(filteredUnitKeywords.filter(k => k.isFactionKeyword), k => k.datasheetId)
   for (const [dsId, kws] of keywordsByDs) {
     for (const kw of kws) {
       const match = SUBFACTION_KEYWORDS.find(sf => sf === kw.keyword)
@@ -343,7 +360,7 @@ export function convertGameData(input: GameDataInput, retrievedAt?: string): Gam
   // Create a top-level node for each faction so detachments, army rules, and
   // datasheets can link up to it via part_of.
   const factionSlugs = new Set<string>()
-  for (const ds of input.datasheets) factionSlugs.add(normalizeFactionId(ds.factionId))
+  for (const ds of filteredDatasheets) factionSlugs.add(normalizeFactionId(ds.factionId))
   for (const det of filteredDetachments) factionSlugs.add(normalizeFactionId(det.factionId))
 
   for (const fSlug of factionSlugs) {
@@ -365,7 +382,7 @@ export function convertGameData(input: GameDataInput, retrievedAt?: string): Gam
 
   // ── 1. Datasheets → unit/datasheet nodes ──────────────────────────────────
 
-  for (const ds of input.datasheets) {
+  for (const ds of filteredDatasheets) {
     const models = modelsByDatasheet.get(ds.id) ?? []
     const keywords = keywordsByDatasheet.get(ds.id) ?? []
     const compositions = compositionsByDatasheet.get(ds.id) ?? []
@@ -519,7 +536,7 @@ export function convertGameData(input: GameDataInput, retrievedAt?: string): Gam
 
   // ── 2. Weapons → unit/weapon nodes ────────────────────────────────────────
   const seenWeaponIds = new Set<string>()
-  for (const wg of input.datasheetWargear) {
+  for (const wg of filteredWargear) {
     // Differentiate melee/ranged profiles with the same name on the same datasheet
     let weaponNodeId = `weapon:${wg.datasheetId}:${slugify(wg.name)}`
     if (seenWeaponIds.has(weaponNodeId)) {
@@ -619,7 +636,7 @@ export function convertGameData(input: GameDataInput, retrievedAt?: string): Gam
   // For army rules that appear as unit abilities: instead of creating duplicate nodes,
   // create refs from the faction ability node to each datasheet that has the keyword.
   const armyRuleRefs = new Map<string, Set<string>>() // ability name → set of datasheet IDs
-  for (const ab of input.unitAbilities) {
+  for (const ab of filteredUnitAbilities) {
     if (factionAbilityNames.has(ab.name.toLowerCase())) {
       const dsIds = armyRuleRefs.get(ab.name.toLowerCase()) ?? new Set()
       dsIds.add(ab.datasheetId)
@@ -633,7 +650,7 @@ export function convertGameData(input: GameDataInput, retrievedAt?: string): Gam
     if (!factionAb) continue
     const factionAbNodeId = `faction:${normalizeFactionId(factionAb.factionId)}:${slugify(factionAb.name)}`
     for (const dsId of dsIds) {
-      const dsName = input.datasheets.find(d => d.id === dsId)?.name ?? dsId
+      const dsName = filteredDatasheets.find(d => d.id === dsId)?.name ?? dsId
       refs.push({
         sourceId: factionAbNodeId,
         targetId: dsId,
@@ -644,7 +661,7 @@ export function convertGameData(input: GameDataInput, retrievedAt?: string): Gam
   }
 
   const seenAbilityIds = new Map<string, number>()
-  for (const ab of input.unitAbilities) {
+  for (const ab of filteredUnitAbilities) {
     // Skip if this is a faction ability (army rule) — handled above with refs
     if (factionAbilityNames.has(ab.name.toLowerCase())) continue
     const baseId = `ability:${ab.datasheetId}:${slugify(ab.name)}`
@@ -653,7 +670,7 @@ export function convertGameData(input: GameDataInput, retrievedAt?: string): Gam
     const abilityNodeId = count === 0 ? baseId : `${baseId}-${count}`
 
     const cleanAbDesc = stripHtml(ab.description)
-    const dsName = input.datasheets.find(d => d.id === ab.datasheetId)?.name ?? ''
+    const dsName = filteredDatasheets.find(d => d.id === ab.datasheetId)?.name ?? ''
 
     // Split multi-option abilities
     const subRules = splitSubRules(cleanAbDesc)
@@ -1002,7 +1019,7 @@ export function convertGameData(input: GameDataInput, retrievedAt?: string): Gam
 
   // ── 6. Junction tables → modifies refs ────────────────────────────────────
 
-  for (const j of input.datasheetStratagems) {
+  for (const j of filteredDsStratagems) {
     if (j.stratagemId) {
       // Find the stratagem node
       const strat = filteredStratagems.find(s => s.id === j.stratagemId)
@@ -1021,7 +1038,7 @@ export function convertGameData(input: GameDataInput, retrievedAt?: string): Gam
     }
   }
 
-  for (const j of input.datasheetEnhancements) {
+  for (const j of filteredDsEnhancements) {
     if (j.enhancementId) {
       const enh = filteredEnhancements.find(e => e.id === j.enhancementId)
       if (enh) {
@@ -1066,7 +1083,7 @@ export function convertGameData(input: GameDataInput, retrievedAt?: string): Gam
     { pattern: 'indirect fire', coreSlug: 'indirect-fire', label: 'Indirect Fire' },
   ]
 
-  for (const wg of input.datasheetWargear) {
+  for (const wg of filteredWargear) {
     const weaponNodeId = `weapon:${wg.datasheetId}:${slugify(wg.name)}`
     const desc = (wg.description ?? '').toLowerCase()
 
@@ -1104,7 +1121,7 @@ export function convertGameData(input: GameDataInput, retrievedAt?: string): Gam
 
   const ALL_CORE_PATTERNS = [...WEAPON_ABILITY_CORE_NODES, ...UNIT_ABILITY_CORE_NODES]
 
-  for (const ab of input.unitAbilities) {
+  for (const ab of filteredUnitAbilities) {
     // Use the deduplicated ID from section 3
     const baseId = `ability:${ab.datasheetId}:${slugify(ab.name)}`
     const existingCount = seenAbilityIds.get(baseId) ?? 0
@@ -1190,7 +1207,7 @@ export function convertGameData(input: GameDataInput, retrievedAt?: string): Gam
 
   // ── 10. Leader attachments → interacts_with refs ──────────────────────────
 
-  for (const la of input.leaderAttachments) {
+  for (const la of filteredLeaderAttachments) {
     refs.push({
       sourceId: la.leaderId,
       targetId: la.attachedId,
@@ -1257,7 +1274,7 @@ export function convertGameData(input: GameDataInput, retrievedAt?: string): Gam
 
   // Build datasheet name lookup for unit context in combos
   const dsNameMap = new Map<string, string>()
-  for (const ds of input.datasheets) dsNameMap.set(ds.id, ds.name)
+  for (const ds of filteredDatasheets) dsNameMap.set(ds.id, ds.name)
   // Build detachment name lookup
   const detNameMap = new Map<string, string>()
   for (const det of filteredDetachments) detNameMap.set(det.id, det.name)
