@@ -274,7 +274,7 @@ When citing sources, use the format: (Source: [title])`
     if (userMessage.length <= MAX_LLM_CONTEXT) {
       answerPath = 'llm'
       try {
-        const aiResult = await (c.env.AI as any).run('@cf/meta/llama-3.1-8b-instruct', {
+        const aiResult = await (c.env.AI as any).run('@cf/meta/llama-3.3-70b-instruct-fp8-fast', {
           messages: [
             { role: 'system', content: systemPrompt },
             { role: 'user', content: userMessage },
@@ -297,6 +297,7 @@ When citing sources, use the format: (Source: [title])`
     answer,
     answerPath,
     contextLength: userMessage.length,
+    connectedIds: connected.map(c => c.id),
     reference: results,
     sources: results.map(n => ({
       id: n.id,
