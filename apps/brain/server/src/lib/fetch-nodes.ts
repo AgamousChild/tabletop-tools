@@ -189,6 +189,50 @@ export async function fetchConnectedNodes(
     })
   }
 
+  // Step 5b: Follow stacks_with refs from connected nodes
+  // This finds combo partners: if Immolation Protocols is connected (grants dev wounds),
+  // follow its stacks_with ref to find Forgefather (grants wound re-rolls).
+  const comboIds = new Set<string>()
+  for (const node of nodes) {
+    const fwdRefs = forwardIndex[node.id]
+    if (!fwdRefs) continue
+    for (const ref of fwdRefs) {
+      if (ref.rel === 'stacks_with' && !known.has(ref.targetId) && !selectedIdSet.has(ref.targetId)) {
+        // Apply faction filter to combo partners too
+        if (factionFilter?.factionId) {
+          // We don't have factionId on forward refs — fetch the node and check
+          comboIds.add(ref.targetId)
+        } else {
+          comboIds.add(ref.targetId)
+        }
+      }
+    }
+    // Also check reverse — if something stacks_with this node
+    const revRefs = reverseIndex[node.id]
+    if (revRefs) {
+      for (const ref of revRefs) {
+        if (ref.rel === 'stacks_with' && !known.has(ref.sourceId) && !selectedIdSet.has(ref.sourceId)) {
+          if (!factionFilter?.factionId || !ref.factionId || ref.factionId === factionFilter.factionId) {
+            comboIds.add(ref.sourceId)
+          }
+        }
+      }
+    }
+  }
+
+  if (comboIds.size > 0) {
+    const comboNodes = await fetchNodesFromR2(bucket, [...comboIds])
+    // Filter combos by faction/subfaction
+    const filteredCombos = comboNodes.filter(n => {
+      if (factionFilter?.factionId && n.factionId && n.factionId !== factionFilter.factionId) return false
+      if (subfactionFilter && n.subfaction && n.subfaction !== subfactionFilter) return false
+      return true
+    })
+    nodes.push(...filteredCombos)
+    // Add combo node IDs to selectedIdSet so they appear in results
+    for (const n of filteredCombos) selectedIdSet.add(n.id)
+  }
+
   // Step 6: Resolve parentMap IDs to titles
   const nodeById = new Map<string, Node>()
   for (const n of nodes) nodeById.set(n.id, n)

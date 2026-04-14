@@ -80,13 +80,14 @@ export const SUBFACTION_TO_PARENT: Record<string, string> = {
 export const MECHANIC_ALIASES: Array<{ alias: string; canonical: string }> = [
   { alias: 'dev wounds', canonical: 'devastating wounds' },
   { alias: 'devs', canonical: 'devastating wounds' },
+  { alias: 'critical wound', canonical: 'devastating wounds' },
+  { alias: 'crit', canonical: 'devastating wounds' },
   { alias: 'sus hits', canonical: 'sustained hits' },
+  { alias: 'sustained', canonical: 'sustained hits' },
   { alias: 'exploding 6s', canonical: 'sustained hits' },
   { alias: 'exploding 6', canonical: 'sustained hits' },
   { alias: 'critical hit', canonical: 'sustained hits' },
-  { alias: 'crit', canonical: 'sustained hits' },
   { alias: 'auto wound', canonical: 'lethal hits' },
-  { alias: 'auto-wound', canonical: 'lethal hits' },
   { alias: 'fnp', canonical: 'feel no pain' },
   { alias: 'mortal', canonical: 'mortal wound' },
   { alias: 'mortals', canonical: 'mortal wound' },
@@ -208,6 +209,8 @@ const MECHANIC_TERMS = [
   'advance', 'fall back', 'charge', 'mortal wound',
   'invulnerable', 'firing deck', 'transport', 'objective control',
   'armour penetration',
+  // Army rules (matched via aliases like ftgg, oath, bok)
+  'for the greater good', 'blessings of khorne', 'oath of moment',
 ]
 
 /**

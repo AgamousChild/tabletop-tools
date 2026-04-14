@@ -67,7 +67,7 @@ interface VectorizeMatch {
 // ── Pipeline ─────────────────────────────────────────────────────────────────
 
 export async function retrieve(options: RetrieveOptions, env: RetrieveEnv): Promise<RetrieveResult> {
-  const { query, filter, includeConnected = false, connectedDepth = 1, dualEmbedding = false } = options
+  const { query, filter, includeConnected = false, connectedDepth = 2, dualEmbedding = false } = options
   const limit = Math.min(options.limit ?? 10, 50)
 
   // Step 1: Detect factions
