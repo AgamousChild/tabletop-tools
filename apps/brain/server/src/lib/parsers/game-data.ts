@@ -293,8 +293,9 @@ export function convertGameData(input: GameDataInput, retrievedAt?: string): Gam
   const source: Source = { ...wahapediaSource, retrievedAt: retrievedAt ?? new Date().toISOString() }
 
   // Filter out Boarding Actions — different game mode
+  // Use the type field (authoritative), not name matching
   const boardingDetIds = new Set(
-    input.detachments.filter(d => d.name.toLowerCase().includes('boarding')).map(d => d.id)
+    input.detachments.filter(d => d.type.toLowerCase() === 'boarding actions').map(d => d.id)
   )
   const filteredDetachments = input.detachments.filter(d => !boardingDetIds.has(d.id))
   const filteredStratagems = input.stratagems.filter(s => !boardingDetIds.has(s.detachmentId))
