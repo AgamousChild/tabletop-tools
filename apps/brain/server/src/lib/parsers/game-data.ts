@@ -338,6 +338,30 @@ export function convertGameData(input: GameDataInput, retrievedAt?: string): Gam
     }
   }
 
+  // ── 0. Faction parent nodes ────────────────────────────────────────────────
+  // Create a top-level node for each faction so detachments, army rules, and
+  // datasheets can link up to it via part_of.
+  const factionSlugs = new Set<string>()
+  for (const ds of input.datasheets) factionSlugs.add(normalizeFactionId(ds.factionId))
+  for (const det of filteredDetachments) factionSlugs.add(normalizeFactionId(det.factionId))
+
+  for (const fSlug of factionSlugs) {
+    const factionNodeId = `faction:${fSlug}`
+    nodes.push({
+      id: factionNodeId,
+      layer: 'faction',
+      category: 'faction-ability', // closest category
+      title: fSlug.split('-').map(w => w[0]!.toUpperCase() + w.slice(1)).join(' '),
+      content: `Top-level faction entry for ${fSlug}.`,
+      summary: `${fSlug} faction.`,
+      factionId: fSlug,
+      sources: [source],
+      refs: [],
+      version: 1,
+      keywords: [fSlug],
+    })
+  }
+
   // ── 1. Datasheets → unit/datasheet nodes ──────────────────────────────────
 
   for (const ds of input.datasheets) {
@@ -482,6 +506,14 @@ export function convertGameData(input: GameDataInput, retrievedAt?: string): Gam
       node.keywords.push('legends')
     }
     nodes.push(node)
+
+    // Datasheet → faction parent ref
+    refs.push({
+      sourceId: ds.id,
+      targetId: `faction:${normalizeFactionId(ds.factionId)}`,
+      rel: 'part_of',
+      context: `${ds.name} belongs to ${normalizeFactionId(ds.factionId)}.`,
+    })
   }
 
   // ── 2. Weapons → unit/weapon nodes ────────────────────────────────────────
@@ -743,6 +775,17 @@ export function convertGameData(input: GameDataInput, retrievedAt?: string): Gam
       keywords: extractTerms(ab.description),
     })
 
+    // Faction ability → faction parent ref
+    if (fSlug) {
+      refs.push({
+        sourceId: factionAbId,
+        targetId: `faction:${fSlug}`,
+        rel: 'part_of',
+        context: `${ab.name} is an army rule for ${fSlug}.`,
+        bidirectional: true,
+      })
+    }
+
     if (hasSubRules) {
       for (const sub of subRules) {
         const subId = `${factionAbId}:${slugify(sub.name)}`
@@ -821,6 +864,15 @@ export function convertGameData(input: GameDataInput, retrievedAt?: string): Gam
         ...extractTerms(content),
         ...(detChapterMap.has(det.id) ? [detChapterMap.get(det.id)!.toLowerCase()] : ['any chapter']),
       ],
+    })
+
+    // Detachment → faction parent ref
+    refs.push({
+      sourceId: detNodeId,
+      targetId: `faction:${normalizeFactionId(det.factionId)}`,
+      rel: 'part_of',
+      context: `${det.name} is a detachment for ${normalizeFactionId(det.factionId)}.`,
+      bidirectional: true,
     })
 
     // ── 5a. Detachment abilities → faction/faction-ability ─────────────────
