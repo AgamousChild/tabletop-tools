@@ -1,4 +1,5 @@
 import type { Node } from './model'
+import { CHAPTER_KEYWORDS } from './filters'
 
 // ── Module-scope manifest cache ──────────────────────────────────────────────
 
@@ -56,11 +57,7 @@ export async function fetchNodesFromR2(bucket: R2Bucket, nodeIds: string[]): Pro
 type RevEntry = { sourceId: string; rel: string; context: string; factionId?: string }
 type FwdEntry = { targetId: string; rel: string; context: string }
 
-const CHAPTER_KEYWORDS = [
-  'space wolves', 'dark angels', 'blood angels', 'black templars',
-  'deathwatch', 'iron hands', 'ultramarines', 'salamanders', 'raven guard',
-  'imperial fists', 'white scars', 'crimson fists', 'any chapter',
-]
+// CHAPTER_KEYWORDS imported from ./filters
 
 /**
  * Walk the graph from the given node IDs using both indexes.

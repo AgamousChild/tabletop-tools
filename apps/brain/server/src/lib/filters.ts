@@ -148,3 +148,45 @@ export function detectChapterFromHeading(heading: string, body: string): string 
   const text = `${heading} ${body}`
   return detectChapterFromText(text)
 }
+
+// ── Shared Utilities ────────────────────────────────────────────────────────
+
+/** Truncate text to maxLen chars, appending "..." if truncated. */
+export function truncate(text: string, maxLen: number): string {
+  const clean = text.replace(/<[^>]+>/g, '').replace(/\n+/g, ' ').trim()
+  return clean.length > maxLen ? clean.substring(0, maxLen - 3) + '...' : clean
+}
+
+/** Strip HTML tags and convert basic HTML to markdown. */
+export function stripHtml(text: string): string {
+  if (!text) return ''
+  return text
+    .replace(/<br\s*\/?>/gi, '\n')
+    .replace(/<li>/gi, '\n- ')
+    .replace(/<\/li>/gi, '')
+    .replace(/<ul>/gi, '')
+    .replace(/<\/ul>/gi, '\n')
+    .replace(/<b>/gi, '**')
+    .replace(/<\/b>/gi, '**')
+    .replace(/<i>/gi, '*')
+    .replace(/<\/i>/gi, '*')
+    .replace(/<span[^>]*>/gi, '')
+    .replace(/<\/span>/gi, '')
+    .replace(/<[^>]+>/g, '')
+    .replace(/&amp;/g, '&')
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;/g, "'")
+    .replace(/\*\*\*\*/g, '** **')
+    .replace(/\*\*/g, '')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim()
+}
+
+/** Chapter keywords list for parent resolution in graph traversal. */
+export const CHAPTER_KEYWORDS = [
+  'space wolves', 'dark angels', 'blood angels', 'black templars',
+  'deathwatch', 'iron hands', 'ultramarines', 'salamanders', 'raven guard',
+  'imperial fists', 'white scars', 'crimson fists', 'any chapter',
+]

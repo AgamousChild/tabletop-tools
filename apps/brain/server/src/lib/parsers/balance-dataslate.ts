@@ -1,11 +1,8 @@
 import type { Node, NodeRef, Source } from '../model'
+import { truncate } from '../filters'
 import { slugify, balanceId } from '../slugify'
 import type { ParseResult } from './core-rules'
 
-function truncate(text: string, maxLen: number): string {
-  const clean = text.replace(/\n+/g, ' ').trim()
-  return clean.length > maxLen ? clean.substring(0, maxLen - 3) + '...' : clean
-}
 
 /**
  * Parse balance dataslate markdown into balance-change nodes.

@@ -1,6 +1,6 @@
 import type { Node, NodeRef, Source, GamePhase } from '../model'
 import { slugify } from '../slugify'
-import { detectChapterFromText } from '../filters'
+import { detectChapterFromText, truncate } from '../filters'
 import type { ParseResult } from './core-rules'
 
 /** Detect phase from stratagem WHEN clause. */
@@ -32,10 +32,6 @@ function extractKeywords(title: string, content: string): string[] {
   return terms.filter(t => combined.includes(t))
 }
 
-function truncate(text: string, maxLen: number): string {
-  const clean = text.replace(/\n+/g, ' ').trim()
-  return clean.length > maxLen ? clean.substring(0, maxLen - 3) + '...' : clean
-}
 
 /**
  * Parse a normalized faction pack into nodes and refs.

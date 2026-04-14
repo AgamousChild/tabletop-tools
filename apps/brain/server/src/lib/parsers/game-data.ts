@@ -20,6 +20,7 @@ import { slugify } from '../slugify'
 import {
   isBoardingAction, isLegends, buildDetachmentChapterMap,
   detectScope, detectWeaponTypes, classifyGrants,
+  truncate, stripHtml,
 } from '../filters'
 
 // ── Input types (matching game-data-store) ──────────────────────────────────
@@ -239,33 +240,6 @@ function extractTargetingKeywords(text: string): string[] {
 }
 
 /** Strip HTML tags and convert basic HTML to markdown. */
-function stripHtml(text: string): string {
-  if (!text) return ''
-  return text
-    .replace(/<br\s*\/?>/gi, '\n')
-    .replace(/<li>/gi, '\n- ')
-    .replace(/<\/li>/gi, '')
-    .replace(/<ul>/gi, '')
-    .replace(/<\/ul>/gi, '\n')
-    .replace(/<b>/gi, '**')
-    .replace(/<\/b>/gi, '**')
-    .replace(/<i>/gi, '*')
-    .replace(/<\/i>/gi, '*')
-    .replace(/<span[^>]*>/gi, '')
-    .replace(/<\/span>/gi, '')
-    .replace(/<[^>]+>/g, '')  // catch-all for remaining tags
-    .replace(/&amp;/g, '&')
-    .replace(/&lt;/g, '<')
-    .replace(/&gt;/g, '>')
-    .replace(/&quot;/g, '"')
-    .replace(/&#39;/g, "'")
-    // Fix adjacent bold spans: **word****word** → **word** **word**
-    .replace(/\*\*\*\*/g, '** **')
-    // Remove bold markers entirely for cleaner display
-    .replace(/\*\*/g, '')
-    .replace(/\n{3,}/g, '\n\n')
-    .trim()
-}
 
 // ── Converter ───────────────────────────────────────────────────────────────
 
@@ -1366,10 +1340,6 @@ function groupBy<T>(items: T[], key: (item: T) => string): Map<string, T[]> {
   return map
 }
 
-function truncate(text: string, maxLen: number): string {
-  const clean = text.replace(/<[^>]+>/g, '').replace(/\n+/g, ' ').trim()
-  return clean.length > maxLen ? clean.substring(0, maxLen - 3) + '...' : clean
-}
 
 function extractWeaponKeywords(wg: DatasheetWargearRecord): string[] {
   const kw: string[] = []
