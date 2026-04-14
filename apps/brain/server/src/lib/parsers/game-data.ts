@@ -560,7 +560,7 @@ export function convertGameData(input: GameDataInput, retrievedAt?: string): Gam
 
     for (const line of lines) {
       const trimmed = line.trim()
-      if (/^[A-Z][A-Z\s']{4,}$/.test(trimmed) &&
+      if (/^[A-Z][A-Z\s'\-]{4,}$/.test(trimmed) &&
           !trimmed.includes('ADEPTUS') && !trimmed.includes('ASTARTES') &&
           !trimmed.includes('HERETIC') && !trimmed.includes('INFANTRY')) {
         if (currentName && currentLines.length > 0) {
