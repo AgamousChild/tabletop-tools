@@ -85,6 +85,7 @@ function AskTab() {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [factionFilter, setFactionFilter] = useState(true)
+  const [selectedRef, setSelectedRef] = useState<ResultNode | null>(null)
 
   async function handleAsk() {
     if (!question.trim()) return
@@ -157,23 +158,32 @@ function AskTab() {
             />
           </div>
 
+          {selectedRef && (
+            <NodeDetailModal node={selectedRef} onClose={() => setSelectedRef(null)} />
+          )}
+
           {answer.reference && answer.reference.length > 0 && (
             <div className="mt-4">
               <h4 className="text-sm font-medium text-slate-400 uppercase mb-2">Reference</h4>
               {answer.reference.map((r, i) => (
-                <ResultCard
-                  key={r.id}
-                  index={i + 1}
-                  title={r.title}
-                  summary={r.summary}
-                  layer={r.layer}
-                  category={r.category}
-                  score={r.score}
-                  factionId={r.factionId}
-                  subfaction={r.subfaction}
-                  phase={r.phase}
-                  parentUnit={r.parentUnit}
-                />
+                <button
+                  key={r.id + '-' + i}
+                  onClick={() => setSelectedRef(r)}
+                  className="w-full text-left"
+                >
+                  <ResultCard
+                    index={i + 1}
+                    title={r.title}
+                    summary={r.summary}
+                    layer={r.layer}
+                    category={r.category}
+                    score={r.score}
+                    factionId={r.factionId}
+                    subfaction={r.subfaction}
+                    phase={r.phase}
+                    parentUnit={r.parentUnit}
+                  />
+                </button>
               ))}
             </div>
           )}
