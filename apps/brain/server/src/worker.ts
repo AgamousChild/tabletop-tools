@@ -212,20 +212,36 @@ app.post('/ask', async (c) => {
   // Assemble LLM context — pass subfaction so context is structured with subfaction-specific content first
   let context = assembleContext(primaryNodes, connectedNodes, parentMap, detected.subfaction)
 
-  // Find combo pairs — stacks_with refs between connected nodes
+  // Find combo pairs — only combos where at least one side matches the query keywords
   let combos: string[] = []
   try {
     const fwdObj = await c.env.BRAIN_BUCKET.get('refs/forward-index.json')
     if (fwdObj) {
       const fwdIndex = await fwdObj.json() as Record<string, Array<{ targetId: string; rel: string; context: string }>>
       const connectedIdSet = new Set(connected.map(n => n.id))
+      const primaryIdSet = new Set(results.map(n => n.id))
+
+      // Build a set of keywords from the query to filter combos by relevance
+      const queryKeywords = detected.keywords.map(k => k.toLowerCase())
+      const queryTerms = detected.strippedQuery.toLowerCase().split(/\s+/).filter(t => t.length > 2)
+      const relevanceTerms = new Set([...queryKeywords, ...queryTerms])
+
       const comboPairs: string[] = []
 
       for (const node of connected) {
         const fwdRefs = fwdIndex[node.id]
         if (!fwdRefs) continue
         for (const ref of fwdRefs) {
-          if (ref.rel === 'stacks_with' && connectedIdSet.has(ref.targetId)) {
+          if (ref.rel !== 'stacks_with') continue
+          if (!connectedIdSet.has(ref.targetId)) continue
+
+          // Relevance filter: at least one side must match query keywords,
+          // OR one side must be a primary search result
+          const comboText = ref.context.toLowerCase()
+          const matchesKeyword = [...relevanceTerms].some(term => comboText.includes(term))
+          const oneIsPrimary = primaryIdSet.has(node.id) || primaryIdSet.has(ref.targetId)
+
+          if (matchesKeyword || oneIsPrimary) {
             comboPairs.push(ref.context)
           }
         }
@@ -237,7 +253,7 @@ app.post('/ask', async (c) => {
       if (combos.length > 0) {
         context += '\n\n========================================\n'
         context += 'COMPETITIVE COMBOS (abilities that stack together for maximum effect):\n'
-        context += 'IMPORTANT: If any of these combos are relevant to the question, explain them explicitly.\n'
+        context += 'Explain these combos — what each piece does and why combining them is powerful.\n'
         context += '========================================\n\n'
         for (const combo of combos) {
           context += `- ${combo}\n`
