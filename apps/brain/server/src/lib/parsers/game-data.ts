@@ -1189,6 +1189,111 @@ export function convertGameData(input: GameDataInput, retrievedAt?: string): Gam
     })
   }
 
+  // ── 11. Combo detection — stacks_with refs ────────────────────────────────
+  //
+  // The three key fishing combos:
+  //   hit re-rolls + sustained hits = fish for extra hits
+  //   hit re-rolls + lethal hits = fish for auto-wounds
+  //   wound re-rolls + devastating wounds = fish for mortal wounds
+  //
+  // Scan all non-weapon, non-datasheet nodes for what they grant and what
+  // weapon type they target. Create stacks_with refs between complementary
+  // pairs that share a weapon type or both target "all weapons."
+
+  const WEAPON_TYPE_PATTERNS = ['torrent', 'melta', 'pistol', 'heavy', 'assault', 'rapid fire']
+
+  interface BuffEntry {
+    nodeId: string
+    title: string
+    factionId: string
+    weaponTypes: string[]   // which weapon types it targets, or ['all'] for generic
+    grantsRerolls: 'hit' | 'wound' | null
+    grantsAbility: string[] // 'sustained hits', 'lethal hits', 'devastating wounds'
+  }
+
+  function classifyBuff(nodeId: string, title: string, content: string, factionId: string): BuffEntry | null {
+    const lower = content.toLowerCase()
+
+    // Detect what it grants
+    const grantsAbility: string[] = []
+    if (lower.includes('sustained hits')) grantsAbility.push('sustained hits')
+    if (lower.includes('lethal hits')) grantsAbility.push('lethal hits')
+    if (lower.includes('devastating wounds')) grantsAbility.push('devastating wounds')
+
+    let grantsRerolls: 'hit' | 'wound' | null = null
+    if (lower.includes('re-roll') && lower.includes('wound')) grantsRerolls = 'wound'
+    if (lower.includes('re-roll') && lower.includes('hit')) grantsRerolls = 'hit'
+    if (lower.includes('twin-linked')) grantsRerolls = 'wound' // twin-linked grants wound re-rolls
+
+    if (!grantsRerolls && grantsAbility.length === 0) return null
+
+    // Detect weapon type targeting
+    const weaponTypes: string[] = []
+    for (const wt of WEAPON_TYPE_PATTERNS) {
+      if (lower.includes(wt)) weaponTypes.push(wt)
+    }
+    if (lower.includes('melee weapon') || lower.includes('melee attack')) weaponTypes.push('melee')
+    if (lower.includes('ranged weapon') || lower.includes('ranged attack')) weaponTypes.push('ranged')
+    if (weaponTypes.length === 0) weaponTypes.push('all')
+
+    return { nodeId, title, factionId, weaponTypes, grantsRerolls, grantsAbility }
+  }
+
+  // Collect all buffs from abilities, stratagems, enhancements, faction abilities
+  const allBuffs: BuffEntry[] = []
+
+  for (const n of nodes) {
+    if (n.category === 'weapon' || n.category === 'datasheet') continue
+    const buff = classifyBuff(n.id, n.title, n.content, n.factionId ?? '')
+    if (buff) allBuffs.push(buff)
+  }
+
+  // Find complementary pairs within the same faction (or generic)
+  // hit re-rolls + sustained hits/lethal hits
+  // wound re-rolls + devastating wounds
+  const COMBOS: Array<{ rerollType: 'hit' | 'wound'; ability: string }> = [
+    { rerollType: 'hit', ability: 'sustained hits' },
+    { rerollType: 'hit', ability: 'lethal hits' },
+    { rerollType: 'wound', ability: 'devastating wounds' },
+  ]
+
+  const seenCombos = new Set<string>()
+
+  for (const combo of COMBOS) {
+    const rerollers = allBuffs.filter(b => b.grantsRerolls === combo.rerollType)
+    const abilityGranters = allBuffs.filter(b => b.grantsAbility.includes(combo.ability))
+
+    for (const rr of rerollers) {
+      for (const ag of abilityGranters) {
+        if (rr.nodeId === ag.nodeId) continue
+
+        // Must be same faction or one is generic
+        if (rr.factionId && ag.factionId && rr.factionId !== ag.factionId) continue
+
+        // Must share a weapon type or one targets 'all'
+        const sharedTypes = rr.weaponTypes.filter(t =>
+          t === 'all' || ag.weaponTypes.includes(t) || ag.weaponTypes.includes('all')
+        )
+        if (sharedTypes.length === 0) continue
+
+        // Deduplicate — only create one ref per pair
+        const comboKey = [rr.nodeId, ag.nodeId].sort().join('|')
+        if (seenCombos.has(comboKey)) continue
+        seenCombos.add(comboKey)
+
+        const weaponTypeStr = sharedTypes.includes('all') ? 'weapons' : sharedTypes.join('/') + ' weapons'
+
+        refs.push({
+          sourceId: rr.nodeId,
+          targetId: ag.nodeId,
+          rel: 'stacks_with',
+          context: `${rr.title} (${combo.rerollType} re-rolls) + ${ag.title} (${combo.ability}) on ${weaponTypeStr} = fish for crits.`,
+          bidirectional: true,
+        })
+      }
+    }
+  }
+
   return { nodes, refs }
 }
 
