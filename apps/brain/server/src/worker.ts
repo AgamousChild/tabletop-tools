@@ -226,7 +226,7 @@ app.post('/ask', async (c) => {
       const queryTerms = detected.strippedQuery.toLowerCase().split(/\s+/).filter(t => t.length > 2)
       const relevanceTerms = new Set([...queryKeywords, ...queryTerms])
 
-      const comboPairs: string[] = []
+      const scoredCombos: Array<{ text: string; score: number }> = []
 
       for (const node of connected) {
         const fwdRefs = fwdIndex[node.id]
@@ -235,18 +235,24 @@ app.post('/ask', async (c) => {
           if (ref.rel !== 'stacks_with') continue
           if (!connectedIdSet.has(ref.targetId)) continue
 
-          // Only include combos where at least one side is a primary search result.
-          // Primary results are what Vectorize returned for this specific query —
-          // they're directly relevant. Connected nodes are one hop away.
-          // This prevents dumping every possible combo in the faction.
-          const oneIsPrimary = primaryIdSet.has(node.id) || primaryIdSet.has(ref.targetId)
-          if (oneIsPrimary) {
-            comboPairs.push(ref.context)
+          // Score combos: 2 = both sides are primary results, 1 = one side is primary
+          const srcPrimary = primaryIdSet.has(node.id) ? 1 : 0
+          const tgtPrimary = primaryIdSet.has(ref.targetId) ? 1 : 0
+          const score = srcPrimary + tgtPrimary
+          if (score > 0) {
+            scoredCombos.push({ text: ref.context, score })
           }
         }
       }
 
-      combos = [...new Set(comboPairs)]
+      // Deduplicate, sort by score (best first), take top 10
+      const seen = new Set<string>()
+      const uniqueScored = scoredCombos.filter(c => {
+        if (seen.has(c.text)) return false
+        seen.add(c.text)
+        return true
+      }).sort((a, b) => b.score - a.score).slice(0, 10)
+      combos = uniqueScored.map(c => c.text)
 
       // Append to LLM context
       if (combos.length > 0) {
