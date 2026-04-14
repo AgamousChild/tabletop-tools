@@ -578,8 +578,15 @@ export function convertGameData(input: GameDataInput, retrievedAt?: string): Gam
     return subRules
   }
 
+  // Build set of faction ability names — these are army rules, not unit abilities.
+  // Skip unit abilities that duplicate a faction ability (e.g. Blessings of Khorne
+  // appears on every WE datasheet but is one army rule, handled in section 4).
+  const factionAbilityNames = new Set(input.abilities.map(a => a.name.toLowerCase()))
+
   const seenAbilityIds = new Map<string, number>()
   for (const ab of input.unitAbilities) {
+    // Skip if this is a faction ability (army rule) — already handled in section 4
+    if (factionAbilityNames.has(ab.name.toLowerCase())) continue
     const baseId = `ability:${ab.datasheetId}:${slugify(ab.name)}`
     const count = seenAbilityIds.get(baseId) ?? 0
     seenAbilityIds.set(baseId, count + 1)
