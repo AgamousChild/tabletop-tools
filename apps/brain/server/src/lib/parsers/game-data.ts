@@ -1114,6 +1114,10 @@ function extractTerms(text: string): string[] {
     'feel no pain', 'invulnerable', 'transport', 'character',
     'infantry', 'vehicle', 'monster', 'leader', 'attached',
     'lone operative', 'stealth', 'scouts', 'deadly demise',
+    // Weapon abilities — also appear in unit abilities, stratagems, enhancements
+    'sustained hits', 'lethal hits', 'devastating wounds', 'hazardous',
+    'blast', 'torrent', 'twin-linked', 'rapid fire', 'pistol', 'melta',
+    'lance', 'anti-', 'ignores cover', 'indirect fire',
   ]
   return terms.filter(t => lower.includes(t))
 }
