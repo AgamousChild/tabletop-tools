@@ -73,6 +73,7 @@ export function formatConversationalAnswer(
   nodes: Node[],
   parentMap: Map<string, string>,
   subfaction?: string,
+  combos?: string[],
 ): string {
   // Build entries with stripped content
   const allEntries: Entry[] = nodes.map(node => {
@@ -104,6 +105,10 @@ export function formatConversationalAnswer(
       parts.push('')
     }
 
+    if (combos && combos.length > 0) {
+      parts.push(formatComboSection(combos))
+      parts.push('')
+    }
     parts.push(formatReferenceSection(allEntries))
     parts.push(`\n*${nodes.length} total result${nodes.length !== 1 ? 's' : ''} from the knowledge graph. Source: Wahapedia 10th Edition, Core Rules.*`)
     return parts.join('\n')
@@ -114,6 +119,10 @@ export function formatConversationalAnswer(
   parts.push(`Results for: "${question}"\n`)
   parts.push(formatEntriesAsProse(allEntries))
   parts.push('')
+  if (combos && combos.length > 0) {
+    parts.push(formatComboSection(combos))
+    parts.push('')
+  }
   parts.push(formatReferenceSection(allEntries))
   parts.push(`\n*${nodes.length} total result${nodes.length !== 1 ? 's' : ''} from the knowledge graph. Source: Wahapedia 10th Edition, Core Rules.*`)
   return parts.join('\n')
@@ -136,6 +145,22 @@ function formatEntriesAsProse(entries: Entry[]): string {
     parts.push(sentences.join(' '))
     parts.push('')
   }
+  return parts.join('\n')
+}
+
+/** Format competitive combo section. */
+function formatComboSection(combos: string[]): string {
+  const parts: string[] = [
+    '## Competitive Combos',
+    '',
+    'These abilities stack together for maximum effect:',
+    '',
+  ]
+  for (const combo of combos) {
+    parts.push(`- ${combo}`)
+  }
+  parts.push('')
+  parts.push('*Note: In 11th edition, only one stratagem per unit per phase is allowed.*')
   return parts.join('\n')
 }
 

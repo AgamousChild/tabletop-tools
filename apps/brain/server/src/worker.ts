@@ -212,7 +212,8 @@ app.post('/ask', async (c) => {
   // Assemble LLM context — pass subfaction so context is structured with subfaction-specific content first
   let context = assembleContext(primaryNodes, connectedNodes, parentMap, detected.subfaction)
 
-  // Append combo pairs — find stacks_with refs between connected nodes
+  // Find combo pairs — stacks_with refs between connected nodes
+  let combos: string[] = []
   try {
     const fwdObj = await c.env.BRAIN_BUCKET.get('refs/forward-index.json')
     if (fwdObj) {
@@ -230,14 +231,15 @@ app.post('/ask', async (c) => {
         }
       }
 
-      if (comboPairs.length > 0) {
-        // Deduplicate (bidirectional refs create duplicates)
-        const uniqueCombos = [...new Set(comboPairs)]
+      combos = [...new Set(comboPairs)]
+
+      // Append to LLM context
+      if (combos.length > 0) {
         context += '\n\n========================================\n'
         context += 'COMPETITIVE COMBOS (abilities that stack together for maximum effect):\n'
         context += 'IMPORTANT: If any of these combos are relevant to the question, explain them explicitly.\n'
         context += '========================================\n\n'
-        for (const combo of uniqueCombos) {
+        for (const combo of combos) {
           context += `- ${combo}\n`
         }
       }
@@ -319,11 +321,11 @@ When citing sources, use the format: (Source: [title])`
         answer = (aiResult as any).response ?? 'No response from model'
       } catch {
         answerPath = 'deterministic-fallback'
-        answer = formatConversationalAnswer(body.question, connectedNodes, parentMap, detected.subfaction)
+        answer = formatConversationalAnswer(body.question, connectedNodes, parentMap, detected.subfaction, combos)
       }
     } else {
       answerPath = 'deterministic'
-      answer = formatConversationalAnswer(body.question, connectedNodes, parentMap, detected.subfaction)
+      answer = formatConversationalAnswer(body.question, connectedNodes, parentMap, detected.subfaction, combos)
     }
   }
 
