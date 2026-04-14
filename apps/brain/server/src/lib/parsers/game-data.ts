@@ -1282,12 +1282,13 @@ export function convertGameData(input: GameDataInput, retrievedAt?: string): Gam
         seenCombos.add(comboKey)
 
         const weaponTypeStr = sharedTypes.includes('all') ? 'weapons' : sharedTypes.join('/') + ' weapons'
+        const factionStr = rr.factionId || ag.factionId || 'generic'
 
         refs.push({
           sourceId: rr.nodeId,
           targetId: ag.nodeId,
           rel: 'stacks_with',
-          context: `${rr.title} (${combo.rerollType} re-rolls) + ${ag.title} (${combo.ability}) on ${weaponTypeStr} = fish for crits.`,
+          context: `[${factionStr}] ${rr.title} (${combo.rerollType} re-rolls) + ${ag.title} (${combo.ability}) on ${weaponTypeStr}.`,
           bidirectional: true,
         })
       }

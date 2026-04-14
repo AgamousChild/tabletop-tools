@@ -93,6 +93,11 @@ export function formatConversationalAnswer(
     const parts: string[] = []
     parts.push(`Results for: "${question}"\n`)
 
+    if (combos && combos.length > 0) {
+      parts.push(formatComboSection(combos))
+      parts.push('')
+    }
+
     if (sfEntries.length > 0) {
       parts.push(`## ${sfLabel} Specific\n`)
       parts.push(formatEntriesAsProse(sfEntries))
@@ -105,10 +110,6 @@ export function formatConversationalAnswer(
       parts.push('')
     }
 
-    if (combos && combos.length > 0) {
-      parts.push(formatComboSection(combos))
-      parts.push('')
-    }
     parts.push(formatReferenceSection(allEntries))
     parts.push(`\n*${nodes.length} total result${nodes.length !== 1 ? 's' : ''} from the knowledge graph. Source: Wahapedia 10th Edition, Core Rules.*`)
     return parts.join('\n')
@@ -117,12 +118,12 @@ export function formatConversationalAnswer(
   // No subfaction — original single-section format
   const parts: string[] = []
   parts.push(`Results for: "${question}"\n`)
-  parts.push(formatEntriesAsProse(allEntries))
-  parts.push('')
   if (combos && combos.length > 0) {
     parts.push(formatComboSection(combos))
     parts.push('')
   }
+  parts.push(formatEntriesAsProse(allEntries))
+  parts.push('')
   parts.push(formatReferenceSection(allEntries))
   parts.push(`\n*${nodes.length} total result${nodes.length !== 1 ? 's' : ''} from the knowledge graph. Source: Wahapedia 10th Edition, Core Rules.*`)
   return parts.join('\n')
@@ -148,16 +149,19 @@ function formatEntriesAsProse(entries: Entry[]): string {
   return parts.join('\n')
 }
 
-/** Format competitive combo section. */
+/** Format competitive combo section — capped at 10 most relevant. */
 function formatComboSection(combos: string[]): string {
+  const MAX_COMBOS = 10
+  const shown = combos.slice(0, MAX_COMBOS)
   const parts: string[] = [
     '## Competitive Combos',
     '',
-    'These abilities stack together for maximum effect:',
-    '',
   ]
-  for (const combo of combos) {
+  for (const combo of shown) {
     parts.push(`- ${combo}`)
+  }
+  if (combos.length > MAX_COMBOS) {
+    parts.push(`- ...and ${combos.length - MAX_COMBOS} more combos`)
   }
   parts.push('')
   parts.push('*Note: In 11th edition, only one stratagem per unit per phase is allowed.*')
