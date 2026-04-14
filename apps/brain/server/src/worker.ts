@@ -236,10 +236,20 @@ app.post('/ask', async (c) => {
           if (ref.rel !== 'stacks_with') continue
           if (!allNodeIds.has(ref.targetId)) continue
 
-          // Score combos: 2 = both sides are primary results, 1 = one side is primary
+          // Score combos:
+          // 2 = both sides are primary results (best — directly relevant)
+          // 1 = one side is primary (good — one hop away)
+          // 0.5 = neither is primary but combo matches a query keyword (relevant by topic)
           const srcPrimary = primaryIdSet.has(node.id) ? 1 : 0
           const tgtPrimary = primaryIdSet.has(ref.targetId) ? 1 : 0
-          const score = srcPrimary + tgtPrimary
+          let score = srcPrimary + tgtPrimary
+          if (score === 0) {
+            // Check if the combo matches a detected keyword
+            const comboLower = ref.context.toLowerCase()
+            if (detected.keywords.some(k => comboLower.includes(k))) {
+              score = 0.5
+            }
+          }
           if (score > 0) {
             scoredCombos.push({ text: ref.context, score })
           }

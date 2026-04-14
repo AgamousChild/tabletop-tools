@@ -1207,6 +1207,10 @@ export function convertGameData(input: GameDataInput, retrievedAt?: string): Gam
     title: string
     unitName: string        // datasheet/detachment that has this ability
     factionId: string
+    subfaction: string      // chapter/legion lock
+    detachmentId: string    // which detachment it belongs to
+    scope: 'bearer' | 'unit' | 'army' | 'stratagem' // who it affects
+    category: string        // node category
     weaponTypes: string[]   // which weapon types it targets, or ['all'] for generic
     grantsRerolls: 'hit' | 'wound' | null
     grantsAbility: string[] // 'sustained hits', 'lethal hits', 'devastating wounds'
@@ -1254,9 +1258,26 @@ export function convertGameData(input: GameDataInput, retrievedAt?: string): Gam
     if (n.category === 'weapon' || n.category === 'datasheet') continue
     const buff = classifyBuff(n.id, n.title, n.content, n.factionId ?? '')
     if (buff) {
-      // Resolve unit name from datasheetId or detachmentId
       buff.unitName = n.datasheetId ? (dsNameMap.get(n.datasheetId) ?? '') :
                       n.detachmentId ? (detNameMap.get(n.detachmentId) ?? '') : ''
+      buff.subfaction = n.subfaction ?? ''
+      buff.detachmentId = n.detachmentId ?? ''
+      buff.category = n.category
+
+      // Determine scope
+      const lower = n.content.toLowerCase()
+      if (n.category === 'stratagem') {
+        buff.scope = 'stratagem'
+      } else if (n.category === 'enhancement' && (lower.includes('the bearer') || lower.includes("bearer's"))) {
+        buff.scope = 'bearer'
+      } else if (n.category === 'faction-ability' && !n.datasheetId) {
+        buff.scope = 'army'
+      } else if (lower.includes('models in this unit') || lower.includes('models in that unit') || lower.includes('leading a unit')) {
+        buff.scope = 'unit'
+      } else {
+        buff.scope = 'unit' // default
+      }
+
       allBuffs.push(buff)
     }
   }
@@ -1280,8 +1301,30 @@ export function convertGameData(input: GameDataInput, retrievedAt?: string): Gam
       for (const ag of abilityGranters) {
         if (rr.nodeId === ag.nodeId) continue
 
+        // ── Army construction constraints ──
+
         // Must be same faction or one is generic
         if (rr.factionId && ag.factionId && rr.factionId !== ag.factionId) continue
+
+        // Chapter lock: if both have subfactions, they must match
+        if (rr.subfaction && ag.subfaction && rr.subfaction !== ag.subfaction) continue
+
+        // One detachment: stratagems/enhancements from different detachments can't combine
+        if (rr.detachmentId && ag.detachmentId && rr.detachmentId !== ag.detachmentId
+            && (rr.category === 'stratagem' || rr.category === 'enhancement')
+            && (ag.category === 'stratagem' || ag.category === 'enhancement')) continue
+
+        // Bearer-only scope: enhancement on bearer + leader ability on unit don't fully stack
+        // (only the bearer benefits from both, not the whole unit)
+        // Still create the ref but mark it as bearer-limited
+        const bearerLimited = rr.scope === 'bearer' || ag.scope === 'bearer'
+
+        // Two leader abilities can't apply to the same unit (one leader per unit)
+        // Leader abilities are unit-abilities from characters (have datasheetId, scope=unit)
+        const bothLeaders = rr.scope === 'unit' && ag.scope === 'unit'
+            && rr.category === 'unit-ability' && ag.category === 'unit-ability'
+            && rr.nodeId.startsWith('ability:') && ag.nodeId.startsWith('ability:')
+        if (bothLeaders) continue
 
         // Must share a weapon type or one targets 'all'
         const sharedTypes = rr.weaponTypes.filter(t =>
@@ -1299,11 +1342,13 @@ export function convertGameData(input: GameDataInput, retrievedAt?: string): Gam
         const rrUnit = rr.unitName ? ` on ${rr.unitName}` : ''
         const agUnit = ag.unitName ? ` on ${ag.unitName}` : ''
 
+        const bearerNote = bearerLimited ? ' [bearer only]' : ''
+
         refs.push({
           sourceId: rr.nodeId,
           targetId: ag.nodeId,
           rel: 'stacks_with',
-          context: `[${factionStr}] ${rr.title}${rrUnit} (${combo.rerollType} re-rolls) + ${ag.title}${agUnit} (${combo.ability}) on ${weaponTypeStr}.`,
+          context: `[${factionStr}] ${rr.title}${rrUnit} (${combo.rerollType} re-rolls) + ${ag.title}${agUnit} (${combo.ability}) on ${weaponTypeStr}${bearerNote}.`,
           bidirectional: true,
         })
       }
