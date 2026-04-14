@@ -218,7 +218,7 @@ app.post('/ask', async (c) => {
     const fwdObj = await c.env.BRAIN_BUCKET.get('refs/forward-index.json')
     if (fwdObj) {
       const fwdIndex = await fwdObj.json() as Record<string, Array<{ targetId: string; rel: string; context: string }>>
-      const connectedIdSet = new Set(connected.map(n => n.id))
+      const allNodeIds = new Set([...results.map(n => n.id), ...connected.map(n => n.id)])
       const primaryIdSet = new Set(results.map(n => n.id))
 
       // Build a set of keywords from the query to filter combos by relevance
@@ -227,13 +227,14 @@ app.post('/ask', async (c) => {
       const relevanceTerms = new Set([...queryKeywords, ...queryTerms])
 
       const scoredCombos: Array<{ text: string; score: number }> = []
+      const allRelevantNodes = [...results, ...connected]
 
-      for (const node of connected) {
+      for (const node of allRelevantNodes) {
         const fwdRefs = fwdIndex[node.id]
         if (!fwdRefs) continue
         for (const ref of fwdRefs) {
           if (ref.rel !== 'stacks_with') continue
-          if (!connectedIdSet.has(ref.targetId)) continue
+          if (!allNodeIds.has(ref.targetId)) continue
 
           // Score combos: 2 = both sides are primary results, 1 = one side is primary
           const srcPrimary = primaryIdSet.has(node.id) ? 1 : 0
