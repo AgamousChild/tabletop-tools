@@ -903,6 +903,8 @@ export function convertGameData(input: GameDataInput, retrievedAt?: string): Gam
       const daNodeId = `det:${normalizeFactionId(det.factionId)}:${slugify(det.name)}:${slugify(da.name)}`
 
       const cleanDaDesc = stripHtml(da.description)
+      const daSubfaction = detChapterMap.has(det.id) ? detChapterMap.get(det.id)!.toLowerCase() : undefined
+
       nodes.push({
         id: daNodeId,
         layer: 'faction',
@@ -911,6 +913,7 @@ export function convertGameData(input: GameDataInput, retrievedAt?: string): Gam
         content: cleanDaDesc,
         summary: `${da.name} — detachment ability for ${det.name}. ${truncate(cleanDaDesc, 100)}`,
         factionId: normalizeFactionId(det.factionId),
+        subfaction: daSubfaction,
         detachmentId: det.id,
         sources: [source],
         refs: [],
@@ -933,6 +936,9 @@ export function convertGameData(input: GameDataInput, retrievedAt?: string): Gam
       const stratNodeId = `det:${normalizeFactionId(det.factionId)}:${slugify(det.name)}:${slugify(strat.name)}`
 
       const cleanStratDesc = stripHtml(strat.description)
+      // Inherit subfaction from parent detachment (chapter lock propagates to stratagems)
+      const stratSubfaction = detChapterMap.has(det.id) ? detChapterMap.get(det.id)!.toLowerCase() : undefined
+
       nodes.push({
         id: stratNodeId,
         layer: 'faction',
@@ -941,6 +947,7 @@ export function convertGameData(input: GameDataInput, retrievedAt?: string): Gam
         content: `**Type:** ${strat.type}\n**CP:** ${strat.cpCost}\n**Turn:** ${strat.turn}\n**Phase:** ${strat.phase}\n\n${cleanStratDesc}`,
         summary: `${strat.name} (${strat.cpCost}CP, ${strat.phase}) — ${truncate(cleanStratDesc, 100)}`,
         factionId: normalizeFactionId(det.factionId),
+        subfaction: stratSubfaction,
         detachmentId: det.id,
         phase: mapPhase(strat.phase),
         sources: [source],
@@ -964,6 +971,8 @@ export function convertGameData(input: GameDataInput, retrievedAt?: string): Gam
       const enhNodeId = `det:${normalizeFactionId(det.factionId)}:${slugify(det.name)}:${slugify(enh.name)}`
 
       const cleanEnhDesc = stripHtml(enh.description)
+      const enhSubfaction = detChapterMap.has(det.id) ? detChapterMap.get(det.id)!.toLowerCase() : undefined
+
       nodes.push({
         id: enhNodeId,
         layer: 'faction',
@@ -972,6 +981,7 @@ export function convertGameData(input: GameDataInput, retrievedAt?: string): Gam
         content: `**Cost:** ${enh.cost}\n\n${cleanEnhDesc}`,
         summary: `${enh.name} (${enh.cost}pts) — ${truncate(cleanEnhDesc, 100)}`,
         factionId: normalizeFactionId(det.factionId),
+        subfaction: enhSubfaction,
         detachmentId: det.id,
         sources: [source],
         refs: [],
