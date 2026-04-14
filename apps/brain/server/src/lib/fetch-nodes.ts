@@ -189,6 +189,8 @@ export async function fetchConnectedNodes(
     })
   }
 
+  const selectedIdSet = new Set(selectedIds)
+
   // Step 5b: Follow stacks_with refs from connected nodes
   // This finds combo partners: if Immolation Protocols is connected (grants dev wounds),
   // follow its stacks_with ref to find Forgefather (grants wound re-rolls).
@@ -254,7 +256,6 @@ export async function fetchConnectedNodes(
 
   // Remove parent-only nodes from the returned list (they're only for title resolution)
   // Only return nodes that were in selectedIds (not parent-only fetches)
-  const selectedIdSet = new Set(selectedIds)
   const contentNodes = nodes.filter(n => selectedIdSet.has(n.id))
 
   return { nodes: contentNodes, parentMap: resolvedParentMap }
