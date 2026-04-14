@@ -809,6 +809,28 @@ export function convertGameData(input: GameDataInput, retrievedAt?: string): Gam
           context: `${sub.name} is an option within ${ab.name}.`,
           bidirectional: true,
         })
+
+        // Create requires refs from faction ability sub-rules to core mechanic nodes
+        const subText = `${sub.name} ${sub.text}`.toLowerCase()
+        const FA_SUB_CORE_LINKS: Array<{ pattern: string; coreSlug: string; label: string }> = [
+          { pattern: 'sustained hits', coreSlug: 'sustained-hits', label: 'Sustained Hits' },
+          { pattern: 'lethal hits', coreSlug: 'lethal-hits', label: 'Lethal Hits' },
+          { pattern: 'devastating wounds', coreSlug: 'devastating-wounds', label: 'Devastating Wounds' },
+          { pattern: 'feel no pain', coreSlug: 'feel-no-pain', label: 'Feel No Pain' },
+          { pattern: 'hazardous', coreSlug: 'hazardous', label: 'Hazardous' },
+          { pattern: 'deep strike', coreSlug: 'deep-strike', label: 'Deep Strike' },
+          { pattern: 'stealth', coreSlug: 'stealth', label: 'Stealth' },
+        ]
+        for (const { pattern, coreSlug, label } of FA_SUB_CORE_LINKS) {
+          if (subText.includes(pattern)) {
+            refs.push({
+              sourceId: subId,
+              targetId: `core:${coreSlug}`,
+              rel: 'requires',
+              context: `${sub.name} grants ${label}.`,
+            })
+          }
+        }
       }
     }
   }
