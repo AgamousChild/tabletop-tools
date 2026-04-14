@@ -252,5 +252,82 @@ These aren't just labels — they're rules triggers that determine:
     keywords: ['infantry', 'beast', 'vehicle', 'monster', 'fly', 'mounted', 'terrain', 'movement', 'keyword'],
   })
 
+  // ── 9. Commonly Missed Rules ─────────────────────────────────────────────
+
+  nodes.push({
+    id: communityId('commonly-missed-rules'),
+    layer: 'community',
+    category: 'ruling',
+    title: 'Commonly Missed Rules and Interactions',
+    content: `Rules that players frequently get wrong or don't know:
+
+**Tactical Missions CP:** If playing tactical missions, you can discard one or more cards at the end of your turn. You draw back to two for free in your next command phase AND gain one command point immediately. You cannot gain more than one bonus CP per battle round.
+
+**Towering and Ruins:** The Towering keyword allows the model to see (and be seen) through any gap in a ruin. Ruins do not automatically block its line of sight — they must physically block it with solid walls.
+
+**Reanimation Coherency:** When adding models back to a squad (e.g., Necron reanimation), new models must be placed in coherency with models that STARTED the phase on the battlefield. You cannot daisy-chain new models off of other new models.
+
+**Move Through Friendly Models:** Models can move through friendly models at any time — move phase, charges, pile-in, consolidation. Exception: Monsters and Vehicles cannot move through other friendly Monsters or Vehicles (unless they have Fly).
+
+**Attached Characters = Separate Unit for VP:** If a rule awards VP when an enemy unit is destroyed, a Leader and its Bodyguard unit count as SEPARATE units. Destroying both in one round scores 2 VP, not 1.
+
+**Firing Deck vs Overwatch:** Firing Deck only works in YOUR shooting phase. You cannot use embarked models' weapons when firing Overwatch — only the transport's own weapons.
+
+**Reserve Limits:** You cannot place more than 50% of your points AND 50% of your units in reserve (whichever is smaller).
+
+**Battleshock After Leader Dies:** If a character's bodyguard unit is wiped out, the character becomes a new unit with starting strength 1. It takes battleshock tests if below half wounds.
+
+**Assault Weapons and Actions:** Units with Assault weapons CAN perform Actions even if they Advanced, because Assault makes them eligible to shoot after Advancing. Same for Pistols in engagement range.
+
+**Stratagem Vecting:** Abilities that increase stratagem cost override abilities that make stratagems free. If a 2CP stratagem is vected (+1CP), using a "free stratagem" ability still costs 1CP.
+
+**One Stratagem Per Unit Per Phase:** In 11th edition, each unit can only be affected by one stratagem per phase.`,
+    summary: 'Frequently missed rules: tactical mission CP, towering LOS, reanimation coherency, move through friendlies, attached characters VP, firing deck vs overwatch, reserve limits.',
+    sources: [source],
+    refs: [],
+    version: 1,
+    keywords: ['rules', 'faq', 'errata', 'commonly missed', 'towering', 'reanimation', 'coherency', 'firing deck', 'overwatch', 'reserve', 'battleshock', 'stratagem', 'vecting'],
+  })
+
+  // ── 10. Competitive Combos ──────────────────────────────────────────────
+
+  nodes.push({
+    id: communityId('competitive-combos'),
+    layer: 'community',
+    category: 'tactic',
+    title: 'Competitive Combo Patterns',
+    content: `Key combo patterns that competitive players use:
+
+**Re-roll + Weapon Ability Fishing:**
+The strongest combos pair a source of re-rolls with a weapon ability trigger:
+- Wound re-rolls + Devastating Wounds = fish for mortal wounds (e.g., Vulkan He'stan's Forgefather + Immolation Protocols on Torrent weapons)
+- Hit re-rolls + Sustained Hits = fish for extra hits (e.g., Bladeguard ability + sustained hits weapons)
+- Hit re-rolls + Lethal Hits = fish for auto-wounds (e.g., hit re-roll source + lethal hits weapon)
+
+**Leader + Unit + Stratagem Stacking:**
+The best combos use all three slots:
+1. A Leader that buffs a specific weapon type (re-rolls, +1 to hit, etc.)
+2. A unit with the right weapons (Torrent, Melta, melee, etc.)
+3. A stratagem or enhancement that grants a weapon ability
+
+Example: Vulkan He'stan (wound re-rolls on Torrent/Melta) + Infernus Squad (Torrent weapons) + Immolation Protocols (grants Devastating Wounds to Torrent). Result: auto-hitting Torrent weapons with devastating wounds and wound re-rolls = massive mortal wound output.
+
+**Debuff Stacking:**
+Some units apply debuffs to enemies (+1 to be hit, -1 save, etc.). Stack multiple debuffs on one target, then concentrate fire. Storm Speeders in Space Marines do this.
+
+**Aura + Attached Leader:**
+Leader abilities affect only the attached unit. Aura abilities affect all nearby units. These are different mechanics. A leader grants its ability to ONE unit. An aura grants its ability to MULTIPLE units within range.`,
+    summary: 'Competitive combo patterns: re-roll + weapon ability fishing, leader + unit + stratagem stacking, debuff stacking, aura vs leader distinction.',
+    sources: [source],
+    refs: [],
+    version: 1,
+    keywords: ['combo', 'competitive', 'fishing', 'stacking', 'reroll', 'sustained hits', 'lethal hits', 'devastating wounds', 'leader', 'aura', 'debuff'],
+  })
+
+  refs.push(
+    { sourceId: communityId('competitive-combos'), targetId: communityId('fishing-for-crits'), rel: 'interacts_with', context: 'Competitive combos build on the fishing for crits concept.' },
+    { sourceId: communityId('competitive-combos'), targetId: communityId('attack-volume'), rel: 'requires', context: 'Combos require attack volume to be effective — more dice = more crit triggers.' },
+  )
+
   return { nodes, refs }
 }
