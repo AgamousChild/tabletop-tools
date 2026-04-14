@@ -583,9 +583,36 @@ export function convertGameData(input: GameDataInput, retrievedAt?: string): Gam
   // appears on every WE datasheet but is one army rule, handled in section 4).
   const factionAbilityNames = new Set(input.abilities.map(a => a.name.toLowerCase()))
 
+  // For army rules that appear as unit abilities: instead of creating duplicate nodes,
+  // create refs from the faction ability node to each datasheet that has the keyword.
+  const armyRuleRefs = new Map<string, Set<string>>() // ability name → set of datasheet IDs
+  for (const ab of input.unitAbilities) {
+    if (factionAbilityNames.has(ab.name.toLowerCase())) {
+      const dsIds = armyRuleRefs.get(ab.name.toLowerCase()) ?? new Set()
+      dsIds.add(ab.datasheetId)
+      armyRuleRefs.set(ab.name.toLowerCase(), dsIds)
+    }
+  }
+  // Create modifies refs from faction ability → datasheets
+  for (const [abilityName, dsIds] of armyRuleRefs) {
+    // Find the faction ability node ID
+    const factionAb = input.abilities.find(a => a.name.toLowerCase() === abilityName)
+    if (!factionAb) continue
+    const factionAbNodeId = `faction:${normalizeFactionId(factionAb.factionId)}:${slugify(factionAb.name)}`
+    for (const dsId of dsIds) {
+      const dsName = input.datasheets.find(d => d.id === dsId)?.name ?? dsId
+      refs.push({
+        sourceId: factionAbNodeId,
+        targetId: dsId,
+        rel: 'modifies',
+        context: `${factionAb.name} applies to ${dsName}.`,
+      })
+    }
+  }
+
   const seenAbilityIds = new Map<string, number>()
   for (const ab of input.unitAbilities) {
-    // Skip if this is a faction ability (army rule) — already handled in section 4
+    // Skip if this is a faction ability (army rule) — handled above with refs
     if (factionAbilityNames.has(ab.name.toLowerCase())) continue
     const baseId = `ability:${ab.datasheetId}:${slugify(ab.name)}`
     const count = seenAbilityIds.get(baseId) ?? 0
