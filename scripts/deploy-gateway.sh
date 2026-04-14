@@ -7,6 +7,11 @@ set -e
 REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 GATEWAY_DIR="$REPO_ROOT/apps/gateway"
 
+# Load .env for CF_ZONE_ID and CF_API_TOKEN
+if [ -f "$REPO_ROOT/.env" ]; then
+  set -a; source "$REPO_ROOT/.env"; set +a
+fi
+
 echo "=== Step 1: Build all client SPAs ==="
 cd "$GATEWAY_DIR"
 bash build.sh
