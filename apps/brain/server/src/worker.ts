@@ -210,12 +210,47 @@ app.post('/ask', async (c) => {
   const connectedNodes = connected as unknown as Node[]
 
   // Assemble LLM context — pass subfaction so context is structured with subfaction-specific content first
-  const context = assembleContext(primaryNodes, connectedNodes, parentMap, detected.subfaction)
+  let context = assembleContext(primaryNodes, connectedNodes, parentMap, detected.subfaction)
+
+  // Append combo pairs — find stacks_with refs between connected nodes
+  try {
+    const fwdObj = await c.env.BRAIN_BUCKET.get('refs/forward-index.json')
+    if (fwdObj) {
+      const fwdIndex = await fwdObj.json() as Record<string, Array<{ targetId: string; rel: string; context: string }>>
+      const connectedIdSet = new Set(connected.map(n => n.id))
+      const comboPairs: string[] = []
+
+      for (const node of connected) {
+        const fwdRefs = fwdIndex[node.id]
+        if (!fwdRefs) continue
+        for (const ref of fwdRefs) {
+          if (ref.rel === 'stacks_with' && connectedIdSet.has(ref.targetId)) {
+            comboPairs.push(ref.context)
+          }
+        }
+      }
+
+      if (comboPairs.length > 0) {
+        // Deduplicate (bidirectional refs create duplicates)
+        const uniqueCombos = [...new Set(comboPairs)]
+        context += '\n\n========================================\n'
+        context += 'COMPETITIVE COMBOS (abilities that stack together for maximum effect):\n'
+        context += 'IMPORTANT: If any of these combos are relevant to the question, explain them explicitly.\n'
+        context += '========================================\n\n'
+        for (const combo of uniqueCombos) {
+          context += `- ${combo}\n`
+        }
+      }
+    }
+  } catch { /* forward index not available — skip combos */ }
 
   const systemPrompt = `You are a Warhammer 40,000 rules expert. Answer questions using ONLY the rules context provided below. Always cite your sources.
 
 MOST IMPORTANT RULE — SECTION STRUCTURE:
 When the context has SECTION 1 and SECTION 2, your answer MUST have TWO separate headings. Present ALL of SECTION 1 first under its own heading (e.g., "## Blood Angels Specific"). Then present ALL of SECTION 2 under a second heading (e.g., "## Available to All Space Marines"). NEVER mix content from the two sections. This is mandatory.
+
+COMPETITIVE COMBOS RULE:
+When the context includes a COMPETITIVE COMBOS section, these are abilities that STACK together for massive effect. ALWAYS explain these combos explicitly — name both abilities, explain what each does, what weapon type they share, and why combining them is powerful.
 
 OTHER RULES:
 1. ALWAYS name the specific unit/datasheet that has each ability or weapon.
