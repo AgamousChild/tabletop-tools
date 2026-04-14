@@ -649,6 +649,20 @@ export function convertGameData(input: GameDataInput, retrievedAt?: string): Gam
           context: `${sub.name} is an option within ${ab.name} on ${dsName}.`,
           bidirectional: true,
         })
+
+        // Create requires refs from sub-rules to core mechanic nodes
+        // e.g. MARTIAL EXCELLENCE → core:sustained-hits
+        const subText = `${sub.name} ${sub.text}`.toLowerCase()
+        for (const { pattern, coreSlug, label } of ALL_CORE_PATTERNS) {
+          if (subText.includes(pattern)) {
+            refs.push({
+              sourceId: subId,
+              targetId: `core:${coreSlug}`,
+              rel: 'requires',
+              context: `${sub.name} (option of ${ab.name}) references ${label}.`,
+            })
+          }
+        }
       }
     }
   }
