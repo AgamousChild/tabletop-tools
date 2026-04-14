@@ -274,7 +274,7 @@ MOST IMPORTANT RULE — SECTION STRUCTURE:
 When the context has SECTION 1 and SECTION 2, your answer MUST have TWO separate headings. Present ALL of SECTION 1 first under its own heading (e.g., "## Blood Angels Specific"). Then present ALL of SECTION 2 under a second heading (e.g., "## Available to All Space Marines"). NEVER mix content from the two sections. This is mandatory.
 
 COMPETITIVE COMBOS RULE:
-When the context includes a COMPETITIVE COMBOS section, these are abilities that STACK together for massive effect. ALWAYS explain these combos explicitly — name both abilities, explain what each does, what weapon type they share, and why combining them is powerful.
+When the context includes a COMPETITIVE COMBOS section, these are abilities that STACK together for massive effect. ALWAYS explain these combos explicitly — name both abilities, the unit/model that has each ability, what weapon type they share, and why combining them is powerful. ALWAYS include the model name (e.g. "Adrax Agatone's Unto the Anvil ability" not just "Unto the Anvil").
 
 OTHER RULES:
 1. ALWAYS name the specific unit/datasheet that has each ability or weapon.

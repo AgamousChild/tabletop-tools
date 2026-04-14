@@ -1205,6 +1205,7 @@ export function convertGameData(input: GameDataInput, retrievedAt?: string): Gam
   interface BuffEntry {
     nodeId: string
     title: string
+    unitName: string        // datasheet/detachment that has this ability
     factionId: string
     weaponTypes: string[]   // which weapon types it targets, or ['all'] for generic
     grantsRerolls: 'hit' | 'wound' | null
@@ -1239,13 +1240,25 @@ export function convertGameData(input: GameDataInput, retrievedAt?: string): Gam
     return { nodeId, title, factionId, weaponTypes, grantsRerolls, grantsAbility }
   }
 
+  // Build datasheet name lookup for unit context in combos
+  const dsNameMap = new Map<string, string>()
+  for (const ds of input.datasheets) dsNameMap.set(ds.id, ds.name)
+  // Build detachment name lookup
+  const detNameMap = new Map<string, string>()
+  for (const det of filteredDetachments) detNameMap.set(det.id, det.name)
+
   // Collect all buffs from abilities, stratagems, enhancements, faction abilities
   const allBuffs: BuffEntry[] = []
 
   for (const n of nodes) {
     if (n.category === 'weapon' || n.category === 'datasheet') continue
     const buff = classifyBuff(n.id, n.title, n.content, n.factionId ?? '')
-    if (buff) allBuffs.push(buff)
+    if (buff) {
+      // Resolve unit name from datasheetId or detachmentId
+      buff.unitName = n.datasheetId ? (dsNameMap.get(n.datasheetId) ?? '') :
+                      n.detachmentId ? (detNameMap.get(n.detachmentId) ?? '') : ''
+      allBuffs.push(buff)
+    }
   }
 
   // Find complementary pairs within the same faction (or generic)
@@ -1283,12 +1296,14 @@ export function convertGameData(input: GameDataInput, retrievedAt?: string): Gam
 
         const weaponTypeStr = sharedTypes.includes('all') ? 'weapons' : sharedTypes.join('/') + ' weapons'
         const factionStr = rr.factionId || ag.factionId || 'generic'
+        const rrUnit = rr.unitName ? ` on ${rr.unitName}` : ''
+        const agUnit = ag.unitName ? ` on ${ag.unitName}` : ''
 
         refs.push({
           sourceId: rr.nodeId,
           targetId: ag.nodeId,
           rel: 'stacks_with',
-          context: `[${factionStr}] ${rr.title} (${combo.rerollType} re-rolls) + ${ag.title} (${combo.ability}) on ${weaponTypeStr}.`,
+          context: `[${factionStr}] ${rr.title}${rrUnit} (${combo.rerollType} re-rolls) + ${ag.title}${agUnit} (${combo.ability}) on ${weaponTypeStr}.`,
           bidirectional: true,
         })
       }
