@@ -235,13 +235,12 @@ app.post('/ask', async (c) => {
           if (ref.rel !== 'stacks_with') continue
           if (!connectedIdSet.has(ref.targetId)) continue
 
-          // Relevance filter: at least one side must match query keywords,
-          // OR one side must be a primary search result
-          const comboText = ref.context.toLowerCase()
-          const matchesKeyword = [...relevanceTerms].some(term => comboText.includes(term))
+          // Only include combos where at least one side is a primary search result.
+          // Primary results are what Vectorize returned for this specific query —
+          // they're directly relevant. Connected nodes are one hop away.
+          // This prevents dumping every possible combo in the faction.
           const oneIsPrimary = primaryIdSet.has(node.id) || primaryIdSet.has(ref.targetId)
-
-          if (matchesKeyword || oneIsPrimary) {
+          if (oneIsPrimary) {
             comboPairs.push(ref.context)
           }
         }
