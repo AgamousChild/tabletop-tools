@@ -1,5 +1,6 @@
 import type { Node, NodeRef, Source, GamePhase } from '../model'
 import { slugify } from '../slugify'
+import { detectChapterFromText } from '../filters'
 import type { ParseResult } from './core-rules'
 
 /** Detect phase from stratagem WHEN clause. */
@@ -70,6 +71,7 @@ export function parseFactionPack(
 
   let currentDetachment: string | null = null
   let currentDetachmentId: string | null = null
+  let currentDetachmentChapter: string | undefined = undefined
 
   // State machine: collect sections between headings
   let sectionTitle = ''
@@ -133,6 +135,13 @@ export function parseFactionPack(
       ? truncate(body.split(/[.!?]\s/)[0] ?? title, 150)
       : title
 
+    // Update detachment chapter detection from body text
+    if (sectionType === 'detachment' && !currentDetachmentChapter) {
+      currentDetachmentChapter = detectChapterFromText(body)
+    }
+    // Use detachment-level chapter lock for all children
+    const chapterLock = currentDetachmentChapter
+
     const node: Node = {
       id,
       layer,
@@ -142,6 +151,7 @@ export function parseFactionPack(
       summary,
       phase,
       factionId: factionSlug,
+      subfaction: chapterLock,
       detachmentId: currentDetachment ? slugify(currentDetachment) : undefined,
       sources: [source],
       refs: [],
@@ -266,6 +276,7 @@ export function parseFactionPack(
       currentDetachment = heading
       const detBaseId = `det:${factionSlug}:${slugify(heading)}`
       currentDetachmentId = makeId(detBaseId)
+      currentDetachmentChapter = detectChapterFromText(heading)
       sectionTitle = heading
       sectionBody = []
       sectionType = 'detachment'

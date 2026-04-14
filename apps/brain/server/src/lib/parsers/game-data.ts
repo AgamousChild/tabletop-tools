@@ -17,6 +17,10 @@
  */
 import type { Node, NodeRef, Source } from '../model'
 import { slugify } from '../slugify'
+import {
+  isBoardingAction, isLegends, buildDetachmentChapterMap,
+  detectScope, detectWeaponTypes, classifyGrants,
+} from '../filters'
 
 // ── Input types (matching game-data-store) ──────────────────────────────────
 
@@ -293,9 +297,8 @@ export function convertGameData(input: GameDataInput, retrievedAt?: string): Gam
   const source: Source = { ...wahapediaSource, retrievedAt: retrievedAt ?? new Date().toISOString() }
 
   // Filter out Boarding Actions — different game mode
-  // Use the type field (authoritative), not name matching
   const boardingDetIds = new Set(
-    input.detachments.filter(d => d.type.toLowerCase() === 'boarding actions').map(d => d.id)
+    input.detachments.filter(isBoardingAction).map(d => d.id)
   )
   const filteredDetachments = input.detachments.filter(d => !boardingDetIds.has(d.id))
   const filteredStratagems = input.stratagems.filter(s => !boardingDetIds.has(s.detachmentId))
@@ -304,9 +307,9 @@ export function convertGameData(input: GameDataInput, retrievedAt?: string): Gam
 
   // Filter out Legends — discontinued units not legal in matched play
   const legendsIds = new Set(
-    input.datasheets.filter(d => d.isLegends).map(d => d.id)
+    input.datasheets.filter(isLegends).map(d => d.id)
   )
-  const filteredDatasheets = input.datasheets.filter(d => !d.isLegends)
+  const filteredDatasheets = input.datasheets.filter(d => !isLegends(d))
   const filteredWargear = input.datasheetWargear.filter(w => !legendsIds.has(w.datasheetId))
   const filteredModels = input.datasheetModels.filter(m => !legendsIds.has(m.datasheetId))
   const filteredUnitAbilities = input.unitAbilities.filter(a => !legendsIds.has(a.datasheetId))
@@ -857,17 +860,8 @@ export function convertGameData(input: GameDataInput, retrievedAt?: string): Gam
 
   // Build detachment → chapter restriction map
   // Scan detachment ability text for chapter names to determine which are chapter-locked
-  const CHAPTERS = ['Ultramarines', 'Space Wolves', 'Dark Angels', 'Blood Angels',
-    'Black Templars', 'Deathwatch', 'Iron Hands', 'White Scars', 'Raven Guard',
-    'Salamanders', 'Imperial Fists', 'Crimson Fists']
-  const detChapterMap = new Map<string, string>() // detachmentId → chapter name
-
-  for (const det of filteredDetachments) {
-    const detAbilities = filteredDetAbilities.filter(a => a.detachmentId === det.id)
-    const allText = detAbilities.map(a => a.description).join(' ')
-    const chapter = CHAPTERS.find(c => allText.includes(c))
-    if (chapter) detChapterMap.set(det.id, chapter)
-  }
+  // Build chapter lock map from shared filter module
+  const detChapterMap = buildDetachmentChapterMap(filteredDetachments, filteredDetAbilities)
 
   const seenDetIds = new Set<string>()
   for (const det of filteredDetachments) {
@@ -1228,48 +1222,34 @@ export function convertGameData(input: GameDataInput, retrievedAt?: string): Gam
   // weapon type they target. Create stacks_with refs between complementary
   // pairs that share a weapon type or both target "all weapons."
 
-  const WEAPON_TYPE_PATTERNS = ['torrent', 'melta', 'pistol', 'heavy', 'assault', 'rapid fire']
-
   interface BuffEntry {
     nodeId: string
     title: string
-    unitName: string        // datasheet/detachment that has this ability
+    unitName: string
     factionId: string
-    subfaction: string      // chapter/legion lock
-    detachmentId: string    // which detachment it belongs to
-    scope: 'bearer' | 'unit' | 'army' | 'stratagem' // who it affects
-    category: string        // node category
-    weaponTypes: string[]   // which weapon types it targets, or ['all'] for generic
+    subfaction: string
+    detachmentId: string
+    scope: ReturnType<typeof detectScope>
+    category: string
+    weaponTypes: string[]
     grantsRerolls: 'hit' | 'wound' | null
-    grantsAbility: string[] // 'sustained hits', 'lethal hits', 'devastating wounds'
+    grantsAbility: string[]
   }
 
   function classifyBuff(nodeId: string, title: string, content: string, factionId: string): BuffEntry | null {
-    const lower = content.toLowerCase()
+    const grants = classifyGrants(content)
+    if (!grants.grantsRerolls && grants.grantsAbility.length === 0) return null
 
-    // Detect what it grants
-    const grantsAbility: string[] = []
-    if (lower.includes('sustained hits')) grantsAbility.push('sustained hits')
-    if (lower.includes('lethal hits')) grantsAbility.push('lethal hits')
-    if (lower.includes('devastating wounds')) grantsAbility.push('devastating wounds')
-
-    let grantsRerolls: 'hit' | 'wound' | null = null
-    if (lower.includes('re-roll') && lower.includes('wound')) grantsRerolls = 'wound'
-    if (lower.includes('re-roll') && lower.includes('hit')) grantsRerolls = 'hit'
-    if (lower.includes('twin-linked')) grantsRerolls = 'wound' // twin-linked grants wound re-rolls
-
-    if (!grantsRerolls && grantsAbility.length === 0) return null
-
-    // Detect weapon type targeting
-    const weaponTypes: string[] = []
-    for (const wt of WEAPON_TYPE_PATTERNS) {
-      if (lower.includes(wt)) weaponTypes.push(wt)
+    return {
+      nodeId, title, factionId,
+      unitName: '',
+      subfaction: '',
+      detachmentId: '',
+      scope: 'unit' as const,
+      category: '',
+      weaponTypes: detectWeaponTypes(content),
+      ...grants,
     }
-    if (lower.includes('melee weapon') || lower.includes('melee attack')) weaponTypes.push('melee')
-    if (lower.includes('ranged weapon') || lower.includes('ranged attack')) weaponTypes.push('ranged')
-    if (weaponTypes.length === 0) weaponTypes.push('all')
-
-    return { nodeId, title, factionId, weaponTypes, grantsRerolls, grantsAbility }
   }
 
   // Build datasheet name lookup for unit context in combos
@@ -1291,20 +1271,7 @@ export function convertGameData(input: GameDataInput, retrievedAt?: string): Gam
       buff.subfaction = n.subfaction ?? ''
       buff.detachmentId = n.detachmentId ?? ''
       buff.category = n.category
-
-      // Determine scope
-      const lower = n.content.toLowerCase()
-      if (n.category === 'stratagem') {
-        buff.scope = 'stratagem'
-      } else if (n.category === 'enhancement' && (lower.includes('the bearer') || lower.includes("bearer's"))) {
-        buff.scope = 'bearer'
-      } else if (n.category === 'faction-ability' && !n.datasheetId) {
-        buff.scope = 'army'
-      } else if (lower.includes('models in this unit') || lower.includes('models in that unit') || lower.includes('leading a unit')) {
-        buff.scope = 'unit'
-      } else {
-        buff.scope = 'unit' // default
-      }
+      buff.scope = detectScope(n.category, n.content)
 
       allBuffs.push(buff)
     }
