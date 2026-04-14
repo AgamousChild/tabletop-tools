@@ -95,6 +95,11 @@ export const MECHANIC_ALIASES: Array<{ alias: string; canonical: string }> = [
   { alias: 'obs sec', canonical: 'objective control' },
   { alias: 'ob sec', canonical: 'objective control' },
   { alias: 'obsec', canonical: 'objective control' },
+  { alias: 'oc', canonical: 'objective control' },
+  // Army rule abbreviations
+  { alias: 'ftgg', canonical: 'for the greater good' },
+  { alias: 'bok', canonical: 'blessings of khorne' },
+  { alias: 'oath', canonical: 'oath of moment' },
 ]
 
 // ── Detection ─────────────────────────────────────────────────────────────────
