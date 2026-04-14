@@ -3,14 +3,13 @@ import { render, screen } from '@testing-library/react'
 import '@testing-library/jest-dom'
 import { ForceGraph } from './ForceGraph'
 
-vi.mock('react-force-graph-2d', () => ({
-  default: (props: any) => (
-    <div data-testid="force-graph">
-      {props.graphData?.nodes?.map((n: any) => (
-        <div key={n.id} data-testid={`node-${n.id}`}>{n.label}</div>
-      ))}
-    </div>
-  ),
+vi.mock('@xyflow/react', () => ({
+  ReactFlow: (props: any) => <div data-testid="react-flow">{props.children}</div>,
+  Background: () => null,
+  Controls: () => null,
+  MiniMap: () => null,
+  Handle: () => null,
+  Position: { Top: 'top', Bottom: 'bottom' },
 }))
 
 global.fetch = vi.fn()
