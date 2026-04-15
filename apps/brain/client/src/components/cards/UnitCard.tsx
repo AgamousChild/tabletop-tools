@@ -75,9 +75,10 @@ function WeaponTable({
       <div className={`${headerBg} text-white text-[10px] font-bold uppercase tracking-widest px-2 py-0.5`}>
         {label}
       </div>
-      <table className="w-full text-xs border-collapse">
+      <div className="overflow-x-auto">
+      <table className="w-full text-[10px] md:text-xs border-collapse">
         <thead>
-          <tr className="bg-slate-800 text-slate-400 text-[9px] uppercase tracking-wider">
+          <tr className="bg-slate-800 text-slate-400 text-[8px] md:text-[9px] uppercase tracking-wider">
             <th className="text-left px-2 py-0.5 font-medium">Weapon</th>
             <th className="text-center px-1 py-0.5 font-medium">Range</th>
             <th className="text-center px-1 py-0.5 font-medium">A</th>
@@ -118,6 +119,7 @@ function WeaponTable({
           })}
         </tbody>
       </table>
+      </div>
     </div>
   )
 }
@@ -133,7 +135,7 @@ export function UnitCard({ data, context }: UnitCardProps) {
     >
       {/* Header */}
       <div
-        className="px-3 py-2 flex items-start justify-between"
+        className="px-2 py-2 md:px-3 flex items-start justify-between"
         style={{ background: 'linear-gradient(135deg, #1e3a5f 0%, #1e40af 60%, #1d4ed8 100%)' }}
       >
         <div>
@@ -163,7 +165,7 @@ export function UnitCard({ data, context }: UnitCardProps) {
       </div>
 
       {/* Stat line */}
-      <div className="bg-slate-800 border-b border-slate-700 px-2 py-1.5 flex items-center justify-around gap-1">
+      <div className="bg-slate-800 border-b border-slate-700 px-2 py-1.5 flex flex-wrap items-center justify-around gap-1">
         {[
           { label: 'M', value: stats.move },
           { label: 'T', value: stats.toughness },
@@ -186,9 +188,9 @@ export function UnitCard({ data, context }: UnitCardProps) {
       </div>
 
       {/* Two-column body */}
-      <div className="grid grid-cols-2 gap-0 border-b border-slate-700">
+      <div className="flex flex-col md:grid md:grid-cols-2 gap-0 border-b border-slate-700">
         {/* Left: Weapons */}
-        <div className="border-r border-slate-700 p-2">
+        <div className="border-b border-slate-700 md:border-b-0 md:border-r p-2">
           <WeaponTable
             weapons={data.rangedWeapons}
             headerColor="amber"

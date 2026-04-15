@@ -39,7 +39,7 @@ export function EnhancementCard({ data, context }: EnhancementCardProps) {
   return (
     <div className="bg-slate-900 border border-slate-800 rounded-lg overflow-hidden">
       {/* Header */}
-      <div className="flex items-center justify-between px-4 py-3 border-b border-purple-700">
+      <div className="flex items-center justify-between px-3 py-2 md:px-4 md:py-3 border-b border-purple-700">
         <h2 className="font-['Oswald'] uppercase tracking-wide text-white text-base font-semibold">
           {data.name}
         </h2>
@@ -48,7 +48,7 @@ export function EnhancementCard({ data, context }: EnhancementCardProps) {
         </span>
       </div>
 
-      <div className="px-4 py-3 space-y-2">
+      <div className="px-3 py-2 md:px-4 md:py-3 space-y-2">
         {/* Restriction */}
         {data.restriction && (
           <p className="text-purple-400 text-xs italic">{data.restriction}</p>
@@ -61,7 +61,7 @@ export function EnhancementCard({ data, context }: EnhancementCardProps) {
       </div>
 
       {/* Footer */}
-      <div className="px-4 py-2 border-t border-slate-800">
+      <div className="px-3 py-2 md:px-4 border-t border-slate-800">
         <span className="text-xs text-slate-500">{data.detachmentName}</span>
       </div>
     </div>

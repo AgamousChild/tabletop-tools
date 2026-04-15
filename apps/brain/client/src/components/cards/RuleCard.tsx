@@ -56,7 +56,7 @@ export function RuleCard({ data, context }: RuleCardProps) {
       {/* Header */}
       <div
         data-testid="rule-card-header"
-        className={`px-4 py-3 border-b ${borderClass}`}
+        className={`px-3 py-2 md:px-4 md:py-3 border-b ${borderClass}`}
       >
         <div className="flex items-start justify-between gap-2">
           <div className="flex-1 min-w-0">
@@ -79,9 +79,9 @@ export function RuleCard({ data, context }: RuleCardProps) {
       </div>
 
       {/* Body */}
-      <div className="px-4 py-3 space-y-3">
+      <div className="px-3 py-2 md:px-4 md:py-3 space-y-3">
         {/* Main description */}
-        <p className="text-slate-300 leading-relaxed text-sm">
+        <p className="text-slate-300 leading-relaxed text-xs md:text-sm break-words">
           <KeywordText text={data.description} onContentClick={onContentClick} />
         </p>
 
@@ -96,10 +96,10 @@ export function RuleCard({ data, context }: RuleCardProps) {
                   data-testid={`sub-rule-${subRule.name}`}
                   className={`border border-slate-700 rounded px-3 py-2 ${highlighted ? 'bg-amber-400/10' : ''}`}
                 >
-                  <span className={`text-xs font-bold uppercase tracking-wider ${subRuleNameClass} mr-2`}>
+                  <span className={`text-[10px] md:text-xs font-bold uppercase tracking-wider ${subRuleNameClass} mr-2`}>
                     {subRule.name}
                   </span>
-                  <span className="text-slate-300 text-sm">
+                  <span className="text-slate-300 text-xs md:text-sm break-words">
                     <KeywordText text={subRule.description} onContentClick={onContentClick} />
                   </span>
                 </div>
@@ -111,7 +111,7 @@ export function RuleCard({ data, context }: RuleCardProps) {
 
       {/* Footer */}
       {data.appliesTo !== undefined && (
-        <div className="px-4 py-2 border-t border-slate-800">
+        <div className="px-3 py-2 md:px-4 border-t border-slate-800">
           <button
             data-testid="applies-to"
             className="text-xs text-slate-500 hover:text-slate-400 cursor-pointer bg-transparent border-0 p-0 text-left"

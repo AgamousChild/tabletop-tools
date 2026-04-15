@@ -55,10 +55,10 @@ function Section({ testId, label, text, highlighted, onContentClick }: SectionPr
       data-testid={testId}
       className={`px-3 py-2 rounded ${highlighted ? 'bg-amber-400/10' : ''}`}
     >
-      <span className="text-xs font-bold text-blue-400 uppercase tracking-wider mr-2">
+      <span className="text-[10px] md:text-xs font-bold text-blue-400 uppercase tracking-wider mr-2">
         {label}
       </span>
-      <span className="text-sm text-slate-300">
+      <span className="text-xs md:text-sm text-slate-300">
         <KeywordText text={text} onContentClick={onContentClick} />
       </span>
     </div>
@@ -69,7 +69,7 @@ export function StratagemCard({ data, context }: StratagemCardProps) {
   const { highlightTerms, onContentClick } = context
 
   return (
-    <div className="flex rounded-lg overflow-hidden bg-slate-900 border border-slate-800 shadow-lg min-w-[320px]">
+    <div className="flex rounded-lg overflow-hidden bg-slate-900 border border-slate-800 shadow-lg w-full min-w-0">
       {/* Left sidebar */}
       <div className="w-9 flex-shrink-0 bg-blue-800 flex flex-col items-center justify-start pt-3">
         {/* CP diamond */}
@@ -85,14 +85,14 @@ export function StratagemCard({ data, context }: StratagemCardProps) {
       <div className="flex-1 py-3 px-3 flex flex-col gap-1">
         {/* Name */}
         <h2
-          className="text-white font-bold uppercase tracking-wide"
+          className="text-sm md:text-base text-white font-bold uppercase tracking-wide"
           style={{ fontFamily: 'Oswald, sans-serif' }}
         >
           {data.name}
         </h2>
 
         {/* Type line */}
-        <p className="text-xs text-blue-400 mb-1">{data.type}</p>
+        <p className="text-[10px] md:text-xs text-blue-400 mb-1">{data.type}</p>
 
         {/* Sections */}
         <Section
