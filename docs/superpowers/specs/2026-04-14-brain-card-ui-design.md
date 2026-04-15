@@ -13,7 +13,9 @@ The brain's answer is the intelligence. Cards are reference material. Every card
 
 ## Card Types
 
-Five card types, using game-datacards (github.com/ronplanken/game-datacards, GPL-3.0) as a dependency. Their React components render the GW-authentic card layout. We wrap them in our own components to add the context overlay layer and apply our custom dark theme (slate-950 background, amber-400 accents from `packages/ui/tailwind-preset`) via CSS overrides.
+Five card types (overlay) plus one full-page view (Detachment Page).
+
+**Implementation approach:** game-datacards (github.com/ronplanken/game-datacards, GPL-3.0) is built on Ant Design + LESS. It cannot be used as a drop-in dependency in our Vite/Tailwind project without importing Ant Design's full CSS bundle and configuring LESS compilation. Instead, we use game-datacards as a **visual specification** — study their component structure and layout, then implement our own React + Tailwind components that match the GW card format. Their code is the reference for exact positioning, proportions, and section layout. Our components are built natively in Tailwind with our custom dark theme (slate-950 background, amber-400 accents from `packages/ui/tailwind-preset`). We may use their faction SVG icons (from the companion repo Locequen/40k-Data-Card) if license permits.
 
 ### 1. Unit Card
 
@@ -89,7 +91,11 @@ When a core mechanic is clicked (Devastating Wounds, Sustained Hits, Feel No Pai
 - Prominent close button — floating, visible, does NOT obscure the page content
 - On small screens: zoom to the highlighted section, scrollable for more context
 
-Source PDFs are stored at `C:\R\sync-data\tools\gw-sync\.local\gw\pdfs\`. Brain nodes have `sources[].type === 'pdf'` with `page` numbers.
+Source PDFs are stored locally at `C:\R\sync-data\tools\gw-sync\.local\gw\pdfs\`. The PNG generation step runs locally as part of the gw-sync build pipeline (same machine that builds the brain graph). PNGs are uploaded to R2 alongside the brain graph data.
+
+Brain nodes have `sources[].type === 'pdf'` with `sources[].page` numbers. The page number maps to `pages/<pdf-name>/page-<N>.png` in R2.
+
+**Highlight coordinates:** Brain nodes do NOT store bounding box coordinates for specific text on a page. The highlight is applied by showing the full page image and using the node's `title` and `content` text to render a text-search overlay — find the matching text on the rendered page image and highlight it. On small screens, auto-scroll to the approximate vertical position of the matched text (derived from page fraction based on the node's position in the parsed markdown). This is approximate, not pixel-perfect — good enough for reference.
 
 For Wahapedia-sourced content (sources[].type === 'wahapedia'), the card IS the reference — no PDF page, the card overlay serves that purpose.
 
@@ -105,6 +111,10 @@ The highlight color should match the query context:
 - Weapon abilities: amber
 - Abilities/rules: green
 - Combos (stacks_with): red arrows/overlay between the relevant elements
+
+**Multiple highlights:** When a query context matches multiple elements on the same card (e.g., a unit with two relevant weapons), highlight all of them. Each highlighted element gets the same color overlay. No limit on simultaneous highlights.
+
+**Missing data:** If IndexedDB game-data-store is empty (user hasn't run data-import), unit cards fall back to brain node data only (summary, content, keywords). The card renders with whatever data is available — no empty state, no error. Brain nodes always have title, summary, and content.
 
 ---
 
@@ -165,9 +175,9 @@ This creates a drill-down pattern: answer → card → click keyword → new fil
 
 ## Tech Stack
 
-- game-datacards (GPL-3.0) as a dependency — their React components for card rendering
-- CSS overrides for our custom dark theme (slate-950/amber-400)
-- Our own wrapper components for context overlay, click handlers, navigation
+- Our own React + Tailwind card components matching GW format (game-datacards as visual reference, not a code dependency)
+- Custom dark theme (slate-950/amber-400) built in from the start
+- Overlay/navigation wrapper components for context highlighting, click handlers, re-query behavior
 - PDF rendering: pre-rendered PNG page images (generated at build time by gw-sync, stored in R2)
 - Data: brain nodes via API + IndexedDB game-data-store for unit details
 
@@ -182,8 +192,9 @@ The detachment page is the only full-page view. Layout:
 - Detachment ability card at the top (army rule card format)
 - Stratagems section: all stratagems rendered as stratagem cards in a grid
 - Enhancements section: all enhancements rendered as enhancement cards in a grid
-- Every card on the page is clickable — same navigation rules (click content → re-query brain)
+- Every card on the page is clickable — same navigation rules (click content → closes the detachment page and re-queries the brain with that term as a filter)
 - Back button returns to previous view
+- Clicking content on an embedded card navigates AWAY from the detachment page back to the brain — no nested overlays
 
 ---
 
