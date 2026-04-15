@@ -12,6 +12,8 @@ import { EnhancementCard } from '../components/cards/EnhancementCard'
 import { RuleCard } from '../components/cards/RuleCard'
 import type { CardData, CardContext } from '../components/cards/types'
 import { type EntityMap } from '../lib/entity-linker'
+import { DetachmentPage } from './DetachmentPage'
+import type { DetachmentPageProps } from './DetachmentPage'
 
 const API_BASE = import.meta.env.VITE_BRAIN_API_URL || '/brain/api'
 
@@ -699,8 +701,74 @@ export function BrainScreen() {
   const [tab, setTab] = useState<'ask' | 'search' | 'browse' | 'graph'>('ask')
   const [activeCard, setActiveCard] = useState<CardData | null>(null)
   const [activeFilters, setActiveFilters] = useState<string[]>([])
+  const [detachmentView, setDetachmentView] = useState<DetachmentPageProps | null>(null)
+
+  async function openDetachmentPage(node: ResultNode) {
+    // Fetch stratagems and enhancements for this detachment
+    const detachmentId = node.id
+    const factionId = node.factionId || ''
+
+    try {
+      const params = new URLSearchParams({ layer: 'detachment', limit: '200' })
+      if (factionId) params.set('factionId', factionId)
+      const res = await fetch(`${API_BASE}/browse/nodes?${params.toString()}`)
+      const data = await res.json() as { nodes: ResultNode[]; total: number }
+      const allNodes: ResultNode[] = data.nodes || []
+
+      // Filter nodes that belong to this detachment
+      const related = allNodes.filter(n => n.detachmentId === detachmentId || n.detachmentId === node.title)
+
+      const stratagems = related
+        .filter(n => n.category === 'stratagem')
+        .map(n => buildStratagemData(n))
+
+      const enhancements = related
+        .filter(n => n.category === 'enhancement')
+        .map(n => buildEnhancementData(n))
+
+      const ability: DetachmentPageProps['ability'] = node.content
+        ? { ...buildRuleData(node), isArmyRule: false }
+        : undefined
+
+      setDetachmentView({
+        detachmentName: node.title,
+        factionId,
+        subfaction: node.subfaction,
+        ability,
+        stratagems,
+        enhancements,
+        onContentClick: (term: string) => {
+          setDetachmentView(null)
+          setActiveFilters(prev => prev.includes(term) ? prev : [...prev, term])
+        },
+        onBack: () => setDetachmentView(null),
+      })
+    } catch {
+      // Fallback: show page with just the ability node
+      const ability: DetachmentPageProps['ability'] = node.content
+        ? { ...buildRuleData(node), isArmyRule: false }
+        : undefined
+      setDetachmentView({
+        detachmentName: node.title,
+        factionId,
+        subfaction: node.subfaction,
+        ability,
+        stratagems: [],
+        enhancements: [],
+        onContentClick: (term: string) => {
+          setDetachmentView(null)
+          setActiveFilters(prev => prev.includes(term) ? prev : [...prev, term])
+        },
+        onBack: () => setDetachmentView(null),
+      })
+    }
+  }
 
   function handleOpenCard(node: ResultNode) {
+    if (node.category === 'detachment-rule') {
+      openDetachmentPage(node)
+      return
+    }
     setActiveCard(buildCardFromNode(node))
   }
 
@@ -717,6 +785,7 @@ export function BrainScreen() {
   function handleTabSwitch(t: 'ask' | 'search' | 'browse' | 'graph') {
     if (t !== tab) {
       setActiveFilters([])
+      setDetachmentView(null)
     }
     setTab(t)
   }
@@ -747,7 +816,9 @@ export function BrainScreen() {
         </div>
       </header>
 
-      {tab === 'browse' ? (
+      {detachmentView ? (
+        <DetachmentPage {...detachmentView} />
+      ) : tab === 'browse' ? (
         <BrowseTab onOpenCard={handleOpenCard} />
       ) : tab === 'graph' ? (
         <ForceGraph />
