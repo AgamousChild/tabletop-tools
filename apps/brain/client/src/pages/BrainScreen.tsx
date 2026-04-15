@@ -76,15 +76,17 @@ interface DetectedFactions {
 
 /** Parse "M6\" T4 Sv3+ W2 Ld6+ OC1" style stat line from content */
 function parseStatLine(content: string) {
-  const stats = { move: '-', toughness: '-', save: '-', wounds: '-', leadership: '-', oc: '-' }
-  const m = content.match(/M(\d+["\u2033]?)\s+T(\d+)\s+Sv(\d+\+)\s+W(\d+)\s+Ld(\d+\+)\s+OC(\d+)/)
+  const stats: { move: string; toughness: string; save: string; wounds: string; leadership: string; oc: string; invSv?: string } =
+    { move: '-', toughness: '-', save: '-', wounds: '-', leadership: '-', oc: '-' }
+  const m = content.match(/M(\d+["\u2033]?)\s+T(\d+)\s+Sv(\d+\+)\s+W(\d+)\s+Ld(\d+\+)\s+OC(\d+)\s*(\d+\+\+)?/)
   if (m) {
-    stats.move = m[1]
-    stats.toughness = m[2]
-    stats.save = m[3]
-    stats.wounds = m[4]
-    stats.leadership = m[5]
-    stats.oc = m[6]
+    stats.move = m[1]!
+    stats.toughness = m[2]!
+    stats.save = m[3]!
+    stats.wounds = m[4]!
+    stats.leadership = m[5]!
+    stats.oc = m[6]!
+    if (m[7]) stats.invSv = m[7]
   }
   return stats
 }
@@ -128,7 +130,7 @@ function extractContentField(content: string, field: string): string {
 
 /** Filter internal keywords (t5, sv3+, pts-90, etc.) from display */
 function filterDisplayKeywords(keywords: string[]): { display: string[]; faction: string[] } {
-  const internal = /^(t\d|sv\d|w\d|pts-|ppw-|moderate|cheap|expensive|premium|heavy-|light-|standard-|elite-|super-|titanic|toughness-|save-|wounds-|damage-|strength-|invuln-|ap-|ap\d|s\d|d\d)/
+  const internal = /^(t\d|sv\d|w\d|pts-|ppw-|moderate|cheap|expensive|premium|heavy-|light-|standard-|elite-|super-|titanic|toughness-|save-|wounds-|damage-|strength-|invuln-|ap-|ap\d|s\d|d\d|characters$|sustained hits|lethal hits|devastating wounds|hazardous|blast|torrent|twin-linked|rapid fire|melta|lance|anti$|ignores cover|indirect fire|pistol|heavy$|assault$|one shot)/
   const faction = ['adeptus astartes', 'heretic astartes', 'orks', 'necrons', 'tyranids', 'aeldari', 't\'au empire', 'chaos', 'imperium', 'drukhari', 'leagues of votann']
   const display: string[] = []
   const factionKw: string[] = []
