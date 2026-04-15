@@ -14,6 +14,7 @@ import type { CardData, CardContext } from '../components/cards/types'
 import { type EntityMap } from '../lib/entity-linker'
 import { DetachmentPage } from './DetachmentPage'
 import type { DetachmentPageProps } from './DetachmentPage'
+import { deriveUnitType } from '../../../shared/derive-unit-type'
 
 const API_BASE = import.meta.env.VITE_BRAIN_API_URL || '/brain/api'
 
@@ -139,6 +140,13 @@ function filterDisplayKeywords(keywords: string[]): { display: string[]; faction
     'thousand sons', 'world eaters', 'chaos daemons', 'grey knights',
     'imperial agents', 'imperial knights', 'chaos knights',
     'astra militarum', 'agents of the imperium',
+    // Subfactions
+    'blood angels', 'dark angels', 'space wolves', 'black templars',
+    'ultramarines', 'deathwatch', 'imperial fists', 'iron hands',
+    'salamanders', 'raven guard', 'white scars', 'crimson fists',
+    'blood ravens', 'ynnari', 'harlequins', 'asuryani',
+    'plague legions', 'scintillating legions', 'legions of excess',
+    'blood legions', 'damned',
   ]
   const display: string[] = []
   const factionKw: string[] = []
@@ -151,38 +159,6 @@ function filterDisplayKeywords(keywords: string[]): { display: string[]; faction
     }
   }
   return { display, faction: factionKw }
-}
-
-/**
- * Derive the unit type designation from keywords.
- * Priority hierarchy — most specific wins. No "Other".
- */
-function deriveUnitType(keywords: string[]): string {
-  const kw = new Set(keywords.map(k => k.toLowerCase()))
-  const factionId = (fid: string) => kw.has(fid)
-
-  if (kw.has('epic hero')) return 'Epic Hero'
-  if (factionId('imperial knights')) return 'Imperial Knight'
-  if (factionId('chaos knights')) return 'Chaos Knight'
-  // Daemon + mechanical chassis = Daemon Engine (Forgefiend, Defiler, Heldrake, etc.)
-  if (kw.has('daemon') && (kw.has('vehicle') || kw.has('walker') || kw.has('dreadnought'))) return 'Daemon Engine'
-  if (kw.has('daemon')) return 'Daemon'
-  if (kw.has('dreadknight')) return 'Dreadknight'
-  if (kw.has('dreadnought')) return 'Dreadnought'
-  if (kw.has('battlesuit')) return 'Battlesuit'
-  if (kw.has('monster')) return 'Monster'
-  if (kw.has('towering')) return 'Towering'
-  if (kw.has('walker')) return 'Walker'
-  if (kw.has('vehicle')) return 'Vehicle'
-  if (kw.has('beast') || kw.has('beasts')) return 'Beast'
-  if (kw.has('fortification')) return 'Fortification'
-  if (kw.has('mounted') && !kw.has('character')) return 'Mounted'
-  if (kw.has('battleline')) return 'Battleline'
-  if (kw.has('swarm')) return 'Swarm'
-  if (kw.has('character')) return 'Character'
-  if (kw.has('infantry')) return 'Infantry'
-
-  return '' // no "Other"
 }
 
 function buildUnitData(node: ResultNode) {
@@ -216,6 +192,7 @@ function buildUnitData(node: ResultNode) {
     factionId: node.factionId || '',
     subfaction: node.subfaction,
     role,
+    derivedType: role,
     points,
     stats,
     rangedWeapons: [] as any[],  // populated async from /browse/unit/:id

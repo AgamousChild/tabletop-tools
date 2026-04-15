@@ -4,6 +4,7 @@ export interface UnitCardData {
   factionId: string
   subfaction?: string
   role: string
+  derivedType: string
   points: string
   stats: {
     move: string; toughness: string; save: string; wounds: string;

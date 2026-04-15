@@ -129,6 +129,7 @@ function buildUnitData(node: BrainNode): UnitCardData {
     factionId: node.factionId || '',
     subfaction: node.subfaction,
     role: node.layer,
+    derivedType: content.match(/\*\*Derived Type:\*\*\s*(.+)/)?.[1]?.trim() || node.layer,
     points: '',
     stats,
     rangedWeapons: rangedLines.length > 0

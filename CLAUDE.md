@@ -372,6 +372,9 @@ App-specific result colors (defined per app, not here).
 - Validate statistically before claiming anything.
 - Keep the stack shallow. Don't add layers.
 - Stop when it works. Don't polish what doesn't need polishing.
+- **Never duplicate functions.** If a utility exists, import it. If it needs to be shared across
+  packages, extract it to a shared module. Use dependency injection over copy-paste. Three copies
+  of the same function is a bug, not a pattern.
 
 ---
 

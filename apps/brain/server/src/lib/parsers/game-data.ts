@@ -17,6 +17,7 @@
  */
 import type { Node, NodeRef, Source } from '../model'
 import { slugify } from '../slugify'
+import { deriveUnitType } from '../../../../shared/derive-unit-type'
 import {
   isBoardingAction, isLegends, buildDetachmentChapterMap,
   detectScope, detectWeaponTypes, classifyGrants,
@@ -283,7 +284,7 @@ export function convertGameData(input: GameDataInput, retrievedAt?: string): Gam
   const legendsIds = new Set(
     input.datasheets.filter(isLegends).map(d => d.id)
   )
-  const filteredDatasheets = input.datasheets.filter(d => !isLegends(d) && !isTestData(d))
+  const filteredDatasheets = input.datasheets.filter(d => !isLegends(d))
   const filteredWargear = input.datasheetWargear.filter(w => !legendsIds.has(w.datasheetId))
   const filteredModels = input.datasheetModels.filter(m => !legendsIds.has(m.datasheetId))
   const filteredUnitAbilities = input.unitAbilities.filter(a => !legendsIds.has(a.datasheetId))
@@ -500,6 +501,14 @@ export function convertGameData(input: GameDataInput, retrievedAt?: string): Gam
     if (ds.isLegends) {
       node.keywords.push('legends')
     }
+
+    // Derive unit type from keywords — stored as content field + keyword
+    const derivedType = deriveUnitType(node.keywords)
+    if (derivedType) {
+      node.content = `**Derived Type:** ${derivedType}\n\n${node.content}`
+      node.keywords.push(`type:${slugify(derivedType)}`)
+    }
+
     nodes.push(node)
 
     // Datasheet → faction parent ref

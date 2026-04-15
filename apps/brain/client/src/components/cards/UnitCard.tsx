@@ -145,22 +145,22 @@ export function UnitCard({ data, context }: UnitCardProps) {
           >
             {data.name}
           </h2>
-          <div className="text-xs text-blue-200 mt-0.5">
-            {data.factionKeywords.map((fk, i) => (
-              <span key={fk}>
-                <Clickable term={fk} onClick={onContentClick} className="hover:text-white transition-colors">
-                  {fk}
+          <div className="text-xs text-blue-200 mt-0.5 uppercase tracking-wide">
+            {(() => {
+              const label = data.subfaction || data.factionKeywords[0] || data.factionId
+              return label ? (
+                <Clickable term={label} onClick={onContentClick} className="hover:text-white transition-colors">
+                  {label.toUpperCase()}
                 </Clickable>
-                {i < data.factionKeywords.length - 1 && <span className="mx-1 opacity-50">·</span>}
-              </span>
-            ))}
+              ) : null
+            })()}
           </div>
         </div>
         <div className="ml-3 text-right flex-shrink-0">
           <span className="text-amber-400 font-bold text-sm" style={{ fontFamily: "'Oswald', sans-serif" }}>
             {data.points}
           </span>
-          <div className="text-blue-300 text-[10px] uppercase tracking-wider mt-0.5">{data.role}</div>
+          <div className="text-blue-300 text-[10px] uppercase tracking-wider mt-0.5">{data.derivedType}</div>
         </div>
       </div>
 
@@ -264,28 +264,35 @@ export function UnitCard({ data, context }: UnitCardProps) {
       </div>
 
       {/* Keywords bar */}
-      <div className="bg-slate-800 border-b border-slate-700 px-3 py-1.5 flex flex-wrap gap-1 items-center">
-        <span className="text-[9px] text-slate-500 uppercase tracking-widest font-medium mr-1">Keywords:</span>
-        {data.keywords.map(kw => (
-          <Clickable
-            key={kw}
-            term={kw}
-            onClick={onContentClick}
-            className="text-[10px] text-slate-300 bg-slate-700 px-1.5 py-0.5 rounded hover:text-amber-400 hover:bg-slate-600 transition-colors"
-          >
-            {kw}
-          </Clickable>
-        ))}
-        {data.factionKeywords.map(fk => (
-          <Clickable
-            key={`fk-${fk}`}
-            term={fk}
-            onClick={onContentClick}
-            className="text-[10px] text-blue-300 bg-blue-900/40 border border-blue-800 px-1.5 py-0.5 rounded hover:text-blue-200 transition-colors"
-          >
-            {fk}
-          </Clickable>
-        ))}
+      <div className="bg-slate-800 border-b border-slate-700 px-3 py-1.5 flex flex-wrap gap-1 items-center justify-between">
+        <div className="flex flex-wrap gap-1 items-center">
+          <span className="text-[9px] text-slate-500 uppercase tracking-widest font-medium mr-1">Keywords:</span>
+          {data.keywords.filter(kw => !kw.startsWith('type:')).map(kw => {
+            const display = kw.toLowerCase() === 'characters' ? 'Character' : kw
+            return (
+              <Clickable
+                key={kw}
+                term={kw}
+                onClick={onContentClick}
+                className="text-[10px] text-slate-300 bg-slate-700 px-1.5 py-0.5 rounded hover:text-amber-400 hover:bg-slate-600 transition-colors"
+              >
+                {display}
+              </Clickable>
+            )
+          })}
+        </div>
+        <div className="flex flex-wrap gap-1 items-center">
+          {data.factionKeywords.map(fk => (
+            <Clickable
+              key={`fk-${fk}`}
+              term={fk}
+              onClick={onContentClick}
+              className="text-[10px] text-blue-300 bg-blue-900/40 border border-blue-800 px-1.5 py-0.5 rounded hover:text-blue-200 transition-colors"
+            >
+              {fk}
+            </Clickable>
+          ))}
+        </div>
       </div>
 
       {/* Footer */}
