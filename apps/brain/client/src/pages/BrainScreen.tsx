@@ -4,6 +4,12 @@ import { useState, useEffect } from 'react'
 import { ForceGraph } from '../components/ForceGraph'
 import { ResultCard } from '../components/ResultCard'
 import { FactionBanner } from '../components/FactionBanner'
+import { Overlay } from '../components/Overlay'
+import { UnitCard } from '../components/cards/UnitCard'
+import { StratagemCard } from '../components/cards/StratagemCard'
+import { EnhancementCard } from '../components/cards/EnhancementCard'
+import { RuleCard } from '../components/cards/RuleCard'
+import type { CardData, CardContext } from '../components/cards/types'
 
 const API_BASE = import.meta.env.VITE_BRAIN_API_URL || '/brain/api'
 
@@ -50,6 +56,7 @@ interface ResultNode {
   subfaction?: string
   phase?: string
   parentUnit?: string
+  detachmentId?: string
   sources: any[]
   keywords: string[]
 }
@@ -59,6 +66,143 @@ interface DetectedFactions {
   subfaction?: string
   strippedQuery: string
   keywords: string[]
+}
+
+// ── Card builder ─────────────────────────────────────────────────────────────
+
+/** Parse "M6\" T4 Sv3+ W2 Ld6+ OC1" style stat line from content */
+function parseStatLine(content: string) {
+  const stats = { move: '-', toughness: '-', save: '-', wounds: '-', leadership: '-', oc: '-' }
+  const m = content.match(/M(\d+["\u2033]?)\s+T(\d+)\s+Sv(\d+\+)\s+W(\d+)\s+Ld(\d+\+)\s+OC(\d+)/)
+  if (m) {
+    stats.move = m[1]
+    stats.toughness = m[2]
+    stats.save = m[3]
+    stats.wounds = m[4]
+    stats.leadership = m[5]
+    stats.oc = m[6]
+  }
+  return stats
+}
+
+/** Parse weapon profiles from content sections */
+function parseWeapons(content: string, section: string) {
+  const lines: string[] = []
+  const sectionIdx = content.indexOf(section)
+  if (sectionIdx === -1) return lines
+
+  const after = content.slice(sectionIdx + section.length)
+  const nextSection = after.search(/Ranged weapons|Melee weapons|Abilities|Keywords/i)
+  const weaponBlock = nextSection === -1 ? after : after.slice(0, nextSection)
+
+  return weaponBlock
+    .split('\n')
+    .map(l => l.trim())
+    .filter(l => l.length > 0)
+}
+
+/** Parse WHEN/TARGET/EFFECT from stratagem content */
+function parseStratagemFields(content: string) {
+  const extract = (label: string) => {
+    const re = new RegExp(`\\*\\*${label}:\\*\\*\\s*([\\s\\S]*?)(?=\\*\\*[A-Z]+:\\*\\*|$)`, 'i')
+    const m = content.match(re)
+    return m ? m[1].trim() : ''
+  }
+  return {
+    when: extract('WHEN'),
+    target: extract('TARGET'),
+    effect: extract('EFFECT'),
+  }
+}
+
+function buildUnitData(node: ResultNode) {
+  const stats = parseStatLine(node.content || '')
+  const rangedLines = parseWeapons(node.content || '', 'Ranged weapons')
+  const meleeLines = parseWeapons(node.content || '', 'Melee weapons')
+
+  return {
+    id: node.id,
+    name: node.title,
+    factionId: node.factionId || '',
+    subfaction: node.subfaction,
+    role: node.layer,
+    points: '',
+    stats,
+    rangedWeapons: rangedLines.length > 0
+      ? [{ name: rangedLines[0] || '', range: '', attacks: '', skill: '', strength: '', ap: '', damage: '', abilities: rangedLines.slice(1).join(', ') }]
+      : [],
+    meleeWeapons: meleeLines.length > 0
+      ? [{ name: meleeLines[0] || '', range: 'Melee', attacks: '', skill: '', strength: '', ap: '', damage: '', abilities: meleeLines.slice(1).join(', ') }]
+      : [],
+    abilities: [],
+    coreAbilities: [],
+    keywords: node.keywords || [],
+    factionKeywords: [],
+    composition: '',
+    loadout: '',
+    leaders: [],
+  }
+}
+
+function buildStratagemData(node: ResultNode) {
+  const { when, target, effect } = parseStratagemFields(node.content || node.summary || '')
+  return {
+    id: node.id,
+    name: node.title,
+    type: 'Stratagem',
+    cpCost: '1',
+    turn: '',
+    phase: node.phase || '',
+    when,
+    target,
+    effect: effect || node.summary,
+    detachmentName: '',
+    factionId: node.factionId || '',
+    subfaction: node.subfaction,
+  }
+}
+
+function buildEnhancementData(node: ResultNode) {
+  return {
+    id: node.id,
+    name: node.title,
+    cost: '',
+    description: node.content || node.summary,
+    detachmentName: '',
+    factionId: node.factionId || '',
+    subfaction: node.subfaction,
+  }
+}
+
+function buildRuleData(node: ResultNode) {
+  return {
+    id: node.id,
+    name: node.title,
+    description: node.content || node.summary,
+    factionId: node.factionId || '',
+    subfaction: node.subfaction,
+    detachmentName: '',
+  }
+}
+
+function buildCardFromNode(node: ResultNode): CardData {
+  switch (node.category) {
+    case 'datasheet':
+      return { type: 'unit', data: buildUnitData(node) }
+    case 'stratagem':
+      return { type: 'stratagem', data: buildStratagemData(node) }
+    case 'enhancement':
+      return { type: 'enhancement', data: buildEnhancementData(node) }
+    case 'faction-ability':
+      if (!node.detachmentId) {
+        return { type: 'rule', data: { ...buildRuleData(node), isArmyRule: true } }
+      }
+      return { type: 'rule', data: { ...buildRuleData(node), isArmyRule: false } }
+    case 'detachment-rule':
+      return { type: 'rule', data: { ...buildRuleData(node), isArmyRule: false } }
+    default:
+      return { type: 'rule', data: { ...buildRuleData(node), isArmyRule: false } }
+  }
 }
 
 // ── AskTab ───────────────────────────────────────────────────────────────────
@@ -79,13 +223,16 @@ interface QAResponse {
   connectedCount: number
 }
 
-function AskTab() {
+interface AskTabProps {
+  onOpenCard: (node: ResultNode) => void
+}
+
+function AskTab({ onOpenCard }: AskTabProps) {
   const [question, setQuestion] = useState('')
   const [answer, setAnswer] = useState<QAResponse | null>(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [factionFilter, setFactionFilter] = useState(true)
-  const [selectedRef, setSelectedRef] = useState<ResultNode | null>(null)
 
   async function handleAsk() {
     if (!question.trim()) return
@@ -158,17 +305,13 @@ function AskTab() {
             />
           </div>
 
-          {selectedRef && (
-            <NodeDetailModal node={selectedRef} onClose={() => setSelectedRef(null)} />
-          )}
-
           {answer.reference && answer.reference.length > 0 && (
             <div className="mt-4">
               <h4 className="text-sm font-medium text-slate-400 uppercase mb-2">Reference</h4>
               {answer.reference.map((r, i) => (
                 <button
                   key={r.id + '-' + i}
-                  onClick={() => setSelectedRef(r)}
+                  onClick={() => onOpenCard(r)}
                   className="w-full text-left"
                 >
                   <ResultCard
@@ -225,12 +368,15 @@ interface SearchResponse {
   results: ResultNode[]
 }
 
-function SearchTab() {
+interface SearchTabProps {
+  onOpenCard: (node: ResultNode) => void
+}
+
+function SearchTab({ onOpenCard }: SearchTabProps) {
   const [query, setQuery] = useState('')
   const [response, setResponse] = useState<SearchResponse | null>(null)
   const [loading, setLoading] = useState(false)
   const [factionFilter, setFactionFilter] = useState(true)
-  const [selectedResult, setSelectedResult] = useState<ResultNode | null>(null)
 
   async function handleSearch() {
     if (!query.trim()) return
@@ -291,16 +437,12 @@ function SearchTab() {
         />
       )}
 
-      {selectedResult && (
-        <NodeDetailModal node={selectedResult} onClose={() => setSelectedResult(null)} />
-      )}
-
       {visibleResults.length > 0 && (
         <div className="space-y-2">
           {visibleResults.map((r, i) => (
             <button
               key={r.id + '-' + i}
-              onClick={() => setSelectedResult(r)}
+              onClick={() => onOpenCard(r)}
               className="w-full text-left"
             >
               <ResultCard
@@ -336,12 +478,15 @@ interface BrowseLayer {
   count: number
 }
 
-function BrowseTab() {
+interface BrowseTabProps {
+  onOpenCard: (node: ResultNode) => void
+}
+
+function BrowseTab({ onOpenCard }: BrowseTabProps) {
   const [layers, setLayers] = useState<BrowseLayer[]>([])
   const [selectedLayer, setSelectedLayer] = useState<string | null>(null)
   const [nodes, setNodes] = useState<any[]>([])
   const [totalCount, setTotalCount] = useState(0)
-  const [selectedNode, setSelectedNode] = useState<any | null>(null)
   const [loading, setLoading] = useState(false)
   const [layersLoading, setLayersLoading] = useState(true)
 
@@ -357,18 +502,17 @@ function BrowseTab() {
   useEffect(() => {
     if (!selectedLayer) { setNodes([]); return }
     setLoading(true)
-    setSelectedNode(null)
     fetch(`${API_BASE}/browse/nodes?layer=${selectedLayer}&limit=100`)
       .then(r => r.json())
       .then(data => { setNodes(data.nodes || []); setTotalCount(data.total || 0); setLoading(false) })
       .catch(() => setLoading(false))
   }, [selectedLayer])
 
-  // Load full node detail
+  // Load full node detail and open card
   function viewNode(nodeId: string) {
     fetch(`${API_BASE}/browse/node/${encodeURIComponent(nodeId)}`)
       .then(r => r.json())
-      .then(data => { if (data.node) setSelectedNode(data.node) })
+      .then(data => { if (data.node) onOpenCard(data.node) })
       .catch(() => {})
   }
 
@@ -394,100 +538,43 @@ function BrowseTab() {
       </aside>
 
       <div className="flex-1 p-4 max-w-4xl">
-        {selectedNode ? (
-          <div className="space-y-4">
-            <button
-              onClick={() => setSelectedNode(null)}
-              className="text-sm text-amber-400 hover:underline"
-            >
-              &larr; Back to list
-            </button>
-            <div className="bg-slate-900 border border-slate-800 rounded-lg p-4">
-              <div className="flex items-center gap-2 mb-2">
-                <span className="px-2 py-0.5 rounded text-xs font-medium text-white bg-slate-600">
-                  {selectedNode.layer}
-                </span>
-                <span className="text-xs text-slate-400">{selectedNode.category}</span>
-                {selectedNode.factionId && <span className="text-xs text-slate-400">{selectedNode.factionId}</span>}
-                {selectedNode.subfaction && <span className="text-xs text-amber-400">{selectedNode.subfaction}</span>}
-                {selectedNode.phase && <span className="text-xs text-slate-500">({selectedNode.phase})</span>}
-              </div>
-              <h2 className="text-lg font-bold text-slate-100 mb-3">{selectedNode.title}</h2>
-              <div
-                className="text-sm text-slate-300 mb-3"
-                dangerouslySetInnerHTML={{ __html: renderMarkdown(selectedNode.content || selectedNode.summary) }}
-              />
-              {selectedNode.sources?.length > 0 && (
-                <div className="border-t border-slate-800 pt-2 mt-2">
-                  <p className="text-xs text-slate-500">
-                    Sources: {selectedNode.sources.map((s: any) => `${s.title}${s.page ? ` p.${s.page}` : ''}`).join(', ')}
-                  </p>
-                </div>
-              )}
-            </div>
-          </div>
-        ) : (
-          <div className="space-y-3">
-            {!selectedLayer && (
-              <p className="text-slate-400">Select a layer to browse rules.</p>
-            )}
-            {loading && <p className="text-slate-400">Loading...</p>}
-            {!loading && selectedLayer && nodes.length === 0 && (
-              <p className="text-slate-400">No nodes in this layer.</p>
-            )}
-            {nodes.length > 0 && (
-              <>
-                <p className="text-xs text-slate-500">
-                  Showing {nodes.length} of {totalCount} nodes
+        <div className="space-y-3">
+          {!selectedLayer && (
+            <p className="text-slate-400">Select a layer to browse rules.</p>
+          )}
+          {loading && <p className="text-slate-400">Loading...</p>}
+          {!loading && selectedLayer && nodes.length === 0 && (
+            <p className="text-slate-400">No nodes in this layer.</p>
+          )}
+          {nodes.length > 0 && (
+            <>
+              <p className="text-xs text-slate-500">
+                Showing {nodes.length} of {totalCount} nodes
+              </p>
+              {nodes.map((node: any) => (
+                <button
+                  key={node.id}
+                  onClick={() => viewNode(node.id)}
+                  className="w-full text-left bg-slate-900 border border-slate-800 rounded-lg p-3 hover:border-slate-700 transition-colors"
+                >
+                  <div className="flex items-center gap-2 mb-1">
+                    <span className="text-xs px-1.5 py-0.5 rounded bg-slate-700 text-slate-300">{node.category}</span>
+                    {node.factionId && <span className="text-xs text-slate-500">{node.factionId}</span>}
+                    {node.subfaction && <span className="text-xs text-amber-400">{node.subfaction}</span>}
+                  </div>
+                  <h3 className="text-sm font-medium text-slate-200">{node.title}</h3>
+                  <p className="text-xs text-slate-400 mt-1 line-clamp-2">{node.summary}</p>
+                </button>
+              ))}
+              {totalCount > nodes.length && (
+                <p className="text-xs text-slate-500 text-center py-2">
+                  Showing {nodes.length} of {totalCount}
                 </p>
-                {nodes.map((node: any) => (
-                  <button
-                    key={node.id}
-                    onClick={() => viewNode(node.id)}
-                    className="w-full text-left bg-slate-900 border border-slate-800 rounded-lg p-3 hover:border-slate-700 transition-colors"
-                  >
-                    <div className="flex items-center gap-2 mb-1">
-                      <span className="text-xs px-1.5 py-0.5 rounded bg-slate-700 text-slate-300">{node.category}</span>
-                      {node.factionId && <span className="text-xs text-slate-500">{node.factionId}</span>}
-                      {node.subfaction && <span className="text-xs text-amber-400">{node.subfaction}</span>}
-                    </div>
-                    <h3 className="text-sm font-medium text-slate-200">{node.title}</h3>
-                    <p className="text-xs text-slate-400 mt-1 line-clamp-2">{node.summary}</p>
-                  </button>
-                ))}
-                {totalCount > nodes.length && (
-                  <p className="text-xs text-slate-500 text-center py-2">
-                    Showing {nodes.length} of {totalCount}
-                  </p>
-                )}
-              </>
-            )}
-          </div>
-        )}
-      </div>
-    </div>
-  )
-}
-
-// ── SearchTab result detail ─────────────────────────────────────────────────
-
-function NodeDetailModal({ node, onClose }: { node: ResultNode; onClose: () => void }) {
-  return (
-    <div className="bg-slate-900 border border-amber-500/30 rounded-lg p-4 mb-4">
-      <div className="flex items-center justify-between mb-3">
-        <div className="flex items-center gap-2">
-          <span className="text-xs px-1.5 py-0.5 rounded bg-slate-700 text-slate-300">{node.category}</span>
-          {node.factionId && <span className="text-xs text-slate-400">{node.factionId}</span>}
-          {node.subfaction && <span className="text-xs text-amber-400">{node.subfaction}</span>}
+              )}
+            </>
+          )}
         </div>
-        <button onClick={onClose} className="text-xs text-slate-500 hover:text-slate-300">&times; Close</button>
       </div>
-      <h2 className="text-lg font-bold text-slate-100 mb-2">{node.title}</h2>
-      {node.parentUnit && <p className="text-xs text-slate-400 italic mb-2">on {node.parentUnit}</p>}
-      <div
-        className="text-sm text-slate-300"
-        dangerouslySetInnerHTML={{ __html: renderMarkdown(node.content || node.summary) }}
-      />
     </div>
   )
 }
@@ -496,6 +583,19 @@ function NodeDetailModal({ node, onClose }: { node: ResultNode; onClose: () => v
 
 export function BrainScreen() {
   const [tab, setTab] = useState<'ask' | 'search' | 'browse' | 'graph'>('ask')
+  const [activeCard, setActiveCard] = useState<CardData | null>(null)
+
+  function handleOpenCard(node: ResultNode) {
+    setActiveCard(buildCardFromNode(node))
+  }
+
+  const cardContext: CardContext = {
+    highlightTerms: [],
+    onContentClick: (_term) => {
+      setActiveCard(null)
+    },
+    onDismiss: () => setActiveCard(null),
+  }
 
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100">
@@ -524,15 +624,22 @@ export function BrainScreen() {
       </header>
 
       {tab === 'browse' ? (
-        <BrowseTab />
+        <BrowseTab onOpenCard={handleOpenCard} />
       ) : tab === 'graph' ? (
         <ForceGraph />
       ) : (
         <main className="flex-1 p-4 max-w-4xl mx-auto">
-          {tab === 'ask' && <AskTab />}
-          {tab === 'search' && <SearchTab />}
+          {tab === 'ask' && <AskTab onOpenCard={handleOpenCard} />}
+          {tab === 'search' && <SearchTab onOpenCard={handleOpenCard} />}
         </main>
       )}
+
+      <Overlay open={!!activeCard} onDismiss={() => setActiveCard(null)}>
+        {activeCard?.type === 'unit' && <UnitCard data={activeCard.data} context={cardContext} />}
+        {activeCard?.type === 'stratagem' && <StratagemCard data={activeCard.data} context={cardContext} />}
+        {activeCard?.type === 'enhancement' && <EnhancementCard data={activeCard.data} context={cardContext} />}
+        {activeCard?.type === 'rule' && <RuleCard data={activeCard.data} context={cardContext} />}
+      </Overlay>
     </div>
   )
 }
