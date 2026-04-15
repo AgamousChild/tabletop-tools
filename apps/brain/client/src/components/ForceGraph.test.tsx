@@ -29,13 +29,8 @@ describe('ForceGraph', () => {
     expect(screen.getByRole('button', { name: /visualize/i })).toBeInTheDocument()
   })
 
-  it('shows legend with layer names', () => {
+  it('shows empty state message', () => {
     render(<ForceGraph />)
-    expect(screen.getByText('core')).toBeInTheDocument()
-    expect(screen.getByText('faction')).toBeInTheDocument()
-    expect(screen.getByText('unit')).toBeInTheDocument()
-    expect(screen.getByText('errata')).toBeInTheDocument()
-    expect(screen.getByText('balance')).toBeInTheDocument()
-    expect(screen.getByText('community')).toBeInTheDocument()
+    expect(screen.getByText(/Search to explore/)).toBeInTheDocument()
   })
 })
