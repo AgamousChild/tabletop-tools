@@ -1,0 +1,107 @@
+import { describe, it, expect, vi } from 'vitest'
+import { render, screen, fireEvent } from '@testing-library/react'
+import { StratagemCard } from './StratagemCard'
+import type { StratagemCardData, CardContext } from './types'
+
+const mockStratagem: StratagemCardData = {
+  id: 'det:space-marines:forgefathers-seekers:immolation-protocols',
+  name: 'Immolation Protocols',
+  type: "Forgefather's Seekers — Battle Tactic Stratagem",
+  cpCost: '2',
+  turn: 'Your turn',
+  phase: 'Shooting phase',
+  when: 'Your Shooting phase.',
+  target: 'One ADEPTUS ASTARTES unit from your army that has not been selected to shoot this phase.',
+  effect: 'Until the end of the phase, Torrent weapons equipped by models in your unit have the [DEVASTATING WOUNDS] ability.',
+  detachmentName: "Forgefather's Seekers",
+  factionId: 'space-marines',
+}
+
+const baseContext: CardContext = {
+  highlightTerms: [],
+  onContentClick: vi.fn(),
+  onDismiss: vi.fn(),
+}
+
+describe('StratagemCard', () => {
+  it('renders stratagem name', () => {
+    render(<StratagemCard data={mockStratagem} context={baseContext} />)
+    expect(screen.getByText('Immolation Protocols')).toBeInTheDocument()
+  })
+
+  it('renders CP cost', () => {
+    render(<StratagemCard data={mockStratagem} context={baseContext} />)
+    expect(screen.getByText('2')).toBeInTheDocument()
+  })
+
+  it('renders type line', () => {
+    render(<StratagemCard data={mockStratagem} context={baseContext} />)
+    expect(screen.getByText("Forgefather's Seekers — Battle Tactic Stratagem")).toBeInTheDocument()
+  })
+
+  it('renders WHEN section with label and text', () => {
+    render(<StratagemCard data={mockStratagem} context={baseContext} />)
+    expect(screen.getByText('WHEN')).toBeInTheDocument()
+    expect(screen.getByText('Your Shooting phase.')).toBeInTheDocument()
+  })
+
+  it('renders TARGET section', () => {
+    render(<StratagemCard data={mockStratagem} context={baseContext} />)
+    expect(screen.getByText('TARGET')).toBeInTheDocument()
+    expect(screen.getByText(/One ADEPTUS ASTARTES unit/)).toBeInTheDocument()
+  })
+
+  it('renders EFFECT section', () => {
+    render(<StratagemCard data={mockStratagem} context={baseContext} />)
+    expect(screen.getByText('EFFECT')).toBeInTheDocument()
+    expect(screen.getByText(/Torrent weapons equipped by models/)).toBeInTheDocument()
+  })
+
+  it('renders detachment name', () => {
+    render(<StratagemCard data={mockStratagem} context={baseContext} />)
+    expect(screen.getByText("Forgefather's Seekers")).toBeInTheDocument()
+  })
+
+  it('highlights EFFECT section when highlightTerms match effect text', () => {
+    const context: CardContext = {
+      ...baseContext,
+      highlightTerms: ['DEVASTATING WOUNDS'],
+    }
+    render(<StratagemCard data={mockStratagem} context={context} />)
+    const effectSection = screen.getByTestId('section-effect')
+    expect(effectSection).toHaveClass('bg-amber-400/10')
+  })
+
+  it('does not highlight EFFECT section when highlightTerms do not match', () => {
+    const context: CardContext = {
+      ...baseContext,
+      highlightTerms: ['something unrelated'],
+    }
+    render(<StratagemCard data={mockStratagem} context={context} />)
+    const effectSection = screen.getByTestId('section-effect')
+    expect(effectSection).not.toHaveClass('bg-amber-400/10')
+  })
+
+  it('does not highlight WHEN section when highlightTerms do not match its text', () => {
+    const context: CardContext = {
+      ...baseContext,
+      highlightTerms: ['DEVASTATING WOUNDS'],
+    }
+    render(<StratagemCard data={mockStratagem} context={context} />)
+    const whenSection = screen.getByTestId('section-when')
+    expect(whenSection).not.toHaveClass('bg-amber-400/10')
+  })
+
+  it('calls onContentClick when a keyword in the text is clicked', () => {
+    const onContentClick = vi.fn()
+    const context: CardContext = {
+      ...baseContext,
+      onContentClick,
+    }
+    render(<StratagemCard data={mockStratagem} context={context} />)
+    // DEVASTATING WOUNDS appears in brackets in the effect text — it's a clickable keyword
+    const keyword = screen.getByText('[DEVASTATING WOUNDS]')
+    fireEvent.click(keyword)
+    expect(onContentClick).toHaveBeenCalledWith('DEVASTATING WOUNDS')
+  })
+})
