@@ -231,7 +231,7 @@ export function ForceGraph() {
   }, [])
 
   const onNodeClick = useCallback((_: any, node: RFNode) => {
-    const data = node.data as BrainNodeData
+    const data = node.data as unknown as BrainNodeData
     setSelectedNode(data)
 
     // Double-click behavior: re-center on this node
