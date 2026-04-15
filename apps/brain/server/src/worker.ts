@@ -130,6 +130,20 @@ app.get('/data/:path{.+}', async (c) => {
   return c.body(await obj.text())
 })
 
+app.get('/pages/:path{.+}', async (c) => {
+  const path = c.req.param('path')
+  if (!path.endsWith('.png')) {
+    return c.json({ error: 'Invalid file' }, 400)
+  }
+  const obj = await c.env.BRAIN_BUCKET.get(`pages/${path}`)
+  if (!obj) {
+    return c.json({ error: 'Page not found' }, 404)
+  }
+  c.header('Cache-Control', 'public, max-age=86400')
+  c.header('Content-Type', 'image/png')
+  return c.body(await obj.arrayBuffer())
+})
+
 // ── Search endpoint (Vectorize) ─────────────────────────────────────────────
 
 app.post('/search', async (c) => {
