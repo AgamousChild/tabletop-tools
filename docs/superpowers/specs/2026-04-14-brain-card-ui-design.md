@@ -138,7 +138,7 @@ Every named element across ALL brain views (Ask, Search, Browse, Graph) becomes 
 
 Cards NEVER link to other cards. Every click on card content goes back to the brain.
 
-3. **Click "applies to X datasheets" on army rule card** — expands inline to show the actual unit list (from modifies refs). Each unit name in the list is clickable to open its unit card overlay. This is the one exception where a card can open another card — but only from the army rule's unit list.
+3. **Click "applies to X datasheets" on army rule card** — closes the overlay, re-queries the brain with the army rule name as a filter. The results show the units that have the rule. No exceptions — cards never open other cards.
 
 ### Graph Specific
 
