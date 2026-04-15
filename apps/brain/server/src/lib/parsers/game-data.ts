@@ -283,7 +283,7 @@ export function convertGameData(input: GameDataInput, retrievedAt?: string): Gam
   const legendsIds = new Set(
     input.datasheets.filter(isLegends).map(d => d.id)
   )
-  const filteredDatasheets = input.datasheets.filter(d => !isLegends(d))
+  const filteredDatasheets = input.datasheets.filter(d => !isLegends(d) && !isTestData(d))
   const filteredWargear = input.datasheetWargear.filter(w => !legendsIds.has(w.datasheetId))
   const filteredModels = input.datasheetModels.filter(m => !legendsIds.has(m.datasheetId))
   const filteredUnitAbilities = input.unitAbilities.filter(a => !legendsIds.has(a.datasheetId))

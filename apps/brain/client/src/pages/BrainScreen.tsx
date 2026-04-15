@@ -128,21 +128,61 @@ function extractContentField(content: string, field: string): string {
   return m ? m[1].trim() : ''
 }
 
-/** Filter internal keywords (t5, sv3+, pts-90, etc.) from display */
+/** Filter internal keywords from display, separate faction keywords */
 function filterDisplayKeywords(keywords: string[]): { display: string[]; faction: string[] } {
   const internal = /^(t\d|sv\d|w\d|pts-|ppw-|moderate|cheap|expensive|premium|heavy-|light-|standard-|elite-|super-|titanic|toughness-|save-|wounds-|damage-|strength-|invuln-|ap-|ap\d|s\d|d\d|characters$|sustained hits|lethal hits|devastating wounds|hazardous|blast|torrent|twin-linked|rapid fire|melta|lance|anti$|ignores cover|indirect fire|pistol|heavy$|assault$|one shot)/
-  const faction = ['adeptus astartes', 'heretic astartes', 'orks', 'necrons', 'tyranids', 'aeldari', 't\'au empire', 'chaos', 'imperium', 'drukhari', 'leagues of votann']
+  const factionNames = [
+    'adeptus astartes', 'heretic astartes', 'orks', 'necrons', 'tyranids',
+    'aeldari', "t'au empire", 'chaos', 'imperium', 'drukhari',
+    'leagues of votann', 'adeptus custodes', 'adeptus mechanicus',
+    'adepta sororitas', 'genestealer cults', 'death guard',
+    'thousand sons', 'world eaters', 'chaos daemons', 'grey knights',
+    'imperial agents', 'imperial knights', 'chaos knights',
+    'astra militarum', 'agents of the imperium',
+  ]
   const display: string[] = []
   const factionKw: string[] = []
   for (const kw of keywords) {
     if (internal.test(kw)) continue
-    if (faction.some(f => kw.toLowerCase() === f)) {
+    if (factionNames.some(f => kw.toLowerCase() === f)) {
       factionKw.push(kw)
     } else if (kw.length > 1) {
       display.push(kw)
     }
   }
   return { display, faction: factionKw }
+}
+
+/**
+ * Derive the unit type designation from keywords.
+ * Priority hierarchy — most specific wins. No "Other".
+ */
+function deriveUnitType(keywords: string[]): string {
+  const kw = new Set(keywords.map(k => k.toLowerCase()))
+  const factionId = (fid: string) => kw.has(fid)
+
+  if (kw.has('epic hero')) return 'Epic Hero'
+  if (factionId('imperial knights')) return 'Imperial Knight'
+  if (factionId('chaos knights')) return 'Chaos Knight'
+  // Daemon + mechanical chassis = Daemon Engine (Forgefiend, Defiler, Heldrake, etc.)
+  if (kw.has('daemon') && (kw.has('vehicle') || kw.has('walker') || kw.has('dreadnought'))) return 'Daemon Engine'
+  if (kw.has('daemon')) return 'Daemon'
+  if (kw.has('dreadknight')) return 'Dreadknight'
+  if (kw.has('dreadnought')) return 'Dreadnought'
+  if (kw.has('battlesuit')) return 'Battlesuit'
+  if (kw.has('monster')) return 'Monster'
+  if (kw.has('towering')) return 'Towering'
+  if (kw.has('walker')) return 'Walker'
+  if (kw.has('vehicle')) return 'Vehicle'
+  if (kw.has('beast') || kw.has('beasts')) return 'Beast'
+  if (kw.has('fortification')) return 'Fortification'
+  if (kw.has('mounted') && !kw.has('character')) return 'Mounted'
+  if (kw.has('battleline')) return 'Battleline'
+  if (kw.has('swarm')) return 'Swarm'
+  if (kw.has('character')) return 'Character'
+  if (kw.has('infantry')) return 'Infantry'
+
+  return '' // no "Other"
 }
 
 function buildUnitData(node: ResultNode) {
@@ -153,14 +193,22 @@ function buildUnitData(node: ResultNode) {
   const points = extractContentField(content, 'Points')
   const composition = extractContentField(content, 'Composition')
   const loadout = extractContentField(content, 'Loadout')
-  const role = extractContentField(content, 'Role') || node.layer
+
+  // Derive unit type from keywords (not the raw role field)
+  const allKeywords = node.keywords || []
+  const role = deriveUnitType(allKeywords)
 
   // Filter keywords for display
-  const { display: displayKeywords, faction: factionKeywords } = filterDisplayKeywords(node.keywords || [])
+  const { display: displayKeywords, faction: factionKeywords } = filterDisplayKeywords(allKeywords)
 
-  // Core abilities from keywords
-  const coreAbilityNames = ['grenades', 'deep strike', 'lone operative', 'stealth', 'scouts', 'infiltrators', 'deadly demise', 'feel no pain', 'fights first', 'firing deck']
+  // Core abilities from keywords — include FNP with its value if present
+  const coreAbilityNames = ['grenades', 'deep strike', 'lone operative', 'stealth', 'scouts', 'infiltrators', 'deadly demise', 'fights first', 'firing deck']
   const coreAbilities = displayKeywords.filter(k => coreAbilityNames.includes(k.toLowerCase()))
+
+  // Feel No Pain — extract the value from keywords (e.g., 'feel no pain' keyword)
+  // The actual FNP value comes from the ability text, but we can check for it
+  const hasFnp = allKeywords.some(k => k.toLowerCase() === 'feel no pain')
+  if (hasFnp) coreAbilities.push('Feel No Pain')
 
   return {
     id: node.id,
