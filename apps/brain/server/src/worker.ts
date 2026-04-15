@@ -105,6 +105,38 @@ app.get('/browse/node/:id', async (c) => {
   return c.json({ error: 'Node not found' }, 404)
 })
 
+app.get('/browse/unit/:id', async (c) => {
+  const id = decodeURIComponent(c.req.param('id'))
+  const bucket = c.env.BRAIN_BUCKET
+  const manifestObj = await bucket.get('manifest.json')
+  if (!manifestObj) return c.json({ error: 'No data' }, 404)
+  const manifest = await manifestObj.json() as { files: Record<string, string> }
+
+  let datasheet: Node | null = null
+  const weapons: Node[] = []
+  const abilities: Node[] = []
+
+  for (const file of Object.keys(manifest.files)) {
+    if (!file.startsWith('nodes/')) continue
+    const obj = await bucket.get(file)
+    if (!obj) continue
+    const nodes = await obj.json() as Node[]
+    for (const n of nodes) {
+      if (n.id === id && n.category === 'datasheet') {
+        datasheet = n
+      } else if (n.datasheetId === id && n.category === 'weapon') {
+        weapons.push(n)
+      } else if (n.datasheetId === id && n.category === 'unit-ability') {
+        abilities.push(n)
+      }
+    }
+  }
+
+  if (!datasheet) return c.json({ error: 'Unit not found' }, 404)
+
+  return c.json({ datasheet, weapons, abilities })
+})
+
 // ── Data endpoints (serve from R2) ──────────────────────────────────────────
 
 app.get('/manifest.json', async (c) => {

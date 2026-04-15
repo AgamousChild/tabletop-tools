@@ -119,32 +119,135 @@ function parseStratagemFields(content: string) {
   }
 }
 
+/** Parse content sections like **Points:** or **Composition:** */
+function extractContentField(content: string, field: string): string {
+  const re = new RegExp(`\\*\\*${field}:\\*\\*\\s*([\\s\\S]*?)(?=\\*\\*[A-Z]|$)`, 'i')
+  const m = content.match(re)
+  return m ? m[1].trim() : ''
+}
+
+/** Filter internal keywords (t5, sv3+, pts-90, etc.) from display */
+function filterDisplayKeywords(keywords: string[]): { display: string[]; faction: string[] } {
+  const internal = /^(t\d|sv\d|w\d|pts-|ppw-|moderate|cheap|expensive|premium|heavy-|light-|standard-|elite-|super-|titanic|toughness-|save-|wounds-|damage-|strength-|invuln-|ap-|ap\d|s\d|d\d)/
+  const faction = ['adeptus astartes', 'heretic astartes', 'orks', 'necrons', 'tyranids', 'aeldari', 't\'au empire', 'chaos', 'imperium', 'drukhari', 'leagues of votann']
+  const display: string[] = []
+  const factionKw: string[] = []
+  for (const kw of keywords) {
+    if (internal.test(kw)) continue
+    if (faction.some(f => kw.toLowerCase() === f)) {
+      factionKw.push(kw)
+    } else if (kw.length > 1) {
+      display.push(kw)
+    }
+  }
+  return { display, faction: factionKw }
+}
+
 function buildUnitData(node: ResultNode) {
   const stats = parseStatLine(node.content || '')
-  const rangedLines = parseWeapons(node.content || '', 'Ranged weapons')
-  const meleeLines = parseWeapons(node.content || '', 'Melee weapons')
+  const content = node.content || ''
+
+  // Extract structured fields from content
+  const points = extractContentField(content, 'Points')
+  const composition = extractContentField(content, 'Composition')
+  const loadout = extractContentField(content, 'Loadout')
+  const role = extractContentField(content, 'Role') || node.layer
+
+  // Filter keywords for display
+  const { display: displayKeywords, faction: factionKeywords } = filterDisplayKeywords(node.keywords || [])
+
+  // Core abilities from keywords
+  const coreAbilityNames = ['grenades', 'deep strike', 'lone operative', 'stealth', 'scouts', 'infiltrators', 'deadly demise', 'feel no pain', 'fights first', 'firing deck']
+  const coreAbilities = displayKeywords.filter(k => coreAbilityNames.includes(k.toLowerCase()))
 
   return {
     id: node.id,
     name: node.title,
     factionId: node.factionId || '',
     subfaction: node.subfaction,
-    role: node.layer,
-    points: '',
+    role,
+    points,
     stats,
-    rangedWeapons: rangedLines.length > 0
-      ? [{ name: rangedLines[0] || '', range: '', attacks: '', skill: '', strength: '', ap: '', damage: '', abilities: rangedLines.slice(1).join(', ') }]
-      : [],
-    meleeWeapons: meleeLines.length > 0
-      ? [{ name: meleeLines[0] || '', range: 'Melee', attacks: '', skill: '', strength: '', ap: '', damage: '', abilities: meleeLines.slice(1).join(', ') }]
-      : [],
-    abilities: [],
-    coreAbilities: [],
-    keywords: node.keywords || [],
-    factionKeywords: [],
-    composition: '',
-    loadout: '',
+    rangedWeapons: [] as any[],  // populated async from /browse/unit/:id
+    meleeWeapons: [] as any[],
+    abilities: [] as any[],
+    coreAbilities,
+    keywords: displayKeywords.filter(k => !coreAbilityNames.includes(k.toLowerCase())),
+    factionKeywords,
+    composition,
+    loadout,
     leaders: [],
+  }
+}
+
+/** Fetch full unit data (datasheet + weapons + abilities) from API */
+async function fetchFullUnitData(nodeId: string, node: ResultNode): Promise<import('../components/cards/types').UnitCardData> {
+  const base = buildUnitData(node)
+
+  try {
+    const res = await fetch(`${API_BASE}/browse/unit/${encodeURIComponent(nodeId)}`)
+    if (!res.ok) return base
+
+    const data = await res.json() as {
+      datasheet: any
+      weapons: Array<{ title: string; content: string; summary: string; category: string }>
+      abilities: Array<{ title: string; content: string; summary: string; category: string; keywords: string[] }>
+    }
+
+    // Parse weapons from weapon nodes
+    const ranged: any[] = []
+    const melee: any[] = []
+    for (const w of data.weapons) {
+      // Summary format: "Name (Type) — Range, AttA, SKILL, SSTR, APAP, DDAM. [abilities]"
+      const m = w.summary.match(/^(.+?)\s*\((\w+)\)\s*—\s*(\S+),\s*(\S+),\s*\S(\d+),\s*AP(\S+),\s*D(\S+)/)
+      const abMatch = w.summary.match(/\[([^\]]+)\]/g)
+      const abilities = abMatch ? abMatch.join(' ') : ''
+
+      // Parse from content which has structured format
+      const rangeMatch = w.content.match(/\*\*Range:\*\*\s*(\S+)/)
+      const aMatch = w.content.match(/\*\*A:\*\*\s*(\S+)/)
+      const skillMatch = w.content.match(/\*\*BS\/WS:\*\*\s*(\S+)/)
+      const sMatch = w.content.match(/\*\*S:\*\*\s*(\S+)/)
+      const apMatch = w.content.match(/\*\*AP:\*\*\s*(\S+)/)
+      const dMatch = w.content.match(/\*\*D:\*\*\s*(\S+)/)
+
+      const profile = {
+        name: w.title,
+        range: rangeMatch?.[1] || (m?.[3] ?? ''),
+        attacks: aMatch?.[1] || (m?.[4] ?? ''),
+        skill: skillMatch?.[1] || '',
+        strength: sMatch?.[1] || '',
+        ap: apMatch?.[1] || '',
+        damage: dMatch?.[1] || '',
+        abilities,
+      }
+
+      const isRanged = w.content.includes('**Type:** Ranged') || w.summary.includes('(Ranged)')
+      if (isRanged) {
+        ranged.push(profile)
+      } else {
+        melee.push(profile)
+      }
+    }
+
+    // Parse abilities from ability nodes
+    const unitAbilities = data.abilities.map(a => ({
+      name: a.title,
+      description: a.content || a.summary,
+      type: a.keywords?.includes('faction') ? 'Faction' : 'Datasheet',
+    }))
+
+    // Extract leaders from forward refs if available
+    // For now, leaders come from leader_attachments — the browse/unit endpoint could be extended
+
+    return {
+      ...base,
+      rangedWeapons: ranged,
+      meleeWeapons: melee,
+      abilities: unitAbilities,
+    }
+  } catch {
+    return base
   }
 }
 
@@ -764,11 +867,19 @@ export function BrainScreen() {
     }
   }
 
-  function handleOpenCard(node: ResultNode) {
+  async function handleOpenCard(node: ResultNode) {
     if (node.category === 'detachment-rule') {
       openDetachmentPage(node)
       return
     }
+
+    // For unit cards, fetch full data (weapons + abilities) from API
+    if (node.category === 'datasheet') {
+      const unitData = await fetchFullUnitData(node.id, node)
+      setActiveCard({ type: 'unit', data: unitData })
+      return
+    }
+
     setActiveCard(buildCardFromNode(node))
   }
 
