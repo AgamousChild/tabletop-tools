@@ -1,15 +1,17 @@
 declare const __APP_VERSION__: string
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { ForceGraph } from '../components/ForceGraph'
 import { ResultCard } from '../components/ResultCard'
 import { FactionBanner } from '../components/FactionBanner'
 import { Overlay } from '../components/Overlay'
+import { LinkedText } from '../components/LinkedText'
 import { UnitCard } from '../components/cards/UnitCard'
 import { StratagemCard } from '../components/cards/StratagemCard'
 import { EnhancementCard } from '../components/cards/EnhancementCard'
 import { RuleCard } from '../components/cards/RuleCard'
 import type { CardData, CardContext } from '../components/cards/types'
+import { type EntityMap } from '../lib/entity-linker'
 
 const API_BASE = import.meta.env.VITE_BRAIN_API_URL || '/brain/api'
 
@@ -205,6 +207,30 @@ function buildCardFromNode(node: ResultNode): CardData {
   }
 }
 
+// ── Entity map builder ───────────────────────────────────────────────────────
+
+function buildEntityMap(nodes: ResultNode[], keywords?: string[]): EntityMap {
+  const map: EntityMap = new Map()
+  for (const node of nodes) {
+    const type =
+      node.category === 'datasheet' ? 'unit'
+      : node.category === 'stratagem' ? 'stratagem'
+      : node.category === 'enhancement' ? 'enhancement'
+      : node.category === 'faction-ability' || node.category === 'detachment-rule' ? 'rule'
+      : 'mechanic'
+    map.set(node.title.toLowerCase(), { type, nodeId: node.id })
+  }
+  if (keywords) {
+    for (const kw of keywords) {
+      const key = kw.toLowerCase()
+      if (!map.has(key)) {
+        map.set(key, { type: 'mechanic', nodeId: kw })
+      }
+    }
+  }
+  return map
+}
+
 // ── AskTab ───────────────────────────────────────────────────────────────────
 
 interface QASource {
@@ -225,17 +251,20 @@ interface QAResponse {
 
 interface AskTabProps {
   onOpenCard: (node: ResultNode) => void
+  activeFilters: string[]
+  onFilterChange: (filters: string[]) => void
 }
 
-function AskTab({ onOpenCard }: AskTabProps) {
+function AskTab({ onOpenCard, activeFilters, onFilterChange }: AskTabProps) {
   const [question, setQuestion] = useState('')
   const [answer, setAnswer] = useState<QAResponse | null>(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [factionFilter, setFactionFilter] = useState(true)
+  const [entityMap, setEntityMap] = useState<EntityMap>(new Map())
 
-  async function handleAsk() {
-    if (!question.trim()) return
+  const doAsk = useCallback(async (q: string) => {
+    if (!q.trim()) return
     setLoading(true)
     setError(null)
     setAnswer(null)
@@ -245,7 +274,7 @@ function AskTab({ onOpenCard }: AskTabProps) {
       const res = await fetch(`${API_BASE}/ask`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ question }),
+        body: JSON.stringify({ question: q }),
       })
 
       if (!res.ok) {
@@ -255,11 +284,31 @@ function AskTab({ onOpenCard }: AskTabProps) {
 
       const data = await res.json() as QAResponse
       setAnswer(data)
+      setEntityMap(buildEntityMap(data.reference || [], data.detected?.keywords))
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to get answer')
     } finally {
       setLoading(false)
     }
+  }, [])
+
+  // Re-query when filters change (only if we have a question)
+  useEffect(() => {
+    if (!question.trim() || activeFilters.length === 0) return
+    const combined = [question, ...activeFilters].join(' ')
+    doAsk(combined)
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeFilters])
+
+  function handleAsk() {
+    const combined = activeFilters.length > 0
+      ? [question, ...activeFilters].join(' ')
+      : question
+    doAsk(combined)
+  }
+
+  function removeFilter(f: string) {
+    onFilterChange(activeFilters.filter(x => x !== f))
   }
 
   return (
@@ -281,6 +330,17 @@ function AskTab({ onOpenCard }: AskTabProps) {
           {loading ? 'Thinking...' : 'Ask'}
         </button>
       </div>
+
+      {activeFilters.length > 0 && (
+        <div className="flex gap-2 flex-wrap">
+          {activeFilters.map(f => (
+            <span key={f} className="text-xs bg-amber-500/20 text-amber-400 px-2 py-1 rounded flex items-center gap-1">
+              {f}
+              <button onClick={() => removeFilter(f)} className="text-amber-400/60 hover:text-amber-400">×</button>
+            </span>
+          ))}
+        </div>
+      )}
 
       {error && (
         <div className="bg-red-900/50 border border-red-700 rounded p-3 text-red-200 text-sm">
@@ -309,24 +369,34 @@ function AskTab({ onOpenCard }: AskTabProps) {
             <div className="mt-4">
               <h4 className="text-sm font-medium text-slate-400 uppercase mb-2">Reference</h4>
               {answer.reference.map((r, i) => (
-                <button
-                  key={r.id + '-' + i}
-                  onClick={() => onOpenCard(r)}
-                  className="w-full text-left"
-                >
-                  <ResultCard
-                    index={i + 1}
-                    title={r.title}
-                    summary={r.summary}
-                    layer={r.layer}
-                    category={r.category}
-                    score={r.score}
-                    factionId={r.factionId}
-                    subfaction={r.subfaction}
-                    phase={r.phase}
-                    parentUnit={r.parentUnit}
-                  />
-                </button>
+                <div key={r.id + '-' + i} className="mb-2">
+                  <button
+                    onClick={() => onOpenCard(r)}
+                    className="w-full text-left"
+                  >
+                    <ResultCard
+                      index={i + 1}
+                      title={r.title}
+                      summary={r.summary}
+                      layer={r.layer}
+                      category={r.category}
+                      score={r.score}
+                      factionId={r.factionId}
+                      subfaction={r.subfaction}
+                      phase={r.phase}
+                      parentUnit={r.parentUnit}
+                    />
+                  </button>
+                  {entityMap.size > 0 && r.summary && (
+                    <p className="text-xs text-slate-400 mt-1 px-3">
+                      <LinkedText
+                        text={r.summary}
+                        entities={entityMap}
+                        onEntityClick={(name) => onOpenCard(r)}
+                      />
+                    </p>
+                  )}
+                </div>
               ))}
             </div>
           )}
@@ -370,31 +440,54 @@ interface SearchResponse {
 
 interface SearchTabProps {
   onOpenCard: (node: ResultNode) => void
+  activeFilters: string[]
+  onFilterChange: (filters: string[]) => void
 }
 
-function SearchTab({ onOpenCard }: SearchTabProps) {
+function SearchTab({ onOpenCard, activeFilters, onFilterChange }: SearchTabProps) {
   const [query, setQuery] = useState('')
   const [response, setResponse] = useState<SearchResponse | null>(null)
   const [loading, setLoading] = useState(false)
   const [factionFilter, setFactionFilter] = useState(true)
+  const [entityMap, setEntityMap] = useState<EntityMap>(new Map())
 
-  async function handleSearch() {
-    if (!query.trim()) return
+  const doSearch = useCallback(async (q: string) => {
+    if (!q.trim()) return
     setLoading(true)
     setFactionFilter(true)
     try {
       const res = await fetch(`${API_BASE}/search`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ query, limit: 20 }),
+        body: JSON.stringify({ query: q, limit: 20 }),
       })
-      const data = await res.json()
+      const data = await res.json() as SearchResponse
       setResponse(data)
+      setEntityMap(buildEntityMap(data.results || [], data.detected?.keywords))
     } catch {
       setResponse(null)
     } finally {
       setLoading(false)
     }
+  }, [])
+
+  // Re-query when filters change (only if we have a query)
+  useEffect(() => {
+    if (!query.trim() || activeFilters.length === 0) return
+    const combined = [query, ...activeFilters].join(' ')
+    doSearch(combined)
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeFilters])
+
+  function handleSearch() {
+    const combined = activeFilters.length > 0
+      ? [query, ...activeFilters].join(' ')
+      : query
+    doSearch(combined)
+  }
+
+  function removeFilter(f: string) {
+    onFilterChange(activeFilters.filter(x => x !== f))
   }
 
   const detected = response?.detected
@@ -429,6 +522,17 @@ function SearchTab({ onOpenCard }: SearchTabProps) {
         </button>
       </div>
 
+      {activeFilters.length > 0 && (
+        <div className="flex gap-2 flex-wrap">
+          {activeFilters.map(f => (
+            <span key={f} className="text-xs bg-amber-500/20 text-amber-400 px-2 py-1 rounded flex items-center gap-1">
+              {f}
+              <button onClick={() => removeFilter(f)} className="text-amber-400/60 hover:text-amber-400">×</button>
+            </span>
+          ))}
+        </div>
+      )}
+
       {factionFilter && detected && detected.factions.length > 0 && (
         <FactionBanner
           factions={detected.factions}
@@ -440,24 +544,34 @@ function SearchTab({ onOpenCard }: SearchTabProps) {
       {visibleResults.length > 0 && (
         <div className="space-y-2">
           {visibleResults.map((r, i) => (
-            <button
-              key={r.id + '-' + i}
-              onClick={() => onOpenCard(r)}
-              className="w-full text-left"
-            >
-              <ResultCard
-                index={i + 1}
-                title={r.title}
-                summary={r.summary}
-                layer={r.layer}
-                category={r.category}
-                score={r.score}
-                factionId={r.factionId}
-                subfaction={r.subfaction}
-                phase={r.phase}
-                parentUnit={r.parentUnit}
-              />
-            </button>
+            <div key={r.id + '-' + i} className="mb-2">
+              <button
+                onClick={() => onOpenCard(r)}
+                className="w-full text-left"
+              >
+                <ResultCard
+                  index={i + 1}
+                  title={r.title}
+                  summary={r.summary}
+                  layer={r.layer}
+                  category={r.category}
+                  score={r.score}
+                  factionId={r.factionId}
+                  subfaction={r.subfaction}
+                  phase={r.phase}
+                  parentUnit={r.parentUnit}
+                />
+              </button>
+              {entityMap.size > 0 && r.summary && (
+                <p className="text-xs text-slate-400 mt-1 px-3">
+                  <LinkedText
+                    text={r.summary}
+                    entities={entityMap}
+                    onEntityClick={(name) => onOpenCard(r)}
+                  />
+                </p>
+              )}
+            </div>
           ))}
           {totalCount > MAX_DISPLAY && (
             <p className="text-xs text-slate-500 text-center py-2">
@@ -584,17 +698,27 @@ function BrowseTab({ onOpenCard }: BrowseTabProps) {
 export function BrainScreen() {
   const [tab, setTab] = useState<'ask' | 'search' | 'browse' | 'graph'>('ask')
   const [activeCard, setActiveCard] = useState<CardData | null>(null)
+  const [activeFilters, setActiveFilters] = useState<string[]>([])
 
   function handleOpenCard(node: ResultNode) {
     setActiveCard(buildCardFromNode(node))
   }
 
   const cardContext: CardContext = {
-    highlightTerms: [],
-    onContentClick: (_term) => {
+    highlightTerms: activeFilters,
+    onContentClick: (term: string) => {
       setActiveCard(null)
+      setActiveFilters(prev => prev.includes(term) ? prev : [...prev, term])
     },
     onDismiss: () => setActiveCard(null),
+  }
+
+  // Clear filters when switching tabs
+  function handleTabSwitch(t: 'ask' | 'search' | 'browse' | 'graph') {
+    if (t !== tab) {
+      setActiveFilters([])
+    }
+    setTab(t)
   }
 
   return (
@@ -609,7 +733,7 @@ export function BrainScreen() {
             {(['ask', 'search', 'browse', 'graph'] as const).map((t) => (
               <button
                 key={t}
-                onClick={() => setTab(t)}
+                onClick={() => handleTabSwitch(t)}
                 className={`px-3 py-1.5 text-sm rounded ${
                   tab === t
                     ? 'bg-amber-500 text-slate-950 font-medium'
@@ -629,8 +753,20 @@ export function BrainScreen() {
         <ForceGraph />
       ) : (
         <main className="flex-1 p-4 max-w-4xl mx-auto">
-          {tab === 'ask' && <AskTab onOpenCard={handleOpenCard} />}
-          {tab === 'search' && <SearchTab onOpenCard={handleOpenCard} />}
+          {tab === 'ask' && (
+            <AskTab
+              onOpenCard={handleOpenCard}
+              activeFilters={activeFilters}
+              onFilterChange={setActiveFilters}
+            />
+          )}
+          {tab === 'search' && (
+            <SearchTab
+              onOpenCard={handleOpenCard}
+              activeFilters={activeFilters}
+              onFilterChange={setActiveFilters}
+            />
+          )}
         </main>
       )}
 
