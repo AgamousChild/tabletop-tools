@@ -131,7 +131,7 @@ function extractContentField(content: string, field: string): string {
 
 /** Filter internal keywords from display, separate faction keywords */
 function filterDisplayKeywords(keywords: string[]): { display: string[]; faction: string[] } {
-  const internal = /^(t\d|sv\d|w\d|pts-|ppw-|moderate|cheap|expensive|premium|heavy-|light-|standard-|elite-|super-|titanic|toughness-|save-|wounds-|damage-|strength-|invuln-|ap-|ap\d|s\d|d\d|characters$|sustained hits|lethal hits|devastating wounds|hazardous|blast|torrent|twin-linked|rapid fire|melta|lance|anti$|ignores cover|indirect fire|pistol|heavy$|assault$|one shot)/
+  const internal = /^(t\d|sv\d|w\d|pts-|ppw-|moderate|cheap|expensive|premium|heavy-|light-|standard-|elite-|super-|titanic|toughness-|save-|wounds-|damage-|strength-|invuln-|ap-|ap\d|s\d|d\d|fnp-|feel no pain$|type:|characters$|sustained hits|lethal hits|devastating wounds|hazardous|blast|torrent|twin-linked|rapid fire|melta|lance|anti$|ignores cover|indirect fire|pistol|heavy$|assault$|one shot)/
   const factionNames = [
     'adeptus astartes', 'heretic astartes', 'orks', 'necrons', 'tyranids',
     'aeldari', "t'au empire", 'chaos', 'imperium', 'drukhari',
@@ -177,14 +177,13 @@ function buildUnitData(node: ResultNode) {
   // Filter keywords for display
   const { display: displayKeywords, faction: factionKeywords } = filterDisplayKeywords(allKeywords)
 
-  // Core abilities from keywords — include FNP with its value if present
+  // Core abilities from keywords
   const coreAbilityNames = ['grenades', 'deep strike', 'lone operative', 'stealth', 'scouts', 'infiltrators', 'deadly demise', 'fights first', 'firing deck']
   const coreAbilities = displayKeywords.filter(k => coreAbilityNames.includes(k.toLowerCase()))
 
-  // Feel No Pain — extract the value from keywords (e.g., 'feel no pain' keyword)
-  // The actual FNP value comes from the ability text, but we can check for it
-  const hasFnp = allKeywords.some(k => k.toLowerCase() === 'feel no pain')
-  if (hasFnp) coreAbilities.push('Feel No Pain')
+  // Feel No Pain — extract value from fnp-X keyword (set by server parser)
+  const fnpKeyword = allKeywords.find(k => /^fnp-\d$/.test(k))
+  const fnpValue = fnpKeyword ? `${fnpKeyword.replace('fnp-', '')}++` : undefined
 
   return {
     id: node.id,
@@ -194,7 +193,7 @@ function buildUnitData(node: ResultNode) {
     role,
     derivedType: role,
     points,
-    stats,
+    stats: { ...stats, ...(fnpValue ? { fnp: fnpValue } : {}) },
     rangedWeapons: [] as any[],  // populated async from /browse/unit/:id
     meleeWeapons: [] as any[],
     abilities: [] as any[],

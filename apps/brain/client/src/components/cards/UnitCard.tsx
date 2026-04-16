@@ -174,6 +174,7 @@ export function UnitCard({ data, context }: UnitCardProps) {
           { label: 'LD', value: stats.leadership },
           { label: 'OC', value: stats.oc },
           ...(stats.invSv ? [{ label: 'INV', value: stats.invSv }] : []),
+          ...(stats.fnp ? [{ label: 'FNP', value: stats.fnp }] : []),
         ].map(({ label, value }) => (
           <div key={label} className="flex flex-col items-center min-w-[32px]">
             <span className="text-[9px] text-slate-400 uppercase tracking-widest font-medium">{label}</span>

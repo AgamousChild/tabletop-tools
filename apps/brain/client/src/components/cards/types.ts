@@ -8,7 +8,7 @@ export interface UnitCardData {
   points: string
   stats: {
     move: string; toughness: string; save: string; wounds: string;
-    leadership: string; oc: string; invSv?: string
+    leadership: string; oc: string; invSv?: string; fnp?: string
   }
   rangedWeapons: WeaponProfile[]
   meleeWeapons: WeaponProfile[]

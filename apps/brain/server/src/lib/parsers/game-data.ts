@@ -494,7 +494,27 @@ export function convertGameData(input: GameDataInput, retrievedAt?: string): Gam
     if (allAbilityText.includes('scouts')) node.keywords.push('scouts')
     if (allAbilityText.includes('infiltrator')) node.keywords.push('infiltrators')
     if (allAbilityText.includes('deadly demise')) node.keywords.push('deadly demise')
-    if (allAbilityText.includes('feel no pain')) node.keywords.push('feel no pain')
+    // Feel No Pain — check ability descriptions AND core ability parameters
+    const fnpValues: number[] = []
+    // From ability text (e.g. "have the Feel No Pain 5+ ability")
+    const fnpTextMatches = allAbilityText.match(/feel no pain (\d)\+/g)
+    if (fnpTextMatches) {
+      for (const m of fnpTextMatches) {
+        const v = parseInt(m.match(/(\d)\+/)![1]!)
+        if (!isNaN(v)) fnpValues.push(v)
+      }
+    }
+    // From core ability parameter (e.g. type="Core", parameter="5+")
+    // FNP is the only core ability with a bare "X+" parameter format
+    for (const ab of unitAbs) {
+      if (ab.type === 'Core' && ab.parameter && /^\d\+$/.test(ab.parameter)) {
+        fnpValues.push(parseInt(ab.parameter))
+      }
+    }
+    if (fnpValues.length > 0) {
+      const bestFnp = Math.min(...fnpValues)
+      node.keywords.push('feel no pain', `fnp-${bestFnp}`)
+    }
     if (allAbilityText.includes('fights first')) node.keywords.push('fights first')
     if (allAbilityText.includes('firing deck')) node.keywords.push('firing deck')
 
