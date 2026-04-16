@@ -1,39 +1,39 @@
-import { describe, it, expect, beforeEach } from 'vitest'
+import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, screen, fireEvent, waitFor } from '@testing-library/react'
 import { BrainScreen } from './BrainScreen'
-import { saveNodes, clearBrainData, type BrainNode } from '../lib/store'
 
-const testNodes: BrainNode[] = [
-  {
-    id: 'core:wound-roll',
-    layer: 'core',
-    category: 'core-mechanic',
-    title: 'Wound Roll',
-    content: 'Compare Strength to Toughness.',
-    summary: 'How wound rolls work.',
-    sources: [{ type: 'pdf', title: 'Core Rules', retrievedAt: '2026-04-08' }],
-    refs: [],
-    version: 1,
-    keywords: ['wound', 'roll'],
-  },
-]
+vi.mock('@xyflow/react', () => ({
+  ReactFlow: (props: any) => <div data-testid="react-flow">{props.children}</div>,
+  Background: () => null,
+  Controls: () => null,
+  MiniMap: () => null,
+  Handle: () => null,
+  Position: { Top: 'top', Bottom: 'bottom' },
+}))
+
+// Mock fetch for Browse tab API calls
+const mockFetch = vi.fn()
+beforeEach(() => {
+  mockFetch.mockReset()
+  mockFetch.mockResolvedValue({
+    ok: true,
+    json: async () => ({ layers: [{ id: 'core', label: 'Core Rules', count: 42 }] }),
+  })
+  global.fetch = mockFetch
+})
 
 describe('BrainScreen', () => {
-  beforeEach(async () => {
-    await clearBrainData()
-    await saveNodes(testNodes)
-  })
-
   it('renders the header', () => {
     render(<BrainScreen />)
     expect(screen.getByText('40K Brain')).toBeInTheDocument()
   })
 
-  it('renders tab navigation', () => {
+  it('renders tab navigation with four tabs', () => {
     render(<BrainScreen />)
     expect(screen.getAllByText('Ask').length).toBeGreaterThanOrEqual(1)
     expect(screen.getByText('Search')).toBeInTheDocument()
     expect(screen.getByText('Browse')).toBeInTheDocument()
+    expect(screen.getByText('Graph')).toBeInTheDocument()
   })
 
   it('shows Ask tab by default with prompt', () => {
@@ -47,11 +47,27 @@ describe('BrainScreen', () => {
     expect(screen.getByPlaceholderText(/Semantic search/)).toBeInTheDocument()
   })
 
-  it('shows Browse tab with layer nav when clicked', async () => {
+  it('shows Graph tab with ForceGraph', () => {
+    render(<BrainScreen />)
+    fireEvent.click(screen.getByText('Graph'))
+    expect(screen.getByPlaceholderText(/Search to visualize/i)).toBeInTheDocument()
+  })
+
+  it('shows Browse tab and fetches layers from API', async () => {
     render(<BrainScreen />)
     fireEvent.click(screen.getByText('Browse'))
     await waitFor(() => {
-      expect(screen.getByText('Core Rules')).toBeInTheDocument()
+      expect(screen.getByText(/Core Rules/)).toBeInTheDocument()
+    })
+    // Should have called the browse/layers API
+    expect(mockFetch).toHaveBeenCalledWith(expect.stringContaining('/browse/layers'))
+  })
+
+  it('Browse tab shows "Select a layer" prompt before selection', async () => {
+    render(<BrainScreen />)
+    fireEvent.click(screen.getByText('Browse'))
+    await waitFor(() => {
+      expect(screen.getByText(/Select a layer/)).toBeInTheDocument()
     })
   })
 })

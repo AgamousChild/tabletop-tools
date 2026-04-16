@@ -10,9 +10,12 @@ rm -rf "$DIST"
 mkdir -p "$DIST"
 
 # Build each app with its base path
+# Clean tsc incremental cache first to prevent stale builds
 for app in no-cheat versus list-builder game-tracker tournament new-meta data-import admin brain; do
   echo "Building $app..."
   cd "$REPO_ROOT/apps/$app/client"
+  rm -f tsconfig.tsbuildinfo
+  rm -rf node_modules/.vite
   pnpm build
   cp -r dist "$DIST/$app"
 done

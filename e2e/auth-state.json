@@ -2,10 +2,10 @@
   "cookies": [
     {
       "name": "__Secure-better-auth.session_token",
-      "value": "JakoR1DOe36C9l1YbYjt9BgMriBbkbVx.X4%2BJ4oMR%2FtG75XtWaPcE%2FajfCUUd48TtRxckf4pYn18%3D",
+      "value": "omCpfk6GAwVTacJ9Vbbs2vHYe4hmSMUG.9gOUeOg0nSFg%2BVvo1jTBj4m8OYGg7sCRgkUwy4QkZvY%3D",
       "domain": "tabletop-tools.net",
       "path": "/",
-      "expires": 1772844455.689465,
+      "expires": 1776704943.400043,
       "httpOnly": true,
       "secure": true,
       "sameSite": "Lax"

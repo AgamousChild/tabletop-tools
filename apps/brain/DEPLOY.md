@@ -20,7 +20,7 @@ cd apps/brain/server && npx tsx src/upload-graph.ts
 
 ## 4. Deploy Worker
 ```bash
-cd apps/brain/server && npx wrangler deploy
+cd apps/brain/server && npx wrangler deploy --var BUILD_VERSION:"$(date +%Y%m%d-%H%M%S)"
 ```
 
 ## 5. Re-index vectors (if node data changed)
@@ -52,18 +52,31 @@ cd apps/brain/server && pnpm test && npx wrangler deploy
 
 ## Quick deploy (client only)
 ```bash
-cd apps/brain/client && npx vite build
-cd apps/gateway && rm -rf dist && bash build.sh && npx wrangler pages deploy dist --project-name tabletop-tools
+# IMPORTANT: clean tsc cache to prevent stale builds
+cd apps/brain/client && rm -f tsconfig.tsbuildinfo && rm -rf node_modules/.vite && npx vite build
+cd apps/gateway && rm -rf dist && bash build.sh && npx wrangler pages deploy dist --project-name tabletop-tools --commit-dirty=true
 ```
 
 ## Full deploy (everything)
 ```bash
+# Generate ONE version for all layers
+export BUILD_VERSION="$(date +%Y%m%d-%H%M%S)"
+echo "Deploying version: $BUILD_VERSION"
+
 cd apps/brain/server && pnpm test
 cd apps/brain/server && npx tsx src/build-graph.ts
 cd apps/brain/server && npx tsx src/upload-graph.ts
-cd apps/brain/server && npx wrangler deploy
+cd apps/brain/server && npx wrangler deploy --var BUILD_VERSION:"$BUILD_VERSION"
 # re-index vectors as needed
-cd apps/brain/client && npx vite build
+cd apps/brain/client && rm -f tsconfig.tsbuildinfo && rm -rf node_modules/.vite
+BUILD_VERSION=$BUILD_VERSION npx vite build
 cd apps/gateway && rm -rf dist && bash build.sh
-cd apps/gateway && npx wrangler pages deploy dist --project-name tabletop-tools
+cd apps/gateway && npx wrangler pages deploy dist --project-name tabletop-tools --commit-dirty=true
+
+# Verify versions match
+echo "Worker version:"
+curl -s https://tabletop-tools-brain.micah-ec2.workers.dev/version
+echo ""
+echo "Client version:"
+curl -s https://tabletop-tools.net/brain/ | grep -o 'data-testid="app-version">[^<]*'
 ```

@@ -1,0 +1,30 @@
+- generic [ref=e3]:
+  - banner [ref=e4]:
+    - generic [ref=e5]:
+      - heading "40K Brain" [level=1] [ref=e6]
+      - generic [ref=e7]:
+        - button "Ask" [ref=e8] [cursor=pointer]
+        - button "Search" [ref=e9] [cursor=pointer]
+        - button "Graph" [ref=e10] [cursor=pointer]
+        - button "Browse" [ref=e11] [cursor=pointer]
+  - main [ref=e13]:
+    - generic [ref=e21]:
+      - generic [ref=e22]:
+        - textbox "Search to visualize graph..." [ref=e23]: blood angels
+        - button "Visualize" [ref=e24] [cursor=pointer]
+      - generic [ref=e25]:
+        - generic [ref=e26]: core
+        - generic [ref=e28]: faction
+        - generic [ref=e30]: unit
+        - generic [ref=e32]: errata
+        - generic [ref=e34]: balance
+        - generic [ref=e36]: community
+      - generic [ref=e43]:
+        - generic [ref=e44]:
+          - heading "Blasphemous Engine" [level=3] [ref=e45]
+          - button "Expand" [ref=e46] [cursor=pointer]
+        - generic [ref=e47]:
+          - generic [ref=e48]: faction
+          - generic [ref=e49]: enhancement
+          - generic [ref=e50]: QT
+        - paragraph [ref=e51]: Blasphemous Engine (35pts) — **CHAOS** **KNIGHTS** model only. Add 2 to the bearer’s Wounds characteristic. Each time the bear...

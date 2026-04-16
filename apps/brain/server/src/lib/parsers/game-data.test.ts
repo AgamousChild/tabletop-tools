@@ -39,7 +39,7 @@ describe('convertGameData', () => {
       datasheetModels: [{
         id: 1, datasheetId: 'abc-123', name: 'Intercessor',
         move: '6"', toughness: '4', save: '3+', wounds: '2',
-        leadership: '6+', oc: '2', invSv: '', invSvDescription: '', baseSize: '32mm',
+        leadership: '6+', oc: '2', invSv: '', invSvDescription: '',
       }],
       unitKeywords: [
         { id: 'k1', datasheetId: 'abc-123', keyword: 'Infantry', isFactionKeyword: false },

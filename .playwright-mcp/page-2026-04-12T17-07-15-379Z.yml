@@ -1,0 +1,17 @@
+- generic [ref=e3]:
+  - banner [ref=e4]:
+    - generic [ref=e5]:
+      - heading "40K Brain" [level=1] [ref=e6]
+      - generic [ref=e7]:
+        - button "Ask" [ref=e8]
+        - button "Search" [ref=e9]
+        - button "Graph" [ref=e10]
+        - button "Browse" [ref=e11]
+  - main [ref=e13]:
+    - generic [ref=e14]:
+      - generic [ref=e15]:
+        - textbox "Ask a 40K rules question..." [ref=e16]
+        - button "Ask" [disabled] [ref=e17]
+      - generic [ref=e18]:
+        - paragraph [ref=e19]: Ask anything about Warhammer 40K rules
+        - paragraph [ref=e20]: "Try: \"How does wound roll work?\" or \"Who has sustained hits?\""

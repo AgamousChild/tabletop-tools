@@ -1,0 +1,2 @@
+[  612141ms] [ERROR] Failed to load resource: the server responded with a status of 500 () @ https://tabletop-tools.net/brain/api/search:0
+[  612141ms] [ERROR] Graph search failed: SyntaxError: Unexpected token 'I', "Internal S"... is not valid JSON @ https://tabletop-tools.net/brain/assets/index-B-vMWmec.js:369

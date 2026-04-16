@@ -1,7 +1,9 @@
 import { Hono } from 'hono'
 import { cors } from 'hono/cors'
 import type { Env } from './types'
-import type { Node, NodeRef } from './lib/model'
+import type { Node } from './lib/model'
+import { retrieve } from './lib/retrieve'
+import { formatConversationalAnswer, assembleContext } from './lib/format'
 
 type HonoEnv = { Bindings: Env }
 
@@ -13,6 +15,126 @@ app.use('*', async (c, next) => {
     origin: [origin, 'http://localhost:3008', 'http://localhost:3009', 'http://localhost:3010', 'http://localhost:3011'],
     allowMethods: ['GET', 'POST'],
   })(c, next)
+})
+
+// ── Version ────────────────────────────────────────────────────────────────
+
+app.get('/version', (c) => c.json({ version: c.env.BUILD_VERSION || 'dev' }))
+
+// ── Browse endpoints ────────────────────────────────────────────────────────
+
+app.get('/browse/layers', async (c) => {
+  const bucket = c.env.BRAIN_BUCKET
+  const manifestObj = await bucket.get('manifest.json')
+  if (!manifestObj) return c.json({ layers: [] })
+  const manifest = await manifestObj.json() as { files: Record<string, string> }
+
+  // Count nodes per layer by reading each node file
+  const layers: Array<{ id: string; label: string; count: number }> = []
+  const layerLabels: Record<string, string> = {
+    core: 'Core Rules', faction: 'Faction', unit: 'Units',
+    errata: 'Errata', balance: 'Balance', community: 'Community',
+  }
+
+  for (const file of Object.keys(manifest.files)) {
+    if (!file.startsWith('nodes/')) continue
+    const obj = await bucket.get(file)
+    if (!obj) continue
+    const nodes = await obj.json() as Node[]
+    for (const node of nodes) {
+      const existing = layers.find(l => l.id === node.layer)
+      if (existing) existing.count++
+      else layers.push({ id: node.layer, label: layerLabels[node.layer] || node.layer, count: 1 })
+    }
+  }
+
+  return c.json({ layers })
+})
+
+app.get('/browse/nodes', async (c) => {
+  const layer = c.req.query('layer')
+  if (!layer) return c.json({ error: 'layer query param required' }, 400)
+
+  const limit = Math.min(parseInt(c.req.query('limit') || '100'), 500)
+  const offset = parseInt(c.req.query('offset') || '0')
+
+  const bucket = c.env.BRAIN_BUCKET
+  const manifestObj = await bucket.get('manifest.json')
+  if (!manifestObj) return c.json({ nodes: [], total: 0 })
+  const manifest = await manifestObj.json() as { files: Record<string, string> }
+
+  const allNodes: Node[] = []
+  for (const file of Object.keys(manifest.files)) {
+    if (!file.startsWith('nodes/')) continue
+    const obj = await bucket.get(file)
+    if (!obj) continue
+    const nodes = await obj.json() as Node[]
+    for (const node of nodes) {
+      if (node.layer === layer) allNodes.push(node)
+    }
+  }
+
+  // Sort by category then title
+  allNodes.sort((a, b) => {
+    if (a.category !== b.category) return a.category.localeCompare(b.category)
+    return a.title.localeCompare(b.title)
+  })
+
+  return c.json({
+    nodes: allNodes.slice(offset, offset + limit),
+    total: allNodes.length,
+  })
+})
+
+app.get('/browse/node/:id', async (c) => {
+  const id = decodeURIComponent(c.req.param('id'))
+  const bucket = c.env.BRAIN_BUCKET
+  const manifestObj = await bucket.get('manifest.json')
+  if (!manifestObj) return c.json({ error: 'No data' }, 404)
+  const manifest = await manifestObj.json() as { files: Record<string, string> }
+
+  for (const file of Object.keys(manifest.files)) {
+    if (!file.startsWith('nodes/')) continue
+    const obj = await bucket.get(file)
+    if (!obj) continue
+    const nodes = await obj.json() as Node[]
+    const found = nodes.find(n => n.id === id)
+    if (found) return c.json({ node: found })
+  }
+
+  return c.json({ error: 'Node not found' }, 404)
+})
+
+app.get('/browse/unit/:id', async (c) => {
+  const id = decodeURIComponent(c.req.param('id'))
+  const bucket = c.env.BRAIN_BUCKET
+  const manifestObj = await bucket.get('manifest.json')
+  if (!manifestObj) return c.json({ error: 'No data' }, 404)
+  const manifest = await manifestObj.json() as { files: Record<string, string> }
+
+  let datasheet: Node | null = null
+  const weapons: Node[] = []
+  const abilities: Node[] = []
+
+  for (const file of Object.keys(manifest.files)) {
+    if (!file.startsWith('nodes/')) continue
+    const obj = await bucket.get(file)
+    if (!obj) continue
+    const nodes = await obj.json() as Node[]
+    for (const n of nodes) {
+      if (n.id === id && n.category === 'datasheet') {
+        datasheet = n
+      } else if (n.datasheetId === id && n.category === 'weapon') {
+        weapons.push(n)
+      } else if (n.datasheetId === id && n.category === 'unit-ability') {
+        abilities.push(n)
+      }
+    }
+  }
+
+  if (!datasheet) return c.json({ error: 'Unit not found' }, 404)
+
+  return c.json({ datasheet, weapons, abilities })
 })
 
 // ── Data endpoints (serve from R2) ──────────────────────────────────────────
@@ -40,6 +162,20 @@ app.get('/data/:path{.+}', async (c) => {
   return c.body(await obj.text())
 })
 
+app.get('/pages/:path{.+}', async (c) => {
+  const path = c.req.param('path')
+  if (!path.endsWith('.png')) {
+    return c.json({ error: 'Invalid file' }, 400)
+  }
+  const obj = await c.env.BRAIN_BUCKET.get(`pages/${path}`)
+  if (!obj) {
+    return c.json({ error: 'Page not found' }, 404)
+  }
+  c.header('Cache-Control', 'public, max-age=86400')
+  c.header('Content-Type', 'image/png')
+  return c.body(await obj.arrayBuffer())
+})
+
 // ── Search endpoint (Vectorize) ─────────────────────────────────────────────
 
 app.post('/search', async (c) => {
@@ -58,111 +194,27 @@ app.post('/search', async (c) => {
     return c.json({ error: 'query is required' }, 400)
   }
 
-  const limit = Math.min(body.limit ?? 10, 50)
-
-  // Auto-detect faction/chapter from query if not explicitly filtered
-  const SM_CHAPTERS = ['blood-angels', 'dark-angels', 'space-wolves', 'black-templars',
-    'deathwatch', 'iron-hands', 'ultramarines', 'salamanders', 'raven-guard',
-    'imperial-fists', 'white-scars', 'crimson-fists']
-
-  let chapterFilter: string | undefined
-  let multiFactionFilter: string[] | undefined
-
-  if (!body.filter?.factionId) {
-    const allFactions = detectAllFactions(body.query)
-
-    if (allFactions.length > 1) {
-      // Multiple factions detected — OR filter
-      multiFactionFilter = allFactions.map(f => SM_CHAPTERS.includes(f) ? 'space-marines' : f)
-    } else if (allFactions.length === 1) {
-      const detected = allFactions[0]!
-      if (SM_CHAPTERS.includes(detected)) {
-        if (!body.filter) body.filter = {}
-        body.filter.factionId = 'space-marines'
-        chapterFilter = detected.replace(/-/g, ' ')
-      } else {
-        if (!body.filter) body.filter = {}
-        body.filter.factionId = detected
-      }
-    }
+  const env = {
+    ai: c.env.AI,
+    vectorize: c.env.BRAIN_INDEX,
+    bucket: c.env.BRAIN_BUCKET,
   }
 
-  // Strip faction name from query for better semantic search
-  const searchQuery = chapterFilter
-    ? stripFactionFromQuery(body.query, body.filter?.factionId === 'space-marines' ? chapterFilter.replace(/ /g, '-') : (body.filter?.factionId ?? ''))
-    : body.filter?.factionId
-      ? stripFactionFromQuery(body.query, body.filter.factionId)
-      : body.query
+  const { detected, results } = await retrieve(
+    {
+      query: body.query,
+      limit: body.limit,
+      filter: body.filter,
+      includeConnected: false,
+      dualEmbedding: false,
+    },
+    env,
+  )
 
-  // Generate embedding for the cleaned query
-  const embeddingResult = await c.env.AI.run('@cf/baai/bge-base-en-v1.5', {
-    text: [searchQuery || body.query],
-  })
-
-  const queryVector = embeddingResult.data[0]
-  if (!queryVector) {
-    return c.json({ error: 'Failed to generate embedding' }, 500)
-  }
-
-  // Build Vectorize filter from optional filters
-  const filter: Record<string, string> = {}
-  if (body.filter?.layer) filter.layer = body.filter.layer
-  if (body.filter?.category) filter.category = body.filter.category
-  if (body.filter?.factionId) filter.factionId = body.filter.factionId
-  if (body.filter?.phase) filter.phase = body.filter.phase
-
-  // Query Vectorize — fetch extra to allow post-filtering
-  const fetchLimit = body.filter?.factionId ? limit * 3 : limit
-  const results = await c.env.BRAIN_INDEX.query(queryVector, {
-    topK: fetchLimit,
-    filter: Object.keys(filter).length > 0 ? filter : undefined,
-    returnMetadata: 'all',
-  })
-
-  // Post-filter: strictly remove results from wrong factions
-  let matches = results.matches
-  if (multiFactionFilter) {
-    const fids = new Set(multiFactionFilter)
-    const factionMatches = matches.filter(m => {
-      const mFaction = (m.metadata?.factionId ?? '') as string
-      return fids.has(mFaction) || mFaction === ''
-    })
-    if (factionMatches.length > 0) matches = factionMatches
-  } else if (body.filter?.factionId) {
-    const fid = body.filter.factionId
-    const factionMatches = matches.filter(m => {
-      const mFaction = (m.metadata?.factionId ?? '') as string
-      return mFaction === fid || mFaction === ''
-    })
-    if (factionMatches.length > 0) matches = factionMatches
-  }
-  // Chapter/subfaction filter: prefer results with matching subfaction or no subfaction (generic)
-  if (chapterFilter) {
-    const chapterMatches = matches.filter(m => {
-      const sub = (m.metadata?.subfaction ?? '') as string
-      return sub === chapterFilter || sub === ''
-    })
-    if (chapterMatches.length >= 3) {
-      matches = chapterMatches
-    }
-  }
-  matches = matches.slice(0, limit)
-
-  return c.json({
-    results: matches.map(m => ({
-      id: m.id,
-      score: m.score,
-      title: m.metadata?.title,
-      summary: m.metadata?.summary,
-      layer: m.metadata?.layer,
-      category: m.metadata?.category,
-      factionId: m.metadata?.factionId,
-      phase: m.metadata?.phase,
-    })),
-  })
+  return c.json({ detected, results })
 })
 
-// ── Q&A endpoint (RAG: Vectorize → R2 → Claude API) ────────────────────────
+// ── Q&A endpoint (RAG: Vectorize → R2 → LLM) ───────────────────────────────
 
 app.post('/ask', async (c) => {
   const body = await c.req.json<{
@@ -177,103 +229,115 @@ app.post('/ask', async (c) => {
 
   const apiKey = c.env.ANTHROPIC_API_KEY
 
-  // 1. Detect faction/chapter from question — same logic as search endpoint
-  const factionHint = body.factionId || detectFactionFromQuestion(body.question)
-  let askChapterFilter: string | undefined
-  let askFactionFilter: string | undefined
+  const env = {
+    ai: c.env.AI,
+    vectorize: c.env.BRAIN_INDEX,
+    bucket: c.env.BRAIN_BUCKET,
+  }
 
-  if (factionHint) {
-    const SM_CHAPTERS = ['blood-angels', 'dark-angels', 'space-wolves', 'black-templars',
-      'deathwatch', 'iron-hands', 'ultramarines', 'salamanders', 'raven-guard',
-      'imperial-fists', 'white-scars', 'crimson-fists']
-    if (SM_CHAPTERS.includes(factionHint)) {
-      askFactionFilter = 'space-marines'
-      askChapterFilter = factionHint.replace(/-/g, ' ')
-    } else {
-      askFactionFilter = factionHint
+  let retrieveResult
+  try {
+    retrieveResult = await retrieve(
+      {
+        query: body.question,
+        limit: 10,
+        includeConnected: true,
+        dualEmbedding: true,
+      },
+      env,
+    )
+  } catch (err) {
+    return c.json({ error: 'Retrieval failed', details: err instanceof Error ? err.message : String(err) }, 500)
+  }
+  const { detected, results, connected, parentMap } = retrieveResult
+
+  // Build Node arrays for assembleContext (results are EnrichedNode, compatible with Node shape)
+  const primaryNodes = results as unknown as Node[]
+  const connectedNodes = connected as unknown as Node[]
+
+  // Assemble LLM context — pass subfaction so context is structured with subfaction-specific content first
+  let context = assembleContext(primaryNodes, connectedNodes, parentMap, detected.subfaction)
+
+  // Find combo pairs — only combos where at least one side matches the query keywords
+  let combos: string[] = []
+  try {
+    const fwdObj = await c.env.BRAIN_BUCKET.get('refs/forward-index.json')
+    if (fwdObj) {
+      const fwdIndex = await fwdObj.json() as Record<string, Array<{ targetId: string; rel: string; context: string }>>
+      const allNodeIds = new Set([...results.map(n => n.id), ...connected.map(n => n.id)])
+      const primaryIdSet = new Set(results.map(n => n.id))
+
+      // Build a set of keywords from the query to filter combos by relevance
+      const queryKeywords = detected.keywords.map(k => k.toLowerCase())
+      const queryTerms = detected.strippedQuery.toLowerCase().split(/\s+/).filter(t => t.length > 2)
+      const relevanceTerms = new Set([...queryKeywords, ...queryTerms])
+
+      const scoredCombos: Array<{ text: string; score: number }> = []
+      const allRelevantNodes = [...results, ...connected]
+
+      for (const node of allRelevantNodes) {
+        const fwdRefs = fwdIndex[node.id]
+        if (!fwdRefs) continue
+        for (const ref of fwdRefs) {
+          if (ref.rel !== 'stacks_with') continue
+          if (!allNodeIds.has(ref.targetId)) continue
+
+          // Score combos:
+          // 2 = both sides are primary results (best — directly relevant)
+          // 1 = one side is primary (good — one hop away)
+          // 0.5 = neither is primary but combo matches a query keyword (relevant by topic)
+          const srcPrimary = primaryIdSet.has(node.id) ? 1 : 0
+          const tgtPrimary = primaryIdSet.has(ref.targetId) ? 1 : 0
+          let score = srcPrimary + tgtPrimary
+          if (score === 0) {
+            // Check if the combo matches a detected keyword
+            const comboLower = ref.context.toLowerCase()
+            if (detected.keywords.some(k => comboLower.includes(k))) {
+              score = 0.5
+            }
+          }
+          if (score > 0) {
+            scoredCombos.push({ text: ref.context, score })
+          }
+        }
+      }
+
+      // Deduplicate, sort by score (best first), take top 10
+      const seen = new Set<string>()
+      const uniqueScored = scoredCombos.filter(c => {
+        if (seen.has(c.text)) return false
+        seen.add(c.text)
+        return true
+      }).sort((a, b) => b.score - a.score).slice(0, 10)
+      combos = uniqueScored.map(c => c.text)
+
+      // Append to LLM context
+      if (combos.length > 0) {
+        context += '\n\n========================================\n'
+        context += 'COMPETITIVE COMBOS (abilities that stack together for maximum effect):\n'
+        context += 'Explain these combos — what each piece does and why combining them is powerful.\n'
+        context += '========================================\n\n'
+        for (const combo of combos) {
+          context += `- ${combo}\n`
+        }
+      }
     }
-  }
-
-  // 2. Generate embeddings — one for the full question, one for extracted keywords
-  const keywords = extractMechanicKeywords(body.question)
-  const textsToEmbed = [body.question, ...(keywords.length > 0 ? [keywords.join(' ')] : [])]
-
-  const embeddingResult = await c.env.AI.run('@cf/baai/bge-base-en-v1.5', {
-    text: textsToEmbed,
-  })
-
-  const questionVector = embeddingResult.data[0]
-  if (!questionVector) {
-    return c.json({ error: 'Failed to generate embedding' }, 500)
-  }
-
-  // 3. Search Vectorize — with faction post-filtering
-  const questionResults = await c.env.BRAIN_INDEX.query(questionVector, {
-    topK: askFactionFilter ? 30 : 10,
-    returnMetadata: 'all',
-  })
-
-  let keywordResults = { matches: [] as typeof questionResults.matches }
-  if (embeddingResult.data[1]) {
-    keywordResults = await c.env.BRAIN_INDEX.query(embeddingResult.data[1], {
-      topK: 5,
-      returnMetadata: 'all',
-    })
-  }
-
-  // Merge, deduplicate, and filter by faction
-  const seenIds = new Set<string>()
-  let allMatches = [...keywordResults.matches, ...questionResults.matches].filter(m => {
-    if (seenIds.has(m.id)) return false
-    seenIds.add(m.id)
-    return true
-  })
-
-  // Post-filter by faction
-  if (askFactionFilter) {
-    const factionMatches = allMatches.filter(m => {
-      const mFaction = (m.metadata?.factionId ?? '') as string
-      return mFaction === askFactionFilter || mFaction === ''
-    })
-    if (factionMatches.length > 0) allMatches = factionMatches
-  }
-  // Chapter filter
-  if (askChapterFilter) {
-    const chapterMatches = allMatches.filter(m => {
-      const text = `${m.metadata?.summary ?? ''} ${m.metadata?.title ?? ''}`.toLowerCase()
-      return text.includes(askChapterFilter!)
-    })
-    if (chapterMatches.length >= 3) allMatches = chapterMatches
-  }
-
-  // 3. Fetch full node content from R2 for the top results
-  const nodeIds = allMatches.map(m => m.id)
-  const nodeContent = await fetchNodesFromR2(c.env.BRAIN_BUCKET, nodeIds)
-
-  // 4. Traverse reverse index to gather connected context
-  const depth = body.depth ?? 1
-  const connected = await fetchConnectedNodes(
-    c.env.BRAIN_BUCKET,
-    nodeIds,
-    depth,
-    factionHint,
-  )
-
-  // 5. Assemble context for Claude — parentMap resolves unit names from graph
-  const context = assembleContext(nodeContent, connected.nodes, connected.parentMap)
-
-  // 6. Call LLM — use Workers AI (free) by default, Claude as optional upgrade
-  const useClaudeParam = c.req.query('model') === 'claude'
-  const useClaude = useClaudeParam && apiKey
+  } catch { /* forward index not available — skip combos */ }
 
   const systemPrompt = `You are a Warhammer 40,000 rules expert. Answer questions using ONLY the rules context provided below. Always cite your sources.
 
-CRITICAL RULES FOR ANSWERS:
-1. ALWAYS name the specific unit/datasheet that has each ability or weapon. Never say "Keep Counting!" without saying which unit has it (e.g., "Uriel Ventris has Keep Counting!").
-2. For unit abilities from characters/leaders, explain that the ability is conferred by ATTACHING the character to a unit — not an "aura". Leader abilities affect ONLY the unit the character is attached to. Aura abilities have a range and affect multiple nearby units — these are different mechanics.
+MOST IMPORTANT RULE — SECTION STRUCTURE:
+When the context has SECTION 1 and SECTION 2, your answer MUST have TWO separate headings. Present ALL of SECTION 1 first under its own heading (e.g., "## Blood Angels Specific"). Then present ALL of SECTION 2 under a second heading (e.g., "## Available to All Space Marines"). NEVER mix content from the two sections. This is mandatory.
+
+COMPETITIVE COMBOS RULE:
+When the context includes a COMPETITIVE COMBOS section, these are abilities that STACK together for massive effect. ALWAYS explain these combos explicitly — name both abilities, the unit/model that has each ability, what weapon type they share, and why combining them is powerful. ALWAYS include the model name (e.g. "Adrax Agatone's Unto the Anvil ability" not just "Unto the Anvil").
+
+OTHER RULES:
+1. ALWAYS name the specific unit/datasheet that has each ability or weapon.
+2. For unit abilities from characters/leaders, explain that the ability is conferred by ATTACHING the character to a unit — not an "aura". Leader abilities affect ONLY the unit the character is attached to.
 3. For faction/detachment abilities, explain which detachment grants it and any activation conditions.
 4. For weapons, name the unit(s) that carry them.
-5. Prioritize by impact: army-wide rules first, then detachment rules, then leader/character abilities (these affect entire attached units), then individual unit abilities, then native weapon abilities last.
+5. Prioritize by impact: army-wide rules first, then detachment rules, then leader/character abilities, then individual unit abilities, then native weapon abilities last.
 6. When a context entry says "[unit-ability, ON UNIT: X]" or "[weapon, ON UNIT: X]", use X as the unit name.
 7. Be precise about game mechanics. If a rule has been errata'd or FAQ'd, mention the correction.
 8. If the context doesn't contain enough information to answer confidently, say so.
@@ -283,8 +347,13 @@ When citing sources, use the format: (Source: [title])`
   const userMessage = `Rules context:\n\n${context}\n\n---\n\nQuestion: ${body.question}`
 
   let answer: string
+  let answerPath = 'unknown'
+
+  const useClaudeParam = c.req.query('model') === 'claude'
+  const useClaude = useClaudeParam && apiKey
 
   if (useClaude) {
+    answerPath = 'claude'
     const response = await fetch('https://api.anthropic.com/v1/messages', {
       method: 'POST',
       headers: {
@@ -314,12 +383,13 @@ When citing sources, use the format: (Source: [title])`
       .join('\n')
   } else {
     // Workers AI — free tier LLM
-    // If context is small enough, use the LLM. Otherwise, format deterministically.
-    const MAX_LLM_CONTEXT = 20000
+    // If context is small enough (< 40000 chars), use LLM. Otherwise, format conversationally.
+    const MAX_LLM_CONTEXT = 40000
 
     if (userMessage.length <= MAX_LLM_CONTEXT) {
+      answerPath = 'llm'
       try {
-        const aiResult = await c.env.AI.run('@cf/meta/llama-3.1-8b-instruct', {
+        const aiResult = await (c.env.AI as any).run('@cf/meta/llama-3.3-70b-instruct-fp8-fast', {
           messages: [
             { role: 'system', content: systemPrompt },
             { role: 'user', content: userMessage },
@@ -328,52 +398,120 @@ When citing sources, use the format: (Source: [title])`
         })
         answer = (aiResult as any).response ?? 'No response from model'
       } catch {
-        // Fallback to deterministic formatting
-        answer = formatDeterministicAnswer(body.question, connected.nodes, connected.parentMap)
+        answerPath = 'deterministic-fallback'
+        answer = formatConversationalAnswer(body.question, connectedNodes, parentMap, detected.subfaction, combos)
       }
     } else {
-      // Large context — format deterministically from graph data
-      // Filter to faction-relevant nodes if a faction was detected
-      let relevantNodes = connected.nodes
-      if (factionHint) {
-        const factionNodes = connected.nodes.filter(n => n.factionId === factionHint || !n.factionId)
-        relevantNodes = factionNodes.length > 0 ? factionNodes : connected.nodes
-      }
-
-      // Filter out false positives — only include nodes whose content
-      // actually mentions the searched mechanic keywords
-      if (keywords.length > 0) {
-        relevantNodes = relevantNodes.filter(n => {
-          const text = `${n.title} ${n.content} ${n.summary}`.toLowerCase()
-          return keywords.some(k => text.includes(k))
-        })
-      }
-
-      // Deduplicate — nodes with same title + same content are redundant
-      const seen = new Map<string, boolean>()
-      relevantNodes = relevantNodes.filter(n => {
-        const key = `${n.title}::${n.content.substring(0, 100)}`
-        if (seen.has(key)) return false
-        seen.set(key, true)
-        return true
-      })
-
-      answer = formatDeterministicAnswer(body.question, relevantNodes, connected.parentMap)
+      answerPath = 'deterministic'
+      answer = formatConversationalAnswer(body.question, connectedNodes, parentMap, detected.subfaction, combos)
     }
   }
 
-  // 7. Return attributed answer
   return c.json({
+    detected,
     answer,
-    sources: nodeContent.map(n => ({
+    answerPath,
+    contextLength: userMessage.length,
+    connectedIds: connected.map(c => c.id),
+    reference: results,
+    sources: results.map(n => ({
       id: n.id,
       title: n.title,
       layer: n.layer,
       category: n.category,
       sources: n.sources,
     })),
-    connectedCount: connected.nodes.length,
+    connectedCount: connected.length,
   })
+})
+
+// ── Graph data endpoint ─────────────────────────────────────────────────────
+
+app.post('/graph-data', async (c) => {
+  const body = await c.req.json<{
+    query: string
+    limit?: number
+    filter?: {
+      layer?: string
+      category?: string
+      factionId?: string
+      phase?: string
+    }
+  }>()
+
+  if (!body.query) {
+    return c.json({ error: 'query is required' }, 400)
+  }
+
+  const bucket = c.env.BRAIN_BUCKET
+
+  const env = {
+    ai: c.env.AI,
+    vectorize: c.env.BRAIN_INDEX,
+    bucket,
+  }
+
+  const { detected, results, connected } = await retrieve(
+    {
+      query: body.query,
+      limit: body.limit || 20,
+      filter: body.filter,
+      includeConnected: true,
+      dualEmbedding: true,
+    },
+    env,
+  )
+
+  // Combine primary results + connected nodes for the graph
+  const allNodes = [...results, ...connected]
+  const seenIds = new Set<string>()
+  const dedupedNodes = allNodes.filter(n => {
+    if (seenIds.has(n.id)) return false
+    seenIds.add(n.id)
+    return true
+  })
+
+  // Build edges from forward/reverse indexes — only between nodes in our set
+  const [revObj, fwdObj] = await Promise.all([
+    bucket.get('refs/reverse-index.json'),
+    bucket.get('refs/forward-index.json'),
+  ])
+
+  const nodeIdSet = new Set(dedupedNodes.map(n => n.id))
+  const edges: Array<{ source: string; target: string; rel: string }> = []
+
+  if (fwdObj) {
+    const fwdIndex = await fwdObj.json() as Record<string, Array<{ targetId: string; rel: string }>>
+    for (const nodeId of nodeIdSet) {
+      const fwd = fwdIndex[nodeId]
+      if (fwd) {
+        for (const ref of fwd) {
+          if (nodeIdSet.has(ref.targetId)) {
+            edges.push({ source: nodeId, target: ref.targetId, rel: ref.rel })
+          }
+        }
+      }
+    }
+  }
+
+  if (revObj) {
+    const revIndex = await revObj.json() as Record<string, Array<{ sourceId: string; rel: string }>>
+    const edgeSet = new Set(edges.map(e => `${e.source}|${e.target}|${e.rel}`))
+    for (const nodeId of nodeIdSet) {
+      const rev = revIndex[nodeId]
+      if (rev) {
+        for (const ref of rev) {
+          const key = `${ref.sourceId}|${nodeId}|${ref.rel}`
+          if (nodeIdSet.has(ref.sourceId) && !edgeSet.has(key)) {
+            edges.push({ source: ref.sourceId, target: nodeId, rel: ref.rel })
+            edgeSet.add(key)
+          }
+        }
+      }
+    }
+  }
+
+  return c.json({ detected, nodes: dedupedNodes, edges })
 })
 
 // ── Index vectors endpoint ──────────────────────────────────────────────────
@@ -415,7 +553,7 @@ app.post('/index-vectors', async (c) => {
       try {
         const embResult = await c.env.AI.run('@cf/baai/bge-base-en-v1.5', {
           text: texts,
-        })
+        }) as { data: number[][] }
 
         const vectors = batch.map((node, idx) => ({
           id: node.id,
@@ -460,519 +598,6 @@ app.post('/sync', async (c) => {
 
   return c.json({ message: 'Brain sync via HTTP not yet implemented - use build-graph.ts CLI and upload to R2' })
 })
-
-// ── Helpers ─────────────────────────────────────────────────────────────────
-
-/** Strip detected faction name from query so it doesn't pollute semantic search. */
-function stripFactionFromQuery(question: string, factionSlug: string): string {
-  const lower = question.toLowerCase()
-  // Find the faction pattern that matched and remove it
-  const patterns: Array<{ pattern: string; slug: string }> = [
-    { pattern: 'in blood angels', slug: 'blood-angels' },
-    { pattern: 'blood angels', slug: 'blood-angels' },
-    { pattern: 'in dark angels', slug: 'dark-angels' },
-    { pattern: 'dark angels', slug: 'dark-angels' },
-    { pattern: 'in space wolves', slug: 'space-wolves' },
-    { pattern: 'space wolves', slug: 'space-wolves' },
-    { pattern: 'in space marines', slug: 'space-marines' },
-    { pattern: 'space marines', slug: 'space-marines' },
-    { pattern: 'space marine', slug: 'space-marines' },
-    { pattern: 'in necrons', slug: 'necrons' },
-    { pattern: 'necrons', slug: 'necrons' },
-    { pattern: 'necron', slug: 'necrons' },
-    { pattern: 'in orks', slug: 'orks' },
-    { pattern: 'orks', slug: 'orks' },
-    { pattern: 'ork', slug: 'orks' },
-    { pattern: 'in tyranids', slug: 'tyranids' },
-    { pattern: 'tyranids', slug: 'tyranids' },
-    { pattern: 'tyranid', slug: 'tyranids' },
-    { pattern: 'in aeldari', slug: 'aeldari' },
-    { pattern: 'aeldari', slug: 'aeldari' },
-    { pattern: 'in tau', slug: 't-au-empire' },
-    { pattern: 'tau', slug: 't-au-empire' },
-  ]
-  for (const { pattern, slug } of patterns) {
-    if (slug === factionSlug && lower.includes(pattern)) {
-      return question.replace(new RegExp(pattern, 'i'), '').replace(/^[\s,]+|[\s,]+$/g, '').trim()
-    }
-  }
-  return question
-}
-
-const FACTION_PATTERNS: Array<{ pattern: string; slug: string }> = [
-  { pattern: 'chaos space marine', slug: 'chaos-space-marines' },
-  { pattern: 'space marine', slug: 'space-marines' },
-  { pattern: 'blood angel', slug: 'blood-angels' },
-  { pattern: 'dark angel', slug: 'dark-angels' },
-  { pattern: 'space wolf', slug: 'space-wolves' },
-  { pattern: 'space wolves', slug: 'space-wolves' },
-  { pattern: 'black templar', slug: 'black-templars' },
-  { pattern: 'grey knight', slug: 'grey-knights' },
-  { pattern: 'death guard', slug: 'death-guard' },
-  { pattern: 'thousand sons', slug: 'thousand-sons' },
-  { pattern: 'world eater', slug: 'world-eaters' },
-  { pattern: 'imperial agent', slug: 'imperial-agents' },
-  { pattern: 'imperial knight', slug: 'imperial-knights' },
-  { pattern: 'chaos knight', slug: 'chaos-knights' },
-  { pattern: 'imperial guard', slug: 'astra-militarum' },
-  { pattern: 'astra militarum', slug: 'astra-militarum' },
-  { pattern: 'sisters of battle', slug: 'adepta-sororitas' },
-  { pattern: 'dark eldar', slug: 'drukhari' },
-  { pattern: 'ork', slug: 'orks' },
-  { pattern: 'necron', slug: 'necrons' },
-  { pattern: 'tyranid', slug: 'tyranids' },
-  { pattern: 'aeldari', slug: 'aeldari' },
-  { pattern: 'eldar', slug: 'aeldari' },
-  { pattern: 'tau', slug: 't-au-empire' },
-  { pattern: 't\'au', slug: 't-au-empire' },
-  { pattern: 'custodes', slug: 'adeptus-custodes' },
-  { pattern: 'sororitas', slug: 'adepta-sororitas' },
-  { pattern: 'mechanicus', slug: 'adeptus-mechanicus' },
-  { pattern: 'genestealer', slug: 'genestealer-cults' },
-  { pattern: 'drukhari', slug: 'drukhari' },
-  { pattern: 'votann', slug: 'leagues-of-votann' },
-  { pattern: 'deathwatch', slug: 'deathwatch' },
-  { pattern: 'daemon', slug: 'chaos-daemons' },
-]
-
-/** Detect faction from question text. Returns first match. */
-function detectFactionFromQuestion(question: string): string | undefined {
-  const lower = question.toLowerCase()
-  for (const { pattern, slug } of FACTION_PATTERNS) {
-    if (lower.includes(pattern)) return slug
-  }
-  return undefined
-}
-
-/** Detect ALL factions mentioned in question text. */
-function detectAllFactions(question: string): string[] {
-  const lower = question.toLowerCase()
-  const found = new Set<string>()
-  for (const { pattern, slug } of FACTION_PATTERNS) {
-    if (lower.includes(pattern)) found.add(slug)
-  }
-  return [...found]
-}
-
-/** Common aliases for game mechanics. */
-const MECHANIC_ALIASES: Array<{ alias: string; canonical: string }> = [
-  { alias: 'dev wounds', canonical: 'devastating wounds' },
-  { alias: 'devs', canonical: 'devastating wounds' },
-  { alias: 'sus hits', canonical: 'sustained hits' },
-  { alias: 'exploding 6s', canonical: 'sustained hits' },
-  { alias: 'exploding 6', canonical: 'sustained hits' },
-  { alias: 'critical hit', canonical: 'sustained hits' },
-  { alias: 'crit', canonical: 'sustained hits' },
-  { alias: 'auto wound', canonical: 'lethal hits' },
-  { alias: 'auto-wound', canonical: 'lethal hits' },
-  { alias: 'fnp', canonical: 'feel no pain' },
-  { alias: 'mortal', canonical: 'mortal wound' },
-  { alias: 'mortals', canonical: 'mortal wound' },
-  { alias: 'ap', canonical: 'armour penetration' },
-  { alias: 'invuln', canonical: 'invulnerable' },
-  { alias: 'obs sec', canonical: 'objective control' },
-  { alias: 'ob sec', canonical: 'objective control' },
-  { alias: 'obsec', canonical: 'objective control' },
-]
-
-/** Extract game mechanic keywords from a question, expanding aliases. */
-function extractMechanicKeywords(question: string): string[] {
-  const lower = question.toLowerCase()
-
-  // Expand aliases first
-  let expanded = lower
-  for (const { alias, canonical } of MECHANIC_ALIASES) {
-    if (expanded.includes(alias)) {
-      expanded = expanded.replace(alias, canonical)
-    }
-  }
-
-  const mechanics = [
-    'sustained hits', 'lethal hits', 'devastating wounds', 'hazardous',
-    'blast', 'torrent', 'twin-linked', 'rapid fire', 'pistol', 'melta',
-    'lance', 'anti-', 'ignores cover', 'indirect fire',
-    'feel no pain', 'deadly demise', 'deep strike', 'lone operative',
-    'stealth', 'scouts', 'infiltrators', 'battle-shock', 'fights first',
-    'overwatch', 'wound roll', 'hit roll', 'saving throw',
-    'engagement range', 'coherency', 'visibility', 'cover',
-    'advance', 'fall back', 'charge', 'mortal wound',
-    'invulnerable', 'firing deck', 'transport', 'objective control',
-    'armour penetration',
-  ]
-  return mechanics.filter(m => expanded.includes(m))
-}
-
-/** Fetch full node objects from R2 by their IDs. */
-async function fetchNodesFromR2(bucket: R2Bucket, nodeIds: string[]): Promise<Node[]> {
-  // Get the manifest to know which files to look in
-  const manifestObj = await bucket.get('manifest.json')
-  if (!manifestObj) return []
-
-  const manifest = await manifestObj.json() as { files: Record<string, string> }
-  const nodeFiles = Object.keys(manifest.files).filter(f => f.startsWith('nodes/'))
-
-  const nodes: Node[] = []
-  const idSet = new Set(nodeIds)
-
-  // Fetch each node file and find matching nodes
-  // In production, this should be cached
-  for (const file of nodeFiles) {
-    const obj = await bucket.get(file)
-    if (!obj) continue
-    const fileNodes = await obj.json() as Node[]
-    for (const node of fileNodes) {
-      if (idSet.has(node.id)) {
-        nodes.push(node)
-        idSet.delete(node.id)
-      }
-    }
-    if (idSet.size === 0) break
-  }
-
-  return nodes
-}
-
-/**
- * Walk the graph from the given node IDs using both indexes.
- * Reverse index: find what points TO these nodes
- * Forward index: resolve part_of parents (ability → datasheet name)
- */
-async function fetchConnectedNodes(
-  bucket: R2Bucket,
-  nodeIds: string[],
-  depth: number,
-  factionHint?: string,
-): Promise<{ nodes: Node[]; parentMap: Map<string, string> }> {
-  if (depth <= 0) return { nodes: [], parentMap: new Map() }
-
-  // Load both indexes in parallel
-  const [revObj, fwdObj] = await Promise.all([
-    bucket.get('refs/reverse-index.json'),
-    bucket.get('refs/forward-index.json'),
-  ])
-  if (!revObj) return { nodes: [], parentMap: new Map() }
-
-  type RevEntry = { sourceId: string; rel: string; context: string; factionId?: string }
-  type FwdEntry = { targetId: string; rel: string; context: string }
-
-  const reverseIndex = await revObj.json() as Record<string, RevEntry[]>
-  const forwardIndex = fwdObj
-    ? await fwdObj.json() as Record<string, FwdEntry[]>
-    : {} as Record<string, FwdEntry[]>
-
-  // Step 1: Reverse lookup — find all nodes that reference our search results
-  const inboundRefs: RevEntry[] = []
-  for (const nodeId of nodeIds) {
-    const refs = reverseIndex[nodeId]
-    if (refs) inboundRefs.push(...refs)
-  }
-
-  if (inboundRefs.length === 0) return { nodes: [], parentMap: new Map() }
-
-  // Step 2: Select which connected nodes to fetch
-  // Priority: abilities/stratagems first (high impact), weapons last (high volume, low info)
-  // Within each priority, faction-matching nodes come first
-  const known = new Set(nodeIds)
-  const uniqueRefs = new Map<string, RevEntry>()
-  for (const r of inboundRefs) {
-    if (!known.has(r.sourceId) && !uniqueRefs.has(r.sourceId)) {
-      uniqueRefs.set(r.sourceId, r)
-    }
-  }
-
-  // Categorize by ID prefix to determine priority without loading nodes
-  // ability: = unit ability, det: = detachment/stratagem/enhancement, faction: = faction ability, weapon: = weapon
-  function refPriority(id: string): number {
-    if (id.startsWith('faction:')) return 0  // army-wide abilities — highest impact
-    if (id.startsWith('det:')) return 1      // detachment rules, stratagems, enhancements
-    if (id.startsWith('ability:')) return 2  // unit abilities (leader grants)
-    if (id.startsWith('weapon:')) return 4   // weapons — lowest priority (high volume)
-    return 3
-  }
-
-  const sortedRefs = [...uniqueRefs.entries()]
-    .sort((a, b) => {
-      // Priority first
-      const pa = refPriority(a[0])
-      const pb = refPriority(b[0])
-      if (pa !== pb) return pa - pb
-      // Then faction match
-      const fa = a[1].factionId === factionHint ? 0 : 1
-      const fb = b[1].factionId === factionHint ? 0 : 1
-      return fa - fb
-    })
-
-  // Take ALL high-priority nodes (abilities, stratagems), cap weapons
-  const highPriority = sortedRefs.filter(([id]) => refPriority(id) <= 3)
-  const weapons = sortedRefs.filter(([id]) => refPriority(id) === 4)
-  const selectedIds = [
-    ...highPriority.map(([id]) => id),
-    ...weapons.map(([id]) => id).slice(0, 15), // representative weapon sample
-  ]
-
-  if (selectedIds.length === 0) return { nodes: [], parentMap: new Map() }
-
-  // Step 3: Forward lookup — for each connected node, find its part_of parent
-  // This resolves: ability → datasheet, weapon → datasheet, stratagem → detachment
-  const parentMap = new Map<string, string>() // child nodeId → parent nodeId
-  const parentIdsToFetch = new Set<string>()
-
-  for (const id of selectedIds) {
-    const fwdRefs = forwardIndex[id]
-    if (!fwdRefs) continue
-    for (const ref of fwdRefs) {
-      if (ref.rel === 'part_of') {
-        parentMap.set(id, ref.targetId)
-        if (!known.has(ref.targetId)) {
-          parentIdsToFetch.add(ref.targetId)
-        }
-        break // first parent only
-      }
-    }
-  }
-
-  // Step 4: Fetch connected nodes + their parents in one batch
-  const allToFetch = [...new Set([...selectedIds, ...parentIdsToFetch])]
-    .filter(id => !known.has(id))
-
-  const nodes = await fetchNodesFromR2(bucket, allToFetch)
-
-  // Step 5: Resolve parentMap IDs to titles
-  const nodeById = new Map<string, Node>()
-  for (const n of nodes) nodeById.set(n.id, n)
-
-  const CHAPTER_KEYWORDS = ['space wolves', 'dark angels', 'blood angels', 'black templars',
-    'deathwatch', 'iron hands', 'ultramarines', 'salamanders', 'raven guard',
-    'imperial fists', 'white scars', 'crimson fists', 'any chapter']
-
-  const resolvedParentMap = new Map<string, string>()
-  for (const [childId, parentId] of parentMap) {
-    const parent = nodeById.get(parentId)
-    if (parent) {
-      const chapter = parent.keywords?.find(k => CHAPTER_KEYWORDS.includes(k))
-      let chapterSuffix = ''
-      if (chapter && chapter !== 'any chapter') {
-        chapterSuffix = ` [${chapter.split(' ').map(w => w[0]!.toUpperCase() + w.slice(1)).join(' ')} only]`
-      } else if (chapter === 'any chapter') {
-        chapterSuffix = ' [any chapter]'
-      }
-      resolvedParentMap.set(childId, `${parent.title}${chapterSuffix}`)
-    }
-  }
-
-  return { nodes, parentMap: resolvedParentMap }
-}
-
-/**
- * Assemble node content into a structured context string for the LLM.
- * Uses parentMap from graph traversal to resolve unit/detachment names.
- */
-function assembleContext(
-  primaryNodes: Node[],
-  connectedNodes: Node[],
-  parentMap: Map<string, string>,
-): string {
-  const parts: string[] = []
-
-  // Primary results first
-  for (const node of primaryNodes) {
-    parts.push(`## ${node.title} [${node.layer}/${node.category}]`)
-    parts.push(node.content)
-    if (node.sources.length > 0) {
-      const srcText = node.sources
-        .map(s => `${s.title}${s.page ? `, p.${s.page}` : ''}`)
-        .join('; ')
-      parts.push(`(Source: ${srcText})`)
-    }
-    parts.push('')
-  }
-
-  // Connected nodes — grouped by category, sorted by impact
-  if (connectedNodes.length > 0) {
-    const groups: Record<string, Node[]> = {
-      'faction-ability': [],
-      'detachment-rule': [],
-      'stratagem': [],
-      'enhancement': [],
-      'unit-ability': [],
-      'weapon': [],
-      'datasheet': [],
-      'other': [],
-    }
-    for (const n of connectedNodes) {
-      const key = groups[n.category] ? n.category : 'other'
-      groups[key]!.push(n)
-    }
-
-    parts.push('--- Connected rules (ordered by impact: army-wide → detachment → leader/unit → weapon) ---')
-    parts.push('')
-
-    for (const n of groups['faction-ability']!) {
-      const parent = parentMap.get(n.id)
-      parts.push(`### ${n.title} [faction-ability${n.factionId ? `, ${n.factionId}` : ''}${parent ? `, from detachment: ${parent}` : ''}]`)
-      parts.push(n.content || n.summary)
-      parts.push('')
-    }
-
-    for (const n of groups['detachment-rule']!) {
-      parts.push(`### ${n.title} [detachment-rule${n.factionId ? `, ${n.factionId}` : ''}]`)
-      parts.push(n.content || n.summary)
-      parts.push('')
-    }
-
-    for (const n of groups['stratagem']!) {
-      const parent = parentMap.get(n.id)
-      parts.push(`### ${n.title} [stratagem${n.factionId ? `, ${n.factionId}` : ''}${parent ? `, detachment: ${parent}` : ''}]`)
-      parts.push(n.content || n.summary)
-      parts.push('')
-    }
-
-    for (const n of groups['enhancement']!) {
-      const parent = parentMap.get(n.id)
-      parts.push(`### ${n.title} [enhancement${n.factionId ? `, ${n.factionId}` : ''}${parent ? `, detachment: ${parent}` : ''}]`)
-      parts.push(n.content || n.summary)
-      parts.push('')
-    }
-
-    for (const n of groups['unit-ability']!) {
-      const parent = parentMap.get(n.id)
-      parts.push(`### ${n.title} [unit-ability, ON UNIT: ${parent || 'unknown unit'}${n.factionId ? `, ${n.factionId}` : ''}]`)
-      parts.push(n.content || n.summary)
-      parts.push('')
-    }
-
-    for (const n of groups['weapon']!) {
-      const parent = parentMap.get(n.id)
-      parts.push(`### ${n.title} [weapon, ON UNIT: ${parent || 'unknown unit'}${n.factionId ? `, ${n.factionId}` : ''}]`)
-      parts.push(n.summary)
-      parts.push('')
-    }
-
-    for (const n of groups['datasheet']!) {
-      parts.push(`### ${n.title} [datasheet${n.factionId ? `, ${n.factionId}` : ''}]`)
-      parts.push(n.summary)
-      parts.push('')
-    }
-
-    for (const n of groups['other']!) {
-      parts.push(`### ${n.title} [${n.category}]`)
-      parts.push(n.summary)
-      parts.push('')
-    }
-  }
-
-  return parts.join('\n')
-}
-
-/** Strip flavor/lore text, keep only mechanical rules content. */
-function stripFlavorText(text: string): string {
-  return text
-    // Remove italic blocks (lore/flavor)
-    .replace(/\*[^*]{20,}\*/g, '')
-    // Remove lines that are pure lore (no rules keywords)
-    .split('\n')
-    .filter(line => {
-      const l = line.trim()
-      if (!l) return false
-      // Keep lines with game mechanics indicators
-      if (/\*\*(WHEN|TARGET|EFFECT|Type|CP|Turn|Phase|Cost|Range|Role|Keywords|Composition|Points|Transport|Loadout|Damaged):/i.test(l)) return true
-      if (/\[SUSTAINED|LETHAL|DEVASTATING|HAZARDOUS|BLAST|TORRENT|MELTA|LANCE|ANTI-|IGNORES|INDIRECT|TWIN|RAPID|PISTOL|HEAVY|ASSAULT|ONE SHOT/i.test(l)) return true
-      if (/\d\+|D\d|re-roll|wound|hit|save|attack|model|unit|phase|turn|Engagement Range|Battle-shock/i.test(l)) return true
-      if (/Detachment Ability:|Ability:|Enhancement:/i.test(l)) return true
-      // Skip pure narrative (long text without mechanical keywords)
-      if (l.length > 80 && !/\d/.test(l) && !/\[/.test(l)) return false
-      return true
-    })
-    .join('\n')
-    .replace(/\n{3,}/g, '\n')
-    .trim()
-}
-
-/**
- * Format an answer directly from graph data without an LLM.
- * For data-lookup queries where the graph traversal already found everything.
- */
-function formatDeterministicAnswer(
-  question: string,
-  nodes: Node[],
-  parentMap: Map<string, string>,
-): string {
-  const groups: Record<string, Array<{ title: string; unit: string; content: string; faction: string }>> = {
-    'Faction/Army-Wide Abilities': [],
-    'Detachment Rules': [],
-    'Stratagems': [],
-    'Enhancements': [],
-    'Character/Leader Abilities (affect attached unit)': [],
-    'Unit Abilities': [],
-    'Weapons': [],
-    'Other': [],
-  }
-
-  for (const n of nodes) {
-    const parent = parentMap.get(n.id) ?? ''
-    const entry = {
-      title: n.title,
-      unit: parent,
-      content: n.content || n.summary,
-      faction: n.factionId ?? '',
-    }
-
-    // Strip flavor text — only keep mechanical rules content
-    // Flavor text is usually italicized (*text*) or is the first paragraph before any rules keywords
-    entry.content = stripFlavorText(entry.content)
-
-    switch (n.category) {
-      case 'faction-ability':
-        groups['Faction/Army-Wide Abilities']!.push(entry)
-        break
-      case 'detachment-rule':
-        entry.content = '' // detachment rules are context — just the name matters
-        groups['Detachment Rules']!.push(entry)
-        break
-      case 'stratagem':
-        groups['Stratagems']!.push(entry)
-        break
-      case 'enhancement':
-        groups['Enhancements']!.push(entry)
-        break
-      case 'unit-ability': {
-        // Determine if this is a leader ability (conferred to attached unit)
-        const desc = (n.content || '').toLowerCase()
-        if (desc.includes('leading a unit') || desc.includes('this model is leading') || desc.includes("model's unit")) {
-          groups['Character/Leader Abilities (affect attached unit)']!.push(entry)
-        } else {
-          groups['Unit Abilities']!.push(entry)
-        }
-        break
-      }
-      case 'weapon':
-        groups['Weapons']!.push(entry)
-        break
-      case 'datasheet':
-        break // skip datasheets in the answer
-      default:
-        groups['Other']!.push(entry)
-    }
-  }
-
-  const parts: string[] = []
-  parts.push(`Results for: "${question}"\n`)
-
-  for (const [groupName, entries] of Object.entries(groups)) {
-    if (entries.length === 0) continue
-    parts.push(`## ${groupName} (${entries.length})`)
-    for (const e of entries) {
-      const unitInfo = e.unit ? ` — on **${e.unit}**` : ''
-      const factionInfo = e.faction ? ` (${e.faction})` : ''
-      const contentInfo = e.content ? `: ${e.content}` : ''
-      parts.push(`- **${e.title}**${unitInfo}${factionInfo}${contentInfo}`)
-    }
-    parts.push('')
-  }
-
-  parts.push(`\n*${nodes.length} total results from the knowledge graph. Source: Wahapedia 10th Edition, Core Rules.*`)
-  return parts.join('\n')
-}
 
 export default {
   fetch: app.fetch,
