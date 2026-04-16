@@ -396,6 +396,24 @@ code should never be scattered across 7 app boundaries.
 
 ---
 
+## Security & Authentication
+
+**Auth is middleware, not application code.** Session validation runs inside `server-core`
+before any app code sees the request. Apps receive `ctx.user` pre-populated and never import
+from `packages/auth` directly.
+
+- `createBaseServer` accepts `db` and `secret`, calls `validateSession` internally
+- Apps opt into auth by using `protectedProcedure` — that's the entire auth surface area
+- Apps that need extra context (storage, adminEmails) use `extendContext`
+- One implementation, one place to audit, tested once in `server-core`
+
+**Why middleware, not utility function:** If Express, Rails, Django, and ASP.NET all handle
+auth as built-in middleware, so should we. Don't follow tRPC tutorial patterns that inline
+auth in `createContext` — follow 30 years of web application architecture. Security-critical
+code should never be scattered across 7 app boundaries.
+
+---
+
 ## Testing: TDD Required
 
 **Tests are written before the code. No exceptions.**
