@@ -1,0 +1,18 @@
+[
+  {
+    "taskId": "task-1-faction-codes",
+    "agent": "senior-dev",
+    "file": "apps/brain/server/src/lib/faction-codes.ts",
+    "action": "created",
+    "reason": "Extract faction code mapping to shared module for reuse across parsers",
+    "timestamp": "2026-04-16T00:00:00.000Z"
+  },
+  {
+    "taskId": "task-1-faction-codes",
+    "agent": "senior-dev",
+    "file": "apps/brain/server/src/lib/parsers/game-data.ts",
+    "action": "modified",
+    "reason": "Replace local FACTION_CODE_TO_SLUG constant and normalizeFactionId with import from faction-codes module",
+    "timestamp": "2026-04-16T00:00:00.000Z"
+  }
+]

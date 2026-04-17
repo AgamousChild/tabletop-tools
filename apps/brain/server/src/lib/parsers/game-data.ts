@@ -17,7 +17,8 @@
  */
 import type { Node, NodeRef, Source } from '../model'
 import { slugify } from '../slugify'
-import { deriveUnitType } from '../../../../shared/derive-unit-type'
+import { deriveUnitType } from '../derive-unit-type'
+import { normalizeFactionId } from '../faction-codes'
 import {
   isBoardingAction, isLegends, buildDetachmentChapterMap,
   detectScope, detectWeaponTypes, classifyGrants,
@@ -185,43 +186,6 @@ export interface JunctionRecord {
   stratagemId?: string
   enhancementId?: string
   detachmentAbilityId?: string
-}
-
-// ── Faction ID Normalization ─────────────────────────────────────────────────
-
-/** Map Wahapedia short codes to kebab-case slugs matching faction pack filenames. */
-const FACTION_CODE_TO_SLUG: Record<string, string> = {
-  AS: 'adepta-sororitas',
-  AC: 'adeptus-custodes',
-  AdM: 'adeptus-mechanicus',
-  TL: 'adeptus-titanicus',
-  AE: 'aeldari',
-  AM: 'astra-militarum',
-  CD: 'chaos-daemons',
-  QT: 'chaos-knights',
-  CSM: 'chaos-space-marines',
-  DG: 'death-guard',
-  DRU: 'drukhari',
-  EC: 'emperors-children',
-  GC: 'genestealer-cults',
-  GK: 'grey-knights',
-  AoI: 'imperial-agents',
-  QI: 'imperial-knights',
-  LoV: 'leagues-of-votann',
-  NEC: 'necrons',
-  ORK: 'orks',
-  SM: 'space-marines',
-  TS: 'thousand-sons',
-  TYR: 'tyranids',
-  TAU: 't-au-empire',
-  UN: 'unaligned',
-  UA: 'unbound-adversaries',
-  WE: 'world-eaters',
-}
-
-/** Normalize a faction ID from Wahapedia short code to slug. */
-function normalizeFactionId(code: string): string {
-  return FACTION_CODE_TO_SLUG[code] ?? slugify(code)
 }
 
 import { getToughnessTier, getStrengthTier, getSaveTier, usefulApCap } from '../combat-tiers'
