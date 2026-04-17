@@ -24,4 +24,21 @@
     "reason": "Add cross-source merge module for BSData/Wahapedia node deduplication and summary enrichment",
     "timestamp": "2026-04-17T07:25:00.000Z"
   }
+,
+  {
+    "taskId": "task-3-integrate-merge",
+    "agent": "senior-dev",
+    "file": "apps/brain/server/src/build-graph.ts",
+    "action": "modified",
+    "reason": "Replace manual dedup block with mergeSources call in CLI build path",
+    "timestamp": "2026-04-17T08:00:00.000Z"
+  },
+  {
+    "taskId": "task-3-integrate-merge",
+    "agent": "senior-dev",
+    "file": "apps/brain/server/src/lib/sync.ts",
+    "action": "modified",
+    "reason": "Add mergeSources call in Worker sync path before node partitioning",
+    "timestamp": "2026-04-17T08:00:00.000Z"
+  }
 ]

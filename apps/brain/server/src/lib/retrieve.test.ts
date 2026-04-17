@@ -269,11 +269,17 @@ describe('retrieve', () => {
 
     const vectorize = {
       query: vi.fn()
+        // primary unfiltered
         .mockResolvedValueOnce({ matches: [{ id: nodeA.id, score: 0.9, metadata: { layer: 'core', category: 'core-mechanic' } }] })
+        // primary datasheet-filtered
+        .mockResolvedValueOnce({ matches: [] })
+        // keyword unfiltered
         .mockResolvedValueOnce({ matches: [
           { id: nodeA.id, score: 0.8, metadata: { layer: 'core', category: 'core-mechanic' } },
           { id: nodeB.id, score: 0.7, metadata: { layer: 'core', category: 'core-mechanic' } },
-        ] }),
+        ] })
+        // keyword datasheet-filtered
+        .mockResolvedValueOnce({ matches: [] }),
     }
     const bucket = makeBucket([nodeA, nodeB])
 

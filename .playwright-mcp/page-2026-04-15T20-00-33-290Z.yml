@@ -1,0 +1,403 @@
+- generic [ref=e3]:
+  - banner [ref=e4]:
+    - generic [ref=e5]:
+      - generic [ref=e6]:
+        - heading "40K Brain" [level=1] [ref=e7]
+        - generic [ref=e8]: dev-2026-04-15T19-47-29
+      - generic [ref=e9]:
+        - button "Ask" [ref=e10] [cursor=pointer]
+        - button "Search" [ref=e11] [cursor=pointer]
+        - button "Browse" [ref=e12] [cursor=pointer]
+        - button "Graph" [ref=e13] [cursor=pointer]
+  - main [ref=e14]:
+    - generic [ref=e22]:
+      - generic [ref=e23]:
+        - textbox "Semantic search across all rules..." [ref=e24]: Baal Predator
+        - button "Search" [ref=e25] [cursor=pointer]
+      - generic [ref=e26]:
+        - generic [ref=e27]:
+          - 'button "#1 Baal Predator 72% unit datasheet space-marines blood angels Baal Predator — Other, 1 model: 125pts." [ref=e28] [cursor=pointer]':
+            - generic [ref=e29]:
+              - generic [ref=e30]:
+                - generic [ref=e31]:
+                  - generic [ref=e32]: "#1"
+                  - heading "Baal Predator" [level=3] [ref=e33]
+                - generic [ref=e34]: 72%
+              - generic [ref=e35]:
+                - generic [ref=e36]: unit
+                - generic [ref=e37]: datasheet
+                - generic [ref=e38]: space-marines
+                - generic [ref=e39]: blood angels
+              - paragraph [ref=e40]: "Baal Predator — Other, 1 model: 125pts."
+          - paragraph [ref=e41]:
+            - button "Baal Predator" [ref=e42] [cursor=pointer]
+            - text: "— Other, 1 model: 125pts."
+        - generic [ref=e43]:
+          - button "#2 Baal flamestorm cannon 65% unit weapon space-marines blood angels Baal flamestorm cannon (Ranged) — 18, D6+3A, S6, AP-2, D2. [ASSAULT, IGNORES COVER, TORRENT]" [ref=e44] [cursor=pointer]:
+            - generic [ref=e45]:
+              - generic [ref=e46]:
+                - generic [ref=e47]:
+                  - generic [ref=e48]: "#2"
+                  - heading "Baal flamestorm cannon" [level=3] [ref=e49]
+                - generic [ref=e50]: 65%
+              - generic [ref=e51]:
+                - generic [ref=e52]: unit
+                - generic [ref=e53]: weapon
+                - generic [ref=e54]: space-marines
+                - generic [ref=e55]: blood angels
+              - paragraph [ref=e56]: Baal flamestorm cannon (Ranged) — 18, D6+3A, S6, AP-2, D2. [ASSAULT, IGNORES COVER, TORRENT]
+          - paragraph [ref=e57]:
+            - button "Baal flamestorm cannon" [ref=e58] [cursor=pointer]
+            - text: (Ranged) — 18, D6+3A, S6, AP-2, D2. [ASSAULT, IGNORES COVER, TORRENT]
+        - generic [ref=e59]:
+          - button "#3 One Shot 64% unit unit-ability space-marines blood angels One Shot (Wargear profile) on Baal Predator — The bearer can only shoot with this weapon once per battle." [ref=e60] [cursor=pointer]:
+            - generic [ref=e61]:
+              - generic [ref=e62]:
+                - generic [ref=e63]:
+                  - generic [ref=e64]: "#3"
+                  - heading "One Shot" [level=3] [ref=e65]
+                - generic [ref=e66]: 64%
+              - generic [ref=e67]:
+                - generic [ref=e68]: unit
+                - generic [ref=e69]: unit-ability
+                - generic [ref=e70]: space-marines
+                - generic [ref=e71]: blood angels
+              - paragraph [ref=e72]: One Shot (Wargear profile) on Baal Predator — The bearer can only shoot with this weapon once per battle.
+          - paragraph [ref=e73]:
+            - button "One Shot" [ref=e74] [cursor=pointer]
+            - text: (Wargear profile) on
+            - button "Baal Predator" [ref=e75] [cursor=pointer]
+            - text: — The bearer can only shoot with this weapon once per battle.
+        - generic [ref=e76]:
+          - 'button "#4 SHALAXI HELBANE 62% faction enhancement chaos-daemons KEYWORDS: Monster, Character, Epic Hero, Psyker, Chaos, Daemon, Slaanesh, Shalaxi Helbane RANGED WEAPONS RANGE A BS S AP D Lash of Slaanesh [ASSAUL..." [ref=e77] [cursor=pointer]':
+            - generic [ref=e78]:
+              - generic [ref=e79]:
+                - generic [ref=e80]:
+                  - generic [ref=e81]: "#4"
+                  - heading "SHALAXI HELBANE" [level=3] [ref=e82]
+                - generic [ref=e83]: 62%
+              - generic [ref=e84]:
+                - generic [ref=e85]: faction
+                - generic [ref=e86]: enhancement
+                - generic [ref=e87]: chaos-daemons
+              - paragraph [ref=e88]: "KEYWORDS: Monster, Character, Epic Hero, Psyker, Chaos, Daemon, Slaanesh, Shalaxi Helbane RANGED WEAPONS RANGE A BS S AP D Lash of Slaanesh [ASSAUL..."
+          - paragraph [ref=e89]:
+            - text: "KEYWORDS: Monster, Character, Epic Hero, Psyker, Chaos, Daemon, Slaanesh,"
+            - button "Shalaxi Helbane" [ref=e90] [cursor=pointer]
+            - text: RANGED WEAPONS RANGE A BS S AP D Lash of Slaanesh [ASSAUL...
+        - generic [ref=e91]:
+          - 'button "#5 BE''LAKOR 61% faction enhancement chaos-daemons KEYWORDS: Monster, Character, Fly, Epic Hero, Psyker, Chaos, Daemon, Be''lakor RANGED WEAPONS RANGE A BS S AP D Betraying Shades — witchfire [DEVA..." [ref=e92] [cursor=pointer]':
+            - generic [ref=e93]:
+              - generic [ref=e94]:
+                - generic [ref=e95]:
+                  - generic [ref=e96]: "#5"
+                  - heading "BE'LAKOR" [level=3] [ref=e97]
+                - generic [ref=e98]: 61%
+              - generic [ref=e99]:
+                - generic [ref=e100]: faction
+                - generic [ref=e101]: enhancement
+                - generic [ref=e102]: chaos-daemons
+              - paragraph [ref=e103]: "KEYWORDS: Monster, Character, Fly, Epic Hero, Psyker, Chaos, Daemon, Be'lakor RANGED WEAPONS RANGE A BS S AP D Betraying Shades — witchfire [DEVA..."
+          - paragraph [ref=e104]:
+            - text: "KEYWORDS: Monster, Character, Fly, Epic Hero, Psyker, Chaos, Daemon,"
+            - button "Be'lakor" [ref=e105] [cursor=pointer]
+            - text: RANGED WEAPONS RANGE A BS S AP D Betraying Shades — witchfire [DEVA...
+        - generic [ref=e106]:
+          - 'button "#6 Be’lakor 61% unit datasheet chaos-daemons Be’lakor — Characters, 1 model: 375pts." [ref=e107] [cursor=pointer]':
+            - generic [ref=e108]:
+              - generic [ref=e109]:
+                - generic [ref=e110]:
+                  - generic [ref=e111]: "#6"
+                  - heading "Be’lakor" [level=3] [ref=e112]
+                - generic [ref=e113]: 61%
+              - generic [ref=e114]:
+                - generic [ref=e115]: unit
+                - generic [ref=e116]: datasheet
+                - generic [ref=e117]: chaos-daemons
+              - paragraph [ref=e118]: "Be’lakor — Characters, 1 model: 375pts."
+          - paragraph [ref=e119]:
+            - button "Be’lakor" [ref=e120] [cursor=pointer]
+            - text: "— Characters, 1 model: 375pts."
+        - generic [ref=e121]:
+          - button "#7 Tempest’s Wrath (Psychic) 61% unit unit-ability space-marines space wolves Tempest’s Wrath (Psychic) (Datasheet) on Njal Stormcaller — In your Shooting phase, after this model’s unit has shot, select one enemy unit (excluding MONSTERS and VEHICLES) hit..." [ref=e122] [cursor=pointer]:
+            - generic [ref=e123]:
+              - generic [ref=e124]:
+                - generic [ref=e125]:
+                  - generic [ref=e126]: "#7"
+                  - heading "Tempest’s Wrath (Psychic)" [level=3] [ref=e127]
+                - generic [ref=e128]: 61%
+              - generic [ref=e129]:
+                - generic [ref=e130]: unit
+                - generic [ref=e131]: unit-ability
+                - generic [ref=e132]: space-marines
+                - generic [ref=e133]: space wolves
+              - paragraph [ref=e134]: Tempest’s Wrath (Psychic) (Datasheet) on Njal Stormcaller — In your Shooting phase, after this model’s unit has shot, select one enemy unit (excluding MONSTERS and VEHICLES) hit...
+          - paragraph [ref=e135]:
+            - button "Tempest’s Wrath (Psychic)" [ref=e136] [cursor=pointer]
+            - text: (Datasheet) on Njal Stormcaller — In your Shooting phase, after this model’s unit has shot, select one enemy unit (excluding MONSTERS and VEHICLES) hit...
+        - generic [ref=e137]:
+          - button "#8 Nethershriek Mind-eater 60% faction enhancement thousand-sons Nethershriek Mind-eater (10pts) — THOUSAND SONS or Lord of Change model only. At the start of your Shooting phase, select one enemy..." [ref=e138] [cursor=pointer]:
+            - generic [ref=e139]:
+              - generic [ref=e140]:
+                - generic [ref=e141]:
+                  - generic [ref=e142]: "#8"
+                  - heading "Nethershriek Mind-eater" [level=3] [ref=e143]
+                - generic [ref=e144]: 60%
+              - generic [ref=e145]:
+                - generic [ref=e146]: faction
+                - generic [ref=e147]: enhancement
+                - generic [ref=e148]: thousand-sons
+              - paragraph [ref=e149]: Nethershriek Mind-eater (10pts) — THOUSAND SONS or Lord of Change model only. At the start of your Shooting phase, select one enemy...
+          - paragraph [ref=e150]:
+            - button "Nethershriek Mind-eater" [ref=e151] [cursor=pointer]
+            - text: (10pts) — THOUSAND SONS or Lord of Change model only. At the start of your Shooting phase, select one enemy...
+        - generic [ref=e152]:
+          - 'button "#9 KARANAK 60% faction enhancement chaos-daemons KEYWORDS: Beast, Character, Epic Hero, Chaos, Daemon, Khorne, Karanak RANGED WEAPONS RANGE A BS S AP D Scalding roar [IGNORES COVER, TORRENT] 12\" D..." [ref=e153] [cursor=pointer]':
+            - generic [ref=e154]:
+              - generic [ref=e155]:
+                - generic [ref=e156]:
+                  - generic [ref=e157]: "#9"
+                  - heading "KARANAK" [level=3] [ref=e158]
+                - generic [ref=e159]: 60%
+              - generic [ref=e160]:
+                - generic [ref=e161]: faction
+                - generic [ref=e162]: enhancement
+                - generic [ref=e163]: chaos-daemons
+              - paragraph [ref=e164]: "KEYWORDS: Beast, Character, Epic Hero, Chaos, Daemon, Khorne, Karanak RANGED WEAPONS RANGE A BS S AP D Scalding roar [IGNORES COVER, TORRENT] 12\" D..."
+          - paragraph [ref=e165]:
+            - text: "KEYWORDS: Beast, Character, Epic Hero, Chaos, Daemon, Khorne,"
+            - button "Karanak" [ref=e166] [cursor=pointer]
+            - text: RANGED WEAPONS RANGE A BS S AP D Scalding roar [IGNORES COVER, TORRENT] 12" D...
+        - generic [ref=e167]:
+          - 'button "#10 NO PREY TOO BIG 60% faction stratagem aeldari shooting NO PREY TOO BIG (1CP, Shooting phase) — WHEN: Your Shooting phase. TARGET: One Anhrathe, Rangers or Shroud Runners unit from your army th..." [ref=e168] [cursor=pointer]':
+            - generic [ref=e169]:
+              - generic [ref=e170]:
+                - generic [ref=e171]:
+                  - generic [ref=e172]: "#10"
+                  - heading "NO PREY TOO BIG" [level=3] [ref=e173]
+                - generic [ref=e174]: 60%
+              - generic [ref=e175]:
+                - generic [ref=e176]: faction
+                - generic [ref=e177]: stratagem
+                - generic [ref=e178]: aeldari
+                - generic [ref=e179]: shooting
+              - paragraph [ref=e180]: "NO PREY TOO BIG (1CP, Shooting phase) — WHEN: Your Shooting phase. TARGET: One Anhrathe, Rangers or Shroud Runners unit from your army th..."
+          - paragraph [ref=e181]:
+            - button "NO PREY TOO BIG" [ref=e182] [cursor=pointer]
+            - text: "(1CP, Shooting phase) — WHEN: Your Shooting phase. TARGET: One Anhrathe, Rangers or Shroud Runners unit from your army th..."
+        - generic [ref=e183]:
+          - 'button "#11 Predator Annihilator 60% unit datasheet space-marines Predator Annihilator — Other, 1 model: 135pts." [ref=e184] [cursor=pointer]':
+            - generic [ref=e185]:
+              - generic [ref=e186]:
+                - generic [ref=e187]:
+                  - generic [ref=e188]: "#11"
+                  - heading "Predator Annihilator" [level=3] [ref=e189]
+                - generic [ref=e190]: 60%
+              - generic [ref=e191]:
+                - generic [ref=e192]: unit
+                - generic [ref=e193]: datasheet
+                - generic [ref=e194]: space-marines
+              - paragraph [ref=e195]: "Predator Annihilator — Other, 1 model: 135pts."
+          - paragraph [ref=e196]:
+            - button "Predator Annihilator" [ref=e197] [cursor=pointer]
+            - text: "— Other, 1 model: 135pts."
+        - generic [ref=e198]:
+          - 'button "#12 TORMENTBRINGER 60% faction enhancement chaos-daemons KEYWORDS: Mounted, Character, Psyker, Chaos, Daemon, Slaanesh, Tormentbringer RANGED WEAPONS RANGE A BS S AP D Lashes of torment [ANTI-INFANTRY 3+,..." [ref=e199] [cursor=pointer]':
+            - generic [ref=e200]:
+              - generic [ref=e201]:
+                - generic [ref=e202]:
+                  - generic [ref=e203]: "#12"
+                  - heading "TORMENTBRINGER" [level=3] [ref=e204]
+                - generic [ref=e205]: 60%
+              - generic [ref=e206]:
+                - generic [ref=e207]: faction
+                - generic [ref=e208]: enhancement
+                - generic [ref=e209]: chaos-daemons
+              - paragraph [ref=e210]: "KEYWORDS: Mounted, Character, Psyker, Chaos, Daemon, Slaanesh, Tormentbringer RANGED WEAPONS RANGE A BS S AP D Lashes of torment [ANTI-INFANTRY 3+,..."
+          - paragraph [ref=e211]:
+            - text: "KEYWORDS: Mounted, Character, Psyker, Chaos, Daemon, Slaanesh,"
+            - button "Tormentbringer" [ref=e212] [cursor=pointer]
+            - text: RANGED WEAPONS RANGE A BS S AP D Lashes of torment [ANTI-INFANTRY 3+,...
+        - generic [ref=e213]:
+          - button "#13 Adaptable Predators 60% unit unit-ability tyranids Adaptable Predators (Datasheet) on Tyranid Warriors With Ranged Bio-weapons — This unit is eligible to shoot and declare a charge in a turn in which it Fell Back." [ref=e214] [cursor=pointer]:
+            - generic [ref=e215]:
+              - generic [ref=e216]:
+                - generic [ref=e217]:
+                  - generic [ref=e218]: "#13"
+                  - heading "Adaptable Predators" [level=3] [ref=e219]
+                - generic [ref=e220]: 60%
+              - generic [ref=e221]:
+                - generic [ref=e222]: unit
+                - generic [ref=e223]: unit-ability
+                - generic [ref=e224]: tyranids
+              - paragraph [ref=e225]: Adaptable Predators (Datasheet) on Tyranid Warriors With Ranged Bio-weapons — This unit is eligible to shoot and declare a charge in a turn in which it Fell Back.
+          - paragraph [ref=e226]:
+            - button "Adaptable Predators" [ref=e227] [cursor=pointer]
+            - text: (Datasheet) on Tyranid Warriors With Ranged Bio-weapons — This unit is eligible to shoot and declare a charge in a turn in which it Fell Back.
+        - generic [ref=e228]:
+          - button "#14 Bullgryn maul 60% unit weapon astra-militarum Bullgryn maul (Melee) — Melee, 4A, S7, AP-1, D2." [ref=e229] [cursor=pointer]:
+            - generic [ref=e230]:
+              - generic [ref=e231]:
+                - generic [ref=e232]:
+                  - generic [ref=e233]: "#14"
+                  - heading "Bullgryn maul" [level=3] [ref=e234]
+                - generic [ref=e235]: 60%
+              - generic [ref=e236]:
+                - generic [ref=e237]: unit
+                - generic [ref=e238]: weapon
+                - generic [ref=e239]: astra-militarum
+              - paragraph [ref=e240]: Bullgryn maul (Melee) — Melee, 4A, S7, AP-1, D2.
+          - paragraph [ref=e241]:
+            - button "Bullgryn maul" [ref=e242] [cursor=pointer]
+            - text: (Melee) — Melee, 4A, S7, AP-1, D2.
+  - generic [ref=e244]:
+    - button "Close" [ref=e245] [cursor=pointer]: ✕
+    - generic [ref=e246]:
+      - generic [ref=e247]:
+        - generic [ref=e248]:
+          - heading "Baal Predator" [level=2] [ref=e249]
+          - button "BLOOD ANGELS" [ref=e251] [cursor=pointer]
+        - generic [ref=e252]:
+          - text: "1 model: 125pts"
+          - generic [ref=e253]: Vehicle
+      - generic [ref=e254]:
+        - generic [ref=e255]:
+          - generic [ref=e256]: M
+          - generic [ref=e257]: 12"
+        - generic [ref=e258]:
+          - generic [ref=e259]: T
+          - generic [ref=e260]: "10"
+        - generic [ref=e261]:
+          - generic [ref=e262]: SV
+          - generic [ref=e263]: 3+
+        - generic [ref=e264]:
+          - generic [ref=e265]: W
+          - generic [ref=e266]: "11"
+        - generic [ref=e267]:
+          - generic [ref=e268]: LD
+          - generic [ref=e269]: 6+
+        - generic [ref=e270]:
+          - generic [ref=e271]: OC
+          - generic [ref=e272]: "3"
+      - generic [ref=e273]:
+        - generic [ref=e274]:
+          - generic [ref=e275]:
+            - generic [ref=e276]: RANGED WEAPONS
+            - table [ref=e278]:
+              - rowgroup [ref=e279]:
+                - row "Weapon Range A BS/WS S AP D" [ref=e280]:
+                  - columnheader "Weapon" [ref=e281]
+                  - columnheader "Range" [ref=e282]
+                  - columnheader "A" [ref=e283]
+                  - columnheader "BS/WS" [ref=e284]
+                  - columnheader "S" [ref=e285]
+                  - columnheader "AP" [ref=e286]
+                  - columnheader "D" [ref=e287]
+              - rowgroup [ref=e288]:
+                - row "Baal flamestorm cannon ASSAULT, IGNORES COVER, TORRENT 18 D6+3 N/A 6 -2 2" [ref=e289]:
+                  - cell "Baal flamestorm cannon ASSAULT, IGNORES COVER, TORRENT" [ref=e290]:
+                    - button "Baal flamestorm cannon" [ref=e291] [cursor=pointer]
+                    - generic [ref=e293]: ASSAULT, IGNORES COVER, TORRENT
+                  - cell "18" [ref=e294]
+                  - cell "D6+3" [ref=e295]
+                  - cell "N/A" [ref=e296]
+                  - cell "6" [ref=e297]
+                  - cell "-2" [ref=e298]
+                  - cell "2" [ref=e299]
+                - row "Heavy bolter assault, sustained hits 1 36 3 3 5 -1 2" [ref=e300]:
+                  - cell "Heavy bolter assault, sustained hits 1" [ref=e301]:
+                    - button "Heavy bolter" [ref=e302] [cursor=pointer]
+                    - generic [ref=e304]: assault, sustained hits 1
+                  - cell "36" [ref=e305]
+                  - cell "3" [ref=e306]
+                  - cell "3" [ref=e307]
+                  - cell "5" [ref=e308]
+                  - cell "-1" [ref=e309]
+                  - cell "2" [ref=e310]
+                - row "Heavy flamer assault, ignores cover, torrent 12 D6 N/A 5 -1 1" [ref=e311]:
+                  - cell "Heavy flamer assault, ignores cover, torrent" [ref=e312]:
+                    - button "Heavy flamer" [ref=e313] [cursor=pointer]
+                    - generic [ref=e315]: assault, ignores cover, torrent
+                  - cell "12" [ref=e316]
+                  - cell "D6" [ref=e317]
+                  - cell "N/A" [ref=e318]
+                  - cell "5" [ref=e319]
+                  - cell "-1" [ref=e320]
+                  - cell "1" [ref=e321]
+                - row "Hunter-killer missile one shot 48 1 2 14 -3 D6" [ref=e322]:
+                  - cell "Hunter-killer missile one shot" [ref=e323]:
+                    - button "Hunter-killer missile" [ref=e324] [cursor=pointer]
+                    - generic [ref=e326]: one shot
+                  - cell "48" [ref=e327]
+                  - cell "1" [ref=e328]
+                  - cell "2" [ref=e329]
+                  - cell "14" [ref=e330]
+                  - cell "-3" [ref=e331]
+                  - cell "D6" [ref=e332]
+                - row "Storm bolter rapid fire 2 24 2 3 4 0 1" [ref=e333]:
+                  - cell "Storm bolter rapid fire 2" [ref=e334]:
+                    - button "Storm bolter" [ref=e335] [cursor=pointer]
+                    - generic [ref=e337]: rapid fire 2
+                  - cell "24" [ref=e338]
+                  - cell "2" [ref=e339]
+                  - cell "3" [ref=e340]
+                  - cell "4" [ref=e341]
+                  - cell "0" [ref=e342]
+                  - cell "1" [ref=e343]
+                - row "Twin assault cannon ASSAULT, DEVASTATING WOUNDS, TWIN-LINKED 24 6 3 6 0 1" [ref=e344]:
+                  - cell "Twin assault cannon ASSAULT, DEVASTATING WOUNDS, TWIN-LINKED" [ref=e345]:
+                    - button "Twin assault cannon" [ref=e346] [cursor=pointer]
+                    - generic [ref=e348]: ASSAULT, DEVASTATING WOUNDS, TWIN-LINKED
+                  - cell "24" [ref=e349]
+                  - cell "6" [ref=e350]
+                  - cell "3" [ref=e351]
+                  - cell "6" [ref=e352]
+                  - cell "0" [ref=e353]
+                  - cell "1" [ref=e354]
+          - generic [ref=e355]:
+            - generic [ref=e356]: MELEE WEAPONS
+            - table [ref=e358]:
+              - rowgroup [ref=e359]:
+                - row "Weapon Range A BS/WS S AP D" [ref=e360]:
+                  - columnheader "Weapon" [ref=e361]
+                  - columnheader "Range" [ref=e362]
+                  - columnheader "A" [ref=e363]
+                  - columnheader "BS/WS" [ref=e364]
+                  - columnheader "S" [ref=e365]
+                  - columnheader "AP" [ref=e366]
+                  - columnheader "D" [ref=e367]
+              - rowgroup [ref=e368]:
+                - row "Armoured tracks Melee 3 4 6 0 1" [ref=e369]:
+                  - cell "Armoured tracks" [ref=e370]:
+                    - button "Armoured tracks" [ref=e371] [cursor=pointer]
+                  - cell "Melee" [ref=e372]
+                  - cell "3" [ref=e373]
+                  - cell "4" [ref=e374]
+                  - cell "6" [ref=e375]
+                  - cell "0" [ref=e376]
+                  - cell "1" [ref=e377]
+        - generic [ref=e378]:
+          - generic [ref=e379]: ABILITIES
+          - button "deadly demise" [ref=e381] [cursor=pointer]
+          - generic [ref=e382]:
+            - generic [ref=e383]:
+              - button "Overcharged Engines" [ref=e384] [cursor=pointer]
+              - paragraph [ref=e385]: You can re-roll Advance rolls made for this model.
+            - generic [ref=e386]:
+              - button "One Shot" [ref=e387] [cursor=pointer]
+              - paragraph [ref=e388]: The bearer can only shoot with this weapon once per battle.
+      - generic [ref=e389]:
+        - generic [ref=e390]:
+          - generic [ref=e391]: "Keywords:"
+          - button "baal predator" [ref=e392] [cursor=pointer]
+          - button "smoke" [ref=e393] [cursor=pointer]
+          - button "vehicle" [ref=e394] [cursor=pointer]
+          - button "other" [ref=e395] [cursor=pointer]
+          - button "power-armour" [ref=e396] [cursor=pointer]
+        - generic [ref=e397]:
+          - button "adeptus astartes" [ref=e398] [cursor=pointer]
+          - button "blood angels" [ref=e399] [cursor=pointer]
+          - button "imperium" [ref=e400] [cursor=pointer]
+      - generic [ref=e401]:
+        - generic [ref=e402]: "Composition: 1 Baal Predator"
+        - generic [ref=e403]: "Loadout: This model is equipped with: twin assault cannon; armoured tracks."

@@ -103,7 +103,7 @@ export async function retrieve(options: RetrieveOptions, env: RetrieveEnv): Prom
     && queryMatchesFactionExactly
 
   if (isFactionBrowse) {
-    return await factionBrowse(detected, strippedQuery, keywords, limit, includeConnected, connectedDepth, env)
+    return await factionBrowse(detected, strippedQuery, keywords, limit, includeConnected, connectedDepth, env, query)
   }
 
   // ── Semantic search mode (normal path) ───────────────────────────────────
@@ -263,6 +263,38 @@ export async function retrieve(options: RetrieveOptions, env: RetrieveEnv): Prom
     })
     .filter((n): n is EnrichedNode => n !== null)
 
+  // Step 12b: Direct title match — find ALL datasheets whose title matches the original query
+  // and inject them at position 0 if not already present. Handles cross-faction units
+  // (e.g., "Genestealers" exists in both tyranids and genestealer-cults).
+  const resultIdSet = new Set(results.map(r => r.id))
+  const queryTitleLower = query.toLowerCase().trim()
+
+  // Scan R2 node files for exact title matches
+  const manifestObj = await env.bucket.get('manifest.json')
+  if (manifestObj) {
+    const manifest = await manifestObj.json() as { files: Record<string, string> }
+    const titleMatches: EnrichedNode[] = []
+
+    for (const file of Object.keys(manifest.files)) {
+      if (!file.startsWith('nodes/')) continue
+      const obj = await env.bucket.get(file)
+      if (!obj) continue
+      const fileNodes = await obj.json() as Node[]
+      for (const n of fileNodes) {
+        if (n.category === 'datasheet' &&
+            n.title.toLowerCase() === queryTitleLower &&
+            !resultIdSet.has(n.id)) {
+          titleMatches.push(enrichNode(n, 1.0, new Map()))
+          resultIdSet.add(n.id)
+        }
+      }
+    }
+
+    if (titleMatches.length > 0) {
+      results.unshift(...titleMatches)
+    }
+  }
+
   // Step 13: If includeConnected, call fetchConnectedNodes
   let connected: EnrichedNode[] = []
   let parentMap = new Map<string, string>()
@@ -329,6 +361,7 @@ async function factionBrowse(
   includeConnected: boolean,
   connectedDepth: number,
   env: RetrieveEnv,
+  originalQuery?: string,
 ): Promise<RetrieveResult> {
   const factionId = detected.factions[0]!
   const subfaction = detected.subfaction
@@ -396,6 +429,28 @@ async function factionBrowse(
   // No hard limit for faction browse — return all faction content
   // (limit only applies to Vectorize searches)
   const results: EnrichedNode[] = filtered.map(n => enrichNode(n, 1.0, new Map()))
+
+  // Inject cross-faction datasheets whose title matches the original query
+  // (e.g., "Genestealers" exists in both tyranids and genestealer-cults)
+  if (originalQuery) {
+    const titleLower = originalQuery.toLowerCase().trim()
+    const resultIdSet = new Set(results.map(r => r.id))
+
+    for (const file of Object.keys(manifest.files)) {
+      if (!file.startsWith('nodes/') || file === factionFile) continue
+      const obj = await env.bucket.get(file)
+      if (!obj) continue
+      const fileNodes = await obj.json() as Node[]
+      for (const n of fileNodes) {
+        if (n.category === 'datasheet' &&
+            n.title.toLowerCase() === titleLower &&
+            !resultIdSet.has(n.id)) {
+          results.unshift(enrichNode(n, 1.0, new Map()))
+          resultIdSet.add(n.id)
+        }
+      }
+    }
+  }
 
   return {
     detected: { factions: detected.factions, subfaction, strippedQuery, keywords },

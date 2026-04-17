@@ -1,0 +1,365 @@
+- generic [ref=e3]:
+  - banner [ref=e4]:
+    - generic [ref=e5]:
+      - generic [ref=e6]:
+        - heading "40K Brain" [level=1] [ref=e7]
+        - generic [ref=e8]: 20260415-091102
+      - generic [ref=e9]:
+        - button "Ask" [ref=e10] [cursor=pointer]
+        - button "Search" [ref=e11] [cursor=pointer]
+        - button "Browse" [ref=e12] [cursor=pointer]
+        - button "Graph" [ref=e13] [cursor=pointer]
+  - main [ref=e14]:
+    - generic [ref=e22]:
+      - generic [ref=e23]:
+        - textbox "Semantic search across all rules..." [ref=e24]: Sanguinary Guard
+        - button "Search" [ref=e25] [cursor=pointer]
+      - generic [ref=e26]:
+        - generic [ref=e27]:
+          - 'button "#1 Sanguinary Guard 71% unit datasheet space-marines blood angels Sanguinary Guard — Other, 3 models: 125pts, 6 models: 260pts." [active] [ref=e28] [cursor=pointer]':
+            - generic [ref=e29]:
+              - generic [ref=e30]:
+                - generic [ref=e31]:
+                  - generic [ref=e32]: "#1"
+                  - heading "Sanguinary Guard" [level=3] [ref=e33]
+                - generic [ref=e34]: 71%
+              - generic [ref=e35]:
+                - generic [ref=e36]: unit
+                - generic [ref=e37]: datasheet
+                - generic [ref=e38]: space-marines
+                - generic [ref=e39]: blood angels
+              - paragraph [ref=e40]: "Sanguinary Guard — Other, 3 models: 125pts, 6 models: 260pts."
+          - paragraph [ref=e41]:
+            - button "Sanguinary Guard" [ref=e42] [cursor=pointer]
+            - text: "— Other, 3 models: 125pts, 6 models: 260pts."
+        - generic [ref=e43]:
+          - 'button "#2 The Sanguinor 66% unit datasheet space-marines blood angels The Sanguinor — Characters, 1 model: 130pts." [ref=e44] [cursor=pointer]':
+            - generic [ref=e45]:
+              - generic [ref=e46]:
+                - generic [ref=e47]:
+                  - generic [ref=e48]: "#2"
+                  - heading "The Sanguinor" [level=3] [ref=e49]
+                - generic [ref=e50]: 66%
+              - generic [ref=e51]:
+                - generic [ref=e52]: unit
+                - generic [ref=e53]: datasheet
+                - generic [ref=e54]: space-marines
+                - generic [ref=e55]: blood angels
+              - paragraph [ref=e56]: "The Sanguinor — Characters, 1 model: 130pts."
+          - paragraph [ref=e57]:
+            - button "The Sanguinor" [ref=e58] [cursor=pointer]
+            - text: "— Characters, 1 model: 130pts."
+        - generic [ref=e59]:
+          - 'button "#3 Sanguinary Priest 65% unit datasheet space-marines blood angels Sanguinary Priest — Characters, 1 model: 75pts." [ref=e60] [cursor=pointer]':
+            - generic [ref=e61]:
+              - generic [ref=e62]:
+                - generic [ref=e63]:
+                  - generic [ref=e64]: "#3"
+                  - heading "Sanguinary Priest" [level=3] [ref=e65]
+                - generic [ref=e66]: 65%
+              - generic [ref=e67]:
+                - generic [ref=e68]: unit
+                - generic [ref=e69]: datasheet
+                - generic [ref=e70]: space-marines
+                - generic [ref=e71]: blood angels
+              - paragraph [ref=e72]: "Sanguinary Priest — Characters, 1 model: 75pts."
+          - paragraph [ref=e73]:
+            - button "Sanguinary Priest" [ref=e74] [cursor=pointer]
+            - text: "— Characters, 1 model: 75pts."
+        - generic [ref=e75]:
+          - button "#4 Heirs of Azkaellon 63% unit unit-ability space-marines blood angels Heirs of Azkaellon (Datasheet) on Sanguinary Guard — While a Character model is leading this unit, each time a melee attack targets this unit, subtract 1 from the Wound r..." [ref=e76] [cursor=pointer]:
+            - generic [ref=e77]:
+              - generic [ref=e78]:
+                - generic [ref=e79]:
+                  - generic [ref=e80]: "#4"
+                  - heading "Heirs of Azkaellon" [level=3] [ref=e81]
+                - generic [ref=e82]: 63%
+              - generic [ref=e83]:
+                - generic [ref=e84]: unit
+                - generic [ref=e85]: unit-ability
+                - generic [ref=e86]: space-marines
+                - generic [ref=e87]: blood angels
+              - paragraph [ref=e88]: Heirs of Azkaellon (Datasheet) on Sanguinary Guard — While a Character model is leading this unit, each time a melee attack targets this unit, subtract 1 from the Wound r...
+          - paragraph [ref=e89]:
+            - button "Heirs of Azkaellon" [ref=e90] [cursor=pointer]
+            - text: (Datasheet) on
+            - button "Sanguinary Guard" [ref=e91] [cursor=pointer]
+            - text: — While a Character model is leading this unit, each time a melee attack targets this unit, subtract 1 from the Wound r...
+        - generic [ref=e92]:
+          - button "#5 Praesidium Shield 63% unit unit-ability adeptus-custodes Praesidium Shield (Wargear) on Custodian Guard — Add 1 to the bearer’s Wounds characteristic." [ref=e93] [cursor=pointer]:
+            - generic [ref=e94]:
+              - generic [ref=e95]:
+                - generic [ref=e96]:
+                  - generic [ref=e97]: "#5"
+                  - heading "Praesidium Shield" [level=3] [ref=e98]
+                - generic [ref=e99]: 63%
+              - generic [ref=e100]:
+                - generic [ref=e101]: unit
+                - generic [ref=e102]: unit-ability
+                - generic [ref=e103]: adeptus-custodes
+              - paragraph [ref=e104]: Praesidium Shield (Wargear) on Custodian Guard — Add 1 to the bearer’s Wounds characteristic.
+          - paragraph [ref=e105]:
+            - button "Praesidium Shield" [ref=e106] [cursor=pointer]
+            - text: (Wargear) on Custodian Guard — Add 1 to the bearer’s Wounds characteristic.
+        - generic [ref=e107]:
+          - button "#6 Sanguinary Banner 63% unit unit-ability space-marines blood angels Sanguinary Banner (Wargear) on Sanguinary Guard — Add 1 to the Objective Control characteristic of models in the bearer’s unit." [ref=e108] [cursor=pointer]:
+            - generic [ref=e109]:
+              - generic [ref=e110]:
+                - generic [ref=e111]:
+                  - generic [ref=e112]: "#6"
+                  - heading "Sanguinary Banner" [level=3] [ref=e113]
+                - generic [ref=e114]: 63%
+              - generic [ref=e115]:
+                - generic [ref=e116]: unit
+                - generic [ref=e117]: unit-ability
+                - generic [ref=e118]: space-marines
+                - generic [ref=e119]: blood angels
+              - paragraph [ref=e120]: Sanguinary Banner (Wargear) on Sanguinary Guard — Add 1 to the Objective Control characteristic of models in the bearer’s unit.
+          - paragraph [ref=e121]:
+            - button "Sanguinary Banner" [ref=e122] [cursor=pointer]
+            - text: (Wargear) on
+            - button "Sanguinary Guard" [ref=e123] [cursor=pointer]
+            - text: — Add 1 to the Objective Control characteristic of models in the bearer’s unit.
+        - generic [ref=e124]:
+          - button "#7 Angelic Visage 62% unit unit-ability space-marines blood angels Angelic Visage (Datasheet) on Sanguinary Guard — Each time a melee attack targets this unit, subtract 1 from the Hit roll." [ref=e125] [cursor=pointer]:
+            - generic [ref=e126]:
+              - generic [ref=e127]:
+                - generic [ref=e128]:
+                  - generic [ref=e129]: "#7"
+                  - heading "Angelic Visage" [level=3] [ref=e130]
+                - generic [ref=e131]: 62%
+              - generic [ref=e132]:
+                - generic [ref=e133]: unit
+                - generic [ref=e134]: unit-ability
+                - generic [ref=e135]: space-marines
+                - generic [ref=e136]: blood angels
+              - paragraph [ref=e137]: Angelic Visage (Datasheet) on Sanguinary Guard — Each time a melee attack targets this unit, subtract 1 from the Hit roll.
+          - paragraph [ref=e138]:
+            - button "Angelic Visage" [ref=e139] [cursor=pointer]
+            - text: (Datasheet) on
+            - button "Sanguinary Guard" [ref=e140] [cursor=pointer]
+            - text: — Each time a melee attack targets this unit, subtract 1 from the Hit roll.
+        - generic [ref=e141]:
+          - button "#8 HONOUR GUARD OF MACRAGGE 62% unit unit-ability space-marines ultramarines HONOUR GUARD OF MACRAGGE (Fortification (левая колонка)) on Ultramarines Honour Guard — Marneus Calgar can be attached to this unit. If a Captain model from your army with the LEADER ability can be attache..." [ref=e142] [cursor=pointer]:
+            - generic [ref=e143]:
+              - generic [ref=e144]:
+                - generic [ref=e145]:
+                  - generic [ref=e146]: "#8"
+                  - heading "HONOUR GUARD OF MACRAGGE" [level=3] [ref=e147]
+                - generic [ref=e148]: 62%
+              - generic [ref=e149]:
+                - generic [ref=e150]: unit
+                - generic [ref=e151]: unit-ability
+                - generic [ref=e152]: space-marines
+                - generic [ref=e153]: ultramarines
+              - paragraph [ref=e154]: HONOUR GUARD OF MACRAGGE (Fortification (левая колонка)) on Ultramarines Honour Guard — Marneus Calgar can be attached to this unit. If a Captain model from your army with the LEADER ability can be attache...
+          - paragraph [ref=e155]:
+            - button "HONOUR GUARD OF MACRAGGE" [ref=e156] [cursor=pointer]
+            - text: (Fortification (левая колонка)) on
+            - button "Ultramarines Honour Guard" [ref=e157] [cursor=pointer]
+            - text: — Marneus Calgar can be attached to this unit. If a Captain model from your army with the LEADER ability can be attache...
+        - generic [ref=e158]:
+          - button "#9 Sanguinary Tear (Aura) 62% faction enhancement space-marines blood angels Sanguinary Tear (Aura) (35pts) — ADEPTUS ASTARTES model only. While a friendly Death Company unit is within 6\" of the bearer, add ..." [ref=e159] [cursor=pointer]:
+            - generic [ref=e160]:
+              - generic [ref=e161]:
+                - generic [ref=e162]:
+                  - generic [ref=e163]: "#9"
+                  - heading "Sanguinary Tear (Aura)" [level=3] [ref=e164]
+                - generic [ref=e165]: 62%
+              - generic [ref=e166]:
+                - generic [ref=e167]: faction
+                - generic [ref=e168]: enhancement
+                - generic [ref=e169]: space-marines
+                - generic [ref=e170]: blood angels
+              - paragraph [ref=e171]: Sanguinary Tear (Aura) (35pts) — ADEPTUS ASTARTES model only. While a friendly Death Company unit is within 6" of the bearer, add ...
+          - paragraph [ref=e172]:
+            - button "Sanguinary Tear (Aura)" [ref=e173] [cursor=pointer]
+            - text: (35pts) — ADEPTUS ASTARTES model only. While a friendly Death Company unit is within 6" of the bearer, add ...
+        - generic [ref=e174]:
+          - 'button "#10 Ultramarines Honour Guard 61% unit datasheet space-marines ultramarines Ultramarines Honour Guard — Other, 4 models: 155pts." [ref=e175] [cursor=pointer]':
+            - generic [ref=e176]:
+              - generic [ref=e177]:
+                - generic [ref=e178]:
+                  - generic [ref=e179]: "#10"
+                  - heading "Ultramarines Honour Guard" [level=3] [ref=e180]
+                - generic [ref=e181]: 61%
+              - generic [ref=e182]:
+                - generic [ref=e183]: unit
+                - generic [ref=e184]: datasheet
+                - generic [ref=e185]: space-marines
+                - generic [ref=e186]: ultramarines
+              - paragraph [ref=e187]: "Ultramarines Honour Guard — Other, 4 models: 155pts."
+          - paragraph [ref=e188]:
+            - button "Ultramarines Honour Guard" [ref=e189] [cursor=pointer]
+            - text: "— Other, 4 models: 155pts."
+        - generic [ref=e190]:
+          - button "#11 ATTACHED UNIT 60% unit unit-ability space-marines blood angels ATTACHED UNIT (Special (правая колонка)) on Sanguinary Guard — If a Captain model from your army with the Leader ability can be attached to an Assault Intercessors with Jump Packs ..." [ref=e191] [cursor=pointer]:
+            - generic [ref=e192]:
+              - generic [ref=e193]:
+                - generic [ref=e194]:
+                  - generic [ref=e195]: "#11"
+                  - heading "ATTACHED UNIT" [level=3] [ref=e196]
+                - generic [ref=e197]: 60%
+              - generic [ref=e198]:
+                - generic [ref=e199]: unit
+                - generic [ref=e200]: unit-ability
+                - generic [ref=e201]: space-marines
+                - generic [ref=e202]: blood angels
+              - paragraph [ref=e203]: ATTACHED UNIT (Special (правая колонка)) on Sanguinary Guard — If a Captain model from your army with the Leader ability can be attached to an Assault Intercessors with Jump Packs ...
+          - paragraph [ref=e204]:
+            - button "ATTACHED UNIT" [ref=e205] [cursor=pointer]
+            - text: (Special (правая колонка)) on
+            - button "Sanguinary Guard" [ref=e206] [cursor=pointer]
+            - text: — If a Captain model from your army with the Leader ability can be attached to an Assault Intercessors with Jump Packs ...
+        - generic [ref=e207]:
+          - 'button "#12 Vigilators 60% unit datasheet adeptus-custodes Vigilators — Other, 4 models: 45pts, 5 models: 55pts, 9 models: 90pts, 10 models: 100pts." [ref=e208] [cursor=pointer]':
+            - generic [ref=e209]:
+              - generic [ref=e210]:
+                - generic [ref=e211]:
+                  - generic [ref=e212]: "#12"
+                  - heading "Vigilators" [level=3] [ref=e213]
+                - generic [ref=e214]: 60%
+              - generic [ref=e215]:
+                - generic [ref=e216]: unit
+                - generic [ref=e217]: datasheet
+                - generic [ref=e218]: adeptus-custodes
+              - paragraph [ref=e219]: "Vigilators — Other, 4 models: 45pts, 5 models: 55pts, 9 models: 90pts, 10 models: 100pts."
+          - paragraph [ref=e220]:
+            - button "Vigilators" [ref=e221] [cursor=pointer]
+            - text: "— Other, 4 models: 45pts, 5 models: 55pts, 9 models: 90pts, 10 models: 100pts."
+  - generic [ref=e223]:
+    - button "Close" [ref=e224] [cursor=pointer]: ✕
+    - generic [ref=e225]:
+      - generic [ref=e226]:
+        - generic [ref=e227]:
+          - heading "Sanguinary Guard" [level=2] [ref=e228]
+          - generic [ref=e229]:
+            - generic [ref=e230]:
+              - button "adeptus astartes" [ref=e231] [cursor=pointer]
+              - text: ·
+            - button "imperium" [ref=e233] [cursor=pointer]
+        - generic [ref=e234]:
+          - text: "3 models: 125pts, 6 models: 260pts"
+          - generic [ref=e235]: Other
+      - generic [ref=e236]:
+        - generic [ref=e237]:
+          - generic [ref=e238]: M
+          - generic [ref=e239]: 12"
+        - generic [ref=e240]:
+          - generic [ref=e241]: T
+          - generic [ref=e242]: "4"
+        - generic [ref=e243]:
+          - generic [ref=e244]: SV
+          - generic [ref=e245]: 2+
+        - generic [ref=e246]:
+          - generic [ref=e247]: W
+          - generic [ref=e248]: "3"
+        - generic [ref=e249]:
+          - generic [ref=e250]: LD
+          - generic [ref=e251]: 6+
+        - generic [ref=e252]:
+          - generic [ref=e253]: OC
+          - generic [ref=e254]: "1"
+        - generic [ref=e255]:
+          - generic [ref=e256]: INV
+          - generic [ref=e257]: 4++
+      - generic [ref=e258]:
+        - generic [ref=e259]:
+          - generic [ref=e260]:
+            - generic [ref=e261]: RANGED WEAPONS
+            - table [ref=e263]:
+              - rowgroup [ref=e264]:
+                - row "Weapon Range A BS/WS S AP D" [ref=e265]:
+                  - columnheader "Weapon" [ref=e266]
+                  - columnheader "Range" [ref=e267]
+                  - columnheader "A" [ref=e268]
+                  - columnheader "BS/WS" [ref=e269]
+                  - columnheader "S" [ref=e270]
+                  - columnheader "AP" [ref=e271]
+                  - columnheader "D" [ref=e272]
+              - rowgroup [ref=e273]:
+                - row "Angelus boltgun pistol 12 2 3 4 0 1" [ref=e274]:
+                  - cell "Angelus boltgun pistol" [ref=e275]:
+                    - button "Angelus boltgun" [ref=e276] [cursor=pointer]
+                    - generic [ref=e278]: pistol
+                  - cell "12" [ref=e279]
+                  - cell "2" [ref=e280]
+                  - cell "3" [ref=e281]
+                  - cell "4" [ref=e282]
+                  - cell "0" [ref=e283]
+                  - cell "1" [ref=e284]
+                - row "Inferno pistol melta 2, pistol 6 1 3 8 -4 D3" [ref=e285]:
+                  - cell "Inferno pistol melta 2, pistol" [ref=e286]:
+                    - button "Inferno pistol" [ref=e287] [cursor=pointer]
+                    - generic [ref=e289]: melta 2, pistol
+                  - cell "6" [ref=e290]
+                  - cell "1" [ref=e291]
+                  - cell "3" [ref=e292]
+                  - cell "8" [ref=e293]
+                  - cell "-4" [ref=e294]
+                  - cell "D3" [ref=e295]
+          - generic [ref=e296]:
+            - generic [ref=e297]: MELEE WEAPONS
+            - table [ref=e299]:
+              - rowgroup [ref=e300]:
+                - row "Weapon Range A BS/WS S AP D" [ref=e301]:
+                  - columnheader "Weapon" [ref=e302]
+                  - columnheader "Range" [ref=e303]
+                  - columnheader "A" [ref=e304]
+                  - columnheader "BS/WS" [ref=e305]
+                  - columnheader "S" [ref=e306]
+                  - columnheader "AP" [ref=e307]
+                  - columnheader "D" [ref=e308]
+              - rowgroup [ref=e309]:
+                - row "Encarmine blade Melee 4 2 6 -3 2" [ref=e310]:
+                  - cell "Encarmine blade" [ref=e311]:
+                    - button "Encarmine blade" [ref=e312] [cursor=pointer]
+                  - cell "Melee" [ref=e313]
+                  - cell "4" [ref=e314]
+                  - cell "2" [ref=e315]
+                  - cell "6" [ref=e316]
+                  - cell "-3" [ref=e317]
+                  - cell "2" [ref=e318]
+                - row "Encarmine spear Lance Melee 4 2 6 -2 2" [ref=e319]:
+                  - cell "Encarmine spear Lance" [ref=e320]:
+                    - button "Encarmine spear" [ref=e321] [cursor=pointer]
+                    - generic [ref=e323]: Lance
+                  - cell "Melee" [ref=e324]
+                  - cell "4" [ref=e325]
+                  - cell "2" [ref=e326]
+                  - cell "6" [ref=e327]
+                  - cell "-2" [ref=e328]
+                  - cell "2" [ref=e329]
+        - generic [ref=e330]:
+          - generic [ref=e331]: ABILITIES
+          - generic [ref=e332]:
+            - button "grenades" [ref=e333] [cursor=pointer]
+            - button "deep strike" [ref=e334] [cursor=pointer]
+          - generic [ref=e335]:
+            - generic [ref=e336]:
+              - button "Angelic Visage" [ref=e337] [cursor=pointer]
+              - paragraph [ref=e338]: Each time a melee attack targets this unit, subtract 1 from the Hit roll.
+            - generic [ref=e339]:
+              - button "Heirs of Azkaellon" [ref=e340] [cursor=pointer]
+              - paragraph [ref=e341]: While a Character model is leading this unit, each time a melee attack targets this unit, subtract 1 from the Wound roll.
+            - generic [ref=e342]:
+              - button "Sanguinary Banner" [ref=e343] [cursor=pointer]
+              - paragraph [ref=e344]: Add 1 to the Objective Control characteristic of models in the bearer’s unit.
+            - generic [ref=e345]:
+              - button "ATTACHED UNIT" [ref=e346] [cursor=pointer]
+              - paragraph [ref=e347]: If a Captain model from your army with the Leader ability can be attached to an Assault Intercessors with Jump Packs unit, it can be attached to this unit instead.
+      - generic [ref=e348]:
+        - generic [ref=e349]: "Keywords:"
+        - button "blood angels" [ref=e350] [cursor=pointer]
+        - button "jump pack" [ref=e351] [cursor=pointer]
+        - button "fly" [ref=e352] [cursor=pointer]
+        - button "infantry" [ref=e353] [cursor=pointer]
+        - button "sanguinary guard" [ref=e354] [cursor=pointer]
+        - button "tacticus" [ref=e355] [cursor=pointer]
+        - button "other" [ref=e356] [cursor=pointer]
+        - button "invulnerable" [ref=e357] [cursor=pointer]
+        - button "adeptus astartes" [ref=e358] [cursor=pointer]
+        - button "imperium" [ref=e359] [cursor=pointer]
+      - generic [ref=e360]:
+        - generic [ref=e361]: "Composition: 3-6 Sanguinary Guard"
+        - generic [ref=e362]: "Loadout: Every model is equipped with: Angelus boltgun; encarmine blade."

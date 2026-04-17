@@ -389,6 +389,38 @@ async function scrapeGoogleSearch(
   return { answer, sources }
 }
 
+// ── Global entity index (cached per isolate) ────────────────────────────────
+
+let cachedEntityIndex: Map<string, { nodeId: string; title: string }> | null = null
+
+async function getEntityIndex(bucket: R2Bucket): Promise<Map<string, { nodeId: string; title: string }>> {
+  if (cachedEntityIndex) return cachedEntityIndex
+
+  const map = new Map<string, { nodeId: string; title: string }>()
+  const manifestObj = await bucket.get('manifest.json')
+  if (!manifestObj) return map
+  const manifest = await manifestObj.json() as { files: Record<string, string> }
+
+  for (const file of Object.keys(manifest.files)) {
+    if (!file.startsWith('nodes/')) continue
+    const obj = await bucket.get(file)
+    if (!obj) continue
+    const nodes = await obj.json() as Node[]
+    for (const n of nodes) {
+      // Index stratagems, detachment rules, enhancements, datasheets, and faction abilities
+      if (['stratagem', 'detachment-rule', 'enhancement', 'datasheet', 'faction-ability'].includes(n.category)) {
+        const key = n.title.toLowerCase()
+        if (key.length > 2 && !map.has(key)) {
+          map.set(key, { nodeId: n.id, title: n.title })
+        }
+      }
+    }
+  }
+
+  cachedEntityIndex = map
+  return map
+}
+
 // ── Server-side entity linking ──────────────────────────────────────────────
 
 function linkEntitiesInText(
@@ -671,11 +703,13 @@ RULES:
     }
   }
 
-  // Server-side entity linking — build map from all retrieved + connected nodes
-  const entityMap = new Map<string, { nodeId: string; title: string }>()
+  // Server-side entity linking — global index + retrieved nodes
+  const globalEntities = await getEntityIndex(c.env.BRAIN_BUCKET)
+  const entityMap = new Map(globalEntities)
+  // Override with retrieved nodes (more specific context)
   for (const node of [...results, ...connected]) {
     const key = node.title.toLowerCase()
-    if (key.length > 2 && !entityMap.has(key)) {
+    if (key.length > 2) {
       entityMap.set(key, { nodeId: node.id, title: node.title })
     }
   }

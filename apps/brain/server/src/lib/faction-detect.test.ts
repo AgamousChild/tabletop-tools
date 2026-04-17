@@ -108,7 +108,7 @@ describe('detectFactions — top-level factions', () => {
     ['genestealer cults ambush', ['genestealer-cults']],
     ['drukhari kabalites', ['drukhari']],
     ['votann hearthkyn', ['leagues-of-votann']],
-    ['daemon prince abilities', ['chaos-daemons']],
+    ['chaos daemon units', ['chaos-daemons']],
   ]
 
   for (const [query, expected] of cases) {

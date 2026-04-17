@@ -18,31 +18,35 @@ import { deriveUnitType } from '../../../shared/derive-unit-type'
 
 const API_BASE = import.meta.env.VITE_BRAIN_API_URL || '/brain/api'
 
-/** Simple markdown to HTML — handles ##, **, -, ` */
-function renderMarkdown(text: string): string {
+/** Simple markdown to HTML — handles ##, **, -, `, and brain: entity links */
+function renderMarkdown(text: string, onBrainLink?: (nodeId: string) => void): string {
+  // Convert [text](brain:nodeId) to clickable entity links
+  const linkBrain = (s: string) =>
+    s.replace(/\[([^\]]+)\]\(brain:([^)]+)\)/g,
+      (_m, label, nodeId) => `<button class="text-amber-400 hover:text-amber-300 underline decoration-amber-400/30 hover:decoration-amber-400 cursor-pointer" data-brain-node="${nodeId}">${label}</button>`)
+
   return text
     .split('\n')
     .map(line => {
       // Headings
-      if (line.startsWith('## ')) return `<h2 class="text-lg font-bold text-amber-400 mt-4 mb-2">${line.slice(3)}</h2>`
-      if (line.startsWith('### ')) return `<h3 class="text-base font-semibold text-amber-300 mt-3 mb-1">${line.slice(4)}</h3>`
+      if (line.startsWith('## ')) return `<h2 class="text-lg font-bold text-amber-400 mt-4 mb-2">${linkBrain(line.slice(3))}</h2>`
+      if (line.startsWith('### ')) return `<h3 class="text-base font-semibold text-amber-300 mt-3 mb-1">${linkBrain(line.slice(4))}</h3>`
       // Bullet points
       if (line.startsWith('- ')) {
         const content = line.slice(2)
           .replace(/\*\*([^*]+)\*\*/g, '<strong class="text-slate-100">$1</strong>')
-          .replace(/\[([^\]]+)\]/g, '<span class="text-amber-400 text-xs">[$1]</span>')
-        return `<div class="pl-4 py-0.5 text-sm text-slate-300 border-l border-slate-700 ml-2">${content}</div>`
+        return `<div class="pl-4 py-0.5 text-sm text-slate-300 border-l border-slate-700 ml-2">${linkBrain(content)}</div>`
       }
       // Italic line
       if (line.startsWith('*') && line.endsWith('*') && !line.startsWith('**')) {
-        return `<p class="text-xs text-slate-500 italic mt-2">${line.slice(1, -1)}</p>`
+        return `<p class="text-xs text-slate-500 italic mt-2">${linkBrain(line.slice(1, -1))}</p>`
       }
       // Empty line
       if (!line.trim()) return ''
       // Regular text with bold
       const formatted = line
         .replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>')
-      return `<p class="text-sm text-slate-300 my-1">${formatted}</p>`
+      return `<p class="text-sm text-slate-300 my-1">${linkBrain(formatted)}</p>`
     })
     .join('\n')
 }
@@ -372,12 +376,18 @@ interface QASource {
   sources?: any[]
 }
 
+interface WebSource {
+  url: string
+  title: string
+}
+
 interface QAResponse {
   detected: DetectedFactions
   answer: string
   reference: ResultNode[]
   sources: QASource[]
   connectedCount: number
+  webSources?: WebSource[]
 }
 
 interface AskTabProps {
@@ -489,12 +499,50 @@ function AskTab({ onOpenCard, activeFilters, onFilterChange }: AskTabProps) {
             />
           )}
 
-          <div className="bg-slate-900 border border-slate-700 rounded p-4 overflow-auto max-h-[70vh]">
+          <div
+            className="bg-slate-900 border border-slate-700 rounded p-4 overflow-auto max-h-[70vh]"
+            onClick={async (e) => {
+              const target = e.target as HTMLElement
+              const nodeId = target.closest('[data-brain-node]')?.getAttribute('data-brain-node')
+              if (!nodeId) return
+              // Try reference list first
+              const node = answer.reference?.find(r => r.id === nodeId)
+              if (node) { onOpenCard(node); return }
+              // Fetch from API if not in reference
+              try {
+                const res = await fetch(`${API_BASE}/browse/node/${encodeURIComponent(nodeId)}`)
+                if (res.ok) {
+                  const data = await res.json() as { node: ResultNode }
+                  if (data.node) onOpenCard(data.node)
+                }
+              } catch { /* ignore fetch errors */ }
+            }}
+          >
             <div
               className="max-w-none"
               dangerouslySetInnerHTML={{ __html: renderMarkdown(answer.answer) }}
             />
           </div>
+
+          {answer.webSources && answer.webSources.length > 0 && (
+            <div className="bg-slate-900/50 border border-slate-800 rounded p-3">
+              <h4 className="text-xs font-medium text-slate-400 uppercase mb-2">Web Sources</h4>
+              <div className="flex flex-wrap gap-2">
+                {answer.webSources.map((s, i) => (
+                  <a
+                    key={i}
+                    href={s.url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center gap-1 bg-slate-800 rounded px-2 py-1 text-xs text-blue-400 hover:text-blue-300 hover:bg-slate-700"
+                  >
+                    {s.title.length > 50 ? s.title.substring(0, 47) + '...' : s.title}
+                    <span className="text-slate-600">↗</span>
+                  </a>
+                ))}
+              </div>
+            </div>
+          )}
 
           {answer.reference && answer.reference.length > 0 && (
             <div className="mt-4">
@@ -523,7 +571,19 @@ function AskTab({ onOpenCard, activeFilters, onFilterChange }: AskTabProps) {
                       <LinkedText
                         text={r.summary}
                         entities={entityMap}
-                        onEntityClick={(name) => onOpenCard(r)}
+                        onEntityClick={async (name) => {
+                          const info = entityMap.get(name.toLowerCase())
+                          if (info) {
+                            try {
+                              const res = await fetch(`${API_BASE}/browse/node/${encodeURIComponent(info.nodeId)}`)
+                              if (res.ok) {
+                                const data = await res.json() as { node: ResultNode }
+                                if (data.node) { onOpenCard(data.node); return }
+                              }
+                            } catch { /* fall through */ }
+                          }
+                          onOpenCard(r)
+                        }}
                       />
                     </p>
                   )}

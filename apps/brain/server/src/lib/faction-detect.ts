@@ -38,7 +38,7 @@ export const FACTION_PATTERNS: Array<{ pattern: string; slug: string }> = [
   { pattern: 'genestealer', slug: 'genestealer-cults' },
   { pattern: 'drukhari', slug: 'drukhari' },
   { pattern: 'votann', slug: 'leagues-of-votann' },
-  { pattern: 'daemon', slug: 'chaos-daemons' },
+  { pattern: 'chaos daemon', slug: 'chaos-daemons' },
 ]
 
 // ── Subfaction → parent faction mapping ───────────────────────────────────────
@@ -135,7 +135,9 @@ export function detectFactions(query: string): { factions: string[]; subfaction?
 
   for (const { pattern, slug } of FACTION_PATTERNS) {
     const startAnchor = /\w/.test(pattern[0]!) ? '\\b' : ''
-    const re = new RegExp(`${startAnchor}${escapeRegex(pattern)}`, 'gi')
+    // End boundary: allow optional trailing 's' (plurals) then require word boundary
+    const endAnchor = /\w/.test(pattern[pattern.length - 1]!) ? 's?\\b' : ''
+    const re = new RegExp(`${startAnchor}${escapeRegex(pattern)}${endAnchor}`, 'gi')
     let m: RegExpExecArray | null
     let matched = false
     while ((m = re.exec(lower)) !== null) {
