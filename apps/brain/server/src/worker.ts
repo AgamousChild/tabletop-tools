@@ -5,6 +5,18 @@ import type { Node } from './lib/model'
 import { retrieve } from './lib/retrieve'
 import { formatConversationalAnswer, assembleContext } from './lib/format'
 
+/** Vectorize IDs must be <= 64 bytes. For long node IDs, truncate + append hash. */
+function vectorizeId(nodeId: string): string {
+  if (nodeId.length <= 64) return nodeId
+  // Simple hash: sum char codes, convert to hex
+  let hash = 0
+  for (let i = 0; i < nodeId.length; i++) {
+    hash = ((hash << 5) - hash + nodeId.charCodeAt(i)) | 0
+  }
+  const hexHash = (hash >>> 0).toString(16).padStart(8, '0')
+  return nodeId.substring(0, 55) + '-' + hexHash
+}
+
 type HonoEnv = { Bindings: Env }
 
 const app = new Hono<HonoEnv>()
@@ -214,7 +226,198 @@ app.post('/search', async (c) => {
   return c.json({ detected, results })
 })
 
-// ── Q&A endpoint (RAG: Vectorize → R2 → LLM) ───────────────────────────────
+// ── Gemini cache helpers ────────────────────────────────────────────────────
+
+function hashQuestion(q: string): string {
+  const normalized = q.toLowerCase().trim().replace(/\s+/g, ' ')
+  let hash = 0
+  for (let i = 0; i < normalized.length; i++) {
+    hash = ((hash << 5) - hash + normalized.charCodeAt(i)) | 0
+  }
+  return (hash >>> 0).toString(16).padStart(8, '0')
+}
+
+const GEMINI_CACHE_TTL_MS = 24 * 60 * 60 * 1000 // 24 hours
+
+interface CachedGeminiResult {
+  answer: string
+  sources: GeminiSource[]
+  cachedAt: string
+}
+
+async function getCachedGemini(bucket: R2Bucket, question: string): Promise<CachedGeminiResult | null> {
+  const key = `cache/gemini/${hashQuestion(question)}.json`
+  const obj = await bucket.get(key)
+  if (!obj) return null
+  const cached = await obj.json() as CachedGeminiResult
+  if (Date.now() - new Date(cached.cachedAt).getTime() > GEMINI_CACHE_TTL_MS) return null
+  return cached
+}
+
+async function setCachedGemini(bucket: R2Bucket, question: string, result: { answer: string; sources: GeminiSource[] }): Promise<void> {
+  const key = `cache/gemini/${hashQuestion(question)}.json`
+  const cached: CachedGeminiResult = { ...result, cachedAt: new Date().toISOString() }
+  await bucket.put(key, JSON.stringify(cached))
+}
+
+// ── Gemini with Google Search grounding ─────────────────────────────────────
+
+interface GeminiSource { url: string; title: string }
+
+async function callGemini(
+  question: string,
+  apiKey: string,
+): Promise<{ answer: string; sources: GeminiSource[] }> {
+  const res = await fetch(
+    `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`,
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        contents: [{ parts: [{ text: `Warhammer 40,000 10th Edition: ${question}` }] }],
+        tools: [{ google_search: {} }],
+      }),
+    },
+  )
+
+  if (!res.ok) {
+    const err = await res.text()
+    throw new Error(`Gemini API ${res.status}: ${err}`)
+  }
+
+  const data = await res.json() as {
+    candidates?: Array<{
+      content?: { parts?: Array<{ text?: string }> }
+      groundingMetadata?: {
+        groundingChunks?: Array<{ web?: { uri?: string; title?: string } }>
+      }
+    }>
+  }
+
+  const candidate = data.candidates?.[0]
+  const answer = candidate?.content?.parts
+    ?.filter((p: any) => p.text)
+    .map((p: any) => p.text)
+    .join('\n') ?? ''
+
+  const sources: GeminiSource[] = (candidate?.groundingMetadata?.groundingChunks ?? [])
+    .filter((ch: any) => ch.web?.uri)
+    .map((ch: any) => ({ url: ch.web!.uri!, title: ch.web!.title ?? ch.web!.uri! }))
+
+  return { answer, sources }
+}
+
+// ── Google scrape fallback ──────────────────────────────────────────────────
+
+async function scrapeGoogleSearch(
+  question: string,
+): Promise<{ answer: string; sources: GeminiSource[] }> {
+  const query = encodeURIComponent(`Warhammer 40K 10th Edition ${question}`)
+  const url = `https://www.google.com/search?q=${query}&hl=en`
+
+  const res = await fetch(url, {
+    headers: {
+      'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36',
+      'Accept': 'text/html,application/xhtml+xml',
+      'Accept-Language': 'en-US,en;q=0.9',
+    },
+  })
+
+  if (!res.ok) throw new Error(`Google search ${res.status}`)
+  const html = await res.text()
+
+  // Extract AI Overview (data-attrid="ai_overview" or class containing "ai-dd")
+  let aiOverview = ''
+  const aiMatch = html.match(/data-attrid="[^"]*ai[^"]*"[^>]*>([\s\S]*?)<\/div>\s*<\/div>\s*<\/div>/)
+    || html.match(/class="[^"]*ai-dd[^"]*"[^>]*>([\s\S]*?)<\/div>/)
+  if (aiMatch) {
+    aiOverview = aiMatch[1]!
+      .replace(/<[^>]+>/g, ' ')
+      .replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&#39;/g, "'").replace(/&quot;/g, '"')
+      .replace(/\s+/g, ' ')
+      .trim()
+  }
+
+  // Extract featured snippet
+  let featuredSnippet = ''
+  const featuredMatch = html.match(/class="[^"]*hgKElc[^"]*"[^>]*>([\s\S]*?)<\/span>/)
+    || html.match(/data-attrid="wa:\/description"[^>]*>([\s\S]*?)<\/span>/)
+  if (featuredMatch) {
+    featuredSnippet = featuredMatch[1]!
+      .replace(/<[^>]+>/g, ' ')
+      .replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&#39;/g, "'").replace(/&quot;/g, '"')
+      .replace(/\s+/g, ' ')
+      .trim()
+  }
+
+  // Extract search result snippets + links
+  const sources: GeminiSource[] = []
+  const snippets: string[] = []
+
+  // Match result blocks: <a href="/url?q=..."><h3>...</h3></a> ... <span class="...">snippet</span>
+  const linkPattern = /href="\/url\?q=([^&"]+)[^"]*"[^>]*>[\s\S]*?<h3[^>]*>([\s\S]*?)<\/h3>/g
+  let linkMatch
+  while ((linkMatch = linkPattern.exec(html)) !== null && sources.length < 5) {
+    const linkUrl = decodeURIComponent(linkMatch[1]!)
+    const title = linkMatch[2]!.replace(/<[^>]+>/g, '').trim()
+    if (linkUrl.startsWith('http') && !linkUrl.includes('google.com')) {
+      sources.push({ url: linkUrl, title })
+    }
+  }
+
+  // Extract snippets from result descriptions
+  const snippetPattern = /class="[^"]*VwiC3b[^"]*"[^>]*>([\s\S]*?)<\/span>/g
+  let snippetMatch
+  while ((snippetMatch = snippetPattern.exec(html)) !== null && snippets.length < 5) {
+    const text = snippetMatch[1]!
+      .replace(/<[^>]+>/g, ' ')
+      .replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&#39;/g, "'").replace(/&quot;/g, '"')
+      .replace(/\s+/g, ' ')
+      .trim()
+    if (text.length > 30) snippets.push(text)
+  }
+
+  // Build answer from whatever we got
+  const parts: string[] = []
+  if (aiOverview) parts.push(aiOverview)
+  if (featuredSnippet && featuredSnippet !== aiOverview) parts.push(featuredSnippet)
+  if (snippets.length > 0) parts.push(...snippets)
+
+  const answer = parts.join('\n\n')
+  if (!answer) throw new Error('No content extracted from Google search')
+
+  return { answer, sources }
+}
+
+// ── Server-side entity linking ──────────────────────────────────────────────
+
+function linkEntitiesInText(
+  text: string,
+  entityMap: Map<string, { nodeId: string; title: string }>,
+): string {
+  if (entityMap.size === 0) return text
+
+  // Sort names longest-first for greedy matching
+  const names = Array.from(entityMap.keys()).sort((a, b) => b.length - a.length)
+
+  // Build a regex that matches any entity name (case-insensitive, word boundaries)
+  // Escape regex special chars in names
+  const escaped = names.map(n => n.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'))
+  const pattern = new RegExp(`\\b(${escaped.join('|')})\\b`, 'gi')
+
+  // Track which entity IDs we've already linked (only link first occurrence)
+  const linked = new Set<string>()
+
+  return text.replace(pattern, (match) => {
+    const key = match.toLowerCase()
+    const entity = entityMap.get(key)
+    if (!entity || linked.has(entity.nodeId)) return match
+    linked.add(entity.nodeId)
+    return `[${match}](brain:${entity.nodeId})`
+  })
+}
+
+// ── Q&A endpoint (RAG: Vectorize → R2 → Gemini + Brain → LLM) ─────────────
 
 app.post('/ask', async (c) => {
   const body = await c.req.json<{
@@ -227,7 +430,8 @@ app.post('/ask', async (c) => {
     return c.json({ error: 'question is required' }, 400)
   }
 
-  const apiKey = c.env.ANTHROPIC_API_KEY
+  const anthropicKey = c.env.ANTHROPIC_API_KEY
+  const geminiKey = c.env.GEMINI_API_KEY
 
   const env = {
     ai: c.env.AI,
@@ -235,9 +439,17 @@ app.post('/ask', async (c) => {
     bucket: c.env.BRAIN_BUCKET,
   }
 
-  let retrieveResult
-  try {
-    retrieveResult = await retrieve(
+  // Check Gemini cache first
+  const cachedGemini = await getCachedGemini(c.env.BRAIN_BUCKET, body.question)
+
+  // Fire Brain retrieval + Gemini in parallel — surface errors, don't swallow them
+  let retrieveResult: Awaited<ReturnType<typeof retrieve>> | null = null
+  let retrieveError: string | null = null
+  let geminiResult: { answer: string; sources: GeminiSource[] } | null = cachedGemini
+  let geminiError: string | null = null
+
+  const [retrieveOutcome, geminiOutcome] = await Promise.allSettled([
+    retrieve(
       {
         query: body.question,
         limit: 10,
@@ -245,20 +457,47 @@ app.post('/ask', async (c) => {
         dualEmbedding: true,
       },
       env,
-    )
-  } catch (err) {
-    return c.json({ error: 'Retrieval failed', details: err instanceof Error ? err.message : String(err) }, 500)
-  }
-  const { detected, results, connected, parentMap } = retrieveResult
+    ),
+    // Skip Gemini call if we have a cached result
+    // Fallback chain: cache → Gemini API → null (scraping done offline via GitHub Action)
+    cachedGemini
+      ? Promise.resolve(cachedGemini)
+      : geminiKey
+        ? callGemini(body.question, geminiKey).catch(() => null)
+        : Promise.resolve(null),
+  ])
 
-  // Build Node arrays for assembleContext (results are EnrichedNode, compatible with Node shape)
+  if (retrieveOutcome.status === 'fulfilled') {
+    retrieveResult = retrieveOutcome.value
+  } else {
+    retrieveError = retrieveOutcome.reason instanceof Error ? retrieveOutcome.reason.message : String(retrieveOutcome.reason)
+  }
+
+  if (geminiOutcome.status === 'fulfilled') {
+    geminiResult = geminiOutcome.value
+    // Cache fresh results (Gemini or scrape — not already-cached ones)
+    if (geminiResult && !cachedGemini && geminiResult.answer) {
+      setCachedGemini(c.env.BRAIN_BUCKET, body.question, geminiResult).catch(() => {})
+    }
+  } else {
+    geminiError = geminiOutcome.reason instanceof Error ? geminiOutcome.reason.message : String(geminiOutcome.reason)
+  }
+
+  const detected = retrieveResult?.detected ?? { factions: [], strippedQuery: body.question, keywords: [] }
+  const results = retrieveResult?.results ?? []
+  const connected = retrieveResult?.connected ?? []
+  const parentMap = retrieveResult?.parentMap ?? {}
+
+  // Build Node arrays for assembleContext
   const primaryNodes = results as unknown as Node[]
   const connectedNodes = connected as unknown as Node[]
 
-  // Assemble LLM context — pass subfaction so context is structured with subfaction-specific content first
-  let context = assembleContext(primaryNodes, connectedNodes, parentMap, detected.subfaction)
+  // Assemble Brain context
+  let brainContext = retrieveResult
+    ? assembleContext(primaryNodes, connectedNodes, parentMap, detected.subfaction)
+    : ''
 
-  // Find combo pairs — only combos where at least one side matches the query keywords
+  // Find combo pairs
   let combos: string[] = []
   try {
     const fwdObj = await c.env.BRAIN_BUCKET.get('refs/forward-index.json')
@@ -266,11 +505,6 @@ app.post('/ask', async (c) => {
       const fwdIndex = await fwdObj.json() as Record<string, Array<{ targetId: string; rel: string; context: string }>>
       const allNodeIds = new Set([...results.map(n => n.id), ...connected.map(n => n.id)])
       const primaryIdSet = new Set(results.map(n => n.id))
-
-      // Build a set of keywords from the query to filter combos by relevance
-      const queryKeywords = detected.keywords.map(k => k.toLowerCase())
-      const queryTerms = detected.strippedQuery.toLowerCase().split(/\s+/).filter(t => t.length > 2)
-      const relevanceTerms = new Set([...queryKeywords, ...queryTerms])
 
       const scoredCombos: Array<{ text: string; score: number }> = []
       const allRelevantNodes = [...results, ...connected]
@@ -282,15 +516,10 @@ app.post('/ask', async (c) => {
           if (ref.rel !== 'stacks_with') continue
           if (!allNodeIds.has(ref.targetId)) continue
 
-          // Score combos:
-          // 2 = both sides are primary results (best — directly relevant)
-          // 1 = one side is primary (good — one hop away)
-          // 0.5 = neither is primary but combo matches a query keyword (relevant by topic)
           const srcPrimary = primaryIdSet.has(node.id) ? 1 : 0
           const tgtPrimary = primaryIdSet.has(ref.targetId) ? 1 : 0
           let score = srcPrimary + tgtPrimary
           if (score === 0) {
-            // Check if the combo matches a detected keyword
             const comboLower = ref.context.toLowerCase()
             if (detected.keywords.some(k => comboLower.includes(k))) {
               score = 0.5
@@ -302,7 +531,6 @@ app.post('/ask', async (c) => {
         }
       }
 
-      // Deduplicate, sort by score (best first), take top 10
       const seen = new Set<string>()
       const uniqueScored = scoredCombos.filter(c => {
         if (seen.has(c.text)) return false
@@ -311,46 +539,84 @@ app.post('/ask', async (c) => {
       }).sort((a, b) => b.score - a.score).slice(0, 10)
       combos = uniqueScored.map(c => c.text)
 
-      // Append to LLM context
       if (combos.length > 0) {
-        context += '\n\n========================================\n'
-        context += 'COMPETITIVE COMBOS (abilities that stack together for maximum effect):\n'
-        context += 'Explain these combos — what each piece does and why combining them is powerful.\n'
-        context += '========================================\n\n'
+        brainContext += '\n\n========================================\n'
+        brainContext += 'COMPETITIVE COMBOS (abilities that stack together for maximum effect):\n'
+        brainContext += '========================================\n\n'
         for (const combo of combos) {
-          context += `- ${combo}\n`
+          brainContext += `- ${combo}\n`
         }
       }
     }
   } catch { /* forward index not available — skip combos */ }
 
-  const systemPrompt = `You are a Warhammer 40,000 rules expert. Answer questions using ONLY the rules context provided below. Always cite your sources.
+  // If question asks for a faction's units, fetch the unit list
+  let unitListContext = ''
+  if (detected.factions.length > 0) {
+    const unitListMatch = body.question.match(/\b(units?|datasheets?|army|roster|list)\b/i)
+    if (unitListMatch) {
+      try {
+        const manifest = await c.env.BRAIN_BUCKET.get('manifest.json')
+        if (manifest) {
+          const manifestData = await manifest.json() as { files: Record<string, string> }
+          const factionUnits: string[] = []
+          for (const file of Object.keys(manifestData.files)) {
+            if (!file.startsWith('nodes/faction-')) continue
+            const obj = await c.env.BRAIN_BUCKET.get(file)
+            if (!obj) continue
+            const nodes = await obj.json() as Node[]
+            for (const n of nodes) {
+              if (n.category === 'datasheet' && detected.factions.some(f =>
+                n.factionId === f || n.factionId?.toLowerCase().replace(/\s+/g, '-') === f
+              )) {
+                factionUnits.push(n.title)
+              }
+            }
+          }
+          if (factionUnits.length > 0) {
+            factionUnits.sort()
+            unitListContext = `\n\nFACTION UNIT LIST (${detected.factions.join(', ')}):\n${factionUnits.map(u => `- ${u}`).join('\n')}\n`
+          }
+        }
+      } catch { /* skip unit list on error */ }
+    }
+  }
 
-MOST IMPORTANT RULE — SECTION STRUCTURE:
-When the context has SECTION 1 and SECTION 2, your answer MUST have TWO separate headings. Present ALL of SECTION 1 first under its own heading (e.g., "## Blood Angels Specific"). Then present ALL of SECTION 2 under a second heading (e.g., "## Available to All Space Marines"). NEVER mix content from the two sections. This is mandatory.
+  // Build the combined LLM prompt
+  const systemPrompt = `You are a Warhammer 40,000 10th Edition rules expert. You have two sources of information:
 
-COMPETITIVE COMBOS RULE:
-When the context includes a COMPETITIVE COMBOS section, these are abilities that STACK together for massive effect. ALWAYS explain these combos explicitly — name both abilities, the unit/model that has each ability, what weapon type they share, and why combining them is powerful. ALWAYS include the model name (e.g. "Adrax Agatone's Unto the Anvil ability" not just "Unto the Anvil").
+1. BRAIN KNOWLEDGE GRAPH — structured rules data from official sources
+2. WEB SEARCH RESULTS — a Gemini AI answer grounded in web sources
 
-OTHER RULES:
+Synthesize BOTH sources into ONE comprehensive answer. When they agree, present the information confidently. When they differ, prefer the Brain knowledge graph (it's from official rules) but include useful context from web results.
+
+RULES:
 1. ALWAYS name the specific unit/datasheet that has each ability or weapon.
-2. For unit abilities from characters/leaders, explain that the ability is conferred by ATTACHING the character to a unit — not an "aura". Leader abilities affect ONLY the unit the character is attached to.
-3. For faction/detachment abilities, explain which detachment grants it and any activation conditions.
-4. For weapons, name the unit(s) that carry them.
-5. Prioritize by impact: army-wide rules first, then detachment rules, then leader/character abilities, then individual unit abilities, then native weapon abilities last.
-6. When a context entry says "[unit-ability, ON UNIT: X]" or "[weapon, ON UNIT: X]", use X as the unit name.
-7. Be precise about game mechanics. If a rule has been errata'd or FAQ'd, mention the correction.
-8. If the context doesn't contain enough information to answer confidently, say so.
+2. For unit abilities from characters/leaders, explain that the ability is conferred by ATTACHING the character — not an "aura".
+3. For faction/detachment abilities, explain which detachment grants it.
+4. When the context has SECTION 1 and SECTION 2, present them under separate headings.
+5. When COMPETITIVE COMBOS are listed, explain each combo: name both abilities, the unit, and why combining them is powerful.
+6. If a FACTION UNIT LIST is provided and the question asks about units, include the full list organized by role.
+7. Be precise about game mechanics. Mention errata/FAQ corrections if present.
+8. Use markdown: ## headings, **bold** for names, - bullets for lists.`
 
-When citing sources, use the format: (Source: [title])`
-
-  const userMessage = `Rules context:\n\n${context}\n\n---\n\nQuestion: ${body.question}`
+  let userMessage = ''
+  if (brainContext) {
+    userMessage += `=== BRAIN KNOWLEDGE GRAPH ===\n\n${brainContext}\n\n`
+  }
+  if (unitListContext) {
+    userMessage += `=== ${unitListContext}\n\n`
+  }
+  if (geminiResult?.answer) {
+    userMessage += `=== WEB SEARCH RESULTS (Gemini with Google Search) ===\n\n${geminiResult.answer}\n\n`
+  }
+  userMessage += `---\n\nQuestion: ${body.question}`
 
   let answer: string
   let answerPath = 'unknown'
 
   const useClaudeParam = c.req.query('model') === 'claude'
-  const useClaude = useClaudeParam && apiKey
+  const useClaude = useClaudeParam && anthropicKey
 
   if (useClaude) {
     answerPath = 'claude'
@@ -358,12 +624,12 @@ When citing sources, use the format: (Source: [title])`
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'x-api-key': apiKey!,
+        'x-api-key': anthropicKey!,
         'anthropic-version': '2023-06-01',
       },
       body: JSON.stringify({
         model: 'claude-sonnet-4-20250514',
-        max_tokens: 1024,
+        max_tokens: 2048,
         system: systemPrompt,
         messages: [{ role: 'user', content: userMessage }],
       }),
@@ -382,8 +648,6 @@ When citing sources, use the format: (Source: [title])`
       .map(c => c.text)
       .join('\n')
   } else {
-    // Workers AI — free tier LLM
-    // If context is small enough (< 40000 chars), use LLM. Otherwise, format conversationally.
     const MAX_LLM_CONTEXT = 40000
 
     if (userMessage.length <= MAX_LLM_CONTEXT) {
@@ -407,6 +671,16 @@ When citing sources, use the format: (Source: [title])`
     }
   }
 
+  // Server-side entity linking — build map from all retrieved + connected nodes
+  const entityMap = new Map<string, { nodeId: string; title: string }>()
+  for (const node of [...results, ...connected]) {
+    const key = node.title.toLowerCase()
+    if (key.length > 2 && !entityMap.has(key)) {
+      entityMap.set(key, { nodeId: node.id, title: node.title })
+    }
+  }
+  answer = linkEntitiesInText(answer, entityMap)
+
   return c.json({
     detected,
     answer,
@@ -422,6 +696,21 @@ When citing sources, use the format: (Source: [title])`
       sources: n.sources,
     })),
     connectedCount: connected.length,
+    webSources: geminiResult?.sources ?? [],
+    geminiCached: !!cachedGemini,
+    webSource: cachedGemini ? 'cache' : geminiResult ? (geminiError ? 'scrape' : 'gemini') : 'none',
+    errors: {
+      ...(retrieveError ? { retrieve: retrieveError } : {}),
+      ...(geminiError ? { gemini: geminiError } : {}),
+    },
+    debug: {
+      retrieveHasResult: !!retrieveResult,
+      retrieveResultCount: results.length,
+      connectedCount2: connected.length,
+      geminiHasResult: !!geminiResult,
+      geminiAnswerLen: geminiResult?.answer?.length ?? 0,
+      brainContextLen: brainContext.length,
+    },
   })
 })
 
@@ -539,6 +828,7 @@ app.post('/index-vectors', async (c) => {
 
   let indexed = 0
   let errors = 0
+  const errorMessages: string[] = []
   const BATCH_SIZE = 50 // Keep batches small for Workers CPU limits
 
   for (const file of nodeFiles) {
@@ -556,9 +846,10 @@ app.post('/index-vectors', async (c) => {
         }) as { data: number[][] }
 
         const vectors = batch.map((node, idx) => ({
-          id: node.id,
+          id: vectorizeId(node.id),
           values: embResult.data[idx]!,
           metadata: {
+            originalId: node.id,
             title: node.title,
             summary: node.summary.substring(0, 500),
             layer: node.layer,
@@ -573,6 +864,7 @@ app.post('/index-vectors', async (c) => {
         indexed += batch.length
       } catch (err) {
         errors += batch.length
+        errorMessages.push(err instanceof Error ? err.message : String(err))
       }
     }
   }
@@ -580,8 +872,9 @@ app.post('/index-vectors', async (c) => {
   return c.json({
     indexed,
     errors,
+    errorMessages: errorMessages.slice(0, 5),
     totalFiles: nodeFiles.length,
-    allFiles: allNodeFiles, // return full list so caller can iterate
+    allFiles: allNodeFiles,
   })
 })
 

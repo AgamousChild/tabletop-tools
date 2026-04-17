@@ -1,0 +1,83 @@
+name: Scrape Brain Cache
+
+on:
+  schedule:
+    # Daily at 4am UTC
+    - cron: '0 4 * * *'
+  workflow_dispatch:
+    inputs:
+      batch_size:
+        description: 'Number of questions to scrape'
+        type: number
+        default: 100
+
+env:
+  R2_BUCKET: tabletop-tools-brain
+
+jobs:
+  scrape-and-upload:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 9
+
+      - name: Install dependencies
+        run: pnpm install --no-frozen-lockfile
+        working-directory: .
+
+      - name: Install Playwright
+        run: npx playwright install chromium --with-deps
+
+      - name: Run scraper
+        run: |
+          BATCH_SIZE="${{ inputs.batch_size || '100' }}"
+          DAY=$(date +%u)  # 1-7 (Monday-Sunday)
+          npx tsx scripts/scrape-brain-cache.ts \
+            --output $RUNNER_TEMP/brain-cache \
+            --batch "$BATCH_SIZE" \
+            --day "$DAY"
+
+      - name: Upload results to R2
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+        run: |
+          CACHE_DIR="$RUNNER_TEMP/brain-cache"
+          if [ ! -d "$CACHE_DIR" ]; then
+            echo "No cache directory found"
+            exit 0
+          fi
+
+          UPLOADED=0
+          SKIPPED=0
+
+          for file in "$CACHE_DIR"/*.json; do
+            filename=$(basename "$file")
+            # Skip the summary file
+            if [ "$filename" = "_summary.json" ]; then continue; fi
+
+            # Upload to R2 under cache/gemini/
+            npx wrangler r2 object put "${R2_BUCKET}/cache/gemini/${filename}" \
+              --file "$file" \
+              --content-type "application/json" \
+              2>/dev/null && UPLOADED=$((UPLOADED + 1)) || SKIPPED=$((SKIPPED + 1))
+          done
+
+          echo "Uploaded: $UPLOADED, Skipped: $SKIPPED"
+
+          # Print summary
+          if [ -f "$CACHE_DIR/_summary.json" ]; then
+            echo "--- Scrape Summary ---"
+            cat "$CACHE_DIR/_summary.json"
+          fi
