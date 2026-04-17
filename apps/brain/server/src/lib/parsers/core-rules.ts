@@ -1,6 +1,29 @@
 import type { Node, NodeRef, Source, NodeCategory, GamePhase } from '../model'
 import { coreId } from '../slugify'
 
+/** Map sections to their page ranges in the core rules PDF (from TOC markers). */
+const PAGE_RANGES: Array<{ pattern: RegExp; startPage: number; endPage: number }> = [
+  { pattern: /core concept|model|unit|dice|roll|re-roll|modif|sequen/i, startPage: 5, endPage: 9 },
+  { pattern: /command phase/i, startPage: 10, endPage: 11 },
+  { pattern: /movement phase|move|advance|fall back|reinforcement/i, startPage: 12, endPage: 17 },
+  { pattern: /shooting phase|ranged|hit roll|wound roll|allocat|saving|damage|mortal|feel no pain/i, startPage: 18, endPage: 27 },
+  { pattern: /charge phase|charge roll/i, startPage: 28, endPage: 29 },
+  { pattern: /fight phase|pile in|consolidat|melee|fight/i, startPage: 30, endPage: 36 },
+  { pattern: /datasheet|ability|leader|transport|aircraft|deadly demise|deep strike|firing deck|infiltrat|lone operative|scouts|stealth|feel no pain|invulnerable|sustained|lethal|devastating|hazardous|blast|torrent|twin-linked|anti-|melta|pistol|rapid fire|heavy|assault|ignores cover|indirect fire|one shot|precision|psychic/i, startPage: 37, endPage: 39 },
+  { pattern: /strategic reserve|stratagem|command re-roll|epic deed|insane bravery|counter-offensive|go to ground|smoke screen|heroic intervention|rapid ingress|fire overwatch|grenade/i, startPage: 41, endPage: 43 },
+  { pattern: /terrain|ruin|obstacle|hill|wall|crater|cover|benefit of cover|breachable/i, startPage: 44, endPage: 52 },
+  { pattern: /muster|army|detachment|warlord|point/i, startPage: 55, endPage: 56 },
+  { pattern: /mission|deploy|objective|victory|game size|battle round|end of game/i, startPage: 57, endPage: 60 },
+]
+
+function detectPageNumber(heading: string, content: string): number | undefined {
+  const text = `${heading} ${content}`
+  for (const { pattern, startPage } of PAGE_RANGES) {
+    if (pattern.test(text)) return startPage
+  }
+  return undefined
+}
+
 /** Map of heading keywords to game phases. */
 const PHASE_KEYWORDS: Array<{ pattern: string; phase: GamePhase }> = [
   { pattern: 'COMMAND PHASE', phase: 'command' },
@@ -202,6 +225,11 @@ export function parseCoreRules(normalizedMarkdown: string, retrievedAt: string):
       }
     }
 
+    const pageNum = detectPageNumber(section.heading, section.body)
+    const nodeSource: Source = pageNum
+      ? { ...source, page: pageNum }
+      : source
+
     const node: Node = {
       id,
       layer: 'core',
@@ -210,7 +238,7 @@ export function parseCoreRules(normalizedMarkdown: string, retrievedAt: string):
       content: section.body,
       summary: generateSummary(section.heading, section.body),
       phase,
-      sources: [source],
+      sources: [nodeSource],
       refs: [],
       version: 1,
       keywords: extractKeywords(section.heading, section.body),

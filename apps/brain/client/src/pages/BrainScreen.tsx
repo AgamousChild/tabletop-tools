@@ -12,6 +12,7 @@ import { EnhancementCard } from '../components/cards/EnhancementCard'
 import { RuleCard } from '../components/cards/RuleCard'
 import type { CardData, CardContext } from '../components/cards/types'
 import { type EntityMap } from '../lib/entity-linker'
+import { PdfPageView } from '../components/cards/PdfPageView'
 import { DetachmentPage } from './DetachmentPage'
 import type { DetachmentPageProps } from './DetachmentPage'
 import { deriveUnitType } from '../../../shared/derive-unit-type'
@@ -319,6 +320,7 @@ function buildRuleData(node: ResultNode) {
     factionId: node.factionId || '',
     subfaction: node.subfaction,
     detachmentName: '',
+    sources: node.sources,
   }
 }
 
@@ -891,6 +893,7 @@ export function BrainScreen() {
   const [activeCard, setActiveCard] = useState<CardData | null>(null)
   const [activeFilters, setActiveFilters] = useState<string[]>([])
   const [detachmentView, setDetachmentView] = useState<DetachmentPageProps | null>(null)
+  const [pdfView, setPdfView] = useState<{ pdfName: string; page: number; title: string } | null>(null)
 
   async function openDetachmentPage(node: ResultNode) {
     // Fetch stratagems and enhancements for this detachment
@@ -976,6 +979,10 @@ export function BrainScreen() {
       setActiveFilters(prev => prev.includes(term) ? prev : [...prev, term])
     },
     onDismiss: () => setActiveCard(null),
+    onViewSource: (pdfName, page, title) => {
+      setActiveCard(null)
+      setPdfView({ pdfName, page, title })
+    },
   }
 
   // Clear filters when switching tabs
@@ -1044,6 +1051,16 @@ export function BrainScreen() {
         {activeCard?.type === 'enhancement' && <EnhancementCard data={activeCard.data} context={cardContext} />}
         {activeCard?.type === 'rule' && <RuleCard data={activeCard.data} context={cardContext} />}
       </Overlay>
+
+      {pdfView && (
+        <PdfPageView
+          pdfName={pdfView.pdfName}
+          pageNumber={pdfView.page}
+          title={pdfView.title}
+          highlightText=""
+          onDismiss={() => setPdfView(null)}
+        />
+      )}
     </div>
   )
 }

@@ -110,8 +110,8 @@ export function RuleCard({ data, context }: RuleCardProps) {
       </div>
 
       {/* Footer */}
-      {data.appliesTo !== undefined && (
-        <div className="px-3 py-2 md:px-4 border-t border-slate-800">
+      <div className="px-3 py-2 md:px-4 border-t border-slate-800 flex items-center gap-3">
+        {data.appliesTo !== undefined && (
           <button
             data-testid="applies-to"
             className="text-xs text-slate-500 hover:text-slate-400 cursor-pointer bg-transparent border-0 p-0 text-left"
@@ -119,8 +119,22 @@ export function RuleCard({ data, context }: RuleCardProps) {
           >
             Applies to {data.appliesTo} datasheets
           </button>
-        </div>
-      )}
+        )}
+        {data.sources?.map((src, i) => src.page && context.onViewSource ? (
+          <button
+            key={i}
+            data-testid="view-source"
+            className="text-xs text-blue-400 hover:text-blue-300 cursor-pointer bg-transparent border-0 p-0"
+            onClick={() => context.onViewSource!(
+              src.title.toLowerCase().replace(/\s+/g, '-'),
+              src.page!,
+              data.name,
+            )}
+          >
+            View source (p.{src.page})
+          </button>
+        ) : null)}
+      </div>
     </div>
   )
 }

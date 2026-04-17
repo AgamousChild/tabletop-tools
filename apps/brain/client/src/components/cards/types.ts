@@ -70,6 +70,7 @@ export interface RuleCardData {
   isArmyRule: boolean
   subRules?: { name: string; description: string }[]
   appliesTo?: number
+  sources?: SourceRef[]
 }
 
 export type CardData =
@@ -82,4 +83,12 @@ export interface CardContext {
   highlightTerms: string[]
   onContentClick: (term: string) => void
   onDismiss: () => void
+  onViewSource?: (pdfName: string, page: number, title: string) => void
+}
+
+export interface SourceRef {
+  type: string
+  title: string
+  page?: number
+  url?: string
 }
