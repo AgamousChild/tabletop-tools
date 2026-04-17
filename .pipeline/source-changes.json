@@ -15,4 +15,13 @@
     "reason": "Replace local FACTION_CODE_TO_SLUG constant and normalizeFactionId with import from faction-codes module",
     "timestamp": "2026-04-16T00:00:00.000Z"
   }
+  ,
+  {
+    "taskId": "task-2-merge-sources",
+    "agent": "senior-dev",
+    "file": "apps/brain/server/src/lib/merge-sources.ts",
+    "action": "created",
+    "reason": "Add cross-source merge module for BSData/Wahapedia node deduplication and summary enrichment",
+    "timestamp": "2026-04-17T07:25:00.000Z"
+  }
 ]
