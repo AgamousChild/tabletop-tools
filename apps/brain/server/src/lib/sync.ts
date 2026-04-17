@@ -1,5 +1,6 @@
 import type { Node, NodeRef } from './model'
 import type { BrainManifest } from '../types'
+import { mergeSources } from './merge-sources'
 
 /**
  * Partition nodes into files by layer and faction.
@@ -176,6 +177,13 @@ export async function runBrainSync(
       errors.push(`Game data: ${err instanceof Error ? err.message : String(err)}`)
     }
   }
+
+  // Merge and deduplicate nodes from all sources
+  const mergeResult = mergeSources(allNodes, allRefs)
+  allNodes.length = 0
+  allNodes.push(...mergeResult.nodes)
+  allRefs.length = 0
+  allRefs.push(...mergeResult.refs)
 
   // Partition nodes into files
   const nodeFiles = partitionNodes(allNodes)

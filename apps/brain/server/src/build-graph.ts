@@ -14,6 +14,7 @@ import { parseBalanceDataslate } from './lib/parsers/balance-dataslate'
 import { convertGameData } from './lib/parsers/game-data'
 import { buildCommunityNodes } from './lib/combat-knowledge'
 import { partitionNodes, partitionRefs, buildManifest } from './lib/sync'
+import { mergeSources } from './lib/merge-sources'
 import type { Node, NodeRef } from './lib/model'
 import type { GameDataInput } from './lib/parsers/game-data'
 
@@ -123,21 +124,16 @@ async function main() {
   allRefs.push(...communityResult.refs)
   console.log(`   ${communityResult.nodes.length} nodes, ${communityResult.refs.length} refs`)
 
-  // ── Deduplicate nodes (game data takes precedence over faction pack PDFs) ──
-  const seenNodeIds = new Set<string>()
-  const dedupedNodes: Node[] = []
-  for (const node of allNodes) {
-    if (!seenNodeIds.has(node.id)) {
-      seenNodeIds.add(node.id)
-      dedupedNodes.push(node)
-    }
-  }
-  const dupeCount = allNodes.length - dedupedNodes.length
-  if (dupeCount > 0) {
-    console.log(`   Deduplicated: removed ${dupeCount} duplicate nodes (game data takes precedence)`)
-  }
+  // ── Merge and deduplicate nodes from all sources ──────────────────────────
+  const mergeResult = mergeSources(allNodes, allRefs)
+  console.log(`   Merged: ${mergeResult.stats.inputNodes} → ${mergeResult.stats.outputNodes} nodes`)
+  console.log(`   ${mergeResult.stats.mergedByIdCount} deduped, ${mergeResult.stats.factionNormalizedCount} factions normalized`)
+  console.log(`   ${mergeResult.stats.summaryTagged} summaries tagged, ${mergeResult.stats.refsDeduped} refs deduped`)
+
   allNodes.length = 0
-  allNodes.push(...dedupedNodes)
+  allNodes.push(...mergeResult.nodes)
+  allRefs.length = 0
+  allRefs.push(...mergeResult.refs)
 
   // ── Summary ────────────────────────────────────────────────────────────────
   console.log(`\n=== TOTAL: ${allNodes.length} nodes, ${allRefs.length} refs ===`)
