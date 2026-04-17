@@ -1,4 +1,4 @@
-import { detectFactions, stripFactionFromQuery, extractMechanicKeywords } from './faction-detect'
+import { detectFactions, stripFactionFromQuery, extractMechanicKeywords, FACTION_PATTERNS, SUBFACTION_TO_PARENT } from './faction-detect'
 import { fetchNodesFromR2, fetchConnectedNodes } from './fetch-nodes'
 import type { Node } from './model'
 
@@ -82,10 +82,25 @@ export async function retrieve(options: RetrieveOptions, env: RetrieveEnv): Prom
   // ── Faction browse mode ──────────────────────────────────────────────────
   // When the user typed just a faction/subfaction name (stripped query is empty
   // or very short) and no mechanic keywords, skip Vectorize entirely.
-  // Fetch all nodes for that faction from R2 and return them sorted.
+  // UNLESS the original query differs from just the faction name — it might be
+  // a unit name that contains the faction (e.g., "Genestealers", "Grey Knights Terminator Squad").
+  // Only use faction browse when the query IS the faction name (e.g., "necrons", "space marines").
+  // If faction stripping consumed the query entirely but the original doesn't exactly match
+  // a known faction pattern, fall through to semantic search — it might be a unit name
+  // that contains a faction word (e.g., "Genestealers" contains "genestealer").
+  const strippedIsEmpty = strippedQuery.trim().length <= 3
+  const escRe = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+  const queryMatchesFactionExactly = FACTION_PATTERNS.some(({ pattern }) => {
+    const re = new RegExp(`^\\s*${escRe(pattern)}s?\\s*$`, 'i')
+    return re.test(query)
+  }) || Object.keys(SUBFACTION_TO_PARENT).some(sf => {
+    const re = new RegExp(`^\\s*${escRe(sf)}s?\\s*$`, 'i')
+    return re.test(query)
+  })
   const isFactionBrowse = detected.factions.length > 0
-    && strippedQuery.trim().length <= 3
+    && strippedIsEmpty
     && keywords.length === 0
+    && queryMatchesFactionExactly
 
   if (isFactionBrowse) {
     return await factionBrowse(detected, strippedQuery, keywords, limit, includeConnected, connectedDepth, env)
@@ -93,10 +108,18 @@ export async function retrieve(options: RetrieveOptions, env: RetrieveEnv): Prom
 
   // ── Semantic search mode (normal path) ───────────────────────────────────
 
-  // Step 4: Generate primary embedding
+  // Step 4: Generate embeddings
+  // When faction stripping removes significant text (e.g., "Grey Knights Terminator Squad" → "Terminator Squad"),
+  // also embed the original query so we find units whose name includes the faction.
   const embeddingText = strippedQuery || query
-  const aiResult = await env.ai.run('@cf/baai/bge-base-en-v1.5', { text: [embeddingText] })
+  const needsOriginalQuery = strippedQuery !== query && strippedQuery.length < query.length * 0.7
+
+  const embeddingTexts = [embeddingText]
+  if (needsOriginalQuery) embeddingTexts.push(query)
+
+  const aiResult = await env.ai.run('@cf/baai/bge-base-en-v1.5', { text: embeddingTexts })
   const primaryVector = aiResult.data[0]!
+  const originalVector = needsOriginalQuery ? aiResult.data[1]! : null
 
   // Step 5: If dualEmbedding and keywords exist, generate keyword embedding
   let keywordVector: number[] | null = null
@@ -106,10 +129,9 @@ export async function retrieve(options: RetrieveOptions, env: RetrieveEnv): Prom
   }
 
   // Build Vectorize query options — include faction filter if detected
-  // Fetch extra results when faction-filtering to compensate for post-filter loss
+  // Fetch extra results to compensate for post-filter loss and category re-ranking
   // Vectorize caps topK at 50 when returnMetadata='all'
-  const fetchMultiplier = detected.factions.length > 0 ? 5 : 3
-  const topK = Math.min(limit * fetchMultiplier, 50)
+  const topK = 50 // always fetch max to give category boosting the best pool
   const vectorizeOpts: any = { topK, returnMetadata: 'all' }
   if (detected.factions.length > 0 || filter) {
     const filterObj: Record<string, any> = {}
@@ -120,39 +142,66 @@ export async function retrieve(options: RetrieveOptions, env: RetrieveEnv): Prom
     vectorizeOpts.filter = filterObj
   }
 
-  // Step 6: Query Vectorize with primary embedding
-  const primaryMatches = await env.vectorize.query(primaryVector, vectorizeOpts)
+  // Step 6: Query Vectorize — run unfiltered + datasheet-only in parallel to ensure datasheets are in the pool
+  const datasheetOpts = { ...vectorizeOpts, filter: { ...vectorizeOpts.filter, category: 'datasheet' } }
+  const [primaryMatches, datasheetMatches] = await Promise.all([
+    env.vectorize.query(primaryVector, vectorizeOpts),
+    env.vectorize.query(primaryVector, datasheetOpts),
+  ])
 
-  // Step 7: If dual embedding, do second Vectorize query and merge/deduplicate
-  let allMatches: VectorizeMatch[]
-  if (keywordVector) {
-    const keywordMatches = await env.vectorize.query(keywordVector, vectorizeOpts)
-    // Merge: keep the higher score when same ID appears in both
-    const mergedMap = new Map<string, VectorizeMatch>()
-    for (const m of primaryMatches.matches) {
+  // Step 6b: If original query differs from stripped, also search with the unstripped text
+  let originalMatches: { matches: VectorizeMatch[] } = { matches: [] }
+  let originalDatasheetMatches: { matches: VectorizeMatch[] } = { matches: [] }
+  if (originalVector) {
+    ;[originalMatches, originalDatasheetMatches] = await Promise.all([
+      env.vectorize.query(originalVector, vectorizeOpts),
+      env.vectorize.query(originalVector, datasheetOpts),
+    ])
+  }
+
+  // Step 7: Merge all query results — keep highest score per ID
+  const mergedMap = new Map<string, VectorizeMatch>()
+  for (const m of [...primaryMatches.matches, ...datasheetMatches.matches,
+                    ...originalMatches.matches, ...originalDatasheetMatches.matches]) {
+    const existing = mergedMap.get(m.id)
+    if (!existing || m.score > existing.score) {
       mergedMap.set(m.id, m)
     }
-    for (const m of keywordMatches.matches) {
+  }
+
+  // If dual embedding, also merge keyword query results
+  if (keywordVector) {
+    const [keywordMatches, keywordDatasheetMatches] = await Promise.all([
+      env.vectorize.query(keywordVector, vectorizeOpts),
+      env.vectorize.query(keywordVector, datasheetOpts),
+    ])
+    for (const m of [...keywordMatches.matches, ...keywordDatasheetMatches.matches]) {
       const existing = mergedMap.get(m.id)
       if (!existing || m.score > existing.score) {
         mergedMap.set(m.id, m)
       }
     }
-    allMatches = [...mergedMap.values()]
-  } else {
-    allMatches = primaryMatches.matches
   }
 
+  let allMatches = [...mergedMap.values()]
+
   // Step 8: Post-filter by faction (keep faction-match + generic), then subfaction
+  // BUT always keep datasheets whose title matches the original query (unit might be cross-faction)
   const detectedFactionSet = new Set(detected.factions)
+  const queryLowerForFilter = query.toLowerCase().trim()
 
   let filtered = allMatches
   if (detectedFactionSet.size > 0) {
     filtered = allMatches.filter(m => {
       const mFaction = m.metadata?.factionId
-      // Keep nodes with no faction (generic) OR matching detected faction
+      // Keep nodes with no faction (generic)
       if (!mFaction) return true
-      return detectedFactionSet.has(mFaction)
+      // Keep nodes matching detected faction
+      if (detectedFactionSet.has(mFaction)) return true
+      // Keep datasheets whose title matches the original query (cross-faction units)
+      if (m.metadata?.category === 'datasheet' &&
+          (m.metadata?.title as string)?.toLowerCase() === queryLowerForFilter) return true
+      return false
     })
   }
 
@@ -166,8 +215,29 @@ export async function retrieve(options: RetrieveOptions, env: RetrieveEnv): Prom
     })
   }
 
-  // Step 9: Sort — subfaction-matched first → faction-matched → generic, each group by score desc
+  // Step 9: Sort — datasheets with title match first, then subfaction → faction → generic, then by score
+  const queryLower = query.toLowerCase().trim()
   const sortedMatches = filtered.sort((a, b) => {
+    // Exact title match on datasheets gets absolute highest priority — regardless of score
+    const aDatasheet = a.metadata?.category === 'datasheet' ? 1 : 0
+    const bDatasheet = b.metadata?.category === 'datasheet' ? 1 : 0
+    const aTitle = (a.metadata?.title as string)?.toLowerCase() ?? ''
+    const bTitle = (b.metadata?.title as string)?.toLowerCase() ?? ''
+    const aTitleMatch = aDatasheet && aTitle === queryLower ? 1 : 0
+    const bTitleMatch = bDatasheet && bTitle === queryLower ? 1 : 0
+    if (aTitleMatch !== bTitleMatch) return bTitleMatch - aTitleMatch
+
+    // Datasheets with title containing the query (or query containing the title) get priority
+    const aContains = aDatasheet && (aTitle.includes(queryLower) || queryLower.includes(aTitle)) ? 1 : 0
+    const bContains = bDatasheet && (bTitle.includes(queryLower) || queryLower.includes(bTitle)) ? 1 : 0
+    if (aContains !== bContains) return bContains - aContains
+
+    // Datasheets always rank above non-datasheets at any score — users searching by name want the unit
+    if (aDatasheet !== bDatasheet) {
+      return bDatasheet - aDatasheet
+    }
+
+    // Then faction/subfaction ranking
     const rankA = matchRank(a, detected.factions, detected.subfaction)
     const rankB = matchRank(b, detected.factions, detected.subfaction)
     if (rankA !== rankB) return rankA - rankB
@@ -178,14 +248,16 @@ export async function retrieve(options: RetrieveOptions, env: RetrieveEnv): Prom
   const limitedMatches = sortedMatches.slice(0, limit)
 
   // Step 11: Fetch full node content from R2
-  const nodeIds = limitedMatches.map(m => m.id)
+  // Use originalId from metadata (Vectorize IDs may be hashed for long node IDs)
+  const nodeIds = limitedMatches.map(m => (m.metadata?.originalId as string) || m.id)
   const nodes = await fetchNodesFromR2(env.bucket, nodeIds)
   const nodesById = new Map<string, Node>(nodes.map(n => [n.id, n]))
 
   // Step 12: Enrich results — merge Vectorize metadata (score) with full node content
   const results: EnrichedNode[] = limitedMatches
     .map(m => {
-      const node = nodesById.get(m.id)
+      const originalId = (m.metadata?.originalId as string) || m.id
+      const node = nodesById.get(originalId)
       if (!node) return null
       return enrichNode(node, m.score, new Map())
     })
