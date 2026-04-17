@@ -50,6 +50,8 @@ export const SourceSchema = z.object({
   title: z.string().min(1),
   url: z.string().optional(),
   page: z.number().int().positive().optional(),
+  topPct: z.number().min(0).max(100).optional(),    // % from top of page where content starts
+  heightPct: z.number().min(0).max(100).optional(),  // % of page height the content covers
   section: z.string().optional(),
   timestamp: z.string().optional(),
   retrievedAt: z.string().min(1),

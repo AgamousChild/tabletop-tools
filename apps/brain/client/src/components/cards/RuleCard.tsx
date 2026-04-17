@@ -126,9 +126,11 @@ export function RuleCard({ data, context }: RuleCardProps) {
             data-testid="view-source"
             className="text-xs text-blue-400 hover:text-blue-300 cursor-pointer bg-transparent border-0 p-0"
             onClick={() => context.onViewSource!(
-              src.title.toLowerCase().replace(/\s+/g, '-'),
+              src.title.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, ''),
               src.page!,
               data.name,
+              src.topPct,
+              src.heightPct,
             )}
           >
             View source (p.{src.page})

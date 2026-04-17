@@ -893,7 +893,7 @@ export function BrainScreen() {
   const [activeCard, setActiveCard] = useState<CardData | null>(null)
   const [activeFilters, setActiveFilters] = useState<string[]>([])
   const [detachmentView, setDetachmentView] = useState<DetachmentPageProps | null>(null)
-  const [pdfView, setPdfView] = useState<{ pdfName: string; page: number; title: string } | null>(null)
+  const [pdfView, setPdfView] = useState<{ pdfName: string; page: number; title: string; topPct?: number; heightPct?: number } | null>(null)
 
   async function openDetachmentPage(node: ResultNode) {
     // Fetch stratagems and enhancements for this detachment
@@ -979,9 +979,9 @@ export function BrainScreen() {
       setActiveFilters(prev => prev.includes(term) ? prev : [...prev, term])
     },
     onDismiss: () => setActiveCard(null),
-    onViewSource: (pdfName, page, title) => {
+    onViewSource: (pdfName, page, title, topPct, heightPct) => {
       setActiveCard(null)
-      setPdfView({ pdfName, page, title })
+      setPdfView({ pdfName, page, title, topPct, heightPct })
     },
   }
 
@@ -1058,6 +1058,8 @@ export function BrainScreen() {
           pageNumber={pdfView.page}
           title={pdfView.title}
           highlightText=""
+          topPct={pdfView.topPct}
+          heightPct={pdfView.heightPct}
           onDismiss={() => setPdfView(null)}
         />
       )}

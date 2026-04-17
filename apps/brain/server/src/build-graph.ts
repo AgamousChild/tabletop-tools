@@ -15,6 +15,7 @@ import { convertGameData } from './lib/parsers/game-data'
 import { buildCommunityNodes } from './lib/combat-knowledge'
 import { partitionNodes, partitionRefs, buildManifest } from './lib/sync'
 import { mergeSources } from './lib/merge-sources'
+import { mapNodesToPages } from './lib/pdf-positions'
 import type { Node, NodeRef } from './lib/model'
 import type { GameDataInput } from './lib/parsers/game-data'
 
@@ -134,6 +135,19 @@ async function main() {
   allNodes.push(...mergeResult.nodes)
   allRefs.length = 0
   allRefs.push(...mergeResult.refs)
+
+  // ── Map nodes to PDF page positions ──────────────────────────────────────
+  console.log('\n7. PDF position mapping')
+  const PDF_DIR = 'C:/R/sync-data/tools/gw-sync/.local/gw/pdfs'
+  if (existsSync(PDF_DIR)) {
+    const posResult = await mapNodesToPages(allNodes, PDF_DIR)
+    console.log(`   Mapped: ${posResult.mapped}, Unmapped: ${posResult.unmapped}`)
+    if (posResult.pdfErrors.length > 0) {
+      for (const err of posResult.pdfErrors) console.log(`   ERROR: ${err}`)
+    }
+  } else {
+    console.log(`   PDF directory not found: ${PDF_DIR} — skipping`)
+  }
 
   // ── Summary ────────────────────────────────────────────────────────────────
   console.log(`\n=== TOTAL: ${allNodes.length} nodes, ${allRefs.length} refs ===`)
