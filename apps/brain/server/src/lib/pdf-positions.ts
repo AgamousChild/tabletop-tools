@@ -28,11 +28,15 @@ export interface TextRegion {
   page: number
   topPct: number
   heightPct: number
+  leftPct: number
+  widthPct: number
 }
 
 interface PageTextBlock {
   text: string
+  x: number       // horizontal position from left (in PDF points)
   y: number       // vertical position from top (in PDF points)
+  width: number    // width of text block
   height: number   // height of text block
 }
 
@@ -58,13 +62,15 @@ export async function extractPdfText(
     const blocks: PageTextBlock[] = []
     for (const item of textContent.items) {
       if ('str' in item && item.str.trim()) {
-        // transform[5] is the y position from bottom of page
+        const x = item.transform[4]!
         const yFromBottom = item.transform[5]!
         const yFromTop = pageHeight - yFromBottom
         blocks.push({
           text: item.str.trim(),
+          x,
           y: yFromTop,
-          height: Math.abs(item.transform[3]!) || 12, // scaleY or default
+          width: item.width || 100,
+          height: Math.abs(item.transform[3]!) || 12,
         })
       }
     }
@@ -99,7 +105,8 @@ function findContentRegion(
   nodeText: string,
   pageMap: Map<number, PageTextBlock[]>,
   pageHeight: number,
-): { page: number; topPct: number; heightPct: number } | null {
+  pageWidth: number,
+): { page: number; topPct: number; heightPct: number; leftPct: number; widthPct: number } | null {
   const normalizedNode = normalizeForMatch(nodeText)
   if (normalizedNode.length < 15) return null
 
@@ -142,11 +149,12 @@ function findContentRegion(
 
   if (!bestMatch) return null
 
-  // Find the vertical position of the matched text on the page
+  // Find the position of the matched text on the page
   const blocks = pageMap.get(bestMatch.page)!
-  let charCount = 0
   let topY = blocks[0]?.y ?? 0
   let bottomY = topY
+  let leftX = pageWidth
+  let rightX = 0
 
   // Walk through blocks to find where our match starts and ends
   const pageTextNorm = blocks.map(b => normalizeForMatch(b.text))
@@ -163,6 +171,8 @@ function findContentRegion(
 
     if (foundStart) {
       bottomY = blocks[i]!.y + blocks[i]!.height
+      leftX = Math.min(leftX, blocks[i]!.x)
+      rightX = Math.max(rightX, blocks[i]!.x + blocks[i]!.width)
       // Check if we've covered enough of the node content
       if (runningLen > bestMatch.matchPos + normalizedNode.length) break
     }
@@ -171,11 +181,14 @@ function findContentRegion(
   }
 
   // Add padding
-  const padding = pageHeight * 0.02
-  const topPct = Math.max(0, ((topY - padding) / pageHeight) * 100)
-  const heightPct = Math.min(100 - topPct, ((bottomY - topY + padding * 2) / pageHeight) * 100)
+  const padY = pageHeight * 0.01
+  const padX = pageWidth * 0.01
+  const topPct = Math.max(0, ((topY - padY) / pageHeight) * 100)
+  const heightPct = Math.min(100 - topPct, ((bottomY - topY + padY * 2) / pageHeight) * 100)
+  const leftPct = Math.max(0, ((leftX - padX) / pageWidth) * 100)
+  const widthPct = Math.min(100 - leftPct, ((rightX - leftX + padX * 2) / pageWidth) * 100)
 
-  return { page: bestMatch.page, topPct, heightPct }
+  return { page: bestMatch.page, topPct, heightPct, leftPct, widthPct }
 }
 
 /**
@@ -226,16 +239,18 @@ export async function mapNodesToPages(
       continue
     }
 
-    // Get page height from first page for percentage calculations
+    // Get page dimensions from first page for percentage calculations
     const pdfjsLib = await import('pdfjs-dist/legacy/build/pdf.mjs')
     const doc = await pdfjsLib.getDocument(pdfPath).promise
     const firstPage = await doc.getPage(1)
-    const pageHeight = firstPage.getViewport({ scale: 1.0 }).height
+    const viewport = firstPage.getViewport({ scale: 1.0 })
+    const pageHeight = viewport.height
+    const pageWidth = viewport.width
     await doc.destroy()
 
     for (const node of pdfNodes) {
       const contentToMatch = node.content || node.summary || node.title
-      const region = findContentRegion(contentToMatch, pageMap, pageHeight)
+      const region = findContentRegion(contentToMatch, pageMap, pageHeight, pageWidth)
 
       if (region) {
         // Update the source with position data
@@ -243,7 +258,7 @@ export async function mapNodesToPages(
         for (let i = 0; i < node.sources.length; i++) {
           const src = node.sources[i]!
           if (src.type === 'pdf' && src.title.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') === pdfName) {
-            node.sources[i] = { ...src, page: region.page, topPct: region.topPct, heightPct: region.heightPct }
+            node.sources[i] = { ...src, page: region.page, topPct: region.topPct, heightPct: region.heightPct, leftPct: region.leftPct, widthPct: region.widthPct }
           }
         }
         mapped++

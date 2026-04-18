@@ -83,7 +83,7 @@ export interface CardContext {
   highlightTerms: string[]
   onContentClick: (term: string) => void
   onDismiss: () => void
-  onViewSource?: (pdfName: string, page: number, title: string, topPct?: number, heightPct?: number) => void
+  onViewSource?: (pdfName: string, page: number, title: string, topPct?: number, heightPct?: number, leftPct?: number, widthPct?: number) => void
 }
 
 export interface SourceRef {
@@ -92,5 +92,7 @@ export interface SourceRef {
   page?: number
   topPct?: number
   heightPct?: number
+  leftPct?: number
+  widthPct?: number
   url?: string
 }

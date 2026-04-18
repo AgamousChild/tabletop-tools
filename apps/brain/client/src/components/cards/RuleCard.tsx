@@ -131,6 +131,8 @@ export function RuleCard({ data, context }: RuleCardProps) {
               data.name,
               src.topPct,
               src.heightPct,
+              src.leftPct,
+              src.widthPct,
             )}
           >
             View source (p.{src.page})

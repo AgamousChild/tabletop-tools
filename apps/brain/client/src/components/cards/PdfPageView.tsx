@@ -5,16 +5,16 @@ interface PdfPageViewProps {
   pageNumber: number
   highlightText: string
   title: string
-  /** Top position as percentage of page height (0-100) */
   topPct?: number
-  /** Height as percentage of page height (0-100) */
   heightPct?: number
+  leftPct?: number
+  widthPct?: number
   onDismiss: () => void
 }
 
 export function PdfPageView({
   pdfName, pageNumber, highlightText, title,
-  topPct, heightPct, onDismiss,
+  topPct, heightPct, leftPct, widthPct, onDismiss,
 }: PdfPageViewProps) {
   const [loaded, setLoaded] = useState(false)
   const [error, setError] = useState(false)
@@ -84,10 +84,12 @@ export function PdfPageView({
           {loaded && hasHighlight && (
             <div
               data-testid="pdf-highlight"
-              className="absolute left-0 right-0 border-2 border-amber-400/60 pointer-events-none"
+              className="absolute border-2 border-amber-400/60 pointer-events-none"
               style={{
                 top: `${topPct}%`,
                 height: `${heightPct}%`,
+                left: `${leftPct ?? 0}%`,
+                width: `${widthPct ?? 100}%`,
                 backgroundColor: 'rgba(251, 191, 36, 0.12)',
               }}
             />

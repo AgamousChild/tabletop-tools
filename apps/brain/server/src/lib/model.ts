@@ -52,6 +52,8 @@ export const SourceSchema = z.object({
   page: z.number().int().positive().optional(),
   topPct: z.number().min(0).max(100).optional(),    // % from top of page where content starts
   heightPct: z.number().min(0).max(100).optional(),  // % of page height the content covers
+  leftPct: z.number().min(0).max(100).optional(),   // % from left of page where content starts
+  widthPct: z.number().min(0).max(100).optional(),   // % of page width the content covers
   section: z.string().optional(),
   timestamp: z.string().optional(),
   retrievedAt: z.string().min(1),
