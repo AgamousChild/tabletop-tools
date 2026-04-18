@@ -136,17 +136,16 @@ async function main() {
   allRefs.length = 0
   allRefs.push(...mergeResult.refs)
 
-  // ── Map nodes to PDF page positions ──────────────────────────────────────
+  // ── Map nodes to PDF page positions (from gw-sync .positions.json sidecars) ──
   console.log('\n7. PDF position mapping')
-  const PDF_DIR = 'C:/R/sync-data/tools/gw-sync/.local/gw/pdfs'
-  if (existsSync(PDF_DIR)) {
-    const posResult = await mapNodesToPages(allNodes, PDF_DIR)
+  if (existsSync(MD_DIR)) {
+    const posResult = await mapNodesToPages(allNodes, MD_DIR)
     console.log(`   Mapped: ${posResult.mapped}, Unmapped: ${posResult.unmapped}`)
-    if (posResult.pdfErrors.length > 0) {
-      for (const err of posResult.pdfErrors) console.log(`   ERROR: ${err}`)
+    if (posResult.errors.length > 0) {
+      for (const err of posResult.errors) console.log(`   ERROR: ${err}`)
     }
   } else {
-    console.log(`   PDF directory not found: ${PDF_DIR} — skipping`)
+    console.log(`   Markdown directory not found: ${MD_DIR} — skipping`)
   }
 
   // ── Summary ────────────────────────────────────────────────────────────────
