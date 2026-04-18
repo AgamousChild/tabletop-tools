@@ -61,23 +61,30 @@ function findRegion(
     }
   }
 
-  // Strategy 2: If no heading match, find body text matching the start of the content
-  if (startIdx === -1 && contentNorm.length >= 20) {
-    const searchSnippet = contentNorm.substring(0, 80)
+  // Strategy 2: Match the node title as a substring of any sidecar block
+  if (startIdx === -1 && titleNorm.length >= 5) {
     for (let i = 0; i < positions.length; i++) {
-      const b = positions[i]!
-      if (normalize(b.text).includes(searchSnippet.substring(0, 40))) {
-        // Walk backwards to find the nearest heading
-        for (let j = i; j >= 0; j--) {
-          if (headingLevels.includes(positions[j]!.level)) {
-            startIdx = j
-            break
-          }
-        }
-        if (startIdx >= 0) break
-        // No heading found — use this body block directly
+      if (normalize(positions[i]!.text).includes(titleNorm.substring(0, Math.min(titleNorm.length, 30)))) {
         startIdx = i
         break
+      }
+    }
+  }
+
+  // Strategy 3: Match content lines against sidecar blocks
+  // (fallback for nodes whose title doesn't appear in any block)
+  if (startIdx === -1 && contentNorm.length >= 10) {
+    const contentLines = nodeContent.split('\n').map(l => normalize(l)).filter(l => l.length >= 10)
+
+    for (const line of contentLines.slice(0, 3)) {
+      if (startIdx >= 0) break
+      const searchText = line.substring(0, Math.min(line.length, 35))
+      for (let i = 0; i < positions.length; i++) {
+        const b = positions[i]!
+        if (normalize(b.text).includes(searchText)) {
+          startIdx = i
+          break
+        }
       }
     }
   }
@@ -146,14 +153,23 @@ export async function mapNodesToPages(
   const errors: string[] = []
 
   // Group nodes by their source PDF
+  // Also map Wahapedia-sourced faction nodes to their faction pack PDF
   const nodesByPdf = new Map<string, Node[]>()
   for (const node of nodes) {
+    // Direct PDF source
     for (const src of node.sources) {
       if (src.type === 'pdf') {
         const pdfName = src.title.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '')
         if (!nodesByPdf.has(pdfName)) nodesByPdf.set(pdfName, [])
         nodesByPdf.get(pdfName)!.push(node)
       }
+    }
+    // Wahapedia-sourced faction/stratagem/enhancement nodes — match to faction pack PDF
+    if (node.sources[0]?.type === 'wahapedia' && node.factionId &&
+        ['stratagem', 'enhancement', 'faction-ability', 'detachment-rule'].includes(node.category)) {
+      const pdfName = `faction-pack-${node.factionId}`
+      if (!nodesByPdf.has(pdfName)) nodesByPdf.set(pdfName, [])
+      nodesByPdf.get(pdfName)!.push(node)
     }
   }
 
@@ -172,19 +188,28 @@ export async function mapNodesToPages(
       const region = findRegion(node.title, node.content, positions)
 
       if (region) {
-        // Clone source to avoid shared reference across nodes
-        for (let i = 0; i < node.sources.length; i++) {
-          const src = node.sources[i]!
-          if (src.type === 'pdf' && src.title.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') === pdfName) {
-            node.sources[i] = {
-              ...src,
-              page: region.page,
-              topPct: region.topPct,
-              heightPct: region.heightPct,
-              leftPct: region.leftPct,
-              widthPct: region.widthPct,
-            }
-          }
+        // Check if this node already has a PDF source for this PDF
+        const existingPdfIdx = node.sources.findIndex(
+          s => s.type === 'pdf' && s.title.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') === pdfName
+        )
+
+        const pdfSource = {
+          type: 'pdf' as const,
+          title: pdfName.split('-').map(w => w[0]!.toUpperCase() + w.slice(1)).join(' '),
+          retrievedAt: node.sources[0]?.retrievedAt ?? new Date().toISOString(),
+          page: region.page,
+          topPct: region.topPct,
+          heightPct: region.heightPct,
+          leftPct: region.leftPct,
+          widthPct: region.widthPct,
+        }
+
+        if (existingPdfIdx >= 0) {
+          // Update existing PDF source (clone to avoid shared refs)
+          node.sources[existingPdfIdx] = pdfSource
+        } else {
+          // Add PDF source to Wahapedia-sourced nodes
+          node.sources.push(pdfSource)
         }
         mapped++
       } else {
