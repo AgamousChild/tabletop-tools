@@ -957,6 +957,21 @@ export function BrainScreen() {
   }
 
   async function handleOpenCard(node: ResultNode) {
+    // PDF-sourced rules — show the page image directly instead of markdown card
+    const pdfSource = node.sources?.find((s: any) => s.type === 'pdf' && s.page)
+    if (pdfSource && node.category !== 'datasheet' && node.category !== 'detachment-rule') {
+      setPdfView({
+        pdfName: pdfSource.title.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, ''),
+        page: pdfSource.page!,
+        title: node.title,
+        topPct: (pdfSource as any).topPct,
+        heightPct: (pdfSource as any).heightPct,
+        leftPct: (pdfSource as any).leftPct,
+        widthPct: (pdfSource as any).widthPct,
+      })
+      return
+    }
+
     if (node.category === 'detachment-rule') {
       openDetachmentPage(node)
       return
