@@ -172,8 +172,9 @@ export function parseFactionPack(
   // The PDF parser outputs these as one giant text block. We need to split
   // errata on "Page NNN" boundaries and FAQs on "Q:" boundaries.
   function splitErrataBlock(body: string, fSlug: string): void {
-    // Split on "Page NNN" or "Pages NNN" pattern
-    const entries = body.split(/(?=Pages?\s+\d+)/i).filter(s => s.trim())
+    // Split on "Page NNN" at the start of a line/sentence (followed by dash or comma for section name).
+    // Avoid splitting on cross-references like "(see Assigned Agents, page 75)".
+    const entries = body.split(/(?=(?:^|\n)\s*Pages?\s+\d+\s*[—–,\-])/i).filter(s => s.trim())
     for (const entry of entries) {
       const pageMatch = entry.match(/Pages?\s+(\d+)/i)
       const page = pageMatch ? parseInt(pageMatch[1]!, 10) : undefined

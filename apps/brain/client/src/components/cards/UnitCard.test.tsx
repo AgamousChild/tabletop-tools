@@ -171,4 +171,33 @@ describe('UnitCard', () => {
     fireEvent.click(screen.getByText('Incendiary Terror'))
     expect(onContentClick).toHaveBeenCalledWith('Incendiary Terror')
   })
+
+  it('does not show errata section when errata is absent', () => {
+    render(<UnitCard data={mockUnit} context={makeContext()} />)
+    expect(screen.queryByText(/Errata & FAQ/i)).not.toBeInTheDocument()
+  })
+
+  it('shows errata section when errata entries are present', () => {
+    const data = {
+      ...mockUnit,
+      errata: [
+        { nodeId: 'e1', title: 'Datasheet FAQ', content: 'The ability triggers once per turn.', source: { type: 'pdf', title: 'Chapter Approved', page: 8 } },
+      ],
+    }
+    render(<UnitCard data={data} context={makeContext()} />)
+    expect(screen.getByText('Errata & FAQ')).toBeInTheDocument()
+  })
+
+  it('reveals errata entry content when section is expanded', () => {
+    const data = {
+      ...mockUnit,
+      errata: [
+        { nodeId: 'e1', title: 'Datasheet FAQ', content: 'The ability triggers once per turn.', source: { type: 'pdf', title: 'Chapter Approved', page: 8 } },
+      ],
+    }
+    render(<UnitCard data={data} context={makeContext()} />)
+    fireEvent.click(screen.getByText('Errata & FAQ'))
+    expect(screen.getByText('Datasheet FAQ')).toBeInTheDocument()
+    expect(screen.getByText('The ability triggers once per turn.')).toBeInTheDocument()
+  })
 })

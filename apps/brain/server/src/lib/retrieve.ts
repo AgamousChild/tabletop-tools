@@ -1,6 +1,8 @@
 import { detectFactions, stripFactionFromQuery, extractMechanicKeywords, FACTION_PATTERNS, SUBFACTION_TO_PARENT } from './faction-detect'
 import { fetchNodesFromR2, fetchConnectedNodes } from './fetch-nodes'
 import type { Node } from './model'
+import { aggregateToRecords, fetchAllChildren, classifyNode } from './records'
+import type { AggregatedRecord } from './records'
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -16,6 +18,9 @@ export interface RetrieveOptions {
   includeConnected?: boolean   // Ask wants connected nodes; Search/Graph don't
   connectedDepth?: number      // default 1
   dualEmbedding?: boolean      // true for Ask — generates keyword embedding too
+  returnRecords?: boolean      // Search wants aggregated AggregatedRecord[]; Ask/Graph don't
+  page?: number                // 1-based page number (used by callers, not by retrieve itself)
+  pageSize?: number            // page size (used by callers, not by retrieve itself)
 }
 
 export interface EnrichedNode {
@@ -45,6 +50,8 @@ export interface RetrieveResult {
   results: EnrichedNode[]
   connected: EnrichedNode[]
   parentMap: Map<string, string>
+  /** Populated when RetrieveOptions.returnRecords is true. Undefined otherwise. */
+  records?: AggregatedRecord[]
 }
 
 // Environment dependencies (injected for testability)
@@ -103,7 +110,7 @@ export async function retrieve(options: RetrieveOptions, env: RetrieveEnv): Prom
     && queryMatchesFactionExactly
 
   if (isFactionBrowse) {
-    return await factionBrowse(detected, strippedQuery, keywords, limit, includeConnected, connectedDepth, env, query)
+    return await factionBrowse(detected, strippedQuery, keywords, limit, includeConnected, connectedDepth, env, query, options.returnRecords)
   }
 
   // ── Semantic search mode (normal path) ───────────────────────────────────
@@ -215,24 +222,25 @@ export async function retrieve(options: RetrieveOptions, env: RetrieveEnv): Prom
     })
   }
 
-  // Step 9: Sort — datasheets with title match first, then subfaction → faction → generic, then by score
+  // Step 9: Sort — exact title match first (any category), then datasheets, then by score
   const queryLower = query.toLowerCase().trim()
   const sortedMatches = filtered.sort((a, b) => {
-    // Exact title match on datasheets gets absolute highest priority — regardless of score
-    const aDatasheet = a.metadata?.category === 'datasheet' ? 1 : 0
-    const bDatasheet = b.metadata?.category === 'datasheet' ? 1 : 0
     const aTitle = (a.metadata?.title as string)?.toLowerCase() ?? ''
     const bTitle = (b.metadata?.title as string)?.toLowerCase() ?? ''
-    const aTitleMatch = aDatasheet && aTitle === queryLower ? 1 : 0
-    const bTitleMatch = bDatasheet && bTitle === queryLower ? 1 : 0
-    if (aTitleMatch !== bTitleMatch) return bTitleMatch - aTitleMatch
 
-    // Datasheets with title containing the query (or query containing the title) get priority
-    const aContains = aDatasheet && (aTitle.includes(queryLower) || queryLower.includes(aTitle)) ? 1 : 0
-    const bContains = bDatasheet && (bTitle.includes(queryLower) || queryLower.includes(bTitle)) ? 1 : 0
+    // Exact title match gets absolute highest priority — any category
+    const aTitleExact = aTitle === queryLower ? 1 : 0
+    const bTitleExact = bTitle === queryLower ? 1 : 0
+    if (aTitleExact !== bTitleExact) return bTitleExact - aTitleExact
+
+    // Title containing query (or vice versa) — any category
+    const aContains = (aTitle.includes(queryLower) || queryLower.includes(aTitle)) ? 1 : 0
+    const bContains = (bTitle.includes(queryLower) || queryLower.includes(bTitle)) ? 1 : 0
     if (aContains !== bContains) return bContains - aContains
 
-    // Datasheets always rank above non-datasheets at any score — users searching by name want the unit
+    // Datasheets rank above non-datasheets at equal title relevance
+    const aDatasheet = a.metadata?.category === 'datasheet' ? 1 : 0
+    const bDatasheet = b.metadata?.category === 'datasheet' ? 1 : 0
     if (aDatasheet !== bDatasheet) {
       return bDatasheet - aDatasheet
     }
@@ -263,13 +271,14 @@ export async function retrieve(options: RetrieveOptions, env: RetrieveEnv): Prom
     })
     .filter((n): n is EnrichedNode => n !== null)
 
-  // Step 12b: Direct title match — find ALL datasheets whose title matches the original query
-  // and inject them at position 0 if not already present. Handles cross-faction units
-  // (e.g., "Genestealers" exists in both tyranids and genestealer-cults).
+  // Step 12b: Direct title match — find ALL nodes whose title matches the original query
+  // and inject them at position 0 if not already present. Covers cross-faction units,
+  // army rules, CA cards, tournament companion rules, etc.
+  // Skip child categories (weapons, abilities) — they'll be aggregated into parent records.
+  const CHILD_CATEGORIES = new Set(['weapon', 'unit-ability', 'wargear-option', 'leader-attachment', 'unit-composition'])
   const resultIdSet = new Set(results.map(r => r.id))
   const queryTitleLower = query.toLowerCase().trim()
 
-  // Scan R2 node files for exact title matches
   const manifestObj = await env.bucket.get('manifest.json')
   if (manifestObj) {
     const manifest = await manifestObj.json() as { files: Record<string, string> }
@@ -281,7 +290,7 @@ export async function retrieve(options: RetrieveOptions, env: RetrieveEnv): Prom
       if (!obj) continue
       const fileNodes = await obj.json() as Node[]
       for (const n of fileNodes) {
-        if (n.category === 'datasheet' &&
+        if (!CHILD_CATEGORIES.has(n.category) &&
             n.title.toLowerCase() === queryTitleLower &&
             !resultIdSet.has(n.id)) {
           titleMatches.push(enrichNode(n, 1.0, new Map()))
@@ -311,6 +320,32 @@ export async function retrieve(options: RetrieveOptions, env: RetrieveEnv): Prom
     connected = connectedResult.nodes.map(node => enrichNode(node, 0, parentMap))
   }
 
+  // Step 15: Aggregate into records (only when requested)
+  // Use `results` (not `nodes`) because results includes title-match injections from step 12b
+  let records: AggregatedRecord[] | undefined
+  if (options.returnRecords) {
+    // Convert enriched results back to a Node-compatible shape for buildRecords
+    // fetchNodesFromR2 already gave us full Node objects; title-match injections also have full Node data via enrichNode
+    // Collect all nodes by ID from both the original fetch and any title-match additions
+    const allResultNodes: Node[] = []
+    const seenIds = new Set<string>()
+    // First: original R2-fetched nodes
+    for (const n of nodes) {
+      if (!seenIds.has(n.id)) { allResultNodes.push(n); seenIds.add(n.id) }
+    }
+    // Then: title-match injections (results may contain nodes not in the original `nodes` array)
+    for (const r of results) {
+      if (!seenIds.has(r.id)) {
+        // Re-fetch from R2 if needed (enrichNode doesn't carry the full Node, but it has all needed fields)
+        const titleMatchNodes = await fetchNodesFromR2(env.bucket, [r.id])
+        for (const n of titleMatchNodes) {
+          if (!seenIds.has(n.id)) { allResultNodes.push(n); seenIds.add(n.id) }
+        }
+      }
+    }
+    records = await buildRecords(allResultNodes, env.bucket)
+  }
+
   return {
     detected: {
       factions: detected.factions,
@@ -321,7 +356,70 @@ export async function retrieve(options: RetrieveOptions, env: RetrieveEnv): Prom
     results,
     connected,
     parentMap,
+    records,
   }
+}
+
+// ── buildRecords ──────────────────────────────────────────────────────────────
+
+/**
+ * Aggregate a list of search-result nodes into AggregatedRecord[].
+ *
+ * 1. Build an allNodes map from the already-fetched nodes.
+ * 2. Determine which container IDs (primary nodes) are missing from allNodes —
+ *    this covers both weapon→datasheet and army-rule-sub-rule→parent scenarios.
+ * 3. Fetch missing primaries from R2 in one batch.
+ * 4. Aggregate nodes into records.
+ * 5. Fetch ALL children for unit records (complete weapon/ability lists).
+ */
+async function buildRecords(nodes: Node[], bucket: RetrieveEnv['bucket']): Promise<AggregatedRecord[]> {
+  // Step 1: Build allNodes map from already-fetched nodes
+  const allNodesMap = new Map<string, Node>()
+  for (const node of nodes) allNodesMap.set(node.id, node)
+
+  // Step 2: Find container IDs that are missing from allNodesMap.
+  //         classifyNode gives us the containerId for each node — if a weapon maps
+  //         to its parent datasheet, or an army-rule sub-rule maps to its parent,
+  //         we need that parent in the map before we can build the record.
+  const missingContainerIds = new Set<string>()
+  for (const node of nodes) {
+    const { containerId } = classifyNode(node)
+    if (containerId !== node.id && !allNodesMap.has(containerId)) {
+      missingContainerIds.add(containerId)
+    }
+  }
+
+  // Step 3: Fetch missing primaries in one batch
+  if (missingContainerIds.size > 0) {
+    const parentNodes = await fetchNodesFromR2(bucket, [...missingContainerIds])
+    for (const pn of parentNodes) allNodesMap.set(pn.id, pn)
+  }
+
+  // Step 4: Aggregate
+  let records = aggregateToRecords(nodes, allNodesMap)
+
+  // Step 5: Fetch ALL children for unit records (weapons, abilities, etc.)
+  const datasheetIds = records
+    .filter(r => r.type === 'unit')
+    .map(r => r.primaryNode.id)
+
+  if (datasheetIds.length > 0) {
+    const allChildren = await fetchAllChildren(bucket, datasheetIds)
+    const childrenByParent = new Map<string, Node[]>()
+    for (const child of allChildren) {
+      if (!child.datasheetId) continue
+      if (!childrenByParent.has(child.datasheetId)) childrenByParent.set(child.datasheetId, [])
+      childrenByParent.get(child.datasheetId)!.push(child)
+    }
+    for (const record of records) {
+      if (record.type === 'unit') {
+        const allKids = childrenByParent.get(record.primaryNode.id)
+        if (allKids) record.childNodes = allKids
+      }
+    }
+  }
+
+  return records
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -362,6 +460,7 @@ async function factionBrowse(
   connectedDepth: number,
   env: RetrieveEnv,
   originalQuery?: string,
+  returnRecords?: boolean,
 ): Promise<RetrieveResult> {
   const factionId = detected.factions[0]!
   const subfaction = detected.subfaction
@@ -452,11 +551,19 @@ async function factionBrowse(
     }
   }
 
+  // Build records if requested
+  let records: AggregatedRecord[] | undefined
+  if (returnRecords) {
+    const nodeMap = new Map<string, Node>(filtered.map(n => [n.id, n]))
+    records = aggregateToRecords(filtered, nodeMap)
+  }
+
   return {
     detected: { factions: detected.factions, subfaction, strippedQuery, keywords },
     results,
     connected: [],
     parentMap: new Map(),
+    records,
   }
 }
 

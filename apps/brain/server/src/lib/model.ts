@@ -18,6 +18,9 @@ export const NodeCategorySchema = z.enum([
   'balance-change', 'faq', 'commentary',
   // Community
   'ruling', 'tactic', 'worked-example',
+  // Missions & deployment
+  'primary-mission', 'secondary-mission', 'deployment-zone',
+  'twist', 'challenger', 'terrain-layout',
 ])
 export type NodeCategory = z.infer<typeof NodeCategorySchema>
 
@@ -107,3 +110,59 @@ export const NodeSchema = z.object({
   keywords: z.array(z.string()),
 })
 export type Node = z.infer<typeof NodeSchema>
+
+// ── Record layer ────────────────────────────────────────────────────────────
+
+/**
+ * High-level content categories used to group nodes into browsable records.
+ * Distinct from NodeCategory (which describes individual node granularity).
+ */
+export const RecordTypeSchema = z.enum([
+  'unit', 'detachment', 'stratagem', 'enhancement',
+  'rule', 'army-rule', 'errata', 'balance',
+  'primary-mission', 'secondary-mission', 'deployment-zone',
+  'twist', 'challenger', 'terrain-layout',
+])
+export type RecordType = z.infer<typeof RecordTypeSchema>
+
+/**
+ * A linked errata entry that annotates a node with clarification or correction text.
+ */
+export const ErrataAnnotationSchema = z.object({
+  nodeId: z.string().min(1),
+  title: z.string().min(1),
+  content: z.string(),
+  source: z.object({
+    type: z.string(),
+    title: z.string(),
+    page: z.number().optional(),
+  }),
+})
+export type ErrataAnnotation = z.infer<typeof ErrataAnnotationSchema>
+
+/**
+ * A cross-reference from one record to another, with relationship context.
+ */
+export const CrossRefSchema = z.object({
+  targetRecordId: z.string().min(1),
+  targetTitle: z.string().min(1),
+  targetType: RecordTypeSchema,
+  rel: z.string().min(1),
+  context: z.string(),
+  refCount: z.number().int().min(1),
+})
+export type CrossRef = z.infer<typeof CrossRefSchema>
+
+/**
+ * A record groups a primary node with its child nodes, cross-references, and errata.
+ * Named BrainRecord to avoid collision with TypeScript's built-in Record<K,V> utility type.
+ */
+export const RecordSchema = z.object({
+  type: RecordTypeSchema,
+  primaryNode: NodeSchema,
+  childNodes: z.array(NodeSchema),
+  crossRefs: z.array(CrossRefSchema),
+  errata: z.array(ErrataAnnotationSchema),
+  matchedChildIds: z.array(z.string()),
+})
+export type BrainRecord = z.infer<typeof RecordSchema>

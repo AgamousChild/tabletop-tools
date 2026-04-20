@@ -3,6 +3,9 @@ import { UnitCard } from './UnitCard'
 import { StratagemCard } from './StratagemCard'
 import { EnhancementCard } from './EnhancementCard'
 import { RuleCard } from './RuleCard'
+import { MissionCard } from './MissionCard'
+import { TwistCard } from './TwistCard'
+import { ChallengerCard } from './ChallengerCard'
 
 export interface ComboViewProps {
   leftCard: CardData
@@ -21,6 +24,12 @@ function renderCard(card: CardData, context: CardContext) {
       return <EnhancementCard data={card.data} context={context} />
     case 'rule':
       return <RuleCard data={card.data} context={context} />
+    case 'mission':
+      return <MissionCard data={card.data} context={context} />
+    case 'twist':
+      return <TwistCard data={card.data} context={context} />
+    case 'challenger':
+      return <ChallengerCard data={card.data} context={context} />
   }
 }
 

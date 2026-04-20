@@ -104,4 +104,33 @@ describe('StratagemCard', () => {
     fireEvent.click(keyword)
     expect(onContentClick).toHaveBeenCalledWith('DEVASTATING WOUNDS')
   })
+
+  it('does not show errata section when errata is absent', () => {
+    render(<StratagemCard data={mockStratagem} context={baseContext} />)
+    expect(screen.queryByText(/Errata & FAQ/i)).not.toBeInTheDocument()
+  })
+
+  it('shows errata section when errata entries are present', () => {
+    const data = {
+      ...mockStratagem,
+      errata: [
+        { nodeId: 'e1', title: 'Stratagem FAQ', content: 'This can only be used once per phase.', source: { type: 'pdf', title: 'Chapter Approved', page: 15 } },
+      ],
+    }
+    render(<StratagemCard data={data} context={baseContext} />)
+    expect(screen.getByText('Errata & FAQ')).toBeInTheDocument()
+  })
+
+  it('reveals errata entry content when section is expanded', () => {
+    const data = {
+      ...mockStratagem,
+      errata: [
+        { nodeId: 'e1', title: 'Stratagem FAQ', content: 'This can only be used once per phase.', source: { type: 'pdf', title: 'Chapter Approved', page: 15 } },
+      ],
+    }
+    render(<StratagemCard data={data} context={baseContext} />)
+    fireEvent.click(screen.getByText('Errata & FAQ'))
+    expect(screen.getByText('Stratagem FAQ')).toBeInTheDocument()
+    expect(screen.getByText('This can only be used once per phase.')).toBeInTheDocument()
+  })
 })

@@ -1,4 +1,5 @@
-import type { StratagemCardData, CardContext } from './types'
+import { ErrataSection } from './ErrataSection'
+import type { CardContext, StratagemCardData } from './types'
 
 interface StratagemCardProps {
   data: StratagemCardData
@@ -116,6 +117,8 @@ export function StratagemCard({ data, context }: StratagemCardProps) {
           highlighted={sectionIsHighlighted(data.effect, highlightTerms)}
           onContentClick={onContentClick}
         />
+
+        <ErrataSection errata={data.errata} />
 
         {/* Detachment name */}
         <p className="text-xs text-slate-500 mt-1 pt-1 border-t border-slate-800">

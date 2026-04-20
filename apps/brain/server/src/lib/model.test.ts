@@ -1,8 +1,11 @@
 import { describe, it, expect } from 'vitest'
 import {
   NodeSchema, NodeRefSchema, SourceSchema,
+  NodeCategorySchema,
+  RecordTypeSchema, RecordSchema, CrossRefSchema, ErrataAnnotationSchema,
   type Node, type NodeRef, type Source,
   type NodeLayer, type NodeCategory, type GamePhase, type RefType,
+  type BrainRecord, type CrossRef, type ErrataAnnotation,
 } from './model'
 
 describe('model schemas', () => {
@@ -207,8 +210,10 @@ describe('model schemas', () => {
         'datasheet', 'weapon', 'unit-ability', 'wargear-option', 'leader-attachment', 'unit-composition',
         'balance-change', 'faq', 'commentary',
         'ruling', 'tactic', 'worked-example',
+        'primary-mission', 'secondary-mission', 'deployment-zone',
+        'twist', 'challenger', 'terrain-layout',
       ]
-      expect(categories).toHaveLength(22)
+      expect(categories).toHaveLength(28)
     })
 
     it('game phase values are exhaustive', () => {
@@ -227,5 +232,109 @@ describe('model schemas', () => {
       ]
       expect(refs).toHaveLength(12)
     })
+  })
+})
+
+// Helper — minimal valid Node for Record tests
+const makeMinimalNode = (id: string): Node => ({
+  id,
+  layer: 'core',
+  category: 'core-mechanic',
+  title: 'Test Node',
+  content: 'Some content.',
+  summary: 'Short summary.',
+  sources: [{ type: 'pdf', title: 'Core Rules', retrievedAt: '2026-04-08' }],
+  refs: [],
+  version: 1,
+  keywords: [],
+})
+
+describe('Record schema', () => {
+  it('validates a unit record', () => {
+    const record: BrainRecord = {
+      type: 'unit',
+      primaryNode: makeMinimalNode('unit:space-marines:intercessors'),
+      childNodes: [],
+      crossRefs: [],
+      errata: [],
+      matchedChildIds: [],
+    }
+    expect(() => RecordSchema.parse(record)).not.toThrow()
+  })
+
+  it('validates an army-rule record', () => {
+    const record: BrainRecord = {
+      type: 'army-rule',
+      primaryNode: makeMinimalNode('faction:space-marines:army-rule'),
+      childNodes: [makeMinimalNode('faction:space-marines:oath-of-moment')],
+      crossRefs: [],
+      errata: [],
+      matchedChildIds: ['faction:space-marines:oath-of-moment'],
+    }
+    expect(() => RecordSchema.parse(record)).not.toThrow()
+  })
+
+  it('validates all record types', () => {
+    const recordTypes = [
+      'unit', 'detachment', 'stratagem', 'enhancement',
+      'rule', 'army-rule', 'errata', 'balance',
+      'primary-mission', 'secondary-mission', 'deployment-zone',
+      'twist', 'challenger', 'terrain-layout',
+    ] as const
+    for (const type of recordTypes) {
+      expect(() => RecordTypeSchema.parse(type)).not.toThrow()
+    }
+  })
+
+  it('validates a cross-reference', () => {
+    const ref: CrossRef = {
+      targetRecordId: 'core:wound-roll',
+      targetTitle: 'Wound Roll',
+      targetType: 'rule',
+      rel: 'modifies',
+      context: 'Modifies the wound roll mechanic',
+      refCount: 3,
+    }
+    expect(() => CrossRefSchema.parse(ref)).not.toThrow()
+  })
+
+  it('rejects a cross-reference with refCount < 1', () => {
+    expect(() => CrossRefSchema.parse({
+      targetRecordId: 'core:wound-roll',
+      targetTitle: 'Wound Roll',
+      targetType: 'rule',
+      rel: 'modifies',
+      context: 'Some context',
+      refCount: 0,
+    })).toThrow()
+  })
+
+  it('validates an errata annotation', () => {
+    const errata: ErrataAnnotation = {
+      nodeId: 'errata:core-commentary:p6:1',
+      title: 'REDEPLOYMENTS',
+      content: 'Rules that allow players to redeploy...',
+      source: { type: 'faq', title: 'Core Rules Updates', page: 6 },
+    }
+    expect(() => ErrataAnnotationSchema.parse(errata)).not.toThrow()
+  })
+
+  it('validates an errata annotation without optional page', () => {
+    const errata: ErrataAnnotation = {
+      nodeId: 'errata:core-commentary:p6:1',
+      title: 'REDEPLOYMENTS',
+      content: 'Rules that allow players to redeploy...',
+      source: { type: 'faq', title: 'Core Rules Updates' },
+    }
+    expect(() => ErrataAnnotationSchema.parse(errata)).not.toThrow()
+  })
+
+  it('validates new node categories', () => {
+    expect(() => NodeCategorySchema.parse('primary-mission')).not.toThrow()
+    expect(() => NodeCategorySchema.parse('secondary-mission')).not.toThrow()
+    expect(() => NodeCategorySchema.parse('twist')).not.toThrow()
+    expect(() => NodeCategorySchema.parse('challenger')).not.toThrow()
+    expect(() => NodeCategorySchema.parse('deployment-zone')).not.toThrow()
+    expect(() => NodeCategorySchema.parse('terrain-layout')).not.toThrow()
   })
 })

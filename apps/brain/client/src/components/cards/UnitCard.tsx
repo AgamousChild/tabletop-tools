@@ -1,4 +1,5 @@
-import type { UnitCardData, CardContext, WeaponProfile } from './types'
+import { ErrataSection } from './ErrataSection'
+import type { CardContext, UnitCardData, WeaponProfile } from './types'
 
 interface UnitCardProps {
   data: UnitCardData
@@ -8,7 +9,7 @@ interface UnitCardProps {
 function isHighlighted(text: string, terms: string[]): boolean {
   if (!terms.length || !text) return false
   const lower = text.toLowerCase()
-  return terms.some(t => lower.includes(t.toLowerCase()))
+  return terms.some((t) => lower.includes(t.toLowerCase()))
 }
 
 function Clickable({
@@ -28,7 +29,9 @@ function Clickable({
       tabIndex={0}
       className={className}
       onClick={() => onClick(term)}
-      onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') onClick(term) }}
+      onKeyDown={(e) => {
+        if (e.key === 'Enter' || e.key === ' ') onClick(term)
+      }}
       style={{ cursor: 'pointer' }}
     >
       {children}
@@ -39,11 +42,11 @@ function Clickable({
 function WeaponAbilityTags({ abilities }: { abilities: string }) {
   if (!abilities) return null
   // Extract [TAG] tokens
-  const tags = Array.from(abilities.matchAll(/\[([^\]]+)\]/g)).map(m => m[1])
+  const tags = Array.from(abilities.matchAll(/\[([^\]]+)\]/g)).map((m) => m[1])
   if (!tags.length) return null
   return (
     <span className="ml-1 inline-flex flex-wrap gap-1">
-      {tags.map(tag => (
+      {tags.map((tag) => (
         <span
           key={tag}
           className="text-[9px] font-semibold uppercase tracking-wide bg-slate-700 text-slate-300 px-1 rounded"
@@ -72,53 +75,59 @@ function WeaponTable({
 
   return (
     <div className="mb-2">
-      <div className={`${headerBg} text-white text-[10px] font-bold uppercase tracking-widest px-2 py-0.5`}>
+      <div
+        className={`${headerBg} text-white text-[10px] font-bold uppercase tracking-widest px-2 py-0.5`}
+      >
         {label}
       </div>
       <div className="overflow-x-auto">
-      <table className="w-full text-[10px] md:text-xs border-collapse">
-        <thead>
-          <tr className="bg-slate-800 text-slate-400 text-[8px] md:text-[9px] uppercase tracking-wider">
-            <th className="text-left px-2 py-0.5 font-medium">Weapon</th>
-            <th className="text-center px-1 py-0.5 font-medium">Range</th>
-            <th className="text-center px-1 py-0.5 font-medium">A</th>
-            <th className="text-center px-1 py-0.5 font-medium">BS/WS</th>
-            <th className="text-center px-1 py-0.5 font-medium">S</th>
-            <th className="text-center px-1 py-0.5 font-medium">AP</th>
-            <th className="text-center px-1 py-0.5 font-medium">D</th>
-          </tr>
-        </thead>
-        <tbody>
-          {weapons.map((w, i) => {
-            const highlight = isHighlighted(w.abilities, highlightTerms)
-            return (
-              <tr
-                key={`${w.name}-${i}`}
-                data-weapon="true"
-                data-highlight={highlight ? 'true' : undefined}
-                className={
-                  highlight
-                    ? 'bg-amber-900/40 border-b border-slate-700'
-                    : 'bg-slate-900 border-b border-slate-700 odd:bg-slate-850'
-                }
-              >
-                <td className="px-2 py-0.5 text-slate-200">
-                  <Clickable term={w.name} onClick={onContentClick} className="hover:text-amber-400 transition-colors">
-                    {w.name}
-                  </Clickable>
-                  <WeaponAbilityTags abilities={w.abilities} />
-                </td>
-                <td className="text-center px-1 py-0.5 text-slate-300">{w.range}</td>
-                <td className="text-center px-1 py-0.5 text-slate-300">{w.attacks}</td>
-                <td className="text-center px-1 py-0.5 text-slate-300">{w.skill}</td>
-                <td className="text-center px-1 py-0.5 text-slate-300">{w.strength}</td>
-                <td className="text-center px-1 py-0.5 text-slate-300">{w.ap}</td>
-                <td className="text-center px-1 py-0.5 text-slate-300">{w.damage}</td>
-              </tr>
-            )
-          })}
-        </tbody>
-      </table>
+        <table className="w-full text-[10px] md:text-xs border-collapse">
+          <thead>
+            <tr className="bg-slate-800 text-slate-400 text-[8px] md:text-[9px] uppercase tracking-wider">
+              <th className="text-left px-2 py-0.5 font-medium">Weapon</th>
+              <th className="text-center px-1 py-0.5 font-medium">Range</th>
+              <th className="text-center px-1 py-0.5 font-medium">A</th>
+              <th className="text-center px-1 py-0.5 font-medium">BS/WS</th>
+              <th className="text-center px-1 py-0.5 font-medium">S</th>
+              <th className="text-center px-1 py-0.5 font-medium">AP</th>
+              <th className="text-center px-1 py-0.5 font-medium">D</th>
+            </tr>
+          </thead>
+          <tbody>
+            {weapons.map((w, i) => {
+              const highlight = isHighlighted(w.abilities, highlightTerms)
+              return (
+                <tr
+                  key={`${w.name}-${i}`}
+                  data-weapon="true"
+                  data-highlight={highlight ? 'true' : undefined}
+                  className={
+                    highlight
+                      ? 'bg-amber-900/40 border-b border-slate-700'
+                      : 'bg-slate-900 border-b border-slate-700 odd:bg-slate-850'
+                  }
+                >
+                  <td className="px-2 py-0.5 text-slate-200">
+                    <Clickable
+                      term={w.name}
+                      onClick={onContentClick}
+                      className="hover:text-amber-400 transition-colors"
+                    >
+                      {w.name}
+                    </Clickable>
+                    <WeaponAbilityTags abilities={w.abilities} />
+                  </td>
+                  <td className="text-center px-1 py-0.5 text-slate-300">{w.range}</td>
+                  <td className="text-center px-1 py-0.5 text-slate-300">{w.attacks}</td>
+                  <td className="text-center px-1 py-0.5 text-slate-300">{w.skill}</td>
+                  <td className="text-center px-1 py-0.5 text-slate-300">{w.strength}</td>
+                  <td className="text-center px-1 py-0.5 text-slate-300">{w.ap}</td>
+                  <td className="text-center px-1 py-0.5 text-slate-300">{w.damage}</td>
+                </tr>
+              )
+            })}
+          </tbody>
+        </table>
       </div>
     </div>
   )
@@ -149,7 +158,11 @@ export function UnitCard({ data, context }: UnitCardProps) {
             {(() => {
               const label = data.subfaction || data.factionKeywords[0] || data.factionId
               return label ? (
-                <Clickable term={label} onClick={onContentClick} className="hover:text-white transition-colors">
+                <Clickable
+                  term={label}
+                  onClick={onContentClick}
+                  className="hover:text-white transition-colors"
+                >
                   {label.toUpperCase()}
                 </Clickable>
               ) : null
@@ -157,10 +170,15 @@ export function UnitCard({ data, context }: UnitCardProps) {
           </div>
         </div>
         <div className="ml-3 text-right flex-shrink-0">
-          <span className="text-amber-400 font-bold text-sm" style={{ fontFamily: "'Oswald', sans-serif" }}>
+          <span
+            className="text-amber-400 font-bold text-sm"
+            style={{ fontFamily: "'Oswald', sans-serif" }}
+          >
             {data.points}
           </span>
-          <div className="text-blue-300 text-[10px] uppercase tracking-wider mt-0.5">{data.derivedType}</div>
+          <div className="text-blue-300 text-[10px] uppercase tracking-wider mt-0.5">
+            {data.derivedType}
+          </div>
         </div>
       </div>
 
@@ -177,7 +195,9 @@ export function UnitCard({ data, context }: UnitCardProps) {
           ...(stats.fnp ? [{ label: 'FNP', value: stats.fnp }] : []),
         ].map(({ label, value }) => (
           <div key={label} className="flex flex-col items-center min-w-[32px]">
-            <span className="text-[9px] text-slate-400 uppercase tracking-widest font-medium">{label}</span>
+            <span className="text-[9px] text-slate-400 uppercase tracking-widest font-medium">
+              {label}
+            </span>
             <span
               className="text-base font-bold text-white leading-tight"
               style={{ fontFamily: "'Oswald', sans-serif" }}
@@ -215,7 +235,7 @@ export function UnitCard({ data, context }: UnitCardProps) {
           {/* Core ability badges */}
           {data.coreAbilities.length > 0 && (
             <div className="flex flex-wrap gap-1 mb-2">
-              {data.coreAbilities.map(ca => {
+              {data.coreAbilities.map((ca) => {
                 const highlighted = isHighlighted(ca, highlightTerms)
                 return (
                   <Clickable
@@ -237,8 +257,11 @@ export function UnitCard({ data, context }: UnitCardProps) {
 
           {/* Datasheet abilities */}
           <div className="flex flex-col gap-2">
-            {data.abilities.map(ability => {
-              const highlighted = isHighlighted(ability.name + ' ' + ability.description, highlightTerms)
+            {data.abilities.map((ability) => {
+              const highlighted = isHighlighted(
+                ability.name + ' ' + ability.description,
+                highlightTerms,
+              )
               return (
                 <div
                   key={ability.name}
@@ -256,7 +279,9 @@ export function UnitCard({ data, context }: UnitCardProps) {
                   >
                     {ability.name}
                   </Clickable>
-                  <p className="text-[10px] text-slate-300 mt-0.5 leading-snug">{ability.description}</p>
+                  <p className="text-[10px] text-slate-300 mt-0.5 leading-snug">
+                    {ability.description}
+                  </p>
                 </div>
               )
             })}
@@ -267,23 +292,27 @@ export function UnitCard({ data, context }: UnitCardProps) {
       {/* Keywords bar */}
       <div className="bg-slate-800 border-b border-slate-700 px-3 py-1.5 flex flex-wrap gap-1 items-center justify-between">
         <div className="flex flex-wrap gap-1 items-center">
-          <span className="text-[9px] text-slate-500 uppercase tracking-widest font-medium mr-1">Keywords:</span>
-          {data.keywords.filter(kw => !kw.startsWith('type:')).map(kw => {
-            const display = kw.toLowerCase() === 'characters' ? 'Character' : kw
-            return (
-              <Clickable
-                key={kw}
-                term={kw}
-                onClick={onContentClick}
-                className="text-[10px] text-slate-300 bg-slate-700 px-1.5 py-0.5 rounded hover:text-amber-400 hover:bg-slate-600 transition-colors"
-              >
-                {display}
-              </Clickable>
-            )
-          })}
+          <span className="text-[9px] text-slate-500 uppercase tracking-widest font-medium mr-1">
+            Keywords:
+          </span>
+          {data.keywords
+            .filter((kw) => !kw.startsWith('type:'))
+            .map((kw) => {
+              const display = kw.toLowerCase() === 'characters' ? 'Character' : kw
+              return (
+                <Clickable
+                  key={kw}
+                  term={kw}
+                  onClick={onContentClick}
+                  className="text-[10px] text-slate-300 bg-slate-700 px-1.5 py-0.5 rounded hover:text-amber-400 hover:bg-slate-600 transition-colors"
+                >
+                  {display}
+                </Clickable>
+              )
+            })}
         </div>
         <div className="flex flex-wrap gap-1 items-center">
-          {data.factionKeywords.map(fk => (
+          {data.factionKeywords.map((fk) => (
             <Clickable
               key={`fk-${fk}`}
               term={fk}
@@ -296,24 +325,32 @@ export function UnitCard({ data, context }: UnitCardProps) {
         </div>
       </div>
 
+      <ErrataSection errata={data.errata} />
+
       {/* Footer */}
       <div className="px-3 py-2 bg-slate-950 text-[10px] text-slate-400 space-y-1">
         {data.composition && (
           <div>
-            <span className="text-slate-500 font-semibold uppercase tracking-wider text-[9px]">Composition: </span>
+            <span className="text-slate-500 font-semibold uppercase tracking-wider text-[9px]">
+              Composition:{' '}
+            </span>
             <span className="text-slate-300">{data.composition}</span>
           </div>
         )}
         {data.loadout && (
           <div>
-            <span className="text-slate-500 font-semibold uppercase tracking-wider text-[9px]">Loadout: </span>
+            <span className="text-slate-500 font-semibold uppercase tracking-wider text-[9px]">
+              Loadout:{' '}
+            </span>
             <span className="text-slate-300">{data.loadout}</span>
           </div>
         )}
         {data.leaders.length > 0 && (
           <div className="flex flex-wrap items-center gap-1">
-            <span className="text-slate-500 font-semibold uppercase tracking-wider text-[9px]">Eligible Leaders: </span>
-            {data.leaders.map(leader => (
+            <span className="text-slate-500 font-semibold uppercase tracking-wider text-[9px]">
+              Eligible Leaders:{' '}
+            </span>
+            {data.leaders.map((leader) => (
               <Clickable
                 key={leader}
                 term={leader}

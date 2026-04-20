@@ -1,5 +1,8 @@
 import { useState } from 'react'
 
+import { ErrataSection } from './ErrataSection'
+import type { ErrataEntry } from './types'
+
 interface PdfPageViewProps {
   pdfName: string
   pageNumber: number
@@ -10,11 +13,20 @@ interface PdfPageViewProps {
   leftPct?: number
   widthPct?: number
   onDismiss: () => void
+  errata?: ErrataEntry[]
 }
 
 export function PdfPageView({
-  pdfName, pageNumber, highlightText, title,
-  topPct, heightPct, leftPct, widthPct, onDismiss,
+  pdfName,
+  pageNumber,
+  highlightText: _highlightText,
+  title,
+  topPct,
+  heightPct,
+  leftPct,
+  widthPct,
+  onDismiss,
+  errata,
 }: PdfPageViewProps) {
   const [loaded, setLoaded] = useState(false)
   const [error, setError] = useState(false)
@@ -63,7 +75,9 @@ export function PdfPageView({
               className="flex flex-col items-center justify-center h-64 text-slate-400 gap-2"
             >
               <span className="text-2xl">Page image unavailable</span>
-              <span className="text-sm">{pdfName}, page {pageNumber}</span>
+              <span className="text-sm">
+                {pdfName}, page {pageNumber}
+              </span>
             </div>
           )}
 
@@ -95,6 +109,13 @@ export function PdfPageView({
             />
           )}
         </div>
+
+        {/* Errata section */}
+        {errata && errata.length > 0 && (
+          <div className="bg-slate-900 border-x border-slate-700 px-4 py-2">
+            <ErrataSection errata={errata} />
+          </div>
+        )}
 
         {/* Close button */}
         <div className="bg-slate-900 border border-slate-700 rounded-b-lg px-4 py-3 flex justify-center">

@@ -1,9 +1,14 @@
 import { Hono } from 'hono'
 import { cors } from 'hono/cors'
-import type { Env } from './types'
+
+import { filterBrowseNodes } from './lib/browse'
+import { buildCrossRefs, loadIndexes } from './lib/cross-refs'
+import { getEntityIndex, linkEntitiesInContent } from './lib/entity-linker'
+import { findErrataForNode } from './lib/errata-linker'
+import { assembleContext, formatConversationalAnswer } from './lib/format'
 import type { Node } from './lib/model'
 import { retrieve } from './lib/retrieve'
-import { formatConversationalAnswer, assembleContext } from './lib/format'
+import type { Env } from './types'
 
 /** Vectorize IDs must be <= 64 bytes. For long node IDs, truncate + append hash. */
 function vectorizeId(nodeId: string): string {
@@ -24,7 +29,13 @@ const app = new Hono<HonoEnv>()
 app.use('*', async (c, next) => {
   const origin = c.env.CORS_ORIGIN || 'https://tabletop-tools.net'
   return cors({
-    origin: [origin, 'http://localhost:3008', 'http://localhost:3009', 'http://localhost:3010', 'http://localhost:3011'],
+    origin: [
+      origin,
+      'http://localhost:3008',
+      'http://localhost:3009',
+      'http://localhost:3010',
+      'http://localhost:3011',
+    ],
     allowMethods: ['GET', 'POST'],
   })(c, next)
 })
@@ -39,22 +50,26 @@ app.get('/browse/layers', async (c) => {
   const bucket = c.env.BRAIN_BUCKET
   const manifestObj = await bucket.get('manifest.json')
   if (!manifestObj) return c.json({ layers: [] })
-  const manifest = await manifestObj.json() as { files: Record<string, string> }
+  const manifest = (await manifestObj.json()) as { files: Record<string, string> }
 
   // Count nodes per layer by reading each node file
   const layers: Array<{ id: string; label: string; count: number }> = []
   const layerLabels: Record<string, string> = {
-    core: 'Core Rules', faction: 'Faction', unit: 'Units',
-    errata: 'Errata', balance: 'Balance', community: 'Community',
+    core: 'Core Rules',
+    faction: 'Faction',
+    unit: 'Units',
+    errata: 'Errata',
+    balance: 'Balance',
+    community: 'Community',
   }
 
   for (const file of Object.keys(manifest.files)) {
     if (!file.startsWith('nodes/')) continue
     const obj = await bucket.get(file)
     if (!obj) continue
-    const nodes = await obj.json() as Node[]
+    const nodes = (await obj.json()) as Node[]
     for (const node of nodes) {
-      const existing = layers.find(l => l.id === node.layer)
+      const existing = layers.find((l) => l.id === node.layer)
       if (existing) existing.count++
       else layers.push({ id: node.layer, label: layerLabels[node.layer] || node.layer, count: 1 })
     }
@@ -67,35 +82,39 @@ app.get('/browse/nodes', async (c) => {
   const layer = c.req.query('layer')
   if (!layer) return c.json({ error: 'layer query param required' }, 400)
 
-  const limit = Math.min(parseInt(c.req.query('limit') || '100'), 500)
-  const offset = parseInt(c.req.query('offset') || '0')
+  const page = Math.max(1, parseInt(c.req.query('page') || '1'))
+  const pageSize = Math.min(Math.max(1, parseInt(c.req.query('pageSize') || '20')), 100)
 
   const bucket = c.env.BRAIN_BUCKET
   const manifestObj = await bucket.get('manifest.json')
-  if (!manifestObj) return c.json({ nodes: [], total: 0 })
-  const manifest = await manifestObj.json() as { files: Record<string, string> }
+  if (!manifestObj) return c.json({ nodes: [], total: 0, page, pageSize, totalPages: 0 })
+  const manifest = (await manifestObj.json()) as { files: Record<string, string> }
 
   const allNodes: Node[] = []
   for (const file of Object.keys(manifest.files)) {
     if (!file.startsWith('nodes/')) continue
     const obj = await bucket.get(file)
     if (!obj) continue
-    const nodes = await obj.json() as Node[]
+    const nodes = (await obj.json()) as Node[]
     for (const node of nodes) {
       if (node.layer === layer) allNodes.push(node)
     }
   }
 
+  // Filter to top-level records only
+  const filtered = filterBrowseNodes(allNodes)
+
   // Sort by category then title
-  allNodes.sort((a, b) => {
+  filtered.sort((a, b) => {
     if (a.category !== b.category) return a.category.localeCompare(b.category)
     return a.title.localeCompare(b.title)
   })
 
-  return c.json({
-    nodes: allNodes.slice(offset, offset + limit),
-    total: allNodes.length,
-  })
+  const total = filtered.length
+  const totalPages = Math.ceil(total / pageSize)
+  const paged = filtered.slice((page - 1) * pageSize, page * pageSize)
+
+  return c.json({ nodes: paged, total, page, pageSize, totalPages })
 })
 
 app.get('/browse/node/:id', async (c) => {
@@ -103,14 +122,14 @@ app.get('/browse/node/:id', async (c) => {
   const bucket = c.env.BRAIN_BUCKET
   const manifestObj = await bucket.get('manifest.json')
   if (!manifestObj) return c.json({ error: 'No data' }, 404)
-  const manifest = await manifestObj.json() as { files: Record<string, string> }
+  const manifest = (await manifestObj.json()) as { files: Record<string, string> }
 
   for (const file of Object.keys(manifest.files)) {
     if (!file.startsWith('nodes/')) continue
     const obj = await bucket.get(file)
     if (!obj) continue
-    const nodes = await obj.json() as Node[]
-    const found = nodes.find(n => n.id === id)
+    const nodes = (await obj.json()) as Node[]
+    const found = nodes.find((n) => n.id === id)
     if (found) return c.json({ node: found })
   }
 
@@ -122,7 +141,7 @@ app.get('/browse/unit/:id', async (c) => {
   const bucket = c.env.BRAIN_BUCKET
   const manifestObj = await bucket.get('manifest.json')
   if (!manifestObj) return c.json({ error: 'No data' }, 404)
-  const manifest = await manifestObj.json() as { files: Record<string, string> }
+  const manifest = (await manifestObj.json()) as { files: Record<string, string> }
 
   let datasheet: Node | null = null
   const weapons: Node[] = []
@@ -132,7 +151,7 @@ app.get('/browse/unit/:id', async (c) => {
     if (!file.startsWith('nodes/')) continue
     const obj = await bucket.get(file)
     if (!obj) continue
-    const nodes = await obj.json() as Node[]
+    const nodes = (await obj.json()) as Node[]
     for (const n of nodes) {
       if (n.id === id && n.category === 'datasheet') {
         datasheet = n
@@ -193,6 +212,8 @@ app.get('/pages/:path{.+}', async (c) => {
 app.post('/search', async (c) => {
   const body = await c.req.json<{
     query: string
+    page?: number
+    pageSize?: number
     limit?: number
     filter?: {
       layer?: string
@@ -206,24 +227,68 @@ app.post('/search', async (c) => {
     return c.json({ error: 'query is required' }, 400)
   }
 
+  const page = Math.max(1, body.page ?? 1)
+  const pageSize = Math.min(Math.max(1, body.pageSize ?? 10), 50)
+
   const env = {
     ai: c.env.AI,
     vectorize: c.env.BRAIN_INDEX,
     bucket: c.env.BRAIN_BUCKET,
   }
 
-  const { detected, results } = await retrieve(
+  const { detected, results, records: rawRecords } = await retrieve(
     {
       query: body.query,
       limit: body.limit,
       filter: body.filter,
       includeConnected: false,
       dualEmbedding: false,
+      returnRecords: true,
     },
     env,
   )
 
-  return c.json({ detected, results })
+  if (!rawRecords) {
+    return c.json({ detected, records: [], total: 0, page, pageSize, totalPages: 0, results })
+  }
+
+  // Collect errata nodes from all R2 node files (correctness-first; caching is a future concern)
+  const errataNodes: Node[] = []
+  const manifestObj = await c.env.BRAIN_BUCKET.get('manifest.json')
+  if (manifestObj) {
+    const manifest = (await manifestObj.json()) as { files: Record<string, string> }
+    for (const file of Object.keys(manifest.files)) {
+      if (!file.startsWith('nodes/')) continue
+      const obj = await c.env.BRAIN_BUCKET.get(file)
+      if (!obj) continue
+      const fileNodes = (await obj.json()) as Node[]
+      for (const n of fileNodes) {
+        if (n.category === 'faq' || n.category === 'commentary') errataNodes.push(n)
+      }
+    }
+  }
+
+  // Attach errata and entity-link each record's primary node content
+  const entityIndex = await getEntityIndex(c.env.BRAIN_BUCKET)
+  const linkedRecords = rawRecords.map(record => ({
+    ...record,
+    errata: findErrataForNode(record.primaryNode, errataNodes),
+    primaryNode: {
+      ...record.primaryNode,
+      content: linkEntitiesInContent(record.primaryNode.content, entityIndex),
+    },
+  }))
+
+  // Build cross-refs using cached indexes (loaded once per Worker isolate)
+  const { fwd, rev } = await loadIndexes(c.env.BRAIN_BUCKET)
+  const records = buildCrossRefs(linkedRecords, fwd, rev)
+
+  // Paginate
+  const total = records.length
+  const totalPages = Math.ceil(total / pageSize)
+  const paginatedRecords = records.slice((page - 1) * pageSize, page * pageSize)
+
+  return c.json({ detected, records: paginatedRecords, total, page, pageSize, totalPages, results })
 })
 
 // ── Gemini cache helpers ────────────────────────────────────────────────────
@@ -245,16 +310,23 @@ interface CachedGeminiResult {
   cachedAt: string
 }
 
-async function getCachedGemini(bucket: R2Bucket, question: string): Promise<CachedGeminiResult | null> {
+async function getCachedGemini(
+  bucket: R2Bucket,
+  question: string,
+): Promise<CachedGeminiResult | null> {
   const key = `cache/gemini/${hashQuestion(question)}.json`
   const obj = await bucket.get(key)
   if (!obj) return null
-  const cached = await obj.json() as CachedGeminiResult
+  const cached = (await obj.json()) as CachedGeminiResult
   if (Date.now() - new Date(cached.cachedAt).getTime() > GEMINI_CACHE_TTL_MS) return null
   return cached
 }
 
-async function setCachedGemini(bucket: R2Bucket, question: string, result: { answer: string; sources: GeminiSource[] }): Promise<void> {
+async function setCachedGemini(
+  bucket: R2Bucket,
+  question: string,
+  result: { answer: string; sources: GeminiSource[] },
+): Promise<void> {
   const key = `cache/gemini/${hashQuestion(question)}.json`
   const cached: CachedGeminiResult = { ...result, cachedAt: new Date().toISOString() }
   await bucket.put(key, JSON.stringify(cached))
@@ -262,7 +334,10 @@ async function setCachedGemini(bucket: R2Bucket, question: string, result: { ans
 
 // ── Gemini with Google Search grounding ─────────────────────────────────────
 
-interface GeminiSource { url: string; title: string }
+interface GeminiSource {
+  url: string
+  title: string
+}
 
 async function callGemini(
   question: string,
@@ -285,7 +360,7 @@ async function callGemini(
     throw new Error(`Gemini API ${res.status}: ${err}`)
   }
 
-  const data = await res.json() as {
+  const data = (await res.json()) as {
     candidates?: Array<{
       content?: { parts?: Array<{ text?: string }> }
       groundingMetadata?: {
@@ -295,10 +370,11 @@ async function callGemini(
   }
 
   const candidate = data.candidates?.[0]
-  const answer = candidate?.content?.parts
-    ?.filter((p: any) => p.text)
-    .map((p: any) => p.text)
-    .join('\n') ?? ''
+  const answer =
+    candidate?.content?.parts
+      ?.filter((p: any) => p.text)
+      .map((p: any) => p.text)
+      .join('\n') ?? ''
 
   const sources: GeminiSource[] = (candidate?.groundingMetadata?.groundingChunks ?? [])
     .filter((ch: any) => ch.web?.uri)
@@ -317,8 +393,9 @@ async function scrapeGoogleSearch(
 
   const res = await fetch(url, {
     headers: {
-      'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36',
-      'Accept': 'text/html,application/xhtml+xml',
+      'User-Agent':
+        'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36',
+      Accept: 'text/html,application/xhtml+xml',
       'Accept-Language': 'en-US,en;q=0.9',
     },
   })
@@ -328,24 +405,34 @@ async function scrapeGoogleSearch(
 
   // Extract AI Overview (data-attrid="ai_overview" or class containing "ai-dd")
   let aiOverview = ''
-  const aiMatch = html.match(/data-attrid="[^"]*ai[^"]*"[^>]*>([\s\S]*?)<\/div>\s*<\/div>\s*<\/div>/)
-    || html.match(/class="[^"]*ai-dd[^"]*"[^>]*>([\s\S]*?)<\/div>/)
+  const aiMatch =
+    html.match(/data-attrid="[^"]*ai[^"]*"[^>]*>([\s\S]*?)<\/div>\s*<\/div>\s*<\/div>/) ||
+    html.match(/class="[^"]*ai-dd[^"]*"[^>]*>([\s\S]*?)<\/div>/)
   if (aiMatch) {
     aiOverview = aiMatch[1]!
       .replace(/<[^>]+>/g, ' ')
-      .replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&#39;/g, "'").replace(/&quot;/g, '"')
+      .replace(/&amp;/g, '&')
+      .replace(/&lt;/g, '<')
+      .replace(/&gt;/g, '>')
+      .replace(/&#39;/g, "'")
+      .replace(/&quot;/g, '"')
       .replace(/\s+/g, ' ')
       .trim()
   }
 
   // Extract featured snippet
   let featuredSnippet = ''
-  const featuredMatch = html.match(/class="[^"]*hgKElc[^"]*"[^>]*>([\s\S]*?)<\/span>/)
-    || html.match(/data-attrid="wa:\/description"[^>]*>([\s\S]*?)<\/span>/)
+  const featuredMatch =
+    html.match(/class="[^"]*hgKElc[^"]*"[^>]*>([\s\S]*?)<\/span>/) ||
+    html.match(/data-attrid="wa:\/description"[^>]*>([\s\S]*?)<\/span>/)
   if (featuredMatch) {
     featuredSnippet = featuredMatch[1]!
       .replace(/<[^>]+>/g, ' ')
-      .replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&#39;/g, "'").replace(/&quot;/g, '"')
+      .replace(/&amp;/g, '&')
+      .replace(/&lt;/g, '<')
+      .replace(/&gt;/g, '>')
+      .replace(/&#39;/g, "'")
+      .replace(/&quot;/g, '"')
       .replace(/\s+/g, ' ')
       .trim()
   }
@@ -371,7 +458,11 @@ async function scrapeGoogleSearch(
   while ((snippetMatch = snippetPattern.exec(html)) !== null && snippets.length < 5) {
     const text = snippetMatch[1]!
       .replace(/<[^>]+>/g, ' ')
-      .replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&#39;/g, "'").replace(/&quot;/g, '"')
+      .replace(/&amp;/g, '&')
+      .replace(/&lt;/g, '<')
+      .replace(/&gt;/g, '>')
+      .replace(/&#39;/g, "'")
+      .replace(/&quot;/g, '"')
       .replace(/\s+/g, ' ')
       .trim()
     if (text.length > 30) snippets.push(text)
@@ -389,65 +480,7 @@ async function scrapeGoogleSearch(
   return { answer, sources }
 }
 
-// ── Global entity index (cached per isolate) ────────────────────────────────
-
-let cachedEntityIndex: Map<string, { nodeId: string; title: string }> | null = null
-
-async function getEntityIndex(bucket: R2Bucket): Promise<Map<string, { nodeId: string; title: string }>> {
-  if (cachedEntityIndex) return cachedEntityIndex
-
-  const map = new Map<string, { nodeId: string; title: string }>()
-  const manifestObj = await bucket.get('manifest.json')
-  if (!manifestObj) return map
-  const manifest = await manifestObj.json() as { files: Record<string, string> }
-
-  for (const file of Object.keys(manifest.files)) {
-    if (!file.startsWith('nodes/')) continue
-    const obj = await bucket.get(file)
-    if (!obj) continue
-    const nodes = await obj.json() as Node[]
-    for (const n of nodes) {
-      // Index stratagems, detachment rules, enhancements, datasheets, and faction abilities
-      if (['stratagem', 'detachment-rule', 'enhancement', 'datasheet', 'faction-ability'].includes(n.category)) {
-        const key = n.title.toLowerCase()
-        if (key.length > 2 && !map.has(key)) {
-          map.set(key, { nodeId: n.id, title: n.title })
-        }
-      }
-    }
-  }
-
-  cachedEntityIndex = map
-  return map
-}
-
-// ── Server-side entity linking ──────────────────────────────────────────────
-
-function linkEntitiesInText(
-  text: string,
-  entityMap: Map<string, { nodeId: string; title: string }>,
-): string {
-  if (entityMap.size === 0) return text
-
-  // Sort names longest-first for greedy matching
-  const names = Array.from(entityMap.keys()).sort((a, b) => b.length - a.length)
-
-  // Build a regex that matches any entity name (case-insensitive, word boundaries)
-  // Escape regex special chars in names
-  const escaped = names.map(n => n.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'))
-  const pattern = new RegExp(`\\b(${escaped.join('|')})\\b`, 'gi')
-
-  // Track which entity IDs we've already linked (only link first occurrence)
-  const linked = new Set<string>()
-
-  return text.replace(pattern, (match) => {
-    const key = match.toLowerCase()
-    const entity = entityMap.get(key)
-    if (!entity || linked.has(entity.nodeId)) return match
-    linked.add(entity.nodeId)
-    return `[${match}](brain:${entity.nodeId})`
-  })
-}
+// ── Global entity index and linking — see lib/entity-linker.ts ─────────────
 
 // ── Q&A endpoint (RAG: Vectorize → R2 → Gemini + Brain → LLM) ─────────────
 
@@ -502,7 +535,10 @@ app.post('/ask', async (c) => {
   if (retrieveOutcome.status === 'fulfilled') {
     retrieveResult = retrieveOutcome.value
   } else {
-    retrieveError = retrieveOutcome.reason instanceof Error ? retrieveOutcome.reason.message : String(retrieveOutcome.reason)
+    retrieveError =
+      retrieveOutcome.reason instanceof Error
+        ? retrieveOutcome.reason.message
+        : String(retrieveOutcome.reason)
   }
 
   if (geminiOutcome.status === 'fulfilled') {
@@ -512,10 +548,17 @@ app.post('/ask', async (c) => {
       setCachedGemini(c.env.BRAIN_BUCKET, body.question, geminiResult).catch(() => {})
     }
   } else {
-    geminiError = geminiOutcome.reason instanceof Error ? geminiOutcome.reason.message : String(geminiOutcome.reason)
+    geminiError =
+      geminiOutcome.reason instanceof Error
+        ? geminiOutcome.reason.message
+        : String(geminiOutcome.reason)
   }
 
-  const detected = retrieveResult?.detected ?? { factions: [], strippedQuery: body.question, keywords: [] }
+  const detected = retrieveResult?.detected ?? {
+    factions: [],
+    strippedQuery: body.question,
+    keywords: [],
+  }
   const results = retrieveResult?.results ?? []
   const connected = retrieveResult?.connected ?? []
   const parentMap = retrieveResult?.parentMap ?? {}
@@ -534,9 +577,12 @@ app.post('/ask', async (c) => {
   try {
     const fwdObj = await c.env.BRAIN_BUCKET.get('refs/forward-index.json')
     if (fwdObj) {
-      const fwdIndex = await fwdObj.json() as Record<string, Array<{ targetId: string; rel: string; context: string }>>
-      const allNodeIds = new Set([...results.map(n => n.id), ...connected.map(n => n.id)])
-      const primaryIdSet = new Set(results.map(n => n.id))
+      const fwdIndex = (await fwdObj.json()) as Record<
+        string,
+        Array<{ targetId: string; rel: string; context: string }>
+      >
+      const allNodeIds = new Set([...results.map((n) => n.id), ...connected.map((n) => n.id)])
+      const primaryIdSet = new Set(results.map((n) => n.id))
 
       const scoredCombos: Array<{ text: string; score: number }> = []
       const allRelevantNodes = [...results, ...connected]
@@ -553,7 +599,7 @@ app.post('/ask', async (c) => {
           let score = srcPrimary + tgtPrimary
           if (score === 0) {
             const comboLower = ref.context.toLowerCase()
-            if (detected.keywords.some(k => comboLower.includes(k))) {
+            if (detected.keywords.some((k) => comboLower.includes(k))) {
               score = 0.5
             }
           }
@@ -564,12 +610,15 @@ app.post('/ask', async (c) => {
       }
 
       const seen = new Set<string>()
-      const uniqueScored = scoredCombos.filter(c => {
-        if (seen.has(c.text)) return false
-        seen.add(c.text)
-        return true
-      }).sort((a, b) => b.score - a.score).slice(0, 10)
-      combos = uniqueScored.map(c => c.text)
+      const uniqueScored = scoredCombos
+        .filter((c) => {
+          if (seen.has(c.text)) return false
+          seen.add(c.text)
+          return true
+        })
+        .sort((a, b) => b.score - a.score)
+        .slice(0, 10)
+      combos = uniqueScored.map((c) => c.text)
 
       if (combos.length > 0) {
         brainContext += '\n\n========================================\n'
@@ -580,7 +629,9 @@ app.post('/ask', async (c) => {
         }
       }
     }
-  } catch { /* forward index not available — skip combos */ }
+  } catch {
+    /* forward index not available — skip combos */
+  }
 
   // If question asks for a faction's units, fetch the unit list
   let unitListContext = ''
@@ -590,27 +641,32 @@ app.post('/ask', async (c) => {
       try {
         const manifest = await c.env.BRAIN_BUCKET.get('manifest.json')
         if (manifest) {
-          const manifestData = await manifest.json() as { files: Record<string, string> }
+          const manifestData = (await manifest.json()) as { files: Record<string, string> }
           const factionUnits: string[] = []
           for (const file of Object.keys(manifestData.files)) {
             if (!file.startsWith('nodes/faction-')) continue
             const obj = await c.env.BRAIN_BUCKET.get(file)
             if (!obj) continue
-            const nodes = await obj.json() as Node[]
+            const nodes = (await obj.json()) as Node[]
             for (const n of nodes) {
-              if (n.category === 'datasheet' && detected.factions.some(f =>
-                n.factionId === f || n.factionId?.toLowerCase().replace(/\s+/g, '-') === f
-              )) {
+              if (
+                n.category === 'datasheet' &&
+                detected.factions.some(
+                  (f) => n.factionId === f || n.factionId?.toLowerCase().replace(/\s+/g, '-') === f,
+                )
+              ) {
                 factionUnits.push(n.title)
               }
             }
           }
           if (factionUnits.length > 0) {
             factionUnits.sort()
-            unitListContext = `\n\nFACTION UNIT LIST (${detected.factions.join(', ')}):\n${factionUnits.map(u => `- ${u}`).join('\n')}\n`
+            unitListContext = `\n\nFACTION UNIT LIST (${detected.factions.join(', ')}):\n${factionUnits.map((u) => `- ${u}`).join('\n')}\n`
           }
         }
-      } catch { /* skip unit list on error */ }
+      } catch {
+        /* skip unit list on error */
+      }
     }
   }
 
@@ -672,12 +728,12 @@ RULES:
       return c.json({ error: `Claude API error: ${response.status}`, details: err }, 502)
     }
 
-    const claudeResponse = await response.json() as {
+    const claudeResponse = (await response.json()) as {
       content: Array<{ type: string; text: string }>
     }
     answer = claudeResponse.content
-      .filter(c => c.type === 'text')
-      .map(c => c.text)
+      .filter((c) => c.type === 'text')
+      .map((c) => c.text)
       .join('\n')
   } else {
     const MAX_LLM_CONTEXT = 40000
@@ -695,11 +751,23 @@ RULES:
         answer = (aiResult as any).response ?? 'No response from model'
       } catch {
         answerPath = 'deterministic-fallback'
-        answer = formatConversationalAnswer(body.question, connectedNodes, parentMap, detected.subfaction, combos)
+        answer = formatConversationalAnswer(
+          body.question,
+          connectedNodes,
+          parentMap,
+          detected.subfaction,
+          combos,
+        )
       }
     } else {
       answerPath = 'deterministic'
-      answer = formatConversationalAnswer(body.question, connectedNodes, parentMap, detected.subfaction, combos)
+      answer = formatConversationalAnswer(
+        body.question,
+        connectedNodes,
+        parentMap,
+        detected.subfaction,
+        combos,
+      )
     }
   }
 
@@ -713,16 +781,16 @@ RULES:
       entityMap.set(key, { nodeId: node.id, title: node.title })
     }
   }
-  answer = linkEntitiesInText(answer, entityMap)
+  answer = linkEntitiesInContent(answer, entityMap)
 
   return c.json({
     detected,
     answer,
     answerPath,
     contextLength: userMessage.length,
-    connectedIds: connected.map(c => c.id),
+    connectedIds: connected.map((c) => c.id),
     reference: results,
-    sources: results.map(n => ({
+    sources: results.map((n) => ({
       id: n.id,
       title: n.title,
       layer: n.layer,
@@ -788,7 +856,7 @@ app.post('/graph-data', async (c) => {
   // Combine primary results + connected nodes for the graph
   const allNodes = [...results, ...connected]
   const seenIds = new Set<string>()
-  const dedupedNodes = allNodes.filter(n => {
+  const dedupedNodes = allNodes.filter((n) => {
     if (seenIds.has(n.id)) return false
     seenIds.add(n.id)
     return true
@@ -800,11 +868,14 @@ app.post('/graph-data', async (c) => {
     bucket.get('refs/forward-index.json'),
   ])
 
-  const nodeIdSet = new Set(dedupedNodes.map(n => n.id))
+  const nodeIdSet = new Set(dedupedNodes.map((n) => n.id))
   const edges: Array<{ source: string; target: string; rel: string }> = []
 
   if (fwdObj) {
-    const fwdIndex = await fwdObj.json() as Record<string, Array<{ targetId: string; rel: string }>>
+    const fwdIndex = (await fwdObj.json()) as Record<
+      string,
+      Array<{ targetId: string; rel: string }>
+    >
     for (const nodeId of nodeIdSet) {
       const fwd = fwdIndex[nodeId]
       if (fwd) {
@@ -818,8 +889,11 @@ app.post('/graph-data', async (c) => {
   }
 
   if (revObj) {
-    const revIndex = await revObj.json() as Record<string, Array<{ sourceId: string; rel: string }>>
-    const edgeSet = new Set(edges.map(e => `${e.source}|${e.target}|${e.rel}`))
+    const revIndex = (await revObj.json()) as Record<
+      string,
+      Array<{ sourceId: string; rel: string }>
+    >
+    const edgeSet = new Set(edges.map((e) => `${e.source}|${e.target}|${e.rel}`))
     for (const nodeId of nodeIdSet) {
       const rev = revIndex[nodeId]
       if (rev) {
@@ -856,8 +930,8 @@ app.post('/index-vectors', async (c) => {
     return c.json({ error: 'No manifest found - upload graph to R2 first' }, 404)
   }
 
-  const manifest = await manifestObj.json() as { files: Record<string, string> }
-  const allNodeFiles = Object.keys(manifest.files).filter(f => f.startsWith('nodes/'))
+  const manifest = (await manifestObj.json()) as { files: Record<string, string> }
+  const allNodeFiles = Object.keys(manifest.files).filter((f) => f.startsWith('nodes/'))
   const nodeFiles = targetFile ? [targetFile] : allNodeFiles
 
   let indexed = 0
@@ -868,16 +942,16 @@ app.post('/index-vectors', async (c) => {
   for (const file of nodeFiles) {
     const obj = await c.env.BRAIN_BUCKET.get(file)
     if (!obj) continue
-    const nodes = await obj.json() as Node[]
+    const nodes = (await obj.json()) as Node[]
 
     for (let i = 0; i < nodes.length; i += BATCH_SIZE) {
       const batch = nodes.slice(i, i + BATCH_SIZE)
-      const texts = batch.map(n => `${n.title}. ${n.summary}. ${n.keywords.join(', ')}`)
+      const texts = batch.map((n) => `${n.title}. ${n.summary}. ${n.keywords.join(', ')}`)
 
       try {
-        const embResult = await c.env.AI.run('@cf/baai/bge-base-en-v1.5', {
+        const embResult = (await c.env.AI.run('@cf/baai/bge-base-en-v1.5', {
           text: texts,
-        }) as { data: number[][] }
+        })) as { data: number[][] }
 
         const vectors = batch.map((node, idx) => ({
           id: vectorizeId(node.id),
@@ -923,7 +997,9 @@ app.post('/sync', async (c) => {
     }
   }
 
-  return c.json({ message: 'Brain sync via HTTP not yet implemented - use build-graph.ts CLI and upload to R2' })
+  return c.json({
+    message: 'Brain sync via HTTP not yet implemented - use build-graph.ts CLI and upload to R2',
+  })
 })
 
 export default {

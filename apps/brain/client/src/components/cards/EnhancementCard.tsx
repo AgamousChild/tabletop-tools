@@ -1,4 +1,5 @@
-import type { EnhancementCardData, CardContext } from './types'
+import { ErrataSection } from './ErrataSection'
+import type { CardContext, EnhancementCardData } from './types'
 
 interface EnhancementCardProps {
   data: EnhancementCardData
@@ -50,15 +51,15 @@ export function EnhancementCard({ data, context }: EnhancementCardProps) {
 
       <div className="px-3 py-2 md:px-4 md:py-3 space-y-2">
         {/* Restriction */}
-        {data.restriction && (
-          <p className="text-purple-400 text-xs italic">{data.restriction}</p>
-        )}
+        {data.restriction && <p className="text-purple-400 text-xs italic">{data.restriction}</p>}
 
         {/* Description */}
         <p className="text-slate-300 leading-relaxed" style={{ fontSize: '11px' }}>
           {highlightText(data.description, highlightTerms, onContentClick)}
         </p>
       </div>
+
+      <ErrataSection errata={data.errata} />
 
       {/* Footer */}
       <div className="px-3 py-2 md:px-4 border-t border-slate-800">

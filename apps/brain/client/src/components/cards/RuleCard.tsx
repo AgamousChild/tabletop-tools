@@ -1,4 +1,5 @@
-import type { RuleCardData, CardContext } from './types'
+import { ErrataSection } from './ErrataSection'
+import type { CardContext, RuleCardData } from './types'
 
 interface RuleCardProps {
   data: RuleCardData
@@ -35,7 +36,10 @@ function KeywordText({
   )
 }
 
-function subRuleIsHighlighted(subRule: { name: string; description: string }, terms: string[]): boolean {
+function subRuleIsHighlighted(
+  subRule: { name: string; description: string },
+  terms: string[],
+): boolean {
   if (terms.length === 0) return false
   const lower = (subRule.name + ' ' + subRule.description).toLowerCase()
   return terms.some((t) => lower.includes(t.toLowerCase()))
@@ -43,13 +47,10 @@ function subRuleIsHighlighted(subRule: { name: string; description: string }, te
 
 export function RuleCard({ data, context }: RuleCardProps) {
   const { highlightTerms, onContentClick } = context
-  const accentColor = data.isArmyRule ? 'amber' : 'blue'
   const borderClass = data.isArmyRule ? 'border-amber-400' : 'border-blue-400'
   const subRuleNameClass = data.isArmyRule ? 'text-amber-400' : 'text-blue-400'
   const subtitleLabel = data.isArmyRule ? 'Army Rule' : 'Detachment Ability'
-  const subtitlePrefix = data.isArmyRule
-    ? data.factionId
-    : data.detachmentName ?? data.factionId
+  const subtitlePrefix = data.isArmyRule ? data.factionId : (data.detachmentName ?? data.factionId)
 
   return (
     <div className="bg-slate-900 border border-slate-800 rounded-lg overflow-hidden">
@@ -96,7 +97,9 @@ export function RuleCard({ data, context }: RuleCardProps) {
                   data-testid={`sub-rule-${subRule.name}`}
                   className={`border border-slate-700 rounded px-3 py-2 ${highlighted ? 'bg-amber-400/10' : ''}`}
                 >
-                  <span className={`text-[10px] md:text-xs font-bold uppercase tracking-wider ${subRuleNameClass} mr-2`}>
+                  <span
+                    className={`text-[10px] md:text-xs font-bold uppercase tracking-wider ${subRuleNameClass} mr-2`}
+                  >
                     {subRule.name}
                   </span>
                   <span className="text-slate-300 text-xs md:text-sm break-words">
@@ -109,6 +112,8 @@ export function RuleCard({ data, context }: RuleCardProps) {
         )}
       </div>
 
+      <ErrataSection errata={data.errata} />
+
       {/* Footer */}
       <div className="px-3 py-2 md:px-4 border-t border-slate-800 flex items-center gap-3">
         {data.appliesTo !== undefined && (
@@ -120,24 +125,33 @@ export function RuleCard({ data, context }: RuleCardProps) {
             Applies to {data.appliesTo} datasheets
           </button>
         )}
-        {data.sources?.map((src, i) => src.page && context.onViewSource ? (
-          <button
-            key={i}
-            data-testid="view-source"
-            className="text-xs text-blue-400 hover:text-blue-300 cursor-pointer bg-transparent border-0 p-0"
-            onClick={() => context.onViewSource!(
-              src.title.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, ''),
-              src.page!,
-              data.name,
-              src.topPct,
-              src.heightPct,
-              src.leftPct,
-              src.widthPct,
-            )}
-          >
-            View source (p.{src.page})
-          </button>
-        ) : null)}
+        {data.sources
+          ?.filter((s) => s.type === 'pdf')
+          .map((src, i) =>
+            src.page && context.onViewSource ? (
+              <button
+                key={i}
+                data-testid="view-source"
+                className="text-xs text-blue-400 hover:text-blue-300 cursor-pointer bg-transparent border-0 p-0"
+                onClick={() =>
+                  context.onViewSource!(
+                    src.title
+                      .toLowerCase()
+                      .replace(/[^a-z0-9]+/g, '-')
+                      .replace(/^-|-$/g, ''),
+                    src.page!,
+                    data.name,
+                    src.topPct,
+                    src.heightPct,
+                    src.leftPct,
+                    src.widthPct,
+                  )
+                }
+              >
+                View source (p.{src.page})
+              </button>
+            ) : null,
+          )}
       </div>
     </div>
   )

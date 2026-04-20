@@ -13,6 +13,8 @@ import { parseRulesCommentary } from './lib/parsers/rules-commentary'
 import { parseBalanceDataslate } from './lib/parsers/balance-dataslate'
 import { convertGameData } from './lib/parsers/game-data'
 import { buildCommunityNodes } from './lib/combat-knowledge'
+import { parsePrimaryMissions, parseSecondaryMissions, parseTwistCards, parseChallengerCards } from './lib/parsers/chapter-approved'
+import { parseTournamentCompanion } from './lib/parsers/tournament-companion'
 import { partitionNodes, partitionRefs, buildManifest } from './lib/sync'
 import { mergeSources } from './lib/merge-sources'
 import { mapNodesToPages } from './lib/pdf-positions'
@@ -124,6 +126,111 @@ async function main() {
   allNodes.push(...communityResult.nodes)
   allRefs.push(...communityResult.refs)
   console.log(`   ${communityResult.nodes.length} nodes, ${communityResult.refs.length} refs`)
+
+  // ── 7. Chapter Approved 2025 cards ────────────────────────────────────────
+  const CA_DIR = 'C:/R/sync-data/.local/chapter-approved/markdown'
+  if (existsSync(CA_DIR)) {
+    console.log('\n--- Chapter Approved 2025 ---')
+
+    const primaryMd = readFileSync(join(CA_DIR, 'primary-missions.md'), 'utf8')
+    const primaryNodes = parsePrimaryMissions(primaryMd, RETRIEVED_AT)
+    console.log(`  Primary missions: ${primaryNodes.length} nodes`)
+    allNodes.push(...primaryNodes)
+
+    const secAtkMd = readFileSync(join(CA_DIR, 'secondary-missions-attacker.md'), 'utf8')
+    const secAtkNodes = parseSecondaryMissions(secAtkMd, 'attacker', RETRIEVED_AT)
+    console.log(`  Secondary missions (attacker): ${secAtkNodes.length} nodes`)
+    allNodes.push(...secAtkNodes)
+
+    const secDefMd = readFileSync(join(CA_DIR, 'secondary-missions-defender.md'), 'utf8')
+    const secDefNodes = parseSecondaryMissions(secDefMd, 'defender', RETRIEVED_AT)
+    console.log(`  Secondary missions (defender): ${secDefNodes.length} nodes`)
+    allNodes.push(...secDefNodes)
+
+    const twistMd = readFileSync(join(CA_DIR, 'twist-cards.md'), 'utf8')
+    const twistNodes = parseTwistCards(twistMd, RETRIEVED_AT)
+    console.log(`  Twist cards: ${twistNodes.length} nodes`)
+    allNodes.push(...twistNodes)
+
+    const challengerMd = readFileSync(join(CA_DIR, 'challenger-cards.md'), 'utf8')
+    const challengerNodes = parseChallengerCards(challengerMd, RETRIEVED_AT)
+    console.log(`  Challenger cards: ${challengerNodes.length} nodes`)
+    allNodes.push(...challengerNodes)
+
+    // Deployment zones (visual — image-only nodes)
+    const deployMd = join(CA_DIR, 'deployment-zones.md')
+    if (existsSync(deployMd)) {
+      const deployText = readFileSync(deployMd, 'utf8')
+      const deployNames = [
+        'CRUCIBLE OF BATTLE', 'DAWN OF WAR', 'HAMMER AND ANVIL',
+        'SEARCH AND DESTROY', 'SWEEPING ENGAGMENT', 'TIPPING POINT',
+        'TIP OF THE SPEAR', 'DEFENSIVE LINE', 'PINCER ATTACK',
+        'BREAKOUT', 'LAST STAND',
+      ]
+      for (const name of deployNames) {
+        if (deployText.includes(name)) {
+          allNodes.push({
+            id: `ca:deploy:${name.toLowerCase().replace(/[^a-z0-9]+/g, '-')}`,
+            layer: 'core',
+            category: 'deployment-zone',
+            title: name,
+            content: `Deployment zone layout. See PDF page image for diagram.`,
+            summary: `${name} deployment zone layout`,
+            sources: [{ type: 'pdf', title: 'Chapter Approved Deployment Zones', retrievedAt: RETRIEVED_AT }],
+            refs: [],
+            version: 1,
+            keywords: ['deployment', 'deployment zone', name.toLowerCase()],
+          })
+        }
+      }
+      console.log(`  Deployment zones: ${deployNames.filter(n => deployText.includes(n)).length} nodes`)
+    }
+
+    // Terrain layouts (visual — image-only nodes)
+    const terrainMd = join(CA_DIR, 'terrain-layouts.md')
+    if (existsSync(terrainMd)) {
+      const terrainText = readFileSync(terrainMd, 'utf8')
+      const layoutCount = (terrainText.match(/Terrain Layout \d/g) || []).length
+      for (let i = 1; i <= Math.min(layoutCount, 8); i++) {
+        allNodes.push({
+          id: `ca:terrain:layout-${i}`,
+          layer: 'core',
+          category: 'terrain-layout',
+          title: `Terrain Layout ${i}`,
+          content: `Terrain layout diagram. See PDF page image for measurements and placement.`,
+          summary: `Terrain Layout ${i} — competitive play terrain placement guide`,
+          sources: [{ type: 'pdf', title: 'Chapter Approved Terrain Layouts', retrievedAt: RETRIEVED_AT }],
+          refs: [],
+          version: 1,
+          keywords: ['terrain', 'terrain layout', 'competitive'],
+        })
+      }
+      console.log(`  Terrain layouts: ${layoutCount} nodes`)
+    }
+  } else {
+    console.log('\n--- Chapter Approved 2025: skipped (directory not found) ---')
+  }
+
+  // ── 8. Tournament Companion rules ──────────────────────────────────────────
+  const TC_DIR = 'C:/R/sync-data/tools/gw-sync/.local/gw/markdown'
+  const pnTcPath = join(TC_DIR, 'pariah-nexus-tournament-companion.md')
+  const caTcPath = join(TC_DIR, 'chapter-approved-tournament-companion.md')
+
+  if (existsSync(pnTcPath)) {
+    console.log('\n--- Pariah Nexus Tournament Companion ---')
+    const pnTc = parseTournamentCompanion(readFileSync(pnTcPath, 'utf8'), 'pariah-nexus', RETRIEVED_AT)
+    console.log(`  ${pnTc.nodes.length} nodes, ${pnTc.refs.length} refs`)
+    allNodes.push(...pnTc.nodes)
+    allRefs.push(...pnTc.refs)
+  }
+
+  if (existsSync(caTcPath)) {
+    console.log('\n--- Chapter Approved Tournament Companion ---')
+    const caTc = parseTournamentCompanion(readFileSync(caTcPath, 'utf8'), 'chapter-approved', RETRIEVED_AT)
+    console.log(`  ${caTc.nodes.length} nodes, ${caTc.refs.length} refs`)
+    allNodes.push(...caTc.nodes)
+    allRefs.push(...caTc.refs)
+  }
 
   // ── Merge and deduplicate nodes from all sources ──────────────────────────
   const mergeResult = mergeSources(allNodes, allRefs)

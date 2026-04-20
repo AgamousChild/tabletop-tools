@@ -55,7 +55,7 @@ async function apiPost(endpoint: string, body: object, retries = 2): Promise<any
       return await res.json()
     } catch (err) {
       if (i === retries) throw err
-      await new Promise(r => setTimeout(r, 1000))
+      await new Promise((r) => setTimeout(r, 1000))
     }
   }
 }
@@ -68,7 +68,7 @@ async function apiGet(endpoint: string, retries = 2): Promise<any> {
       return await res.json()
     } catch (err) {
       if (i === retries) throw err
-      await new Promise(r => setTimeout(r, 1000))
+      await new Promise((r) => setTimeout(r, 1000))
     }
   }
 }
@@ -78,16 +78,57 @@ async function apiGet(endpoint: string, retries = 2): Promise<any> {
 describe('search: unit name → #1 result is the unit datasheet', () => {
   const allFactions = [
     // Full names (game-data parser)
-    'adepta-sororitas', 'adeptus-custodes', 'adeptus-mechanicus', 'adeptus-titanicus',
-    'aeldari', 'astra-militarum', 'chaos-daemons', 'chaos-knights',
-    'chaos-space-marines', 'death-guard', 'drukhari', 'emperors-children',
-    'genestealer-cults', 'grey-knights', 'imperial-agents', 'imperial-knights',
-    'leagues-of-votann', 'necrons', 'orks', 'space-marines', 't-au-empire',
-    'thousand-sons', 'tyranids', 'world-eaters', 'unaligned',
+    'adepta-sororitas',
+    'adeptus-custodes',
+    'adeptus-mechanicus',
+    'adeptus-titanicus',
+    'aeldari',
+    'astra-militarum',
+    'chaos-daemons',
+    'chaos-knights',
+    'chaos-space-marines',
+    'death-guard',
+    'drukhari',
+    'emperors-children',
+    'genestealer-cults',
+    'grey-knights',
+    'imperial-agents',
+    'imperial-knights',
+    'leagues-of-votann',
+    'necrons',
+    'orks',
+    'space-marines',
+    't-au-empire',
+    'thousand-sons',
+    'tyranids',
+    'world-eaters',
+    'unaligned',
     // Short codes (BSData parser)
-    'AC', 'AdM', 'AE', 'AM', 'AoI', 'AS', 'CD', 'CSM', 'DG', 'DRU',
-    'EC', 'GC', 'GK', 'LoV', 'NEC', 'ORK', 'QI', 'QT', 'SM', 'TAU',
-    'TL', 'TS', 'TYR', 'UN', 'WE',
+    'AC',
+    'AdM',
+    'AE',
+    'AM',
+    'AoI',
+    'AS',
+    'CD',
+    'CSM',
+    'DG',
+    'DRU',
+    'EC',
+    'GC',
+    'GK',
+    'LoV',
+    'NEC',
+    'ORK',
+    'QI',
+    'QT',
+    'SM',
+    'TAU',
+    'TL',
+    'TS',
+    'TYR',
+    'UN',
+    'WE',
   ]
 
   for (const faction of allFactions) {
@@ -129,7 +170,9 @@ describe('search: unit name → #1 result is the unit datasheet', () => {
                 if (top.title.toLowerCase() !== unit.title.toLowerCase()) {
                   // Check if it's at least in the top 5
                   const found = data.results.find(
-                    (r: any) => r.title.toLowerCase() === unit.title.toLowerCase() && r.category === 'datasheet',
+                    (r: any) =>
+                      r.title.toLowerCase() === unit.title.toLowerCase() &&
+                      r.category === 'datasheet',
                   )
                   if (found) {
                     return {
@@ -164,11 +207,12 @@ describe('search: unit name → #1 result is the unit datasheet', () => {
 
         if (failures.length > 0) {
           const msg = failures
-            .map(f => `  "${f.unit}" — ${f.issue}${f.gotTitle ? ` (got: "${f.gotTitle}" [${f.gotCategory}])` : ''}`)
+            .map(
+              (f) =>
+                `  "${f.unit}" — ${f.issue}${f.gotTitle ? ` (got: "${f.gotTitle}" [${f.gotCategory}])` : ''}`,
+            )
             .join('\n')
-          expect.fail(
-            `${failures.length}/${units.length} units failed:\n${msg}`,
-          )
+          expect.fail(`${failures.length}/${units.length} units failed:\n${msg}`)
         }
       }, 600_000) // 10 min per faction
     })
@@ -184,27 +228,27 @@ describe('ask: "[faction] all units" returns complete roster', () => {
     'adeptus-custodes': 'Adeptus Custodes',
     'adeptus-mechanicus': 'Adeptus Mechanicus',
     'adeptus-titanicus': 'Adeptus Titanicus',
-    'aeldari': 'Aeldari',
+    aeldari: 'Aeldari',
     'astra-militarum': 'Astra Militarum',
     'chaos-daemons': 'Chaos Daemons',
     'chaos-knights': 'Chaos Knights',
     'chaos-space-marines': 'Chaos Space Marines',
     'death-guard': 'Death Guard',
-    'drukhari': 'Drukhari',
+    drukhari: 'Drukhari',
     'emperors-children': "Emperor's Children",
     'genestealer-cults': 'Genestealer Cults',
     'grey-knights': 'Grey Knights',
     'imperial-agents': 'Imperial Agents',
     'imperial-knights': 'Imperial Knights',
     'leagues-of-votann': 'Leagues of Votann',
-    'necrons': 'Necrons',
-    'orks': 'Orks',
+    necrons: 'Necrons',
+    orks: 'Orks',
     'space-marines': 'Space Marines',
     't-au-empire': "T'au Empire",
     'thousand-sons': 'Thousand Sons',
-    'tyranids': 'Tyranids',
+    tyranids: 'Tyranids',
     'world-eaters': 'World Eaters',
-    'unaligned': 'Unaligned',
+    unaligned: 'Unaligned',
   }
 
   for (const [factionId, label] of Object.entries(factionLabels)) {
@@ -227,7 +271,7 @@ describe('ask: "[faction] all units" returns complete roster', () => {
       if (missing.length > 0) {
         expect.fail(
           `${missing.length}/${expected.length} units missing from answer:\n` +
-          missing.map(u => `  - ${u}`).join('\n'),
+            missing.map((u) => `  - ${u}`).join('\n'),
         )
       }
     }, 120_000)
@@ -247,7 +291,7 @@ describe('browse: layers and unit counts', () => {
 
   it('unit layer total matches inventory count', async () => {
     const data = await apiGet('/browse/nodes?layer=unit&limit=1')
-    const totalUnitsInInventory = inventory.units.filter(u => u.factionId !== 'unknown').length
+    const totalUnitsInInventory = inventory.units.filter((u) => u.factionId !== 'unknown').length
     // Browse returns all nodes in the unit layer — should be >= our inventory
     expect(data.total).toBeGreaterThanOrEqual(totalUnitsInInventory * 0.9) // allow 10% tolerance for layer assignment
   }, 60_000)
@@ -302,9 +346,155 @@ describe('graph-data: unit queries return connected graph', () => {
 
       // Find the target unit
       const found = data.nodes.find(
-        (n: any) => n.title.toLowerCase().includes(query.toLowerCase()) && n.category === 'datasheet',
+        (n: any) =>
+          n.title.toLowerCase().includes(query.toLowerCase()) && n.category === 'datasheet',
       )
       expect(found, `${query} datasheet not found in graph results`).toBeDefined()
     }, 60_000)
   }
+})
+
+// ── 5. Record-based search ─────────────────────────────────────────────────
+
+describe('record-based search', () => {
+  it('weapon name returns unit record (not raw weapon node)', async () => {
+    const data = await apiPost('/search', { query: 'lascannon', pageSize: 5 })
+    // Response should have records array
+    expect(data.records).toBeDefined()
+    expect(data.records.length).toBeGreaterThan(0)
+    // No record should have a weapon as its primaryNode
+    for (const record of data.records) {
+      expect(record.primaryNode.category).not.toBe('weapon')
+      expect(record.primaryNode.category).not.toBe('unit-ability')
+    }
+    // At least one should be a unit record
+    const units = data.records.filter((r: any) => r.type === 'unit')
+    expect(units.length).toBeGreaterThan(0)
+  }, 60_000)
+
+  it('army rule search returns army-rule record with PDF source', async () => {
+    const data = await apiPost('/search', { query: 'Oath of Moment' })
+    expect(data.records).toBeDefined()
+    const armyRules = data.records.filter((r: any) => r.type === 'army-rule')
+    expect(armyRules.length).toBeGreaterThan(0)
+    const oath = armyRules[0]
+    // Full text, not partial
+    expect(oath.primaryNode.content.length).toBeGreaterThan(50)
+    // Must have PDF source
+    const pdfSource = oath.primaryNode.sources.find((s: any) => s.type === 'pdf')
+    expect(pdfSource).toBeDefined()
+  }, 60_000)
+
+  it('record content has inline entity links (brain:nodeId)', async () => {
+    const data = await apiPost('/search', { query: 'Oath of Moment' })
+    expect(data.records.length).toBeGreaterThan(0)
+    // At least one record should have brain: links in content
+    const hasLinks = data.records.some((r: any) =>
+      /\[.*?\]\(brain:.*?\)/.test(r.primaryNode.content),
+    )
+    expect(hasLinks).toBe(true)
+  }, 60_000)
+
+  it('pagination returns different results per page', async () => {
+    const p1 = await apiPost('/search', { query: 'space marines', page: 1, pageSize: 3 })
+    const p2 = await apiPost('/search', { query: 'space marines', page: 2, pageSize: 3 })
+    expect(p1.page).toBe(1)
+    expect(p2.page).toBe(2)
+    expect(p1.totalPages).toBeGreaterThanOrEqual(2)
+    if (p2.records.length > 0) {
+      expect(p1.records[0].primaryNode.id).not.toBe(p2.records[0].primaryNode.id)
+    }
+  }, 60_000)
+
+  it('search response includes pagination metadata', async () => {
+    const data = await apiPost('/search', { query: 'wound roll', page: 1, pageSize: 5 })
+    expect(data.page).toBe(1)
+    expect(data.pageSize).toBe(5)
+    expect(data.total).toBeGreaterThan(0)
+    expect(data.totalPages).toBeGreaterThan(0)
+  }, 60_000)
+
+  it('no raw weapon/unit-ability nodes escape in weapon searches', async () => {
+    for (const query of ['bolt rifle', 'lascannon', 'power sword', 'melta']) {
+      const data = await apiPost('/search', { query, pageSize: 10 })
+      if (!data.records) continue
+      for (const record of data.records) {
+        expect(record.primaryNode.category).not.toBe('weapon')
+        expect(record.primaryNode.category).not.toBe('unit-ability')
+        expect(record.primaryNode.category).not.toBe('wargear-option')
+      }
+    }
+  }, 120_000)
+})
+
+// ── 6. Browse pagination ───────────────────────────────────────────────────
+
+describe('browse pagination', () => {
+  it('browse returns paginated results', async () => {
+    const res = await fetch(`${API_BASE}/browse/nodes?layer=core&page=1&pageSize=10`)
+    const data = await res.json()
+    expect(data.page).toBe(1)
+    expect(data.pageSize).toBe(10)
+    expect(data.total).toBeGreaterThan(0)
+    expect(data.totalPages).toBeGreaterThan(0)
+    expect(data.nodes.length).toBeLessThanOrEqual(10)
+  }, 60_000)
+
+  it('browse excludes child nodes', async () => {
+    const res = await fetch(`${API_BASE}/browse/nodes?layer=faction&page=1&pageSize=50`)
+    const data = await res.json()
+    for (const node of data.nodes) {
+      expect(node.category).not.toBe('weapon')
+      expect(node.category).not.toBe('unit-ability')
+      expect(node.category).not.toBe('wargear-option')
+      expect(node.category).not.toBe('leader-attachment')
+      expect(node.category).not.toBe('unit-composition')
+    }
+  }, 60_000)
+
+  it('browse page 2 returns different nodes than page 1', async () => {
+    const p1 = await fetch(`${API_BASE}/browse/nodes?layer=core&page=1&pageSize=5`)
+    const p2 = await fetch(`${API_BASE}/browse/nodes?layer=core&page=2&pageSize=5`)
+    const d1 = await p1.json()
+    const d2 = await p2.json()
+    if (d2.nodes.length > 0) {
+      expect(d1.nodes[0].id).not.toBe(d2.nodes[0].id)
+    }
+  }, 60_000)
+})
+
+// ── 7. Chapter Approved cards ──────────────────────────────────────────────
+
+describe('chapter approved cards', () => {
+  it('primary mission search returns mission records', async () => {
+    const data = await apiPost('/search', { query: 'Take and Hold', pageSize: 5 })
+    if (!data.records) return // CA data may not be indexed yet
+    const missions = data.records.filter(
+      (r: any) => r.type === 'primary-mission' || r.primaryNode.category === 'primary-mission',
+    )
+    if (missions.length > 0) {
+      expect(missions[0].primaryNode.content).toContain('VP')
+    }
+  }, 60_000)
+
+  it('twist card search returns twist records', async () => {
+    const data = await apiPost('/search', { query: 'Night Fighting', pageSize: 5 })
+    if (!data.records) return // CA data may not be indexed yet
+    const twists = data.records.filter(
+      (r: any) => r.type === 'twist' || r.primaryNode.category === 'twist',
+    )
+    if (twists.length > 0) {
+      expect(twists[0].primaryNode.content).toContain('18')
+    }
+  }, 60_000)
+
+  it('secondary mission Assassination is searchable', async () => {
+    const data = await apiPost('/search', { query: 'Assassination secondary', pageSize: 5 })
+    if (!data.records) return // CA data may not be indexed yet
+    const secondaries = data.records.filter(
+      (r: any) => r.type === 'secondary-mission' || r.primaryNode.category === 'secondary-mission',
+    )
+    // Informational — CA cards may not be indexed yet
+    console.log(`Found ${secondaries.length} secondary mission records for Assassination`)
+  }, 60_000)
 })

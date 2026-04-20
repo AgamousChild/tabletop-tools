@@ -1,6 +1,6 @@
 declare const __APP_VERSION__: string
 
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import { ForceGraph } from '../components/ForceGraph'
 import { ResultCard } from '../components/ResultCard'
 import { FactionBanner } from '../components/FactionBanner'
@@ -10,12 +10,16 @@ import { UnitCard } from '../components/cards/UnitCard'
 import { StratagemCard } from '../components/cards/StratagemCard'
 import { EnhancementCard } from '../components/cards/EnhancementCard'
 import { RuleCard } from '../components/cards/RuleCard'
-import type { CardData, CardContext } from '../components/cards/types'
+import { MissionCard } from '../components/cards/MissionCard'
+import { TwistCard } from '../components/cards/TwistCard'
+import { ChallengerCard } from '../components/cards/ChallengerCard'
+import type { CardData, CardContext, ErrataEntry, MissionCardData, TwistCardData, ChallengerCardData } from '../components/cards/types'
 import { type EntityMap } from '../lib/entity-linker'
 import { PdfPageView } from '../components/cards/PdfPageView'
 import { DetachmentPage } from './DetachmentPage'
 import type { DetachmentPageProps } from './DetachmentPage'
 import { deriveUnitType } from '../../../shared/derive-unit-type'
+import { Pagination } from '../components/Pagination'
 
 const API_BASE = import.meta.env.VITE_BRAIN_API_URL || '/brain/api'
 
@@ -339,6 +343,50 @@ function buildCardFromNode(node: ResultNode): CardData {
       return { type: 'rule', data: { ...buildRuleData(node), isArmyRule: false } }
     case 'detachment-rule':
       return { type: 'rule', data: { ...buildRuleData(node), isArmyRule: false } }
+    case 'primary-mission':
+      return {
+        type: 'mission',
+        data: {
+          id: node.id,
+          name: node.title,
+          missionType: 'primary',
+          content: node.content || node.summary,
+          sources: node.sources,
+        } as MissionCardData,
+      }
+    case 'secondary-mission':
+      return {
+        type: 'mission',
+        data: {
+          id: node.id,
+          name: node.title,
+          missionType: 'secondary',
+          side: node.id.includes(':atk:') ? 'attacker' : node.id.includes(':def:') ? 'defender' : undefined,
+          isFixed: node.keywords?.includes('fixed'),
+          content: node.content || node.summary,
+          sources: node.sources,
+        } as MissionCardData,
+      }
+    case 'twist':
+      return {
+        type: 'twist',
+        data: {
+          id: node.id,
+          name: node.title,
+          description: node.content || node.summary,
+          sources: node.sources,
+        } as TwistCardData,
+      }
+    case 'challenger':
+      return {
+        type: 'challenger',
+        data: {
+          id: node.id,
+          name: node.title,
+          content: node.content || node.summary,
+          sources: node.sources,
+        } as ChallengerCardData,
+      }
     default:
       return { type: 'rule', data: { ...buildRuleData(node), isArmyRule: false } }
   }
@@ -626,37 +674,63 @@ function AskTab({ onOpenCard, activeFilters, onFilterChange }: AskTabProps) {
 
 // ── SearchTab ────────────────────────────────────────────────────────────────
 
+interface SearchRecord {
+  type: string
+  primaryNode: ResultNode
+  childNodes: ResultNode[]
+  crossRefs: any[]
+  errata: ErrataEntry[]
+  matchedChildIds: string[]
+}
+
+/** Server response — supports both the new record-based format and the old flat format */
 interface SearchResponse {
   detected: DetectedFactions
-  results: ResultNode[]
+  // New record-based format
+  records?: SearchRecord[]
+  total?: number
+  page?: number
+  pageSize?: number
+  totalPages?: number
+  // Legacy flat format (backward compat)
+  results?: ResultNode[]
 }
 
 interface SearchTabProps {
   onOpenCard: (node: ResultNode) => void
+  onOpenRecord?: (record: SearchRecord) => void
   activeFilters: string[]
   onFilterChange: (filters: string[]) => void
 }
 
-function SearchTab({ onOpenCard, activeFilters, onFilterChange }: SearchTabProps) {
+function SearchTab({ onOpenCard, onOpenRecord, activeFilters, onFilterChange }: SearchTabProps) {
   const [query, setQuery] = useState('')
   const [response, setResponse] = useState<SearchResponse | null>(null)
   const [loading, setLoading] = useState(false)
   const [factionFilter, setFactionFilter] = useState(true)
   const [entityMap, setEntityMap] = useState<EntityMap>(new Map())
+  const [page, setPage] = useState(1)
+  // Track the last query string used so page-change re-fetches use the correct query
+  const lastQueryRef = useRef('')
 
-  const doSearch = useCallback(async (q: string) => {
+  const doSearch = useCallback(async (q: string, p: number) => {
     if (!q.trim()) return
+    lastQueryRef.current = q
     setLoading(true)
     setFactionFilter(true)
     try {
       const res = await fetch(`${API_BASE}/search`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ query: q, limit: 20 }),
+        body: JSON.stringify({ query: q, page: p, pageSize: 10 }),
       })
       const data = await res.json() as SearchResponse
       setResponse(data)
-      setEntityMap(buildEntityMap(data.results || [], data.detected?.keywords))
+      // Build entity map from whichever node list is available
+      const nodes = data.records
+        ? data.records.map(r => r.primaryNode)
+        : (data.results ?? [])
+      setEntityMap(buildEntityMap(nodes, data.detected?.keywords))
     } catch {
       setResponse(null)
     } finally {
@@ -664,11 +738,19 @@ function SearchTab({ onOpenCard, activeFilters, onFilterChange }: SearchTabProps
     }
   }, [])
 
-  // Re-query when filters change (only if we have a query)
+  // Re-fetch when page changes (only when there's an active query)
+  useEffect(() => {
+    if (!lastQueryRef.current) return
+    doSearch(lastQueryRef.current, page)
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [page])
+
+  // Re-query when filters change (only if we have a query) — reset to page 1
   useEffect(() => {
     if (!query.trim() || activeFilters.length === 0) return
     const combined = [query, ...activeFilters].join(' ')
-    doSearch(combined)
+    setPage(1)
+    doSearch(combined, 1)
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeFilters])
 
@@ -676,24 +758,26 @@ function SearchTab({ onOpenCard, activeFilters, onFilterChange }: SearchTabProps
     const combined = activeFilters.length > 0
       ? [query, ...activeFilters].join(' ')
       : query
-    doSearch(combined)
+    setPage(1)
+    doSearch(combined, 1)
   }
 
   function removeFilter(f: string) {
     onFilterChange(activeFilters.filter(x => x !== f))
   }
 
+  function handlePageChange(p: number) {
+    setPage(p)
+    // doSearch will be triggered by the page useEffect
+  }
+
   const detected = response?.detected
-  const allResults = response?.results ?? []
 
-  const filteredResults = factionFilter && detected && detected.factions.length > 0
-    ? allResults.filter(r => r.factionId && detected.factions.includes(r.factionId))
-    : allResults
+  // Determine rendering mode: record-based (new) or flat (legacy)
+  const isRecordMode = !!response?.records
 
-  // Cap displayed results to prevent browser hang on faction browse (3000+ nodes)
-  const MAX_DISPLAY = 100
-  const visibleResults = filteredResults.slice(0, MAX_DISPLAY)
-  const totalCount = filteredResults.length
+  // For legacy mode, build a flat list (no pagination from server)
+  const legacyResults = response?.results ?? []
 
   return (
     <div className="space-y-4">
@@ -734,9 +818,68 @@ function SearchTab({ onOpenCard, activeFilters, onFilterChange }: SearchTabProps
         />
       )}
 
-      {visibleResults.length > 0 && (
+      {/* Record-based results (new format) */}
+      {isRecordMode && response!.records!.length > 0 && (
         <div className="space-y-2">
-          {visibleResults.map((r, i) => (
+          {response!.records!.map((record, i) => {
+            const r = record.primaryNode
+            // Collect titles of matched child nodes for the badge
+            const matchedChildTitles = record.matchedChildIds.length > 0
+              ? record.childNodes
+                  .filter(c => record.matchedChildIds.includes(c.id))
+                  .map(c => c.title)
+              : []
+
+            return (
+              <div key={r.id + '-' + i} className="mb-2">
+                <button
+                  onClick={() => onOpenRecord ? onOpenRecord(record) : onOpenCard(r)}
+                  className="w-full text-left"
+                >
+                  <ResultCard
+                    index={((response!.page ?? 1) - 1) * (response!.pageSize ?? 10) + i + 1}
+                    title={r.title}
+                    summary={r.summary}
+                    layer={r.layer}
+                    category={r.category}
+                    score={r.score}
+                    factionId={r.factionId}
+                    subfaction={r.subfaction}
+                    phase={r.phase}
+                    parentUnit={r.parentUnit}
+                  />
+                </button>
+                {matchedChildTitles.length > 0 && (
+                  <p className="text-xs text-slate-500 mt-0.5 px-3">
+                    Matched: <span className="text-amber-400/70">{matchedChildTitles.join(', ')}</span>
+                  </p>
+                )}
+                {entityMap.size > 0 && r.summary && (
+                  <p className="text-xs text-slate-400 mt-1 px-3">
+                    <LinkedText
+                      text={r.summary}
+                      entities={entityMap}
+                      onEntityClick={() => onOpenRecord ? onOpenRecord(record) : onOpenCard(r)}
+                    />
+                  </p>
+                )}
+              </div>
+            )
+          })}
+          <Pagination
+            page={response!.page ?? 1}
+            totalPages={response!.totalPages ?? 1}
+            total={response!.total ?? 0}
+            pageSize={response!.pageSize ?? 10}
+            onPageChange={handlePageChange}
+          />
+        </div>
+      )}
+
+      {/* Legacy flat results (old format, no server pagination) */}
+      {!isRecordMode && legacyResults.length > 0 && (
+        <div className="space-y-2">
+          {legacyResults.map((r, i) => (
             <div key={r.id + '-' + i} className="mb-2">
               <button
                 onClick={() => onOpenCard(r)}
@@ -760,17 +903,12 @@ function SearchTab({ onOpenCard, activeFilters, onFilterChange }: SearchTabProps
                   <LinkedText
                     text={r.summary}
                     entities={entityMap}
-                    onEntityClick={(name) => onOpenCard(r)}
+                    onEntityClick={() => onOpenCard(r)}
                   />
                 </p>
               )}
             </div>
           ))}
-          {totalCount > MAX_DISPLAY && (
-            <p className="text-xs text-slate-500 text-center py-2">
-              Showing {MAX_DISPLAY} of {totalCount} results
-            </p>
-          )}
         </div>
       )}
     </div>
@@ -789,13 +927,22 @@ interface BrowseTabProps {
   onOpenCard: (node: ResultNode) => void
 }
 
+interface BrowsePaginatedResponse {
+  nodes: any[]
+  total: number
+  page: number
+  pageSize: number
+  totalPages: number
+}
+
 function BrowseTab({ onOpenCard }: BrowseTabProps) {
   const [layers, setLayers] = useState<BrowseLayer[]>([])
   const [selectedLayer, setSelectedLayer] = useState<string | null>(null)
-  const [nodes, setNodes] = useState<any[]>([])
-  const [totalCount, setTotalCount] = useState(0)
+  const [browseResponse, setBrowseResponse] = useState<BrowsePaginatedResponse | null>(null)
   const [loading, setLoading] = useState(false)
   const [layersLoading, setLayersLoading] = useState(true)
+  const [page, setPage] = useState(1)
+  const pageSize = 20
 
   // Load layers on mount
   useEffect(() => {
@@ -805,15 +952,29 @@ function BrowseTab({ onOpenCard }: BrowseTabProps) {
       .catch(() => setLayersLoading(false))
   }, [])
 
-  // Load nodes when layer selected
+  // Reset page when layer changes
   useEffect(() => {
-    if (!selectedLayer) { setNodes([]); return }
-    setLoading(true)
-    fetch(`${API_BASE}/browse/nodes?layer=${selectedLayer}&limit=100`)
-      .then(r => r.json())
-      .then(data => { setNodes(data.nodes || []); setTotalCount(data.total || 0); setLoading(false) })
-      .catch(() => setLoading(false))
+    setPage(1)
   }, [selectedLayer])
+
+  // Load nodes when layer or page changes
+  useEffect(() => {
+    if (!selectedLayer) { setBrowseResponse(null); return }
+    setLoading(true)
+    fetch(`${API_BASE}/browse/nodes?layer=${selectedLayer}&page=${page}&pageSize=${pageSize}`)
+      .then(r => r.json())
+      .then((data: BrowsePaginatedResponse) => {
+        setBrowseResponse({
+          nodes: data.nodes || [],
+          total: data.total || 0,
+          page: data.page || page,
+          pageSize: data.pageSize || pageSize,
+          totalPages: data.totalPages || 1,
+        })
+        setLoading(false)
+      })
+      .catch(() => setLoading(false))
+  }, [selectedLayer, page])
 
   // Load full node detail and open card
   function viewNode(nodeId: string) {
@@ -822,6 +983,11 @@ function BrowseTab({ onOpenCard }: BrowseTabProps) {
       .then(data => { if (data.node) onOpenCard(data.node) })
       .catch(() => {})
   }
+
+  const nodes = browseResponse?.nodes ?? []
+  const total = browseResponse?.total ?? 0
+  const totalPages = browseResponse?.totalPages ?? 1
+  const currentPage = browseResponse?.page ?? page
 
   return (
     <div className="flex">
@@ -855,9 +1021,6 @@ function BrowseTab({ onOpenCard }: BrowseTabProps) {
           )}
           {nodes.length > 0 && (
             <>
-              <p className="text-xs text-slate-500">
-                Showing {nodes.length} of {totalCount} nodes
-              </p>
               {nodes.map((node: any) => (
                 <button
                   key={node.id}
@@ -873,11 +1036,13 @@ function BrowseTab({ onOpenCard }: BrowseTabProps) {
                   <p className="text-xs text-slate-400 mt-1 line-clamp-2">{node.summary}</p>
                 </button>
               ))}
-              {totalCount > nodes.length && (
-                <p className="text-xs text-slate-500 text-center py-2">
-                  Showing {nodes.length} of {totalCount}
-                </p>
-              )}
+              <Pagination
+                page={currentPage}
+                totalPages={totalPages}
+                total={total}
+                pageSize={pageSize}
+                onPageChange={setPage}
+              />
             </>
           )}
         </div>
@@ -956,10 +1121,95 @@ export function BrainScreen() {
     }
   }
 
-  async function handleOpenCard(node: ResultNode) {
-    // PDF-sourced rules — show the page image directly instead of markdown card
+  async function handleOpenRecord(record: SearchRecord) {
+    const node = record.primaryNode
+
+    // For unit cards — build data directly from record.childNodes, avoiding a second API fetch
+    if (record.type === 'unit' || node.category === 'datasheet') {
+      const base = buildUnitData(node)
+      const ranged: any[] = []
+      const melee: any[] = []
+      const unitAbilities: any[] = []
+
+      for (const child of record.childNodes) {
+        if (child.category === 'weapon') {
+          const rangeMatch = child.content.match(/\*\*Range:\*\*\s*(\S+)/)
+          const aMatch = child.content.match(/\*\*A:\*\*\s*(\S+)/)
+          const skillMatch = child.content.match(/\*\*BS\/WS:\*\*\s*(\S+)/)
+          const sMatch = child.content.match(/\*\*S:\*\*\s*(\S+)/)
+          const apMatch = child.content.match(/\*\*AP:\*\*\s*(\S+)/)
+          const dMatch = child.content.match(/\*\*D:\*\*\s*(\S+)/)
+          const abMatch = child.summary?.match(/\[([^\]]+)\]/g)
+          const abilities = abMatch ? abMatch.join(' ') : ''
+
+          const profile = {
+            name: child.title,
+            range: rangeMatch?.[1] ?? '',
+            attacks: aMatch?.[1] ?? '',
+            skill: skillMatch?.[1] ?? '',
+            strength: sMatch?.[1] ?? '',
+            ap: apMatch?.[1] ?? '',
+            damage: dMatch?.[1] ?? '',
+            abilities,
+          }
+          const isRanged = child.content.includes('**Type:** Ranged') || child.summary?.includes('(Ranged)')
+          if (isRanged) {
+            ranged.push(profile)
+          } else {
+            melee.push(profile)
+          }
+        } else if (child.category === 'unit-ability') {
+          unitAbilities.push({
+            name: child.title,
+            description: child.content || child.summary,
+            type: child.keywords?.includes('faction') ? 'Faction' : 'Datasheet',
+          })
+        }
+      }
+
+      setActiveCard({
+        type: 'unit',
+        data: { ...base, rangedWeapons: ranged, meleeWeapons: melee, abilities: unitAbilities, errata: record.errata },
+      })
+      return
+    }
+
+    // For non-unit types: check if this should open a PDF view or detachment page first.
+    // Mission/twist/challenger nodes have PDF sources but render as card views — exclude them.
+    const CARD_CATEGORIES = new Set(['primary-mission', 'secondary-mission', 'twist', 'challenger'])
     const pdfSource = node.sources?.find((s: any) => s.type === 'pdf' && s.page)
-    if (pdfSource && node.category !== 'datasheet' && node.category !== 'detachment-rule') {
+    if (pdfSource && !CARD_CATEGORIES.has(node.category) && node.category !== 'datasheet' && node.category !== 'detachment-rule') {
+      setPdfView({
+        pdfName: pdfSource.title.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, ''),
+        page: pdfSource.page!,
+        title: node.title,
+        topPct: (pdfSource as any).topPct,
+        heightPct: (pdfSource as any).heightPct,
+        leftPct: (pdfSource as any).leftPct,
+        widthPct: (pdfSource as any).widthPct,
+      })
+      return
+    }
+
+    if (node.category === 'detachment-rule') {
+      openDetachmentPage(node)
+      return
+    }
+
+    // Build card with errata attached
+    const card = buildCardFromNode(node)
+    if (record.errata && record.errata.length > 0) {
+      (card.data as any).errata = record.errata
+    }
+    setActiveCard(card)
+  }
+
+  async function handleOpenCard(node: ResultNode) {
+    // PDF-sourced rules — show the page image directly instead of markdown card.
+    // Mission/twist/challenger categories have PDF sources but should show card views.
+    const CARD_CATEGORIES = new Set(['primary-mission', 'secondary-mission', 'twist', 'challenger'])
+    const pdfSource = node.sources?.find((s: any) => s.type === 'pdf' && s.page)
+    if (pdfSource && !CARD_CATEGORIES.has(node.category) && node.category !== 'datasheet' && node.category !== 'detachment-rule') {
       setPdfView({
         pdfName: pdfSource.title.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, ''),
         page: pdfSource.page!,
@@ -1053,6 +1303,7 @@ export function BrainScreen() {
           {tab === 'search' && (
             <SearchTab
               onOpenCard={handleOpenCard}
+              onOpenRecord={handleOpenRecord}
               activeFilters={activeFilters}
               onFilterChange={setActiveFilters}
             />
@@ -1065,6 +1316,9 @@ export function BrainScreen() {
         {activeCard?.type === 'stratagem' && <StratagemCard data={activeCard.data} context={cardContext} />}
         {activeCard?.type === 'enhancement' && <EnhancementCard data={activeCard.data} context={cardContext} />}
         {activeCard?.type === 'rule' && <RuleCard data={activeCard.data} context={cardContext} />}
+        {activeCard?.type === 'mission' && <MissionCard data={activeCard.data} context={cardContext} />}
+        {activeCard?.type === 'twist' && <TwistCard data={activeCard.data} context={cardContext} />}
+        {activeCard?.type === 'challenger' && <ChallengerCard data={activeCard.data} context={cardContext} />}
       </Overlay>
 
       {pdfView && (
