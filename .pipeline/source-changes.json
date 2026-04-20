@@ -40,5 +40,185 @@
     "action": "modified",
     "reason": "Add mergeSources call in Worker sync path before node partitioning",
     "timestamp": "2026-04-17T08:00:00.000Z"
+  },
+  {
+    "taskId": "task-1-type-definitions",
+    "agent": "senior-dev",
+    "file": "apps/brain/server/src/lib/model.ts",
+    "action": "modified",
+    "reason": "Add RecordType, ErrataAnnotation, CrossRef, BrainRecord schemas and 6 new NodeCategory values",
+    "timestamp": "2026-04-19T01:35:00.000Z"
+  }
+,
+  {
+    "taskId": "task-2-errata-linker",
+    "agent": "senior-dev",
+    "file": "apps/brain/server/src/lib/errata-linker.ts",
+    "action": "created",
+    "reason": "Standalone fuzzy errata-to-rule matching module using title, content, and keyword heuristics",
+    "timestamp": "2026-04-19T01:42:00.000Z"
+  }
+,
+  {
+    "taskId": "task-8-pagination-component",
+    "agent": "senior-dev",
+    "file": "apps/brain/client/src/components/Pagination.tsx",
+    "action": "created",
+    "reason": "Add client-side Pagination component with prev/next navigation for search results",
+    "timestamp": "2026-04-19T01:48:00.000Z"
+  },
+  {
+    "taskId": "task-9-collapsible-section",
+    "agent": "senior-dev",
+    "file": "apps/brain/client/src/components/CollapsibleSection.tsx",
+    "action": "created",
+    "reason": "Add CollapsibleSection component for errata and cross-reference lists on cards",
+    "timestamp": "2026-04-19T01:51:00.000Z"
+  }
+,
+  {
+    "taskId": "task-3-record-aggregation",
+    "agent": "senior-dev",
+    "file": "apps/brain/server/src/lib/records.ts",
+    "action": "created",
+    "reason": "Record aggregation module: classifyNode, aggregateToRecords, fetchAllChildren",
+    "timestamp": "2026-04-19T01:55:00.000Z"
+  }
+,
+  {
+    "taskId": "task-4-entity-linker",
+    "agent": "senior-dev",
+    "file": "apps/brain/server/src/lib/entity-linker.ts",
+    "action": "created",
+    "reason": "Extract entity linking into shared module for reuse by record aggregation pipeline",
+    "timestamp": "2026-04-19T02:03:00.000Z"
+  },
+  {
+    "taskId": "task-4-entity-linker",
+    "agent": "senior-dev",
+    "file": "apps/brain/server/src/worker.ts",
+    "action": "modified",
+    "reason": "Remove local linkEntitiesInText/getEntityIndex/cachedEntityIndex, import from entity-linker module",
+    "timestamp": "2026-04-19T02:03:00.000Z"
+  },
+  {
+    "taskId": "task-5-wire-records-search",
+    "agent": "senior-dev",
+    "file": "apps/brain/server/src/lib/retrieve.ts",
+    "action": "modified",
+    "reason": "Add returnRecords option and buildRecords helper; wire aggregateToRecords + fetchAllChildren into retrieve pipeline",
+    "timestamp": "2026-04-19T02:20:00.000Z"
+  },
+  {
+    "taskId": "task-5-wire-records-search",
+    "agent": "senior-dev",
+    "file": "apps/brain/server/src/worker.ts",
+    "action": "modified",
+    "reason": "Update /search endpoint to return AggregatedRecord[] with pagination, errata, and entity linking",
+    "timestamp": "2026-04-19T02:20:00.000Z"
+  },
+  {
+    "taskId": "task-6-browse-endpoint",
+    "agent": "senior-dev",
+    "file": "apps/brain/server/src/lib/browse.ts",
+    "action": "created",
+    "reason": "Filter browse nodes to top-level records only, excluding child categories and sub-rule faction-abilities",
+    "timestamp": "2026-04-19T02:35:00.000Z"
+  },
+  {
+    "taskId": "task-6-browse-endpoint",
+    "agent": "senior-dev",
+    "file": "apps/brain/server/src/worker.ts",
+    "action": "modified",
+    "reason": "Update GET /browse/nodes to apply filterBrowseNodes and use page/pageSize pagination",
+    "timestamp": "2026-04-19T02:35:00.000Z"
+  },
+  {
+    "taskId": "task-10-card-errata",
+    "agent": "senior-dev",
+    "file": "apps/brain/client/src/components/cards/types.ts",
+    "action": "modified",
+    "reason": "Add ErrataEntry interface, errata? field to all card data interfaces, onNodeNavigate? to CardContext",
+    "timestamp": "2026-04-19T06:41:00.000Z"
+  },
+  {
+    "taskId": "task-10-card-errata",
+    "agent": "senior-dev",
+    "file": "apps/brain/client/src/components/cards/ErrataSection.tsx",
+    "action": "created",
+    "reason": "Shared ErrataSection component using CollapsibleSection for use across all card types",
+    "timestamp": "2026-04-19T06:41:00.000Z"
+  },
+  {
+    "taskId": "task-10-card-errata",
+    "agent": "senior-dev",
+    "file": "apps/brain/client/src/components/cards/RuleCard.tsx",
+    "action": "modified",
+    "reason": "Add ErrataSection and filter sources to PDF-only for view-source buttons",
+    "timestamp": "2026-04-19T06:41:00.000Z"
+  },
+  {
+    "taskId": "task-10-card-errata",
+    "agent": "senior-dev",
+    "file": "apps/brain/client/src/components/cards/UnitCard.tsx",
+    "action": "modified",
+    "reason": "Add ErrataSection after keywords bar",
+    "timestamp": "2026-04-19T06:41:00.000Z"
+  },
+  {
+    "taskId": "task-10-card-errata",
+    "agent": "senior-dev",
+    "file": "apps/brain/client/src/components/cards/StratagemCard.tsx",
+    "action": "modified",
+    "reason": "Add ErrataSection before detachment name footer",
+    "timestamp": "2026-04-19T06:41:00.000Z"
+  },
+  {
+    "taskId": "task-10-card-errata",
+    "agent": "senior-dev",
+    "file": "apps/brain/client/src/components/cards/EnhancementCard.tsx",
+    "action": "modified",
+    "reason": "Add ErrataSection before footer",
+    "timestamp": "2026-04-19T06:41:00.000Z"
+  },
+  {
+    "taskId": "task-10-card-errata",
+    "agent": "senior-dev",
+    "file": "apps/brain/client/src/components/cards/PdfPageView.tsx",
+    "action": "modified",
+    "reason": "Add optional errata prop and render ErrataSection between image area and close button",
+    "timestamp": "2026-04-19T06:41:00.000Z"
+  },
+  {
+    "taskId": "task-12-chapter-approved-parser",
+    "agent": "senior-dev",
+    "file": "apps/brain/server/src/lib/parsers/chapter-approved.ts",
+    "action": "created",
+    "reason": "Chapter Approved 2025 card parser: primary missions, secondary missions, twists, challengers",
+    "timestamp": "2026-04-19T07:10:00.000Z"
+  },
+  {
+    "taskId": "task-11-search-browse-pagination",
+    "agent": "senior-dev",
+    "file": "apps/brain/client/src/pages/BrainScreen.tsx",
+    "action": "modified",
+    "reason": "Integrate record-based API responses and pagination into SearchTab and BrowseTab",
+    "timestamp": "2026-04-19T07:20:00.000Z"
+  },
+  {
+    "taskId": "task-13-tournament-companion-parser",
+    "agent": "senior-dev",
+    "file": "apps/brain/server/src/lib/parsers/tournament-companion.ts",
+    "action": "created",
+    "reason": "Tournament companion parser for Pariah Nexus and Chapter Approved markdown files",
+    "timestamp": "2026-04-19T07:35:00.000Z"
+  },
+  {
+    "taskId": "task-14-chapter-approved-page-images",
+    "agent": "senior-dev",
+    "file": "apps/brain/server/src/generate-page-images.ts",
+    "action": "modified",
+    "reason": "Add Chapter Approved 2025 PDFs to page image generator with slugified output directory names",
+    "timestamp": "2026-04-19T08:00:00.000Z"
   }
 ]
