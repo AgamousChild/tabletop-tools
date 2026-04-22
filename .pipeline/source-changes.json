@@ -14,8 +14,7 @@
     "action": "modified",
     "reason": "Replace local FACTION_CODE_TO_SLUG constant and normalizeFactionId with import from faction-codes module",
     "timestamp": "2026-04-16T00:00:00.000Z"
-  }
-  ,
+  },
   {
     "taskId": "task-2-merge-sources",
     "agent": "senior-dev",
@@ -23,8 +22,7 @@
     "action": "created",
     "reason": "Add cross-source merge module for BSData/Wahapedia node deduplication and summary enrichment",
     "timestamp": "2026-04-17T07:25:00.000Z"
-  }
-,
+  },
   {
     "taskId": "task-3-integrate-merge",
     "agent": "senior-dev",
@@ -48,8 +46,7 @@
     "action": "modified",
     "reason": "Add RecordType, ErrataAnnotation, CrossRef, BrainRecord schemas and 6 new NodeCategory values",
     "timestamp": "2026-04-19T01:35:00.000Z"
-  }
-,
+  },
   {
     "taskId": "task-2-errata-linker",
     "agent": "senior-dev",
@@ -57,8 +54,7 @@
     "action": "created",
     "reason": "Standalone fuzzy errata-to-rule matching module using title, content, and keyword heuristics",
     "timestamp": "2026-04-19T01:42:00.000Z"
-  }
-,
+  },
   {
     "taskId": "task-8-pagination-component",
     "agent": "senior-dev",
@@ -74,8 +70,7 @@
     "action": "created",
     "reason": "Add CollapsibleSection component for errata and cross-reference lists on cards",
     "timestamp": "2026-04-19T01:51:00.000Z"
-  }
-,
+  },
   {
     "taskId": "task-3-record-aggregation",
     "agent": "senior-dev",
@@ -83,8 +78,7 @@
     "action": "created",
     "reason": "Record aggregation module: classifyNode, aggregateToRecords, fetchAllChildren",
     "timestamp": "2026-04-19T01:55:00.000Z"
-  }
-,
+  },
   {
     "taskId": "task-4-entity-linker",
     "agent": "senior-dev",
@@ -364,5 +358,21 @@
     "action": "created",
     "reason": "CommunityCard component — cyan accent, description text, sourceAttribution footer, quality flags",
     "timestamp": "2026-04-20T23:47:00.000Z"
+  },
+  {
+    "taskId": "task-deployment-zone-terrain-cards",
+    "agent": "senior-dev",
+    "file": "apps/brain/client/src/components/cards/DeploymentZoneCard.tsx",
+    "action": "created",
+    "reason": "DeploymentZoneCard component with inline PDF image, loading/error states, battleSize badge, and quality flags",
+    "timestamp": "2026-04-20T23:48:00.000Z"
+  },
+  {
+    "taskId": "task-deployment-zone-terrain-cards",
+    "agent": "senior-dev",
+    "file": "apps/brain/client/src/components/cards/TerrainLayoutCard.tsx",
+    "action": "created",
+    "reason": "TerrainLayoutCard component with inline PDF image, loading/error states, and quality flags",
+    "timestamp": "2026-04-20T23:48:00.000Z"
   }
 ]
