@@ -306,3 +306,125 @@ describe('massage — immutability', () => {
     expect(input[1]?.id).toBe('mut:good')
   })
 })
+
+// ── Pass 4 — content independence ────────────────────────────────────────────
+
+describe('massage — content independence', () => {
+  it('flags nodes where content just echoes the title', () => {
+    // Use a structural category so Pass 2 does not drop the node before Pass 4 runs.
+    const nodes = [
+      makeNode({ id: 'echo', category: 'datasheet', title: 'INVULNERABLE SAVE', content: 'INVULNERABLE SAVE', summary: 'The invulnerable save rule from the Core Rules book.' }),
+    ]
+    const result = massage(nodes)
+    expect(result.nodes[0].qualityFlags).toContain('content-inferred')
+    expect(result.nodes[0].content).toBe('The invulnerable save rule from the Core Rules book.')
+  })
+
+  it('flags nodes with content under 30 chars', () => {
+    // Content is 20–29 chars (survives Pass 2 at ≥20) but < 30 (flagged by Pass 4).
+    const nodes = [
+      makeNode({ id: 'short', title: 'Something', content: 'Too short; see detail.', summary: 'A longer summary that should replace the short content field.' }),
+    ]
+    const result = massage(nodes)
+    expect(result.nodes[0].qualityFlags).toContain('content-inferred')
+    expect(result.nodes[0].content.length).toBeGreaterThan(30)
+  })
+
+  it('does NOT flag nodes with good content', () => {
+    const nodes = [
+      makeNode({ id: 'good', title: 'Wound Roll', content: 'Each time an attack scores a hit, make a wound roll by rolling one D6.' }),
+    ]
+    const result = massage(nodes)
+    expect(result.nodes[0].qualityFlags).toBeUndefined()
+  })
+})
+
+// ── Pass 5 — PDF reference validation ────────────────────────────────────────
+
+describe('massage — PDF reference validation', () => {
+  it('flags PDF sources with out-of-range topPct', () => {
+    const nodes = [
+      makeNode({
+        id: 'bad-top',
+        sources: [{ type: 'pdf' as const, title: 'Core Rules', retrievedAt: '2026-01-01T00:00:00Z', page: 5, topPct: -10, heightPct: 20, leftPct: 10, widthPct: 50 }],
+      }),
+    ]
+    const result = massage(nodes)
+    expect(result.nodes[0].qualityFlags).toContain('pdf-ref-invalid')
+  })
+
+  it('flags PDF sources with zero-area bounding box', () => {
+    const nodes = [
+      makeNode({
+        id: 'zero',
+        sources: [{ type: 'pdf' as const, title: 'Core Rules', retrievedAt: '2026-01-01T00:00:00Z', page: 1, topPct: 50, heightPct: 0, leftPct: 10, widthPct: 0 }],
+      }),
+    ]
+    const result = massage(nodes)
+    expect(result.nodes[0].qualityFlags).toContain('pdf-ref-invalid')
+  })
+
+  it('does NOT flag valid PDF sources', () => {
+    const nodes = [
+      makeNode({
+        id: 'valid',
+        sources: [{ type: 'pdf' as const, title: 'Core Rules', retrievedAt: '2026-01-01T00:00:00Z', page: 28, topPct: 7.69, heightPct: 27.19, leftPct: 44.32, widthPct: 40.42 }],
+      }),
+    ]
+    const result = massage(nodes)
+    expect(result.nodes[0].qualityFlags).toBeUndefined()
+  })
+})
+
+// ── Pass 6 — hierarchy validation ────────────────────────────────────────────
+
+describe('massage — hierarchy validation', () => {
+  it('flags weapons without valid datasheetId', () => {
+    const nodes = [
+      makeNode({ id: 'ds:001', category: 'datasheet', title: 'Intercessors' }),
+      makeNode({ id: 'w:good', category: 'weapon', title: 'Bolt Rifle', summary: 'The Bolt Rifle weapon profile.', datasheetId: 'ds:001' }),
+      makeNode({ id: 'w:orphan', category: 'weapon', title: 'Orphan Gun', summary: 'The Orphan Gun weapon profile.', datasheetId: 'ds:missing' }),
+    ]
+    const result = massage(nodes)
+    const orphan = result.nodes.find(n => n.id === 'w:orphan')!
+    expect(orphan.qualityFlags).toContain('orphan')
+    const good = result.nodes.find(n => n.id === 'w:good')!
+    expect(good.qualityFlags).toBeUndefined()
+  })
+
+  it('flags stratagems without valid detachmentId', () => {
+    const nodes = [
+      makeNode({ id: 'det:test', category: 'detachment-rule', title: 'Test Det' }),
+      makeNode({ id: 's:good', category: 'stratagem', title: 'Good Strat', summary: 'The good stratagem summary text.', detachmentId: 'det:test' }),
+      makeNode({ id: 's:orphan', category: 'stratagem', title: 'Orphan Strat', summary: 'The orphan stratagem summary text.', detachmentId: 'det:missing' }),
+    ]
+    const result = massage(nodes)
+    const orphan = result.nodes.find(n => n.id === 's:orphan')!
+    expect(orphan.qualityFlags).toContain('orphan')
+  })
+
+  it('does not flag nodes without datasheetId/detachmentId', () => {
+    const nodes = [
+      makeNode({ id: 'rule', category: 'core-mechanic', title: 'Some Rule' }),
+    ]
+    const result = massage(nodes)
+    expect(result.nodes[0].qualityFlags).toBeUndefined()
+  })
+})
+
+// ── Stats (passes 4–6) ───────────────────────────────────────────────────────
+
+describe('massage — stats: flag counts', () => {
+  it('reports correct flag counts', () => {
+    const nodes = [
+      // Structural category bypasses Pass 2 so Pass 4 can flag the echo
+      makeNode({ id: 'echo', category: 'datasheet', title: 'ECHO RULE', content: 'ECHO RULE', summary: 'A longer description of this rule for content inference.' }),
+      makeNode({ id: 'bad-pdf', sources: [{ type: 'pdf' as const, title: 'X', retrievedAt: '2026-01-01T00:00:00Z', page: 1, topPct: -5, heightPct: 10, leftPct: 0, widthPct: 50 }] }),
+      makeNode({ id: 'orphan', category: 'weapon', title: 'Gun', datasheetId: 'ds:missing' }),
+    ]
+    const result = massage(nodes)
+    expect(result.stats.flaggedContentInferred).toBe(1)
+    expect(result.stats.flaggedPdfInvalid).toBe(1)
+    expect(result.stats.flaggedOrphan).toBe(1)
+  })
+})
