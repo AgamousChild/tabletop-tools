@@ -332,5 +332,13 @@
     "action": "modified",
     "reason": "Add CoreRuleCardData, DeploymentZoneCardData, TerrainLayoutCardData, ErrataCardData, BalanceCardData, CommunityCardData, DetachmentCardData interfaces and extend CardData union",
     "timestamp": "2026-04-20T23:43:00.000Z"
+  },
+  {
+    "taskId": "task-core-rule-card",
+    "agent": "senior-dev",
+    "file": "apps/brain/client/src/components/cards/CoreRuleCard.tsx",
+    "action": "created",
+    "reason": "CoreRuleCard component — amber accent, phase badge, table support, quality flags, view source",
+    "timestamp": "2026-04-20T23:44:00.000Z"
   }
 ]
