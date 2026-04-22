@@ -13,7 +13,15 @@ import { RuleCard } from '../components/cards/RuleCard'
 import { MissionCard } from '../components/cards/MissionCard'
 import { TwistCard } from '../components/cards/TwistCard'
 import { ChallengerCard } from '../components/cards/ChallengerCard'
+import { CoreRuleCard } from '../components/cards/CoreRuleCard'
+import { ErrataCard } from '../components/cards/ErrataCard'
+import { BalanceCard } from '../components/cards/BalanceCard'
+import { CommunityCard } from '../components/cards/CommunityCard'
+import { DetachmentCard } from '../components/cards/DetachmentCard'
+import { DeploymentZoneCard } from '../components/cards/DeploymentZoneCard'
+import { TerrainLayoutCard } from '../components/cards/TerrainLayoutCard'
 import type { CardData, CardContext, ErrataEntry, MissionCardData, TwistCardData, ChallengerCardData } from '../components/cards/types'
+import { resolveCardView } from '../lib/card-display'
 import { type EntityMap } from '../lib/entity-linker'
 import { PdfPageView } from '../components/cards/PdfPageView'
 import { DetachmentPage } from './DetachmentPage'
@@ -67,6 +75,7 @@ interface ResultNode {
   layer: string
   category: string
   factionId?: string
+  factionName?: string
   subfaction?: string
   phase?: string
   parentUnit?: string
@@ -140,7 +149,7 @@ function extractContentField(content: string, field: string): string {
 
 /** Filter internal keywords from display, separate faction keywords */
 function filterDisplayKeywords(keywords: string[]): { display: string[]; faction: string[] } {
-  const internal = /^(t\d|sv\d|w\d|pts-|ppw-|moderate|cheap|expensive|premium|heavy-|light-|standard-|elite-|super-|titanic|toughness-|save-|wounds-|damage-|strength-|invuln-|ap-|ap\d|s\d|d\d|fnp-|feel no pain$|type:|characters$|sustained hits|lethal hits|devastating wounds|hazardous|blast|torrent|twin-linked|rapid fire|melta|lance|anti$|ignores cover|indirect fire|pistol|heavy$|assault$|one shot)/
+  const internal = /^(t\d|sv\d|w\d|pts-|ppw-|moderate|cheap|expensive|premium|heavy-|light-|standard-|elite-|super-|titanic|toughness-|save-|wounds-|damage-|strength-|invuln-|ap-|ap\d|s\d|d\d|fnp-|feel no pain$|type:|characters$|sustained hits|lethal hits|devastating wounds|hazardous|blast|torrent|twin-linked|rapid fire|melta|lance|anti$|ignores cover|indirect fire|pistol|heavy$|assault$|one shot|^other$|^power armou?r$|^gravis$|^terminator armou?r$|^phobos$|^tacticus$|^mk x|^artificer armou?r$|^scout armou?r$|^deathwing$|^ravenwing$|^inner circle$|^wolf guard$|^sanguinary guard$|^lion guard$)/
   const factionNames = [
     'adeptus astartes', 'heretic astartes', 'orks', 'necrons', 'tyranids',
     'aeldari', "t'au empire", 'chaos', 'imperium', 'drukhari',
@@ -159,15 +168,39 @@ function filterDisplayKeywords(keywords: string[]): { display: string[]; faction
   ]
   const display: string[] = []
   const factionKw: string[] = []
+  const seen = new Set<string>()
   for (const kw of keywords) {
-    if (internal.test(kw)) continue
-    if (factionNames.some(f => kw.toLowerCase() === f)) {
+    const lower = kw.toLowerCase()
+    if (seen.has(lower)) continue
+    seen.add(lower)
+    if (internal.test(lower)) continue
+    if (factionNames.some(f => lower === f)) {
       factionKw.push(kw)
     } else if (kw.length > 1) {
       display.push(kw)
     }
   }
-  return { display, faction: factionKw }
+  return { display, faction: [...new Set(factionKw)] }
+}
+
+/** Formal faction names that map to their slug — used to filter redundant faction keywords */
+const FORMAL_TO_SLUG: Record<string, string> = {
+  'adeptus astartes': 'space-marines',
+  'heretic astartes': 'chaos-space-marines',
+  "t'au empire": 't-au-empire',
+  'astra militarum': 'astra-militarum',
+  'adepta sororitas': 'adepta-sororitas',
+  'adeptus custodes': 'adeptus-custodes',
+  'adeptus mechanicus': 'adeptus-mechanicus',
+  'agents of the imperium': 'imperial-agents',
+}
+
+/** Remove faction keywords that are just the formal name of the node's own factionId */
+function filterRedundantFactionKeywords(factionKeywords: string[], nodeFactionId: string): string[] {
+  return factionKeywords.filter(kw => {
+    const slug = FORMAL_TO_SLUG[kw.toLowerCase()]
+    return slug !== nodeFactionId
+  })
 }
 
 function buildUnitData(node: ResultNode) {
@@ -178,17 +211,24 @@ function buildUnitData(node: ResultNode) {
   const points = extractContentField(content, 'Points')
   const composition = extractContentField(content, 'Composition')
   const loadout = extractContentField(content, 'Loadout')
+  const wargearOptions = extractContentField(content, 'Wargear Options')
 
   // Derive unit type from keywords (not the raw role field)
   const allKeywords = node.keywords || []
   const role = deriveUnitType(allKeywords)
 
   // Filter keywords for display
-  const { display: displayKeywords, faction: factionKeywords } = filterDisplayKeywords(allKeywords)
+  const { display: displayKeywords, faction: rawFactionKw } = filterDisplayKeywords(allKeywords)
+  const factionKeywords = filterRedundantFactionKeywords(rawFactionKw, node.factionId || '')
 
-  // Core abilities from keywords
-  const coreAbilityNames = ['grenades', 'deep strike', 'lone operative', 'stealth', 'scouts', 'infiltrators', 'deadly demise', 'fights first', 'firing deck']
-  const coreAbilities = displayKeywords.filter(k => coreAbilityNames.includes(k.toLowerCase()))
+  // Core abilities from keywords (some are parameterized like "deadly demise D3")
+  const coreAbilityPrefixes = ['grenades', 'deep strike', 'lone operative', 'stealth', 'scouts', 'infiltrators', 'deadly demise', 'fights first', 'firing deck']
+  const coreAbilities = displayKeywords
+    .filter(k => coreAbilityPrefixes.some(prefix => k.toLowerCase().startsWith(prefix)))
+    .map(k => {
+      // Title-case the ability name
+      return k.split(' ').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ')
+    })
 
   // Feel No Pain — extract value from fnp-X keyword (set by server parser)
   const fnpKeyword = allKeywords.find(k => /^fnp-\d$/.test(k))
@@ -207,10 +247,11 @@ function buildUnitData(node: ResultNode) {
     meleeWeapons: [] as any[],
     abilities: [] as any[],
     coreAbilities,
-    keywords: displayKeywords.filter(k => !coreAbilityNames.includes(k.toLowerCase())),
+    keywords: displayKeywords.filter(k => !coreAbilityPrefixes.some(prefix => k.toLowerCase().startsWith(prefix))),
     factionKeywords,
     composition,
     loadout,
+    wargearOptions,
     leaders: [],
   }
 }
@@ -305,12 +346,27 @@ function buildStratagemData(node: ResultNode) {
 }
 
 function buildEnhancementData(node: ResultNode) {
+  const content = node.content || node.summary || ''
+  // Extract cost from "**Cost:** 10" or from summary "(10pts)"
+  const costMatch = content.match(/\*\*Cost:\*\*\s*(\d+)/) || node.summary?.match(/\((\d+)pts?\)/)
+  const cost = costMatch ? costMatch[1] : ''
+  // Extract restriction — first line of content after cost (e.g., "Infantry Warboss model only.")
+  const lines = content.replace(/\*\*Cost:\*\*\s*\d+\s*/, '').split('\n').map(l => l.trim()).filter(Boolean)
+  const restrictionLine = lines[0] && /model only/i.test(lines[0]) ? lines[0] : ''
+  const description = restrictionLine ? lines.slice(1).join('\n') : lines.join('\n')
+  // Detachment name from detachmentId (format: "det:faction:slug" or just a slug)
+  const detSlug = node.detachmentId || ''
+  const detName = detSlug.includes(':')
+    ? detSlug.split(':').pop()!.replace(/-/g, ' ').replace(/\b\w/g, (c: string) => c.toUpperCase())
+    : detSlug.replace(/-/g, ' ').replace(/\b\w/g, (c: string) => c.toUpperCase())
+
   return {
     id: node.id,
     name: node.title,
-    cost: '',
-    description: node.content || node.summary,
-    detachmentName: '',
+    cost,
+    restriction: restrictionLine,
+    description,
+    detachmentName: detName,
     factionId: node.factionId || '',
     subfaction: node.subfaction,
   }
@@ -818,6 +874,11 @@ function SearchTab({ onOpenCard, onOpenRecord, activeFilters, onFilterChange }: 
         />
       )}
 
+      {/* Total count */}
+      {response?.total != null && response.total > 0 && (
+        <p className="text-xs text-slate-500">{response.total} results</p>
+      )}
+
       {/* Record-based results (new format) */}
       {isRecordMode && response!.records!.length > 0 && (
         <div className="space-y-2">
@@ -844,6 +905,7 @@ function SearchTab({ onOpenCard, onOpenRecord, activeFilters, onFilterChange }: 
                     category={r.category}
                     score={r.score}
                     factionId={r.factionId}
+                    factionName={r.factionName}
                     subfaction={r.subfaction}
                     phase={r.phase}
                     parentUnit={r.parentUnit}
@@ -1021,19 +1083,22 @@ function BrowseTab({ onOpenCard }: BrowseTabProps) {
           )}
           {nodes.length > 0 && (
             <>
-              {nodes.map((node: any) => (
+              {nodes.map((node: any, i: number) => (
                 <button
                   key={node.id}
                   onClick={() => viewNode(node.id)}
-                  className="w-full text-left bg-slate-900 border border-slate-800 rounded-lg p-3 hover:border-slate-700 transition-colors"
+                  className="w-full text-left"
                 >
-                  <div className="flex items-center gap-2 mb-1">
-                    <span className="text-xs px-1.5 py-0.5 rounded bg-slate-700 text-slate-300">{node.category}</span>
-                    {node.factionId && <span className="text-xs text-slate-500">{node.factionId}</span>}
-                    {node.subfaction && <span className="text-xs text-amber-400">{node.subfaction}</span>}
-                  </div>
-                  <h3 className="text-sm font-medium text-slate-200">{node.title}</h3>
-                  <p className="text-xs text-slate-400 mt-1 line-clamp-2">{node.summary}</p>
+                  <ResultCard
+                    index={(currentPage - 1) * pageSize + i + 1}
+                    title={node.title}
+                    summary={node.summary || ''}
+                    layer={node.layer || ''}
+                    category={node.category || ''}
+                    score={0}
+                    factionId={node.factionId}
+                    subfaction={node.subfaction}
+                  />
                 </button>
               ))}
               <Pagination
@@ -1061,26 +1126,23 @@ export function BrainScreen() {
   const [pdfView, setPdfView] = useState<{ pdfName: string; page: number; title: string; topPct?: number; heightPct?: number; leftPct?: number; widthPct?: number } | null>(null)
 
   async function openDetachmentPage(node: ResultNode) {
-    // Fetch stratagems and enhancements for this detachment
+    // Fetch stratagems and enhancements for this detachment via dedicated endpoint
     const detachmentId = node.id
     const factionId = node.factionId || ''
 
     try {
-      const params = new URLSearchParams({ layer: 'detachment', limit: '200' })
-      if (factionId) params.set('factionId', factionId)
-      const res = await fetch(`${API_BASE}/browse/nodes?${params.toString()}`)
-      const data = await res.json() as { nodes: ResultNode[]; total: number }
-      const allNodes: ResultNode[] = data.nodes || []
+      const res = await fetch(`${API_BASE}/browse/detachment/${encodeURIComponent(detachmentId)}`)
+      const data = await res.json() as {
+        detachment: ResultNode
+        stratagems: ResultNode[]
+        enhancements: ResultNode[]
+        abilities: ResultNode[]
+      }
 
-      // Filter nodes that belong to this detachment
-      const related = allNodes.filter(n => n.detachmentId === detachmentId || n.detachmentId === node.title)
-
-      const stratagems = related
-        .filter(n => n.category === 'stratagem')
+      const stratagems = (data.stratagems || [])
         .map(n => buildStratagemData(n))
 
-      const enhancements = related
-        .filter(n => n.category === 'enhancement')
+      const enhancements = (data.enhancements || [])
         .map(n => buildEnhancementData(n))
 
       const ability: DetachmentPageProps['ability'] = node.content
@@ -1174,30 +1236,8 @@ export function BrainScreen() {
       return
     }
 
-    // For non-unit types: check if this should open a PDF view or detachment page first.
-    // Mission/twist/challenger nodes have PDF sources but render as card views — exclude them.
-    const CARD_CATEGORIES = new Set(['primary-mission', 'secondary-mission', 'twist', 'challenger'])
-    const pdfSource = node.sources?.find((s: any) => s.type === 'pdf' && s.page)
-    if (pdfSource && !CARD_CATEGORIES.has(node.category) && node.category !== 'datasheet' && node.category !== 'detachment-rule') {
-      setPdfView({
-        pdfName: pdfSource.title.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, ''),
-        page: pdfSource.page!,
-        title: node.title,
-        topPct: (pdfSource as any).topPct,
-        heightPct: (pdfSource as any).heightPct,
-        leftPct: (pdfSource as any).leftPct,
-        widthPct: (pdfSource as any).widthPct,
-      })
-      return
-    }
-
-    if (node.category === 'detachment-rule') {
-      openDetachmentPage(node)
-      return
-    }
-
-    // Build card with errata attached
-    const card = buildCardFromNode(node)
+    // For ALL other types: use resolveCardView (never PDF-first)
+    const { card } = resolveCardView(node)
     if (record.errata && record.errata.length > 0) {
       (card.data as any).errata = record.errata
     }
@@ -1205,28 +1245,6 @@ export function BrainScreen() {
   }
 
   async function handleOpenCard(node: ResultNode) {
-    // PDF-sourced rules — show the page image directly instead of markdown card.
-    // Mission/twist/challenger categories have PDF sources but should show card views.
-    const CARD_CATEGORIES = new Set(['primary-mission', 'secondary-mission', 'twist', 'challenger'])
-    const pdfSource = node.sources?.find((s: any) => s.type === 'pdf' && s.page)
-    if (pdfSource && !CARD_CATEGORIES.has(node.category) && node.category !== 'datasheet' && node.category !== 'detachment-rule') {
-      setPdfView({
-        pdfName: pdfSource.title.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, ''),
-        page: pdfSource.page!,
-        title: node.title,
-        topPct: (pdfSource as any).topPct,
-        heightPct: (pdfSource as any).heightPct,
-        leftPct: (pdfSource as any).leftPct,
-        widthPct: (pdfSource as any).widthPct,
-      })
-      return
-    }
-
-    if (node.category === 'detachment-rule') {
-      openDetachmentPage(node)
-      return
-    }
-
     // For unit cards, fetch full data (weapons + abilities) from API
     if (node.category === 'datasheet') {
       const unitData = await fetchFullUnitData(node.id, node)
@@ -1234,12 +1252,54 @@ export function BrainScreen() {
       return
     }
 
-    setActiveCard(buildCardFromNode(node))
+    // For all other types: use resolveCardView
+    const { card } = resolveCardView(node)
+    setActiveCard(card)
   }
 
   const cardContext: CardContext = {
     highlightTerms: activeFilters,
-    onContentClick: (term: string) => {
+    onContentClick: async (term: string) => {
+      // Try to find and open the rule card for this term
+      try {
+        const res = await fetch(`${API_BASE}/search`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ query: term, pageSize: 5 }),
+        })
+        if (res.ok) {
+          const data = await res.json() as SearchResponse
+          // Look for an exact title match first among records
+          const records = data.records ?? []
+          const exactMatch = records.find(
+            r => r.primaryNode.title.toLowerCase() === term.toLowerCase()
+          )
+          if (exactMatch) {
+            handleOpenRecord(exactMatch)
+            return
+          }
+          // Fall back to first non-unit result (prefer rules/mechanics)
+          const ruleResult = records.find(
+            r => r.primaryNode.category !== 'datasheet'
+          )
+          if (ruleResult) {
+            handleOpenRecord(ruleResult)
+            return
+          }
+          // Fall back to first result of any type
+          if (records.length > 0) {
+            handleOpenRecord(records[0])
+            return
+          }
+          // Legacy format fallback
+          const results = data.results ?? []
+          if (results.length > 0) {
+            handleOpenCard(results[0])
+            return
+          }
+        }
+      } catch { /* fall through to filter behavior */ }
+      // If no rule found, add as filter
       setActiveCard(null)
       setActiveFilters(prev => prev.includes(term) ? prev : [...prev, term])
     },
@@ -1319,6 +1379,13 @@ export function BrainScreen() {
         {activeCard?.type === 'mission' && <MissionCard data={activeCard.data} context={cardContext} />}
         {activeCard?.type === 'twist' && <TwistCard data={activeCard.data} context={cardContext} />}
         {activeCard?.type === 'challenger' && <ChallengerCard data={activeCard.data} context={cardContext} />}
+        {activeCard?.type === 'core-rule' && <CoreRuleCard data={activeCard.data} context={cardContext} />}
+        {activeCard?.type === 'deployment-zone' && <DeploymentZoneCard data={activeCard.data} context={cardContext} />}
+        {activeCard?.type === 'terrain-layout' && <TerrainLayoutCard data={activeCard.data} context={cardContext} />}
+        {activeCard?.type === 'errata' && <ErrataCard data={activeCard.data} context={cardContext} />}
+        {activeCard?.type === 'balance' && <BalanceCard data={activeCard.data} context={cardContext} />}
+        {activeCard?.type === 'community' && <CommunityCard data={activeCard.data} context={cardContext} />}
+        {activeCard?.type === 'detachment' && <DetachmentCard data={activeCard.data} context={cardContext} />}
       </Overlay>
 
       {pdfView && (

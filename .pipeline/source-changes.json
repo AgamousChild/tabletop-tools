@@ -398,5 +398,13 @@
     "action": "created",
     "reason": "resolveCardView utility — maps any node to CardData + optional PdfSource, always returns a card",
     "timestamp": "2026-04-20T23:56:00.000Z"
+  },
+  {
+    "taskId": "task-11-integrate-resolveCardView",
+    "agent": "senior-dev",
+    "file": "apps/brain/client/src/pages/BrainScreen.tsx",
+    "action": "modified",
+    "reason": "Integrate resolveCardView, remove PDF-first branching, add new card type renders in Overlay",
+    "timestamp": "2026-04-21T00:01:00.000Z"
   }
 ]
