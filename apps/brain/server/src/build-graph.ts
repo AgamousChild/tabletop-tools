@@ -17,6 +17,7 @@ import { parsePrimaryMissions, parseSecondaryMissions, parseTwistCards, parseCha
 import { parseTournamentCompanion } from './lib/parsers/tournament-companion'
 import { partitionNodes, partitionRefs, buildManifest } from './lib/sync'
 import { mergeSources } from './lib/merge-sources'
+import { massage } from './lib/massage'
 import { mapNodesToPages } from './lib/pdf-positions'
 import type { Node, NodeRef } from './lib/model'
 import type { GameDataInput } from './lib/parsers/game-data'
@@ -242,6 +243,12 @@ async function main() {
   allNodes.push(...mergeResult.nodes)
   allRefs.length = 0
   allRefs.push(...mergeResult.refs)
+
+  // ── Massage: clean phantom nodes, validate content, flag issues ──────────
+  console.log('\n6b. Data massage')
+  const massageResult = massage(allNodes)
+  allNodes.length = 0
+  allNodes.push(...massageResult.nodes)
 
   // ── Map nodes to PDF page positions (from gw-sync .positions.json sidecars) ──
   console.log('\n7. PDF position mapping')

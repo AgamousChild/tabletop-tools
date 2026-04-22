@@ -308,5 +308,21 @@
     "action": "created",
     "reason": "Drop phantom/malformed nodes from the brain knowledge graph via three-pass massage layer",
     "timestamp": "2026-04-20T23:34:00.000Z"
+  },
+  {
+    "taskId": "task-3-massage-validation",
+    "agent": "senior-dev",
+    "file": "apps/brain/server/src/lib/massage.ts",
+    "action": "modified",
+    "reason": "Add passes 4–6: content independence, PDF reference validation, hierarchy orphan detection",
+    "timestamp": "2026-04-20T23:39:00.000Z"
+  },
+  {
+    "taskId": "task-4-wire-massage-pipeline",
+    "agent": "senior-dev",
+    "file": "apps/brain/server/src/build-graph.ts",
+    "action": "modified",
+    "reason": "Wire massage layer into build pipeline between mergeSources and mapNodesToPages",
+    "timestamp": "2026-04-20T23:42:00.000Z"
   }
 ]
