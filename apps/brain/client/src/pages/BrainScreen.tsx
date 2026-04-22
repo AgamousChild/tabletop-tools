@@ -180,7 +180,7 @@ function filterDisplayKeywords(keywords: string[]): { display: string[]; faction
       display.push(kw)
     }
   }
-  return { display, faction: [...new Set(factionKw)] }
+  return { display, faction: factionKw }
 }
 
 /** Formal faction names that map to their slug — used to filter redundant faction keywords */
