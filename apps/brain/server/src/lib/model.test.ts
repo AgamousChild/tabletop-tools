@@ -195,6 +195,41 @@ describe('model schemas', () => {
         keywords: [],
       })).toThrow()
     })
+
+    it('accepts optional qualityFlags array', () => {
+      const node: Node = {
+        id: 'core:test-flags',
+        layer: 'core',
+        category: 'core-mechanic',
+        title: 'Test Node',
+        content: 'Content here.',
+        summary: 'Summary here.',
+        sources: [{ type: 'pdf', title: 'Core Rules', retrievedAt: '2026-04-08' }],
+        refs: [],
+        version: 1,
+        keywords: ['test'],
+        qualityFlags: ['content-inferred', 'pdf-ref-invalid'],
+      }
+      expect(() => NodeSchema.parse(node)).not.toThrow()
+      expect(NodeSchema.parse(node).qualityFlags).toEqual(['content-inferred', 'pdf-ref-invalid'])
+    })
+
+    it('accepts node without qualityFlags (field is optional)', () => {
+      const node: Node = {
+        id: 'core:no-flags',
+        layer: 'core',
+        category: 'core-mechanic',
+        title: 'No Flags',
+        content: 'Content.',
+        summary: 'Summary.',
+        sources: [{ type: 'pdf', title: 'Core Rules', retrievedAt: '2026-04-08' }],
+        refs: [],
+        version: 1,
+        keywords: [],
+      }
+      expect(() => NodeSchema.parse(node)).not.toThrow()
+      expect(NodeSchema.parse(node).qualityFlags).toBeUndefined()
+    })
   })
 
   describe('type unions', () => {

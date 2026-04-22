@@ -220,5 +220,85 @@
     "action": "modified",
     "reason": "Add Chapter Approved 2025 PDFs to page image generator with slugified output directory names",
     "timestamp": "2026-04-19T08:00:00.000Z"
+  },
+  {
+    "taskId": "task-15-build-pipeline-integration",
+    "agent": "senior-dev",
+    "file": "apps/brain/server/src/build-graph.ts",
+    "action": "modified",
+    "reason": "Integrate Chapter Approved + Tournament Companion parsers into build pipeline (steps 7 and 8)",
+    "timestamp": "2026-04-19T08:15:00.000Z"
+  },
+  {
+    "taskId": "task-16-mission-card-components",
+    "agent": "senior-dev",
+    "file": "apps/brain/client/src/components/cards/types.ts",
+    "action": "modified",
+    "reason": "Add MissionCardData, TwistCardData, ChallengerCardData interfaces and extend CardData union",
+    "timestamp": "2026-04-19T07:50:00.000Z"
+  },
+  {
+    "taskId": "task-16-mission-card-components",
+    "agent": "senior-dev",
+    "file": "apps/brain/client/src/components/cards/MissionCard.tsx",
+    "action": "created",
+    "reason": "Mission card component for primary and secondary missions with type badge, side badge, and fixed badge",
+    "timestamp": "2026-04-19T07:50:00.000Z"
+  },
+  {
+    "taskId": "task-16-mission-card-components",
+    "agent": "senior-dev",
+    "file": "apps/brain/client/src/components/cards/TwistCard.tsx",
+    "action": "created",
+    "reason": "Twist card component with green accent and TWIST badge",
+    "timestamp": "2026-04-19T07:50:00.000Z"
+  },
+  {
+    "taskId": "task-16-mission-card-components",
+    "agent": "senior-dev",
+    "file": "apps/brain/client/src/components/cards/ChallengerCard.tsx",
+    "action": "created",
+    "reason": "Challenger card component with orange accent, narrative VP text, and optional WHEN/TARGET/EFFECT stratagem sections",
+    "timestamp": "2026-04-19T07:50:00.000Z"
+  },
+  {
+    "taskId": "task-16-mission-card-components",
+    "agent": "senior-dev",
+    "file": "apps/brain/client/src/pages/BrainScreen.tsx",
+    "action": "modified",
+    "reason": "Wire MissionCard, TwistCard, ChallengerCard into buildCardFromNode, Overlay, and PDF-bypass logic",
+    "timestamp": "2026-04-19T07:50:00.000Z"
+  },
+  {
+    "taskId": "task-16-mission-card-components",
+    "agent": "senior-dev",
+    "file": "apps/brain/client/src/components/cards/ComboView.tsx",
+    "action": "modified",
+    "reason": "Add mission/twist/challenger cases to renderCard switch to satisfy exhaustive CardData union coverage",
+    "timestamp": "2026-04-19T07:50:00.000Z"
+  },
+  {
+    "taskId": "task-cross-refs",
+    "agent": "senior-dev",
+    "file": "apps/brain/server/src/lib/cross-refs.ts",
+    "action": "created",
+    "reason": "Cross-reference link builder with module-scope cached forward/reverse index loading",
+    "timestamp": "2026-04-19T09:40:00.000Z"
+  },
+  {
+    "taskId": "task-cross-refs",
+    "agent": "senior-dev",
+    "file": "apps/brain/server/src/worker.ts",
+    "action": "modified",
+    "reason": "Wire loadIndexes + buildCrossRefs into /search handler, replacing empty crossRefs stub",
+    "timestamp": "2026-04-19T09:40:00.000Z"
+  },
+  {
+    "taskId": "add-qualityflags-field",
+    "agent": "senior-dev",
+    "file": "apps/brain/server/src/lib/model.ts",
+    "action": "modified",
+    "reason": "Add optional qualityFlags field to Node schema for data quality flagging by massage layer",
+    "timestamp": "2026-04-20T23:30:49.000Z"
   }
 ]

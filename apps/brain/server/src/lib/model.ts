@@ -89,6 +89,7 @@ export const NodeSchema = z.object({
   // Taxonomy
   phase: GamePhaseSchema.optional(),
   factionId: z.string().optional(),
+  factionName: z.string().optional(),    // Preferred display name (e.g., "SPACE MARINES")
   detachmentId: z.string().optional(),
   datasheetId: z.string().optional(),
 
@@ -108,6 +109,9 @@ export const NodeSchema = z.object({
 
   // Search
   keywords: z.array(z.string()),
+
+  // Data quality (set by massage layer, surfaced to UI)
+  qualityFlags: z.array(z.string()).optional(),
 })
 export type Node = z.infer<typeof NodeSchema>
 
