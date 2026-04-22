@@ -374,5 +374,21 @@
     "action": "created",
     "reason": "TerrainLayoutCard component with inline PDF image, loading/error states, and quality flags",
     "timestamp": "2026-04-20T23:48:00.000Z"
+  },
+  {
+    "taskId": "task-9-detachment-card",
+    "agent": "senior-dev",
+    "file": "apps/brain/client/src/components/cards/DetachmentCard.tsx",
+    "action": "created",
+    "reason": "DetachmentCard component — inline stratagem/enhancement lists via CollapsibleSection, replaces DetachmentPage",
+    "timestamp": "2026-04-20T23:49:00.000Z"
+  },
+  {
+    "taskId": "task-9-detachment-card",
+    "agent": "senior-dev",
+    "file": "apps/brain/client/src/components/cards/ComboView.tsx",
+    "action": "modified",
+    "reason": "Add all missing CardData union cases (core-rule, deployment-zone, terrain-layout, errata, balance, community, detachment) to fix TS7030 exhaustiveness error",
+    "timestamp": "2026-04-20T23:49:30.000Z"
   }
 ]

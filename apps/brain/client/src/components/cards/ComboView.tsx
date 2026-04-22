@@ -1,11 +1,18 @@
 import type { CardData, CardContext } from './types'
-import { UnitCard } from './UnitCard'
-import { StratagemCard } from './StratagemCard'
-import { EnhancementCard } from './EnhancementCard'
-import { RuleCard } from './RuleCard'
-import { MissionCard } from './MissionCard'
-import { TwistCard } from './TwistCard'
+import { BalanceCard } from './BalanceCard'
 import { ChallengerCard } from './ChallengerCard'
+import { CommunityCard } from './CommunityCard'
+import { CoreRuleCard } from './CoreRuleCard'
+import { DeploymentZoneCard } from './DeploymentZoneCard'
+import { DetachmentCard } from './DetachmentCard'
+import { EnhancementCard } from './EnhancementCard'
+import { ErrataCard } from './ErrataCard'
+import { MissionCard } from './MissionCard'
+import { RuleCard } from './RuleCard'
+import { StratagemCard } from './StratagemCard'
+import { TerrainLayoutCard } from './TerrainLayoutCard'
+import { TwistCard } from './TwistCard'
+import { UnitCard } from './UnitCard'
 
 export interface ComboViewProps {
   leftCard: CardData
@@ -30,6 +37,20 @@ function renderCard(card: CardData, context: CardContext) {
       return <TwistCard data={card.data} context={context} />
     case 'challenger':
       return <ChallengerCard data={card.data} context={context} />
+    case 'core-rule':
+      return <CoreRuleCard data={card.data} context={context} />
+    case 'deployment-zone':
+      return <DeploymentZoneCard data={card.data} context={context} />
+    case 'terrain-layout':
+      return <TerrainLayoutCard data={card.data} context={context} />
+    case 'errata':
+      return <ErrataCard data={card.data} context={context} />
+    case 'balance':
+      return <BalanceCard data={card.data} context={context} />
+    case 'community':
+      return <CommunityCard data={card.data} context={context} />
+    case 'detachment':
+      return <DetachmentCard data={card.data} context={context} />
   }
 }
 
