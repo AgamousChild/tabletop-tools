@@ -324,5 +324,13 @@
     "action": "modified",
     "reason": "Wire massage layer into build pipeline between mergeSources and mapNodesToPages",
     "timestamp": "2026-04-20T23:42:00.000Z"
+  },
+  {
+    "taskId": "task-5-new-card-types",
+    "agent": "senior-dev",
+    "file": "apps/brain/client/src/components/cards/types.ts",
+    "action": "modified",
+    "reason": "Add CoreRuleCardData, DeploymentZoneCardData, TerrainLayoutCardData, ErrataCardData, BalanceCardData, CommunityCardData, DetachmentCardData interfaces and extend CardData union",
+    "timestamp": "2026-04-20T23:43:00.000Z"
   }
 ]

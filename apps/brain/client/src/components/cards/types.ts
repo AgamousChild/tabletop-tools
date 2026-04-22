@@ -31,6 +31,7 @@ export interface UnitCardData {
   factionKeywords: string[]
   composition: string
   loadout: string
+  wargearOptions?: string
   leaders: string[]
   transport?: string
   damaged?: { threshold: string; description: string }
@@ -117,14 +118,94 @@ export interface ChallengerCardData {
   errata?: ErrataEntry[]
 }
 
+export interface CoreRuleCardData {
+  id: string
+  name: string
+  description: string
+  phase?: string
+  tableHtml?: string
+  sources?: SourceRef[]
+  errata?: ErrataEntry[]
+  qualityFlags?: string[]
+}
+
+export interface DeploymentZoneCardData {
+  id: string
+  name: string
+  battleSize?: string
+  description: string
+  pdfImage?: { pdfName: string; page: number }
+  sources?: SourceRef[]
+  qualityFlags?: string[]
+}
+
+export interface TerrainLayoutCardData {
+  id: string
+  name: string
+  description: string
+  pdfImage?: { pdfName: string; page: number }
+  sources?: SourceRef[]
+  qualityFlags?: string[]
+}
+
+export interface ErrataCardData {
+  id: string
+  name: string
+  targetRule?: string
+  targetNodeId?: string
+  correctionText: string
+  source?: string
+  effectiveDate?: string
+  qualityFlags?: string[]
+}
+
+export interface BalanceCardData {
+  id: string
+  name: string
+  description: string
+  effectiveDate?: string
+  sources?: SourceRef[]
+  qualityFlags?: string[]
+}
+
+export interface CommunityCardData {
+  id: string
+  name: string
+  description: string
+  sourceAttribution?: string
+  qualityFlags?: string[]
+}
+
+export interface DetachmentCardData {
+  id: string
+  name: string
+  factionId: string
+  factionName?: string
+  subfaction?: string
+  abilityText: string
+  stratagems: StratagemCardData[]
+  enhancements: EnhancementCardData[]
+  chapterBadge?: string
+  sources?: SourceRef[]
+  errata?: ErrataEntry[]
+  qualityFlags?: string[]
+}
+
 export type CardData =
   | { type: 'unit'; data: UnitCardData }
   | { type: 'stratagem'; data: StratagemCardData }
   | { type: 'enhancement'; data: EnhancementCardData }
   | { type: 'rule'; data: RuleCardData }
+  | { type: 'core-rule'; data: CoreRuleCardData }
   | { type: 'mission'; data: MissionCardData }
   | { type: 'twist'; data: TwistCardData }
   | { type: 'challenger'; data: ChallengerCardData }
+  | { type: 'deployment-zone'; data: DeploymentZoneCardData }
+  | { type: 'terrain-layout'; data: TerrainLayoutCardData }
+  | { type: 'errata'; data: ErrataCardData }
+  | { type: 'balance'; data: BalanceCardData }
+  | { type: 'community'; data: CommunityCardData }
+  | { type: 'detachment'; data: DetachmentCardData }
 
 export interface CardContext {
   highlightTerms: string[]
