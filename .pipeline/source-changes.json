@@ -390,5 +390,13 @@
     "action": "modified",
     "reason": "Add all missing CardData union cases (core-rule, deployment-zone, terrain-layout, errata, balance, community, detachment) to fix TS7030 exhaustiveness error",
     "timestamp": "2026-04-20T23:49:30.000Z"
+  },
+  {
+    "taskId": "task-10-display-resilience",
+    "agent": "senior-dev",
+    "file": "apps/brain/client/src/lib/card-display.ts",
+    "action": "created",
+    "reason": "resolveCardView utility — maps any node to CardData + optional PdfSource, always returns a card",
+    "timestamp": "2026-04-20T23:56:00.000Z"
   }
 ]
