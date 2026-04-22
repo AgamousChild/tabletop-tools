@@ -340,5 +340,29 @@
     "action": "created",
     "reason": "CoreRuleCard component — amber accent, phase badge, table support, quality flags, view source",
     "timestamp": "2026-04-20T23:44:00.000Z"
+  },
+  {
+    "taskId": "task-errata-balance-community-cards",
+    "agent": "senior-dev",
+    "file": "apps/brain/client/src/components/cards/ErrataCard.tsx",
+    "action": "created",
+    "reason": "ErrataCard component — orange accent, clarifies link, correction text, quality flags",
+    "timestamp": "2026-04-20T23:47:00.000Z"
+  },
+  {
+    "taskId": "task-errata-balance-community-cards",
+    "agent": "senior-dev",
+    "file": "apps/brain/client/src/components/cards/BalanceCard.tsx",
+    "action": "created",
+    "reason": "BalanceCard component — red accent, description text, effectiveDate footer, quality flags",
+    "timestamp": "2026-04-20T23:47:00.000Z"
+  },
+  {
+    "taskId": "task-errata-balance-community-cards",
+    "agent": "senior-dev",
+    "file": "apps/brain/client/src/components/cards/CommunityCard.tsx",
+    "action": "created",
+    "reason": "CommunityCard component — cyan accent, description text, sourceAttribution footer, quality flags",
+    "timestamp": "2026-04-20T23:47:00.000Z"
   }
 ]
