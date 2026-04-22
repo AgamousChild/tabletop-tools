@@ -300,5 +300,13 @@
     "action": "modified",
     "reason": "Add optional qualityFlags field to Node schema for data quality flagging by massage layer",
     "timestamp": "2026-04-20T23:30:49.000Z"
+  },
+  {
+    "taskId": "task-2-massage-layer",
+    "agent": "senior-dev",
+    "file": "apps/brain/server/src/lib/massage.ts",
+    "action": "created",
+    "reason": "Drop phantom/malformed nodes from the brain knowledge graph via three-pass massage layer",
+    "timestamp": "2026-04-20T23:34:00.000Z"
   }
 ]
