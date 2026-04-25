@@ -308,7 +308,7 @@
     "agent": "senior-dev",
     "file": "apps/brain/server/src/lib/massage.ts",
     "action": "modified",
-    "reason": "Add passes 4–6: content independence, PDF reference validation, hierarchy orphan detection",
+    "reason": "Add passes 4-6: content independence, PDF reference validation, hierarchy orphan detection",
     "timestamp": "2026-04-20T23:39:00.000Z"
   },
   {
@@ -406,5 +406,165 @@
     "action": "modified",
     "reason": "Integrate resolveCardView, remove PDF-first branching, add new card type renders in Overlay",
     "timestamp": "2026-04-21T00:01:00.000Z"
+  },
+  {
+    "taskId": "task-1-deployment-package-scaffold",
+    "agent": "senior-dev",
+    "file": "packages/deployment/package.json",
+    "action": "created",
+    "reason": "Scaffold @tabletop-tools/deployment package for Warhammer 40K deployment algorithm",
+    "timestamp": "2026-04-24T00:00:00.000Z"
+  },
+  {
+    "taskId": "task-1-deployment-package-scaffold",
+    "agent": "senior-dev",
+    "file": "packages/deployment/tsconfig.json",
+    "action": "created",
+    "reason": "Scaffold @tabletop-tools/deployment package for Warhammer 40K deployment algorithm",
+    "timestamp": "2026-04-24T00:00:00.000Z"
+  },
+  {
+    "taskId": "task-1-deployment-package-scaffold",
+    "agent": "senior-dev",
+    "file": "packages/deployment/vitest.config.ts",
+    "action": "created",
+    "reason": "Scaffold @tabletop-tools/deployment package for Warhammer 40K deployment algorithm",
+    "timestamp": "2026-04-24T00:00:00.000Z"
+  },
+  {
+    "taskId": "task-1-deployment-package-scaffold",
+    "agent": "senior-dev",
+    "file": "packages/deployment/src/types.ts",
+    "action": "created",
+    "reason": "Complete type system for the 40K deployment algorithm: geometry, battlefield, units, enemy, algorithm I/O",
+    "timestamp": "2026-04-24T00:00:00.000Z"
+  },
+  {
+    "taskId": "task-1-deployment-package-scaffold",
+    "agent": "senior-dev",
+    "file": "packages/deployment/src/index.ts",
+    "action": "created",
+    "reason": "Barrel export for @tabletop-tools/deployment package",
+    "timestamp": "2026-04-24T00:00:00.000Z"
+  },
+  {
+    "taskId": "task-2-geometry-primitives",
+    "agent": "senior-dev",
+    "file": "packages/deployment/src/geometry/point.ts",
+    "action": "created",
+    "reason": "Euclidean distance, offset, midpoint for Point type",
+    "timestamp": "2026-04-24T18:22:00.000Z"
+  },
+  {
+    "taskId": "task-2-geometry-primitives",
+    "agent": "senior-dev",
+    "file": "packages/deployment/src/geometry/polygon.ts",
+    "action": "created",
+    "reason": "AABB containment, rect overlap, ray-casting point-in-polygon",
+    "timestamp": "2026-04-24T18:22:00.000Z"
+  },
+  {
+    "taskId": "task-2-geometry-primitives",
+    "agent": "senior-dev",
+    "file": "packages/deployment/src/geometry/circle.ts",
+    "action": "created",
+    "reason": "Point-in-circle and point-in-quarter-circle for Search and Destroy exclusion arcs",
+    "timestamp": "2026-04-24T18:22:00.000Z"
+  },
+  {
+    "taskId": "task-2-geometry-primitives",
+    "agent": "senior-dev",
+    "file": "packages/deployment/src/geometry/los.ts",
+    "action": "created",
+    "reason": "LOS computation with segment-intersection and 40K ruins rules (inside-same-terrain visible)",
+    "timestamp": "2026-04-24T18:22:00.000Z"
+  },
+  {
+    "taskId": "task-3-deployment-zones",
+    "agent": "senior-dev",
+    "file": "packages/deployment/src/zones/deployment-zones.ts",
+    "action": "created",
+    "reason": "DeploymentZone interface + computeDeploymentZone/computeEnemyZone for Search and Destroy and Dawn of War layouts",
+    "timestamp": "2026-04-24T18:29:00.000Z"
+  },
+  {
+    "taskId": "task-3-deployment-zones",
+    "agent": "senior-dev",
+    "file": "packages/deployment/src/zones/exclusion-zones.ts",
+    "action": "created",
+    "reason": "canInfiltrate, canScoutMoveTo, canDeepStrike — enforce model and zone exclusion distances",
+    "timestamp": "2026-04-24T18:29:00.000Z"
+  },
+  {
+    "taskId": "task-4-threat-range-map",
+    "agent": "senior-dev",
+    "file": "packages/deployment/src/threats/threat-range.ts",
+    "action": "created",
+    "reason": "Per-unit max/avg shooting and melee threat range calculation with assault, advance+charge, and scout modifiers",
+    "timestamp": "2026-04-24T18:35:00.000Z"
+  },
+  {
+    "taskId": "task-4-threat-range-map",
+    "agent": "senior-dev",
+    "file": "packages/deployment/src/threats/threat-map.ts",
+    "action": "created",
+    "reason": "Grid-based shooting and melee heat map generation from sampled enemy zone positions with LOS checking",
+    "timestamp": "2026-04-24T18:35:00.000Z"
+  },
+  {
+    "taskId": "task-4-threat-range-map",
+    "agent": "senior-dev",
+    "file": "packages/deployment/src/threats/los-analysis.ts",
+    "action": "created",
+    "reason": "findHidingSpots (zone + scout range) and estimateTerrainCapacity higher-level LOS deployment utilities",
+    "timestamp": "2026-04-24T18:35:00.000Z"
+  },
+  {
+    "taskId": "task-5-objective-classification",
+    "agent": "senior-dev",
+    "file": "packages/deployment/src/objectives/classify.ts",
+    "action": "created",
+    "reason": "Classify objectives as home/safe/center/expansion/enemy-home relative to player deployment zone",
+    "timestamp": "2026-04-24T18:39:00.000Z"
+  },
+  {
+    "taskId": "task-6-unit-role-assignment",
+    "agent": "senior-dev",
+    "file": "packages/deployment/src/units/role-assignment.ts",
+    "action": "created",
+    "reason": "Heuristic strategicPurpose + tacticalRole assignment with manual override preservation",
+    "timestamp": "2026-04-24T18:45:00.000Z"
+  },
+  {
+    "taskId": "task-6-unit-role-assignment",
+    "agent": "senior-dev",
+    "file": "packages/deployment/src/units/drop-order.ts",
+    "action": "created",
+    "reason": "Deployment drop order by tactical role priority tier, with within-tier sort by points ascending",
+    "timestamp": "2026-04-24T18:45:00.000Z"
+  },
+  {
+    "taskId": "task-7-legal-position-checking",
+    "agent": "senior-dev",
+    "file": "packages/deployment/src/placement/coherency.ts",
+    "action": "created",
+    "reason": "baseSizeInches (mm to inches conversion) + isCoherent (center-to-center adjacency graph, small/large unit thresholds)",
+    "timestamp": "2026-04-24T18:56:00.000Z"
+  },
+  {
+    "taskId": "task-7-legal-position-checking",
+    "agent": "senior-dev",
+    "file": "packages/deployment/src/placement/formations.ts",
+    "action": "created",
+    "reason": "generateFormations — block (grid with last-row fix for large units), line, wide-line, dog-bone, blob (hex close-pack) templates",
+    "timestamp": "2026-04-24T18:56:00.000Z"
+  },
+  {
+    "taskId": "task-7-legal-position-checking",
+    "agent": "senior-dev",
+    "file": "packages/deployment/src/placement/legal-check.ts",
+    "action": "created",
+    "reason": "isLegalPlacement — zone containment, base overlap, coherency, infiltrate exclusion checks",
+    "timestamp": "2026-04-24T18:56:00.000Z"
   }
 ]
