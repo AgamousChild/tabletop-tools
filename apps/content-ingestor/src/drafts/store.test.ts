@@ -59,8 +59,9 @@ describe('draftToMarkdown', () => {
     const draft = makeDraft()
     const md = draftToMarkdown(draft)
     expect(md).toContain('screenshots:')
-    expect(md).toContain('file: /path/to/frame.png')
-    expect(md).toContain('caption: Key moment')
+    // Values are quoted to handle colons in Windows paths and captions
+    expect(md).toContain('file: "/path/to/frame.png"')
+    expect(md).toContain('caption: "Key moment"')
   })
 
   it('includes ## Summary, ## Content, and ## Source Context sections', () => {

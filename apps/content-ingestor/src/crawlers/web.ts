@@ -43,11 +43,13 @@ export async function crawlSite(
     const segments = resolved.pathname.split('/').filter(Boolean)
     if (segments.length < 2) return
 
-    const url = resolved.href
-    if (seen.has(url)) return
+    // Dedup on canonical URL (origin + pathname), ignoring query params and
+    // fragments that tracking systems append to the same article link.
+    const canonicalUrl = resolved.origin + resolved.pathname
+    if (seen.has(canonicalUrl)) return
 
-    seen.add(url)
-    results.push({ url, title: title || url })
+    seen.add(canonicalUrl)
+    results.push({ url: canonicalUrl, title: title || canonicalUrl })
   })
 
   return results

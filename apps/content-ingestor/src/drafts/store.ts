@@ -23,10 +23,12 @@ function screenshotsToYaml(screenshots: Screenshot[]): string {
 
   const lines = ['screenshots:']
   for (const s of screenshots) {
-    lines.push(`  - file: ${s.file}`)
-    lines.push(`    timestamp: ${s.timestamp}`)
+    // Quote values that may contain colons (Windows paths, captions) to avoid
+    // ambiguous YAML and ensure the hand-rolled parser can extract them cleanly.
+    lines.push(`  - file: "${s.file.replace(/"/g, '\\"')}"`)
+    lines.push(`    timestamp: "${s.timestamp}"`)
     lines.push(`    timestampSec: ${s.timestampSec}`)
-    lines.push(`    caption: ${s.caption}`)
+    lines.push(`    caption: "${s.caption.replace(/"/g, '\\"')}"`)
   }
   return lines.join('\n') + '\n'
 }
@@ -44,10 +46,12 @@ function parseScreenshots(frontmatter: string): Screenshot[] {
   const itemBlocks = frontmatter.split(/\n  - file: /).slice(1)
   for (const block of itemBlocks) {
     const lines = block.split('\n')
-    const file = lines[0]?.trim() ?? ''
-    const timestamp = lines[1]?.replace(/^\s*timestamp:\s*/, '').trim() ?? ''
+    // Strip surrounding quotes added by screenshotsToYaml for safety
+    const unquote = (s: string) => s.replace(/^"(.*)"$/, '$1').replace(/\\"/g, '"')
+    const file = unquote(lines[0]?.trim() ?? '')
+    const timestamp = unquote(lines[1]?.replace(/^\s*timestamp:\s*/, '').trim() ?? '')
     const timestampSec = Number(lines[2]?.replace(/^\s*timestampSec:\s*/, '').trim() ?? '0')
-    const caption = lines[3]?.replace(/^\s*caption:\s*/, '').trim() ?? ''
+    const caption = unquote(lines[3]?.replace(/^\s*caption:\s*/, '').trim() ?? '')
     screenshots.push({ file, timestamp, timestampSec, caption })
   }
   return screenshots
@@ -129,9 +133,18 @@ export function markdownToDraft(markdown: string): DraftNode {
   }
 
   // Parse body sections by ## headers
+  // Split on headings so the last section greedily captures to end-of-string
+  // without truncation from lazy quantifier + $ edge cases.
   function getSection(heading: string): string {
-    const re = new RegExp(`## ${heading}\\n\\n([\\s\\S]*?)(?=\\n## |$)`)
-    return body.match(re)?.[1]?.trim() ?? ''
+    const headingMarker = `## ${heading}\n\n`
+    const start = body.indexOf(headingMarker)
+    if (start === -1) return ''
+    const contentStart = start + headingMarker.length
+    const nextHeading = body.indexOf('\n## ', contentStart)
+    const raw = nextHeading === -1
+      ? body.slice(contentStart)
+      : body.slice(contentStart, nextHeading)
+    return raw.trim()
   }
 
   const status = (getField('status') ?? 'draft') as DraftNode['status']

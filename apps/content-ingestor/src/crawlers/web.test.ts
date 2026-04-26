@@ -81,6 +81,22 @@ describe('crawlSite', () => {
     await expect(crawlSite('https://example.com')).rejects.toThrow('404')
   })
 
+  it('deduplicates URLs that differ only by query parameters', async () => {
+    mockFetch.mockResolvedValue({
+      ok: true,
+      text: async () => `
+        <html><body>
+          <a href="/articles/tactics?ref=nav">Tactics (nav)</a>
+          <a href="/articles/tactics?ref=footer">Tactics (footer)</a>
+        </body></html>
+      `,
+    })
+
+    const result = await crawlSite('https://example.com')
+    expect(result).toHaveLength(1)
+    expect(result[0]!.url).toBe('https://example.com/articles/tactics')
+  })
+
   it('handles absolute hrefs from other domains by ignoring them', async () => {
     mockFetch.mockResolvedValue({
       ok: true,
