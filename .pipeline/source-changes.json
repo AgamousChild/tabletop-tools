@@ -710,5 +710,29 @@
     "action": "created",
     "reason": "Crawl manifest: loadManifest, saveManifest, getUnprocessedEntries, markEntryProcessed",
     "timestamp": "2026-04-24T22:00:00.000Z"
+  },
+  {
+    "taskId": "ci-task-7-extraction-pipeline-dedup",
+    "agent": "senior-dev",
+    "file": "apps/content-ingestor/src/extract/dedup.ts",
+    "action": "created",
+    "reason": "loadExistingNodes (community.json reader) + findSimilar (title substring + keyword overlap deduplication)",
+    "timestamp": "2026-04-24T00:25:00.000Z"
+  },
+  {
+    "taskId": "ci-task-7-extraction-pipeline-dedup",
+    "agent": "senior-dev",
+    "file": "apps/content-ingestor/src/extract/extract.ts",
+    "action": "created",
+    "reason": "processContent (relevance check + concept extraction + dedup) + processYouTubeVideo (full transcript-to-draft pipeline)",
+    "timestamp": "2026-04-24T00:25:00.000Z"
+  },
+  {
+    "taskId": "ci-task-8-interactive-review",
+    "agent": "senior-dev",
+    "file": "apps/content-ingestor/src/review/interactive.ts",
+    "action": "created",
+    "reason": "Interactive review CLI: findDraftDirs + reviewDrafts with approve/reject/skip/quit prompt loop",
+    "timestamp": "2026-04-24T00:25:00.000Z"
   }
 ]
