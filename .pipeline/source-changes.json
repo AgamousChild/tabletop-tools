@@ -678,5 +678,37 @@
     "action": "created",
     "reason": "Capture video frames at specified timestamps using yt-dlp with thumbnail fallback",
     "timestamp": "2026-04-24T21:00:00.000Z"
+  },
+  {
+    "taskId": "ci-task-5-web-reddit-crawlers",
+    "agent": "senior-dev",
+    "file": "apps/content-ingestor/src/crawlers/web.ts",
+    "action": "created",
+    "reason": "Web crawler: crawlSite (Cheerio link extraction) + fetchArticle (boilerplate stripping, text extraction)",
+    "timestamp": "2026-04-24T22:00:00.000Z"
+  },
+  {
+    "taskId": "ci-task-5-web-reddit-crawlers",
+    "agent": "senior-dev",
+    "file": "apps/content-ingestor/src/crawlers/reddit.ts",
+    "action": "created",
+    "reason": "Reddit JSON API crawler: crawlSubreddit (score-filtered, sorted) + fetchRedditPost (top 10 comments by score)",
+    "timestamp": "2026-04-24T22:00:00.000Z"
+  },
+  {
+    "taskId": "ci-task-6-draft-store-manifest",
+    "agent": "senior-dev",
+    "file": "apps/content-ingestor/src/drafts/store.ts",
+    "action": "created",
+    "reason": "Draft store: draftToMarkdown/markdownToDraft (YAML frontmatter round-trip), saveDraft, loadDrafts, updateDraftStatus",
+    "timestamp": "2026-04-24T22:00:00.000Z"
+  },
+  {
+    "taskId": "ci-task-6-draft-store-manifest",
+    "agent": "senior-dev",
+    "file": "apps/content-ingestor/src/drafts/manifest.ts",
+    "action": "created",
+    "reason": "Crawl manifest: loadManifest, saveManifest, getUnprocessedEntries, markEntryProcessed",
+    "timestamp": "2026-04-24T22:00:00.000Z"
   }
 ]
