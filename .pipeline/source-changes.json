@@ -735,4 +735,21 @@
     "reason": "Interactive review CLI: findDraftDirs + reviewDrafts with approve/reject/skip/quit prompt loop",
     "timestamp": "2026-04-24T00:25:00.000Z"
   }
+,
+  {
+    "taskId": "ci-task-9-brain-commit",
+    "agent": "senior-dev",
+    "file": "apps/content-ingestor/src/commit/commit.ts",
+    "action": "created",
+    "reason": "commitApprovedNodes: scan draft dirs, filter approved, build brain nodes, dedup by ID, write community.json, copy screenshots",
+    "timestamp": "2026-04-24T00:32:00.000Z"
+  },
+  {
+    "taskId": "ci-task-10-cli-entry-point",
+    "agent": "senior-dev",
+    "file": "apps/content-ingestor/src/cli.ts",
+    "action": "created",
+    "reason": "CLI entry point with commander: channel, site, url, review, commit, list subcommands",
+    "timestamp": "2026-04-24T00:33:00.000Z"
+  }
 ]
