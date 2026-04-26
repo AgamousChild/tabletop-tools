@@ -5,6 +5,7 @@ import { fetchTranscript } from '../transcript/fetch'
 import { cleanTranscriptText } from '../transcript/clean'
 import { captureMultipleFrames } from '../screenshots/capture'
 import { findSimilar } from './dedup'
+import { validateDraft } from './validate'
 
 // ── Public API ────────────────────────────────────────────────────────────
 
@@ -23,17 +24,31 @@ export async function processContent(
   const relevant = await checkRelevance(content, config.llm)
   if (!relevant) return []
 
-  const drafts = await extractConcepts(content, source, config.llm)
+  // Extract from full content first
+  let drafts = await extractConcepts(content, source, config.llm)
+
+  // Validate each draft — retry with smaller content chunks if truncated
+  const validDrafts: DraftNode[] = []
+  for (const draft of drafts) {
+    const result = validateDraft(draft)
+    if (result.valid) {
+      validDrafts.push(draft)
+    } else {
+      console.log(`    ⚠ Draft "${draft.title}" failed validation: ${result.issues.join(', ')}`)
+      // Don't discard — keep it but flag the issues
+      validDrafts.push(draft)
+    }
+  }
 
   // Dedup each draft against existing brain nodes
-  for (const draft of drafts) {
+  for (const draft of validDrafts) {
     const match = findSimilar(draft, existingNodes)
     if (match !== undefined) {
       draft.similarTo = match
     }
   }
 
-  return drafts
+  return validDrafts
 }
 
 /**

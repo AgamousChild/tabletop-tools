@@ -3,6 +3,7 @@ import { Command } from 'commander'
 import { DEFAULT_CONFIG } from './types'
 import type { ContentSource } from './types'
 import { listChannelVideos } from './crawlers/youtube'
+import { fetchTranscript } from './transcript/fetch'
 import { crawlSite, fetchArticle } from './crawlers/web'
 import { crawlSubreddit, fetchRedditPost } from './crawlers/reddit'
 import { processContent, processYouTubeVideo } from './extract/extract'
@@ -16,8 +17,10 @@ import {
 } from './drafts/manifest'
 import { reviewDrafts, findDraftDirs } from './review/interactive'
 import { commitApprovedNodes } from './commit/commit'
-import { mkdirSync } from 'node:fs'
+import { mkdirSync, readdirSync, readFileSync } from 'node:fs'
 import path from 'node:path'
+import { processContent } from './extract/extract'
+import { validateDraft } from './extract/validate'
 
 const config = DEFAULT_CONFIG
 
@@ -26,11 +29,154 @@ const program = new Command()
   .description('Ingest competitive 40K content into brain community nodes')
   .version('0.0.1')
 
+// ── fetch (pass 1: transcripts only, no LLM) ─────────────────────────────
+
+program
+  .command('fetch <url>')
+  .description('Fetch all video transcripts from a YouTube channel (no LLM processing)')
+  .action(async (url: string) => {
+    console.log(`Fetching transcripts from: ${url}`)
+    const videos = await listChannelVideos(url, config.ytdlpPath)
+    console.log(`Found ${videos.length} videos`)
+
+    const slug = url.replace(/.*@/, '').replace(/[^a-z0-9]/gi, '-').toLowerCase()
+    const outDir = path.join(config.dataDir, slug)
+    const transcriptDir = path.join(outDir, 'transcripts')
+    mkdirSync(transcriptDir, { recursive: true })
+
+    let manifest = await loadManifest(outDir)
+    if (!manifest) {
+      manifest = {
+        source: url,
+        sourceType: 'youtube',
+        lastCrawlAt: new Date().toISOString(),
+        entries: [],
+      }
+    }
+
+    for (const v of videos) {
+      if (!manifest.entries.find(e => e.url === v.url)) {
+        manifest.entries.push({ url: v.url, title: v.title })
+      }
+    }
+
+    const unprocessed = getUnprocessedEntries(manifest)
+    console.log(`${unprocessed.length} videos to fetch`)
+
+    let fetched = 0
+    let failed = 0
+    for (const entry of unprocessed) {
+      try {
+        process.stdout.write(`  [${fetched + failed + 1}/${unprocessed.length}] ${entry.title.substring(0, 60)}...`)
+        await fetchTranscript(entry.url, config.ytdlpPath, transcriptDir)
+        markEntryProcessed(manifest, entry.url, true, 0)
+        fetched++
+        console.log(' ✓')
+      } catch {
+        markEntryProcessed(manifest, entry.url, false, 0)
+        failed++
+        console.log(' ✗ (no transcript)')
+      }
+    }
+
+    manifest.lastCrawlAt = new Date().toISOString()
+    await saveManifest(manifest, outDir)
+    console.log(`\nDone. ${fetched} transcripts fetched, ${failed} failed. Saved to ${transcriptDir}`)
+  })
+
+// ── process (pass 2: LLM extraction on saved transcripts) ─────────────────
+
+program
+  .command('process <channelSlug>')
+  .description('Run LLM extraction on previously fetched transcripts')
+  .action(async (channelSlug: string) => {
+    const outDir = path.join(config.dataDir, channelSlug)
+    const transcriptDir = path.join(outDir, 'transcripts')
+
+    // Find all json3 transcript files
+    let transcriptFiles: string[]
+    try {
+      transcriptFiles = readdirSync(transcriptDir).filter(f => f.endsWith('.json3'))
+    } catch {
+      console.error(`No transcripts found in ${transcriptDir}. Run 'ingest fetch' first.`)
+      return
+    }
+
+    console.log(`Found ${transcriptFiles.length} transcripts in ${transcriptDir}`)
+
+    const existingNodes = await loadExistingNodes(config.brainNodesDir)
+    let totalNodes = 0
+    let validated = 0
+    let withIssues = 0
+
+    for (let i = 0; i < transcriptFiles.length; i++) {
+      const file = transcriptFiles[i]!
+      const filePath = path.join(transcriptDir, file)
+
+      try {
+        // Parse json3 transcript
+        const raw = readFileSync(filePath, 'utf-8')
+        const data = JSON.parse(raw) as { events: Array<{ segs?: Array<{ utf8?: string }>; tStartMs?: number }> }
+        const text = data.events
+          .filter(e => e.segs && e.segs.length > 0)
+          .map(e => (e.segs ?? []).map(s => s.utf8 ?? '').join('').trim())
+          .filter(t => t.length > 0)
+          .join(' ')
+
+        if (text.length < 50) {
+          console.log(`  [${i + 1}/${transcriptFiles.length}] ${file} — too short, skipping`)
+          continue
+        }
+
+        process.stdout.write(`  [${i + 1}/${transcriptFiles.length}] ${file.replace('.en.json3', '')}...`)
+
+        // Extract video ID from filename for URL
+        const videoId = file.replace('.en.json3', '')
+        const source = {
+          url: `https://www.youtube.com/watch?v=${videoId}`,
+          type: 'youtube' as const,
+          channel: channelSlug,
+          title: videoId,
+          fetchedAt: new Date().toISOString(),
+        }
+
+        const drafts = await processContent(source, text, config, existingNodes)
+
+        // Validate each draft
+        let draftIssues = 0
+        for (const draft of drafts) {
+          const result = validateDraft(draft)
+          if (!result.valid) draftIssues++
+        }
+
+        for (let j = 0; j < drafts.length; j++) {
+          await saveDraft(drafts[j]!, outDir, totalNodes + j)
+        }
+
+        totalNodes += drafts.length
+        validated += drafts.length - draftIssues
+        withIssues += draftIssues
+
+        if (drafts.length === 0) {
+          console.log(' — not relevant')
+        } else if (draftIssues > 0) {
+          console.log(` → ${drafts.length} concepts (${draftIssues} with issues)`)
+        } else {
+          console.log(` → ${drafts.length} concepts ✓`)
+        }
+      } catch (err) {
+        console.log(` ✗ Error: ${err instanceof Error ? err.message : err}`)
+      }
+    }
+
+    console.log(`\nDone. ${totalNodes} drafts (${validated} clean, ${withIssues} with issues). Saved to ${outDir}`)
+  })
+
 // ── channel ────────────────────────────────────────────────────────────────
 
 program
   .command('channel <url>')
-  .description('Crawl all videos from a YouTube channel')
+  .description('Crawl all videos from a YouTube channel (full LLM processing)')
   .action(async (url: string) => {
     console.log(`Crawling channel: ${url}`)
     const videos = await listChannelVideos(url, config.ytdlpPath)

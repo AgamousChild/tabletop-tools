@@ -167,14 +167,14 @@ describe('extractConcepts', () => {
     expect(node.category).toBe('tactic')
   })
 
-  it('sets sourceContext to the first 500 chars of content', async () => {
+  it('sets sourceContext to the full content (no truncation)', async () => {
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue(
       makeOllamaResponse(JSON.stringify(validConcepts)),
     ))
 
     const longContent = 'B'.repeat(1000)
     const result = await extractConcepts(longContent, source, config)
-    expect(result[0].sourceContext).toBe('B'.repeat(500))
+    expect(result[0].sourceContext).toBe(longContent)
   })
 
   it('handles JSON wrapped in markdown code blocks', async () => {

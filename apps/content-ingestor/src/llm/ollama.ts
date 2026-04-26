@@ -26,6 +26,10 @@ export async function ollamaChat(
       { role: 'user', content: prompt },
     ],
     stream: false,
+    options: {
+      num_ctx: 8192,
+      num_predict: 4096,
+    },
   }
 
   const response = await fetch(url, {
@@ -78,7 +82,38 @@ export async function checkRelevance(content: string, config: LLMConfig): Promis
  */
 export async function cleanTranscript(transcript: string, config: LLMConfig): Promise<string> {
   const systemPrompt = `${CLEANUP_PROMPT}\n\n${GLOSSARY}`
-  return ollamaChat(transcript, systemPrompt, config)
+  // Chunk long transcripts to avoid truncation
+  const maxChunkSize = 3000
+  if (transcript.length <= maxChunkSize) {
+    return ollamaChat(transcript, systemPrompt, config)
+  }
+  // Split on sentence boundaries
+  const chunks = chunkText(transcript, maxChunkSize)
+  const cleaned: string[] = []
+  for (const chunk of chunks) {
+    const result = await ollamaChat(chunk, systemPrompt, config)
+    cleaned.push(result)
+  }
+  return cleaned.join(' ')
+}
+
+/** Split text into chunks at sentence boundaries */
+function chunkText(text: string, maxSize: number): string[] {
+  const chunks: string[] = []
+  let remaining = text
+  while (remaining.length > maxSize) {
+    // Find the last sentence boundary before maxSize
+    let splitAt = maxSize
+    const searchArea = remaining.slice(0, maxSize)
+    const lastPeriod = searchArea.lastIndexOf('. ')
+    const lastNewline = searchArea.lastIndexOf('\n')
+    splitAt = Math.max(lastPeriod + 1, lastNewline + 1)
+    if (splitAt <= 0) splitAt = maxSize // no boundary found, hard split
+    chunks.push(remaining.slice(0, splitAt).trim())
+    remaining = remaining.slice(splitAt).trim()
+  }
+  if (remaining.length > 0) chunks.push(remaining)
+  return chunks
 }
 
 // ── Extracted concept shape from LLM ─────────────────────────────────────
@@ -101,27 +136,40 @@ export async function extractConcepts(
   source: ContentSource,
   config: LLMConfig,
 ): Promise<DraftNode[]> {
-  const response = await ollamaChat(content, EXTRACTION_PROMPT, config)
-  const parsed = parseJsonFromResponse<ExtractedConcept[]>(response)
+  // Chunk long content to avoid overwhelming the LLM context window
+  // Each chunk gets extracted independently, results merged
+  const maxContentSize = 3000
+  const allDrafts: DraftNode[] = []
 
-  if (!parsed || !Array.isArray(parsed)) return []
+  const chunks = content.length <= maxContentSize
+    ? [content]
+    : chunkText(content, maxContentSize)
 
-  const sourceContext = content.slice(0, 500)
+  for (const chunk of chunks) {
+    const response = await ollamaChat(chunk, EXTRACTION_PROMPT, config)
+    const parsed = parseJsonFromResponse<ExtractedConcept[]>(response)
 
-  return parsed.map((concept): DraftNode => ({
-    status: 'draft',
-    title: concept.title,
-    category: concept.category,
-    keywords: concept.keywords ?? [],
-    sourceUrl: source.url,
-    sourceType: source.type,
-    sourceChannel: source.channel,
-    confidence: concept.confidence,
-    screenshots: [],
-    summary: concept.summary,
-    content: concept.content,
-    sourceContext,
-  }))
+    if (!parsed || !Array.isArray(parsed)) continue
+
+    for (const concept of parsed) {
+      allDrafts.push({
+        status: 'draft',
+        title: concept.title,
+        category: concept.category ?? 'tactic',
+        keywords: concept.keywords ?? [],
+        sourceUrl: source.url,
+        sourceType: source.type,
+        sourceChannel: source.channel,
+        confidence: concept.confidence ?? 0.5,
+        screenshots: [],
+        summary: concept.summary ?? '',
+        content: concept.content ?? '',
+        sourceContext: chunk,
+      })
+    }
+  }
+
+  return allDrafts
 }
 
 // ── Timestamp identification ──────────────────────────────────────────────
