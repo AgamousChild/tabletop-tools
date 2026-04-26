@@ -566,5 +566,117 @@
     "action": "created",
     "reason": "isLegalPlacement — zone containment, base overlap, coherency, infiltrate exclusion checks",
     "timestamp": "2026-04-24T18:56:00.000Z"
+  },
+  {
+    "taskId": "task-8-strategic-scoring",
+    "agent": "senior-dev",
+    "file": "packages/deployment/src/placement/scoring.ts",
+    "action": "created",
+    "reason": "Strategic position scoring — 12 factors (cover, threat exposure, charge threat, objective proximity, firing lanes, screen coverage, specialist placeholders, turn1 survival, role fit) with role-weighted total normalised to 0-100",
+    "timestamp": "2026-04-24T19:02:00.000Z"
+  },
+  {
+    "taskId": "task-9-solver",
+    "agent": "senior-dev",
+    "file": "packages/deployment/src/solver.ts",
+    "action": "created",
+    "reason": "Top-level solveDeployment orchestrator — runs all 9 phases, produces DeploymentPlan",
+    "timestamp": "2026-04-24T19:10:00.000Z"
+  },
+  {
+    "taskId": "task-9-solver",
+    "agent": "senior-dev",
+    "file": "packages/deployment/src/index.ts",
+    "action": "modified",
+    "reason": "Expand barrel export to include solveDeployment and all public module APIs",
+    "timestamp": "2026-04-24T19:10:00.000Z"
+  },
+  {
+    "taskId": "ci-task-1-package-scaffold",
+    "agent": "senior-dev",
+    "file": "apps/content-ingestor/package.json",
+    "action": "created",
+    "reason": "Scaffold content-ingestor CLI app with types for YouTube/article/reddit/wiki/pdf ingest pipeline",
+    "timestamp": "2026-04-24T19:20:00.000Z"
+  },
+  {
+    "taskId": "ci-task-1-package-scaffold",
+    "agent": "senior-dev",
+    "file": "apps/content-ingestor/tsconfig.json",
+    "action": "created",
+    "reason": "Scaffold content-ingestor CLI app with types for YouTube/article/reddit/wiki/pdf ingest pipeline",
+    "timestamp": "2026-04-24T19:20:00.000Z"
+  },
+  {
+    "taskId": "ci-task-1-package-scaffold",
+    "agent": "senior-dev",
+    "file": "apps/content-ingestor/vitest.config.ts",
+    "action": "created",
+    "reason": "Scaffold content-ingestor CLI app with types for YouTube/article/reddit/wiki/pdf ingest pipeline",
+    "timestamp": "2026-04-24T19:20:00.000Z"
+  },
+  {
+    "taskId": "ci-task-1-package-scaffold",
+    "agent": "senior-dev",
+    "file": "apps/content-ingestor/src/types.ts",
+    "action": "created",
+    "reason": "Scaffold content-ingestor CLI app with types for YouTube/article/reddit/wiki/pdf ingest pipeline",
+    "timestamp": "2026-04-24T19:20:00.000Z"
+  },
+  {
+    "taskId": "ci-task-1-package-scaffold",
+    "agent": "senior-dev",
+    "file": "apps/content-ingestor/src/index.ts",
+    "action": "created",
+    "reason": "Scaffold content-ingestor CLI app with types for YouTube/article/reddit/wiki/pdf ingest pipeline",
+    "timestamp": "2026-04-24T19:20:00.000Z"
+  },
+  {
+    "taskId": "ci-task-2-llm-prompts-ollama",
+    "agent": "senior-dev",
+    "file": "apps/content-ingestor/src/llm/prompts.ts",
+    "action": "created",
+    "reason": "LLM system prompts for relevance classification, transcript cleanup, concept extraction, and timestamp identification",
+    "timestamp": "2026-04-26T00:00:00.000Z"
+  },
+  {
+    "taskId": "ci-task-2-llm-prompts-ollama",
+    "agent": "senior-dev",
+    "file": "apps/content-ingestor/src/llm/ollama.ts",
+    "action": "created",
+    "reason": "Ollama HTTP client with ollamaChat, checkRelevance, cleanTranscript, extractConcepts, identifyTimestamps",
+    "timestamp": "2026-04-26T00:00:00.000Z"
+  },
+  {
+    "taskId": "ci-task-3-youtube-crawler-transcript",
+    "agent": "senior-dev",
+    "file": "apps/content-ingestor/src/crawlers/youtube.ts",
+    "action": "created",
+    "reason": "YouTube channel crawler using yt-dlp --flat-playlist to list videos",
+    "timestamp": "2026-04-24T21:00:00.000Z"
+  },
+  {
+    "taskId": "ci-task-3-youtube-crawler-transcript",
+    "agent": "senior-dev",
+    "file": "apps/content-ingestor/src/transcript/fetch.ts",
+    "action": "created",
+    "reason": "Fetch and parse auto-generated YouTube subtitles from json3 format into TranscriptSegment[]",
+    "timestamp": "2026-04-24T21:00:00.000Z"
+  },
+  {
+    "taskId": "ci-task-3-youtube-crawler-transcript",
+    "agent": "senior-dev",
+    "file": "apps/content-ingestor/src/transcript/clean.ts",
+    "action": "created",
+    "reason": "Join transcript segments and send to Ollama for 40K terminology cleanup",
+    "timestamp": "2026-04-24T21:00:00.000Z"
+  },
+  {
+    "taskId": "ci-task-4-screenshot-capture",
+    "agent": "senior-dev",
+    "file": "apps/content-ingestor/src/screenshots/capture.ts",
+    "action": "created",
+    "reason": "Capture video frames at specified timestamps using yt-dlp with thumbnail fallback",
+    "timestamp": "2026-04-24T21:00:00.000Z"
   }
 ]
