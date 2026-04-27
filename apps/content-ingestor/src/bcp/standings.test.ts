@@ -32,7 +32,15 @@ describe('parseStandingsFromRows', () => {
 
   it('parses W/L/D separated columns (alternate format)', () => {
     const rows = [
-      { rank: '1', name: 'Dave Black', faction: 'T\'au Empire', wins: '6', losses: '1', draws: '0', points: '21' },
+      {
+        rank: '1',
+        name: 'Dave Black',
+        faction: "T'au Empire",
+        wins: '6',
+        losses: '1',
+        draws: '0',
+        points: '21',
+      },
     ]
 
     const result = parseStandingsFromRows(rows)
@@ -53,9 +61,7 @@ describe('parseStandingsFromRows', () => {
   })
 
   it('handles missing or blank fields gracefully with fallback defaults', () => {
-    const rows = [
-      { rank: '5', name: 'Eve Green', faction: '', record: '', points: '' },
-    ]
+    const rows = [{ rank: '5', name: 'Eve Green', faction: '', record: '', points: '' }]
 
     const result = parseStandingsFromRows(rows)
 
@@ -82,9 +88,7 @@ describe('parseStandingsFromRows', () => {
   })
 
   it('handles draws-only record strings like "0-0-7"', () => {
-    const rows = [
-      { rank: '1', name: 'Frank', faction: 'Necrons', record: '0-0-7', points: '7' },
-    ]
+    const rows = [{ rank: '1', name: 'Frank', faction: 'Necrons', record: '0-0-7', points: '7' }]
 
     const result = parseStandingsFromRows(rows)
 
@@ -105,8 +109,6 @@ describe('parseStandingsFromRows', () => {
 
     const result = parseStandingsFromRows(rows)
 
-    expect(result[0]?.armyListUrl).toBe(
-      'https://www.bestcoastpairings.com/event/abc123/player/xyz',
-    )
+    expect(result[0]?.armyListUrl).toBe('https://www.bestcoastpairings.com/event/abc123/player/xyz')
   })
 })

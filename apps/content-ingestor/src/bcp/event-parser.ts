@@ -6,7 +6,7 @@ import type { BCPStanding } from './standings'
 export interface TournamentRecord {
   eventName: string
   eventDate: string // ISO date: YYYY-MM-DD
-  format: string    // "GT", "RTT", "Major", "Super Major", "Local"
+  format: string // "GT", "RTT", "Major", "Super Major", "Local"
   players: Array<{
     name: string
     placement: number
@@ -86,7 +86,7 @@ export function toTournamentRecord(
     eventName: event.name,
     eventDate: normalizeDate(event.date),
     format: deriveFormat(event.playerCount),
-    players: standings.map(s => ({
+    players: standings.map((s) => ({
       name: s.playerName,
       placement: s.placement,
       faction: s.faction,

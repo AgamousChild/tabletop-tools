@@ -109,7 +109,9 @@ export async function scrapeStandings(eventUrl: string, page: Page): Promise<BCP
       const tableRows = document.querySelectorAll('table tbody tr')
       if (tableRows.length > 0) return tableRows.length
       // Fall back to card-based entries
-      return document.querySelectorAll('[class*="standing"], [class*="player-row"], [class*="leaderboard"]').length
+      return document.querySelectorAll(
+        '[class*="standing"], [class*="player-row"], [class*="leaderboard"]',
+      ).length
     })
 
     if (count > 0 && count === lastCount) break
@@ -128,20 +130,26 @@ export async function scrapeStandings(eventUrl: string, page: Page): Promise<BCP
     // Strategy 1: table-based layout
     const tableRows = document.querySelectorAll('table tbody tr')
     if (tableRows.length > 0) {
-      return Array.from(tableRows).map(row => {
-        const cells = Array.from(row.querySelectorAll('td')).map(td => td.textContent?.trim() ?? '')
+      return Array.from(tableRows).map((row) => {
+        const cells = Array.from(row.querySelectorAll('td')).map(
+          (td) => td.textContent?.trim() ?? '',
+        )
         // BCP column order tends to be: rank, name, faction, record, points
         // But exact column count varies — be flexible
-        const record = cells.find(c => /^\d+-\d+-\d+$/.test(c)) ?? ''
-        const rankCol = cells.find(c => /^\d+$/.test(c) && parseInt(c) < 1000) ?? ''
-        const pointsCol = cells.findLast(c => /^\d+(\.\d+)?$/.test(c)) ?? ''
+        const record = cells.find((c) => /^\d+-\d+-\d+$/.test(c)) ?? ''
+        const rankCol = cells.find((c) => /^\d+$/.test(c) && parseInt(c) < 1000) ?? ''
+        // findLast is ES2023 — use slice().reverse().find() for broader target compat
+        const pointsCol =
+          [...cells].reverse().find((c: string) => /^\d+(\.\d+)?$/.test(c)) ?? ''
 
         // Player name is the longest non-numeric cell, faction is the second longest
-        const textCols = cells.filter(c => c && !/^\d/.test(c) && !c.match(/^\d+-\d+-\d+$/))
+        const textCols = cells.filter((c) => c && !/^\d/.test(c) && !c.match(/^\d+-\d+-\d+$/))
         const sorted = [...textCols].sort((a, b) => b.length - a.length)
 
         // Link to army list
-        const link = row.querySelector('a[href*="player"], a[href*="list"]') as HTMLAnchorElement | null
+        const link = row.querySelector(
+          'a[href*="player"], a[href*="list"]',
+        ) as HTMLAnchorElement | null
 
         return {
           rank: rankCol,
@@ -155,13 +163,17 @@ export async function scrapeStandings(eventUrl: string, page: Page): Promise<BCP
     }
 
     // Strategy 2: card-style entries
-    const cards = document.querySelectorAll('[class*="standing-row"], [class*="player-card"], [class*="leaderboard-row"]')
+    const cards = document.querySelectorAll(
+      '[class*="standing-row"], [class*="player-card"], [class*="leaderboard-row"]',
+    )
     if (cards.length > 0) {
-      return Array.from(cards).map(card => {
+      return Array.from(cards).map((card) => {
         const text = card.textContent ?? ''
         const rankMatch = text.match(/^#?(\d+)/)
         const recordMatch = text.match(/(\d+)-(\d+)-(\d+)/)
-        const link = card.querySelector('a[href*="player"], a[href*="list"]') as HTMLAnchorElement | null
+        const link = card.querySelector(
+          'a[href*="player"], a[href*="list"]',
+        ) as HTMLAnchorElement | null
 
         // Extract name: typically the first heading or bold element
         const nameEl = card.querySelector('h3, h4, h5, strong, [class*="name"]')
