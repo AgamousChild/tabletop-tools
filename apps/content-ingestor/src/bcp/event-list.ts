@@ -27,29 +27,55 @@ export async function scrapeEventList(
 
     let hasMore = true
     while (hasMore) {
-      // Extract events from current page
+      // Extract events from current page — read individual <p> elements, not concatenated text
       const events = await page.evaluate(() => {
         const cards = document.querySelectorAll('a[href*="/event/"]')
         const results: Array<{
           url: string
           name: string
-          text: string
+          date: string
+          playerCount: number
+          rounds: number
+          location: string
         }> = []
 
         cards.forEach(card => {
           const url = (card as HTMLAnchorElement).href
           const heading = card.querySelector('h3, h6')
           const name = heading?.textContent?.trim() || ''
-          if (name && url.includes('/event/') && !url.includes('register')) {
-            results.push({
-              url,
-              name,
-              text: card.textContent || '',
-            })
+          if (!name || !url.includes('/event/') || url.includes('register') || url.includes('Learn More')) return
+
+          // Extract from individual <p> elements to avoid text concatenation issues
+          const paragraphs = Array.from(card.querySelectorAll('p')).map(p => p.textContent?.trim() || '')
+
+          let date = ''
+          let playerCount = 0
+          let rounds = 0
+          let location = ''
+
+          for (const p of paragraphs) {
+            // Date: "May 4" or "Jun 17" etc
+            if (/^(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)\s+\d+/.test(p)) {
+              date = p
+            }
+            // Rounds: "6 Rounds" or "8 Rounds"
+            if (/^\d+\s+Rounds?$/i.test(p)) {
+              rounds = parseInt(p)
+            }
+            // Players: "131 / 200" or "245 / 360" or just "131"
+            if (/^\d+\s*\/\s*\d+$/.test(p)) {
+              playerCount = parseInt(p)
+            }
+            // Location: contains comma (city, state) or "United States" etc
+            if (p.includes(',') && !p.includes('AM') && !p.includes('PM') && p.length > 5) {
+              location = p
+            }
           }
+
+          results.push({ url, name, date, playerCount, rounds, location })
         })
 
-        // Dedupe
+        // Dedupe by URL
         const seen = new Set<string>()
         return results.filter(e => {
           if (seen.has(e.url)) return false
@@ -59,25 +85,17 @@ export async function scrapeEventList(
       })
 
       for (const raw of events) {
-        // Extract event ID from URL: /event/{id} or /event/{id}?...
         const idMatch = raw.url.match(/\/event\/([^/?]+)/)
         if (!idMatch) continue
 
-        // Parse metadata from card text
-        const roundsMatch = raw.text.match(/(\d+)\s*Rounds/)
-        const playerMatch = raw.text.match(/(\d+)\s*\/\s*(\d+)/) ?? raw.text.match(/—\s*(\d+)/)
-        const dateMatch = raw.text.match(
-          /(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)\s+\d+/,
-        )
-
         allEvents.push({
           id: idMatch[1]!,
-          url: raw.url.split('?')[0]!, // clean URL
+          url: raw.url.split('?')[0]!,
           name: raw.name,
-          date: dateMatch ? dateMatch[0] : '',
-          playerCount: playerMatch ? parseInt(playerMatch[1]!) : 0,
-          rounds: roundsMatch ? parseInt(roundsMatch[1]!) : 0,
-          location: '', // hard to parse reliably from card text
+          date: raw.date,
+          playerCount: raw.playerCount,
+          rounds: raw.rounds,
+          location: raw.location,
         })
       }
 
