@@ -751,5 +751,37 @@
     "action": "created",
     "reason": "CLI entry point with commander: channel, site, url, review, commit, list subcommands",
     "timestamp": "2026-04-24T00:33:00.000Z"
+  },
+  {
+    "taskId": "bcp-task-1-event-list",
+    "agent": "senior-dev",
+    "file": "apps/content-ingestor/src/bcp/event-list.ts",
+    "action": "created",
+    "reason": "BCP event list scraper with pagination, ID extraction, and JSON save/load utilities",
+    "timestamp": "2026-04-24T23:07:00.000Z"
+  },
+  {
+    "taskId": "bcp-task-2-standings-scraper",
+    "agent": "senior-dev",
+    "file": "apps/content-ingestor/src/bcp/standings.ts",
+    "action": "created",
+    "reason": "BCP standings scraper: pure parseStandingsFromRows + Playwright scrapeStandings with multi-strategy DOM extraction and infinite-scroll handling",
+    "timestamp": "2026-04-24T23:15:00.000Z"
+  },
+  {
+    "taskId": "bcp-task-3-army-list-scraper",
+    "agent": "senior-dev",
+    "file": "apps/content-ingestor/src/bcp/army-list.ts",
+    "action": "created",
+    "reason": "BCP army list scraper: pure parseArmyListFromText + Playwright scrapeArmyList with three-strategy DOM extraction",
+    "timestamp": "2026-04-24T23:15:00.000Z"
+  },
+  {
+    "taskId": "bcp-task-4-event-parser",
+    "agent": "senior-dev",
+    "file": "apps/content-ingestor/src/bcp/event-parser.ts",
+    "action": "created",
+    "reason": "BCP event parser: toTournamentRecord, deriveFormat, normalizeDate (ISO passthrough + abbreviated month parsing), deriveMetaWindow (UTC-safe quarter calculation)",
+    "timestamp": "2026-04-24T23:15:00.000Z"
   }
 ]
