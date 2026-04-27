@@ -12,7 +12,7 @@ export interface BCPEvent {
 
 // The search URL with filters for 40K majors (100+ players, 5+ rounds, 2 years)
 export const BCP_SEARCH_URL =
-  'https://www.bestcoastpairings.com/play/events?search=true&startDate=2024-04-27&endDate=2026-04-27&gameSystemId=WGMSzfKFYA&numberOfRounds=5&numberOfPlayers=100&sortAsc=true&eventStatus=all&sortKey=eventDate'
+  'https://www.bestcoastpairings.com/play/events?search=true&startDate=2024-04-27&endDate=2026-04-27&gameSystemId=WGMSzfKFYA&numberOfRounds=5&numberOfPlayers=100&sortAsc=false&eventStatus=all&sortKey=eventDate'
 
 export async function scrapeEventList(
   searchUrl: string,
