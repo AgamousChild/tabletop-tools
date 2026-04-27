@@ -783,5 +783,21 @@
     "action": "created",
     "reason": "BCP event parser: toTournamentRecord, deriveFormat, normalizeDate (ISO passthrough + abbreviated month parsing), deriveMetaWindow (UTC-safe quarter calculation)",
     "timestamp": "2026-04-24T23:15:00.000Z"
+  },
+  {
+    "taskId": "bcp-task-5-import-module",
+    "agent": "senior-dev",
+    "file": "apps/content-ingestor/src/bcp/import.ts",
+    "action": "created",
+    "reason": "prepareForImport (file-based export of valid tournament records) + generateSummaryCSV for review",
+    "timestamp": "2026-04-24T23:30:00.000Z"
+  },
+  {
+    "taskId": "bcp-task-6-cli-commands",
+    "agent": "senior-dev",
+    "file": "apps/content-ingestor/src/cli.ts",
+    "action": "modified",
+    "reason": "Add bcp-scan, bcp-scrape, bcp-import Commander commands with BCP module imports",
+    "timestamp": "2026-04-24T23:30:00.000Z"
   }
 ]

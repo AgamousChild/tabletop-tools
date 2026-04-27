@@ -22,6 +22,11 @@ import path from 'node:path'
 import { validateDraft } from './extract/validate'
 import { loadTermDictionary, buildPhoneticIndex, scanDraftsForMismatches, applyPhoneticFixes, findPhoneticMatches } from './extract/phonetic-fix'
 import { autoReviewDrafts, REVIEWER_CONFIG } from './review/auto-review'
+import { scrapeEventList, saveEventList, loadEventList, BCP_SEARCH_URL } from './bcp/event-list'
+import { scrapeStandings } from './bcp/standings'
+import { scrapeArmyList } from './bcp/army-list'
+import { toTournamentRecord } from './bcp/event-parser'
+import { prepareForImport, generateSummaryCSV } from './bcp/import'
 
 const config = DEFAULT_CONFIG
 
@@ -470,6 +475,105 @@ program
     } else {
       console.log(`\n${totalFixed} fixes applied`)
     }
+  })
+
+// ── BCP tournament scraping ───────────────────────────────────────────────
+
+program
+  .command('bcp-scan')
+  .description('Scan BCP for major 40K events (100+ players, 5+ rounds, last 2 years)')
+  .action(async () => {
+    const { chromium } = await import('playwright')
+    console.log('Launching browser — log into BCP if needed...')
+    const browser = await chromium.launch({ headless: false })
+
+    try {
+      console.log('Scanning BCP for major events...')
+      const events = await scrapeEventList(BCP_SEARCH_URL, browser)
+
+      const outPath = path.join(config.dataDir, 'bcp', 'events.json')
+      await saveEventList(events, outPath)
+
+      console.log(`\nFound ${events.length} events. Saved to ${outPath}`)
+      events.forEach(e => console.log(`  ${e.name} — ${e.playerCount} players, ${e.rounds} rounds (${e.date})`))
+    } finally {
+      await browser.close()
+    }
+  })
+
+program
+  .command('bcp-scrape [eventId]')
+  .description('Scrape standings from BCP events')
+  .option('--lists', 'Also scrape army lists for top 10 players')
+  .action(async (eventId: string | undefined, opts: { lists?: boolean }) => {
+    const eventsPath = path.join(config.dataDir, 'bcp', 'events.json')
+    let events = await loadEventList(eventsPath)
+
+    if (eventId) {
+      events = events.filter(e => e.id === eventId)
+      if (events.length === 0) {
+        console.error(`Event ${eventId} not found in events.json`)
+        return
+      }
+    }
+
+    const { chromium } = await import('playwright')
+    console.log('Launching browser...')
+    const browser = await chromium.launch({ headless: false })
+    const page = await browser.newPage()
+
+    try {
+      const bcpDir = path.join(config.dataDir, 'bcp')
+
+      for (let i = 0; i < events.length; i++) {
+        const event = events[i]!
+        process.stdout.write(`  [${i + 1}/${events.length}] ${event.name.substring(0, 50)}...`)
+
+        try {
+          const standings = await scrapeStandings(event.url, page)
+
+          let armyLists: Map<string, string> | undefined
+          if (opts.lists && standings.length > 0) {
+            armyLists = new Map()
+            // Only scrape top 10 army lists
+            for (const s of standings.slice(0, 10)) {
+              if (s.armyListUrl) {
+                const list = await scrapeArmyList(s.armyListUrl, page)
+                if (list) armyLists.set(s.playerName, list)
+              }
+            }
+          }
+
+          const record = toTournamentRecord(event, standings, armyLists)
+
+          const outPath = path.join(bcpDir, `${event.id}.json`)
+          mkdirSync(bcpDir, { recursive: true })
+          writeFileSync(outPath, JSON.stringify(record, null, 2))
+
+          console.log(` → ${standings.length} players`)
+
+          // Rate limiting
+          await page.waitForTimeout(1500)
+        } catch (err) {
+          console.log(` ✗ Error: ${err instanceof Error ? err.message : err}`)
+        }
+      }
+    } finally {
+      await page.close()
+      await browser.close()
+    }
+  })
+
+program
+  .command('bcp-import')
+  .description('Prepare scraped BCP data for new-meta import')
+  .action(async () => {
+    const bcpDir = path.join(config.dataDir, 'bcp')
+    const importDir = path.join(config.dataDir, 'bcp-import')
+
+    const result = await prepareForImport(bcpDir, importDir)
+    console.log(`Prepared ${result.imported} events for import, ${result.skipped} skipped, ${result.errors} errors`)
+    console.log(`Import-ready files in: ${importDir}`)
   })
 
 program.parse()
