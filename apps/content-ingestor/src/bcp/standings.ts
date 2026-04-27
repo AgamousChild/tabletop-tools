@@ -177,13 +177,20 @@ export async function scrapeStandings(eventUrl: string, page: Page): Promise<BCP
   }
 
   // Scroll until content stabilises (handles infinite scroll / lazy loading)
+  // BCP lazy-loads players — need many scroll cycles for 200+ player events
   let lastText = ''
-  for (let i = 0; i < 30; i++) {
+  let stableCount = 0
+  for (let i = 0; i < 100; i++) {
     await page.evaluate(() => window.scrollTo(0, document.body.scrollHeight))
-    await page.waitForTimeout(1000)
+    await page.waitForTimeout(800)
 
     const currentText = await page.evaluate(() => document.body.innerText)
-    if (currentText === lastText) break
+    if (currentText === lastText) {
+      stableCount++
+      if (stableCount >= 3) break  // stable for 3 cycles = done
+    } else {
+      stableCount = 0
+    }
     lastText = currentText
   }
 
