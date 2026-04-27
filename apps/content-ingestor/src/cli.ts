@@ -17,10 +17,10 @@ import {
 } from './drafts/manifest'
 import { reviewDrafts, findDraftDirs } from './review/interactive'
 import { commitApprovedNodes } from './commit/commit'
-import { mkdirSync, readdirSync, readFileSync } from 'node:fs'
+import { mkdirSync, readdirSync, readFileSync, writeFileSync } from 'node:fs'
 import path from 'node:path'
-import { processContent } from './extract/extract'
 import { validateDraft } from './extract/validate'
+import { loadTermDictionary, buildPhoneticIndex, scanDraftsForMismatches, applyPhoneticFixes, findPhoneticMatches } from './extract/phonetic-fix'
 
 const config = DEFAULT_CONFIG
 
@@ -397,6 +397,67 @@ program
     }
     if (total === 0) console.log('No drafts found.')
     else console.log(`\n${total} total drafts`)
+  })
+
+// ── fix (phonetic correction scan) ────────────────────────────────────────
+
+program
+  .command('fix [channelSlug]')
+  .description('Scan drafts for phonetically mismatched 40K terms and fix them')
+  .option('--dry-run', 'Show matches without applying fixes')
+  .option('--min-confidence <n>', 'Minimum confidence threshold (0-1)', '0.7')
+  .action(async (channelSlug: string | undefined, opts: { dryRun?: boolean; minConfidence?: string }) => {
+    const draftDir = channelSlug
+      ? path.join(config.dataDir, channelSlug)
+      : config.dataDir
+
+    const minConf = parseFloat(opts.minConfidence ?? '0.7')
+
+    console.log(`Loading 40K term dictionary from brain...`)
+    const terms = loadTermDictionary(config.brainNodesDir)
+    console.log(`${terms.length} known terms loaded`)
+
+    const index = buildPhoneticIndex(terms)
+    console.log(`Phonetic index built\n`)
+
+    // Find all draft directories
+    const dirs = channelSlug ? [draftDir] : await findDraftDirs(draftDir)
+    let totalMatches = 0
+    let totalFixed = 0
+
+    for (const dir of dirs) {
+      const files = readdirSync(dir).filter(f => f.endsWith('.md'))
+      if (files.length === 0) continue
+
+      console.log(`Scanning ${path.basename(dir)}/  (${files.length} files)`)
+
+      for (const file of files) {
+        const filePath = path.join(dir, file)
+        const content = readFileSync(filePath, 'utf-8')
+        const matches = findPhoneticMatches(content, terms, index)
+
+        const highConf = matches.filter(m => m.confidence >= minConf)
+        if (highConf.length === 0) continue
+
+        totalMatches += highConf.length
+
+        for (const m of highConf) {
+          console.log(`  ${file}: "${m.original}" → "${m.replacement}" (${(m.confidence * 100).toFixed(0)}%)`)
+        }
+
+        if (!opts.dryRun) {
+          const fixed = applyPhoneticFixes(content, matches, minConf)
+          writeFileSync(filePath, fixed)
+          totalFixed += highConf.length
+        }
+      }
+    }
+
+    if (opts.dryRun) {
+      console.log(`\n${totalMatches} potential fixes found (dry run — nothing changed)`)
+    } else {
+      console.log(`\n${totalFixed} fixes applied`)
+    }
   })
 
 program.parse()

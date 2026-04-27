@@ -39,9 +39,9 @@ export async function crawlSite(
     // Same origin only
     if (resolved.origin !== base.origin) return
 
-    // Must have a path with at least 2 segments (e.g. /articles/something)
+    // Must have a meaningful path (not just the root)
     const segments = resolved.pathname.split('/').filter(Boolean)
-    if (segments.length < 2) return
+    if (segments.length < 1) return
 
     // Dedup on canonical URL (origin + pathname), ignoring query params and
     // fragments that tracking systems append to the same article link.

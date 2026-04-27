@@ -67,6 +67,28 @@ Common rule terms:
 - RTT = Ranked Team Tournament (or Rogue Trader Tournament)
 - ETC = European Team Championship
 
+Channel/community terms:
+- "Happy cring" / "happy crumping" = "Happy Krumpin" (Ork slang for having a good fight/melee engagement)
+
+Commonly misheard unit names:
+- "Satan" / "Satin" = C'tan (Necron star gods, NOT the devil)
+- "pylon" / "pylons" = "Pile In" / "Pile Ins" (melee consolidation move, NOT a building)
+- "L Morte" / "Lamors" = Lemartes (Blood Angels character)
+- "hyper cryp" / "Hyper Cryp" / "Hyper-Cryx" = Hypercrypt Legion (Necrons detachment)
+- "Ball Predator" / "ball pred" = Baal Predator (Blood Angels tank, anti-infantry)
+- "Neurot Tyrant" = Neurotyrant (Tyranids unit)
+- "GRS and gats" = "Grotz and Gitz" (Ork greeting, means guys/lads)
+- "Morgan Ball" / "Morgan Vahl" = Morvenn Vahl (Adepta Sororitas character)
+- "Pat Bounds" / "Packbound Zelts" / "Packbound Zealots" = Pactbound Zealots (CSM detachment)
+
+Commonly misheard detachment/unit names:
+- "Hammer Veri" / "Hammer Verite" = Hammer of Avernii (Iron Hands detachment)
+- "Glad Task Force" = Gladius Task Force
+- "Angelic Inheritor" = Angelic Inheritors (Blood Angels detachment)
+- "Champions of Fenris" (correct)
+- "Wrathful Procession" (correct - Black Templars)
+- "Berzerker Warband" (correct - World Eaters)
+
 Common game concepts:
 - Pregame = actions before first turn (Scouts, Infiltrators, deploy)
 - Scout move = pregame movement special rule
@@ -106,7 +128,9 @@ Answer NO if the content is primarily about:
 - Painting, modelling, or hobby projects
 - Casual or narrative play
 - Unboxing, reviews, or product coverage with no tactical depth
-- General news with no tactical application`.trim()
+- General news with no tactical application
+- 9th edition or earlier rules/tactics (ONLY 10th and 11th edition content is relevant)
+- Rules or strategies that reference detachments, stratagems, or abilities that no longer exist in 10th/11th edition`.trim()
 
 // ── Cleanup prompt ────────────────────────────────────────────────────────
 
