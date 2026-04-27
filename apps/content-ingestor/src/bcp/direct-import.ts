@@ -42,15 +42,20 @@ async function main() {
   for (const file of files) {
     const record = JSON.parse(readFileSync(path.join(importDir, file), 'utf-8')) as TournamentRecord
 
-    // Check if already imported
+    // Check if already imported — if so, UPDATE with new data (W/L/D from pairings)
     const existing = await client.execute({
       sql: 'SELECT id FROM imported_tournament_results WHERE event_name = ?',
       args: [record.eventName],
     })
 
     if (existing.rows.length > 0) {
-      console.log(`  ⊘ ${record.eventName} — already imported`)
-      skipped++
+      const existingId = existing.rows[0]!.id as string
+      await client.execute({
+        sql: 'UPDATE imported_tournament_results SET parsed_data = ?, raw_data = ?, imported_at = ? WHERE id = ?',
+        args: [JSON.stringify(record), JSON.stringify(record), Date.now(), existingId],
+      })
+      console.log(`  ↻ ${record.eventName} — updated with W/L/D data (${record.players.length} players)`)
+      imported++
       continue
     }
 

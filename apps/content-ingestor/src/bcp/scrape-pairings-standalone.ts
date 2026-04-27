@@ -218,25 +218,30 @@ async function main() {
     viewport: { width: 1280, height: 800 },
   })
 
-  // Check if logged in
+  // Check if logged in by looking for user-specific content
   const checkPage = await context.newPage()
   await checkPage.goto('https://www.bestcoastpairings.com/', { waitUntil: 'domcontentloaded' })
-  await checkPage.waitForTimeout(2000)
-  const isLoggedIn = await checkPage.evaluate(() => document.body.innerText.includes('Subscribe'))
+  await checkPage.waitForTimeout(3000)
+  const userName = await checkPage.evaluate(() => {
+    // Look for a user button/avatar that indicates logged in
+    const btn = document.querySelector('button[class*="user"], button img[alt]')
+    return btn ? (btn as HTMLElement).getAttribute('alt') || 'logged in' : null
+  })
   await checkPage.close()
 
-  if (!isLoggedIn) {
-    console.log('⚠ Not logged into BCP. Please log in through the browser window, then press Enter here.')
+  if (!userName) {
+    console.log('⚠ Not logged into BCP. Opening login page — please log in manually.')
+    console.log('  After logging in, re-run this script. Your session will be saved.')
     const loginPage = await context.newPage()
     await loginPage.goto('https://www.bestcoastpairings.com/login', { waitUntil: 'domcontentloaded' })
-
-    // Wait for user to press Enter
-    await new Promise<void>(resolve => {
-      process.stdin.once('data', () => resolve())
-    })
-    await loginPage.close()
-    console.log('Continuing...\n')
+    // Keep browser open for 60 seconds for login
+    await new Promise(r => setTimeout(r, 60000))
+    await context.close()
+    console.log('Session saved. Run again to start scraping.')
+    process.exit(0)
   }
+
+  console.log(`Logged in as: ${userName}\nStarting scrape...\n`)
 
   let totalPairings = 0
   let totalPlayers = 0
