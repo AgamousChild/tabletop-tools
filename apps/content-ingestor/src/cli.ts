@@ -21,6 +21,7 @@ import { mkdirSync, readdirSync, readFileSync, writeFileSync } from 'node:fs'
 import path from 'node:path'
 import { validateDraft } from './extract/validate'
 import { loadTermDictionary, buildPhoneticIndex, scanDraftsForMismatches, applyPhoneticFixes, findPhoneticMatches } from './extract/phonetic-fix'
+import { autoReviewDrafts, REVIEWER_CONFIG } from './review/auto-review'
 
 const config = DEFAULT_CONFIG
 
@@ -397,6 +398,17 @@ program
     }
     if (total === 0) console.log('No drafts found.')
     else console.log(`\n${total} total drafts`)
+  })
+
+// ── auto-review (AI-powered review using different model) ─────────────────
+
+program
+  .command('auto-review <channelSlug>')
+  .description('Auto-review drafts using Gemma 2 (different model from extractor)')
+  .action(async (channelSlug: string) => {
+    const draftDir = path.join(config.dataDir, channelSlug)
+    const result = await autoReviewDrafts(draftDir, REVIEWER_CONFIG)
+    console.log(`\nFinal: ${result.approved} approved, ${result.rejected} rejected, ${result.needsFix} need fixes`)
   })
 
 // ── fix (phonetic correction scan) ────────────────────────────────────────
