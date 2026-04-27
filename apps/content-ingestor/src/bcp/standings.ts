@@ -90,117 +90,104 @@ export function parseStandingsFromRows(rows: RawStandingRow[]): BCPStanding[] {
  * Handles BCP infinite-scroll by repeatedly scrolling to the bottom and
  * waiting for new content until the count stabilises.
  */
+/**
+ * Parse standings from BCP's text format.
+ * BCP renders player entries as text blocks with this pattern:
+ *   placement (2-digit number like "01", "02")
+ *   (optional "MANUAL" badge)
+ *   player name - team name
+ *   faction name
+ *   round scores (XX / XX / XX / ...)
+ */
+export function parseStandingsFromText(text: string): BCPStanding[] {
+  const lines = text.split('\n').map(l => l.trim())
+  const results: BCPStanding[] = []
+
+  for (let i = 0; i < lines.length; i++) {
+    // Look for placement numbers: "01", "02", ... "245"
+    if (!/^\d{1,3}$/.test(lines[i]!)) continue
+    const placement = parseInt(lines[i]!, 10)
+    if (placement < 1 || placement > 999) continue
+
+    // Scan forward for player name and faction (skip empty lines and "MANUAL")
+    let playerName = ''
+    let faction = ''
+    let scores = ''
+
+    for (let j = i + 1; j < Math.min(i + 8, lines.length); j++) {
+      const line = lines[j]!
+      if (!line || line === 'MANUAL') continue
+
+      // Round scores pattern: "XX / XX / XX / ..."
+      if (/^\d+\s*\/\s*\d+/.test(line)) {
+        scores = line
+        break
+      }
+
+      // First non-empty non-MANUAL line = player name
+      if (!playerName) {
+        playerName = line
+        continue
+      }
+
+      // Second non-empty line = faction
+      if (!faction) {
+        faction = line
+        continue
+      }
+    }
+
+    if (!playerName) continue
+
+    // Calculate wins/losses/draws from round scores
+    // Scores > 50 are typically wins, < 50 losses, exactly 50 is a draw (simplified)
+    const scoreNums = scores
+      ? scores.split('/').map(s => parseInt(s.trim(), 10)).filter(n => !isNaN(n))
+      : []
+    const totalPoints = scoreNums.reduce((sum, s) => sum + s, 0)
+
+    results.push({
+      placement,
+      playerName,
+      faction,
+      wins: 0,    // BCP placings tab doesn't show W/L/D directly
+      losses: 0,
+      draws: 0,
+      points: totalPoints,
+    })
+  }
+
+  return results
+}
+
 export async function scrapeStandings(eventUrl: string, page: Page): Promise<BCPStanding[]> {
-  const standingsUrl = eventUrl.includes('?')
+  // BCP uses "Placings" tab, not "standings"
+  const placingsUrl = eventUrl.includes('?')
     ? `${eventUrl}&active_tab=standings`
     : `${eventUrl}?active_tab=standings`
 
-  await page.goto(standingsUrl, { waitUntil: 'networkidle', timeout: 30_000 })
-  await page.waitForTimeout(2000)
+  await page.goto(placingsUrl, { waitUntil: 'domcontentloaded', timeout: 60_000 })
+  await page.waitForTimeout(3000)
 
-  // Scroll until content stabilises (handles infinite scroll)
-  let lastCount = 0
-  for (let i = 0; i < 20; i++) {
-    await page.evaluate(() => window.scrollTo(0, document.body.scrollHeight))
-    await page.waitForTimeout(1500)
-
-    const count = await page.evaluate(() => {
-      // Try table rows first
-      const tableRows = document.querySelectorAll('table tbody tr')
-      if (tableRows.length > 0) return tableRows.length
-      // Fall back to card-based entries
-      return document.querySelectorAll(
-        '[class*="standing"], [class*="player-row"], [class*="leaderboard"]',
-      ).length
-    })
-
-    if (count > 0 && count === lastCount) break
-    lastCount = count
-  }
-
-  // Check for a "load more" button after scrolling
-  const loadMore = await page.$('button:has-text("Load More"), button:has-text("load more")')
-  if (loadMore) {
-    await loadMore.click()
+  // Click "Placings" tab if visible
+  const placingsTab = await page.$('button:has-text("Placings"), a:has-text("Placings")')
+  if (placingsTab) {
+    await placingsTab.click()
     await page.waitForTimeout(2000)
   }
 
-  // Extract raw row data using multiple fallback strategies
-  const rawRows = await page.evaluate((): RawStandingRow[] => {
-    // Strategy 1: table-based layout
-    const tableRows = document.querySelectorAll('table tbody tr')
-    if (tableRows.length > 0) {
-      return Array.from(tableRows).map((row) => {
-        const cells = Array.from(row.querySelectorAll('td')).map(
-          (td) => td.textContent?.trim() ?? '',
-        )
-        // BCP column order tends to be: rank, name, faction, record, points
-        // But exact column count varies — be flexible
-        const record = cells.find((c) => /^\d+-\d+-\d+$/.test(c)) ?? ''
-        const rankCol = cells.find((c) => /^\d+$/.test(c) && parseInt(c) < 1000) ?? ''
-        // findLast is ES2023 — use slice().reverse().find() for broader target compat
-        const pointsCol =
-          [...cells].reverse().find((c: string) => /^\d+(\.\d+)?$/.test(c)) ?? ''
+  // Scroll until content stabilises (handles infinite scroll / lazy loading)
+  let lastText = ''
+  for (let i = 0; i < 30; i++) {
+    await page.evaluate(() => window.scrollTo(0, document.body.scrollHeight))
+    await page.waitForTimeout(1000)
 
-        // Player name is the longest non-numeric cell, faction is the second longest
-        const textCols = cells.filter((c) => c && !/^\d/.test(c) && !c.match(/^\d+-\d+-\d+$/))
-        const sorted = [...textCols].sort((a, b) => b.length - a.length)
+    const currentText = await page.evaluate(() => document.body.innerText)
+    if (currentText === lastText) break
+    lastText = currentText
+  }
 
-        // Link to army list
-        const link = row.querySelector(
-          'a[href*="player"], a[href*="list"]',
-        ) as HTMLAnchorElement | null
-
-        return {
-          rank: rankCol,
-          name: sorted[0] ?? '',
-          faction: sorted[1] ?? '',
-          record,
-          points: pointsCol,
-          armyListUrl: link?.href,
-        }
-      })
-    }
-
-    // Strategy 2: card-style entries
-    const cards = document.querySelectorAll(
-      '[class*="standing-row"], [class*="player-card"], [class*="leaderboard-row"]',
-    )
-    if (cards.length > 0) {
-      return Array.from(cards).map((card) => {
-        const text = card.textContent ?? ''
-        const rankMatch = text.match(/^#?(\d+)/)
-        const recordMatch = text.match(/(\d+)-(\d+)-(\d+)/)
-        const link = card.querySelector(
-          'a[href*="player"], a[href*="list"]',
-        ) as HTMLAnchorElement | null
-
-        // Extract name: typically the first heading or bold element
-        const nameEl = card.querySelector('h3, h4, h5, strong, [class*="name"]')
-        const name = nameEl?.textContent?.trim() ?? ''
-
-        return {
-          rank: rankMatch?.[1] ?? '',
-          name,
-          faction: '',
-          record: recordMatch ? `${recordMatch[1]}-${recordMatch[2]}-${recordMatch[3]}` : '',
-          points: '',
-          armyListUrl: link?.href,
-        }
-      })
-    }
-
-    // Strategy 3: raw text extraction from player links
-    const playerLinks = document.querySelectorAll('a[href*="player"]')
-    return Array.from(playerLinks).map((link, idx) => ({
-      rank: String(idx + 1),
-      name: link.textContent?.trim() ?? '',
-      faction: '',
-      record: '',
-      points: '',
-      armyListUrl: (link as HTMLAnchorElement).href,
-    }))
-  })
-
-  return parseStandingsFromRows(rawRows)
+  // Extract full page text and parse
+  const fullText = await page.evaluate(() => document.body.innerText)
+  return parseStandingsFromText(fullText)
 }
