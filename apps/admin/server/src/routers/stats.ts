@@ -18,6 +18,8 @@ import {
   playerElo,
   importedTournamentResults,
   playerGlicko,
+  bcpScrapeJobs,
+  metaEvents,
 } from '@tabletop-tools/db'
 
 async function count(db: any, table: any): Promise<number> {
@@ -320,6 +322,93 @@ export const statsRouter = router({
       await ctx.db.delete(authUsers).where(eq(authUsers.id, input.userId))
       return { deleted: true }
     }),
+
+  pipeline: adminProcedure.query(async ({ ctx }) => {
+    // Meta 3NF counts
+    const events = await ctx.db.all(sql`SELECT count(*) as n FROM meta_events`).catch(() => [{ n: 0 }])
+    const players = await ctx.db.all(sql`SELECT count(*) as n FROM meta_event_players`).catch(() => [{ n: 0 }])
+    const pairings = await ctx.db.all(sql`SELECT count(*) as n FROM meta_pairings`).catch(() => [{ n: 0 }])
+    const withLists = await ctx.db.all(sql`SELECT count(*) as n FROM meta_event_players WHERE list_text IS NOT NULL`).catch(() => [{ n: 0 }])
+    const withDetachment = await ctx.db.all(sql`SELECT count(*) as n FROM meta_event_players WHERE detachment_id IS NOT NULL`).catch(() => [{ n: 0 }])
+
+    // Cube counts
+    const facts = await ctx.db.all(sql`SELECT count(*) as n FROM fact_game_results`).catch(() => [{ n: 0 }])
+    const frames = await ctx.db.all(sql`SELECT count(*) as n FROM meta_for`).catch(() => [{ n: 0 }])
+    const topRows = await ctx.db.all(sql`SELECT count(*) as n FROM meta_top`).catch(() => [{ n: 0 }])
+
+    // Cube status
+    const cubeStatus = await ctx.db.all(sql`SELECT * FROM meta_cube_status WHERE id = 1`).catch(() => [])
+
+    // Dimension counts
+    const factions = await ctx.db.all(sql`SELECT count(*) as n FROM dim_faction`).catch(() => [{ n: 0 }])
+    const detachments = await ctx.db.all(sql`SELECT count(*) as n FROM dim_detachment`).catch(() => [{ n: 0 }])
+
+    // Brain community nodes (from meta_top community counts — approximate)
+    // We can't read R2 from here, so just report cube data
+
+    // Date range
+    const dateRange = await ctx.db.all(sql`SELECT min(date) as earliest, max(date) as latest FROM meta_events`).catch(() => [{ earliest: null, latest: null }])
+
+    return {
+      meta: {
+        events: (events as any)[0]?.n ?? 0,
+        players: (players as any)[0]?.n ?? 0,
+        pairings: (pairings as any)[0]?.n ?? 0,
+        withLists: (withLists as any)[0]?.n ?? 0,
+        withDetachment: (withDetachment as any)[0]?.n ?? 0,
+        earliestEvent: (dateRange as any)[0]?.earliest ?? null,
+        latestEvent: (dateRange as any)[0]?.latest ?? null,
+      },
+      cube: {
+        factRows: (facts as any)[0]?.n ?? 0,
+        frames: (frames as any)[0]?.n ?? 0,
+        metaTopRows: (topRows as any)[0]?.n ?? 0,
+        status: (cubeStatus as any)[0]?.status ?? 'unknown',
+        lastCompleted: (cubeStatus as any)[0]?.last_completed_at ?? null,
+      },
+      dimensions: {
+        factions: (factions as any)[0]?.n ?? 0,
+        detachments: (detachments as any)[0]?.n ?? 0,
+      },
+    }
+  }),
+
+  bcpScraperStatus: adminProcedure.query(async ({ ctx }) => {
+    const [latestJob] = await ctx.db
+      .select()
+      .from(bcpScrapeJobs)
+      .orderBy(desc(bcpScrapeJobs.startedAt))
+      .limit(1)
+
+    const [totalEvents] = await ctx.db
+      .select({ count: sql<number>`count(*)` })
+      .from(metaEvents)
+
+    return {
+      latestJob: latestJob ?? null,
+      totalEvents: totalEvents.count,
+    }
+  }),
+
+  bcpScraperHistory: adminProcedure
+    .input(z.object({ limit: z.number().optional().default(20) }))
+    .query(async ({ ctx, input }) => {
+      const jobs = await ctx.db
+        .select()
+        .from(bcpScrapeJobs)
+        .orderBy(desc(bcpScrapeJobs.startedAt))
+        .limit(input.limit)
+
+      return jobs
+    }),
+
+  triggerBcpScrape: adminProcedure.mutation(async () => {
+    return { status: 'not-configured', message: 'Service binding not configured yet' }
+  }),
+
+  triggerMetaPipeline: adminProcedure.mutation(async () => {
+    return { status: 'not-configured', message: 'Service binding not configured yet' }
+  }),
 
   bsdataVersion: publicProcedure.query(async () => {
     try {

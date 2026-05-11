@@ -29,6 +29,10 @@ vi.mock('./lib/trpc', () => {
       bsdataVersion: { useQuery: vi.fn(() => ({ data: null, isLoading: true })) },
       matchResults: { useQuery: vi.fn(() => ({ data: null, isLoading: true })) },
       topFactions: { useQuery: vi.fn(() => ({ data: null, isLoading: true })) },
+      bcpScraperStatus: { useQuery: vi.fn(() => ({ data: null, isLoading: true })) },
+      bcpScraperHistory: { useQuery: vi.fn(() => ({ data: null, isLoading: true })) },
+      triggerBcpScrape: { useMutation: vi.fn(() => ({ mutate: vi.fn(), isPending: false })) },
+      triggerMetaPipeline: { useMutation: vi.fn(() => ({ mutate: vi.fn(), isPending: false })) },
     },
   }
   return { trpc, createTRPCClient: vi.fn() }
@@ -74,6 +78,7 @@ describe('App', () => {
     expect(screen.getByText('Sessions')).toBeInTheDocument()
     expect(screen.getByText('Activity')).toBeInTheDocument()
     expect(screen.getByText('Imports')).toBeInTheDocument()
+    expect(screen.getByText('Scraper')).toBeInTheDocument()
     expect(screen.getByText('Micah')).toBeInTheDocument()
     expect(screen.getByText('Sign out')).toBeInTheDocument()
   })
@@ -125,6 +130,18 @@ describe('App', () => {
     render(<App />)
     fireEvent.click(screen.getByText('Imports'))
     expect(screen.getByText('Loading imports...')).toBeInTheDocument()
+  })
+
+  it('clicking Scraper nav renders ScraperPage', () => {
+    vi.mocked(authClient.useSession).mockReturnValue({
+      data: { user: { id: '1', name: 'Micah', email: 'micah@test.com' }, session: {} },
+      isPending: false,
+      refetch: vi.fn(),
+    } as any)
+
+    render(<App />)
+    fireEvent.click(screen.getByText('Scraper'))
+    expect(screen.getByText('Loading scraper status...')).toBeInTheDocument()
   })
 
   it('defaults to Overview (Dashboard) page', () => {
