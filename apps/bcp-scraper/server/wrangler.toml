@@ -1,0 +1,7 @@
+name = "tabletop-tools-bcp-scraper"
+main = "src/worker.ts"
+compatibility_date = "2024-09-23"
+compatibility_flags = ["nodejs_compat"]
+
+[triggers]
+crons = ["0 4 * * 1"]
