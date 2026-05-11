@@ -43,6 +43,13 @@
       "when": 1772727940894,
       "tag": "0005_smart_mojo",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "6",
+      "when": 1778534076545,
+      "tag": "0006_naive_reptil",
+      "breakpoints": true
     }
   ]
 }

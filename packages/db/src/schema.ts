@@ -587,3 +587,248 @@ export const glickoHistory = sqliteTable('glicko_history', {
 }, (table) => [
   index('idx_glicko_history_player_id').on(table.playerId),
 ])
+
+// === Meta Analytics — Dimension Tables ===
+
+export const dimFaction = sqliteTable('dim_faction', {
+  id: text('id').primaryKey(),
+  name: text('name').notNull(),
+  allegiance: text('allegiance').notNull(),
+})
+
+export const dimSubfaction = sqliteTable('dim_subfaction', {
+  id: text('id').primaryKey(),
+  name: text('name').notNull(),
+  factionId: text('faction_id').notNull().references(() => dimFaction.id),
+}, (table) => [
+  index('idx_dim_subfaction_faction').on(table.factionId),
+])
+
+export const dimDetachment = sqliteTable('dim_detachment', {
+  id: text('id').primaryKey(),
+  name: text('name').notNull(),
+  factionId: text('faction_id').notNull().references(() => dimFaction.id),
+  subfactionId: text('subfaction_id').references(() => dimSubfaction.id),
+}, (table) => [
+  index('idx_dim_detachment_faction').on(table.factionId),
+  index('idx_dim_detachment_subfaction').on(table.subfactionId),
+])
+
+export const dimForType = sqliteTable('dim_for_type', {
+  id: integer('id').primaryKey(),
+  name: text('name').notNull().unique(),
+})
+
+export const dimGranularity = sqliteTable('dim_granularity', {
+  id: integer('id').primaryKey(),
+  name: text('name').notNull().unique(),
+})
+
+export const dimDataslate = sqliteTable('dim_dataslate', {
+  id: text('id').primaryKey(),
+  name: text('name').notNull(),
+  effectiveDate: integer('effective_date').notNull(),
+  endDate: integer('end_date'),
+})
+
+export const dimTournamentPack = sqliteTable('dim_tournament_pack', {
+  id: text('id').primaryKey(),
+  name: text('name').notNull(),
+  effectiveDate: integer('effective_date').notNull(),
+  endDate: integer('end_date'),
+})
+
+export const dimEdition = sqliteTable('dim_edition', {
+  id: text('id').primaryKey(),
+  name: text('name').notNull(),
+  startDate: integer('start_date').notNull(),
+  endDate: integer('end_date'),
+})
+
+export const dimRegion = sqliteTable('dim_region', {
+  id: integer('id').primaryKey(),
+  name: text('name').notNull(),
+  country: text('country'),
+})
+
+// === Meta Analytics — 3NF Source Tables ===
+
+export const metaEvents = sqliteTable('meta_events', {
+  id: text('id').primaryKey(),
+  name: text('name').notNull(),
+  date: integer('date').notNull(),
+  location: text('location'),
+  gpsCoords: text('gps_coords'),
+  regionId: integer('region_id').references(() => dimRegion.id),
+  format: text('format').notNull(),
+  rounds: integer('rounds'),
+  playerCount: integer('player_count').notNull(),
+  source: text('source').notNull(),
+  sourceId: text('source_id'),
+  importedAt: integer('imported_at').notNull(),
+  winFactionId: text('win_faction_id').references(() => dimFaction.id),
+  winSubfactionId: text('win_subfaction_id').references(() => dimSubfaction.id),
+  winDetachmentId: text('win_detachment_id').references(() => dimDetachment.id),
+}, (table) => [
+  index('idx_meta_events_date').on(table.date),
+  index('idx_meta_events_format').on(table.format),
+  index('idx_meta_events_region').on(table.regionId),
+  uniqueIndex('uq_meta_events_source').on(table.source, table.sourceId),
+])
+
+export const metaEventPlayers = sqliteTable('meta_event_players', {
+  id: text('id').primaryKey(),
+  eventId: text('event_id').notNull().references(() => metaEvents.id, { onDelete: 'cascade' }),
+  playerName: text('player_name').notNull(),
+  sourcePlayerId: text('source_player_id'),
+  factionId: text('faction_id').notNull().references(() => dimFaction.id),
+  subfactionId: text('subfaction_id').references(() => dimSubfaction.id),
+  detachmentId: text('detachment_id').references(() => dimDetachment.id),
+  placement: integer('placement').notNull(),
+  listText: text('list_text'),
+  wins: integer('wins').notNull().default(0),
+  losses: integer('losses').notNull().default(0),
+  draws: integer('draws').notNull().default(0),
+  gl2RatingStart: real('gl2_rating_start'),
+  gl2RdStart: real('gl2_rd_start'),
+  gl2VolStart: real('gl2_vol_start'),
+  gl2RatingEnd: real('gl2_rating_end'),
+  gl2RdEnd: real('gl2_rd_end'),
+  gl2VolEnd: real('gl2_vol_end'),
+}, (table) => [
+  index('idx_meta_event_players_event').on(table.eventId),
+  index('idx_meta_event_players_faction').on(table.factionId),
+])
+
+export const metaPairings = sqliteTable('meta_pairings', {
+  id: text('id').primaryKey(),
+  eventId: text('event_id').notNull().references(() => metaEvents.id, { onDelete: 'cascade' }),
+  round: integer('round').notNull(),
+  player1Id: text('player1_id').notNull().references(() => metaEventPlayers.id, { onDelete: 'cascade' }),
+  player2Id: text('player2_id').notNull().references(() => metaEventPlayers.id, { onDelete: 'cascade' }),
+  player1Score: integer('player1_score'),
+  player2Score: integer('player2_score'),
+  player1Gl2: real('player1_gl2'),
+  player2Gl2: real('player2_gl2'),
+  result: text('result').notNull(),
+}, (table) => [
+  index('idx_meta_pairings_event_round').on(table.eventId, table.round),
+  index('idx_meta_pairings_player1').on(table.player1Id),
+  index('idx_meta_pairings_player2').on(table.player2Id),
+])
+
+export const metaEventWinDistribution = sqliteTable('meta_event_win_distribution', {
+  id: text('id').primaryKey(),
+  eventId: text('event_id').notNull().references(() => metaEvents.id, { onDelete: 'cascade' }),
+  wins: integer('wins').notNull(),
+  playerCount: integer('player_count').notNull(),
+  playerPct: real('player_pct').notNull(),
+}, (table) => [
+  index('idx_event_win_dist_event').on(table.eventId),
+])
+
+export const metaEventPlacements = sqliteTable('meta_event_placements', {
+  id: text('id').primaryKey(),
+  eventId: text('event_id').notNull().references(() => metaEvents.id, { onDelete: 'cascade' }),
+  tier: text('tier').notNull(),
+  factionId: text('faction_id').notNull().references(() => dimFaction.id),
+  subfactionId: text('subfaction_id').references(() => dimSubfaction.id),
+  detachmentId: text('detachment_id').references(() => dimDetachment.id),
+  playerName: text('player_name').notNull(),
+  placement: integer('placement').notNull(),
+}, (table) => [
+  index('idx_event_placements_event').on(table.eventId),
+  index('idx_event_placements_faction').on(table.factionId),
+])
+
+// === Meta Analytics — Cube Tables ===
+
+export const metaFor = sqliteTable('meta_for', {
+  id: text('id').primaryKey(),
+  typeId: integer('type_id').notNull().references(() => dimForType.id),
+  date: integer('date').notNull(),
+  endDate: integer('end_date'),
+  day: integer('day'),
+  month: integer('month'),
+  quarter: integer('quarter'),
+  year: integer('year').notNull(),
+  dataslateId: text('dataslate_id').references(() => dimDataslate.id),
+  tourneyPackId: text('tourney_pack_id').references(() => dimTournamentPack.id),
+  editionId: text('edition_id').references(() => dimEdition.id),
+}, (table) => [
+  index('idx_meta_for_type').on(table.typeId),
+  index('idx_meta_for_type_date').on(table.typeId, table.date),
+])
+
+export const metaTop = sqliteTable('meta_top', {
+  id: text('id').primaryKey(),
+  granularityId: integer('granularity_id').notNull().references(() => dimGranularity.id),
+  factionId: text('faction_id').notNull().references(() => dimFaction.id),
+  subfactionId: text('subfaction_id').references(() => dimSubfaction.id),
+  detachmentId: text('detachment_id').references(() => dimDetachment.id),
+  metaForId: text('meta_for_id').notNull().references(() => metaFor.id, { onDelete: 'cascade' }),
+  winRate: real('win_rate').notNull(),
+  drawRate: real('draw_rate').notNull(),
+  overRep: real('over_rep').notNull(),
+  fourOhStart: real('four_oh_start').notNull(),
+  eventWins: integer('event_wins').notNull().default(0),
+  eventFinals: integer('event_finals').notNull().default(0),
+  eventTop4: integer('event_top4').notNull().default(0),
+  eventTop8: integer('event_top8').notNull().default(0),
+  eventTop16: integer('event_top16').notNull().default(0),
+  playerPopPct: real('player_pop_pct').notNull(),
+  wins: integer('wins').notNull().default(0),
+  losses: integer('losses').notNull().default(0),
+  draws: integer('draws').notNull().default(0),
+  games: integer('games').notNull().default(0),
+  players: integer('players').notNull().default(0),
+}, (table) => [
+  index('idx_meta_top_for').on(table.metaForId),
+  index('idx_meta_top_for_granularity').on(table.metaForId, table.granularityId),
+  index('idx_meta_top_faction_for').on(table.factionId, table.metaForId),
+])
+
+export const factGameResults = sqliteTable('fact_game_results', {
+  id: text('id').primaryKey(),
+  eventId: text('event_id').notNull().references(() => metaEvents.id, { onDelete: 'cascade' }),
+  playerId: text('player_id').notNull().references(() => metaEventPlayers.id, { onDelete: 'cascade' }),
+  opponentId: text('opponent_id').references(() => metaEventPlayers.id, { onDelete: 'cascade' }),
+  round: integer('round').notNull(),
+  factionId: text('faction_id').notNull().references(() => dimFaction.id),
+  subfactionId: text('subfaction_id').references(() => dimSubfaction.id),
+  detachmentId: text('detachment_id').references(() => dimDetachment.id),
+  opponentFactionId: text('opponent_faction_id').references(() => dimFaction.id),
+  opponentSubfactionId: text('opponent_subfaction_id').references(() => dimSubfaction.id),
+  opponentDetachmentId: text('opponent_detachment_id').references(() => dimDetachment.id),
+  result: real('result').notNull(),
+  playerScore: integer('player_score'),
+  opponentScore: integer('opponent_score'),
+}, (table) => [
+  index('idx_fact_results_faction').on(table.factionId),
+  index('idx_fact_results_event').on(table.eventId),
+  index('idx_fact_results_player').on(table.playerId),
+  index('idx_fact_results_matchup').on(table.factionId, table.opponentFactionId),
+])
+
+export const metaCubeStatus = sqliteTable('meta_cube_status', {
+  id: integer('id').primaryKey().default(1),
+  lastStartedAt: integer('last_started_at'),
+  lastCompletedAt: integer('last_completed_at'),
+  lastEventId: text('last_event_id'),
+  status: text('status').notNull().default('pending'),
+})
+
+// ── BCP Scraper ──────────────────────────────────────────────────────────────
+
+export const bcpScrapeJobs = sqliteTable('bcp_scrape_jobs', {
+  id: text('id').primaryKey(),
+  startedAt: integer('started_at', { mode: 'timestamp' }).notNull(),
+  completedAt: integer('completed_at', { mode: 'timestamp' }),
+  status: text('status').notNull().default('running'),
+  eventsFound: integer('events_found').default(0),
+  eventsScraped: integer('events_scraped').default(0),
+  pairingsScraped: integer('pairings_scraped').default(0),
+  listsScraped: integer('lists_scraped').default(0),
+  errors: text('errors'),
+  triggeredBy: text('triggered_by').notNull().default('cron'),
+})
