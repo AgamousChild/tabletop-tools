@@ -3,6 +3,7 @@ import { createClient } from '@libsql/client'
 import { createDbFromClient } from '@tabletop-tools/db'
 import { runScrape } from './lib/scrape'
 import { runPipeline } from './lib/pipeline'
+import { parsePendingLists } from './lib/parse-lists'
 
 interface Env {
   TURSO_DB_URL: string
@@ -45,6 +46,7 @@ function getApp() {
     }, 'manual')
 
     await runPipeline(db)
+    await parsePendingLists(db)
 
     return c.json(result)
   })
@@ -63,7 +65,7 @@ export default {
         bcpEmail: env.BCP_EMAIL,
         bcpPassword: env.BCP_PASSWORD,
         db,
-      }, 'cron').then(() => runPipeline(db))
+      }, 'cron').then(() => runPipeline(db)).then(() => parsePendingLists(db))
     )
   },
 }

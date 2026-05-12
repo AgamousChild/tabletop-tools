@@ -418,6 +418,27 @@ export const statsRouter = router({
     return { status: 'not-configured', message: 'Meta pipeline trigger not configured yet' }
   }),
 
+  listParserStatus: adminProcedure.query(async ({ ctx }) => {
+    const [parsed] = await ctx.db.all(
+      sql`SELECT count(*) as n FROM meta_event_players WHERE list_ttt IS NOT NULL AND json_extract(list_ttt, '$.parseStatus') = 'ok'`,
+    ) as any[]
+    const [partial] = await ctx.db.all(
+      sql`SELECT count(*) as n FROM meta_event_players WHERE list_ttt IS NOT NULL AND json_extract(list_ttt, '$.parseStatus') = 'partial'`,
+    ) as any[]
+    const [failed] = await ctx.db.all(
+      sql`SELECT count(*) as n FROM meta_event_players WHERE list_ttt IS NOT NULL AND json_extract(list_ttt, '$.parseStatus') = 'failed'`,
+    ) as any[]
+    const [pending] = await ctx.db.all(
+      sql`SELECT count(*) as n FROM meta_event_players WHERE list_ttt IS NULL AND list_text IS NOT NULL AND list_text != ''`,
+    ) as any[]
+    return {
+      parsed: parsed?.n || 0,
+      partial: partial?.n || 0,
+      failed: failed?.n || 0,
+      pending: pending?.n || 0,
+    }
+  }),
+
   bsdataVersion: publicProcedure.query(async () => {
     try {
       const res = await fetch(
