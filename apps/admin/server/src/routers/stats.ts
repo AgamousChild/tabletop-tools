@@ -402,12 +402,20 @@ export const statsRouter = router({
       return jobs
     }),
 
-  triggerBcpScrape: adminProcedure.mutation(async () => {
-    return { status: 'not-configured', message: 'Service binding not configured yet' }
+  triggerBcpScrape: adminProcedure.mutation(async ({ ctx }) => {
+    if (!ctx.bcpScraper) {
+      return { status: 'error', message: 'BCP Scraper service binding not configured' }
+    }
+    const resp = await ctx.bcpScraper.fetch(new Request('https://bcp-scraper/scrape', { method: 'POST' }))
+    if (!resp.ok) {
+      return { status: 'error', message: `Scraper returned ${resp.status}` }
+    }
+    const result = await resp.json() as { jobId?: string }
+    return { status: 'triggered', jobId: result.jobId }
   }),
 
   triggerMetaPipeline: adminProcedure.mutation(async () => {
-    return { status: 'not-configured', message: 'Service binding not configured yet' }
+    return { status: 'not-configured', message: 'Meta pipeline trigger not configured yet' }
   }),
 
   bsdataVersion: publicProcedure.query(async () => {

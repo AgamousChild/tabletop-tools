@@ -880,10 +880,10 @@ describe('stats router', () => {
       await expect(caller.stats.triggerBcpScrape()).rejects.toMatchObject({ code: 'FORBIDDEN' })
     })
 
-    it('returns placeholder status', async () => {
+    it('returns error when service binding not configured', async () => {
       const caller = createCaller(adminCtx)
       const result = await caller.stats.triggerBcpScrape()
-      expect(result.status).toBe('not-configured')
+      expect(result.status).toBe('error')
       expect(result.message).toContain('not configured')
     })
   })

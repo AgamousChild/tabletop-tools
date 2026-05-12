@@ -11,6 +11,7 @@ import { initTRPC } from '@trpc/server'
 
 export type Context = BaseContext & {
   adminEmails: string[]
+  bcpScraper?: Fetcher
 }
 
 const t = initTRPC.context<Context>().create()
