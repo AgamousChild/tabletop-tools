@@ -58,7 +58,7 @@ describe('BcpApiClient', () => {
 
       const [url, opts] = mockFetch.mock.calls[0]!
       expect(url).toBe(
-        `${BASE_URL}/v1/events?gameSystemId=WGMSzfKFYA&startDate=2026-01-01&endDate=2026-01-31&numberOfPlayers=20&numberOfRounds=5&sortAsc=false&eventStatus=ended&sortKey=eventDate`,
+        `${BASE_URL}/v2/events?limit=40&sortAscending=false&sortKey=eventDate&startDate=2026-01-01T00%3A00%3A00Z&endDate=2026-01-31T00%3A00%3A00Z&gameSystemId=WGMSzfKFYA&numberOfRounds=5&numberOfPlayers=20`,
       )
       expect(opts.headers['authorization']).toBe('Bearer my-token')
       expect(opts.headers['client-id']).toBe('web-app')

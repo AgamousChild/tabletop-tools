@@ -86,7 +86,7 @@ export class BcpApiClient {
 
   constructor(token: string, fetchFn?: typeof globalThis.fetch) {
     this.token = token
-    this.fetch = fetchFn ?? globalThis.fetch
+    this.fetch = fetchFn ?? ((...args: Parameters<typeof fetch>) => fetch(...args))
   }
 
   private headers(auth: boolean): Record<string, string> {
@@ -115,18 +115,19 @@ export class BcpApiClient {
     minPlayers: number
     minRounds: number
   }): Promise<BcpEvent[]> {
+    // Exact URL format captured from BCP website network requests
     const qs = new URLSearchParams({
-      gameSystemId: GAME_SYSTEM_ID,
-      startDate: params.startDate,
-      endDate: params.endDate,
-      numberOfPlayers: String(params.minPlayers),
-      numberOfRounds: String(params.minRounds),
-      sortAsc: 'false',
-      eventStatus: 'ended',
+      limit: '40',
+      sortAscending: 'false',
       sortKey: 'eventDate',
+      startDate: `${params.startDate}T00:00:00Z`,
+      endDate: `${params.endDate}T00:00:00Z`,
+      gameSystemId: GAME_SYSTEM_ID,
+      numberOfRounds: String(params.minRounds),
+      numberOfPlayers: String(params.minPlayers),
     })
     const data = await this.request<{ data: BcpEventRaw[] }>(
-      `${BASE_URL}/v1/events?${qs}`,
+      `${BASE_URL}/v2/events?${qs}`,
       true,
     )
     return data.data.map(mapEvent)
