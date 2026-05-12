@@ -686,6 +686,7 @@ export const metaEventPlayers = sqliteTable('meta_event_players', {
   detachmentId: text('detachment_id').references(() => dimDetachment.id),
   placement: integer('placement').notNull(),
   listText: text('list_text'),
+  listTtt: text('list_ttt'),
   wins: integer('wins').notNull().default(0),
   losses: integer('losses').notNull().default(0),
   draws: integer('draws').notNull().default(0),
