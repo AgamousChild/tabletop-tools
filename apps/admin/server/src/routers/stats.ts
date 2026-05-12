@@ -411,7 +411,7 @@ export const statsRouter = router({
       return { status: 'error', message: `Scraper returned ${resp.status}` }
     }
     const result = await resp.json() as { jobId?: string }
-    return { status: 'triggered', jobId: result.jobId }
+    return { status: 'triggered', message: 'Scrape started', jobId: result.jobId }
   }),
 
   triggerMetaPipeline: adminProcedure.mutation(async () => {

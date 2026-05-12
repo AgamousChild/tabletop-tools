@@ -9,7 +9,7 @@ interface Env {
   TURSO_AUTH_TOKEN: string
   AUTH_SECRET: string
   ADMIN_EMAILS: string
-  BCP_SCRAPER?: Fetcher
+  BCP_SCRAPER?: { fetch(request: Request): Promise<Response> }
 }
 
 export default createWorkerHandler<Env>({
