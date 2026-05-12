@@ -21,8 +21,8 @@ export interface BcpPairing {
   table: number
   player1: { name: string; faction: string; listId?: string }
   player2: { name: string; faction: string; listId?: string }
-  player1Game: { result: number; points: number }
-  player2Game: { result: number; points: number }
+  player1Game: { result: number; points: number } | null
+  player2Game: { result: number; points: number } | null
 }
 
 interface BcpEventRaw {
@@ -61,22 +61,25 @@ function mapEvent(raw: BcpEventRaw): BcpEvent {
   }
 }
 
-function mapPairing(raw: BcpPairingRaw): BcpPairing {
+function mapPairing(raw: BcpPairingRaw): BcpPairing | null {
+  // Skip BYEs (no player2)
+  if (!raw.player1 || !raw.player2) return null
+
   return {
     round: raw.round,
     table: raw.table,
     player1: {
-      name: `${raw.player1.user.firstName} ${raw.player1.user.lastName}`,
-      faction: raw.player1.faction,
+      name: `${raw.player1.user?.firstName || ''} ${raw.player1.user?.lastName || ''}`.trim(),
+      faction: raw.player1.faction || '',
       listId: raw.player1.listId ?? undefined,
     },
     player2: {
-      name: `${raw.player2.user.firstName} ${raw.player2.user.lastName}`,
-      faction: raw.player2.faction,
+      name: `${raw.player2.user?.firstName || ''} ${raw.player2.user?.lastName || ''}`.trim(),
+      faction: raw.player2.faction || '',
       listId: raw.player2.listId ?? undefined,
     },
-    player1Game: { result: raw.player1Game.result, points: raw.player1Game.points },
-    player2Game: { result: raw.player2Game.result, points: raw.player2Game.points },
+    player1Game: raw.player1Game ? { result: raw.player1Game.result, points: raw.player1Game.points } : null,
+    player2Game: raw.player2Game ? { result: raw.player2Game.result, points: raw.player2Game.points } : null,
   }
 }
 
@@ -151,6 +154,6 @@ export class BcpApiClient {
       `${BASE_URL}/v1/events/${eventId}/pairings?${qs}`,
       true,
     )
-    return data.active.map(mapPairing)
+    return data.active.map(mapPairing).filter((p): p is BcpPairing => p !== null)
   }
 }

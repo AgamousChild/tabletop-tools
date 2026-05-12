@@ -83,8 +83,10 @@ export async function runScrape(
 
     let eventsScraped = 0
     let totalPairings = 0
+    const errors: string[] = []
 
     for (const searchEvent of newEvents) {
+      try {
       // Get full event details
       const event = await api.getEvent(searchEvent.id)
       const eventId = generateId()
@@ -114,6 +116,7 @@ export async function runScrape(
       const playerMap = new Map<string, PlayerAccumulator>()
 
       for (const pairing of allPairings) {
+        if (!pairing.player1Game || !pairing.player2Game) continue
         const result = mapResult(
           pairing.player1Game.result,
           pairing.player2Game.result,
@@ -163,12 +166,16 @@ export async function runScrape(
         playerIdMap.set(player.name, playerId)
 
         const factionSlug = normalizeFaction(player.faction)
+        if (!factionSlug) {
+          errors.push(`Unknown faction "${player.faction}" for player "${player.name}" in event ${searchEvent.id}`)
+          continue
+        }
 
         await db.insert(metaEventPlayers).values({
           id: playerId,
           eventId,
           playerName: player.name,
-          factionId: factionSlug || 'unknown',
+          factionId: factionSlug,
           subfactionId: null,
           detachmentId: null,
           placement: i + 1,
@@ -178,22 +185,26 @@ export async function runScrape(
         })
       }
 
-      // Insert pairings
+      // Insert pairings (skip if either player wasn't inserted)
       for (const pairing of allPairings) {
+        if (!pairing.player1Game || !pairing.player2Game) continue
+
+        const p1Id = playerIdMap.get(pairing.player1.name)
+        const p2Id = playerIdMap.get(pairing.player2.name)
+        if (!p1Id || !p2Id) continue
+
         const pairingId = generateId()
         const result = mapResult(
           pairing.player1Game.result,
           pairing.player2Game.result,
         )
-        const p1Id = playerIdMap.get(pairing.player1.name)
-        const p2Id = playerIdMap.get(pairing.player2.name)
 
         await db.insert(metaPairings).values({
           id: pairingId,
           eventId,
           round: pairing.round,
-          player1Id: p1Id ?? '',
-          player2Id: p2Id ?? '',
+          player1Id: p1Id,
+          player2Id: p2Id,
           player1Score: pairing.player1Game.points,
           player2Score: pairing.player2Game.points,
           result,
@@ -202,6 +213,9 @@ export async function runScrape(
 
       totalPairings += allPairings.length
       eventsScraped++
+      } catch (eventErr) {
+        errors.push(`Event ${searchEvent.id} (${searchEvent.name}): ${(eventErr as Error).message}`)
+      }
     }
 
     // Update job as completed
