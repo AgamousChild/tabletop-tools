@@ -50,27 +50,27 @@ export function CoreRuleCard({ data, context }: CoreRuleCardProps) {
         {/* Header — rule name (left) + optional phase badge (right) */}
         <div className="flex items-baseline justify-between border-b-2 border-amber-500 pb-1 mb-1.5">
           <span
-            className="text-sm font-bold uppercase tracking-wider text-white"
+            className="text-[15px] font-bold uppercase tracking-wider text-white"
             style={{ fontFamily: "'Oswald', sans-serif" }}
           >
             {data.name}
           </span>
           {data.phase && (
-            <span className="text-[9px] text-amber-400 uppercase tracking-wide bg-amber-400/10 px-1.5 py-0.5 rounded shrink-0 ml-2">
+            <span className="text-[10px] text-amber-400 uppercase tracking-wide bg-amber-400/10 px-1.5 py-0.5 rounded shrink-0 ml-2">
               {data.phase}
             </span>
           )}
         </div>
 
         {/* Description */}
-        <div className="text-[11px] text-slate-300 leading-snug">
+        <div className="text-xs text-slate-300 leading-snug">
           {highlightText(data.description, highlightTerms, onContentClick)}
         </div>
 
         {/* Optional HTML table */}
         {data.tableHtml && (
           <div
-            className="overflow-x-auto text-[10px] mt-2"
+            className="overflow-x-auto text-[11px] mt-2"
             dangerouslySetInnerHTML={{ __html: data.tableHtml }}
           />
         )}
@@ -81,7 +81,7 @@ export function CoreRuleCard({ data, context }: CoreRuleCardProps) {
             {data.qualityFlags.map((flag) => (
               <span
                 key={flag}
-                className="text-[8px] bg-amber-500/20 text-amber-400 px-1.5 py-0.5 rounded"
+                className="text-[9px] bg-amber-500/20 text-amber-400 px-1.5 py-0.5 rounded"
               >
                 {flag}
               </span>
@@ -95,7 +95,7 @@ export function CoreRuleCard({ data, context }: CoreRuleCardProps) {
             {pdfSources.map((src, i) => (
               <button
                 key={i}
-                className="text-[9px] text-slate-500 hover:text-amber-400 underline bg-transparent border-0 p-0 cursor-pointer"
+                className="text-[10px] text-slate-500 hover:text-amber-400 underline bg-transparent border-0 p-0 cursor-pointer"
                 onClick={() =>
                   context.onViewSource!(
                     src.title

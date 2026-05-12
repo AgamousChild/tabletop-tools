@@ -48,6 +48,9 @@ tabletop-tools/
   apps/
     auth-server/     ← central auth Worker (CORS lockdown, caching)
     gateway/         ← unified Cloudflare Pages project (landing + tRPC proxies)
+    brain/           ← 40K knowledge graph: search, browse, ask (Hono, not tRPC)
+    content-ingestor/← YouTube/article → brain node pipeline
+    bcp-scraper/     ← BCP tournament data scraper
     data-import/     ← game data pipeline (Worker fetches sources → R2, client syncs to IndexedDB)
     no-cheat/        ← dice cheat detection        (port 3001)
     versus/          ← combat simulator             (port 3002)
@@ -68,16 +71,19 @@ at `tabletop-tools.net/auth/*`.
 
 ## App Registry
 
-| App | Port | Tests | Status | Purpose |
-|---|---|---|---|---|
-| no-cheat | 3001 | 242 | Deployed | Detect loaded dice via CV + statistics |
-| versus | 3002 | 142 | Deployed | Simulate 40K combat: hit/wound/save/damage |
-| list-builder | 3003 | 87 | Deployed | Build lists with live meta ratings from GT data |
-| game-tracker | 3004 | 214 | Deployed | Track matches turn-by-turn with photos |
-| tournament | 3005 | 127 | Deployed | Swiss events: pairings, results, standings, ELO |
-| new-meta | 3006 | 140 | Deployed | Meta analytics: win rates, Glicko-2 ratings |
-| data-import | — | 78 | Deployed | Game data pipeline: Worker fetches BSData+Wahapedia → R2 → client IndexedDB |
-| admin | 3007 | 93 | Deployed | Platform dashboard: users, sessions, app stats |
+| App | Port | Status | Purpose |
+|---|---|---|---|
+| brain | 3008 | Deployed | 40K knowledge graph: search, browse, ask (Hono, not tRPC) |
+| no-cheat | 3001 | Deployed | Detect loaded dice via CV + statistics |
+| versus | 3002 | Deployed | Simulate 40K combat: hit/wound/save/damage |
+| list-builder | 3003 | Deployed | Build lists with live meta ratings from GT data |
+| game-tracker | 3004 | Deployed | Track matches turn-by-turn with photos |
+| tournament | 3005 | Deployed | Swiss events: pairings, results, standings, ELO |
+| new-meta | 3006 | Deployed | Meta analytics: win rates, Glicko-2 ratings |
+| data-import | — | Deployed | Game data pipeline: Worker fetches BSData+Wahapedia → R2 → client IndexedDB |
+| admin | 3007 | Deployed | Platform dashboard: users, sessions, app stats |
+| content-ingestor | — | Local | YouTube/article → brain node pipeline |
+| bcp-scraper | — | Local | BCP tournament data scraper |
 
 Each app has its own `CLAUDE.md` with full spec, architecture, and V2 implementation detail.
 
@@ -367,7 +373,7 @@ App-specific result colors (defined per app, not here).
 
 ## Rules for Every Session
 
-- Plan before touching anything — understand every layer first.
+- Scope before you start — understand what you're touching and what depends on it. Small fixes don't need architecture reviews.
 - No features that aren't needed yet.
 - Validate statistically before claiming anything.
 - Keep the stack shallow. Don't add layers.
@@ -396,35 +402,13 @@ code should never be scattered across 7 app boundaries.
 
 ---
 
-## Security & Authentication
-
-**Auth is middleware, not application code.** Session validation runs inside `server-core`
-before any app code sees the request. Apps receive `ctx.user` pre-populated and never import
-from `packages/auth` directly.
-
-- `createBaseServer` accepts `db` and `secret`, calls `validateSession` internally
-- Apps opt into auth by using `protectedProcedure` — that's the entire auth surface area
-- Apps that need extra context (storage, adminEmails) use `extendContext`
-- One implementation, one place to audit, tested once in `server-core`
-
-**Why middleware, not utility function:** If Express, Rails, Django, and ASP.NET all handle
-auth as built-in middleware, so should we. Don't follow tRPC tutorial patterns that inline
-auth in `createContext` — follow 30 years of web application architecture. Security-critical
-code should never be scattered across 7 app boundaries.
-
----
-
 ## Testing: TDD Required
 
-**Tests are written before the code. No exceptions.**
+**Default: TDD for logic, algorithms, and routers.** Write the test first, confirm it fails,
+implement, confirm it passes.
 
-The workflow for every change:
-
-1. Write the test — define what the code must do
-2. Run it — confirm it fails (red)
-3. Write the code — make it pass
-4. Run it again — confirm it passes (green)
-5. Refactor if needed — tests still pass
+**Exception: exploratory/integration work** (scrapers, data pipelines, graph builders, one-off
+scripts) — test after the shape stabilizes, not before.
 
 ```bash
 pnpm test --watch   # keep this running during development
@@ -436,8 +420,6 @@ tRPC routers. Routers are tested using `createCallerFactory` against an in-memor
 SQLite database — no mocks for the database layer.
 
 The specific test file structure for each app is documented in that app's own CLAUDE.md.
-
-**Platform total: 1,427 unit tests, all passing.** Plus 36 Playwright E2E browser tests.
 
 ---
 
@@ -453,18 +435,3 @@ cd e2e && BASE_URL=https://tabletop-tools.net pnpm test
 cd e2e && pnpm test
 ```
 
----
-
-## V2 Implementation Status
-
-All 8 phases of the V1 → V2 migration are complete:
-
-1. **DB migration** — 27 indexes, 4 unique constraints, 23 cascading deletes ✅
-2. **`packages/auth` hardening** — HMAC verification, timing-safe comparison, custom scrypt params ✅
-3. **`packages/server-core` creation** — base tRPC, createBaseServer, Worker handler, ID gen (16 tests) ✅
-4. **`packages/ui` expansion** — AuthScreen, AppShell, ErrorBoundary, auth/tRPC factories, Tailwind preset (21 tests) ✅
-5. **App server migration** — all 7 apps use server-core ✅
-6. **App client migration** — all 8 apps use packages/ui ✅
-7. **Per-app fixes** — TRPCError, authorization, SQL-first queries, dead code removal, R2 bindings ✅
-8. **Client routing** — hash-based routing for tournament and new-meta ✅
-9. **Deployment verification** — pending (requires Cloudflare credentials)

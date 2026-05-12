@@ -1,4 +1,4 @@
-import type { Browser } from 'playwright'
+import type { Browser, Page } from 'playwright'
 
 export interface BCPEvent {
   id: string
@@ -14,11 +14,101 @@ export interface BCPEvent {
 export const BCP_SEARCH_URL =
   'https://www.bestcoastpairings.com/play/events?search=true&startDate=2024-04-27&endDate=2026-04-27&gameSystemId=WGMSzfKFYA&numberOfRounds=5&numberOfPlayers=100&sortAsc=false&eventStatus=all&sortKey=eventDate'
 
+/** BCP search filter config */
+export interface BCPSearchConfig {
+  startDate: string // YYYY-MM-DD
+  endDate: string // YYYY-MM-DD
+  gameSystemId?: string // default: WGMSzfKFYA (40K)
+  numberOfRounds?: number // minimum rounds
+  numberOfPlayers?: number // minimum players
+}
+
+const BCP_BASE_URL = 'https://www.bestcoastpairings.com/play/events'
+
+/** Build a BCP search URL from config */
+export function buildSearchUrl(config: BCPSearchConfig): string {
+  const params = new URLSearchParams({
+    search: 'true',
+    startDate: config.startDate,
+    endDate: config.endDate,
+    gameSystemId: config.gameSystemId ?? 'WGMSzfKFYA',
+    sortAsc: 'false',
+    eventStatus: 'all',
+    sortKey: 'eventDate',
+  })
+  if (config.numberOfRounds) params.set('numberOfRounds', String(config.numberOfRounds))
+  if (config.numberOfPlayers) params.set('numberOfPlayers', String(config.numberOfPlayers))
+  return `${BCP_BASE_URL}?${params.toString()}`
+}
+
+/** Generate monthly date windows between start and end */
+export function generateMonthlyWindows(
+  startDate: string,
+  endDate: string,
+): Array<{ start: string; end: string }> {
+  const windows: Array<{ start: string; end: string }> = []
+  const end = new Date(endDate + 'T00:00:00Z')
+  let cursor = new Date(startDate + 'T00:00:00Z')
+
+  while (cursor < end) {
+    const windowEnd = new Date(cursor)
+    windowEnd.setUTCMonth(windowEnd.getUTCMonth() + 1)
+    if (windowEnd > end) windowEnd.setTime(end.getTime())
+
+    windows.push({
+      start: cursor.toISOString().split('T')[0]!,
+      end: windowEnd.toISOString().split('T')[0]!,
+    })
+
+    cursor = windowEnd
+  }
+
+  return windows
+}
+
+/**
+ * Scan BCP events using monthly date windows to bypass result caps.
+ * Scans each window independently and dedupes by event ID.
+ */
+export async function scrapeEventListWindowed(
+  config: BCPSearchConfig,
+  page: Page,
+): Promise<BCPEvent[]> {
+  const windows = generateMonthlyWindows(config.startDate, config.endDate)
+  const allEvents = new Map<string, BCPEvent>()
+
+  console.log(`Scanning ${windows.length} monthly windows from ${config.startDate} to ${config.endDate}`)
+  if (config.numberOfPlayers) console.log(`  Filter: ${config.numberOfPlayers}+ players, ${config.numberOfRounds ?? 'any'}+ rounds`)
+
+  for (let i = 0; i < windows.length; i++) {
+    const window = windows[i]!
+    const url = buildSearchUrl({
+      ...config,
+      startDate: window.start,
+      endDate: window.end,
+    })
+
+    console.log(`\n[${i + 1}/${windows.length}] ${window.start} → ${window.end}`)
+
+    const events = await scrapeEventList(url, page)
+    let newCount = 0
+    for (const event of events) {
+      if (!allEvents.has(event.id)) newCount++
+      allEvents.set(event.id, event)
+    }
+
+    console.log(`  Found ${events.length} events (${newCount} new, ${allEvents.size} total)`)
+  }
+
+  return Array.from(allEvents.values())
+}
+
 export async function scrapeEventList(
   searchUrl: string,
-  browser: Browser,
+  browserOrPage: Browser | Page,
 ): Promise<BCPEvent[]> {
-  const page = await browser.newPage()
+  const ownPage = 'newPage' in browserOrPage
+  const page = ownPage ? await (browserOrPage as Browser).newPage() : (browserOrPage as Page)
   const allEvents: BCPEvent[] = []
 
   try {
@@ -26,6 +116,7 @@ export async function scrapeEventList(
     await page.waitForTimeout(2000) // Let dynamic content load
 
     let hasMore = true
+    let prevCount = 0
     while (hasMore) {
       // Extract events from current page — read individual <p> elements, not concatenated text
       const events = await page.evaluate(() => {
@@ -99,17 +190,25 @@ export async function scrapeEventList(
         })
       }
 
-      // Check for next page button
-      const nextButton = await page.$('button:has-text("next page"):not([disabled])')
-      if (nextButton) {
-        await nextButton.click()
-        await page.waitForTimeout(2000)
+      // Stop if no new events were found this round
+      if (allEvents.length === prevCount) {
+        hasMore = false
+        break
+      }
+      prevCount = allEvents.length
+
+      // Check for "Load More" button
+      const loadMoreButton = await page.$('button:has-text("Load More"):not([disabled])')
+      if (loadMoreButton) {
+        console.log(`  ... ${allEvents.length} events so far, loading more...`)
+        await loadMoreButton.click()
+        await page.waitForTimeout(3000)
       } else {
         hasMore = false
       }
     }
   } finally {
-    await page.close()
+    if (ownPage) await page.close()
   }
 
   return allEvents

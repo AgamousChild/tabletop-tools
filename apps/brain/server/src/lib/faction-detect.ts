@@ -39,7 +39,25 @@ export const FACTION_PATTERNS: Array<{ pattern: string; slug: string }> = [
   { pattern: 'drukhari', slug: 'drukhari' },
   { pattern: 'votann', slug: 'leagues-of-votann' },
   { pattern: 'chaos daemon', slug: 'chaos-daemons' },
+  // Common abbreviations
+  { pattern: 'csm', slug: 'chaos-space-marines' },
+  { pattern: 'gk', slug: 'grey-knights' },
+  { pattern: 'dg', slug: 'death-guard' },
+  { pattern: 'ts', slug: 'thousand-sons' },
+  { pattern: 'we', slug: 'world-eaters' },
+  { pattern: 'gsc', slug: 'genestealer-cults' },
+  { pattern: 'admech', slug: 'adeptus-mechanicus' },
 ]
+
+// Abbreviation → subfaction mappings (resolved via SUBFACTION_TO_PARENT)
+export const ABBREVIATION_TO_SUBFACTION: Record<string, string> = {
+  'ba': 'blood angels',
+  'da': 'dark angels',
+  'sw': 'space wolves',
+  'bt': 'black templars',
+  'dw': 'deathwatch',
+  'sm': '',  // plain Space Marines, no subfaction
+}
 
 // ── Subfaction → parent faction mapping ───────────────────────────────────────
 
@@ -121,15 +139,39 @@ export function detectFactions(query: string): { factions: string[]; subfaction?
   // Track consumed text ranges to prevent double-matching substrings
   const consumed: Array<[number, number]> = []
 
-  // Check subfaction keywords first — they imply a parent faction
+  // Check abbreviation-to-subfaction first (e.g., "BA" → "blood angels")
+  for (const [abbr, sf] of Object.entries(ABBREVIATION_TO_SUBFACTION)) {
+    const re = new RegExp(`\\b${abbr}\\b`, 'i')
+    const m = re.exec(lower)
+    if (m) {
+      if (sf) {
+        // Has a subfaction (e.g., BA → blood angels)
+        const parent = SUBFACTION_TO_PARENT[sf]
+        if (parent) {
+          found.add(parent)
+          subfaction = sf
+          consumed.push([m.index, m.index + m[0].length])
+        }
+      } else {
+        // Plain faction abbreviation (e.g., SM → space-marines)
+        found.add('space-marines')
+        consumed.push([m.index, m.index + m[0].length])
+      }
+      break
+    }
+  }
+
+  // Check subfaction keywords — they imply a parent faction
   // Also consume the matched text range so FACTION_PATTERNS doesn't re-match
-  for (const [sf, parent] of Object.entries(SUBFACTION_TO_PARENT)) {
-    const idx = lower.indexOf(sf)
-    if (idx !== -1) {
-      found.add(parent)
-      subfaction = sf
-      consumed.push([idx, idx + sf.length])
-      break // only one subfaction
+  if (!subfaction) {
+    for (const [sf, parent] of Object.entries(SUBFACTION_TO_PARENT)) {
+      const idx = lower.indexOf(sf)
+      if (idx !== -1) {
+        found.add(parent)
+        subfaction = sf
+        consumed.push([idx, idx + sf.length])
+        break // only one subfaction
+      }
     }
   }
 

@@ -1,0 +1,14 @@
+{
+  "mcpServers": {
+    "brain": {
+      "command": "cmd",
+      "args": ["/c", "npx", "tsx", "mcp/brain-server/src/index.ts"],
+      "cwd": "C:/R/tabletop-tools"
+    },
+    "tts": {
+      "command": "cmd",
+      "args": ["/c", "npx", "tsx", "mcp/tts-client/src/index.ts"],
+      "cwd": "C:/R/tabletop-tools"
+    }
+  }
+}

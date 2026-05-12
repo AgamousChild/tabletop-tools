@@ -267,6 +267,7 @@ export function convertGameData(input: GameDataInput, retrievedAt?: string): Gam
   const compositionsByDatasheet = groupBy(filteredCompositions, r => r.datasheetId)
   const costsByDatasheet = groupBy(filteredCosts, r => r.datasheetId)
   const wargearByDatasheet = groupBy(filteredWargear, r => r.datasheetId)
+  const wargearOptionsByDatasheet = groupBy(filteredWargearOptions, r => r.datasheetId)
   const abilitiesByDatasheet = groupBy(filteredUnitAbilities, r => r.datasheetId)
   const stratagemsByDetachment = groupBy(filteredStratagems, r => r.detachmentId)
   const enhancementsByDetachment = groupBy(filteredEnhancements, r => r.detachmentId)
@@ -339,6 +340,9 @@ export function convertGameData(input: GameDataInput, retrievedAt?: string): Gam
     const compositionText = compositions.map(c => stripHtml(c.description)).join('\n')
     const costText = costs.map(c => `${stripHtml(c.description)}: ${c.cost}pts`).join(', ')
 
+    const wargearOpts = wargearOptionsByDatasheet.get(ds.id) ?? []
+    const wargearOptsText = wargearOpts.map(w => `• ${stripHtml(w.description)}`).join('\n')
+
     const content = [
       statBlock,
       ds.role ? `**Role:** ${ds.role}` : '',
@@ -348,8 +352,25 @@ export function convertGameData(input: GameDataInput, retrievedAt?: string): Gam
       costText ? `**Points:** ${costText}` : '',
       ds.transport ? `**Transport:** ${stripHtml(ds.transport)}` : '',
       ds.loadout ? `**Loadout:** ${stripHtml(ds.loadout)}` : '',
+      wargearOptsText ? `**Wargear Options:**\n${wargearOptsText}` : '',
       ds.damagedW ? `**Damaged (${ds.damagedW}W):** ${stripHtml(ds.damagedDescription)}` : '',
     ].filter(Boolean).join('\n\n')
+
+    // Build structured points costs
+    const unitPoints = costs.length > 0
+      ? costs.map(c => ({ models: c.description || '1 model', cost: parseInt(c.cost) || 0 }))
+      : undefined
+
+    // Build structured stat line from Wahapedia data
+    const unitStats = ds.move || ds.toughness || ds.save || ds.wounds ? {
+      M: ds.move || '-',
+      T: parseInt(ds.toughness) || 0,
+      SV: ds.save ? `${ds.save}+` : '-',
+      W: parseInt(ds.wounds) || 0,
+      LD: ds.leadership ? `${ds.leadership}+` : '-',
+      OC: parseInt(ds.oc as any) || 0,
+      ...(ds.invSv ? { invSv: `${ds.invSv}+` } : {}),
+    } : undefined
 
     const node: Node = {
       id: ds.id,  // BSData GUID
@@ -361,10 +382,12 @@ export function convertGameData(input: GameDataInput, retrievedAt?: string): Gam
       factionId: normalizeFactionId(ds.factionId),
       subfaction: dsSubfactionMap.get(ds.id),
       datasheetId: ds.id,
+      ...(unitStats ? { stats: unitStats } : {}),
+      ...(unitPoints ? { points: unitPoints } : {}),
       sources: [source],
       refs: [],
       version: 1,
-      keywords: [...keywords.map(k => k.keyword.toLowerCase()), ds.role.toLowerCase()].filter(Boolean),
+      keywords: [...new Set([...keywords.map(k => k.keyword.toLowerCase()), ...(ds.role.toLowerCase() !== 'other' ? [ds.role.toLowerCase()] : [])].filter(Boolean))],
     }
 
     // Add combat profile to keywords for combat-relevant queries
@@ -457,7 +480,23 @@ export function convertGameData(input: GameDataInput, retrievedAt?: string): Gam
     if (allAbilityText.includes('stealth')) node.keywords.push('stealth')
     if (allAbilityText.includes('scouts')) node.keywords.push('scouts')
     if (allAbilityText.includes('infiltrator')) node.keywords.push('infiltrators')
-    if (allAbilityText.includes('deadly demise')) node.keywords.push('deadly demise')
+    // Deadly Demise — extract value from ability parameter or description
+    if (allAbilityText.includes('deadly demise')) {
+      let ddValue = ''
+      // Check core ability parameter first (e.g. parameter="D3")
+      for (const ab of unitAbs) {
+        if (/deadly demise/i.test(ab.name) && ab.parameter) {
+          ddValue = ab.parameter.toUpperCase()
+          break
+        }
+      }
+      // Fallback: check ability text for "Deadly Demise D3" pattern
+      if (!ddValue) {
+        const ddMatch = allAbilityText.match(/deadly demise\s+(d\d+)/i)
+        if (ddMatch) ddValue = ddMatch[1]!.toUpperCase()
+      }
+      node.keywords.push(ddValue ? `deadly demise ${ddValue}` : 'deadly demise')
+    }
     // Feel No Pain — check ability descriptions AND core ability parameters
     const fnpValues: number[] = []
     // From ability text (e.g. "have the Feel No Pain 5+ ability")
@@ -492,6 +531,9 @@ export function convertGameData(input: GameDataInput, retrievedAt?: string): Gam
       node.content = `**Derived Type:** ${derivedType}\n\n${node.content}`
       node.keywords.push(`type:${slugify(derivedType)}`)
     }
+
+    // Final dedup — abilities scan may have pushed duplicates of existing keywords
+    node.keywords = [...new Set(node.keywords)]
 
     nodes.push(node)
 
@@ -535,6 +577,14 @@ export function convertGameData(input: GameDataInput, retrievedAt?: string): Gam
       factionId: dsFactionMap.get(wg.datasheetId),
       subfaction: dsSubfactionMap.get(wg.datasheetId),
       datasheetId: wg.datasheetId,
+      weaponStats: {
+        range: wg.range || 'Melee',
+        A: wg.attacks || '1',
+        skill: wg.skill || '-',
+        S: parseInt(wg.strength) || 0,
+        AP: parseInt(wg.ap) || 0,
+        D: wg.damage || '1',
+      },
       sources: [source],
       refs: [],
       version: 1,
@@ -601,7 +651,17 @@ export function convertGameData(input: GameDataInput, retrievedAt?: string): Gam
   // Build set of faction ability names — these are army rules, not unit abilities.
   // Skip unit abilities that duplicate a faction ability (e.g. Blessings of Khorne
   // appears on every WE datasheet but is one army rule, handled in section 4).
-  const factionAbilityNames = new Set(input.abilities.map(a => a.name.toLowerCase()))
+  // Only include abilities that are actual army rules (non-empty factionId, not Designer's Note).
+  const factionAbilityNames = new Set(
+    input.abilities
+      .filter(a => {
+        const fSlug = normalizeFactionId(a.factionId)
+        if (!fSlug) return false
+        if (/^designer'?s?\s*note$/i.test(a.name)) return false
+        return true
+      })
+      .map(a => a.name.toLowerCase())
+  )
 
   // For army rules that appear as unit abilities: instead of creating duplicate nodes,
   // create refs from the faction ability node to each datasheet that has the keyword.
@@ -732,8 +792,18 @@ export function convertGameData(input: GameDataInput, retrievedAt?: string): Gam
 
   // ── 4. Faction abilities (army rules) → faction/faction-ability nodes ─────
 
+  // Skip abilities with empty factionId — these are core/basic rules (Deep Strike,
+  // Deadly Demise, Feel No Pain, etc.) already handled by the core rules parser.
+  // Also skip "Designer's Note" entries which are clarifications, not army rules.
+  const factionAbilities = input.abilities.filter(ab => {
+    const fSlug = normalizeFactionId(ab.factionId)
+    if (!fSlug) return false
+    if (/^designer['\u2019]?s?\s*note$/i.test(ab.name)) return false
+    return true
+  })
+
   const seenFactionAbIds = new Set<string>()
-  for (const ab of input.abilities) {
+  for (const ab of factionAbilities) {
     let factionAbId = `faction:${normalizeFactionId(ab.factionId)}:${slugify(ab.name)}`
     if (seenFactionAbIds.has(factionAbId)) {
       factionAbId = `faction:${normalizeFactionId(ab.factionId)}:${slugify(ab.name)}-${ab.id}`
@@ -857,7 +927,7 @@ export function convertGameData(input: GameDataInput, retrievedAt?: string): Gam
       summary: `${det.name} detachment for ${normalizeFactionId(det.factionId)}${detChapterMap.has(det.id) ? ` [${detChapterMap.get(det.id)} only]` : ' [any chapter]'}. ${detAbilities[0]?.name ?? ''}`,
       factionId: normalizeFactionId(det.factionId),
       subfaction: detChapterMap.has(det.id) ? detChapterMap.get(det.id)!.toLowerCase() : undefined,
-      detachmentId: det.id,
+      detachmentId: detNodeId,
       sources: [source],
       refs: [],
       version: 1,
@@ -893,7 +963,7 @@ export function convertGameData(input: GameDataInput, retrievedAt?: string): Gam
         summary: `${da.name} — detachment ability for ${det.name}. ${truncate(cleanDaDesc, 100)}`,
         factionId: normalizeFactionId(det.factionId),
         subfaction: daSubfaction,
-        detachmentId: det.id,
+        detachmentId: detNodeId,
         sources: [source],
         refs: [],
         version: 1,
@@ -927,7 +997,7 @@ export function convertGameData(input: GameDataInput, retrievedAt?: string): Gam
         summary: `${strat.name} (${strat.cpCost}CP, ${strat.phase}) — ${truncate(cleanStratDesc, 100)}`,
         factionId: normalizeFactionId(det.factionId),
         subfaction: stratSubfaction,
-        detachmentId: det.id,
+        detachmentId: detNodeId,
         phase: mapPhase(strat.phase),
         sources: [source],
         refs: [],
@@ -961,7 +1031,7 @@ export function convertGameData(input: GameDataInput, retrievedAt?: string): Gam
         summary: `${enh.name} (${enh.cost}pts) — ${truncate(cleanEnhDesc, 100)}`,
         factionId: normalizeFactionId(det.factionId),
         subfaction: enhSubfaction,
-        detachmentId: det.id,
+        detachmentId: detNodeId,
         sources: [source],
         refs: [],
         version: 1,
@@ -1172,150 +1242,14 @@ export function convertGameData(input: GameDataInput, retrievedAt?: string): Gam
     refs.push({
       sourceId: la.leaderId,
       targetId: la.attachedId,
-      rel: 'interacts_with',
-      context: `This leader can be attached to this unit as a Bodyguard.`,
+      rel: 'can_lead',
+      context: `This leader can be attached to this unit.`,
       bidirectional: true,
     })
   }
 
-  // ── 11. Combo detection — stacks_with refs ────────────────────────────────
-  //
-  // The three key fishing combos:
-  //   hit re-rolls + sustained hits = fish for extra hits
-  //   hit re-rolls + lethal hits = fish for auto-wounds
-  //   wound re-rolls + devastating wounds = fish for mortal wounds
-  //
-  // Scan all non-weapon, non-datasheet nodes for what they grant and what
-  // weapon type they target. Create stacks_with refs between complementary
-  // pairs that share a weapon type or both target "all weapons."
-
-  interface BuffEntry {
-    nodeId: string
-    title: string
-    unitName: string
-    factionId: string
-    subfaction: string
-    detachmentId: string
-    scope: ReturnType<typeof detectScope>
-    category: string
-    weaponTypes: string[]
-    grantsRerolls: 'hit' | 'wound' | null
-    grantsAbility: string[]
-  }
-
-  function classifyBuff(nodeId: string, title: string, content: string, factionId: string): BuffEntry | null {
-    const grants = classifyGrants(content)
-    if (!grants.grantsRerolls && grants.grantsAbility.length === 0) return null
-
-    return {
-      nodeId, title, factionId,
-      unitName: '',
-      subfaction: '',
-      detachmentId: '',
-      scope: 'unit' as const,
-      category: '',
-      weaponTypes: detectWeaponTypes(content),
-      ...grants,
-    }
-  }
-
-  // Build datasheet name lookup for unit context in combos
-  const dsNameMap = new Map<string, string>()
-  for (const ds of filteredDatasheets) dsNameMap.set(ds.id, ds.name)
-  // Build detachment name lookup
-  const detNameMap = new Map<string, string>()
-  for (const det of filteredDetachments) detNameMap.set(det.id, det.name)
-
-  // Collect all buffs from abilities, stratagems, enhancements, faction abilities
-  const allBuffs: BuffEntry[] = []
-
-  for (const n of nodes) {
-    if (n.category === 'weapon' || n.category === 'datasheet') continue
-    const buff = classifyBuff(n.id, n.title, n.content, n.factionId ?? '')
-    if (buff) {
-      buff.unitName = n.datasheetId ? (dsNameMap.get(n.datasheetId) ?? '') :
-                      n.detachmentId ? (detNameMap.get(n.detachmentId) ?? '') : ''
-      buff.subfaction = n.subfaction ?? ''
-      buff.detachmentId = n.detachmentId ?? ''
-      buff.category = n.category
-      buff.scope = detectScope(n.category, n.content)
-
-      allBuffs.push(buff)
-    }
-  }
-
-  // Find complementary pairs within the same faction (or generic)
-  // hit re-rolls + sustained hits/lethal hits
-  // wound re-rolls + devastating wounds
-  const COMBOS: Array<{ rerollType: 'hit' | 'wound'; ability: string }> = [
-    { rerollType: 'hit', ability: 'sustained hits' },
-    { rerollType: 'hit', ability: 'lethal hits' },
-    { rerollType: 'wound', ability: 'devastating wounds' },
-  ]
-
-  const seenCombos = new Set<string>()
-
-  for (const combo of COMBOS) {
-    const rerollers = allBuffs.filter(b => b.grantsRerolls === combo.rerollType)
-    const abilityGranters = allBuffs.filter(b => b.grantsAbility.includes(combo.ability))
-
-    for (const rr of rerollers) {
-      for (const ag of abilityGranters) {
-        if (rr.nodeId === ag.nodeId) continue
-
-        // ── Army construction constraints ──
-
-        // Must be same faction or one is generic
-        if (rr.factionId && ag.factionId && rr.factionId !== ag.factionId) continue
-
-        // Chapter lock: if both have subfactions, they must match
-        if (rr.subfaction && ag.subfaction && rr.subfaction !== ag.subfaction) continue
-
-        // One detachment: stratagems/enhancements from different detachments can't combine
-        if (rr.detachmentId && ag.detachmentId && rr.detachmentId !== ag.detachmentId
-            && (rr.category === 'stratagem' || rr.category === 'enhancement')
-            && (ag.category === 'stratagem' || ag.category === 'enhancement')) continue
-
-        // Bearer-only scope: enhancement on bearer + leader ability on unit don't fully stack
-        // (only the bearer benefits from both, not the whole unit)
-        // Still create the ref but mark it as bearer-limited
-        const bearerLimited = rr.scope === 'bearer' || ag.scope === 'bearer'
-
-        // Two leader abilities can't apply to the same unit (one leader per unit)
-        // Leader abilities are unit-abilities from characters (have datasheetId, scope=unit)
-        const bothLeaders = rr.scope === 'unit' && ag.scope === 'unit'
-            && rr.category === 'unit-ability' && ag.category === 'unit-ability'
-            && rr.nodeId.startsWith('ability:') && ag.nodeId.startsWith('ability:')
-        if (bothLeaders) continue
-
-        // Must share a weapon type or one targets 'all'
-        const sharedTypes = rr.weaponTypes.filter(t =>
-          t === 'all' || ag.weaponTypes.includes(t) || ag.weaponTypes.includes('all')
-        )
-        if (sharedTypes.length === 0) continue
-
-        // Deduplicate — only create one ref per pair
-        const comboKey = [rr.nodeId, ag.nodeId].sort().join('|')
-        if (seenCombos.has(comboKey)) continue
-        seenCombos.add(comboKey)
-
-        const weaponTypeStr = sharedTypes.includes('all') ? 'weapons' : sharedTypes.join('/') + ' weapons'
-        const factionStr = rr.factionId || ag.factionId || 'generic'
-        const rrUnit = rr.unitName ? ` on ${rr.unitName}` : ''
-        const agUnit = ag.unitName ? ` on ${ag.unitName}` : ''
-
-        const bearerNote = bearerLimited ? ' [bearer only]' : ''
-
-        refs.push({
-          sourceId: rr.nodeId,
-          targetId: ag.nodeId,
-          rel: 'stacks_with',
-          context: `[${factionStr}] ${rr.title}${rrUnit} (${combo.rerollType} re-rolls) + ${ag.title}${agUnit} (${combo.ability}) on ${weaponTypeStr}${bearerNote}.`,
-          bidirectional: true,
-        })
-      }
-    }
-  }
+  // NOTE: stacks_with combo detection moved to lib/combo-detection.ts
+  // It runs post-merge+massage in build-graph.ts where all nodes have final factionId/subfaction.
 
   return { nodes, refs }
 }

@@ -33,9 +33,9 @@ describe('ResultCard', () => {
   })
 
   it('shows faction and subfaction tags', () => {
-    render(<ResultCard {...baseProps} factionId="Space Marines" subfaction="Ultramarines" />)
-    expect(screen.getByText('Space Marines')).toBeInTheDocument()
-    expect(screen.getByText('Ultramarines')).toBeInTheDocument()
+    render(<ResultCard {...baseProps} factionId="space-marines" subfaction="ultramarines" />)
+    expect(screen.getByText('SPACE MARINES')).toBeInTheDocument()
+    expect(screen.getByText('ULTRAMARINES')).toBeInTheDocument()
   })
 
   it('shows relevance score as percentage (85%)', () => {
@@ -48,14 +48,16 @@ describe('ResultCard', () => {
     expect(screen.getByText('How to resolve wound rolls in the shooting phase.')).toBeInTheDocument()
   })
 
-  it('shows layer badge', () => {
-    render(<ResultCard {...baseProps} />)
-    expect(screen.getByText('core')).toBeInTheDocument()
-  })
-
-  it('shows category', () => {
+  it('shows category badge', () => {
     render(<ResultCard {...baseProps} />)
     expect(screen.getByText('core-mechanic')).toBeInTheDocument()
+  })
+
+  it('shows category in colored badge', () => {
+    render(<ResultCard {...baseProps} />)
+    const badge = screen.getByText('core-mechanic')
+    expect(badge).toBeInTheDocument()
+    expect(badge.className).toContain('rounded')
   })
 
   it('shows phase when provided', () => {

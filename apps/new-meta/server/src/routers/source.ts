@@ -1,115 +1,72 @@
+import { sql } from 'drizzle-orm'
 import { z } from 'zod'
-import { eq, desc, and, gte, lte } from 'drizzle-orm'
 import { router, publicProcedure } from '../trpc.js'
-import { importedTournamentResults } from '@tabletop-tools/db'
-import type { TournamentRecord } from '@tabletop-tools/game-content'
 
 export const sourceRouter = router({
-  /** List imported tournaments with summary stats. */
   tournaments: publicProcedure
-    .input(
-      z.object({
-        format: z.string().optional(),
-        after: z.number().optional(),   // event_date timestamp
-        before: z.number().optional(),  // event_date timestamp
-        limit: z.number().int().min(1).max(100).default(20),
-      }).optional(),
-    )
+    .input(z.object({ format: z.string().optional(), limit: z.number().int().min(1).max(200).default(50) }).optional())
     .query(async ({ ctx, input }) => {
-      const rows = await ctx.db
-        .select()
-        .from(importedTournamentResults)
-        .orderBy(desc(importedTournamentResults.eventDate))
+      const rows = input?.format
+        ? await ctx.db.all(sql`
+            SELECT me.id, me.name, me.date, me.format, me.location, me.player_count, me.rounds,
+                   df.name AS winner_faction
+            FROM meta_events me LEFT JOIN dim_faction df ON me.win_faction_id = df.id
+            WHERE me.format = ${input.format}
+            ORDER BY me.date DESC LIMIT ${input.limit ?? 50}
+          `)
+        : await ctx.db.all(sql`
+            SELECT me.id, me.name, me.date, me.format, me.location, me.player_count, me.rounds,
+                   df.name AS winner_faction
+            FROM meta_events me LEFT JOIN dim_faction df ON me.win_faction_id = df.id
+            ORDER BY me.date DESC LIMIT ${input?.limit ?? 50}
+          `)
 
-      return rows
-        .filter((r: any) => {
-          if (input?.format && r.format !== input.format) return false
-          if (input?.after && r.eventDate < input.after) return false
-          if (input?.before && r.eventDate > input.before) return false
-          return true
-        })
-        .slice(0, input?.limit ?? 20)
-        .map((r: any) => {
-          let playerCount = 0
-          try {
-            const parsed: TournamentRecord[] = JSON.parse(r.parsedData)
-            playerCount = parsed.reduce((sum, rec) => sum + rec.players.length, 0)
-          } catch {}
-          return {
-            importId: r.id,
-            eventName: r.eventName,
-            eventDate: r.eventDate,
-            format: r.format,
-            metaWindow: r.metaWindow,
-            playerCount,
-            importedAt: r.importedAt,
-          }
-        })
+      return (rows as any[]).map(r => ({
+        eventId: r.id, eventName: r.name, eventDate: r.date, format: r.format,
+        location: r.location, playerCount: r.player_count, rounds: r.rounds,
+        winnerFaction: r.winner_faction,
+      }))
     }),
 
-  /** Single tournament detail — all players, results, lists. */
   tournament: publicProcedure
-    .input(z.object({ importId: z.string() }))
+    .input(z.object({ eventId: z.string() }))
     .query(async ({ ctx, input }) => {
-      const [row] = await ctx.db
-        .select()
-        .from(importedTournamentResults)
-        .where(eq(importedTournamentResults.id, input.importId))
-        .limit(1)
+      const eventRows = await ctx.db.all(sql`
+        SELECT me.*, df.name AS winner_faction
+        FROM meta_events me LEFT JOIN dim_faction df ON me.win_faction_id = df.id
+        WHERE me.id = ${input.eventId}
+      `)
+      const event = (eventRows as any[])[0]
+      if (!event) return null
 
-      if (!row) return null
+      const playerRows = await ctx.db.all(sql`
+        SELECT ep.player_name, ep.placement, ep.list_text, ep.wins, ep.losses, ep.draws,
+               df.name AS faction, dd.name AS detachment
+        FROM meta_event_players ep
+        JOIN dim_faction df ON ep.faction_id = df.id
+        LEFT JOIN dim_detachment dd ON ep.detachment_id = dd.id
+        WHERE ep.event_id = ${input.eventId}
+        ORDER BY ep.placement ASC
+      `)
 
-      let records: TournamentRecord[] = []
-      try {
-        records = JSON.parse(row.parsedData)
-      } catch {}
-
-      const players = records.flatMap((rec) =>
-        rec.players.map((p) => ({
-          ...p,
-          eventName: rec.eventName,
-          eventDate: rec.eventDate,
-        })),
-      )
+      const distRows = await ctx.db.all(sql`
+        SELECT wins, player_count, player_pct
+        FROM meta_event_win_distribution WHERE event_id = ${input.eventId}
+        ORDER BY wins ASC
+      `)
 
       return {
-        importId: row.id,
-        eventName: row.eventName,
-        eventDate: row.eventDate,
-        format: row.format,
-        metaWindow: row.metaWindow,
-        importedAt: row.importedAt,
-        players,
-      }
-    }),
-
-  /** Download raw source data for a tournament. */
-  download: publicProcedure
-    .input(
-      z.object({
-        importId: z.string(),
-        format: z.enum(['json', 'csv']),
-      }),
-    )
-    .query(async ({ ctx, input }) => {
-      const [row] = await ctx.db
-        .select()
-        .from(importedTournamentResults)
-        .where(eq(importedTournamentResults.id, input.importId))
-        .limit(1)
-
-      if (!row) return null
-
-      if (input.format === 'csv') {
-        return row.rawData
-      }
-
-      // json — return the parsed + reformatted JSON
-      try {
-        const parsed = JSON.parse(row.parsedData)
-        return JSON.stringify(parsed, null, 2)
-      } catch {
-        return row.parsedData
+        eventId: event.id, eventName: event.name, eventDate: event.date,
+        format: event.format, location: event.location, rounds: event.rounds,
+        playerCount: event.player_count, winnerFaction: event.winner_faction,
+        players: (playerRows as any[]).map(r => ({
+          playerName: r.player_name, placement: r.placement, faction: r.faction,
+          detachment: r.detachment, wins: r.wins, losses: r.losses, draws: r.draws,
+          listText: r.list_text,
+        })),
+        winDistribution: (distRows as any[]).map(r => ({
+          wins: r.wins, playerCount: r.player_count, playerPct: r.player_pct,
+        })),
       }
     }),
 })

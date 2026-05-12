@@ -22,10 +22,10 @@ function SectionRow({ label, text }: SectionRowProps) {
   if (!text) return null
   return (
     <div className="px-3 py-1.5 rounded">
-      <span className="text-[10px] md:text-xs font-bold text-orange-400 uppercase tracking-wider mr-2">
+      <span className="text-[11px] md:text-[13px] font-bold text-orange-400 uppercase tracking-wider mr-2">
         {label}
       </span>
-      <span className="text-xs md:text-sm text-slate-300">{text}</span>
+      <span className="text-[13px] md:text-[15px] text-slate-300">{text}</span>
     </div>
   )
 }
@@ -57,12 +57,12 @@ export function ChallengerCard({ data, context }: ChallengerCardProps) {
         className="px-3 py-2 md:px-4 md:py-3 border-b border-orange-500"
       >
         <div className="flex items-start justify-between gap-2">
-          <h2 className="font-['Oswald'] uppercase tracking-wide text-white text-base font-semibold">
+          <h2 className="font-['Oswald'] uppercase tracking-wide text-white text-[17px] font-semibold">
             {data.name}
           </h2>
           <span
             data-testid="challenger-badge"
-            className="shrink-0 text-[10px] font-bold uppercase px-2 py-0.5 rounded-full bg-orange-500/20 text-orange-400"
+            className="shrink-0 text-[11px] font-bold uppercase px-2 py-0.5 rounded-full bg-orange-500/20 text-orange-400"
           >
             CHALLENGER
           </span>
@@ -74,7 +74,7 @@ export function ChallengerCard({ data, context }: ChallengerCardProps) {
         {/* Narrative / VP condition text */}
         {narrative && (
           <div className="px-3 md:px-4">
-            <p className="text-slate-300 text-xs md:text-sm leading-relaxed whitespace-pre-wrap break-words">
+            <p className="text-slate-300 text-[13px] md:text-[15px] leading-relaxed whitespace-pre-wrap break-words">
               {narrative}
             </p>
           </div>
@@ -86,7 +86,7 @@ export function ChallengerCard({ data, context }: ChallengerCardProps) {
             data-testid="challenger-stratagem"
             className="mt-1 border-t border-slate-800 pt-1"
           >
-            <p className="px-3 text-[10px] font-semibold uppercase tracking-wider text-slate-500 mb-1">
+            <p className="px-3 text-[11px] font-semibold uppercase tracking-wider text-slate-500 mb-1">
               Paired Stratagem
             </p>
             <SectionRow label="WHEN" text={when} />
@@ -98,7 +98,7 @@ export function ChallengerCard({ data, context }: ChallengerCardProps) {
         {/* Plain text fallback when no structured sections */}
         {!hasStructured && !narrative && (
           <div className="px-3 md:px-4">
-            <p className="text-slate-500 text-xs italic">No content available.</p>
+            <p className="text-slate-500 text-[13px] italic">No content available.</p>
           </div>
         )}
       </div>
@@ -114,7 +114,7 @@ export function ChallengerCard({ data, context }: ChallengerCardProps) {
               <button
                 key={i}
                 data-testid="view-source"
-                className="text-xs text-blue-400 hover:text-blue-300 cursor-pointer bg-transparent border-0 p-0"
+                className="text-[13px] text-blue-400 hover:text-blue-300 cursor-pointer bg-transparent border-0 p-0"
                 onClick={() =>
                   context.onViewSource!(
                     src.title.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, ''),

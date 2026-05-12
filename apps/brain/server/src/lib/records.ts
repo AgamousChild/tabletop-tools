@@ -66,28 +66,35 @@ export function classifyNode(node: Node): Classification {
     return { recordType: 'unit', containerId: id }
   }
 
-  // Faction abilities require careful classification
-  if (category === 'faction-ability') {
-    if (detachmentId) {
-      // Detachment-scoped faction abilities are standalone rules in search
-      return { recordType: 'rule', containerId: id }
-    }
+  // Faction root nodes
+  if (category === 'faction') {
+    return { recordType: 'faction', containerId: id }
+  }
 
-    // Army rules — may be a sub-rule with parenthetical title
+  // Detachment container nodes
+  if (category === 'detachment') {
+    return { recordType: 'detachment', containerId: id }
+  }
+
+  // Army rules
+  if (category === 'army-rule') {
     const hasParenthetical = /\(.+\)$/.test(node.title.trim())
     const segments = id.split(':')
     if (hasParenthetical && segments.length >= 4) {
-      // Sub-rule: strip last segment to get parent container ID
       const parentId = segments.slice(0, -1).join(':')
       return { recordType: 'army-rule', containerId: parentId }
     }
-
     return { recordType: 'army-rule', containerId: id }
   }
 
-  // Detachment rules
+  // Faction abilities (detachment-scoped abilities)
+  if (category === 'faction-ability') {
+    return { recordType: 'rule', containerId: id }
+  }
+
+  // Detachment rules (the mechanic inside a detachment)
   if (category === 'detachment-rule') {
-    return { recordType: 'detachment', containerId: id }
+    return { recordType: 'rule', containerId: id }
   }
 
   // Stratagems and enhancements are always standalone

@@ -1252,6 +1252,28 @@ export function BrainScreen() {
       return
     }
 
+    // For detachment cards, fetch stratagems + enhancements from API
+    if (node.category === 'detachment-rule') {
+      const { card } = resolveCardView(node)
+      if (card.type === 'detachment') {
+        try {
+          const res = await fetch(`${API_BASE}/browse/detachment/${encodeURIComponent(node.id)}`)
+          const data = await res.json() as {
+            detachment: ResultNode
+            stratagems: ResultNode[]
+            enhancements: ResultNode[]
+            abilities: ResultNode[]
+          }
+          card.data.stratagems = (data.stratagems || []).map(n => buildStratagemData(n))
+          card.data.enhancements = (data.enhancements || []).map(n => buildEnhancementData(n))
+        } catch {
+          // Fallback: show card without stratagems/enhancements
+        }
+      }
+      setActiveCard(card)
+      return
+    }
+
     // For all other types: use resolveCardView
     const { card } = resolveCardView(node)
     setActiveCard(card)

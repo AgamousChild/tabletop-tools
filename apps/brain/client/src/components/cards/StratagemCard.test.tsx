@@ -34,9 +34,9 @@ describe('StratagemCard', () => {
     expect(screen.getByText('2')).toBeInTheDocument()
   })
 
-  it('renders type line', () => {
+  it('renders type line with phase', () => {
     render(<StratagemCard data={mockStratagem} context={baseContext} />)
-    expect(screen.getByText("Forgefather's Seekers — Battle Tactic Stratagem")).toBeInTheDocument()
+    expect(screen.getByText("Forgefather's Seekers — Battle Tactic Stratagem — Shooting phase")).toBeInTheDocument()
   })
 
   it('renders WHEN section with label and text', () => {
@@ -57,9 +57,15 @@ describe('StratagemCard', () => {
     expect(screen.getByText(/Torrent weapons equipped by models/)).toBeInTheDocument()
   })
 
-  it('renders detachment name', () => {
+  it('renders faction and detachment name in footer', () => {
     render(<StratagemCard data={mockStratagem} context={baseContext} />)
-    expect(screen.getByText("Forgefather's Seekers")).toBeInTheDocument()
+    expect(screen.getByText("SPACE MARINES — Forgefather's Seekers Detachment")).toBeInTheDocument()
+  })
+
+  it('prefers subfaction over factionId in footer', () => {
+    const data = { ...mockStratagem, subfaction: 'blood angels' }
+    render(<StratagemCard data={data} context={baseContext} />)
+    expect(screen.getByText("BLOOD ANGELS — Forgefather's Seekers Detachment")).toBeInTheDocument()
   })
 
   it('highlights EFFECT section when highlightTerms match effect text', () => {

@@ -130,10 +130,14 @@ function findRegion(
   if (minY >= maxY) return null
 
   // Convert to percentages with padding
+  // PDF coordinate system: Y=0 is at the BOTTOM of the page
+  // CSS top%: measured from the TOP of the page
+  // So we invert: topPct = 100 - (maxY / pageH) * 100
   const padX = pageW * 0.01
   const padY = pageH * 0.01
-  const topPct = Math.max(0, ((minY - padY) / pageH) * 100)
-  const heightPct = Math.min(100 - topPct, ((maxY - minY + padY * 2) / pageH) * 100)
+  const topPct = Math.max(0, (1 - (maxY + padY) / pageH) * 100)
+  const bottomPct = Math.min(100, (1 - (minY - padY) / pageH) * 100)
+  const heightPct = bottomPct - topPct
   const leftPct = Math.max(0, ((minX - padX) / pageW) * 100)
   const widthPct = Math.min(100 - leftPct, ((maxX - minX + padX * 2) / pageW) * 100)
 
@@ -196,6 +200,7 @@ export async function mapNodesToPages(
         const pdfSource = {
           type: 'pdf' as const,
           title: pdfName.split('-').map(w => w[0]!.toUpperCase() + w.slice(1)).join(' '),
+          publishedAt: node.sources[0]?.publishedAt,
           retrievedAt: node.sources[0]?.retrievedAt ?? new Date().toISOString(),
           page: region.page,
           topPct: region.topPct,

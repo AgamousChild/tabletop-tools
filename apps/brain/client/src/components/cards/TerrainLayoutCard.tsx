@@ -37,14 +37,14 @@ export function TerrainLayoutCard({ data }: TerrainLayoutCardProps) {
           <div className="mb-1.5">
             {/* Loading placeholder */}
             {!loaded && !error && (
-              <div className="flex items-center justify-center h-24 text-slate-400 text-[11px]">
+              <div className="flex items-center justify-center h-24 text-slate-400 text-xs">
                 Loading...
               </div>
             )}
 
             {/* Error fallback — show text description */}
             {error && (
-              <div className="text-[11px] text-slate-300 leading-snug">{data.description}</div>
+              <div className="text-xs text-slate-300 leading-snug">{data.description}</div>
             )}
 
             {/* PDF page image */}
@@ -62,7 +62,7 @@ export function TerrainLayoutCard({ data }: TerrainLayoutCardProps) {
           </div>
         ) : (
           /* No image — render text description */
-          <div className="text-[11px] text-slate-300 leading-snug mb-1.5">{data.description}</div>
+          <div className="text-xs text-slate-300 leading-snug mb-1.5">{data.description}</div>
         )}
 
         {/* Quality flags */}
@@ -71,7 +71,7 @@ export function TerrainLayoutCard({ data }: TerrainLayoutCardProps) {
             {data.qualityFlags.map((flag) => (
               <span
                 key={flag}
-                className="text-[8px] bg-amber-500/20 text-amber-400 px-1.5 py-0.5 rounded"
+                className="text-[9px] bg-amber-500/20 text-amber-400 px-1.5 py-0.5 rounded"
               >
                 {flag}
               </span>

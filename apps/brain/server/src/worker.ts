@@ -10,6 +10,55 @@ import type { Node } from './lib/model'
 import { retrieve } from './lib/retrieve'
 import type { Env } from './types'
 
+// ── Module-scope caches (persist across requests in the same Worker isolate) ──
+let cachedErrataNodes: Node[] | null = null
+let cachedEntityIndex: Map<string, { nodeId: string; category: string }> | null = null
+let cachedAllNodes: Node[] | null = null
+let cacheManifestHash: string | null = null
+
+async function getManifestHash(bucket: any): Promise<string> {
+  const obj = await bucket.get('manifest.json')
+  if (!obj) return ''
+  const text = await obj.text()
+  // Hash full content to detect any change
+  let h = 0
+  for (let i = 0; i < text.length; i++) h = ((h << 5) - h + text.charCodeAt(i)) | 0
+  return (h >>> 0).toString(16)
+}
+
+async function getAllNodes(bucket: any): Promise<Node[]> {
+  const hash = await getManifestHash(bucket)
+  if (cachedAllNodes && cacheManifestHash === hash) return cachedAllNodes
+
+  const manifestObj = await bucket.get('manifest.json')
+  if (!manifestObj) return []
+  const manifest = (await manifestObj.json()) as { files: Record<string, string> }
+  const allNodes: Node[] = []
+  for (const file of Object.keys(manifest.files)) {
+    if (!file.startsWith('nodes/')) continue
+    const obj = await bucket.get(file)
+    if (!obj) continue
+    const nodes = (await obj.json()) as Node[]
+    allNodes.push(...nodes)
+  }
+  cachedAllNodes = allNodes
+  cacheManifestHash = hash
+  cachedErrataNodes = allNodes.filter(n => n.category === 'faq' || n.category === 'commentary')
+  return allNodes
+}
+
+async function getErrataNodes(bucket: any): Promise<Node[]> {
+  if (cachedErrataNodes) return cachedErrataNodes
+  await getAllNodes(bucket)
+  return cachedErrataNodes ?? []
+}
+
+async function getCachedEntityIndex(bucket: any) {
+  if (cachedEntityIndex) return cachedEntityIndex
+  cachedEntityIndex = await getEntityIndex(bucket)
+  return cachedEntityIndex
+}
+
 /** Vectorize IDs must be <= 64 bytes. For long node IDs, truncate + append hash. */
 function vectorizeId(nodeId: string): string {
   if (nodeId.length <= 64) return nodeId
@@ -46,34 +95,108 @@ app.get('/version', (c) => c.json({ version: c.env.BUILD_VERSION || 'dev' }))
 
 // ── Browse endpoints ────────────────────────────────────────────────────────
 
+/** Browse category definitions — each has a filter function over nodes */
+const BROWSE_CATEGORIES: Array<{
+  id: string
+  label: string
+  filter: (n: Node) => boolean
+}> = [
+  {
+    id: 'core-rules',
+    label: 'Core Rules',
+    filter: (n) => {
+      if (n.layer !== 'core') return false
+      if (['faq', 'commentary', 'challenger', 'primary-mission', 'secondary-mission', 'twist', 'deployment-zone', 'terrain-layout'].includes(n.category)) return false
+      // Filter out table fragment nodes (titles like "+", "2+", single symbols)
+      if (/^[+\-\d".\s]+$/.test(n.title)) return false
+      // Filter out Tournament Companion nodes (previous season rules)
+      if (n.id.startsWith('tc:')) return false
+      return true
+    },
+  },
+  {
+    id: 'errata',
+    label: 'Errata',
+    filter: (n) => n.layer === 'errata' || n.category === 'faq' || n.category === 'commentary',
+  },
+  {
+    id: 'ca-deployments',
+    label: 'Chapter Approved Deployments',
+    filter: (n) => n.category === 'deployment-zone',
+  },
+  {
+    id: 'ca-terrain',
+    label: 'Chapter Approved Terrain',
+    filter: (n) => n.category === 'terrain-layout',
+  },
+  {
+    id: 'ca-primary-missions',
+    label: 'Chapter Approved Primary Missions',
+    filter: (n) => n.category === 'primary-mission',
+  },
+  {
+    id: 'ca-secondary-missions',
+    label: 'Chapter Approved Secondary Missions',
+    filter: (n) => n.category === 'secondary-mission' && !n.id.startsWith('tc:'),
+  },
+  {
+    id: 'ca-twists',
+    label: 'Chapter Approved Twists',
+    filter: (n) => n.category === 'twist',
+  },
+  {
+    id: 'ca-challengers',
+    label: 'Chapter Approved Challenger Cards',
+    filter: (n) => n.category === 'challenger',
+  },
+  {
+    id: 'army-rules',
+    label: 'Army Rules',
+    filter: (n) => {
+      if (n.category !== 'faction-ability' || n.detachmentId) return false
+      // Exclude faction parent placeholder nodes
+      if (n.summary?.endsWith(' faction.') || n.content?.includes('Top-level faction entry')) return false
+      // Exclude army-rule sub-rules (title has "(ParentName)" suffix, may have nested parens)
+      if (/\(.+\)\s*$/.test(n.title)) return false
+      return true
+    },
+  },
+  {
+    id: 'detachments',
+    label: 'Detachments',
+    filter: (n) => n.category === 'detachment-rule',
+  },
+  {
+    id: 'stratagems',
+    label: 'Stratagems',
+    filter: (n) => n.category === 'stratagem',
+  },
+  {
+    id: 'enhancements',
+    label: 'Enhancements',
+    // Filter out misclassified stat-line nodes (titles like "6\" 3+ 7+", "-3+ 7+", "10\" 2+ 6+")
+    filter: (n) => n.category === 'enhancement' && !/^[\d\-\u2011]/.test(n.title) && !/^\d+"/.test(n.title),
+  },
+  {
+    id: 'units',
+    label: 'Units',
+    filter: (n) => n.category === 'datasheet',
+  },
+  {
+    id: 'community',
+    label: 'Community',
+    filter: (n) => n.layer === 'community',
+  },
+]
+
 app.get('/browse/layers', async (c) => {
-  const bucket = c.env.BRAIN_BUCKET
-  const manifestObj = await bucket.get('manifest.json')
-  if (!manifestObj) return c.json({ layers: [] })
-  const manifest = (await manifestObj.json()) as { files: Record<string, string> }
+  const allNodes = await getAllNodes(c.env.BRAIN_BUCKET)
+  if (!allNodes.length) return c.json({ layers: [] })
 
-  // Count nodes per layer by reading each node file
-  const layers: Array<{ id: string; label: string; count: number }> = []
-  const layerLabels: Record<string, string> = {
-    core: 'Core Rules',
-    faction: 'Faction',
-    unit: 'Units',
-    errata: 'Errata',
-    balance: 'Balance',
-    community: 'Community',
-  }
-
-  for (const file of Object.keys(manifest.files)) {
-    if (!file.startsWith('nodes/')) continue
-    const obj = await bucket.get(file)
-    if (!obj) continue
-    const nodes = (await obj.json()) as Node[]
-    for (const node of nodes) {
-      const existing = layers.find((l) => l.id === node.layer)
-      if (existing) existing.count++
-      else layers.push({ id: node.layer, label: layerLabels[node.layer] || node.layer, count: 1 })
-    }
-  }
+  const layers = BROWSE_CATEGORIES.map(cat => {
+    const count = allNodes.filter(cat.filter).length
+    return { id: cat.id, label: cat.label, count }
+  }).filter(l => l.count > 0)
 
   return c.json({ layers })
 })
@@ -85,21 +208,13 @@ app.get('/browse/nodes', async (c) => {
   const page = Math.max(1, parseInt(c.req.query('page') || '1'))
   const pageSize = Math.min(Math.max(1, parseInt(c.req.query('pageSize') || '20')), 100)
 
-  const bucket = c.env.BRAIN_BUCKET
-  const manifestObj = await bucket.get('manifest.json')
-  if (!manifestObj) return c.json({ nodes: [], total: 0, page, pageSize, totalPages: 0 })
-  const manifest = (await manifestObj.json()) as { files: Record<string, string> }
+  const allCached = await getAllNodes(c.env.BRAIN_BUCKET)
+  if (!allCached.length) return c.json({ nodes: [], total: 0, page, pageSize, totalPages: 0 })
 
-  const allNodes: Node[] = []
-  for (const file of Object.keys(manifest.files)) {
-    if (!file.startsWith('nodes/')) continue
-    const obj = await bucket.get(file)
-    if (!obj) continue
-    const nodes = (await obj.json()) as Node[]
-    for (const node of nodes) {
-      if (node.layer === layer) allNodes.push(node)
-    }
-  }
+  const catDef = BROWSE_CATEGORIES.find(cat => cat.id === layer)
+  const allNodes = catDef
+    ? allCached.filter(catDef.filter)
+    : allCached.filter(n => n.layer === layer)
 
   // Filter to top-level records only
   const filtered = filterBrowseNodes(allNodes)
@@ -119,53 +234,57 @@ app.get('/browse/nodes', async (c) => {
 
 app.get('/browse/node/:id', async (c) => {
   const id = decodeURIComponent(c.req.param('id'))
-  const bucket = c.env.BRAIN_BUCKET
-  const manifestObj = await bucket.get('manifest.json')
-  if (!manifestObj) return c.json({ error: 'No data' }, 404)
-  const manifest = (await manifestObj.json()) as { files: Record<string, string> }
-
-  for (const file of Object.keys(manifest.files)) {
-    if (!file.startsWith('nodes/')) continue
-    const obj = await bucket.get(file)
-    if (!obj) continue
-    const nodes = (await obj.json()) as Node[]
-    const found = nodes.find((n) => n.id === id)
-    if (found) return c.json({ node: found })
-  }
-
+  const allNodes = await getAllNodes(c.env.BRAIN_BUCKET)
+  const found = allNodes.find((n) => n.id === id)
+  if (found) return c.json({ node: found })
   return c.json({ error: 'Node not found' }, 404)
 })
 
 app.get('/browse/unit/:id', async (c) => {
   const id = decodeURIComponent(c.req.param('id'))
-  const bucket = c.env.BRAIN_BUCKET
-  const manifestObj = await bucket.get('manifest.json')
-  if (!manifestObj) return c.json({ error: 'No data' }, 404)
-  const manifest = (await manifestObj.json()) as { files: Record<string, string> }
+  const allNodes = await getAllNodes(c.env.BRAIN_BUCKET)
 
   let datasheet: Node | null = null
   const weapons: Node[] = []
   const abilities: Node[] = []
 
-  for (const file of Object.keys(manifest.files)) {
-    if (!file.startsWith('nodes/')) continue
-    const obj = await bucket.get(file)
-    if (!obj) continue
-    const nodes = (await obj.json()) as Node[]
-    for (const n of nodes) {
-      if (n.id === id && n.category === 'datasheet') {
-        datasheet = n
-      } else if (n.datasheetId === id && n.category === 'weapon') {
-        weapons.push(n)
-      } else if (n.datasheetId === id && n.category === 'unit-ability') {
-        abilities.push(n)
-      }
+  for (const n of allNodes) {
+    if (n.id === id && n.category === 'datasheet') {
+      datasheet = n
+    } else if (n.datasheetId === id && n.category === 'weapon') {
+      weapons.push(n)
+    } else if (n.datasheetId === id && n.category === 'unit-ability') {
+      abilities.push(n)
     }
   }
 
   if (!datasheet) return c.json({ error: 'Unit not found' }, 404)
 
   return c.json({ datasheet, weapons, abilities })
+})
+
+app.get('/browse/detachment/:id', async (c) => {
+  const id = decodeURIComponent(c.req.param('id'))
+  const allNodes = await getAllNodes(c.env.BRAIN_BUCKET)
+
+  let detachment: Node | null = null
+  const stratagems: Node[] = []
+  const enhancements: Node[] = []
+  const abilities: Node[] = []
+
+  for (const n of allNodes) {
+    if (n.id === id && n.category === 'detachment-rule') {
+      detachment = n
+    } else if (n.detachmentId === id || n.detachmentId === id.split(':').pop()) {
+      if (n.category === 'stratagem') stratagems.push(n)
+      else if (n.category === 'enhancement') enhancements.push(n)
+      else if (n.category === 'faction-ability') abilities.push(n)
+    }
+  }
+
+  if (!detachment) return c.json({ error: 'Detachment not found' }, 404)
+
+  return c.json({ detachment, stratagems, enhancements, abilities })
 })
 
 // ── Data endpoints (serve from R2) ──────────────────────────────────────────
@@ -252,24 +371,9 @@ app.post('/search', async (c) => {
     return c.json({ detected, records: [], total: 0, page, pageSize, totalPages: 0, results })
   }
 
-  // Collect errata nodes from all R2 node files (correctness-first; caching is a future concern)
-  const errataNodes: Node[] = []
-  const manifestObj = await c.env.BRAIN_BUCKET.get('manifest.json')
-  if (manifestObj) {
-    const manifest = (await manifestObj.json()) as { files: Record<string, string> }
-    for (const file of Object.keys(manifest.files)) {
-      if (!file.startsWith('nodes/')) continue
-      const obj = await c.env.BRAIN_BUCKET.get(file)
-      if (!obj) continue
-      const fileNodes = (await obj.json()) as Node[]
-      for (const n of fileNodes) {
-        if (n.category === 'faq' || n.category === 'commentary') errataNodes.push(n)
-      }
-    }
-  }
-
-  // Attach errata and entity-link each record's primary node content
-  const entityIndex = await getEntityIndex(c.env.BRAIN_BUCKET)
+  // Use module-scope cached errata + entity index (loaded once per isolate)
+  const errataNodes = await getErrataNodes(c.env.BRAIN_BUCKET)
+  const entityIndex = await getCachedEntityIndex(c.env.BRAIN_BUCKET)
   const linkedRecords = rawRecords.map(record => ({
     ...record,
     errata: findErrataForNode(record.primaryNode, errataNodes),
@@ -279,9 +383,26 @@ app.post('/search', async (c) => {
     },
   }))
 
+  // Build nodeId → factionId/subfaction maps from all cached nodes
+  const nodeFactionMap = new Map<string, string>()
+  const nodeSubfactionMap = new Map<string, string>()
+  const allCachedNodes = await getAllNodes(c.env.BRAIN_BUCKET)
+  for (const n of allCachedNodes) {
+    if (n.factionId) nodeFactionMap.set(n.id, n.factionId)
+    if (n.subfaction) nodeSubfactionMap.set(n.id, n.subfaction)
+  }
+
+  // Infer faction + subfaction from top result if not detected from query
+  let searchFactionScope = detected.factions
+  let searchSubfaction = detected.subfaction
+  if (searchFactionScope.length === 0 && rawRecords.length > 0 && rawRecords[0].primaryNode.factionId) {
+    searchFactionScope = [rawRecords[0].primaryNode.factionId]
+    searchSubfaction = rawRecords[0].primaryNode.subfaction
+  }
+
   // Build cross-refs using cached indexes (loaded once per Worker isolate)
   const { fwd, rev } = await loadIndexes(c.env.BRAIN_BUCKET)
-  const records = buildCrossRefs(linkedRecords, fwd, rev)
+  const records = buildCrossRefs(linkedRecords, fwd, rev, searchFactionScope, nodeFactionMap, nodeSubfactionMap, searchSubfaction)
 
   // Paginate
   const total = records.length
@@ -563,14 +684,53 @@ app.post('/ask', async (c) => {
   const connected = retrieveResult?.connected ?? []
   const parentMap = retrieveResult?.parentMap ?? {}
 
-  // Build Node arrays for assembleContext
+  // Attach errata to primary results so the LLM context includes corrections
+  const errataNodesForAsk = await getErrataNodes(c.env.BRAIN_BUCKET)
   const primaryNodes = results as unknown as Node[]
-  const connectedNodes = connected as unknown as Node[]
+  const primaryErrata: string[] = []
+  for (const node of primaryNodes) {
+    const errata = findErrataForNode(node as Node, errataNodesForAsk)
+    for (const e of errata) {
+      primaryErrata.push(`ERRATA for ${node.title}: ${e.content}`)
+    }
+  }
+
+  // Build Node arrays for assembleContext
+  const allConnected = connected as unknown as Node[]
+
+  // Filter connected nodes by relevance to the actual question
+  // Score each connected node: how many query keywords appear in its title/summary/content
+  const queryWords = detected.strippedQuery.toLowerCase().split(/\s+/).filter(w => w.length > 2)
+  const mechanicKeywords = detected.keywords.map(k => k.toLowerCase())
+  const allQueryTerms = [...new Set([...queryWords, ...mechanicKeywords])]
+
+  const MAX_CONNECTED_FOR_CONTEXT = 15
+  const scoredConnected = allConnected.map(node => {
+    const text = `${node.title} ${node.summary} ${node.keywords.join(' ')}`.toLowerCase()
+    let score = 0
+    for (const term of allQueryTerms) {
+      if (text.includes(term)) score++
+    }
+    return { node, score }
+  })
+  scoredConnected.sort((a, b) => b.score - a.score)
+  const connectedNodes = scoredConnected
+    .slice(0, MAX_CONNECTED_FOR_CONTEXT)
+    .filter(s => s.score > 0) // only include nodes with at least one keyword match
+    .map(s => s.node)
 
   // Assemble Brain context
   let brainContext = retrieveResult
     ? assembleContext(primaryNodes, connectedNodes, parentMap, detected.subfaction)
     : ''
+
+  // Append errata corrections to context so the LLM always cites them
+  if (primaryErrata.length > 0) {
+    brainContext += '\n\n========================================\n'
+    brainContext += 'ERRATA / FAQ CORRECTIONS (always mention these):\n'
+    brainContext += '========================================\n\n'
+    for (const e of primaryErrata) brainContext += `- ${e}\n`
+  }
 
   // Find combo pairs
   let combos: string[] = []
@@ -581,11 +741,11 @@ app.post('/ask', async (c) => {
         string,
         Array<{ targetId: string; rel: string; context: string }>
       >
-      const allNodeIds = new Set([...results.map((n) => n.id), ...connected.map((n) => n.id)])
+      const allNodeIds = new Set([...results.map((n) => n.id), ...allConnected.map((n) => n.id)])
       const primaryIdSet = new Set(results.map((n) => n.id))
 
       const scoredCombos: Array<{ text: string; score: number }> = []
-      const allRelevantNodes = [...results, ...connected]
+      const allRelevantNodes = [...results, ...allConnected]
 
       for (const node of allRelevantNodes) {
         const fwdRefs = fwdIndex[node.id]
@@ -671,22 +831,25 @@ app.post('/ask', async (c) => {
   }
 
   // Build the combined LLM prompt
-  const systemPrompt = `You are a Warhammer 40,000 10th Edition rules expert. You have two sources of information:
+  const factionScope = detected.factions.length > 0
+    ? `\n\nIMPORTANT FACTION SCOPE: The user is asking about ${detected.subfaction || detected.factions.join(' / ')}. ONLY discuss abilities, stratagems, enhancements, and rules that are available to this specific faction. Do NOT mention abilities from other factions or chapters unless the user explicitly asks for a comparison. If a unit or ability belongs to a different faction or chapter, do NOT include it in your answer.`
+    : ''
 
-1. BRAIN KNOWLEDGE GRAPH — structured rules data from official sources
-2. WEB SEARCH RESULTS — a Gemini AI answer grounded in web sources
+  const systemPrompt = `You are a Warhammer 40,000 10th Edition rules expert. Answer the user's SPECIFIC question using the provided context. Do NOT summarize the entire faction — only address what was asked.${factionScope}
 
-Synthesize BOTH sources into ONE comprehensive answer. When they agree, present the information confidently. When they differ, prefer the Brain knowledge graph (it's from official rules) but include useful context from web results.
+CRITICAL: Focus on the question. If they ask "how does Oath of Moment work?" — explain Oath of Moment. Do NOT list every stratagem, enhancement, and ability the faction has.
 
-RULES:
-1. ALWAYS name the specific unit/datasheet that has each ability or weapon.
-2. For unit abilities from characters/leaders, explain that the ability is conferred by ATTACHING the character — not an "aura".
-3. For faction/detachment abilities, explain which detachment grants it.
-4. When the context has SECTION 1 and SECTION 2, present them under separate headings.
-5. When COMPETITIVE COMBOS are listed, explain each combo: name both abilities, the unit, and why combining them is powerful.
-6. If a FACTION UNIT LIST is provided and the question asks about units, include the full list organized by role.
-7. Be precise about game mechanics. Mention errata/FAQ corrections if present.
-8. Use markdown: ## headings, **bold** for names, - bullets for lists.`
+Sources (in priority order):
+1. BRAIN KNOWLEDGE GRAPH — official rules data (prefer this)
+2. WEB SEARCH RESULTS — supplementary context
+
+Rules:
+- Name the specific unit/datasheet that has each ability
+- Leader abilities are conferred by ATTACHING the character (not an aura)
+- For faction/detachment abilities, state which detachment grants it
+- Be precise about game mechanics. Cite errata if present.
+- Use markdown: ## headings, **bold** for names, - bullets for lists
+- Keep your answer focused and concise — under 500 words unless the question demands more`
 
   let userMessage = ''
   if (brainContext) {
@@ -854,7 +1017,27 @@ app.post('/graph-data', async (c) => {
   )
 
   // Combine primary results + connected nodes for the graph
-  const allNodes = [...results, ...connected]
+  // Filter by faction + subfaction — infer from top result if not in query
+  let factionScope = detected.factions
+  let subfactionScope = detected.subfaction
+  if (factionScope.length === 0 && results.length > 0 && results[0].factionId) {
+    factionScope = [results[0].factionId]
+    subfactionScope = results[0].subfaction
+  }
+  // Include both the parent faction AND the subfaction slug as allowed factionIds
+  // (Blood Angels data exists under both factionId:"space-marines" and factionId:"blood-angels")
+  const factionSet = factionScope.length > 0 ? new Set(factionScope) : null
+  if (factionSet && subfactionScope) {
+    factionSet.add(subfactionScope.replace(/\s+/g, '-'))
+  }
+  const allNodes = [...results, ...connected].filter(n => {
+    if (!factionSet) return true
+    if (!n.factionId) return true // generic/core — always include
+    if (!factionSet.has(n.factionId)) return false
+    // If we have a subfaction scope, filter out other subfactions
+    if (subfactionScope && n.subfaction && n.subfaction !== subfactionScope) return false
+    return true
+  })
   const seenIds = new Set<string>()
   const dedupedNodes = allNodes.filter((n) => {
     if (seenIds.has(n.id)) return false
@@ -862,53 +1045,96 @@ app.post('/graph-data', async (c) => {
     return true
   })
 
-  // Build edges from forward/reverse indexes — only between nodes in our set
+  // Load ref indexes
   const [revObj, fwdObj] = await Promise.all([
     bucket.get('refs/reverse-index.json'),
     bucket.get('refs/forward-index.json'),
   ])
 
+  const fwdIndex = fwdObj
+    ? await fwdObj.json() as Record<string, Array<{ targetId: string; rel: string }>>
+    : {} as Record<string, Array<{ targetId: string; rel: string }>>
+  const revIndex = revObj
+    ? await revObj.json() as Record<string, Array<{ sourceId: string; rel: string }>>
+    : {} as Record<string, Array<{ sourceId: string; rel: string }>>
+
   const nodeIdSet = new Set(dedupedNodes.map((n) => n.id))
+
+  // Walk eligible_for refs from datasheets to pull in their detachments
+  const detachmentIdsToFetch = new Set<string>()
+  for (const node of dedupedNodes) {
+    if (node.category !== 'datasheet') continue
+    const fwd = fwdIndex[node.id]
+    if (!fwd) continue
+    for (const ref of fwd) {
+      if (ref.rel === 'eligible_for' && !nodeIdSet.has(ref.targetId)) {
+        detachmentIdsToFetch.add(ref.targetId)
+      }
+    }
+  }
+
+  // Also walk eligible_for REVERSE — from detachments, find eligible units
+  const unitIdsToFetch = new Set<string>()
+  for (const node of dedupedNodes) {
+    if (node.category !== 'detachment' && node.category !== 'detachment-rule') continue
+    const rev = revIndex[node.id]
+    if (!rev) continue
+    for (const ref of rev) {
+      if (ref.rel === 'eligible_for' && !nodeIdSet.has(ref.sourceId)) {
+        unitIdsToFetch.add(ref.sourceId)
+      }
+    }
+  }
+
+  // Fetch both detachments (for units) and units (for detachments)
+  const idsToFetch = new Set([...detachmentIdsToFetch, ...unitIdsToFetch])
+  if (idsToFetch.size > 0) {
+    const allCachedForGraph = await getAllNodes(bucket)
+    for (const n of allCachedForGraph) {
+      if (!idsToFetch.has(n.id)) continue
+      if (factionSet && n.factionId && !factionSet.has(n.factionId)) continue
+      if (subfactionScope && n.subfaction && n.subfaction !== subfactionScope) continue
+      dedupedNodes.push(n as any)
+      nodeIdSet.add(n.id)
+    }
+  }
+
+  // Build edges from forward/reverse indexes — only between nodes in our set
   const edges: Array<{ source: string; target: string; rel: string }> = []
 
-  if (fwdObj) {
-    const fwdIndex = (await fwdObj.json()) as Record<
-      string,
-      Array<{ targetId: string; rel: string }>
-    >
-    for (const nodeId of nodeIdSet) {
-      const fwd = fwdIndex[nodeId]
-      if (fwd) {
-        for (const ref of fwd) {
-          if (nodeIdSet.has(ref.targetId)) {
-            edges.push({ source: nodeId, target: ref.targetId, rel: ref.rel })
-          }
+  for (const nodeId of nodeIdSet) {
+    const fwd = fwdIndex[nodeId]
+    if (fwd) {
+      for (const ref of fwd) {
+        if (nodeIdSet.has(ref.targetId)) {
+          edges.push({ source: nodeId, target: ref.targetId, rel: ref.rel })
         }
       }
     }
   }
 
-  if (revObj) {
-    const revIndex = (await revObj.json()) as Record<
-      string,
-      Array<{ sourceId: string; rel: string }>
-    >
-    const edgeSet = new Set(edges.map((e) => `${e.source}|${e.target}|${e.rel}`))
-    for (const nodeId of nodeIdSet) {
-      const rev = revIndex[nodeId]
-      if (rev) {
-        for (const ref of rev) {
-          const key = `${ref.sourceId}|${nodeId}|${ref.rel}`
-          if (nodeIdSet.has(ref.sourceId) && !edgeSet.has(key)) {
-            edges.push({ source: ref.sourceId, target: nodeId, rel: ref.rel })
-            edgeSet.add(key)
-          }
+  const edgeSet = new Set(edges.map((e) => `${e.source}|${e.target}|${e.rel}`))
+  for (const nodeId of nodeIdSet) {
+    const rev = revIndex[nodeId]
+    if (rev) {
+      for (const ref of rev) {
+        const key = `${ref.sourceId}|${nodeId}|${ref.rel}`
+        if (nodeIdSet.has(ref.sourceId) && !edgeSet.has(key)) {
+          edges.push({ source: ref.sourceId, target: nodeId, rel: ref.rel })
+          edgeSet.add(key)
         }
       }
     }
   }
 
-  return c.json({ detected, nodes: dedupedNodes, edges })
+  // Attach errata to graph nodes
+  const graphErrataNodes = await getErrataNodes(c.env.BRAIN_BUCKET)
+  const nodesWithErrata = dedupedNodes.map(n => ({
+    ...n,
+    errata: findErrataForNode(n as unknown as Node, graphErrataNodes),
+  }))
+
+  return c.json({ detected, nodes: nodesWithErrata, edges })
 })
 
 // ── Index vectors endpoint ──────────────────────────────────────────────────

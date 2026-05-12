@@ -1,4 +1,5 @@
 import { ErrataSection } from './ErrataSection'
+import { factionDisplayName } from '../../lib/faction-names'
 import type { CardContext, StratagemCardData } from './types'
 
 interface StratagemCardProps {
@@ -56,10 +57,10 @@ function Section({ testId, label, text, highlighted, onContentClick }: SectionPr
       data-testid={testId}
       className={`px-3 py-2 rounded ${highlighted ? 'bg-amber-400/10' : ''}`}
     >
-      <span className="text-[10px] md:text-xs font-bold text-blue-400 uppercase tracking-wider mr-2">
+      <span className="text-[11px] md:text-[13px] font-bold text-blue-400 uppercase tracking-wider mr-2">
         {label}
       </span>
-      <span className="text-xs md:text-sm text-slate-300">
+      <span className="text-[13px] md:text-[15px] text-slate-300">
         <KeywordText text={text} onContentClick={onContentClick} />
       </span>
     </div>
@@ -76,7 +77,7 @@ export function StratagemCard({ data, context }: StratagemCardProps) {
         {/* CP diamond */}
         <div className="relative w-8 h-8 flex items-center justify-center">
           <div className="absolute w-5 h-5 bg-amber-400 rotate-45" />
-          <span className="relative z-10 text-slate-900 font-bold text-sm leading-none">
+          <span className="relative z-10 text-slate-900 font-bold text-[15px] leading-none">
             {data.cpCost}
           </span>
         </div>
@@ -86,14 +87,16 @@ export function StratagemCard({ data, context }: StratagemCardProps) {
       <div className="flex-1 py-3 px-3 flex flex-col gap-1">
         {/* Name */}
         <h2
-          className="text-sm md:text-base text-white font-bold uppercase tracking-wide"
+          className="text-[15px] md:text-[17px] text-white font-bold uppercase tracking-wide"
           style={{ fontFamily: 'Oswald, sans-serif' }}
         >
           {data.name}
         </h2>
 
-        {/* Type line */}
-        <p className="text-[10px] md:text-xs text-blue-400 mb-1">{data.type}</p>
+        {/* Type line — Type — Phase */}
+        <p className="text-[11px] md:text-[13px] text-blue-400 mb-1">
+          {data.type}{data.phase ? ` — ${data.phase}` : ''}
+        </p>
 
         {/* Sections */}
         <Section
@@ -120,9 +123,9 @@ export function StratagemCard({ data, context }: StratagemCardProps) {
 
         <ErrataSection errata={data.errata} />
 
-        {/* Detachment name */}
-        <p className="text-xs text-slate-500 mt-1 pt-1 border-t border-slate-800">
-          {data.detachmentName}
+        {/* Faction — Detachment footer */}
+        <p className="text-[9px] text-slate-500 uppercase tracking-widest mt-1 pt-1 border-t border-slate-800">
+          {factionDisplayName(data.subfaction || data.factionId)}{data.detachmentName ? ` — ${data.detachmentName} Detachment` : ''}
         </p>
       </div>
     </div>

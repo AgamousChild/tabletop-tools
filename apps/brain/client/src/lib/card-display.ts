@@ -158,15 +158,28 @@ function buildCardForCategory(node: ResultNode, pdfSource?: PdfSource): CardData
 
     case 'faction-ability':
       if (!node.detachmentId) {
+        // Parse sub-rules from content — lines like "**NAME:** description"
+        const armyContent = node.content || node.summary || ''
+        const subRuleLines = armyContent.match(/^\*\*([^:*]+):\*\*\s*(.+)$/gm) || []
+        const subRules = subRuleLines.map(line => {
+          const m = line.match(/^\*\*([^:*]+):\*\*\s*(.+)$/)
+          return m ? { name: m[1]!.trim(), description: m[2]!.trim() } : null
+        }).filter((sr): sr is { name: string; description: string } => sr !== null)
+
+        // Description is the content before the first sub-rule
+        const firstSubIdx = armyContent.search(/^\*\*[A-Z][^:*]+:\*\*/m)
+        const mainDesc = firstSubIdx > 0 ? armyContent.slice(0, firstSubIdx).trim() : armyContent
+
         return {
           type: 'rule',
           data: {
             id: node.id,
             name: node.title,
-            description: node.content || node.summary,
+            description: mainDesc,
             factionId: node.factionId || '',
             subfaction: node.subfaction,
             isArmyRule: true,
+            subRules: subRules.length > 0 ? subRules : undefined,
             sources: node.sources as SourceRef[],
           },
         }
@@ -203,7 +216,8 @@ function buildCardForCategory(node: ResultNode, pdfSource?: PdfSource): CardData
       }
 
     case 'primary-mission':
-    case 'secondary-mission':
+    case 'secondary-mission': {
+      const missionContent = node.content || node.summary || ''
       return {
         type: 'mission',
         data: {
@@ -216,10 +230,11 @@ function buildCardForCategory(node: ResultNode, pdfSource?: PdfSource): CardData
               ? 'defender'
               : undefined,
           isFixed: node.keywords?.includes('fixed'),
-          content: node.content || node.summary,
+          content: missionContent,
           sources: node.sources as SourceRef[],
         },
       }
+    }
 
     case 'twist':
       return {
@@ -243,20 +258,26 @@ function buildCardForCategory(node: ResultNode, pdfSource?: PdfSource): CardData
         },
       }
 
-    case 'deployment-zone':
+    case 'deployment-zone': {
+      // Build all PDF page images (Incursion + Strike Force pages)
+      const deployImages = (node.sources ?? [])
+        .filter((s: any) => s.type === 'pdf' && s.page)
+        .map((s: any) => ({
+          pdfName: s.title.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, ''),
+          page: s.page as number,
+        }))
       return {
         type: 'deployment-zone',
         data: {
           id: node.id,
           name: node.title,
           description: node.content || node.summary,
-          pdfImage: pdfSource
-            ? { pdfName: pdfSource.pdfName, page: pdfSource.page }
-            : undefined,
+          pdfImages: deployImages.length > 0 ? deployImages : undefined,
           sources: node.sources as SourceRef[],
           qualityFlags: node.qualityFlags,
         },
       }
+    }
 
     case 'terrain-layout':
       return {
@@ -329,14 +350,23 @@ function buildCardForCategory(node: ResultNode, pdfSource?: PdfSource): CardData
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
-/** Extract a **FIELD:** value from content (multi-line, stops at next bold-caps label) */
+/** Extract a FIELD: value from content — handles both **FIELD:** (bold) and plain FIELD: formats */
 function extractField(content: string, field: string): string {
-  const re = new RegExp(
+  // Try bold format first: **FIELD:** value
+  const boldRe = new RegExp(
     `\\*\\*${field}:\\*\\*\\s*([\\s\\S]*?)(?=\\*\\*[A-Z]+:\\*\\*|$)`,
     'i',
   )
-  const m = content.match(re)
-  return m ? m[1]!.trim() : ''
+  const boldMatch = content.match(boldRe)
+  if (boldMatch) return boldMatch[1]!.trim()
+
+  // Try plain format: FIELD: value (stops at next ALLCAPS label or double newline)
+  const plainRe = new RegExp(
+    `(?:^|\\n)${field}:\\s*([\\s\\S]*?)(?=\\n[A-Z]+:|$)`,
+    'i',
+  )
+  const plainMatch = content.match(plainRe)
+  return plainMatch ? plainMatch[1]!.trim() : ''
 }
 
 /** Extract a **FIELD:** single-line value (stops at end of line) */
@@ -360,6 +390,53 @@ function extractRestriction(content: string): string | undefined {
     .map(l => l.trim())
     .filter(Boolean)
   return lines.find(l => /model only/i.test(l))
+}
+
+/**
+ * Parse structured fields from mission content text.
+ * Extracts: action, condition, when, scoring (VP value + cap).
+ */
+function parseMissionFields(content: string): {
+  action?: string
+  condition?: string
+  when?: string
+  scoring?: string
+} {
+  const result: { action?: string; condition?: string; when?: string; scoring?: string } = {}
+
+  // Extract WHEN: timing
+  const whenMatch = content.match(/\bWHEN:\s*([^.]+(?:\.[^A-Z])?)/i) ||
+    content.match(/\*\*WHEN:\*\*\s*([^\n]+)/i)
+  if (whenMatch) result.when = whenMatch[1]!.trim().replace(/\*\*/g, '')
+
+  // Extract VP scoring — look for "X VP" patterns and caps like "max XVP" or "to a maximum of"
+  const vpPatterns = content.match(/(\d+)\s*VP/gi)
+  const maxMatch = content.match(/(?:max(?:imum)?(?:\s+of)?)\s*(\d+)\s*VP/i) ||
+    content.match(/(\d+)\s*VP.*?(?:max|cap|limit)/i)
+  if (vpPatterns && vpPatterns.length > 0) {
+    const scores = vpPatterns.map(p => p.trim()).join(', ')
+    const cap = maxMatch ? maxMatch[1] + 'VP' : ''
+    result.scoring = cap ? `${scores} (max ${cap})` : scores
+  }
+
+  // Detect action requirement
+  const hasAction = /\baction\b/i.test(content) &&
+    (/\bperform\b|\bstart\b|\bcomplete\b|\bselect.*action\b/i.test(content))
+  if (hasAction) {
+    const actionMatch = content.match(/(?:perform|start|complete)\s+(?:the\s+)?([^.]+action[^.]*)/i)
+    result.action = actionMatch ? actionMatch[0]!.trim() : 'Yes — see description'
+  }
+
+  // Extract condition — the "how" of scoring
+  // Look for text near VP values that describes conditions
+  const condMatch = content.match(/(?:you\s+(?:score|earn)|each\s+(?:time|objective)|for\s+each|if\s+you\s+control)[^.]+/i)
+  if (condMatch) {
+    result.condition = condMatch[0]!.trim()
+    // Clean up markdown
+    result.condition = result.condition.replace(/\*\*/g, '')
+  }
+
+  return result
 }
 
 /** Format a detachmentId slug into a display name */

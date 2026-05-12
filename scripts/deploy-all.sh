@@ -6,6 +6,11 @@ set -e
 
 REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 
+# Load env vars (Cloudflare API token, Turso credentials, etc.)
+if [ -f "$REPO_ROOT/.env" ]; then
+  set -a && source "$REPO_ROOT/.env" && set +a
+fi
+
 echo "============================================"
 echo " Tabletop Tools — Full Deployment"
 echo "============================================"

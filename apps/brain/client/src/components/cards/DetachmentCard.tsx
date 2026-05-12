@@ -20,30 +20,30 @@ export function DetachmentCard({ data, context }: DetachmentCardProps) {
         <div className="border-b-2 border-blue-500 pb-1 mb-1.5">
           <div className="flex items-baseline justify-between">
             <span
-              className="text-sm font-bold uppercase tracking-wider text-white"
+              className="text-[15px] font-bold uppercase tracking-wider text-white"
               style={{ fontFamily: "'Oswald', sans-serif" }}
             >
               {data.name}
             </span>
             {data.factionName && (
-              <span className="text-[9px] text-blue-400 uppercase tracking-wide shrink-0 ml-2">
+              <span className="text-[10px] text-blue-400 uppercase tracking-wide shrink-0 ml-2">
                 {data.factionName}
               </span>
             )}
           </div>
-          <div className="text-[9px] text-blue-400 uppercase tracking-wide mt-0.5">
+          <div className="text-[10px] text-blue-400 uppercase tracking-wide mt-0.5">
             {data.factionName || data.factionId} — Detachment Ability
           </div>
         </div>
 
         {/* Ability text */}
-        <div className="text-[11px] text-slate-300 leading-snug whitespace-pre-line">
+        <div className="text-xs text-slate-300 leading-snug whitespace-pre-line">
           {data.abilityText}
         </div>
 
         {/* Chapter badge */}
         {data.chapterBadge && (
-          <span className="inline-block text-[9px] text-amber-400 bg-amber-400/10 border border-amber-400/20 px-1.5 py-0.5 rounded mt-2">
+          <span className="inline-block text-[10px] text-amber-400 bg-amber-400/10 border border-amber-400/20 px-1.5 py-0.5 rounded mt-2">
             {data.chapterBadge}
           </span>
         )}
@@ -70,7 +70,7 @@ export function DetachmentCard({ data, context }: DetachmentCardProps) {
         {data.qualityFlags?.length ? (
           <div className="flex gap-1 mt-2">
             {data.qualityFlags.map((f) => (
-              <span key={f} className="text-[8px] bg-amber-500/20 text-amber-400 px-1.5 py-0.5 rounded">
+              <span key={f} className="text-[9px] bg-amber-500/20 text-amber-400 px-1.5 py-0.5 rounded">
                 {f}
               </span>
             ))}

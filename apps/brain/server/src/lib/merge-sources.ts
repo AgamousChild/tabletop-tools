@@ -1,6 +1,34 @@
 import type { Node, NodeRef } from './model'
 import { normalizeFactionId } from './faction-codes'
 
+/** Slug → preferred English display name (ALL CAPS). */
+const FACTION_DISPLAY_NAMES: Record<string, string> = {
+  'space-marines': 'SPACE MARINES',
+  'chaos-space-marines': 'CHAOS SPACE MARINES',
+  't-au-empire': "T'AU EMPIRE",
+  'astra-militarum': 'ASTRA MILITARUM',
+  'adepta-sororitas': 'ADEPTA SORORITAS',
+  'adeptus-custodes': 'ADEPTUS CUSTODES',
+  'adeptus-mechanicus': 'ADEPTUS MECHANICUS',
+  'grey-knights': 'GREY KNIGHTS',
+  'imperial-agents': 'IMPERIAL AGENTS',
+  'imperial-knights': 'IMPERIAL KNIGHTS',
+  'chaos-knights': 'CHAOS KNIGHTS',
+  'death-guard': 'DEATH GUARD',
+  'thousand-sons': 'THOUSAND SONS',
+  'world-eaters': 'WORLD EATERS',
+  'chaos-daemons': 'CHAOS DAEMONS',
+  'leagues-of-votann': 'LEAGUES OF VOTANN',
+  'genestealer-cults': 'GENESTEALER CULTS',
+  'aeldari': 'AELDARI',
+  'drukhari': 'DRUKHARI',
+  'tyranids': 'TYRANIDS',
+  'necrons': 'NECRONS',
+  'orks': 'ORKS',
+  'emperors-children': "EMPEROR'S CHILDREN",
+  'unaligned': 'UNALIGNED',
+}
+
 export interface MergeStats {
   inputNodes: number
   outputNodes: number
@@ -43,7 +71,7 @@ export function mergeSources(allNodes: Node[], allRefs: NodeRef[]): MergeResult 
     summaryTagged: 0,
   }
 
-  // Step 1: Normalize factionIds (mutates a working copy — nodes from caller should be treated as mutable)
+  // Step 1: Normalize factionIds and assign factionName (mutates a working copy)
   for (const node of allNodes) {
     if (node.factionId) {
       const canonical = normalizeFactionId(node.factionId)
@@ -51,6 +79,8 @@ export function mergeSources(allNodes: Node[], allRefs: NodeRef[]): MergeResult 
         node.factionId = canonical
         stats.factionNormalizedCount++
       }
+      // Assign display name from slug
+      node.factionName = FACTION_DISPLAY_NAMES[canonical] ?? canonical.replace(/-/g, ' ').toUpperCase()
     }
   }
 
@@ -81,6 +111,89 @@ export function mergeSources(allNodes: Node[], allRefs: NodeRef[]): MergeResult 
       if (!existing.has(kw)) {
         node.keywords.push(kw)
       }
+    }
+  }
+
+  // Step 2b: Deduplicate detachment-rules by title + faction
+  // Different sources produce the same detachment with different IDs
+  // (e.g. "det:dark-angels:wrath-of-the-rock:wrath-of-the-rock" from Wahapedia
+  // vs "det:space-marines:wrath-of-the-rock" from faction packs with subfaction "dark angels")
+  // Keep the one with more content, redirect refs from the dropped ID to the kept ID.
+  // Map subfaction factionIds to their canonical subfaction name for dedup matching
+  const SUBFACTION_ALIASES: Record<string, string> = {
+    'blood-angels': 'blood angels', 'dark-angels': 'dark angels', 'space-wolves': 'space wolves',
+    'black-templars': 'black templars', 'deathwatch': 'deathwatch', 'ultramarines': 'ultramarines',
+    'iron-hands': 'iron hands', 'imperial-fists': 'imperial fists', 'raven-guard': 'raven guard',
+    'salamanders': 'salamanders', 'white-scars': 'white scars',
+  }
+
+  // Step 2c: Normalize subfactions on SM nodes before dedup
+  // Wahapedia uses factionId: "space-marines" for chapter-specific detachments
+  // but doesn't set subfaction. The faction pack parser uses factionId: "dark-angels" etc.
+  // Unify by detecting chapter slugs in node IDs and setting subfaction.
+  const CHAPTER_SLUGS_TO_SUBFACTION: Record<string, string> = {
+    'blood-angels': 'blood angels', 'dark-angels': 'dark angels', 'space-wolves': 'space wolves',
+    'black-templars': 'black templars', 'deathwatch': 'deathwatch', 'ultramarines': 'ultramarines',
+    'iron-hands': 'iron hands', 'imperial-fists': 'imperial fists', 'raven-guard': 'raven guard',
+    'salamanders': 'salamanders', 'white-scars': 'white scars', 'blood-ravens': 'blood ravens',
+  }
+  for (const node of nodeMap.values()) {
+    if (node.factionId === 'space-marines' && !node.subfaction) {
+      // Check if node ID or detachmentId contains a chapter slug
+      const idToCheck = node.detachmentId || node.id
+      for (const [slug, sub] of Object.entries(CHAPTER_SLUGS_TO_SUBFACTION)) {
+        if (idToCheck.includes(slug)) {
+          node.subfaction = sub
+          break
+        }
+      }
+    }
+  }
+
+  const DEDUP_CATEGORIES = new Set(['detachment-rule', 'stratagem', 'enhancement', 'faction-ability'])
+  const byTitleFaction = new Map<string, Node[]>()
+  for (const node of nodeMap.values()) {
+    if (!DEDUP_CATEGORIES.has(node.category)) continue
+    // For detachment-rules, dedup by title only — the same detachment often appears
+    // under different factionIds (e.g., "Wrath of the Rock" under both "dark-angels" and "space-marines")
+    // For other categories, include faction to avoid collapsing legitimately different abilities
+    const faction = node.category === 'detachment-rule'
+      ? '' // title-only dedup for detachments
+      : (node.subfaction || SUBFACTION_ALIASES[node.factionId ?? ''] || node.factionId || '')
+    const key = `${node.category}|${node.title.toLowerCase().trim()}|${faction}`
+    if (!byTitleFaction.has(key)) byTitleFaction.set(key, [])
+    byTitleFaction.get(key)!.push(node)
+  }
+
+  const redirectIds = new Map<string, string>() // droppedId → keptId
+  let titleDeduped = 0
+  for (const [, dupes] of byTitleFaction) {
+    if (dupes.length <= 1) continue
+    // Keep the one with more content
+    dupes.sort((a, b) => (b.content?.length ?? 0) - (a.content?.length ?? 0))
+    const keeper = dupes[0]!
+    for (let i = 1; i < dupes.length; i++) {
+      const dropped = dupes[i]!
+      redirectIds.set(dropped.id, keeper.id)
+      nodeMap.delete(dropped.id)
+      // Merge keywords from dropped into keeper
+      const existing = new Set(keeper.keywords)
+      for (const kw of dropped.keywords) {
+        if (!existing.has(kw)) keeper.keywords.push(kw)
+      }
+      titleDeduped++
+    }
+  }
+
+  console.log(`   Title-based dedup: ${titleDeduped} nodes removed, ${redirectIds.size} IDs redirected`)
+
+  // Redirect refs that pointed to dropped nodes
+  if (redirectIds.size > 0) {
+    for (const ref of allRefs) {
+      const newSource = redirectIds.get(ref.sourceId)
+      if (newSource) ref.sourceId = newSource
+      const newTarget = redirectIds.get(ref.targetId)
+      if (newTarget) ref.targetId = newTarget
     }
   }
 

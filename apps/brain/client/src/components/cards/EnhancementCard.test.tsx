@@ -40,9 +40,9 @@ describe('EnhancementCard', () => {
     expect(screen.getByText(/The bearer's melee weapons/)).toBeInTheDocument()
   })
 
-  it('renders detachment name', () => {
+  it('renders faction and detachment name in footer', () => {
     render(<EnhancementCard data={mockEnhancement} context={mockContext} />)
-    expect(screen.getByText('Wrathful Procession')).toBeInTheDocument()
+    expect(screen.getByText('SPACE MARINES — Wrathful Procession Detachment')).toBeInTheDocument()
   })
 
   it('does not render restriction line when restriction is absent', () => {

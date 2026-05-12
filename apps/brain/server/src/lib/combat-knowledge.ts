@@ -6,6 +6,8 @@
  * tactical decisions.
  */
 
+import { existsSync, readFileSync } from 'node:fs'
+import { join } from 'node:path'
 import type { Node, NodeRef } from './model'
 import { communityId } from './slugify'
 
@@ -328,6 +330,158 @@ Leader abilities affect only the attached unit. Aura abilities affect all nearby
     { sourceId: communityId('competitive-combos'), targetId: communityId('fishing-for-crits'), rel: 'interacts_with', context: 'Competitive combos build on the fishing for crits concept.' },
     { sourceId: communityId('competitive-combos'), targetId: communityId('attack-volume'), rel: 'requires', context: 'Combos require attack volume to be effective — more dice = more crit triggers.' },
   )
+
+  // ── Deployment Tactics ───────────────────────────────────────────────────
+
+  nodes.push({
+    id: communityId('deploy-hidden'),
+    layer: 'community',
+    category: 'tactic',
+    title: 'Deploy Hidden — The #1 Deployment Rule',
+    content: `If the enemy has any shooting at all, deploy everything behind LOS-blocking terrain. Being visible at deployment means taking damage before you act. Hide everything, push out on your own turn when you control the timing.\n\nThe only units that deploy in the open are cheap expendable screens you're OK losing (Jakhals, chaff infantry). Everything else — transports, gunline, hammers, anchors, characters — hides behind terrain.\n\n**Exception:** If the enemy has zero shooting (pure melee army like some World Eaters builds), deploy for board position instead — spread wide, take space, control objectives.`,
+    summary: 'Default deployment: hide everything behind terrain. Only cheap sacrificial screens go in the open. Push out on your own turn.',
+    sources: [source],
+    refs: [],
+    version: 1,
+    keywords: ['deployment', 'hidden', 'los', 'terrain', 'cover', 'turn 1', 'survival'],
+  })
+
+  nodes.push({
+    id: communityId('deploy-transports'),
+    layer: 'community',
+    category: 'tactic',
+    title: 'Transport Deployment — Hide Your Cargo',
+    content: `Transports (Rhinos, Impulsors, Wave Serpents, etc.) are high-priority targets because they carry your valuable cargo. If the enemy can see a transport at deployment, they shoot it turn 1 before it moves — killing both the transport and stranding the cargo.\n\n**Always deploy transports behind LOS-blocking terrain.** Forward position is irrelevant if the transport is dead. On your turn 1, the transport pushes forward safely because you choose when and where to expose it.\n\n**Common mistake:** Deploying transports at the front of the deployment zone for a faster delivery. This gets them killed before they move.`,
+    summary: 'Always hide transports behind terrain. A dead transport delivers nothing. Push forward on your own turn.',
+    sources: [source],
+    refs: [],
+    version: 1,
+    keywords: ['deployment', 'transport', 'rhino', 'hidden', 'cargo', 'turn 1'],
+  })
+
+  nodes.push({
+    id: communityId('deploy-gunline'),
+    layer: 'community',
+    category: 'tactic',
+    title: 'Gunline Deployment — Survive First, Shoot Later',
+    content: `Shooting units don't need to deploy with a firing lane. They deploy hidden behind terrain and move to a firing position on your turn 1 or 2.\n\n**Without Indirect Fire:** Deploy hidden, then move to a position where you can see targets through a terrain gap. Ideal position: behind terrain with a narrow firing lane through a corridor — you can see the enemy but they have limited angles on you.\n\n**With Indirect Fire:** Deploy completely hidden. Firing lanes are irrelevant since you shoot without LOS. Pure cover score.\n\n**Convoy tactic:** Deploy a gunline unit behind advancing transports. The transports push forward as mobile LOS blockers, and the gunline follows behind them. The enemy must deal with the transports before they can shoot the gunline.`,
+    summary: 'Deploy gunline hidden. Move to a firing lane on your turn. With Indirect, hide completely. Without Indirect, move to a terrain gap.',
+    sources: [source],
+    refs: [],
+    version: 1,
+    keywords: ['deployment', 'gunline', 'shooting', 'indirect', 'firing lane', 'terrain gap', 'convoy'],
+  })
+
+  nodes.push({
+    id: communityId('deploy-screens-vs-melee'),
+    layer: 'community',
+    category: 'tactic',
+    title: 'Forward Screens Against Melee Armies',
+    content: `Against melee-heavy armies with Advance and Charge (World Eaters, some Chaos), forward screens only work with cheap expendable units you don't care about losing.\n\n**Do:** Put cheap chaff (Jakhals, Cultists, Kroot) forward to absorb the first charge wave. They die, but they delay the enemy one turn and let your valuable units act.\n\n**Don't:** Put expensive melee units (Sacresants, Terminators) forward in the open. Against Advance+Charge armies with 24" threat range, they die turn 1 without fighting. Deploy them hidden in terrain and counter-charge on YOUR turn.\n\n**Key math:** Standard charge threat = Move + 12" (max). Advance+Charge threat = Move + 6" + 12" = Move + 18" (max). A 6" move unit with Advance+Charge threatens 24" — that reaches almost anywhere from the deployment zone edge.`,
+    summary: 'Against advance+charge armies, only cheap expendable units screen forward. Valuable melee units hide in terrain and counter-charge.',
+    sources: [source],
+    refs: [],
+    version: 1,
+    keywords: ['deployment', 'screen', 'melee', 'advance and charge', 'world eaters', 'counter-charge', 'chaff'],
+  })
+
+  nodes.push({
+    id: communityId('deploy-slow-units'),
+    layer: 'community',
+    category: 'tactic',
+    title: 'Slow Units Must Deploy Forward',
+    content: `Units with 6" or less movement and primarily melee or short-range weapons (18" or less) must deploy at the front edge of the deployment zone. A slow unit in the backfield takes 3+ turns to reach combat — by then the game is decided.\n\n**Examples:** Helbrute (6" move, melee + multi-melta 18"), Terminators without Deep Strike, heavy melee infantry.\n\n**Exception:** Slow units with long-range weapons (36"+) can deploy in the backfield — their guns reach the fight even if their legs don't.`,
+    summary: "Slow melee/short-range units deploy at the zone edge. They can't waste turns walking to the fight.",
+    sources: [source],
+    refs: [],
+    version: 1,
+    keywords: ['deployment', 'slow', 'movement', 'melee', 'forward', 'zone edge'],
+  })
+
+  nodes.push({
+    id: communityId('deploy-characters'),
+    layer: 'community',
+    category: 'tactic',
+    title: 'Character Deployment — Proximity Protection',
+    content: `Characters with conditional protection abilities (Lone Operative, -1 to wound auras, Look Out Sir) must deploy within range of the units that trigger those abilities.\n\n**Example:** A Daemon Prince of Khorne has "Lord of Murder" — gains Lone Operative when within 3" of friendly World Eaters Infantry. Deploy him within 3" of an Infantry unit, not isolated in a corner.\n\n**Attached characters** (10th ed Leader ability) deploy as part of their unit — one drop, one formation. They don't need separate positioning.\n\n**Solo characters** without protection abilities should deploy hidden behind terrain like everything else.\n\n**Common mistake:** Deploying characters alone, exposed, away from protective units. An isolated character is a priority target.`,
+    summary: 'Characters with proximity-based protection deploy next to their escort unit. Attached characters deploy as part of their unit.',
+    sources: [source],
+    refs: [],
+    version: 1,
+    keywords: ['deployment', 'character', 'lone operative', 'look out sir', 'leader', 'attachment', 'protection'],
+  })
+
+  nodes.push({
+    id: communityId('deploy-objectives'),
+    layer: 'community',
+    category: 'tactic',
+    title: 'Objective-Based Deployment Roles',
+    content: `Each objective on the table requires a different deployment approach:\n\n**Home objective:** Cheap unit deployed directly on it. Jakhals, Cultists, basic Infantry. Their only job is to stand there and score.\n\n**Safe objective** (no man's land, closer to you): Chaff/screen holds it, backed by shooting from your deployment zone or mid-range shooters. It's safe because you CONTROL the space with firepower, not because of what's standing on it.\n\n**Center objective(s):** The fight zone. Deploy your combat units toward these with screens in front.\n\n**Expansion objective** (no man's land, further out): Commit strong durable units. You're fighting to take and hold this under pressure. Fast forward-deploying units (Chaos Spawn, Bikes) can grab it early.\n\n**Enemy home:** Ignore at deployment. Deep strike or late-game push.`,
+    summary: 'Home: cheap holder. Safe: chaff + gunline cover. Center: fighting units. Expansion: strong push. Enemy home: late game.',
+    sources: [source],
+    refs: [],
+    version: 1,
+    keywords: ['deployment', 'objective', 'home', 'safe', 'expansion', 'center', 'scoring'],
+  })
+
+  nodes.push({
+    id: communityId('deploy-army-identity'),
+    layer: 'community',
+    category: 'tactic',
+    title: 'Deployment Posture — Match Your Army Identity',
+    content: `Your army's identity determines the entire deployment strategy:\n\n**Aggressive melee army** (World Eaters, Daemons): Don't screen. Every unit is a killer, objective holder, or forward objective grabber. Push fast, take space, force the enemy to react.\n\n**Defensive shooting army** (Tau, Astra Militarum): Castle behind terrain, layer screens, create overlapping fire lanes. Make the enemy come to you through a kill zone.\n\n**Mixed army** (Space Marines, Sisters): Hide valuable units, screen with chaff, deploy transport hammers hidden for turn 1 delivery.\n\n**Three deployment plans:** For any army against an unknown opponent, prepare three mental deployments — anti-shooting (hide everything), anti-mixed (hide valuable, screen forward), anti-melee (spread wide, take space). Choose based on the enemy list.`,
+    summary: "Aggressive armies push, defensive armies castle, mixed armies hide and screen. Prepare three deployment plans for different matchups.",
+    sources: [source],
+    refs: [],
+    version: 1,
+    keywords: ['deployment', 'army identity', 'aggressive', 'defensive', 'mixed', 'posture', 'matchup'],
+  })
+
+  nodes.push({
+    id: communityId('deploy-multi-turn'),
+    layer: 'community',
+    category: 'tactic',
+    title: 'Deploy for the Plan, Not the Position',
+    content: `The best deployment position isn't where a unit is most effective at the start of the game — it's where the unit needs to START so that its turn 1-2 movement puts it in the ideal position.\n\n**Example:** An Exorcist (36" range, no Indirect) deploys completely hidden with zero firing lanes. Why? Because its turn 1 plan is to move behind advancing Rhinos into the midboard, where it has firing lanes AND mobile cover. The deployment position serves the plan.\n\n**Think backwards:** Where does this unit need to be at the end of turn 2? What's its turn 1 move? That tells you where to deploy.\n\n**Unit convoys:** Some units deploy together because they move together. Transport + gunline behind it. Screen in front of an anchor. The deployment positions only make sense as a group.`,
+    summary: 'Deploy for where the unit needs to BE after moving, not where it starts. Think backwards from the turn 2 position.',
+    sources: [source],
+    refs: [],
+    version: 1,
+    keywords: ['deployment', 'movement', 'multi-turn', 'plan', 'convoy', 'position'],
+  })
+
+  nodes.push({
+    id: communityId('deploy-deep-strike-denial'),
+    layer: 'community',
+    category: 'tactic',
+    title: 'Backfield Deep Strike Denial',
+    content: `Cheap infantry units in the backfield aren't just holding objectives — they're creating 9" denial bubbles that prevent enemy deep strikers from landing behind your lines.\n\n**The threat:** If you leave your backfield empty, the enemy drops Seraphim, Terminators, or other deep strike units behind your army turn 2. They grab uncontested objectives or shoot your gunline in the back.\n\n**The fix:** Spread 10 cheap bodies across your backfield corners. Each model creates a 9" no-deep-strike bubble. 10 models spread out cover a huge area. Cost: ~65-105pts for complete backfield denial.\n\n**Key insight:** The unit doesn't need to fight or shoot effectively. It just needs to exist in the right places. Boltgun damage is a bonus, not the reason they're there.`,
+    summary: "Spread cheap infantry in the backfield to create 9\" deep strike denial zones. They exist to deny space, not to fight.",
+    sources: [source],
+    refs: [],
+    version: 1,
+    keywords: ['deployment', 'deep strike', 'denial', 'screen', 'backfield', '9 inch', 'reserves'],
+  })
+
+  // ── Load community.json (ingested nodes from content-ingestor) ───────────
+  const communityJsonPath = join(process.cwd(), '.local/brain/nodes/community.json')
+  if (existsSync(communityJsonPath)) {
+    try {
+      const ingested = JSON.parse(readFileSync(communityJsonPath, 'utf-8')) as Node[]
+      const existingIds = new Set(nodes.map(n => n.id))
+      let added = 0
+      for (const node of ingested) {
+        if (!existingIds.has(node.id)) {
+          nodes.push(node)
+          existingIds.add(node.id)
+          added++
+        }
+      }
+      if (added > 0) console.log(`   + ${added} ingested community nodes from community.json`)
+    } catch (err) {
+      console.error(`   ⚠ Failed to load community.json: ${err}`)
+    }
+  }
 
   return { nodes, refs }
 }

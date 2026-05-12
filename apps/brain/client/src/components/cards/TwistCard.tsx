@@ -15,12 +15,12 @@ export function TwistCard({ data, context }: TwistCardProps) {
         className="px-3 py-2 md:px-4 md:py-3 border-b border-green-500"
       >
         <div className="flex items-start justify-between gap-2">
-          <h2 className="font-['Oswald'] uppercase tracking-wide text-white text-base font-semibold">
+          <h2 className="font-['Oswald'] uppercase tracking-wide text-white text-[17px] font-semibold">
             {data.name}
           </h2>
           <span
             data-testid="twist-badge"
-            className="shrink-0 text-[10px] font-bold uppercase px-2 py-0.5 rounded-full bg-green-500/20 text-green-400"
+            className="shrink-0 text-[11px] font-bold uppercase px-2 py-0.5 rounded-full bg-green-500/20 text-green-400"
           >
             TWIST
           </span>
@@ -29,7 +29,7 @@ export function TwistCard({ data, context }: TwistCardProps) {
 
       {/* Body */}
       <div className="px-3 py-2 md:px-4 md:py-3">
-        <p className="text-slate-300 text-xs md:text-sm leading-relaxed whitespace-pre-wrap break-words">
+        <p className="text-slate-300 text-[13px] md:text-[15px] leading-relaxed whitespace-pre-wrap break-words">
           {data.description}
         </p>
       </div>
@@ -45,7 +45,7 @@ export function TwistCard({ data, context }: TwistCardProps) {
               <button
                 key={i}
                 data-testid="view-source"
-                className="text-xs text-blue-400 hover:text-blue-300 cursor-pointer bg-transparent border-0 p-0"
+                className="text-[13px] text-blue-400 hover:text-blue-300 cursor-pointer bg-transparent border-0 p-0"
                 onClick={() =>
                   context.onViewSource!(
                     src.title.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, ''),

@@ -19,6 +19,78 @@ function deriveMetaWindow(dateStr: string): string {
   return `${year}-Q${quarter}`
 }
 
+/** Normalize subfaction/chapter names to their parent faction */
+const FACTION_ALIASES: Record<string, string> = {
+  // Tyranids
+  'Forces of the Hive Mind': 'Tyranids',
+  'Hive Fleet Kronos': 'Tyranids',
+  'Hive Fleet Hyrda': 'Tyranids',
+
+  // Space Marines chapters
+  'Ultramarines': 'Space Marines (Astartes)',
+  'Salamanders': 'Space Marines (Astartes)',
+  'Imperial Fists': 'Space Marines (Astartes)',
+  'Iron Hands': 'Space Marines (Astartes)',
+  'Raven Guard': 'Space Marines (Astartes)',
+  'White Scars': 'Space Marines (Astartes)',
+  'Crimson Fists': 'Space Marines (Astartes)',
+  'Carcharadons': 'Space Marines (Astartes)',
+
+  // CSM legions
+  'Alpha Legion': 'Chaos Space Marines',
+  'Night Lords': 'Chaos Space Marines',
+  'Iron Warriors': 'Chaos Space Marines',
+  'Word Bearers': 'Chaos Space Marines',
+  'Red Corsairs': 'Chaos Space Marines',
+  'Black Legion': 'Chaos Space Marines',
+
+  // Blood Angels subfactions
+  'Flesh Tearers': 'Blood Angels',
+
+  // Dark Angels subfactions
+  'Deathwing': 'Dark Angels',
+
+  // Drukhari subfactions
+  'Kabal of the Flayed Skull': 'Drukhari',
+
+  // Orks clans
+  'Blood Axe': 'Orks',
+  'Freebooterz': 'Orks',
+  'Goffs': 'Orks',
+
+  // T'au septs
+  'T\'au Sept': 'T\'au Empire',
+  'Farsight Enclaves': 'T\'au Empire',
+
+  // Necron dynasties
+  'Sautekh': 'Necrons',
+  'Nihilakh': 'Necrons',
+
+  // Leagues of Votann
+  'Ymyr Conglomerate': 'Leagues of Votann',
+
+  // Chaos Daemons god-specific
+  'Nurgle Daemons': 'Chaos Daemons',
+  'Slaanesh Daemons': 'Chaos Daemons',
+  'Slaanesh': 'Chaos Daemons',
+
+  // Guard regiments
+  'Cadian Shock Troops': 'Astra Militarum',
+  'Catachan Jungle Fighters': 'Astra Militarum',
+
+  // Catch-all soup keywords
+  'Imperium': 'Imperial Agents',
+  'Chaos': 'Chaos Space Marines',
+  'Xenos': 'Aeldari', // best guess — usually Ynnari or mixed Aeldari
+
+  // Junk
+  '--------': '',
+}
+
+function normalizeFaction(faction: string): string {
+  return FACTION_ALIASES[faction] ?? faction
+}
+
 function deriveFormat(playerCount: number): string {
   if (playerCount >= 400) return 'Super Major'
   if (playerCount >= 200) return 'Major'
@@ -59,13 +131,14 @@ async function main() {
       .map(([name, r]) => ({
         name,
         placement: 0,
-        faction: r.faction,
+        faction: normalizeFaction(r.faction),
         wins: r.wins,
         losses: r.losses,
         draws: r.draws,
         points: 0,
-        listText: r.listUrl || undefined,
+        listText: undefined, // stored locally, not in DB
       }))
+      .filter(p => p.faction !== '')
       .sort((a, b) => b.wins - a.wins || a.losses - b.losses)
       .map((p, idx) => ({ ...p, placement: idx + 1 }))
 
@@ -90,7 +163,7 @@ async function main() {
         safeEventDate,
         tournamentRecord.format,
         deriveMetaWindow(event.date || '2024-06-01'),
-        JSON.stringify(data),
+        JSON.stringify({ event: data.event, recordCount: Object.keys(records).length }),
         JSON.stringify([tournamentRecord]),
         now,
       ],

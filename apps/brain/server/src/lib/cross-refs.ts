@@ -58,7 +58,29 @@ export function buildCrossRefs(
   records: AggregatedRecord[],
   fwd: Record<string, FwdEntry[]>,
   rev: Record<string, RevEntry[]>,
+  factionScope?: string[],
+  nodeFactionMap?: Map<string, string>,
+  nodeSubfactionMap?: Map<string, string>,
+  subfactionScope?: string,
 ): AggregatedRecord[] {
+  // When factionScope is set, only include cross-refs to nodes that share
+  // a faction or are generic (no faction). Uses the nodeFactionMap (nodeId → factionId)
+  // built from actual node data, not ID string parsing.
+  const factionSet = factionScope && factionScope.length > 0 ? new Set(factionScope) : null
+
+  function factionAllowed(nodeId: string): boolean {
+    if (!factionSet) return true
+    if (!nodeFactionMap) return true
+    const nodeFaction = nodeFactionMap.get(nodeId)
+    if (!nodeFaction) return true // no faction = generic/core, always allowed
+    if (!factionSet.has(nodeFaction)) return false
+    // Subfaction check: if we have a subfaction scope, reject other subfactions
+    if (subfactionScope && nodeSubfactionMap) {
+      const nodeSub = nodeSubfactionMap.get(nodeId)
+      if (nodeSub && nodeSub !== subfactionScope) return false
+    }
+    return true
+  }
   // nodeId → owning record's primaryNode.id
   const nodeToRecord = new Map<string, string>()
   // nodeId → title (best-effort, used when target record isn't in result set)
@@ -93,6 +115,7 @@ export function buildCrossRefs(
       // Forward refs: this record → something else
       for (const ref of fwd[nodeId] ?? []) {
         if (ref.rel === 'part_of') continue
+        if (!factionAllowed(ref.targetId)) continue
         const targetRecordId = nodeToRecord.get(ref.targetId) ?? ref.targetId
         if (targetRecordId === myId) continue // self-reference
 
@@ -112,6 +135,7 @@ export function buildCrossRefs(
       // Reverse refs: something else → this record
       for (const ref of rev[nodeId] ?? []) {
         if (ref.rel === 'part_of') continue
+        if (!factionAllowed(ref.sourceId)) continue
         const sourceRecordId = nodeToRecord.get(ref.sourceId) ?? ref.sourceId
         if (sourceRecordId === myId) continue // self-reference
 

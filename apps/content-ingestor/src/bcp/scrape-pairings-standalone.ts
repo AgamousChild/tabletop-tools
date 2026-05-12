@@ -250,6 +250,14 @@ async function main() {
 
   for (let i = 0; i < events.length; i++) {
     const event = events[i]!
+
+    // Skip events we already have pairings for
+    const pairingsPath = path.join(BCP_DIR, `pairings-${event.id}.json`)
+    if (existsSync(pairingsPath)) {
+      console.log(`  [${i + 1}/${events.length}] ${event.name.substring(0, 50)}... (cached)`)
+      continue
+    }
+
     process.stdout.write(`  [${i + 1}/${events.length}] ${event.name.substring(0, 50)}...`)
 
     try {

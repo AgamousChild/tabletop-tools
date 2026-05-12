@@ -98,6 +98,14 @@ export interface MissionCardData {
   side?: 'attacker' | 'defender'
   isFixed?: boolean
   content: string
+  /** Does it require an action to score? Description of the action if yes. */
+  action?: string
+  /** How are points scored — the condition that must be met. */
+  condition?: string
+  /** When does it score — which phase/turn/timing. */
+  when?: string
+  /** VP value and maximum cap (e.g., "3VP per objective, max 15VP"). */
+  scoring?: string
   sources?: SourceRef[]
   errata?: ErrataEntry[]
 }
@@ -134,7 +142,7 @@ export interface DeploymentZoneCardData {
   name: string
   battleSize?: string
   description: string
-  pdfImage?: { pdfName: string; page: number }
+  pdfImages?: Array<{ pdfName: string; page: number; label?: string }>
   sources?: SourceRef[]
   qualityFlags?: string[]
 }

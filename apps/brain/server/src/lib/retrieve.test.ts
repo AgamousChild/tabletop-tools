@@ -263,7 +263,7 @@ describe('retrieve', () => {
 
   it('dualEmbedding merges and deduplicates results from both queries', async () => {
     const ai = createMockAI()
-    // First query returns nodeA, second query returns nodeA + nodeB (nodeA is deduped)
+    // First query returns nodeA, keyword query returns nodeA + nodeB (nodeA is deduped)
     const nodeA = makeNode({ id: 'core:node-a', title: 'Node A' })
     const nodeB = makeNode({ id: 'core:node-b', title: 'Node B' })
 
@@ -271,15 +271,11 @@ describe('retrieve', () => {
       query: vi.fn()
         // primary unfiltered
         .mockResolvedValueOnce({ matches: [{ id: nodeA.id, score: 0.9, metadata: { layer: 'core', category: 'core-mechanic' } }] })
-        // primary datasheet-filtered
-        .mockResolvedValueOnce({ matches: [] })
         // keyword unfiltered
         .mockResolvedValueOnce({ matches: [
           { id: nodeA.id, score: 0.8, metadata: { layer: 'core', category: 'core-mechanic' } },
           { id: nodeB.id, score: 0.7, metadata: { layer: 'core', category: 'core-mechanic' } },
-        ] })
-        // keyword datasheet-filtered
-        .mockResolvedValueOnce({ matches: [] }),
+        ] }),
     }
     const bucket = makeBucket([nodeA, nodeB])
 

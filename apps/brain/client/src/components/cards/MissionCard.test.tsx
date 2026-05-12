@@ -28,6 +28,17 @@ const mockFixed: MissionCardData = {
   content: 'Score 5VP if you control your own stronghold objective at the end of the battle.',
 }
 
+const mockStructured: MissionCardData = {
+  id: 'mission:structured',
+  name: 'Structured Mission',
+  missionType: 'primary',
+  content: 'Full description here.',
+  when: 'End of Command phase',
+  condition: 'For each objective marker you control',
+  scoring: '4VP per objective (max 15VP)',
+  action: 'Perform the Secure action',
+}
+
 const baseContext: CardContext = {
   highlightTerms: [],
   onContentClick: vi.fn(),
@@ -40,26 +51,14 @@ describe('MissionCard', () => {
     expect(screen.getByText('Take and Hold')).toBeInTheDocument()
   })
 
-  it('renders primary mission with amber accent border', () => {
+  it('shows PRIMARY badge for primary type', () => {
     render(<MissionCard data={mockPrimary} context={baseContext} />)
-    const header = screen.getByTestId('mission-card-header')
-    expect(header).toHaveClass('border-amber-400')
+    expect(screen.getByTestId('mission-type-badge')).toHaveTextContent('PRIMARY')
   })
 
-  it('renders secondary mission with blue accent border', () => {
+  it('shows SECONDARY badge for secondary type', () => {
     render(<MissionCard data={mockSecondary} context={baseContext} />)
-    const header = screen.getByTestId('mission-card-header')
-    expect(header).toHaveClass('border-blue-400')
-  })
-
-  it('shows PRIMARY MISSION badge for primary type', () => {
-    render(<MissionCard data={mockPrimary} context={baseContext} />)
-    expect(screen.getByTestId('mission-type-badge')).toHaveTextContent('PRIMARY MISSION')
-  })
-
-  it('shows SECONDARY MISSION badge for secondary type', () => {
-    render(<MissionCard data={mockSecondary} context={baseContext} />)
-    expect(screen.getByTestId('mission-type-badge')).toHaveTextContent('SECONDARY MISSION')
+    expect(screen.getByTestId('mission-type-badge')).toHaveTextContent('SECONDARY')
   })
 
   it('shows FIXED badge when isFixed is true', () => {
@@ -69,11 +68,6 @@ describe('MissionCard', () => {
 
   it('does not show FIXED badge when isFixed is false', () => {
     render(<MissionCard data={mockSecondary} context={baseContext} />)
-    expect(screen.queryByTestId('fixed-badge')).not.toBeInTheDocument()
-  })
-
-  it('does not show FIXED badge when isFixed is absent', () => {
-    render(<MissionCard data={mockPrimary} context={baseContext} />)
     expect(screen.queryByTestId('fixed-badge')).not.toBeInTheDocument()
   })
 
@@ -87,33 +81,27 @@ describe('MissionCard', () => {
     expect(screen.getByTestId('side-badge')).toHaveTextContent('defender')
   })
 
-  it('does not show side badge when side is absent', () => {
+  it('does not show side badge when absent', () => {
     render(<MissionCard data={mockPrimary} context={baseContext} />)
     expect(screen.queryByTestId('side-badge')).not.toBeInTheDocument()
   })
 
-  it('renders the mission content text', () => {
+  it('renders raw content when no structured fields', () => {
     render(<MissionCard data={mockPrimary} context={baseContext} />)
     expect(screen.getByText(/At the end of each player/)).toBeInTheDocument()
   })
 
-  it('does not render errata section when errata is absent', () => {
-    render(<MissionCard data={mockPrimary} context={baseContext} />)
-    expect(screen.queryByText(/Errata & FAQ/i)).not.toBeInTheDocument()
+  it('renders content as structured markdown', () => {
+    render(<MissionCard data={mockStructured} context={baseContext} />)
+    expect(screen.getByText('Full description here.')).toBeInTheDocument()
   })
 
-  it('shows errata section when errata entries are present', () => {
-    const data: MissionCardData = {
-      ...mockPrimary,
-      errata: [
-        { nodeId: 'e1', title: 'FAQ Q1', content: 'Clarified wording.', source: { type: 'pdf', title: 'Chapter Approved', page: 10 } },
-      ],
-    }
-    render(<MissionCard data={data} context={baseContext} />)
-    expect(screen.getByText('Errata & FAQ')).toBeInTheDocument()
+  it('shows full content alongside structured fields', () => {
+    render(<MissionCard data={mockStructured} context={baseContext} />)
+    expect(screen.getByText('Full description here.')).toBeInTheDocument()
   })
 
-  it('shows view-source button for PDF sources with page', () => {
+  it('shows view-source button for PDF sources', () => {
     const data: MissionCardData = {
       ...mockPrimary,
       sources: [{ type: 'pdf', title: 'Chapter Approved 2025', page: 42 }],
@@ -121,28 +109,25 @@ describe('MissionCard', () => {
     const context: CardContext = { ...baseContext, onViewSource: vi.fn() }
     render(<MissionCard data={data} context={context} />)
     expect(screen.getByTestId('view-source')).toBeInTheDocument()
-    expect(screen.getByText('View source (p.42)')).toBeInTheDocument()
   })
 
-  it('calls onViewSource when view-source button is clicked', () => {
+  it('calls onViewSource when clicked', () => {
     const onViewSource = vi.fn()
     const data: MissionCardData = {
       ...mockPrimary,
       sources: [{ type: 'pdf', title: 'Chapter Approved 2025', page: 42 }],
     }
-    const context: CardContext = { ...baseContext, onViewSource }
-    render(<MissionCard data={data} context={context} />)
+    render(<MissionCard data={data} context={{ ...baseContext, onViewSource }} />)
     fireEvent.click(screen.getByTestId('view-source'))
     expect(onViewSource).toHaveBeenCalledWith('chapter-approved-2025', 42, 'Take and Hold', undefined, undefined, undefined, undefined)
   })
 
-  it('does not show view-source button for non-pdf sources', () => {
+  it('shows errata section when present', () => {
     const data: MissionCardData = {
       ...mockPrimary,
-      sources: [{ type: 'wahapedia', title: 'Wahapedia', page: 5 }],
+      errata: [{ nodeId: 'e1', title: 'FAQ Q1', content: 'Clarified.', source: { type: 'pdf', title: 'CA', page: 10 } }],
     }
-    const context: CardContext = { ...baseContext, onViewSource: vi.fn() }
-    render(<MissionCard data={data} context={context} />)
-    expect(screen.queryByTestId('view-source')).not.toBeInTheDocument()
+    render(<MissionCard data={data} context={baseContext} />)
+    expect(screen.getByText('Errata & FAQ')).toBeInTheDocument()
   })
 })

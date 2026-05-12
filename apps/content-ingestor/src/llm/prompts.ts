@@ -80,6 +80,7 @@ Commonly misheard unit names:
 - "GRS and gats" = "Grotz and Gitz" (Ork greeting, means guys/lads)
 - "Morgan Ball" / "Morgan Vahl" = Morvenn Vahl (Adepta Sororitas character)
 - "Pat Bounds" / "Packbound Zelts" / "Packbound Zealots" = Pactbound Zealots (CSM detachment)
+- "High Marshal Hell's" / "Hell Brecht" = High Marshal Helbrecht (Black Templars character)
 
 Commonly misheard detachment/unit names:
 - "Hammer Veri" / "Hammer Verite" = Hammer of Avernii (Iron Hands detachment)

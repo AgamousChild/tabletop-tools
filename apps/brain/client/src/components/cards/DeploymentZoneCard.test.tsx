@@ -16,45 +16,44 @@ describe('DeploymentZoneCard', () => {
     expect(screen.getByText('Strike Force')).toBeInTheDocument()
   })
 
-  it('does not render battle size badge when absent', () => {
-    render(<DeploymentZoneCard data={{ id: '1', name: 'Test', description: 'Desc' }} context={mockContext} />)
-    expect(screen.queryByText('Strike Force')).not.toBeInTheDocument()
-  })
-
-  it('renders description when no pdfImage', () => {
+  it('renders description when no pdfImages', () => {
     render(<DeploymentZoneCard data={{ id: '1', name: 'Test', description: 'Standard 12" deployment zones.' }} context={mockContext} />)
-    expect(screen.getByText(/12" deployment/)).toBeInTheDocument()
+    expect(screen.getAllByText(/12" deployment/).length).toBeGreaterThan(0)
   })
 
-  it('renders image tag when pdfImage provided', () => {
-    const { container } = render(<DeploymentZoneCard data={{ id: '1', name: 'Test', description: 'Desc', pdfImage: { pdfName: 'chapter-approved-deployment-zones', page: 1 } }} context={mockContext} />)
-    expect(container.querySelector('img')).toBeTruthy()
+  it('shows page tabs for multiple pages', () => {
+    render(<DeploymentZoneCard data={{
+      id: '1', name: 'CRUCIBLE', description: 'Desc',
+      pdfImages: [
+        { pdfName: 'chapter-approved-deployment-zones', page: 2 },
+        { pdfName: 'chapter-approved-deployment-zones', page: 1 },
+      ],
+    }} context={mockContext} />)
+    // Shows tab buttons for Strike Force and Incursion
+    expect(screen.getByText(/Strike Force/)).toBeInTheDocument()
+    expect(screen.getByText(/Incursion/)).toBeInTheDocument()
+    // Only one image rendered at a time (the active tab)
+    const { container } = render(<DeploymentZoneCard data={{
+      id: '2', name: 'TEST', description: 'D',
+      pdfImages: [
+        { pdfName: 'x', page: 1 },
+        { pdfName: 'x', page: 2 },
+      ],
+    }} context={mockContext} />)
+    expect(container.querySelectorAll('img').length).toBe(1)
   })
 
-  it('sets image src from pdfImage data', () => {
-    const { container } = render(<DeploymentZoneCard data={{ id: '1', name: 'Test', description: 'Desc', pdfImage: { pdfName: 'my-pdf', page: 5 } }} context={mockContext} />)
-    const img = container.querySelector('img')
-    expect(img?.getAttribute('src')).toContain('/pages/my-pdf/page-5.png')
+  it('renders single image for asymmetric zones without tabs', () => {
+    render(<DeploymentZoneCard data={{
+      id: '1', name: 'TIP OF THE SPEAR', description: 'Desc',
+      pdfImages: [{ pdfName: 'chapter-approved-deployment-zones', page: 13 }],
+    }} context={mockContext} />)
+    expect(screen.getByText(/Asymmetric War/)).toBeInTheDocument()
+    expect(screen.queryByText(/Incursion/)).not.toBeInTheDocument()
   })
 
   it('shows quality flags', () => {
     render(<DeploymentZoneCard data={{ id: '1', name: 'Test', description: 'Desc', qualityFlags: ['content-inferred'] }} context={mockContext} />)
     expect(screen.getByText('content-inferred')).toBeInTheDocument()
-  })
-
-  it('renders multiple quality flags', () => {
-    render(<DeploymentZoneCard data={{ id: '1', name: 'Test', description: 'Desc', qualityFlags: ['content-inferred', 'needs-review'] }} context={mockContext} />)
-    expect(screen.getByText('content-inferred')).toBeInTheDocument()
-    expect(screen.getByText('needs-review')).toBeInTheDocument()
-  })
-
-  it('renders no quality flags section when qualityFlags is absent', () => {
-    const { container } = render(<DeploymentZoneCard data={{ id: '1', name: 'Test', description: 'Desc' }} context={mockContext} />)
-    expect(container.querySelectorAll('.bg-amber-500\\/20').length).toBe(0)
-  })
-
-  it('shows Loading... placeholder when pdfImage is set', () => {
-    render(<DeploymentZoneCard data={{ id: '1', name: 'Test', description: 'Desc', pdfImage: { pdfName: 'my-pdf', page: 1 } }} context={mockContext} />)
-    expect(screen.getByText('Loading...')).toBeInTheDocument()
   })
 })

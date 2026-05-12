@@ -55,7 +55,7 @@ export function BalanceCard({ data, context }: BalanceCardProps) {
               {data.qualityFlags.map((flag) => (
                 <span
                   key={flag}
-                  className="text-[8px] bg-amber-500/20 text-amber-400 px-1.5 py-0.5 rounded"
+                  className="text-[9px] bg-amber-500/20 text-amber-400 px-1.5 py-0.5 rounded"
                 >
                   {flag}
                 </span>
@@ -65,13 +65,13 @@ export function BalanceCard({ data, context }: BalanceCardProps) {
         </div>
 
         {/* Description */}
-        <div className="text-[11px] text-slate-300 leading-snug">
+        <div className="text-xs text-slate-300 leading-snug">
           {highlightText(data.description, highlightTerms, onContentClick)}
         </div>
 
         {/* Footer */}
         {data.effectiveDate && (
-          <div className="text-[8px] text-slate-500 mt-2 pt-1 border-t border-slate-800">
+          <div className="text-[9px] text-slate-500 mt-2 pt-1 border-t border-slate-800">
             {data.effectiveDate}
           </div>
         )}

@@ -55,7 +55,7 @@ export function ErrataCard({ data, context }: ErrataCardProps) {
               {data.qualityFlags.map((flag) => (
                 <span
                   key={flag}
-                  className="text-[8px] bg-amber-500/20 text-amber-400 px-1.5 py-0.5 rounded"
+                  className="text-[9px] bg-amber-500/20 text-amber-400 px-1.5 py-0.5 rounded"
                 >
                   {flag}
                 </span>
@@ -66,7 +66,7 @@ export function ErrataCard({ data, context }: ErrataCardProps) {
 
         {/* Clarifies link */}
         {data.targetRule && (
-          <div className="text-[9px] text-orange-400 mb-1.5">
+          <div className="text-[10px] text-orange-400 mb-1.5">
             Clarifies:{' '}
             <span
               className="cursor-pointer underline"
@@ -78,13 +78,13 @@ export function ErrataCard({ data, context }: ErrataCardProps) {
         )}
 
         {/* Correction text */}
-        <div className="text-[11px] text-slate-300 leading-snug">
+        <div className="text-xs text-slate-300 leading-snug">
           {highlightText(data.correctionText, highlightTerms, onContentClick)}
         </div>
 
         {/* Footer */}
         {(data.source || data.effectiveDate) && (
-          <div className="text-[8px] text-slate-500 mt-2 pt-1 border-t border-slate-800 flex gap-2">
+          <div className="text-[9px] text-slate-500 mt-2 pt-1 border-t border-slate-800 flex gap-2">
             {data.source && <span>{data.source}</span>}
             {data.effectiveDate && <span>{data.effectiveDate}</span>}
           </div>

@@ -1,0 +1,563 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Mission Card Layout Comparison</title>
+<link href="https://fonts.googleapis.com/css2?family=Oswald:wght@400;700&family=Source+Sans+3:wght@300;400;600;700&display=swap" rel="stylesheet">
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { background: #0a0e1a; color: #f1f5f9; font-family: 'Source Sans 3', sans-serif; padding: 24px; }
+  h1 { font-family: 'Oswald', sans-serif; font-size: 20px; text-transform: uppercase; letter-spacing: 2px; color: #fbbf24; margin-bottom: 24px; text-align: center; }
+  .comparison { display: grid; grid-template-columns: 1fr 1fr; gap: 32px; margin-bottom: 48px; }
+  .column-label { font-family: 'Oswald', sans-serif; font-size: 13px; text-transform: uppercase; letter-spacing: 2px; color: #94a3b8; margin-bottom: 8px; text-align: center; }
+  .card-wrapper { max-width: 420px; margin: 0 auto; }
+  .section-title { font-family: 'Oswald', sans-serif; font-size: 16px; color: #94a3b8; text-transform: uppercase; letter-spacing: 1px; margin: 32px 0 16px; padding-bottom: 4px; border-bottom: 1px solid #334155; }
+
+  /* ── Shared card base ── */
+  .card { border: 2px solid #334155; border-radius: 6px; overflow: hidden; background: #0f172a; font-family: 'Source Sans 3', sans-serif; }
+  .card-inner { padding: 10px 14px; }
+
+  /* ── Header ── */
+  .header { padding-bottom: 4px; margin-bottom: 6px; }
+  .header-primary { border-bottom: 2px solid #f59e0b; }
+  .header-secondary { border-bottom: 2px solid #3b82f6; }
+  .header h2 { font-family: 'Oswald', sans-serif; font-size: 14px; font-weight: 700; text-transform: uppercase; letter-spacing: 1px; color: white; }
+  .badges { display: flex; gap: 4px; flex-wrap: wrap; margin-top: 4px; }
+  .badge { font-size: 9px; font-weight: 700; text-transform: uppercase; padding: 2px 6px; border-radius: 3px; }
+  .badge-primary { background: rgba(245, 158, 11, 0.2); color: #fbbf24; }
+  .badge-secondary { background: rgba(59, 130, 246, 0.2); color: #60a5fa; }
+  .badge-fixed { background: rgba(168, 85, 247, 0.2); color: #c084fc; }
+  .badge-side { background: #334155; color: #cbd5e1; }
+
+  /* ── Body ── */
+  .body-text { font-size: 11px; color: #cbd5e1; line-height: 1.4; margin-bottom: 6px; }
+  .body-text .label { font-size: 9px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; margin-right: 4px; }
+  .label-primary { color: #fbbf24; }
+  .label-secondary { color: #60a5fa; }
+
+  /* ── Markdown-style rendering (current) ── */
+  .md-section-header { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; margin-top: 8px; padding-top: 4px; border-top: 1px solid #1e293b; }
+  .md-bullet { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; padding: 2px 0 2px 8px; border-left: 2px solid #334155; margin-left: 4px; }
+  .md-bullet .cond { color: #cbd5e1; font-size: 11px; }
+  .md-bullet .vp { color: #fbbf24; font-weight: 700; font-size: 10px; white-space: nowrap; }
+  .md-plain { font-size: 11px; color: #cbd5e1; margin: 2px 0; }
+  .md-italic { font-size: 10px; color: #64748b; font-style: italic; margin-top: 4px; border: 1px solid #1e293b; border-radius: 4px; padding: 6px; }
+  .md-max { font-size: 10px; color: #94a3b8; margin-top: 2px; }
+  .spacer { height: 4px; }
+
+  /* ── Structured field rows (proposed) ── */
+  .field-row { display: flex; gap: 8px; padding: 6px 0; border-bottom: 1px solid #1e293b; }
+  .field-row:last-child { border-bottom: none; }
+  .field-label { font-size: 9px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; flex-shrink: 0; width: 72px; padding-top: 1px; }
+  .field-label-accent { color: #fbbf24; }
+  .field-label-accent-blue { color: #60a5fa; }
+  .field-label-purple { color: #c084fc; }
+  .field-label-green { color: #4ade80; }
+  .field-label-amber { color: #fbbf24; }
+  .field-value { font-size: 11px; color: #cbd5e1; line-height: 1.4; }
+  .collapsible { font-size: 10px; color: #64748b; margin-top: 6px; padding-top: 4px; border-top: 1px solid #1e293b; cursor: pointer; }
+  .collapsible:hover { color: #94a3b8; }
+  .collapsed-content { display: none; font-size: 11px; color: #94a3b8; margin-top: 4px; white-space: pre-line; line-height: 1.4; }
+  .collapsible.open .collapsed-content { display: block; }
+
+  /* ── Footer ── */
+  .footer { font-size: 9px; color: #64748b; margin-top: 6px; }
+  .footer button { font-size: 9px; color: #64748b; text-decoration: underline; background: none; border: none; cursor: pointer; padding: 0; }
+  .footer button:hover { color: #fbbf24; }
+</style>
+<script>
+function toggleCollapsible(el) {
+  el.classList.toggle('open');
+  const arrow = el.querySelector('.arrow');
+  arrow.textContent = el.classList.contains('open') ? '▾' : '▸';
+}
+</script>
+</head>
+<body>
+
+<h1>Mission Card — Layout Comparison</h1>
+
+<!-- ═══════════════════════════════════════════════════════════════════════ -->
+<!-- TAKE AND HOLD (Primary) -->
+<!-- ═══════════════════════════════════════════════════════════════════════ -->
+<div class="section-title">1. Take and Hold — Primary Mission</div>
+<div class="comparison">
+
+<!-- CURRENT -->
+<div>
+  <div class="column-label">Current (Markdown Rendering)</div>
+  <div class="card-wrapper">
+    <div class="card">
+      <div class="card-inner">
+        <div class="header header-primary">
+          <h2>TAKE AND HOLD</h2>
+          <div class="badges">
+            <span class="badge badge-primary">PRIMARY</span>
+          </div>
+        </div>
+        <div class="body-text">
+          <div class="md-section-header label-primary">SECOND BATTLE ROUND ONWARDS</div>
+          <div><span class="label label-primary">WHEN:</span>End of the Command phase (or the end of your turn if it is the fifth battle round and you are going second).</div>
+          <div class="md-plain">The player whose turn it is scores:</div>
+          <div class="md-bullet">
+            <span class="cond">For each objective marker that they control</span>
+            <span class="vp">5 VP</span>
+          </div>
+          <div class="spacer"></div>
+          <div class="md-max"><strong>Max VP:</strong> 15VP</div>
+        </div>
+        <div class="footer"><button>View source (p.3)</button></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- PROPOSED -->
+<div>
+  <div class="column-label">Proposed (Structured Fields)</div>
+  <div class="card-wrapper">
+    <div class="card">
+      <div class="card-inner">
+        <div class="header header-primary">
+          <h2>TAKE AND HOLD</h2>
+          <div class="badges">
+            <span class="badge badge-primary">PRIMARY</span>
+          </div>
+        </div>
+        <div class="md-section-header label-primary">SECOND BATTLE ROUND ONWARDS</div>
+        <div class="body-text">
+          <div class="field-row">
+            <span class="field-label field-label-accent">WHEN</span>
+            <span class="field-value">End of the Command phase (or end of your turn if fifth battle round, going second). Second battle round onwards.</span>
+          </div>
+          <div class="field-row">
+            <span class="field-label field-label-green">CONDITION</span>
+            <span class="field-value">For each objective marker that the player controls.</span>
+          </div>
+          <div class="field-row">
+            <span class="field-label field-label-amber">SCORING</span>
+            <span class="field-value">  <div class="md-plain">The player whose turn it is scores:</div>
+          <div class="md-bullet">
+            <span class="cond">For each objective marker that they control</span>
+            <span class="vp">5 VP</span>
+          </div>
+          <div class="spacer"></div>
+          <div class="md-max"><strong>Max VP:</strong> 15VP</div></span>
+          </div>
+        </div>
+        <div class="collapsible" onclick="toggleCollapsible(this)">
+          <span class="arrow">▸</span> Full Description
+          <div class="collapsed-content">SECOND BATTLE ROUND ONWARDS
+WHEN: End of the Command phase (or the end of your turn if it is the fifth battle round and you are going second).
+The player whose turn it is scores:
+- For each objective marker that they control → 5 VP
+
+Max VP: 15VP</div>
+        </div>
+        <div class="footer"><button>View source (p.3)</button></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════════════════ -->
+<!-- LINCHPIN (Primary — complex conditional scoring) -->
+<!-- ═══════════════════════════════════════════════════════════════════════ -->
+<div class="section-title">2. Linchpin — Primary Mission (Complex Conditionals)</div>
+<div class="comparison">
+
+<!-- CURRENT -->
+<div>
+  <div class="column-label">Current (Markdown Rendering)</div>
+  <div class="card-wrapper">
+    <div class="card">
+      <div class="card-inner">
+        <div class="header header-primary">
+          <h2>LINCHPIN</h2>
+          <div class="badges">
+            <span class="badge badge-primary">PRIMARY</span>
+          </div>
+        </div>
+        <div class="body-text">
+          <div class="md-section-header label-primary">SECOND BATTLE ROUND ONWARDS</div>
+          <div><span class="label label-primary">WHEN:</span>End of the Command phase (or the end of your turn if it is the fifth battle round and you are going second).</div>
+          <div class="md-bullet">
+            <span class="cond">If the player does NOT control the objective marker in their deployment zone: For each objective marker that the player controls</span>
+            <span class="vp">3 VP</span>
+          </div>
+          <div class="md-bullet">
+            <span class="cond">If the player DOES control the objective marker in their deployment zone: For controlling the objective marker in their deployment zone</span>
+            <span class="vp">1 VP</span>
+          </div>
+          <div class="md-bullet">
+            <span class="cond">If the player DOES control the objective marker in their deployment zone: For each other objective marker that the player controls</span>
+            <span class="vp">5 VP</span>
+          </div>
+          <div class="spacer"></div>
+          <div class="md-max"><strong>Max VP:</strong> 15VP</div>
+        </div>
+        <div class="footer"><button>View source (p.5)</button></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- PROPOSED -->
+<div>
+  <div class="column-label">Proposed (Structured Fields)</div>
+  <div class="card-wrapper">
+    <div class="card">
+      <div class="card-inner">
+        <div class="header header-primary">
+          <h2>LINCHPIN</h2>
+          <div class="badges">
+            <span class="badge badge-primary">PRIMARY</span>
+          </div>
+        </div>
+        <div class="md-section-header label-primary">SECOND BATTLE ROUND ONWARDS</div>
+        <div class="body-text">
+          <div class="field-row">
+            <span class="field-label field-label-accent">WHEN</span>
+            <span class="field-value">End of the Command phase (or end of your turn if fifth battle round, going second). Second battle round onwards.</span>
+          </div>
+          <div class="field-row">
+            <span class="field-label field-label-green">CONDITION</span>
+            <span class="field-value">Scoring depends on whether you control your deployment zone objective. </span>
+          </div>
+          <div class="field-row">
+            <span class="field-label field-label-amber">SCORING</span>
+            <span class="field-value"><div class="md-bullet">
+            <span class="cond">If the player does NOT control the objective marker in their deployment zone: For each objective marker that the player controls</span>
+            <span class="vp">3 VP</span>
+          </div>
+          <div class="md-bullet">
+            <span class="cond">If the player DOES control the objective marker in their deployment zone: For controlling the objective marker in their deployment zone</span>
+            <span class="vp">1 VP</span>
+          </div>
+          <div class="md-bullet">
+            <span class="cond">If the player DOES control the objective marker in their deployment zone: For each other objective marker that the player controls</span>
+            <span class="vp">5 VP</span>
+          </div>
+          <div class="spacer"></div>
+          <div class="md-max"><strong>Max VP:</strong> 15VP</div></span>
+          </div>
+        </div>
+        <div class="collapsible" onclick="toggleCollapsible(this)">
+          <span class="arrow">▸</span> Full Description
+          <div class="collapsed-content">SECOND BATTLE ROUND ONWARDS
+WHEN: End of the Command phase (or the end of your turn if it is the fifth battle round and you are going second).
+- If the player does NOT control the objective marker in their deployment zone: For each objective marker that the player controls → 3 VP (OR)
+- If the player DOES control the objective marker in their deployment zone: For controlling the objective marker in their deployment zone → 1 VP
+- If the player DOES control the objective marker in their deployment zone: For each other objective marker that the player controls → 5 VP
+
+Max VP: 15VP</div>
+        </div>
+        <div class="footer"><button>View source (p.5)</button></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════════════════ -->
+<!-- RECOVER ASSETS (Secondary — with ACTION) -->
+<!-- ═══════════════════════════════════════════════════════════════════════ -->
+<div class="section-title">3. Recover Assets — Secondary (Action Required)</div>
+<div class="comparison">
+
+<!-- CURRENT -->
+<div>
+  <div class="column-label">Current (Markdown Rendering)</div>
+  <div class="card-wrapper">
+    <div class="card">
+      <div class="card-inner">
+        <div class="header header-secondary">
+          <h2>RECOVER ASSETS</h2>
+          <div class="badges">
+            <span class="badge badge-secondary">SECONDARY</span>
+            <span class="badge badge-side">ATTACKER</span>
+          </div>
+        </div>
+        <div class="body-text">
+          <div><span class="label label-secondary" style="font-size:10px; font-weight:700; text-transform:uppercase;">ACTION: RECOVER ASSETS</span></div>
+          <div class="spacer"></div>
+          <div><span class="label label-secondary">WHEN:</span>End of your turn or the end of the battle (whichever comes first).</div>
+          <div class="md-bullet">
+            <span class="cond">Two of your units recovered assets this turn.</span>
+            <span class="vp">3 VP</span>
+          </div>
+          <div class="md-bullet">
+            <span class="cond">Three of your units recovered assets this turn.</span>
+            <span class="vp">5 VP</span>
+          </div>
+          <div class="md-italic">WHEN DRAWN: If you are playing an Incursion mission, or if there are fewer than three units from your army on the battlefield, you can discard this card and draw a new Secondary Mission card.</div>
+        </div>
+        <div class="footer"><button>View source (p.12)</button></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- PROPOSED -->
+<div>
+  <div class="column-label">Proposed (Structured Fields)</div>
+  <div class="card-wrapper">
+    <div class="card">
+      <div class="card-inner">
+        <div class="header header-secondary">
+          <h2>RECOVER ASSETS</h2>
+          <div class="badges">
+            <span class="badge badge-secondary">SECONDARY</span>
+            <span class="badge badge-side">ATTACKER</span>
+          </div>
+        </div>
+        <div class="body-text">
+          <div class="field-row">
+            <span class="field-label field-label-accent-blue">WHEN</span>
+            <span class="field-value">End of your turn or the end of the battle (whichever comes first).</span>
+          </div>
+          <div class="field-row">
+            <span class="field-label field-label-purple">ACTION</span>
+            <span class="field-value">Recover Assets — one or more units in No Man's Land or opponent's deployment zone.</span>
+          </div>
+          <div class="field-row">
+            <span class="field-label field-label-green">CONDITION</span>
+            <span class="field-value">Units that completed the Recover Assets action this turn.</span>
+          </div>
+          <div class="field-row">
+            <span class="field-label field-label-amber">SCORING</span>
+            <span class="field-value">  <div class="md-bullet">
+            <span class="cond">Two of your units recovered assets this turn.</span>
+            <span class="vp">3 VP</span>
+          </div>
+          <div class="md-bullet">
+            <span class="cond">Three of your units recovered assets this turn.</span>
+            <span class="vp">5 VP</span>
+          </div>
+          <div class="md-italic">WHEN DRAWN: If you are playing an Incursion mission, or if there are fewer than three units from your army on the battlefield, you can discard this card and draw a new Secondary Mission card.</div>
+</span>
+          </div>
+        </div>
+        <div class="collapsible" onclick="toggleCollapsible(this)">
+          <span class="arrow">▸</span> Full Description
+          <div class="collapsed-content">ACTION: RECOVER ASSETS
+
+WHEN: End of your turn or the end of the battle (whichever comes first).
+- Two of your units recovered assets this turn. → 3 VP
+- Three of your units recovered assets this turn. → 5 VP
+- WHEN DRAWN: If you are playing an Incursion mission, or if there are fewer than three units from your army on the battlefield, you can discard this card and draw a new Secondary Mission card.</div>
+        </div>
+        <div class="footer"><button>View source (p.12)</button></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════════════════ -->
+<!-- ASSASSINATION (Secondary — Fixed, Defender) -->
+<!-- ═══════════════════════════════════════════════════════════════════════ -->
+<div class="section-title">4. Assassination — Secondary (Fixed, Multi-WHEN)</div>
+<div class="comparison">
+
+<!-- CURRENT -->
+<div>
+  <div class="column-label">Current (Markdown Rendering)</div>
+  <div class="card-wrapper">
+    <div class="card">
+      <div class="card-inner">
+        <div class="header header-secondary">
+          <h2>ASSASSINATION</h2>
+          <div class="badges">
+            <span class="badge badge-secondary">SECONDARY</span>
+            <span class="badge badge-fixed">FIXED</span>
+            <span class="badge badge-side">DEFENDER</span>
+          </div>
+        </div>
+        <div class="body-text">
+          <div><span class="label label-secondary">WHEN:</span>End of either player's turn.</div>
+          <div class="md-bullet">
+            <span class="cond">One or more enemy CHARACTER models were destroyed this turn.</span>
+            <span class="vp">5 VP</span>
+          </div>
+          <div class="md-bullet">
+            <span class="cond">All enemy CHARACTER models have been destroyed during the battle.</span>
+            <span class="vp">4 VP</span>
+          </div>
+          <div class="spacer"></div>
+          <div><span class="label label-secondary">WHEN:</span>While this card is active.</div>
+          <div class="md-bullet">
+            <span class="cond">Each time an enemy CHARACTER model with a Wounds characteristic of 4 or higher is destroyed.</span>
+            <span class="vp">5 VP</span>
+          </div>
+          <div class="md-bullet">
+            <span class="cond">Each time an enemy CHARACTER model with a Wounds characteristic of 3 or lower is destroyed.</span>
+            <span class="vp">2 VP</span>
+          </div>
+        </div>
+        <div class="footer"><button>View source (p.8)</button></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- PROPOSED -->
+<div>
+  <div class="column-label">Proposed (Structured Fields)</div>
+  <div class="card-wrapper">
+    <div class="card">
+      <div class="card-inner">
+        <div class="header header-secondary">
+          <h2>ASSASSINATION</h2>
+          <div class="badges">
+            <span class="badge badge-secondary">SECONDARY</span>
+            <span class="badge badge-fixed">FIXED</span>
+            <span class="badge badge-side">DEFENDER</span>
+          </div>
+        </div>
+        <div class="body-text">
+          <div class="field-row">
+            <span class="field-label field-label-accent-blue">WHEN</span>
+            <span class="field-value">End of either player's turn; also while this card is active as a fixed secondary.</span>
+          </div>
+          <div class="field-row">
+            <span class="field-label field-label-green">CONDITION</span>
+            <span class="field-value">Enemy CHARACTER models destroyed. Bonus for destroying all. Additional VP per CHARACTER killed based on Wounds characteristic.</span>
+          </div>
+          <div class="field-row">
+            <span class="field-label field-label-amber">SCORING</span>
+            <span class="field-value">  <div><span class="label label-secondary">WHEN:</span>End of either player's turn.</div>
+          <div class="md-bullet">
+            <span class="cond">One or more enemy CHARACTER models were destroyed this turn.</span>
+            <span class="vp">5 VP</span>
+          </div>
+          <div class="md-bullet">
+            <span class="cond">All enemy CHARACTER models have been destroyed during the battle.</span>
+            <span class="vp">4 VP</span>
+          </div>
+          <div class="spacer"></div>
+          <div><span class="label label-secondary">WHEN:</span>While this card is active as a fixed secondary.</div>
+          <div class="md-bullet">
+            <span class="cond">Each time an enemy CHARACTER model with a Wounds characteristic of 4 or higher is destroyed.</span>
+            <span class="vp">5 VP</span>
+          </div>
+          <div class="md-bullet">
+            <span class="cond">Each time an enemy CHARACTER model with a Wounds characteristic of 3 or lower is destroyed.</span>
+            <span class="vp">2 VP</span>
+          </div></span>
+          </div>
+        </div>
+        <div class="collapsible" onclick="toggleCollapsible(this)">
+          <span class="arrow">▸</span> Full Description
+          <div class="collapsed-content">WHEN: End of either player's turn.
+- One or more enemy CHARACTER models were destroyed this turn. → 5 VP
+- All enemy CHARACTER models have been destroyed during the battle. → 4 VP
+
+WHEN: While this card is active.
+- Each time an enemy CHARACTER model with a Wounds characteristic of 4 or higher is destroyed. → 5 VP
+- Each time an enemy CHARACTER model with a Wounds characteristic of 3 or lower is destroyed. → 2 VP</div>
+        </div>
+        <div class="footer"><button>View source (p.8)</button></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════════════════ -->
+<!-- BEHIND ENEMY LINES (Secondary — Attacker, Fixed) -->
+<!-- ═══════════════════════════════════════════════════════════════════════ -->
+<div class="section-title">5. Behind Enemy Lines — Secondary (Attacker, Fixed, Simple)</div>
+<div class="comparison">
+
+<!-- CURRENT -->
+<div>
+  <div class="column-label">Current (Markdown Rendering)</div>
+  <div class="card-wrapper">
+    <div class="card">
+      <div class="card-inner">
+        <div class="header header-secondary">
+          <h2>BEHIND ENEMY LINES</h2>
+          <div class="badges">
+            <span class="badge badge-secondary">SECONDARY</span>
+            <span class="badge badge-fixed">FIXED</span>
+            <span class="badge badge-side">ATTACKER</span>
+          </div>
+        </div>
+        <div class="body-text">
+          <div><span class="label label-secondary">WHEN:</span>End of your turn.</div>
+          <div class="md-bullet">
+            <span class="cond">One unit from your army (excluding AIRCRAFT and Battle-shocked units) is wholly within your opponent's deployment zone.</span>
+            <span class="vp">3 VP</span>
+          </div>
+          <div class="md-italic">WHEN DRAWN: If it is the first battle round, you can draw a new Secondary Mission card and shuffle this card back into your Secondary Mission deck.</div>
+          <div class="md-bullet">
+            <span class="cond">Two or more units from your army (excluding AIRCRAFT and Battle-shocked units) are wholly within your opponent's deployment zone.</span>
+            <span class="vp">5 VP</span>
+          </div>
+        </div>
+        <div class="footer"><button>View source (p.9)</button></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- PROPOSED -->
+<div>
+  <div class="column-label">Proposed (Structured Fields)</div>
+  <div class="card-wrapper">
+    <div class="card">
+      <div class="card-inner">
+        <div class="header header-secondary">
+          <h2>BEHIND ENEMY LINES</h2>
+          <div class="badges">
+            <span class="badge badge-secondary">SECONDARY</span>
+            <span class="badge badge-fixed">FIXED</span>
+            <span class="badge badge-side">ATTACKER</span>
+          </div>
+        </div>
+        <div class="body-text">
+          <div class="field-row">
+            <span class="field-label field-label-accent-blue">WHEN</span>
+            <span class="field-value">End of your turn.</span>
+          </div>
+          <div class="field-row">
+            <span class="field-label field-label-green">CONDITION</span>
+            <span class="field-value">Units from your army (excluding AIRCRAFT and Battle-shocked) wholly within opponent's deployment zone.</span>
+          </div>
+          <div class="field-row">
+            <span class="field-label field-label-amber">SCORING</span>
+            <span class="field-value"> <div class="md-bullet">
+            <span class="cond">One unit from your army (excluding AIRCRAFT and Battle-shocked units) is wholly within your opponent's deployment zone.</span>
+            <span class="vp">3 VP</span>
+          </div>
+          <div class="md-italic">WHEN DRAWN: If it is the first battle round, you can draw a new Secondary Mission card and shuffle this card back into your Secondary Mission deck.</div>
+          <div class="md-bullet">
+            <span class="cond">Two or more units from your army (excluding AIRCRAFT and Battle-shocked units) are wholly within your opponent's deployment zone.</span>
+            <span class="vp">5 VP</span>
+          </div></span>
+          </div>
+        </div>
+        <div class="collapsible" onclick="toggleCollapsible(this)">
+          <span class="arrow">▸</span> Full Description
+          <div class="collapsed-content">WHEN: End of your turn.
+- One unit from your army (excluding AIRCRAFT and Battle-shocked units) is wholly within your opponent's deployment zone. → 3 VP
+- WHEN DRAWN: If it is the first battle round, you can draw a new Secondary Mission card and shuffle this card back into your Secondary Mission deck.
+- Two or more units from your army (excluding AIRCRAFT and Battle-shocked units) are wholly within your opponent's deployment zone. → 5 VP</div>
+        </div>
+        <div class="footer"><button>View source (p.9)</button></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+</div>
+
+</body>
+</html>

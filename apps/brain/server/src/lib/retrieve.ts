@@ -32,6 +32,7 @@ export interface EnrichedNode {
   layer: string
   category: string
   factionId?: string
+  factionName?: string         // Preferred display name (e.g., "SPACE MARINES")
   subfaction?: string
   phase?: string
   datasheetId?: string
@@ -110,6 +111,12 @@ export async function retrieve(options: RetrieveOptions, env: RetrieveEnv): Prom
     && queryMatchesFactionExactly
 
   if (isFactionBrowse) {
+    // Try to find the faction root node first — if it exists, return it as the
+    // single result with its direct connections. Much cleaner than dumping 1000+ nodes.
+    const factionRootResult = await factionRootBrowse(detected, env)
+    if (factionRootResult) return factionRootResult
+
+    // Fallback: old-style faction browse (for factions without a root node)
     return await factionBrowse(detected, strippedQuery, keywords, limit, includeConnected, connectedDepth, env, query, options.returnRecords)
   }
 
@@ -149,27 +156,20 @@ export async function retrieve(options: RetrieveOptions, env: RetrieveEnv): Prom
     vectorizeOpts.filter = filterObj
   }
 
-  // Step 6: Query Vectorize — run unfiltered + datasheet-only in parallel to ensure datasheets are in the pool
-  const datasheetOpts = { ...vectorizeOpts, filter: { ...vectorizeOpts.filter, category: 'datasheet' } }
-  const [primaryMatches, datasheetMatches] = await Promise.all([
+  // Step 6: Query Vectorize — single unfiltered query to get all record types
+  const [primaryMatches] = await Promise.all([
     env.vectorize.query(primaryVector, vectorizeOpts),
-    env.vectorize.query(primaryVector, datasheetOpts),
   ])
 
   // Step 6b: If original query differs from stripped, also search with the unstripped text
   let originalMatches: { matches: VectorizeMatch[] } = { matches: [] }
-  let originalDatasheetMatches: { matches: VectorizeMatch[] } = { matches: [] }
   if (originalVector) {
-    ;[originalMatches, originalDatasheetMatches] = await Promise.all([
-      env.vectorize.query(originalVector, vectorizeOpts),
-      env.vectorize.query(originalVector, datasheetOpts),
-    ])
+    originalMatches = await env.vectorize.query(originalVector, vectorizeOpts)
   }
 
   // Step 7: Merge all query results — keep highest score per ID
   const mergedMap = new Map<string, VectorizeMatch>()
-  for (const m of [...primaryMatches.matches, ...datasheetMatches.matches,
-                    ...originalMatches.matches, ...originalDatasheetMatches.matches]) {
+  for (const m of [...primaryMatches.matches, ...originalMatches.matches]) {
     const existing = mergedMap.get(m.id)
     if (!existing || m.score > existing.score) {
       mergedMap.set(m.id, m)
@@ -178,11 +178,8 @@ export async function retrieve(options: RetrieveOptions, env: RetrieveEnv): Prom
 
   // If dual embedding, also merge keyword query results
   if (keywordVector) {
-    const [keywordMatches, keywordDatasheetMatches] = await Promise.all([
-      env.vectorize.query(keywordVector, vectorizeOpts),
-      env.vectorize.query(keywordVector, datasheetOpts),
-    ])
-    for (const m of [...keywordMatches.matches, ...keywordDatasheetMatches.matches]) {
+    const keywordMatches = await env.vectorize.query(keywordVector, vectorizeOpts)
+    for (const m of keywordMatches.matches) {
       const existing = mergedMap.get(m.id)
       if (!existing || m.score > existing.score) {
         mergedMap.set(m.id, m)
@@ -222,7 +219,7 @@ export async function retrieve(options: RetrieveOptions, env: RetrieveEnv): Prom
     })
   }
 
-  // Step 9: Sort — exact title match first (any category), then datasheets, then by score
+  // Step 9: Sort — exact title match first, then by score
   const queryLower = query.toLowerCase().trim()
   const sortedMatches = filtered.sort((a, b) => {
     const aTitle = (a.metadata?.title as string)?.toLowerCase() ?? ''
@@ -232,18 +229,6 @@ export async function retrieve(options: RetrieveOptions, env: RetrieveEnv): Prom
     const aTitleExact = aTitle === queryLower ? 1 : 0
     const bTitleExact = bTitle === queryLower ? 1 : 0
     if (aTitleExact !== bTitleExact) return bTitleExact - aTitleExact
-
-    // Title containing query (or vice versa) — any category
-    const aContains = (aTitle.includes(queryLower) || queryLower.includes(aTitle)) ? 1 : 0
-    const bContains = (bTitle.includes(queryLower) || queryLower.includes(bTitle)) ? 1 : 0
-    if (aContains !== bContains) return bContains - aContains
-
-    // Datasheets rank above non-datasheets at equal title relevance
-    const aDatasheet = a.metadata?.category === 'datasheet' ? 1 : 0
-    const bDatasheet = b.metadata?.category === 'datasheet' ? 1 : 0
-    if (aDatasheet !== bDatasheet) {
-      return bDatasheet - aDatasheet
-    }
 
     // Then faction/subfaction ranking
     const rankA = matchRank(a, detected.factions, detected.subfaction)
@@ -321,24 +306,23 @@ export async function retrieve(options: RetrieveOptions, env: RetrieveEnv): Prom
   }
 
   // Step 15: Aggregate into records (only when requested)
-  // Use `results` (not `nodes`) because results includes title-match injections from step 12b
+  // Build allResultNodes in the SAME ORDER as `results` (which has exact title matches first)
   let records: AggregatedRecord[] | undefined
   if (options.returnRecords) {
-    // Convert enriched results back to a Node-compatible shape for buildRecords
-    // fetchNodesFromR2 already gave us full Node objects; title-match injections also have full Node data via enrichNode
-    // Collect all nodes by ID from both the original fetch and any title-match additions
     const allResultNodes: Node[] = []
     const seenIds = new Set<string>()
-    // First: original R2-fetched nodes
-    for (const n of nodes) {
-      if (!seenIds.has(n.id)) { allResultNodes.push(n); seenIds.add(n.id) }
-    }
-    // Then: title-match injections (results may contain nodes not in the original `nodes` array)
+    // Follow `results` ordering (exact matches first, then scored results)
     for (const r of results) {
-      if (!seenIds.has(r.id)) {
-        // Re-fetch from R2 if needed (enrichNode doesn't carry the full Node, but it has all needed fields)
-        const titleMatchNodes = await fetchNodesFromR2(env.bucket, [r.id])
-        for (const n of titleMatchNodes) {
+      if (seenIds.has(r.id)) continue
+      // Try to find in already-fetched nodes first
+      const existing = nodes.find(n => n.id === r.id)
+      if (existing) {
+        allResultNodes.push(existing)
+        seenIds.add(r.id)
+      } else {
+        // Fetch from R2 (title-match injection)
+        const fetched = await fetchNodesFromR2(env.bucket, [r.id])
+        for (const n of fetched) {
           if (!seenIds.has(n.id)) { allResultNodes.push(n); seenIds.add(n.id) }
         }
       }
@@ -442,6 +426,99 @@ function matchRank(
   if (mFaction && detectedFactions.includes(mFaction)) return 1
   // Generic (no faction)
   return 2
+}
+
+// ── Faction root browse ─────────────────────────────────────────────────────
+
+/**
+ * When the user searches a faction name, find the faction root node and return
+ * it as the single result with its direct connections (army rules, detachments).
+ * Returns null if no faction root node exists for this faction.
+ */
+async function factionRootBrowse(
+  detected: { factions: string[]; subfaction?: string },
+  env: RetrieveEnv,
+): Promise<RetrieveResult | null> {
+  const factionId = detected.factions[0]!
+  const subfaction = detected.subfaction
+
+  // Determine the faction root node ID
+  // Subfactions use their slug directly: faction-root:blood-angels
+  // Regular factions: faction-root:orks
+  const rootId = subfaction
+    ? `faction-root:${subfaction.replace(/\s+/g, '-')}`
+    : `faction-root:${factionId}`
+
+  // Load all nodes to find the root and its connections
+  const manifestObj = await env.bucket.get('manifest.json')
+  if (!manifestObj) return null
+  const manifest = await manifestObj.json() as { files: Record<string, string> }
+
+  let rootNode: Node | null = null
+  const allNodes = new Map<string, Node>()
+
+  for (const file of Object.keys(manifest.files)) {
+    if (!file.startsWith('nodes/')) continue
+    const obj = await env.bucket.get(file)
+    if (!obj) continue
+    const nodes = await obj.json() as Node[]
+    for (const n of nodes) {
+      allNodes.set(n.id, n)
+      if (n.id === rootId) rootNode = n
+    }
+  }
+
+  if (!rootNode) return null
+
+  // Load reverse index to find what points TO this faction node
+  const revObj = await env.bucket.get('refs/reverse-index.json')
+  if (!revObj) return null
+  const revIndex = await revObj.json() as Record<string, Array<{ sourceId: string; rel: string }>>
+
+  const connectedIds = new Set<string>()
+  const revRefs = revIndex[rootId] || []
+  for (const ref of revRefs) {
+    connectedIds.add(ref.sourceId)
+  }
+
+  // Also check forward index for outgoing refs
+  const fwdObj = await env.bucket.get('refs/forward-index.json')
+  if (fwdObj) {
+    const fwdIndex = await fwdObj.json() as Record<string, Array<{ targetId: string; rel: string }>>
+    const fwdRefs = fwdIndex[rootId] || []
+    for (const ref of fwdRefs) {
+      connectedIds.add(ref.targetId)
+    }
+  }
+
+  // Build connected nodes
+  const connected: EnrichedNode[] = []
+  const connectedNodesList: Node[] = []
+  for (const id of connectedIds) {
+    const n = allNodes.get(id)
+    if (n) {
+      connected.push(enrichNode(n, 0.9, new Map()))
+      connectedNodesList.push(n)
+    }
+  }
+
+  // Build records: root + connected as individual records for search display
+  const allResultNodes = [rootNode, ...connectedNodesList]
+  const nodeMap = new Map<string, Node>(allResultNodes.map(n => [n.id, n]))
+  const records = aggregateToRecords(allResultNodes, nodeMap)
+
+  return {
+    detected: {
+      factions: detected.factions,
+      subfaction,
+      strippedQuery: '',
+      keywords: [],
+    },
+    results: [enrichNode(rootNode, 1.0, new Map())],
+    connected,
+    parentMap: new Map(),
+    records,
+  }
 }
 
 // ── Faction browse ──────────────────────────────────────────────────────────
@@ -577,6 +654,7 @@ function enrichNode(node: Node, score: number, parentMap: Map<string, string>): 
     layer: node.layer,
     category: node.category,
     factionId: node.factionId,
+    factionName: node.factionName,
     subfaction: node.subfaction,
     phase: node.phase,
     datasheetId: node.datasheetId,

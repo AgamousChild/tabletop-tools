@@ -11,7 +11,7 @@ export const NodeCategorySchema = z.enum([
   // Core rules
   'core-mechanic', 'phase-sequence', 'terrain', 'army-construction', 'mission', 'keyword',
   // Faction
-  'detachment-rule', 'stratagem', 'enhancement', 'faction-ability',
+  'faction', 'army-rule', 'detachment', 'detachment-rule', 'stratagem', 'enhancement', 'faction-ability',
   // Unit
   'datasheet', 'weapon', 'unit-ability', 'wargear-option', 'leader-attachment', 'unit-composition',
   // Overlay
@@ -37,6 +37,8 @@ export const RefTypeSchema = z.enum([
   'requires', 'modifies', 'triggers', 'sequence_adjacent',
   // Mechanical — non-obvious
   'interacts_with', 'commonly_confused', 'edge_case', 'stacks_with', 'prevents',
+  // Army construction
+  'eligible_for', 'can_lead',
 ])
 export type RefType = z.infer<typeof RefTypeSchema>
 
@@ -59,6 +61,7 @@ export const SourceSchema = z.object({
   widthPct: z.number().min(0).max(100).optional(),   // % of page width the content covers
   section: z.string().optional(),
   timestamp: z.string().optional(),
+  publishedAt: z.string().optional(),   // when the source material was published/released
   retrievedAt: z.string().min(1),
 })
 export type Source = z.infer<typeof SourceSchema>
@@ -93,6 +96,38 @@ export const NodeSchema = z.object({
   detachmentId: z.string().optional(),
   datasheetId: z.string().optional(),
 
+  // Structured fields (parsed from content text)
+  cpCost: z.number().int().min(0).optional(),           // Stratagem CP cost
+  targetKeywords: z.array(z.string()).optional(),        // Keywords a stratagem/detachment-rule targets (e.g., ["DEATH COMPANY"])
+  modelRestriction: z.string().optional(),               // Enhancement model restriction (e.g., "PHOBOS model only")
+  isUpgrade: z.boolean().optional(),                     // Enhancement is a unit upgrade (not character-only)
+  isEpicHero: z.boolean().optional(),                    // Unit is a named character — cannot take enhancements
+  points: z.array(z.object({                            // Unit points costs by model count
+    models: z.string(),                                   // e.g., "5 models", "1 model"
+    cost: z.number(),
+  })).optional(),
+
+  // Unit stat line (parsed from Wahapedia structured data)
+  stats: z.object({
+    M: z.string(),    // e.g., "6\"", "12\""
+    T: z.number(),
+    SV: z.string(),   // e.g., "3+", "2+"
+    W: z.number(),
+    LD: z.string(),   // e.g., "6+", "5+"
+    OC: z.number(),
+    invSv: z.string().optional(), // e.g., "4+"
+  }).optional(),
+
+  // Weapon stat line (parsed from Wahapedia structured data)
+  weaponStats: z.object({
+    range: z.string(),  // e.g., "24\"", "Melee"
+    A: z.string(),      // e.g., "2", "D6"
+    skill: z.string(),  // e.g., "3+", "2+"
+    S: z.number(),
+    AP: z.number(),
+    D: z.string(),      // e.g., "1", "D3"
+  }).optional(),
+
   // Source attribution
   sources: z.array(SourceSchema).min(1),
 
@@ -106,6 +141,9 @@ export const NodeSchema = z.object({
 
   // Sub-faction (chapter, legion, craftworld, etc.)
   subfaction: z.string().optional(),
+
+  // Edition (e.g., '10th', '11th')
+  edition: z.string().optional(),
 
   // Search
   keywords: z.array(z.string()),
@@ -122,7 +160,7 @@ export type Node = z.infer<typeof NodeSchema>
  * Distinct from NodeCategory (which describes individual node granularity).
  */
 export const RecordTypeSchema = z.enum([
-  'unit', 'detachment', 'stratagem', 'enhancement',
+  'faction', 'detachment', 'unit', 'stratagem', 'enhancement', 'army-rule',
   'rule', 'army-rule', 'errata', 'balance',
   'primary-mission', 'secondary-mission', 'deployment-zone',
   'twist', 'challenger', 'terrain-layout',

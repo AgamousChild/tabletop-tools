@@ -61,17 +61,17 @@ export function RuleCard({ data, context }: RuleCardProps) {
       >
         <div className="flex items-start justify-between gap-2">
           <div className="flex-1 min-w-0">
-            <h2 className="font-['Oswald'] uppercase tracking-wide text-white text-base font-semibold">
+            <h2 className="font-['Oswald'] uppercase tracking-wide text-white text-[17px] font-semibold">
               {data.name}
             </h2>
-            <p className={`text-xs mt-0.5 ${data.isArmyRule ? 'text-amber-400' : 'text-blue-400'}`}>
+            <p className={`text-[13px] mt-0.5 ${data.isArmyRule ? 'text-amber-400' : 'text-blue-400'}`}>
               {subtitlePrefix} — {subtitleLabel}
             </p>
           </div>
           {data.subfaction && (
             <span
               data-testid="subfaction-badge"
-              className="shrink-0 bg-amber-400/20 text-amber-400 text-xs font-medium px-2 py-0.5 rounded-full"
+              className="shrink-0 bg-amber-400/20 text-amber-400 text-[13px] font-medium px-2 py-0.5 rounded-full"
             >
               {data.subfaction}
             </span>
@@ -82,7 +82,7 @@ export function RuleCard({ data, context }: RuleCardProps) {
       {/* Body */}
       <div className="px-3 py-2 md:px-4 md:py-3 space-y-3">
         {/* Main description */}
-        <p className="text-slate-300 leading-relaxed text-xs md:text-sm break-words">
+        <p className="text-slate-300 leading-relaxed text-[13px] md:text-[15px] break-words">
           <KeywordText text={data.description} onContentClick={onContentClick} />
         </p>
 
@@ -98,11 +98,11 @@ export function RuleCard({ data, context }: RuleCardProps) {
                   className={`border border-slate-700 rounded px-3 py-2 ${highlighted ? 'bg-amber-400/10' : ''}`}
                 >
                   <span
-                    className={`text-[10px] md:text-xs font-bold uppercase tracking-wider ${subRuleNameClass} mr-2`}
+                    className={`text-[11px] md:text-[13px] font-bold uppercase tracking-wider ${subRuleNameClass} mr-2`}
                   >
                     {subRule.name}
                   </span>
-                  <span className="text-slate-300 text-xs md:text-sm break-words">
+                  <span className="text-slate-300 text-[13px] md:text-[15px] break-words">
                     <KeywordText text={subRule.description} onContentClick={onContentClick} />
                   </span>
                 </div>
@@ -119,7 +119,7 @@ export function RuleCard({ data, context }: RuleCardProps) {
         {data.appliesTo !== undefined && (
           <button
             data-testid="applies-to"
-            className="text-xs text-slate-500 hover:text-slate-400 cursor-pointer bg-transparent border-0 p-0 text-left"
+            className="text-[13px] text-slate-500 hover:text-slate-400 cursor-pointer bg-transparent border-0 p-0 text-left"
             onClick={() => onContentClick(data.name)}
           >
             Applies to {data.appliesTo} datasheets
@@ -132,7 +132,7 @@ export function RuleCard({ data, context }: RuleCardProps) {
               <button
                 key={i}
                 data-testid="view-source"
-                className="text-xs text-blue-400 hover:text-blue-300 cursor-pointer bg-transparent border-0 p-0"
+                className="text-[13px] text-blue-400 hover:text-blue-300 cursor-pointer bg-transparent border-0 p-0"
                 onClick={() =>
                   context.onViewSource!(
                     src.title

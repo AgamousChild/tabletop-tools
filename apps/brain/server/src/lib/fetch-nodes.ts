@@ -132,12 +132,15 @@ export async function fetchConnectedNodes(
       return fa - fb
     })
 
-  // Take all high-priority nodes (abilities, stratagems), cap weapons at 15
-  const highPriority = sortedRefs.filter(([id]) => refPriority(id) <= 3)
-  const weapons = sortedRefs.filter(([id]) => refPriority(id) === 4)
+  // Cap all categories — prevent flooding R2 fetches with hundreds of nodes.
+  // The real relevance filter is downstream in the /ask handler (keyword scoring).
+  const MAX_HIGH_PRIORITY = 30
+  const MAX_WEAPONS = 30
+  const highPriority = sortedRefs.filter(([id]) => refPriority(id) <= 3).slice(0, MAX_HIGH_PRIORITY)
+  const weapons = sortedRefs.filter(([id]) => refPriority(id) === 4).slice(0, MAX_WEAPONS)
   const selectedIds = [
     ...highPriority.map(([id]) => id),
-    ...weapons.map(([id]) => id).slice(0, 15),
+    ...weapons.map(([id]) => id),
   ]
 
   if (selectedIds.length === 0) return { nodes: [], parentMap: new Map() }

@@ -297,19 +297,19 @@ describe('resolveCardView', () => {
     )
     expect(result.card.type).toBe('deployment-zone')
     if (result.card.type === 'deployment-zone') {
-      expect(result.card.data.pdfImage).toBeDefined()
-      expect(result.card.data.pdfImage!.page).toBe(2)
-      expect(result.card.data.pdfImage!.pdfName).toBe('chapter-approved-deployment-zones')
+      expect(result.card.data.pdfImages).toBeDefined()
+      expect(result.card.data.pdfImages![0].page).toBe(2)
+      expect(result.card.data.pdfImages![0].pdfName).toBe('chapter-approved-deployment-zones')
     }
   })
 
-  it('maps deployment-zone without PDF — pdfImage is undefined', () => {
+  it('maps deployment-zone without PDF — pdfImages is undefined', () => {
     const result = resolveCardView(
       makeNode({ category: 'deployment-zone', sources: [] }),
     )
     expect(result.card.type).toBe('deployment-zone')
     if (result.card.type === 'deployment-zone') {
-      expect(result.card.data.pdfImage).toBeUndefined()
+      expect(result.card.data.pdfImages).toBeUndefined()
     }
   })
 
