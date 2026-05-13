@@ -9,7 +9,7 @@ bucket_name = "tabletop-tools-brain"
 
 [[vectorize]]
 binding = "BRAIN_INDEX"
-index_name = "brain-index"
+index_name = "brain-nodes"
 
 [ai]
 binding = "AI"

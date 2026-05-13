@@ -73,6 +73,7 @@ function getApp() {
   })
 
   // Gladia callback — receives completed transcript
+  // Respond immediately, process in background via waitUntil
   app.post('/ingest/callback', async (c) => {
     const body = await c.req.json()
     const parsed = parseGladiaCallback(body)
@@ -83,15 +84,20 @@ function getApp() {
     }
 
     const db = createDb(c.env)
-    await completeYoutubeIngest({
-      gladiaJobId: parsed.id,
-      transcript: parsed.transcript,
-      db,
-      anthropicKey: c.env.ANTHROPIC_API_KEY,
-      bucket: c.env.BRAIN_BUCKET,
-      vectorize: c.env.BRAIN_INDEX,
-      ai: c.env.AI,
-    })
+    const env = c.env
+
+    // Process in background — respond to Gladia immediately
+    c.executionCtx.waitUntil(
+      completeYoutubeIngest({
+        gladiaJobId: parsed.id,
+        transcript: parsed.transcript,
+        db,
+        anthropicKey: env.ANTHROPIC_API_KEY,
+        bucket: env.BRAIN_BUCKET,
+        vectorize: env.BRAIN_INDEX,
+        ai: env.AI,
+      }).catch(err => console.error('Background ingest failed:', err))
+    )
 
     return c.json({ received: true })
   })
@@ -109,5 +115,5 @@ function getApp() {
 }
 
 export default {
-  fetch: (req: Request, env: Env) => getApp().fetch(req, env),
+  fetch: (req: Request, env: Env, ctx: ExecutionContext) => getApp().fetch(req, env, ctx),
 }
