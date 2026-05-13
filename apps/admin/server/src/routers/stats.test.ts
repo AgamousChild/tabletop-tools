@@ -264,6 +264,20 @@ beforeAll(async () => {
       state TEXT,
       scraped_at INTEGER NOT NULL
     );
+    CREATE TABLE IF NOT EXISTS ingest_jobs (
+      id TEXT PRIMARY KEY,
+      url TEXT NOT NULL,
+      source_type TEXT NOT NULL,
+      source_name TEXT,
+      title TEXT,
+      status TEXT DEFAULT 'pending' NOT NULL,
+      gladia_job_id TEXT,
+      transcript TEXT,
+      nodes_extracted INTEGER DEFAULT 0,
+      error TEXT,
+      created_at INTEGER NOT NULL,
+      completed_at INTEGER
+    );
     CREATE TABLE IF NOT EXISTS glicko_history (
       id TEXT PRIMARY KEY,
       player_id TEXT NOT NULL REFERENCES player_glicko(id),
@@ -285,6 +299,7 @@ afterAll(() => client.close())
 // Helper to clear all data between tests in the "with data" suite
 async function clearAllData() {
   await client.executeMultiple(`
+    DELETE FROM ingest_jobs;
     DELETE FROM meta_events;
     DELETE FROM bcp_scrape_jobs;
     DELETE FROM glicko_history;
@@ -899,6 +914,63 @@ describe('stats router', () => {
       const result = await caller.stats.triggerMetaPipeline()
       expect(result.status).toBe('not-configured')
       expect(result.message).toContain('not configured')
+    })
+  })
+
+  describe('stats.ingestJobs', () => {
+    beforeEach(() => clearAllData())
+
+    it('returns empty array when no jobs', async () => {
+      const caller = createCaller(adminCtx)
+      const result = await caller.stats.ingestJobs({ limit: 20 })
+      expect(result).toEqual([])
+    })
+
+    it('returns jobs ordered by created_at desc', async () => {
+      const now = Math.floor(Date.now() / 1000)
+      await client.executeMultiple(`
+        INSERT INTO ingest_jobs (id, url, source_type, source_name, status, nodes_extracted, created_at) VALUES ('ij1', 'https://youtube.com/watch?v=abc', 'youtube', 'Auspex Tactics', 'completed', 5, ${now - 3600});
+        INSERT INTO ingest_jobs (id, url, source_type, source_name, status, nodes_extracted, created_at) VALUES ('ij2', 'https://example.com/article', 'web', 'WHC', 'pending', 0, ${now});
+      `)
+
+      const caller = createCaller(adminCtx)
+      const result = await caller.stats.ingestJobs({ limit: 20 })
+      expect(result.length).toBe(2)
+      expect(result[0].id).toBe('ij2')
+      expect(result[1].id).toBe('ij1')
+    })
+
+    it('rejects non-admin users', async () => {
+      const caller = createCaller(nonAdminCtx)
+      await expect(caller.stats.ingestJobs({ limit: 20 })).rejects.toMatchObject({ code: 'FORBIDDEN' })
+    })
+  })
+
+  describe('stats.triggerYoutubeIngest', () => {
+    it('returns error when service binding not configured', async () => {
+      const caller = createCaller(adminCtx)
+      const result = await caller.stats.triggerYoutubeIngest({ url: 'https://youtube.com/watch?v=abc' })
+      expect(result.status).toBe('error')
+      expect(result.message).toContain('not configured')
+    })
+
+    it('rejects non-admin users', async () => {
+      const caller = createCaller(nonAdminCtx)
+      await expect(caller.stats.triggerYoutubeIngest({ url: 'https://youtube.com/watch?v=abc' })).rejects.toMatchObject({ code: 'FORBIDDEN' })
+    })
+  })
+
+  describe('stats.triggerWebIngest', () => {
+    it('returns error when service binding not configured', async () => {
+      const caller = createCaller(adminCtx)
+      const result = await caller.stats.triggerWebIngest({ url: 'https://example.com/article' })
+      expect(result.status).toBe('error')
+      expect(result.message).toContain('not configured')
+    })
+
+    it('rejects non-admin users', async () => {
+      const caller = createCaller(nonAdminCtx)
+      await expect(caller.stats.triggerWebIngest({ url: 'https://example.com/article' })).rejects.toMatchObject({ code: 'FORBIDDEN' })
     })
   })
 })

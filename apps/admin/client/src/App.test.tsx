@@ -33,6 +33,9 @@ vi.mock('./lib/trpc', () => {
       bcpScraperHistory: { useQuery: vi.fn(() => ({ data: null, isLoading: true })) },
       triggerBcpScrape: { useMutation: vi.fn(() => ({ mutate: vi.fn(), isPending: false })) },
       triggerMetaPipeline: { useMutation: vi.fn(() => ({ mutate: vi.fn(), isPending: false })) },
+      ingestJobs: { useQuery: vi.fn(() => ({ data: null, isLoading: true, refetch: vi.fn() })) },
+      triggerYoutubeIngest: { useMutation: vi.fn(() => ({ mutate: vi.fn(), isPending: false })) },
+      triggerWebIngest: { useMutation: vi.fn(() => ({ mutate: vi.fn(), isPending: false })) },
     },
   }
   return { trpc, createTRPCClient: vi.fn() }
@@ -79,6 +82,7 @@ describe('App', () => {
     expect(screen.getByText('Activity')).toBeInTheDocument()
     expect(screen.getByText('Imports')).toBeInTheDocument()
     expect(screen.getByText('Scraper')).toBeInTheDocument()
+    expect(screen.getByText('Ingest')).toBeInTheDocument()
     expect(screen.getByText('Micah')).toBeInTheDocument()
     expect(screen.getByText('Sign out')).toBeInTheDocument()
   })
@@ -142,6 +146,18 @@ describe('App', () => {
     render(<App />)
     fireEvent.click(screen.getByText('Scraper'))
     expect(screen.getByText('Loading scraper status...')).toBeInTheDocument()
+  })
+
+  it('clicking Ingest nav renders IngestPage', () => {
+    vi.mocked(authClient.useSession).mockReturnValue({
+      data: { user: { id: '1', name: 'Micah', email: 'micah@test.com' }, session: {} },
+      isPending: false,
+      refetch: vi.fn(),
+    } as any)
+
+    render(<App />)
+    fireEvent.click(screen.getByText('Ingest'))
+    expect(screen.getByText('Loading ingest jobs...')).toBeInTheDocument()
   })
 
   it('defaults to Overview (Dashboard) page', () => {

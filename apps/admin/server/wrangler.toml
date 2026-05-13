@@ -10,3 +10,7 @@ compatibility_flags = ["nodejs_compat"]
 [[services]]
 binding = "BCP_SCRAPER"
 service = "tabletop-tools-bcp-scraper"
+
+[[services]]
+binding = "CONTENT_INGESTOR"
+service = "tabletop-tools-content-ingestor-worker"

@@ -20,6 +20,7 @@ import {
   playerGlicko,
   bcpScrapeJobs,
   metaEvents,
+  ingestJobs,
 } from '@tabletop-tools/db'
 
 async function count(db: any, table: any): Promise<number> {
@@ -438,6 +439,49 @@ export const statsRouter = router({
       pending: pending?.n || 0,
     }
   }),
+
+  ingestJobs: adminProcedure
+    .input(z.object({ limit: z.number().optional().default(20) }))
+    .query(async ({ ctx, input }) => {
+      const jobs = await ctx.db
+        .select()
+        .from(ingestJobs)
+        .orderBy(desc(ingestJobs.createdAt))
+        .limit(input.limit)
+      return jobs
+    }),
+
+  triggerYoutubeIngest: adminProcedure
+    .input(z.object({ url: z.string(), sourceName: z.string().optional() }))
+    .mutation(async ({ ctx, input }) => {
+      if (!ctx.contentIngestor) {
+        return { status: 'error', message: 'Content Ingestor service binding not configured' }
+      }
+      const resp = await ctx.contentIngestor.fetch(new Request('https://content-ingestor/ingest/youtube', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ url: input.url, sourceName: input.sourceName }),
+      }))
+      if (!resp.ok) return { status: 'error', message: `Ingestor returned ${resp.status}` }
+      const result = await resp.json() as { jobId?: string }
+      return { status: 'triggered', message: 'Ingestion started', jobId: result.jobId }
+    }),
+
+  triggerWebIngest: adminProcedure
+    .input(z.object({ url: z.string(), sourceName: z.string().optional() }))
+    .mutation(async ({ ctx, input }) => {
+      if (!ctx.contentIngestor) {
+        return { status: 'error', message: 'Content Ingestor service binding not configured' }
+      }
+      const resp = await ctx.contentIngestor.fetch(new Request('https://content-ingestor/ingest/web', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ url: input.url, sourceName: input.sourceName }),
+      }))
+      if (!resp.ok) return { status: 'error', message: `Ingestor returned ${resp.status}` }
+      const result = await resp.json() as { jobId?: string }
+      return { status: 'triggered', message: 'Ingestion started', jobId: result.jobId }
+    }),
 
   bsdataVersion: publicProcedure.query(async () => {
     try {
