@@ -5,36 +5,36 @@ import { MatchupMatrix } from '../components/MatchupMatrix'
 import { MetaWindowSelector } from '../components/MetaWindowSelector'
 
 interface Props {
-  onFactionSelect: (faction: string) => void
+  onFactionSelect: (factionId: string) => void
 }
 
 export function Dashboard({ onFactionSelect }: Props) {
-  const [metaWindow, setMetaWindow] = useState<string | undefined>()
+  const [frame, setFrame] = useState<string | undefined>()
 
   const { data: factions = [], isLoading: loadingFactions } = trpc.meta.factions.useQuery(
-    { metaWindow, minGames: 5 },
+    { frame, minGames: 5 },
   )
 
   const { data: matchups = [] } = trpc.meta.matchups.useQuery(
-    { metaWindow, minGames: 3 },
+    { frame, minGames: 3 },
   )
 
   return (
     <div className="space-y-8">
       <div className="flex items-center justify-between">
         <h1 className="text-2xl font-semibold text-slate-100">Meta Dashboard</h1>
-        <MetaWindowSelector value={metaWindow} onChange={setMetaWindow} />
+        <MetaWindowSelector value={frame} onChange={setFrame} />
       </div>
       <p className="text-xs text-slate-500 mb-4">
-        Faction win rates and head-to-head matchups from imported tournament data. Click a faction row to see detailed stats. Use the meta window selector to filter by time period.
+        Faction win rates, event placements, and head-to-head matchups from {factions.length > 0 ? `${factions.reduce((s, f) => s + f.games, 0).toLocaleString()} games across ${factions.reduce((s, f) => s + f.players, 0).toLocaleString()} player entries` : 'imported tournament data'}.
       </p>
 
       <section>
         <h2 className="text-lg font-medium text-slate-200 mb-4">Faction Win Rates</h2>
         {loadingFactions ? (
-          <p className="text-slate-400 text-sm">Loading…</p>
+          <p className="text-slate-400 text-sm">Loading...</p>
         ) : factions.length === 0 ? (
-          <p className="text-slate-500 text-sm">No tournament data yet. Import CSV data or close a tournament to see analytics.</p>
+          <p className="text-slate-500 text-sm">No tournament data for this period.</p>
         ) : (
           <FactionTable stats={factions} onSelect={onFactionSelect} />
         )}

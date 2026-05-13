@@ -1,4 +1,6 @@
-import type { EnhancementCardData, CardContext } from './types'
+import { ErrataSection } from './ErrataSection'
+import { factionDisplayName } from '../../lib/faction-names'
+import type { CardContext, EnhancementCardData } from './types'
 
 interface EnhancementCardProps {
   data: EnhancementCardData
@@ -37,33 +39,48 @@ export function EnhancementCard({ data, context }: EnhancementCardProps) {
   const { highlightTerms, onContentClick } = context
 
   return (
-    <div className="bg-slate-900 border border-slate-800 rounded-lg overflow-hidden">
-      {/* Header */}
-      <div className="flex items-center justify-between px-3 py-2 md:px-4 md:py-3 border-b border-purple-700">
-        <h2 className="font-['Oswald'] uppercase tracking-wide text-white text-base font-semibold">
-          {data.name}
-        </h2>
-        <span className="font-['Oswald'] text-purple-400 text-sm font-medium shrink-0 ml-2">
-          {data.cost} pts
-        </span>
-      </div>
+    <div
+      className="border-2 border-slate-700 rounded-md overflow-hidden bg-slate-950"
+      style={{ fontFamily: "'Source Sans 3', sans-serif" }}
+    >
+      <div className="px-3.5 py-2.5">
+        {/* Header — name + cost, purple underline */}
+        <div className="flex items-baseline justify-between border-b-2 border-purple-500 pb-1 mb-1.5">
+          <span
+            className="text-[15px] font-bold uppercase tracking-wider text-white"
+            style={{ fontFamily: "'Oswald', sans-serif" }}
+          >
+            {data.name}
+          </span>
+          <span
+            className="text-[17px] font-bold text-purple-500 shrink-0 ml-2"
+            style={{ fontFamily: "'Oswald', sans-serif" }}
+          >
+            {data.cost ? `${data.cost} pts` : ''}
+          </span>
+        </div>
 
-      <div className="px-3 py-2 md:px-4 md:py-3 space-y-2">
         {/* Restriction */}
         {data.restriction && (
-          <p className="text-purple-400 text-xs italic">{data.restriction}</p>
+          <div className="text-[10px] text-purple-400 uppercase tracking-wide mb-1.5">
+            {data.restriction}
+          </div>
         )}
 
         {/* Description */}
-        <p className="text-slate-300 leading-relaxed" style={{ fontSize: '11px' }}>
+        <div className="text-xs text-slate-300 leading-snug">
           {highlightText(data.description, highlightTerms, onContentClick)}
-        </p>
+        </div>
+
+        {/* Faction — Detachment footer */}
+        {(data.factionId || data.detachmentName) && (
+          <div className="text-[9px] text-slate-500 uppercase tracking-widest mt-2 pt-1 border-t border-slate-800">
+            {factionDisplayName(data.subfaction || data.factionId)}{data.detachmentName ? ` — ${data.detachmentName} Detachment` : ''}
+          </div>
+        )}
       </div>
 
-      {/* Footer */}
-      <div className="px-3 py-2 md:px-4 border-t border-slate-800">
-        <span className="text-xs text-slate-500">{data.detachmentName}</span>
-      </div>
+      <ErrataSection errata={data.errata} />
     </div>
   )
 }

@@ -95,11 +95,11 @@ export default function App() {
 
       <main className="max-w-5xl mx-auto px-6 py-8">
         {page.id === 'dashboard' && (
-          <Dashboard onFactionSelect={(faction) => navigate(`#/faction/${encodeURIComponent(faction)}`)} />
+          <Dashboard onFactionSelect={(factionId) => navigate(`#/faction/${encodeURIComponent(factionId)}`)} />
         )}
         {page.id === 'faction' && (
           <FactionDetail
-            faction={page.faction}
+            factionId={page.faction}
             onBack={() => navigate('#/')}
           />
         )}
@@ -114,7 +114,7 @@ export default function App() {
         )}
         {page.id === 'source' && (
           <SourceData
-            onTournamentSelect={(importId) => navigate(`#/tournament/${importId}`)}
+            onTournamentSelect={(eventId) => navigate(`#/tournament/${eventId}`)}
           />
         )}
         {page.id === 'tournament' && (

@@ -241,6 +241,43 @@ beforeAll(async () => {
       last_rating_period TEXT,
       updated_at INTEGER NOT NULL
     );
+    CREATE TABLE IF NOT EXISTS bcp_scrape_jobs (
+      id TEXT PRIMARY KEY,
+      started_at INTEGER NOT NULL,
+      completed_at INTEGER,
+      status TEXT NOT NULL DEFAULT 'running',
+      events_found INTEGER DEFAULT 0,
+      events_scraped INTEGER DEFAULT 0,
+      pairings_scraped INTEGER DEFAULT 0,
+      lists_scraped INTEGER DEFAULT 0,
+      errors TEXT,
+      triggered_by TEXT NOT NULL DEFAULT 'cron'
+    );
+    CREATE TABLE IF NOT EXISTS meta_events (
+      id TEXT PRIMARY KEY,
+      bcp_id TEXT UNIQUE,
+      name TEXT NOT NULL,
+      date TEXT NOT NULL,
+      round_count INTEGER NOT NULL DEFAULT 0,
+      player_count INTEGER NOT NULL DEFAULT 0,
+      country TEXT,
+      state TEXT,
+      scraped_at INTEGER NOT NULL
+    );
+    CREATE TABLE IF NOT EXISTS ingest_jobs (
+      id TEXT PRIMARY KEY,
+      url TEXT NOT NULL,
+      source_type TEXT NOT NULL,
+      source_name TEXT,
+      title TEXT,
+      status TEXT DEFAULT 'pending' NOT NULL,
+      gladia_job_id TEXT,
+      transcript TEXT,
+      nodes_extracted INTEGER DEFAULT 0,
+      error TEXT,
+      created_at INTEGER NOT NULL,
+      completed_at INTEGER
+    );
     CREATE TABLE IF NOT EXISTS glicko_history (
       id TEXT PRIMARY KEY,
       player_id TEXT NOT NULL REFERENCES player_glicko(id),
@@ -262,6 +299,9 @@ afterAll(() => client.close())
 // Helper to clear all data between tests in the "with data" suite
 async function clearAllData() {
   await client.executeMultiple(`
+    DELETE FROM ingest_jobs;
+    DELETE FROM meta_events;
+    DELETE FROM bcp_scrape_jobs;
     DELETE FROM glicko_history;
     DELETE FROM player_glicko;
     DELETE FROM imported_tournament_results;
@@ -773,6 +813,164 @@ describe('stats router', () => {
     it('rejects non-admin', async () => {
       const caller = createCaller(nonAdminCtx)
       await expect(caller.stats.deleteUser({ userId: 'u1' })).rejects.toMatchObject({ code: 'FORBIDDEN' })
+    })
+  })
+
+  describe('stats.bcpScraperStatus', () => {
+    beforeEach(() => clearAllData())
+
+    it('rejects non-admin users', async () => {
+      const caller = createCaller(nonAdminCtx)
+      await expect(caller.stats.bcpScraperStatus()).rejects.toMatchObject({ code: 'FORBIDDEN' })
+    })
+
+    it('returns null job when no jobs exist', async () => {
+      const caller = createCaller(adminCtx)
+      const result = await caller.stats.bcpScraperStatus()
+      expect(result.latestJob).toBeNull()
+      expect(result.totalEvents).toBe(0)
+    })
+
+    it('returns latest job when jobs exist', async () => {
+      const now = Math.floor(Date.now() / 1000)
+      await client.executeMultiple(`
+        INSERT INTO bcp_scrape_jobs (id, started_at, completed_at, status, events_found, events_scraped, pairings_scraped, triggered_by) VALUES ('j1', ${now - 3600}, ${now - 3500}, 'completed', 10, 8, 50, 'cron');
+        INSERT INTO bcp_scrape_jobs (id, started_at, status, events_found, triggered_by) VALUES ('j2', ${now}, 'running', 5, 'manual');
+        INSERT INTO meta_events (id, name, date, round_count, player_count, scraped_at) VALUES ('e1', 'GT Alpha', '2026-01-15', 5, 32, ${now});
+        INSERT INTO meta_events (id, name, date, round_count, player_count, scraped_at) VALUES ('e2', 'GT Beta', '2026-02-01', 5, 48, ${now});
+      `)
+
+      const caller = createCaller(adminCtx)
+      const result = await caller.stats.bcpScraperStatus()
+      expect(result.latestJob).not.toBeNull()
+      expect(result.latestJob!.id).toBe('j2')
+      expect(result.latestJob!.status).toBe('running')
+      expect(result.totalEvents).toBe(2)
+    })
+  })
+
+  describe('stats.bcpScraperHistory', () => {
+    beforeEach(() => clearAllData())
+
+    it('rejects non-admin users', async () => {
+      const caller = createCaller(nonAdminCtx)
+      await expect(caller.stats.bcpScraperHistory({ limit: 20 })).rejects.toMatchObject({ code: 'FORBIDDEN' })
+    })
+
+    it('returns jobs ordered by started_at desc', async () => {
+      const now = Math.floor(Date.now() / 1000)
+      await client.executeMultiple(`
+        INSERT INTO bcp_scrape_jobs (id, started_at, completed_at, status, events_found, events_scraped, triggered_by) VALUES ('j1', ${now - 7200}, ${now - 7100}, 'completed', 10, 8, 'cron');
+        INSERT INTO bcp_scrape_jobs (id, started_at, completed_at, status, events_found, events_scraped, triggered_by) VALUES ('j2', ${now - 3600}, ${now - 3500}, 'completed', 5, 5, 'cron');
+        INSERT INTO bcp_scrape_jobs (id, started_at, status, events_found, triggered_by) VALUES ('j3', ${now}, 'running', 3, 'manual');
+      `)
+
+      const caller = createCaller(adminCtx)
+      const result = await caller.stats.bcpScraperHistory({ limit: 20 })
+      expect(result.length).toBe(3)
+      expect(result[0].id).toBe('j3')
+      expect(result[1].id).toBe('j2')
+      expect(result[2].id).toBe('j1')
+    })
+
+    it('respects limit parameter', async () => {
+      const now = Math.floor(Date.now() / 1000)
+      await client.executeMultiple(`
+        INSERT INTO bcp_scrape_jobs (id, started_at, status, triggered_by) VALUES ('j1', ${now - 7200}, 'completed', 'cron');
+        INSERT INTO bcp_scrape_jobs (id, started_at, status, triggered_by) VALUES ('j2', ${now - 3600}, 'completed', 'cron');
+        INSERT INTO bcp_scrape_jobs (id, started_at, status, triggered_by) VALUES ('j3', ${now}, 'running', 'manual');
+      `)
+
+      const caller = createCaller(adminCtx)
+      const result = await caller.stats.bcpScraperHistory({ limit: 2 })
+      expect(result.length).toBe(2)
+      expect(result[0].id).toBe('j3')
+      expect(result[1].id).toBe('j2')
+    })
+  })
+
+  describe('stats.triggerBcpScrape', () => {
+    it('rejects non-admin users', async () => {
+      const caller = createCaller(nonAdminCtx)
+      await expect(caller.stats.triggerBcpScrape()).rejects.toMatchObject({ code: 'FORBIDDEN' })
+    })
+
+    it('returns error when service binding not configured', async () => {
+      const caller = createCaller(adminCtx)
+      const result = await caller.stats.triggerBcpScrape()
+      expect(result.status).toBe('error')
+      expect(result.message).toContain('not configured')
+    })
+  })
+
+  describe('stats.triggerMetaPipeline', () => {
+    it('rejects non-admin users', async () => {
+      const caller = createCaller(nonAdminCtx)
+      await expect(caller.stats.triggerMetaPipeline()).rejects.toMatchObject({ code: 'FORBIDDEN' })
+    })
+
+    it('returns placeholder status', async () => {
+      const caller = createCaller(adminCtx)
+      const result = await caller.stats.triggerMetaPipeline()
+      expect(result.status).toBe('not-configured')
+      expect(result.message).toContain('not configured')
+    })
+  })
+
+  describe('stats.ingestJobs', () => {
+    beforeEach(() => clearAllData())
+
+    it('returns empty array when no jobs', async () => {
+      const caller = createCaller(adminCtx)
+      const result = await caller.stats.ingestJobs({ limit: 20 })
+      expect(result).toEqual([])
+    })
+
+    it('returns jobs ordered by created_at desc', async () => {
+      const now = Math.floor(Date.now() / 1000)
+      await client.executeMultiple(`
+        INSERT INTO ingest_jobs (id, url, source_type, source_name, status, nodes_extracted, created_at) VALUES ('ij1', 'https://youtube.com/watch?v=abc', 'youtube', 'Auspex Tactics', 'completed', 5, ${now - 3600});
+        INSERT INTO ingest_jobs (id, url, source_type, source_name, status, nodes_extracted, created_at) VALUES ('ij2', 'https://example.com/article', 'web', 'WHC', 'pending', 0, ${now});
+      `)
+
+      const caller = createCaller(adminCtx)
+      const result = await caller.stats.ingestJobs({ limit: 20 })
+      expect(result.length).toBe(2)
+      expect(result[0].id).toBe('ij2')
+      expect(result[1].id).toBe('ij1')
+    })
+
+    it('rejects non-admin users', async () => {
+      const caller = createCaller(nonAdminCtx)
+      await expect(caller.stats.ingestJobs({ limit: 20 })).rejects.toMatchObject({ code: 'FORBIDDEN' })
+    })
+  })
+
+  describe('stats.triggerYoutubeIngest', () => {
+    it('returns error when service binding not configured', async () => {
+      const caller = createCaller(adminCtx)
+      const result = await caller.stats.triggerYoutubeIngest({ url: 'https://youtube.com/watch?v=abc' })
+      expect(result.status).toBe('error')
+      expect(result.message).toContain('not configured')
+    })
+
+    it('rejects non-admin users', async () => {
+      const caller = createCaller(nonAdminCtx)
+      await expect(caller.stats.triggerYoutubeIngest({ url: 'https://youtube.com/watch?v=abc' })).rejects.toMatchObject({ code: 'FORBIDDEN' })
+    })
+  })
+
+  describe('stats.triggerWebIngest', () => {
+    it('returns error when service binding not configured', async () => {
+      const caller = createCaller(adminCtx)
+      const result = await caller.stats.triggerWebIngest({ url: 'https://example.com/article' })
+      expect(result.status).toBe('error')
+      expect(result.message).toContain('not configured')
+    })
+
+    it('rejects non-admin users', async () => {
+      const caller = createCaller(nonAdminCtx)
+      await expect(caller.stats.triggerWebIngest({ url: 'https://example.com/article' })).rejects.toMatchObject({ code: 'FORBIDDEN' })
     })
   })
 })

@@ -102,15 +102,15 @@ describe('UnitCard', () => {
 
   it('renders keywords', () => {
     render(<UnitCard data={mockUnit} context={makeContext()} />)
-    expect(screen.getByText('Infantry')).toBeInTheDocument()
+    expect(screen.getByText(/^Infantry/)).toBeInTheDocument()
     expect(screen.getByText('Imperium')).toBeInTheDocument()
     expect(screen.getByText('Tacticus')).toBeInTheDocument()
   })
 
   it('renders faction keywords', () => {
     render(<UnitCard data={mockUnit} context={makeContext()} />)
-    // Faction keywords appear in header subtitle and keywords bar
-    expect(screen.getAllByText('Adeptus Astartes').length).toBeGreaterThan(0)
+    // Faction keywords appear in header subtitle and keywords bar (displayed as ALL CAPS)
+    expect(screen.getAllByText('ADEPTUS ASTARTES').length).toBeGreaterThan(0)
   })
 
   it('renders eligible leader names', () => {
@@ -152,7 +152,7 @@ describe('UnitCard', () => {
     const onContentClick = vi.fn()
     const context = makeContext({ onContentClick })
     render(<UnitCard data={mockUnit} context={context} />)
-    fireEvent.click(screen.getByText('Infantry'))
+    fireEvent.click(screen.getByText(/^Infantry/))
     expect(onContentClick).toHaveBeenCalledWith('Infantry')
   })
 
@@ -170,5 +170,34 @@ describe('UnitCard', () => {
     render(<UnitCard data={mockUnit} context={context} />)
     fireEvent.click(screen.getByText('Incendiary Terror'))
     expect(onContentClick).toHaveBeenCalledWith('Incendiary Terror')
+  })
+
+  it('does not show errata section when errata is absent', () => {
+    render(<UnitCard data={mockUnit} context={makeContext()} />)
+    expect(screen.queryByText(/Errata & FAQ/i)).not.toBeInTheDocument()
+  })
+
+  it('shows errata section when errata entries are present', () => {
+    const data = {
+      ...mockUnit,
+      errata: [
+        { nodeId: 'e1', title: 'Datasheet FAQ', content: 'The ability triggers once per turn.', source: { type: 'pdf', title: 'Chapter Approved', page: 8 } },
+      ],
+    }
+    render(<UnitCard data={data} context={makeContext()} />)
+    expect(screen.getByText('Errata & FAQ')).toBeInTheDocument()
+  })
+
+  it('reveals errata entry content when section is expanded', () => {
+    const data = {
+      ...mockUnit,
+      errata: [
+        { nodeId: 'e1', title: 'Datasheet FAQ', content: 'The ability triggers once per turn.', source: { type: 'pdf', title: 'Chapter Approved', page: 8 } },
+      ],
+    }
+    render(<UnitCard data={data} context={makeContext()} />)
+    fireEvent.click(screen.getByText('Errata & FAQ'))
+    expect(screen.getByText('Datasheet FAQ')).toBeInTheDocument()
+    expect(screen.getByText('The ability triggers once per turn.')).toBeInTheDocument()
   })
 })

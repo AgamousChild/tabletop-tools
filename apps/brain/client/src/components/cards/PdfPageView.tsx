@@ -1,19 +1,40 @@
 import { useState } from 'react'
 
+import { ErrataSection } from './ErrataSection'
+import type { ErrataEntry } from './types'
+
 interface PdfPageViewProps {
   pdfName: string
   pageNumber: number
   highlightText: string
   title: string
+  topPct?: number
+  heightPct?: number
+  leftPct?: number
+  widthPct?: number
   onDismiss: () => void
+  errata?: ErrataEntry[]
 }
 
-export function PdfPageView({ pdfName, pageNumber, title, onDismiss }: PdfPageViewProps) {
+export function PdfPageView({
+  pdfName,
+  pageNumber,
+  highlightText: _highlightText,
+  title,
+  topPct,
+  heightPct,
+  leftPct,
+  widthPct,
+  onDismiss,
+  errata,
+}: PdfPageViewProps) {
   const [loaded, setLoaded] = useState(false)
   const [error, setError] = useState(false)
 
   const apiBase = import.meta.env.VITE_BRAIN_API_URL || '/brain/api'
   const src = `${apiBase}/pages/${pdfName}/page-${pageNumber}.png`
+
+  const hasHighlight = topPct !== undefined && heightPct !== undefined
 
   return (
     <div
@@ -35,15 +56,15 @@ export function PdfPageView({ pdfName, pageNumber, title, onDismiss }: PdfPageVi
           </span>
         </div>
 
-        {/* Image area */}
-        <div className="relative bg-slate-950 border-x border-slate-700 overflow-x-auto">
+        {/* Image area with highlight overlay */}
+        <div className="relative bg-slate-950 border-x border-slate-700">
           {/* Loading state */}
           {!loaded && !error && (
             <div
               data-testid="pdf-loading"
               className="flex items-center justify-center h-64 text-slate-400"
             >
-              <span className="text-sm">Loading page…</span>
+              <span className="text-sm">Loading page...</span>
             </div>
           )}
 
@@ -53,12 +74,14 @@ export function PdfPageView({ pdfName, pageNumber, title, onDismiss }: PdfPageVi
               data-testid="pdf-error"
               className="flex flex-col items-center justify-center h-64 text-slate-400 gap-2"
             >
-              <span className="text-2xl">⚠</span>
-              <span className="text-sm">Page image unavailable</span>
-              <span className="text-xs text-slate-500">{pdfName}, page {pageNumber}</span>
+              <span className="text-2xl">Page image unavailable</span>
+              <span className="text-sm">
+                {pdfName}, page {pageNumber}
+              </span>
             </div>
           )}
 
+          {/* PDF page image */}
           <img
             src={src}
             alt={`${title} — ${pdfName} page ${pageNumber}`}
@@ -70,7 +93,29 @@ export function PdfPageView({ pdfName, pageNumber, title, onDismiss }: PdfPageVi
               setError(true)
             }}
           />
+
+          {/* Semi-transparent highlight overlay showing where the rule text is on the page */}
+          {loaded && hasHighlight && (
+            <div
+              data-testid="pdf-highlight"
+              className="absolute border-2 border-amber-400/60 pointer-events-none"
+              style={{
+                top: `${topPct}%`,
+                height: `${heightPct}%`,
+                left: `${leftPct ?? 0}%`,
+                width: `${widthPct ?? 100}%`,
+                backgroundColor: 'rgba(251, 191, 36, 0.12)',
+              }}
+            />
+          )}
         </div>
+
+        {/* Errata section */}
+        {errata && errata.length > 0 && (
+          <div className="bg-slate-900 border-x border-slate-700 px-4 py-2">
+            <ErrataSection errata={errata} />
+          </div>
+        )}
 
         {/* Close button */}
         <div className="bg-slate-900 border border-slate-700 rounded-b-lg px-4 py-3 flex justify-center">
@@ -79,7 +124,7 @@ export function PdfPageView({ pdfName, pageNumber, title, onDismiss }: PdfPageVi
             onClick={onDismiss}
             className="flex items-center gap-2 px-6 py-2 bg-slate-800 hover:bg-slate-700 text-slate-100 rounded transition-colors text-sm font-medium"
           >
-            Close ✕
+            Close
           </button>
         </div>
       </div>

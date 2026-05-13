@@ -79,4 +79,27 @@ describe('PdfPageView', () => {
     // @ts-expect-error cleanup
     import.meta.env.VITE_BRAIN_API_URL = undefined
   })
+
+  it('does not show errata section when errata prop is absent', () => {
+    render(<PdfPageView {...defaultProps} />)
+    expect(screen.queryByText(/Errata & FAQ/i)).not.toBeInTheDocument()
+  })
+
+  it('shows errata section when errata entries are provided', () => {
+    const errata = [
+      { nodeId: 'e1', title: 'FAQ Q1', content: 'Yes, it works.', source: { type: 'pdf', title: 'Chapter Approved', page: 12 } },
+    ]
+    render(<PdfPageView {...defaultProps} errata={errata} />)
+    expect(screen.getByText('Errata & FAQ')).toBeInTheDocument()
+  })
+
+  it('reveals errata entry content when section is expanded', () => {
+    const errata = [
+      { nodeId: 'e1', title: 'FAQ Q1', content: 'Yes, it works.', source: { type: 'pdf', title: 'Chapter Approved', page: 12 } },
+    ]
+    render(<PdfPageView {...defaultProps} errata={errata} />)
+    fireEvent.click(screen.getByText('Errata & FAQ'))
+    expect(screen.getByText('FAQ Q1')).toBeInTheDocument()
+    expect(screen.getByText('Yes, it works.')).toBeInTheDocument()
+  })
 })

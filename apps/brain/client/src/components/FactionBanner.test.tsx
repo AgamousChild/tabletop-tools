@@ -4,18 +4,18 @@ import { FactionBanner } from './FactionBanner'
 
 describe('FactionBanner', () => {
   it('shows detected faction', () => {
-    render(<FactionBanner factions={['Space Marines']} onDismiss={() => {}} />)
-    expect(screen.getByText(/Space Marines/)).toBeInTheDocument()
+    render(<FactionBanner factions={['space-marines']} onDismiss={() => {}} />)
+    expect(screen.getByText(/SPACE MARINES/)).toBeInTheDocument()
   })
 
   it('shows subfaction when present', () => {
-    render(<FactionBanner factions={['Space Marines']} subfaction="Ultramarines" onDismiss={() => {}} />)
-    expect(screen.getByText(/Ultramarines/)).toBeInTheDocument()
+    render(<FactionBanner factions={['space-marines']} subfaction="ultramarines" onDismiss={() => {}} />)
+    expect(screen.getByText(/ULTRAMARINES/)).toBeInTheDocument()
   })
 
   it('calls onDismiss when "Show all" clicked', () => {
     const onDismiss = vi.fn()
-    render(<FactionBanner factions={['Space Marines']} onDismiss={onDismiss} />)
+    render(<FactionBanner factions={['space-marines']} onDismiss={onDismiss} />)
     fireEvent.click(screen.getByText(/Show all results/))
     expect(onDismiss).toHaveBeenCalledOnce()
   })
@@ -26,13 +26,13 @@ describe('FactionBanner', () => {
   })
 
   it('joins multiple factions with comma', () => {
-    render(<FactionBanner factions={['Space Marines', 'Necrons']} onDismiss={() => {}} />)
-    expect(screen.getByText(/Space Marines, Necrons/)).toBeInTheDocument()
+    render(<FactionBanner factions={['space-marines', 'necrons']} onDismiss={() => {}} />)
+    expect(screen.getByText(/SPACE MARINES, NECRONS/)).toBeInTheDocument()
   })
 
   it('prefers subfaction over faction list in display', () => {
-    render(<FactionBanner factions={['Space Marines']} subfaction="Iron Hands" onDismiss={() => {}} />)
-    expect(screen.getByText(/Iron Hands/)).toBeInTheDocument()
-    expect(screen.queryByText(/Space Marines/)).not.toBeInTheDocument()
+    render(<FactionBanner factions={['space-marines']} subfaction="iron hands" onDismiss={() => {}} />)
+    expect(screen.getByText(/IRON HANDS/)).toBeInTheDocument()
+    expect(screen.queryByText(/SPACE MARINES/)).not.toBeInTheDocument()
   })
 })

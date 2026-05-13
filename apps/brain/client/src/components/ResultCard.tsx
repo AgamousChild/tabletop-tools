@@ -1,3 +1,5 @@
+import { factionDisplayName } from '../lib/faction-names'
+
 const LAYER_COLORS: Record<string, string> = {
   core: 'bg-blue-600',
   faction: 'bg-purple-600',
@@ -16,6 +18,7 @@ export interface ResultCardProps {
   score: number
   parentUnit?: string
   factionId?: string
+  factionName?: string
   subfaction?: string
   phase?: string
 }
@@ -29,10 +32,11 @@ export function ResultCard({
   score,
   parentUnit,
   factionId,
+  factionName,
   subfaction,
   phase,
 }: ResultCardProps) {
-  const pct = Math.round(score * 100)
+  const pct = score ? Math.round(score * 100) : 0
 
   return (
     <div className="bg-slate-900 border border-slate-800 rounded-lg p-4">
@@ -41,18 +45,17 @@ export function ResultCard({
           <span className="text-amber-400 font-bold text-sm">#{index}</span>
           <h3 className="font-bold text-slate-100">{title}</h3>
         </div>
-        <span className="text-xs text-slate-500 shrink-0">{pct}%</span>
+        {pct > 0 && <span className="text-xs text-slate-500 shrink-0">{pct}%</span>}
       </div>
       {parentUnit && (
         <p className="text-xs text-slate-400 italic mb-2">on {parentUnit}</p>
       )}
       <div className="flex flex-wrap items-center gap-2 mb-2">
         <span className={`px-2 py-0.5 rounded text-xs font-medium text-white ${LAYER_COLORS[layer] || 'bg-slate-600'}`}>
-          {layer}
+          {category}
         </span>
-        <span className="text-xs text-slate-400">{category}</span>
-        {factionId && <span className="text-xs text-slate-400">{factionId}</span>}
-        {subfaction && <span className="text-xs text-slate-400">{subfaction}</span>}
+        {factionId && <span className="text-xs text-slate-400">{factionName || factionDisplayName(factionId)}</span>}
+        {subfaction && <span className="text-xs text-slate-400">{factionDisplayName(subfaction)}</span>}
         {phase && <span className="text-xs text-slate-400">{phase}</span>}
       </div>
       <p className="text-sm text-slate-300 line-clamp-2">{summary}</p>

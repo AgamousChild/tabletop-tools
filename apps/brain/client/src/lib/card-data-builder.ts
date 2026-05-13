@@ -131,7 +131,10 @@ function buildUnitData(node: BrainNode): UnitCardData {
     role: node.layer,
     derivedType: content.match(/\*\*Derived Type:\*\*\s*(.+)/)?.[1]?.trim() || node.layer,
     points: '',
-    stats,
+    stats: (() => {
+      const fnpKw = (node.keywords || []).find(k => /^fnp-\d$/.test(k))
+      return fnpKw ? { ...stats, fnp: `${fnpKw.replace('fnp-', '')}++` } : stats
+    })(),
     rangedWeapons: rangedLines.length > 0
       ? [{ name: rangedLines[0] || '', range: '', attacks: '', skill: '', strength: '', ap: '', damage: '', abilities: rangedLines.slice(1).join(', ') }]
       : [],

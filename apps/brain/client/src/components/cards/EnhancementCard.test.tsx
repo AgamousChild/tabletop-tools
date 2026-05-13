@@ -40,9 +40,9 @@ describe('EnhancementCard', () => {
     expect(screen.getByText(/The bearer's melee weapons/)).toBeInTheDocument()
   })
 
-  it('renders detachment name', () => {
+  it('renders faction and detachment name in footer', () => {
     render(<EnhancementCard data={mockEnhancement} context={mockContext} />)
-    expect(screen.getByText('Wrathful Procession')).toBeInTheDocument()
+    expect(screen.getByText('SPACE MARINES — Wrathful Procession Detachment')).toBeInTheDocument()
   })
 
   it('does not render restriction line when restriction is absent', () => {
@@ -64,5 +64,34 @@ describe('EnhancementCard', () => {
     render(<EnhancementCard data={mockEnhancement} context={context} />)
     fireEvent.click(screen.getByText('DEVASTATING WOUNDS'))
     expect(onContentClick).toHaveBeenCalledWith('DEVASTATING WOUNDS')
+  })
+
+  it('does not show errata section when errata is absent', () => {
+    render(<EnhancementCard data={mockEnhancement} context={mockContext} />)
+    expect(screen.queryByText(/Errata & FAQ/i)).not.toBeInTheDocument()
+  })
+
+  it('shows errata section when errata entries are present', () => {
+    const data = {
+      ...mockEnhancement,
+      errata: [
+        { nodeId: 'e1', title: 'Enhancement FAQ', content: 'Only applies to the bearer.', source: { type: 'pdf', title: 'Chapter Approved', page: 20 } },
+      ],
+    }
+    render(<EnhancementCard data={data} context={mockContext} />)
+    expect(screen.getByText('Errata & FAQ')).toBeInTheDocument()
+  })
+
+  it('reveals errata entry content when section is expanded', () => {
+    const data = {
+      ...mockEnhancement,
+      errata: [
+        { nodeId: 'e1', title: 'Enhancement FAQ', content: 'Only applies to the bearer.', source: { type: 'pdf', title: 'Chapter Approved', page: 20 } },
+      ],
+    }
+    render(<EnhancementCard data={data} context={mockContext} />)
+    fireEvent.click(screen.getByText('Errata & FAQ'))
+    expect(screen.getByText('Enhancement FAQ')).toBeInTheDocument()
+    expect(screen.getByText('Only applies to the bearer.')).toBeInTheDocument()
   })
 })

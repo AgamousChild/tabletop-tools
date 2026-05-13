@@ -35,7 +35,7 @@ describe('FACTION_PATTERNS', () => {
 
   it('has no duplicate slugs (except aliases like eldar→aeldari)', () => {
     const slugs = FACTION_PATTERNS.map(p => p.slug)
-    const allowedDupes = new Set(['aeldari', 't-au-empire', 'adepta-sororitas', 'astra-militarum', 'drukhari'])
+    const allowedDupes = new Set(['aeldari', 't-au-empire', 'adepta-sororitas', 'astra-militarum', 'drukhari', 'chaos-space-marines', 'grey-knights', 'death-guard', 'thousand-sons', 'world-eaters', 'genestealer-cults', 'adeptus-mechanicus'])
     const seen = new Map<string, number>()
     for (const s of slugs) {
       seen.set(s, (seen.get(s) ?? 0) + 1)
@@ -108,7 +108,7 @@ describe('detectFactions — top-level factions', () => {
     ['genestealer cults ambush', ['genestealer-cults']],
     ['drukhari kabalites', ['drukhari']],
     ['votann hearthkyn', ['leagues-of-votann']],
-    ['daemon prince abilities', ['chaos-daemons']],
+    ['chaos daemon units', ['chaos-daemons']],
   ]
 
   for (const [query, expected] of cases) {

@@ -34,9 +34,9 @@ describe('StratagemCard', () => {
     expect(screen.getByText('2')).toBeInTheDocument()
   })
 
-  it('renders type line', () => {
+  it('renders type line with phase', () => {
     render(<StratagemCard data={mockStratagem} context={baseContext} />)
-    expect(screen.getByText("Forgefather's Seekers — Battle Tactic Stratagem")).toBeInTheDocument()
+    expect(screen.getByText("Forgefather's Seekers — Battle Tactic Stratagem — Shooting phase")).toBeInTheDocument()
   })
 
   it('renders WHEN section with label and text', () => {
@@ -57,9 +57,15 @@ describe('StratagemCard', () => {
     expect(screen.getByText(/Torrent weapons equipped by models/)).toBeInTheDocument()
   })
 
-  it('renders detachment name', () => {
+  it('renders faction and detachment name in footer', () => {
     render(<StratagemCard data={mockStratagem} context={baseContext} />)
-    expect(screen.getByText("Forgefather's Seekers")).toBeInTheDocument()
+    expect(screen.getByText("SPACE MARINES — Forgefather's Seekers Detachment")).toBeInTheDocument()
+  })
+
+  it('prefers subfaction over factionId in footer', () => {
+    const data = { ...mockStratagem, subfaction: 'blood angels' }
+    render(<StratagemCard data={data} context={baseContext} />)
+    expect(screen.getByText("BLOOD ANGELS — Forgefather's Seekers Detachment")).toBeInTheDocument()
   })
 
   it('highlights EFFECT section when highlightTerms match effect text', () => {
@@ -103,5 +109,34 @@ describe('StratagemCard', () => {
     const keyword = screen.getByText('[DEVASTATING WOUNDS]')
     fireEvent.click(keyword)
     expect(onContentClick).toHaveBeenCalledWith('DEVASTATING WOUNDS')
+  })
+
+  it('does not show errata section when errata is absent', () => {
+    render(<StratagemCard data={mockStratagem} context={baseContext} />)
+    expect(screen.queryByText(/Errata & FAQ/i)).not.toBeInTheDocument()
+  })
+
+  it('shows errata section when errata entries are present', () => {
+    const data = {
+      ...mockStratagem,
+      errata: [
+        { nodeId: 'e1', title: 'Stratagem FAQ', content: 'This can only be used once per phase.', source: { type: 'pdf', title: 'Chapter Approved', page: 15 } },
+      ],
+    }
+    render(<StratagemCard data={data} context={baseContext} />)
+    expect(screen.getByText('Errata & FAQ')).toBeInTheDocument()
+  })
+
+  it('reveals errata entry content when section is expanded', () => {
+    const data = {
+      ...mockStratagem,
+      errata: [
+        { nodeId: 'e1', title: 'Stratagem FAQ', content: 'This can only be used once per phase.', source: { type: 'pdf', title: 'Chapter Approved', page: 15 } },
+      ],
+    }
+    render(<StratagemCard data={data} context={baseContext} />)
+    fireEvent.click(screen.getByText('Errata & FAQ'))
+    expect(screen.getByText('Stratagem FAQ')).toBeInTheDocument()
+    expect(screen.getByText('This can only be used once per phase.')).toBeInTheDocument()
   })
 })

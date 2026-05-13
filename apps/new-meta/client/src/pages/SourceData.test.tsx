@@ -18,20 +18,24 @@ vi.mock('../lib/trpc', () => ({
 
 const fakeTournaments = [
   {
-    importId: 'imp-1',
+    eventId: 'evt-1',
     eventName: 'London GT 2025',
     eventDate: '2025-03-15',
     format: '40k',
-    metaWindow: '2025-Q1',
+    location: 'London, UK',
     playerCount: 128,
+    rounds: 6,
+    winnerFaction: 'Space Marines',
   },
   {
-    importId: 'imp-2',
+    eventId: 'evt-2',
     eventName: 'Berlin Open',
     eventDate: '2025-04-20',
     format: '40k',
-    metaWindow: '2025-Q2',
+    location: 'Berlin, DE',
     playerCount: 64,
+    rounds: 5,
+    winnerFaction: 'Orks',
   },
 ]
 
@@ -65,12 +69,12 @@ describe('SourceData', () => {
     expect(screen.getByText('Berlin Open')).toBeInTheDocument()
   })
 
-  it('calls onTournamentSelect with importId when a row is clicked', () => {
+  it('calls onTournamentSelect with eventId when a row is clicked', () => {
     mockIsLoading = false
     mockTournaments = fakeTournaments
     const onTournamentSelect = vi.fn()
     render(<SourceData onTournamentSelect={onTournamentSelect} />)
     fireEvent.click(screen.getByText('London GT 2025'))
-    expect(onTournamentSelect).toHaveBeenCalledWith('imp-1')
+    expect(onTournamentSelect).toHaveBeenCalledWith('evt-1')
   })
 })

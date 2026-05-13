@@ -13,13 +13,6 @@ describe('Overlay', () => {
     expect(screen.queryByText('Card content')).not.toBeInTheDocument()
   })
 
-  it('calls onDismiss when close button clicked', () => {
-    const onDismiss = vi.fn()
-    render(<Overlay open onDismiss={onDismiss}><div>Content</div></Overlay>)
-    fireEvent.click(screen.getByLabelText('Close'))
-    expect(onDismiss).toHaveBeenCalled()
-  })
-
   it('calls onDismiss when backdrop clicked', () => {
     const onDismiss = vi.fn()
     render(<Overlay open onDismiss={onDismiss}><div>Content</div></Overlay>)

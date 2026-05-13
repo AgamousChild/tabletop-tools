@@ -6,6 +6,11 @@ set -e
 
 REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 
+# Load env vars (Cloudflare API token, etc.)
+if [ -f "$REPO_ROOT/.env" ]; then
+  set -a && source "$REPO_ROOT/.env" && set +a
+fi
+
 APPS="no-cheat versus list-builder game-tracker tournament new-meta admin"
 
 for app in $APPS; do

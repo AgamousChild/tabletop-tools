@@ -263,13 +263,15 @@ describe('retrieve', () => {
 
   it('dualEmbedding merges and deduplicates results from both queries', async () => {
     const ai = createMockAI()
-    // First query returns nodeA, second query returns nodeA + nodeB (nodeA is deduped)
+    // First query returns nodeA, keyword query returns nodeA + nodeB (nodeA is deduped)
     const nodeA = makeNode({ id: 'core:node-a', title: 'Node A' })
     const nodeB = makeNode({ id: 'core:node-b', title: 'Node B' })
 
     const vectorize = {
       query: vi.fn()
+        // primary unfiltered
         .mockResolvedValueOnce({ matches: [{ id: nodeA.id, score: 0.9, metadata: { layer: 'core', category: 'core-mechanic' } }] })
+        // keyword unfiltered
         .mockResolvedValueOnce({ matches: [
           { id: nodeA.id, score: 0.8, metadata: { layer: 'core', category: 'core-mechanic' } },
           { id: nodeB.id, score: 0.7, metadata: { layer: 'core', category: 'core-mechanic' } },
@@ -567,5 +569,146 @@ describe('retrieve', () => {
     expect(ids).toContain(genericNode.id)
     expect(ids).toContain(necronNode.id)
     expect(ids).not.toContain(orkNode.id)
+  })
+})
+
+// ── returnRecords tests ────────────────────────────────────────────────────────
+
+describe('retrieve with returnRecords', () => {
+  beforeEach(() => {
+    resetManifestCache()
+  })
+
+  const makeDatasheet = (id: string, title: string, factionId?: string): Node =>
+    makeNode({
+      id,
+      layer: 'unit',
+      category: 'datasheet',
+      title,
+      factionId,
+    })
+
+  const makeWeapon = (id: string, title: string, datasheetId: string): Node =>
+    makeNode({
+      id,
+      layer: 'unit',
+      category: 'weapon',
+      title,
+      datasheetId,
+    })
+
+  it('returns records array when returnRecords is true', async () => {
+    const datasheet = makeDatasheet('datasheet:necrons:warriors', 'Necron Warriors', 'necrons')
+    const weapon = makeWeapon('weapon:necrons:warriors:gauss', 'Gauss Flayer', 'datasheet:necrons:warriors')
+
+    const ai = createMockAI()
+    // Vectorize returns the weapon — its parent datasheet is NOT in the results
+    const vectorize = createMockVectorize([
+      { id: weapon.id, score: 0.85, metadata: { layer: 'unit', category: 'weapon', datasheetId: datasheet.id } },
+    ])
+    const bucket = createMockBucket({
+      'manifest.json': { files: { 'nodes/necrons.json': 'v1' } },
+      'nodes/necrons.json': [datasheet, weapon],
+      'refs/reverse-index.json': {},
+      'refs/forward-index.json': {},
+    })
+
+    const env: RetrieveEnv = { ai, vectorize, bucket }
+    const result = await retrieve({ query: 'gauss flayer', limit: 10, returnRecords: true }, env)
+
+    expect(result.records).toBeDefined()
+    expect(result.records!.length).toBe(1)
+    expect(result.records![0]!.type).toBe('unit')
+    // Primary node should be the datasheet (parent), not the weapon
+    expect(result.records![0]!.primaryNode.id).toBe(datasheet.id)
+    // The weapon should appear as a matched child
+    expect(result.records![0]!.matchedChildIds).toContain(weapon.id)
+  })
+
+  it('returns undefined records when returnRecords is false', async () => {
+    const datasheet = makeDatasheet('datasheet:necrons:warriors', 'Necron Warriors', 'necrons')
+
+    const ai = createMockAI()
+    const vectorize = createMockVectorize([
+      { id: datasheet.id, score: 0.9, metadata: { layer: 'unit', category: 'datasheet' } },
+    ])
+    const bucket = createMockBucket({
+      'manifest.json': { files: { 'nodes/necrons.json': 'v1' } },
+      'nodes/necrons.json': [datasheet],
+      'refs/reverse-index.json': {},
+      'refs/forward-index.json': {},
+    })
+
+    const env: RetrieveEnv = { ai, vectorize, bucket }
+    const result = await retrieve({ query: 'necron warriors', limit: 10, returnRecords: false }, env)
+
+    expect(result.records).toBeUndefined()
+  })
+
+  it('returns undefined records when returnRecords is omitted', async () => {
+    const datasheet = makeDatasheet('datasheet:necrons:warriors', 'Necron Warriors', 'necrons')
+
+    const ai = createMockAI()
+    const vectorize = createMockVectorize([
+      { id: datasheet.id, score: 0.9, metadata: { layer: 'unit', category: 'datasheet' } },
+    ])
+    const bucket = createMockBucket({
+      'manifest.json': { files: { 'nodes/necrons.json': 'v1' } },
+      'nodes/necrons.json': [datasheet],
+      'refs/reverse-index.json': {},
+      'refs/forward-index.json': {},
+    })
+
+    const env: RetrieveEnv = { ai, vectorize, bucket }
+    const result = await retrieve({ query: 'necron warriors', limit: 10 }, env)
+
+    expect(result.records).toBeUndefined()
+  })
+
+  it('deduplicates: datasheet matched directly creates one unit record (not two)', async () => {
+    const datasheet = makeDatasheet('datasheet:necrons:warriors', 'Necron Warriors', 'necrons')
+
+    const ai = createMockAI()
+    const vectorize = createMockVectorize([
+      { id: datasheet.id, score: 0.95, metadata: { layer: 'unit', category: 'datasheet' } },
+    ])
+    const bucket = createMockBucket({
+      'manifest.json': { files: { 'nodes/necrons.json': 'v1' } },
+      'nodes/necrons.json': [datasheet],
+      'refs/reverse-index.json': {},
+      'refs/forward-index.json': {},
+    })
+
+    const env: RetrieveEnv = { ai, vectorize, bucket }
+    const result = await retrieve({ query: 'necron warriors', limit: 10, returnRecords: true }, env)
+
+    expect(result.records).toBeDefined()
+    expect(result.records!.length).toBe(1)
+    expect(result.records![0]!.primaryNode.id).toBe(datasheet.id)
+    expect(result.records![0]!.matchedChildIds).toHaveLength(0)
+  })
+
+  it('records still available alongside results (backwards compatibility)', async () => {
+    const datasheet = makeDatasheet('datasheet:necrons:warriors', 'Necron Warriors', 'necrons')
+
+    const ai = createMockAI()
+    const vectorize = createMockVectorize([
+      { id: datasheet.id, score: 0.9, metadata: { layer: 'unit', category: 'datasheet' } },
+    ])
+    const bucket = createMockBucket({
+      'manifest.json': { files: { 'nodes/necrons.json': 'v1' } },
+      'nodes/necrons.json': [datasheet],
+      'refs/reverse-index.json': {},
+      'refs/forward-index.json': {},
+    })
+
+    const env: RetrieveEnv = { ai, vectorize, bucket }
+    const result = await retrieve({ query: 'necron warriors', limit: 10, returnRecords: true }, env)
+
+    // Old field still present
+    expect(result.results).toBeDefined()
+    expect(result.results.length).toBeGreaterThan(0)
+    // New field also present
+    expect(result.records).toBeDefined()
   })
 })

@@ -76,6 +76,7 @@ export function parseFactionPack(
   let inEnhancementZone = false
   let inFaqZone = false
   let inErrataZone = false
+  let pendingStratagemName = '' // Name extracted from trailing ALL-CAPS in previous stratagem's effect
 
   function flushSection() {
     if (!sectionTitle || sectionType === 'skip') {
@@ -90,6 +91,19 @@ export function parseFactionPack(
     sectionBody = []
 
     if (!body && sectionType !== 'detachment') return
+
+    // Reject phantom enhancements — stat lines (e.g., "6\" 3+ 7+", "10\" 2+ 6+", "-3+ 7+")
+    // that appear in the enhancement zone of faction pack PDFs but are actually datasheet fragments
+    if (sectionType === 'enhancement' && /^[\d\-\u2011]/.test(title)) return
+
+    // Reject datasheets misclassified as enhancements — full unit profiles that appear
+    // in the enhancement zone (e.g., Tiger Shark in T'au, Deathwatch kill teams).
+    // Detect by: weapon stat tables, KEYWORDS: header, or FACTION KEYWORDS: header.
+    if (sectionType === 'enhancement') {
+      if (/\b(RANGED|MELEE) WEAPONS\s+(RANGE|A\b)/i.test(body)) return
+      if (/^KEYWORDS:\s/i.test(body)) return
+      if (/\bFACTION KEYWORDS?:\s/i.test(body)) return
+    }
 
     // Errata and FAQ blocks need to be split into individual entries
     if (sectionType === 'errata' && body) {
@@ -172,8 +186,9 @@ export function parseFactionPack(
   // The PDF parser outputs these as one giant text block. We need to split
   // errata on "Page NNN" boundaries and FAQs on "Q:" boundaries.
   function splitErrataBlock(body: string, fSlug: string): void {
-    // Split on "Page NNN" or "Pages NNN" pattern
-    const entries = body.split(/(?=Pages?\s+\d+)/i).filter(s => s.trim())
+    // Split on "Page NNN" at the start of a line/sentence (followed by dash or comma for section name).
+    // Avoid splitting on cross-references like "(see Assigned Agents, page 75)".
+    const entries = body.split(/(?=(?:^|\n)\s*Pages?\s+\d+\s*[—–,\-])/i).filter(s => s.trim())
     for (const entry of entries) {
       const pageMatch = entry.match(/Pages?\s+(\d+)/i)
       const page = pageMatch ? parseInt(pageMatch[1]!, 10) : undefined
@@ -347,37 +362,59 @@ export function parseFactionPack(
     const stratagemLabel = line.match(/^\*(.+STRATAGEM.*)\*$/i)
     if (stratagemLabel) {
       flushSection()
-      // The stratagem title is usually in the body that follows (after the label)
-      // Look ahead for a title-like line
       const labelText = stratagemLabel[1]!.trim()
+
+      // Use pending name from previous stratagem's trailing effect text,
+      // or look BACKWARD for an ALL-CAPS line before the label.
+      let stratName = pendingStratagemName
+      pendingStratagemName = ''
+
+      if (!stratName) {
+        // Look backward: "STRATAGEM NAME\n\n*DET — TYPE STRATAGEM*"
+        for (let k = i - 1; k >= Math.max(0, i - 5); k--) {
+          const prev = lines[k]!.trim()
+          if (!prev) continue
+          if (prev === prev.toUpperCase() && /^[A-Z][A-Z\s\-'\u2019\u2011.,!?:]+$/.test(prev) && prev.length >= 2 && prev.length <= 60) {
+            stratName = prev
+          }
+          break
+        }
+      }
 
       // Collect the stratagem body until the next heading or label
       sectionBody = [labelText]
       sectionType = 'stratagem'
 
-      // Find the stratagem name from the body that follows
-      // Usually the next non-empty line after the label has the name + flavor text
       let j = i + 1
       const bodyLines: string[] = []
       while (j < lines.length) {
         const nextLine = lines[j]!
-        // Stop at next heading or stratagem label
         if (/^#{2,5}\s/.test(nextLine) || /^\*.*STRATAGEM.*\*$/i.test(nextLine)) break
         bodyLines.push(nextLine)
         j++
       }
 
-      const fullBody = bodyLines.join('\n').trim()
-      // Extract the name: first sentence or line before **WHEN:**
-      const nameMatch = fullBody.match(/^([^*\n]+?)(?:\s*\*\*WHEN|\.\s)/i)
-      const stratName = nameMatch
-        ? nameMatch[1]!.trim()
-        : labelText.replace(/\s*—\s*.*STRATAGEM.*/i, '').trim()
+      let fullBody = bodyLines.join('\n').trim()
+
+      // Strip trailing ALL-CAPS name from the EFFECT text — it's the NEXT stratagem's name.
+      // Pattern: "...effect text. NEXT STRATAGEM NAME" at end of body
+      const trailingNameMatch = fullBody.match(/\.\s+([A-Z][A-Z\s\-'\u2019\u2011]{3,58})$/)
+      if (trailingNameMatch) {
+        pendingStratagemName = trailingNameMatch[1]!.trim()
+        fullBody = fullBody.slice(0, fullBody.length - trailingNameMatch[0]!.length).trim() + '.'
+      }
+
+      // Fallback: if no name found, try extracting from body before **WHEN:**
+      if (!stratName) {
+        const nameMatch = fullBody.match(/^([^*\n]+?)(?:\s*\*\*WHEN|\.\s)/i)
+        stratName = nameMatch
+          ? nameMatch[1]!.trim()
+          : labelText.replace(/\s*—\s*.*STRATAGEM.*/i, '').trim()
+      }
 
       sectionTitle = stratName || labelText
       sectionBody = [labelText, '', fullBody]
 
-      // Skip the lines we consumed
       i = j - 1
       continue
     }

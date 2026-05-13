@@ -146,4 +146,82 @@ describe('RuleCard', () => {
     fireEvent.click(screen.getByText('[LETHAL HITS]'))
     expect(onContentClick).toHaveBeenCalledWith('LETHAL HITS')
   })
+
+  it('does not show errata section when errata is absent', () => {
+    render(<RuleCard data={mockArmyRule} context={baseContext} />)
+    expect(screen.queryByText(/Errata & FAQ/i)).not.toBeInTheDocument()
+  })
+
+  it('shows collapsed errata section when errata entries are present', () => {
+    const data: RuleCardData = {
+      ...mockArmyRule,
+      errata: [
+        { nodeId: 'e1', title: 'FAQ Q1', content: 'Yes, it works.', source: { type: 'pdf', title: 'Chapter Approved', page: 12 } },
+      ],
+    }
+    render(<RuleCard data={data} context={baseContext} />)
+    expect(screen.getByText('Errata & FAQ')).toBeInTheDocument()
+  })
+
+  it('shows errata count badge', () => {
+    const data: RuleCardData = {
+      ...mockArmyRule,
+      errata: [
+        { nodeId: 'e1', title: 'FAQ Q1', content: 'Yes.', source: { type: 'pdf', title: 'Chapter Approved', page: 12 } },
+        { nodeId: 'e2', title: 'FAQ Q2', content: 'No.', source: { type: 'pdf', title: 'Chapter Approved', page: 13 } },
+      ],
+    }
+    render(<RuleCard data={data} context={baseContext} />)
+    expect(screen.getByText('2')).toBeInTheDocument()
+  })
+
+  it('reveals errata entries when section is expanded', async () => {
+    const data: RuleCardData = {
+      ...mockArmyRule,
+      errata: [
+        { nodeId: 'e1', title: 'FAQ Q1', content: 'Yes, it works.', source: { type: 'pdf', title: 'Chapter Approved', page: 12 } },
+      ],
+    }
+    render(<RuleCard data={data} context={baseContext} />)
+    fireEvent.click(screen.getByText('Errata & FAQ'))
+    expect(screen.getByText('FAQ Q1')).toBeInTheDocument()
+    expect(screen.getByText('Yes, it works.')).toBeInTheDocument()
+  })
+
+  it('shows source page in errata entry', async () => {
+    const data: RuleCardData = {
+      ...mockArmyRule,
+      errata: [
+        { nodeId: 'e1', title: 'FAQ Q1', content: 'Yes.', source: { type: 'pdf', title: 'Chapter Approved', page: 42 } },
+      ],
+    }
+    render(<RuleCard data={data} context={baseContext} />)
+    fireEvent.click(screen.getByText('Errata & FAQ'))
+    expect(screen.getByText('(p.42)')).toBeInTheDocument()
+  })
+
+  it('filters sources to PDF type only — non-pdf sources do not show view-source button', () => {
+    const data: RuleCardData = {
+      ...mockArmyRule,
+      sources: [
+        { type: 'wahapedia', title: 'Wahapedia', page: 5 },
+        { type: 'bsdata', title: 'BSData', page: 10 },
+      ],
+    }
+    const context: CardContext = { ...baseContext, onViewSource: vi.fn() }
+    render(<RuleCard data={data} context={context} />)
+    expect(screen.queryByTestId('view-source')).not.toBeInTheDocument()
+  })
+
+  it('shows view-source button for PDF sources', () => {
+    const data: RuleCardData = {
+      ...mockArmyRule,
+      sources: [
+        { type: 'pdf', title: 'Core Rules', page: 25 },
+      ],
+    }
+    const context: CardContext = { ...baseContext, onViewSource: vi.fn() }
+    render(<RuleCard data={data} context={context} />)
+    expect(screen.getByTestId('view-source')).toBeInTheDocument()
+  })
 })

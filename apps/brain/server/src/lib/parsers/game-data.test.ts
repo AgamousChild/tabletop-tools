@@ -131,6 +131,41 @@ describe('convertGameData', () => {
     expect(armyRule!.content).toContain('Command phase')
   })
 
+  it('skips abilities with empty factionId (core/basic rules)', () => {
+    const input = makeInput({
+      abilities: [
+        { id: 'ab-core-1', name: 'Deep Strike', legend: '', factionId: '', description: 'During the Declare Battle Formations step...' },
+        { id: 'ab-core-2', name: 'Deadly Demise', legend: '', factionId: '', description: 'When this model is destroyed...' },
+        { id: 'ab-core-3', name: 'Feel No Pain', legend: '', factionId: '', description: 'Each time this model would lose a wound...' },
+        { id: 'ab-real', name: 'Oath of Moment', legend: '', factionId: 'SM', description: 'Re-roll hits.' },
+      ],
+    })
+
+    const { nodes } = convertGameData(input, '2026-04-08')
+
+    // Core rules should NOT appear as faction-ability nodes
+    expect(nodes.find(n => n.title === 'Deep Strike' && n.category === 'faction-ability')).toBeUndefined()
+    expect(nodes.find(n => n.title === 'Deadly Demise' && n.category === 'faction-ability')).toBeUndefined()
+    expect(nodes.find(n => n.title === 'Feel No Pain' && n.category === 'faction-ability')).toBeUndefined()
+
+    // Real army rule should still exist
+    expect(nodes.find(n => n.title === 'Oath of Moment' && n.category === 'faction-ability')).toBeDefined()
+  })
+
+  it('skips Designer\u2019s Note abilities', () => {
+    const input = makeInput({
+      abilities: [
+        { id: 'ab-dn', name: "Designer\u2019s Note", legend: '', factionId: 'AT', description: 'This is a clarification.' },
+        { id: 'ab-real', name: 'Towering Example', legend: '', factionId: 'AT', description: 'This unit can...' },
+      ],
+    })
+
+    const { nodes } = convertGameData(input, '2026-04-08')
+
+    expect(nodes.find(n => n.title === "Designer\u2019s Note" && n.category === 'faction-ability')).toBeUndefined()
+    expect(nodes.find(n => n.title === 'Towering Example' && n.category === 'faction-ability')).toBeDefined()
+  })
+
   it('converts detachments with abilities, stratagems, and enhancements', () => {
     const input = makeInput({
       detachments: [{

@@ -6,11 +6,19 @@ import { UsersPage } from './pages/UsersPage'
 import { SessionsPage } from './pages/SessionsPage'
 import { ActivityPage } from './pages/ActivityPage'
 import { ImportsPage } from './pages/ImportsPage'
+import { PipelinePage } from './pages/PipelinePage'
+import { TasksPage } from './pages/TasksPage'
+import { ScraperPage } from './pages/ScraperPage'
+import { IngestPage } from './pages/IngestPage'
 
-type Page = 'dashboard' | 'users' | 'sessions' | 'activity' | 'imports'
+type Page = 'dashboard' | 'users' | 'sessions' | 'activity' | 'imports' | 'pipeline' | 'tasks' | 'scraper' | 'ingest'
 
 const NAV: { id: Page; label: string }[] = [
   { id: 'dashboard', label: 'Overview' },
+  { id: 'tasks', label: 'Tasks' },
+  { id: 'pipeline', label: 'Pipeline' },
+  { id: 'scraper', label: 'Scraper' },
+  { id: 'ingest', label: 'Ingest' },
   { id: 'users', label: 'Users' },
   { id: 'sessions', label: 'Sessions' },
   { id: 'activity', label: 'Activity' },
@@ -73,6 +81,10 @@ export default function App() {
         {page === 'sessions' && <SessionsPage />}
         {page === 'activity' && <ActivityPage />}
         {page === 'imports' && <ImportsPage />}
+        {page === 'pipeline' && <PipelinePage />}
+        {page === 'scraper' && <ScraperPage />}
+        {page === 'ingest' && <IngestPage />}
+        {page === 'tasks' && <TasksPage />}
       </main>
     </div>
   )

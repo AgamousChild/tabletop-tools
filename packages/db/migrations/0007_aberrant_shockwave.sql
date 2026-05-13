@@ -1,0 +1,1 @@
+ALTER TABLE `meta_event_players` ADD `list_ttt` text;

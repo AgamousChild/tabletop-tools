@@ -1,0 +1,803 @@
+[
+  {
+    "taskId": "task-1-faction-codes",
+    "agent": "senior-dev",
+    "file": "apps/brain/server/src/lib/faction-codes.ts",
+    "action": "created",
+    "reason": "Extract faction code mapping to shared module for reuse across parsers",
+    "timestamp": "2026-04-16T00:00:00.000Z"
+  },
+  {
+    "taskId": "task-1-faction-codes",
+    "agent": "senior-dev",
+    "file": "apps/brain/server/src/lib/parsers/game-data.ts",
+    "action": "modified",
+    "reason": "Replace local FACTION_CODE_TO_SLUG constant and normalizeFactionId with import from faction-codes module",
+    "timestamp": "2026-04-16T00:00:00.000Z"
+  },
+  {
+    "taskId": "task-2-merge-sources",
+    "agent": "senior-dev",
+    "file": "apps/brain/server/src/lib/merge-sources.ts",
+    "action": "created",
+    "reason": "Add cross-source merge module for BSData/Wahapedia node deduplication and summary enrichment",
+    "timestamp": "2026-04-17T07:25:00.000Z"
+  },
+  {
+    "taskId": "task-3-integrate-merge",
+    "agent": "senior-dev",
+    "file": "apps/brain/server/src/build-graph.ts",
+    "action": "modified",
+    "reason": "Replace manual dedup block with mergeSources call in CLI build path",
+    "timestamp": "2026-04-17T08:00:00.000Z"
+  },
+  {
+    "taskId": "task-3-integrate-merge",
+    "agent": "senior-dev",
+    "file": "apps/brain/server/src/lib/sync.ts",
+    "action": "modified",
+    "reason": "Add mergeSources call in Worker sync path before node partitioning",
+    "timestamp": "2026-04-17T08:00:00.000Z"
+  },
+  {
+    "taskId": "task-1-type-definitions",
+    "agent": "senior-dev",
+    "file": "apps/brain/server/src/lib/model.ts",
+    "action": "modified",
+    "reason": "Add RecordType, ErrataAnnotation, CrossRef, BrainRecord schemas and 6 new NodeCategory values",
+    "timestamp": "2026-04-19T01:35:00.000Z"
+  },
+  {
+    "taskId": "task-2-errata-linker",
+    "agent": "senior-dev",
+    "file": "apps/brain/server/src/lib/errata-linker.ts",
+    "action": "created",
+    "reason": "Standalone fuzzy errata-to-rule matching module using title, content, and keyword heuristics",
+    "timestamp": "2026-04-19T01:42:00.000Z"
+  },
+  {
+    "taskId": "task-8-pagination-component",
+    "agent": "senior-dev",
+    "file": "apps/brain/client/src/components/Pagination.tsx",
+    "action": "created",
+    "reason": "Add client-side Pagination component with prev/next navigation for search results",
+    "timestamp": "2026-04-19T01:48:00.000Z"
+  },
+  {
+    "taskId": "task-9-collapsible-section",
+    "agent": "senior-dev",
+    "file": "apps/brain/client/src/components/CollapsibleSection.tsx",
+    "action": "created",
+    "reason": "Add CollapsibleSection component for errata and cross-reference lists on cards",
+    "timestamp": "2026-04-19T01:51:00.000Z"
+  },
+  {
+    "taskId": "task-3-record-aggregation",
+    "agent": "senior-dev",
+    "file": "apps/brain/server/src/lib/records.ts",
+    "action": "created",
+    "reason": "Record aggregation module: classifyNode, aggregateToRecords, fetchAllChildren",
+    "timestamp": "2026-04-19T01:55:00.000Z"
+  },
+  {
+    "taskId": "task-4-entity-linker",
+    "agent": "senior-dev",
+    "file": "apps/brain/server/src/lib/entity-linker.ts",
+    "action": "created",
+    "reason": "Extract entity linking into shared module for reuse by record aggregation pipeline",
+    "timestamp": "2026-04-19T02:03:00.000Z"
+  },
+  {
+    "taskId": "task-4-entity-linker",
+    "agent": "senior-dev",
+    "file": "apps/brain/server/src/worker.ts",
+    "action": "modified",
+    "reason": "Remove local linkEntitiesInText/getEntityIndex/cachedEntityIndex, import from entity-linker module",
+    "timestamp": "2026-04-19T02:03:00.000Z"
+  },
+  {
+    "taskId": "task-5-wire-records-search",
+    "agent": "senior-dev",
+    "file": "apps/brain/server/src/lib/retrieve.ts",
+    "action": "modified",
+    "reason": "Add returnRecords option and buildRecords helper; wire aggregateToRecords + fetchAllChildren into retrieve pipeline",
+    "timestamp": "2026-04-19T02:20:00.000Z"
+  },
+  {
+    "taskId": "task-5-wire-records-search",
+    "agent": "senior-dev",
+    "file": "apps/brain/server/src/worker.ts",
+    "action": "modified",
+    "reason": "Update /search endpoint to return AggregatedRecord[] with pagination, errata, and entity linking",
+    "timestamp": "2026-04-19T02:20:00.000Z"
+  },
+  {
+    "taskId": "task-6-browse-endpoint",
+    "agent": "senior-dev",
+    "file": "apps/brain/server/src/lib/browse.ts",
+    "action": "created",
+    "reason": "Filter browse nodes to top-level records only, excluding child categories and sub-rule faction-abilities",
+    "timestamp": "2026-04-19T02:35:00.000Z"
+  },
+  {
+    "taskId": "task-6-browse-endpoint",
+    "agent": "senior-dev",
+    "file": "apps/brain/server/src/worker.ts",
+    "action": "modified",
+    "reason": "Update GET /browse/nodes to apply filterBrowseNodes and use page/pageSize pagination",
+    "timestamp": "2026-04-19T02:35:00.000Z"
+  },
+  {
+    "taskId": "task-10-card-errata",
+    "agent": "senior-dev",
+    "file": "apps/brain/client/src/components/cards/types.ts",
+    "action": "modified",
+    "reason": "Add ErrataEntry interface, errata? field to all card data interfaces, onNodeNavigate? to CardContext",
+    "timestamp": "2026-04-19T06:41:00.000Z"
+  },
+  {
+    "taskId": "task-10-card-errata",
+    "agent": "senior-dev",
+    "file": "apps/brain/client/src/components/cards/ErrataSection.tsx",
+    "action": "created",
+    "reason": "Shared ErrataSection component using CollapsibleSection for use across all card types",
+    "timestamp": "2026-04-19T06:41:00.000Z"
+  },
+  {
+    "taskId": "task-10-card-errata",
+    "agent": "senior-dev",
+    "file": "apps/brain/client/src/components/cards/RuleCard.tsx",
+    "action": "modified",
+    "reason": "Add ErrataSection and filter sources to PDF-only for view-source buttons",
+    "timestamp": "2026-04-19T06:41:00.000Z"
+  },
+  {
+    "taskId": "task-10-card-errata",
+    "agent": "senior-dev",
+    "file": "apps/brain/client/src/components/cards/UnitCard.tsx",
+    "action": "modified",
+    "reason": "Add ErrataSection after keywords bar",
+    "timestamp": "2026-04-19T06:41:00.000Z"
+  },
+  {
+    "taskId": "task-10-card-errata",
+    "agent": "senior-dev",
+    "file": "apps/brain/client/src/components/cards/StratagemCard.tsx",
+    "action": "modified",
+    "reason": "Add ErrataSection before detachment name footer",
+    "timestamp": "2026-04-19T06:41:00.000Z"
+  },
+  {
+    "taskId": "task-10-card-errata",
+    "agent": "senior-dev",
+    "file": "apps/brain/client/src/components/cards/EnhancementCard.tsx",
+    "action": "modified",
+    "reason": "Add ErrataSection before footer",
+    "timestamp": "2026-04-19T06:41:00.000Z"
+  },
+  {
+    "taskId": "task-10-card-errata",
+    "agent": "senior-dev",
+    "file": "apps/brain/client/src/components/cards/PdfPageView.tsx",
+    "action": "modified",
+    "reason": "Add optional errata prop and render ErrataSection between image area and close button",
+    "timestamp": "2026-04-19T06:41:00.000Z"
+  },
+  {
+    "taskId": "task-12-chapter-approved-parser",
+    "agent": "senior-dev",
+    "file": "apps/brain/server/src/lib/parsers/chapter-approved.ts",
+    "action": "created",
+    "reason": "Chapter Approved 2025 card parser: primary missions, secondary missions, twists, challengers",
+    "timestamp": "2026-04-19T07:10:00.000Z"
+  },
+  {
+    "taskId": "task-11-search-browse-pagination",
+    "agent": "senior-dev",
+    "file": "apps/brain/client/src/pages/BrainScreen.tsx",
+    "action": "modified",
+    "reason": "Integrate record-based API responses and pagination into SearchTab and BrowseTab",
+    "timestamp": "2026-04-19T07:20:00.000Z"
+  },
+  {
+    "taskId": "task-13-tournament-companion-parser",
+    "agent": "senior-dev",
+    "file": "apps/brain/server/src/lib/parsers/tournament-companion.ts",
+    "action": "created",
+    "reason": "Tournament companion parser for Pariah Nexus and Chapter Approved markdown files",
+    "timestamp": "2026-04-19T07:35:00.000Z"
+  },
+  {
+    "taskId": "task-14-chapter-approved-page-images",
+    "agent": "senior-dev",
+    "file": "apps/brain/server/src/generate-page-images.ts",
+    "action": "modified",
+    "reason": "Add Chapter Approved 2025 PDFs to page image generator with slugified output directory names",
+    "timestamp": "2026-04-19T08:00:00.000Z"
+  },
+  {
+    "taskId": "task-15-build-pipeline-integration",
+    "agent": "senior-dev",
+    "file": "apps/brain/server/src/build-graph.ts",
+    "action": "modified",
+    "reason": "Integrate Chapter Approved + Tournament Companion parsers into build pipeline (steps 7 and 8)",
+    "timestamp": "2026-04-19T08:15:00.000Z"
+  },
+  {
+    "taskId": "task-16-mission-card-components",
+    "agent": "senior-dev",
+    "file": "apps/brain/client/src/components/cards/types.ts",
+    "action": "modified",
+    "reason": "Add MissionCardData, TwistCardData, ChallengerCardData interfaces and extend CardData union",
+    "timestamp": "2026-04-19T07:50:00.000Z"
+  },
+  {
+    "taskId": "task-16-mission-card-components",
+    "agent": "senior-dev",
+    "file": "apps/brain/client/src/components/cards/MissionCard.tsx",
+    "action": "created",
+    "reason": "Mission card component for primary and secondary missions with type badge, side badge, and fixed badge",
+    "timestamp": "2026-04-19T07:50:00.000Z"
+  },
+  {
+    "taskId": "task-16-mission-card-components",
+    "agent": "senior-dev",
+    "file": "apps/brain/client/src/components/cards/TwistCard.tsx",
+    "action": "created",
+    "reason": "Twist card component with green accent and TWIST badge",
+    "timestamp": "2026-04-19T07:50:00.000Z"
+  },
+  {
+    "taskId": "task-16-mission-card-components",
+    "agent": "senior-dev",
+    "file": "apps/brain/client/src/components/cards/ChallengerCard.tsx",
+    "action": "created",
+    "reason": "Challenger card component with orange accent, narrative VP text, and optional WHEN/TARGET/EFFECT stratagem sections",
+    "timestamp": "2026-04-19T07:50:00.000Z"
+  },
+  {
+    "taskId": "task-16-mission-card-components",
+    "agent": "senior-dev",
+    "file": "apps/brain/client/src/pages/BrainScreen.tsx",
+    "action": "modified",
+    "reason": "Wire MissionCard, TwistCard, ChallengerCard into buildCardFromNode, Overlay, and PDF-bypass logic",
+    "timestamp": "2026-04-19T07:50:00.000Z"
+  },
+  {
+    "taskId": "task-16-mission-card-components",
+    "agent": "senior-dev",
+    "file": "apps/brain/client/src/components/cards/ComboView.tsx",
+    "action": "modified",
+    "reason": "Add mission/twist/challenger cases to renderCard switch to satisfy exhaustive CardData union coverage",
+    "timestamp": "2026-04-19T07:50:00.000Z"
+  },
+  {
+    "taskId": "task-cross-refs",
+    "agent": "senior-dev",
+    "file": "apps/brain/server/src/lib/cross-refs.ts",
+    "action": "created",
+    "reason": "Cross-reference link builder with module-scope cached forward/reverse index loading",
+    "timestamp": "2026-04-19T09:40:00.000Z"
+  },
+  {
+    "taskId": "task-cross-refs",
+    "agent": "senior-dev",
+    "file": "apps/brain/server/src/worker.ts",
+    "action": "modified",
+    "reason": "Wire loadIndexes + buildCrossRefs into /search handler, replacing empty crossRefs stub",
+    "timestamp": "2026-04-19T09:40:00.000Z"
+  },
+  {
+    "taskId": "add-qualityflags-field",
+    "agent": "senior-dev",
+    "file": "apps/brain/server/src/lib/model.ts",
+    "action": "modified",
+    "reason": "Add optional qualityFlags field to Node schema for data quality flagging by massage layer",
+    "timestamp": "2026-04-20T23:30:49.000Z"
+  },
+  {
+    "taskId": "task-2-massage-layer",
+    "agent": "senior-dev",
+    "file": "apps/brain/server/src/lib/massage.ts",
+    "action": "created",
+    "reason": "Drop phantom/malformed nodes from the brain knowledge graph via three-pass massage layer",
+    "timestamp": "2026-04-20T23:34:00.000Z"
+  },
+  {
+    "taskId": "task-3-massage-validation",
+    "agent": "senior-dev",
+    "file": "apps/brain/server/src/lib/massage.ts",
+    "action": "modified",
+    "reason": "Add passes 4-6: content independence, PDF reference validation, hierarchy orphan detection",
+    "timestamp": "2026-04-20T23:39:00.000Z"
+  },
+  {
+    "taskId": "task-4-wire-massage-pipeline",
+    "agent": "senior-dev",
+    "file": "apps/brain/server/src/build-graph.ts",
+    "action": "modified",
+    "reason": "Wire massage layer into build pipeline between mergeSources and mapNodesToPages",
+    "timestamp": "2026-04-20T23:42:00.000Z"
+  },
+  {
+    "taskId": "task-5-new-card-types",
+    "agent": "senior-dev",
+    "file": "apps/brain/client/src/components/cards/types.ts",
+    "action": "modified",
+    "reason": "Add CoreRuleCardData, DeploymentZoneCardData, TerrainLayoutCardData, ErrataCardData, BalanceCardData, CommunityCardData, DetachmentCardData interfaces and extend CardData union",
+    "timestamp": "2026-04-20T23:43:00.000Z"
+  },
+  {
+    "taskId": "task-core-rule-card",
+    "agent": "senior-dev",
+    "file": "apps/brain/client/src/components/cards/CoreRuleCard.tsx",
+    "action": "created",
+    "reason": "CoreRuleCard component — amber accent, phase badge, table support, quality flags, view source",
+    "timestamp": "2026-04-20T23:44:00.000Z"
+  },
+  {
+    "taskId": "task-errata-balance-community-cards",
+    "agent": "senior-dev",
+    "file": "apps/brain/client/src/components/cards/ErrataCard.tsx",
+    "action": "created",
+    "reason": "ErrataCard component — orange accent, clarifies link, correction text, quality flags",
+    "timestamp": "2026-04-20T23:47:00.000Z"
+  },
+  {
+    "taskId": "task-errata-balance-community-cards",
+    "agent": "senior-dev",
+    "file": "apps/brain/client/src/components/cards/BalanceCard.tsx",
+    "action": "created",
+    "reason": "BalanceCard component — red accent, description text, effectiveDate footer, quality flags",
+    "timestamp": "2026-04-20T23:47:00.000Z"
+  },
+  {
+    "taskId": "task-errata-balance-community-cards",
+    "agent": "senior-dev",
+    "file": "apps/brain/client/src/components/cards/CommunityCard.tsx",
+    "action": "created",
+    "reason": "CommunityCard component — cyan accent, description text, sourceAttribution footer, quality flags",
+    "timestamp": "2026-04-20T23:47:00.000Z"
+  },
+  {
+    "taskId": "task-deployment-zone-terrain-cards",
+    "agent": "senior-dev",
+    "file": "apps/brain/client/src/components/cards/DeploymentZoneCard.tsx",
+    "action": "created",
+    "reason": "DeploymentZoneCard component with inline PDF image, loading/error states, battleSize badge, and quality flags",
+    "timestamp": "2026-04-20T23:48:00.000Z"
+  },
+  {
+    "taskId": "task-deployment-zone-terrain-cards",
+    "agent": "senior-dev",
+    "file": "apps/brain/client/src/components/cards/TerrainLayoutCard.tsx",
+    "action": "created",
+    "reason": "TerrainLayoutCard component with inline PDF image, loading/error states, and quality flags",
+    "timestamp": "2026-04-20T23:48:00.000Z"
+  },
+  {
+    "taskId": "task-9-detachment-card",
+    "agent": "senior-dev",
+    "file": "apps/brain/client/src/components/cards/DetachmentCard.tsx",
+    "action": "created",
+    "reason": "DetachmentCard component — inline stratagem/enhancement lists via CollapsibleSection, replaces DetachmentPage",
+    "timestamp": "2026-04-20T23:49:00.000Z"
+  },
+  {
+    "taskId": "task-9-detachment-card",
+    "agent": "senior-dev",
+    "file": "apps/brain/client/src/components/cards/ComboView.tsx",
+    "action": "modified",
+    "reason": "Add all missing CardData union cases (core-rule, deployment-zone, terrain-layout, errata, balance, community, detachment) to fix TS7030 exhaustiveness error",
+    "timestamp": "2026-04-20T23:49:30.000Z"
+  },
+  {
+    "taskId": "task-10-display-resilience",
+    "agent": "senior-dev",
+    "file": "apps/brain/client/src/lib/card-display.ts",
+    "action": "created",
+    "reason": "resolveCardView utility — maps any node to CardData + optional PdfSource, always returns a card",
+    "timestamp": "2026-04-20T23:56:00.000Z"
+  },
+  {
+    "taskId": "task-11-integrate-resolveCardView",
+    "agent": "senior-dev",
+    "file": "apps/brain/client/src/pages/BrainScreen.tsx",
+    "action": "modified",
+    "reason": "Integrate resolveCardView, remove PDF-first branching, add new card type renders in Overlay",
+    "timestamp": "2026-04-21T00:01:00.000Z"
+  },
+  {
+    "taskId": "task-1-deployment-package-scaffold",
+    "agent": "senior-dev",
+    "file": "packages/deployment/package.json",
+    "action": "created",
+    "reason": "Scaffold @tabletop-tools/deployment package for Warhammer 40K deployment algorithm",
+    "timestamp": "2026-04-24T00:00:00.000Z"
+  },
+  {
+    "taskId": "task-1-deployment-package-scaffold",
+    "agent": "senior-dev",
+    "file": "packages/deployment/tsconfig.json",
+    "action": "created",
+    "reason": "Scaffold @tabletop-tools/deployment package for Warhammer 40K deployment algorithm",
+    "timestamp": "2026-04-24T00:00:00.000Z"
+  },
+  {
+    "taskId": "task-1-deployment-package-scaffold",
+    "agent": "senior-dev",
+    "file": "packages/deployment/vitest.config.ts",
+    "action": "created",
+    "reason": "Scaffold @tabletop-tools/deployment package for Warhammer 40K deployment algorithm",
+    "timestamp": "2026-04-24T00:00:00.000Z"
+  },
+  {
+    "taskId": "task-1-deployment-package-scaffold",
+    "agent": "senior-dev",
+    "file": "packages/deployment/src/types.ts",
+    "action": "created",
+    "reason": "Complete type system for the 40K deployment algorithm: geometry, battlefield, units, enemy, algorithm I/O",
+    "timestamp": "2026-04-24T00:00:00.000Z"
+  },
+  {
+    "taskId": "task-1-deployment-package-scaffold",
+    "agent": "senior-dev",
+    "file": "packages/deployment/src/index.ts",
+    "action": "created",
+    "reason": "Barrel export for @tabletop-tools/deployment package",
+    "timestamp": "2026-04-24T00:00:00.000Z"
+  },
+  {
+    "taskId": "task-2-geometry-primitives",
+    "agent": "senior-dev",
+    "file": "packages/deployment/src/geometry/point.ts",
+    "action": "created",
+    "reason": "Euclidean distance, offset, midpoint for Point type",
+    "timestamp": "2026-04-24T18:22:00.000Z"
+  },
+  {
+    "taskId": "task-2-geometry-primitives",
+    "agent": "senior-dev",
+    "file": "packages/deployment/src/geometry/polygon.ts",
+    "action": "created",
+    "reason": "AABB containment, rect overlap, ray-casting point-in-polygon",
+    "timestamp": "2026-04-24T18:22:00.000Z"
+  },
+  {
+    "taskId": "task-2-geometry-primitives",
+    "agent": "senior-dev",
+    "file": "packages/deployment/src/geometry/circle.ts",
+    "action": "created",
+    "reason": "Point-in-circle and point-in-quarter-circle for Search and Destroy exclusion arcs",
+    "timestamp": "2026-04-24T18:22:00.000Z"
+  },
+  {
+    "taskId": "task-2-geometry-primitives",
+    "agent": "senior-dev",
+    "file": "packages/deployment/src/geometry/los.ts",
+    "action": "created",
+    "reason": "LOS computation with segment-intersection and 40K ruins rules (inside-same-terrain visible)",
+    "timestamp": "2026-04-24T18:22:00.000Z"
+  },
+  {
+    "taskId": "task-3-deployment-zones",
+    "agent": "senior-dev",
+    "file": "packages/deployment/src/zones/deployment-zones.ts",
+    "action": "created",
+    "reason": "DeploymentZone interface + computeDeploymentZone/computeEnemyZone for Search and Destroy and Dawn of War layouts",
+    "timestamp": "2026-04-24T18:29:00.000Z"
+  },
+  {
+    "taskId": "task-3-deployment-zones",
+    "agent": "senior-dev",
+    "file": "packages/deployment/src/zones/exclusion-zones.ts",
+    "action": "created",
+    "reason": "canInfiltrate, canScoutMoveTo, canDeepStrike — enforce model and zone exclusion distances",
+    "timestamp": "2026-04-24T18:29:00.000Z"
+  },
+  {
+    "taskId": "task-4-threat-range-map",
+    "agent": "senior-dev",
+    "file": "packages/deployment/src/threats/threat-range.ts",
+    "action": "created",
+    "reason": "Per-unit max/avg shooting and melee threat range calculation with assault, advance+charge, and scout modifiers",
+    "timestamp": "2026-04-24T18:35:00.000Z"
+  },
+  {
+    "taskId": "task-4-threat-range-map",
+    "agent": "senior-dev",
+    "file": "packages/deployment/src/threats/threat-map.ts",
+    "action": "created",
+    "reason": "Grid-based shooting and melee heat map generation from sampled enemy zone positions with LOS checking",
+    "timestamp": "2026-04-24T18:35:00.000Z"
+  },
+  {
+    "taskId": "task-4-threat-range-map",
+    "agent": "senior-dev",
+    "file": "packages/deployment/src/threats/los-analysis.ts",
+    "action": "created",
+    "reason": "findHidingSpots (zone + scout range) and estimateTerrainCapacity higher-level LOS deployment utilities",
+    "timestamp": "2026-04-24T18:35:00.000Z"
+  },
+  {
+    "taskId": "task-5-objective-classification",
+    "agent": "senior-dev",
+    "file": "packages/deployment/src/objectives/classify.ts",
+    "action": "created",
+    "reason": "Classify objectives as home/safe/center/expansion/enemy-home relative to player deployment zone",
+    "timestamp": "2026-04-24T18:39:00.000Z"
+  },
+  {
+    "taskId": "task-6-unit-role-assignment",
+    "agent": "senior-dev",
+    "file": "packages/deployment/src/units/role-assignment.ts",
+    "action": "created",
+    "reason": "Heuristic strategicPurpose + tacticalRole assignment with manual override preservation",
+    "timestamp": "2026-04-24T18:45:00.000Z"
+  },
+  {
+    "taskId": "task-6-unit-role-assignment",
+    "agent": "senior-dev",
+    "file": "packages/deployment/src/units/drop-order.ts",
+    "action": "created",
+    "reason": "Deployment drop order by tactical role priority tier, with within-tier sort by points ascending",
+    "timestamp": "2026-04-24T18:45:00.000Z"
+  },
+  {
+    "taskId": "task-7-legal-position-checking",
+    "agent": "senior-dev",
+    "file": "packages/deployment/src/placement/coherency.ts",
+    "action": "created",
+    "reason": "baseSizeInches (mm to inches conversion) + isCoherent (center-to-center adjacency graph, small/large unit thresholds)",
+    "timestamp": "2026-04-24T18:56:00.000Z"
+  },
+  {
+    "taskId": "task-7-legal-position-checking",
+    "agent": "senior-dev",
+    "file": "packages/deployment/src/placement/formations.ts",
+    "action": "created",
+    "reason": "generateFormations — block (grid with last-row fix for large units), line, wide-line, dog-bone, blob (hex close-pack) templates",
+    "timestamp": "2026-04-24T18:56:00.000Z"
+  },
+  {
+    "taskId": "task-7-legal-position-checking",
+    "agent": "senior-dev",
+    "file": "packages/deployment/src/placement/legal-check.ts",
+    "action": "created",
+    "reason": "isLegalPlacement — zone containment, base overlap, coherency, infiltrate exclusion checks",
+    "timestamp": "2026-04-24T18:56:00.000Z"
+  },
+  {
+    "taskId": "task-8-strategic-scoring",
+    "agent": "senior-dev",
+    "file": "packages/deployment/src/placement/scoring.ts",
+    "action": "created",
+    "reason": "Strategic position scoring — 12 factors (cover, threat exposure, charge threat, objective proximity, firing lanes, screen coverage, specialist placeholders, turn1 survival, role fit) with role-weighted total normalised to 0-100",
+    "timestamp": "2026-04-24T19:02:00.000Z"
+  },
+  {
+    "taskId": "task-9-solver",
+    "agent": "senior-dev",
+    "file": "packages/deployment/src/solver.ts",
+    "action": "created",
+    "reason": "Top-level solveDeployment orchestrator — runs all 9 phases, produces DeploymentPlan",
+    "timestamp": "2026-04-24T19:10:00.000Z"
+  },
+  {
+    "taskId": "task-9-solver",
+    "agent": "senior-dev",
+    "file": "packages/deployment/src/index.ts",
+    "action": "modified",
+    "reason": "Expand barrel export to include solveDeployment and all public module APIs",
+    "timestamp": "2026-04-24T19:10:00.000Z"
+  },
+  {
+    "taskId": "ci-task-1-package-scaffold",
+    "agent": "senior-dev",
+    "file": "apps/content-ingestor/package.json",
+    "action": "created",
+    "reason": "Scaffold content-ingestor CLI app with types for YouTube/article/reddit/wiki/pdf ingest pipeline",
+    "timestamp": "2026-04-24T19:20:00.000Z"
+  },
+  {
+    "taskId": "ci-task-1-package-scaffold",
+    "agent": "senior-dev",
+    "file": "apps/content-ingestor/tsconfig.json",
+    "action": "created",
+    "reason": "Scaffold content-ingestor CLI app with types for YouTube/article/reddit/wiki/pdf ingest pipeline",
+    "timestamp": "2026-04-24T19:20:00.000Z"
+  },
+  {
+    "taskId": "ci-task-1-package-scaffold",
+    "agent": "senior-dev",
+    "file": "apps/content-ingestor/vitest.config.ts",
+    "action": "created",
+    "reason": "Scaffold content-ingestor CLI app with types for YouTube/article/reddit/wiki/pdf ingest pipeline",
+    "timestamp": "2026-04-24T19:20:00.000Z"
+  },
+  {
+    "taskId": "ci-task-1-package-scaffold",
+    "agent": "senior-dev",
+    "file": "apps/content-ingestor/src/types.ts",
+    "action": "created",
+    "reason": "Scaffold content-ingestor CLI app with types for YouTube/article/reddit/wiki/pdf ingest pipeline",
+    "timestamp": "2026-04-24T19:20:00.000Z"
+  },
+  {
+    "taskId": "ci-task-1-package-scaffold",
+    "agent": "senior-dev",
+    "file": "apps/content-ingestor/src/index.ts",
+    "action": "created",
+    "reason": "Scaffold content-ingestor CLI app with types for YouTube/article/reddit/wiki/pdf ingest pipeline",
+    "timestamp": "2026-04-24T19:20:00.000Z"
+  },
+  {
+    "taskId": "ci-task-2-llm-prompts-ollama",
+    "agent": "senior-dev",
+    "file": "apps/content-ingestor/src/llm/prompts.ts",
+    "action": "created",
+    "reason": "LLM system prompts for relevance classification, transcript cleanup, concept extraction, and timestamp identification",
+    "timestamp": "2026-04-26T00:00:00.000Z"
+  },
+  {
+    "taskId": "ci-task-2-llm-prompts-ollama",
+    "agent": "senior-dev",
+    "file": "apps/content-ingestor/src/llm/ollama.ts",
+    "action": "created",
+    "reason": "Ollama HTTP client with ollamaChat, checkRelevance, cleanTranscript, extractConcepts, identifyTimestamps",
+    "timestamp": "2026-04-26T00:00:00.000Z"
+  },
+  {
+    "taskId": "ci-task-3-youtube-crawler-transcript",
+    "agent": "senior-dev",
+    "file": "apps/content-ingestor/src/crawlers/youtube.ts",
+    "action": "created",
+    "reason": "YouTube channel crawler using yt-dlp --flat-playlist to list videos",
+    "timestamp": "2026-04-24T21:00:00.000Z"
+  },
+  {
+    "taskId": "ci-task-3-youtube-crawler-transcript",
+    "agent": "senior-dev",
+    "file": "apps/content-ingestor/src/transcript/fetch.ts",
+    "action": "created",
+    "reason": "Fetch and parse auto-generated YouTube subtitles from json3 format into TranscriptSegment[]",
+    "timestamp": "2026-04-24T21:00:00.000Z"
+  },
+  {
+    "taskId": "ci-task-3-youtube-crawler-transcript",
+    "agent": "senior-dev",
+    "file": "apps/content-ingestor/src/transcript/clean.ts",
+    "action": "created",
+    "reason": "Join transcript segments and send to Ollama for 40K terminology cleanup",
+    "timestamp": "2026-04-24T21:00:00.000Z"
+  },
+  {
+    "taskId": "ci-task-4-screenshot-capture",
+    "agent": "senior-dev",
+    "file": "apps/content-ingestor/src/screenshots/capture.ts",
+    "action": "created",
+    "reason": "Capture video frames at specified timestamps using yt-dlp with thumbnail fallback",
+    "timestamp": "2026-04-24T21:00:00.000Z"
+  },
+  {
+    "taskId": "ci-task-5-web-reddit-crawlers",
+    "agent": "senior-dev",
+    "file": "apps/content-ingestor/src/crawlers/web.ts",
+    "action": "created",
+    "reason": "Web crawler: crawlSite (Cheerio link extraction) + fetchArticle (boilerplate stripping, text extraction)",
+    "timestamp": "2026-04-24T22:00:00.000Z"
+  },
+  {
+    "taskId": "ci-task-5-web-reddit-crawlers",
+    "agent": "senior-dev",
+    "file": "apps/content-ingestor/src/crawlers/reddit.ts",
+    "action": "created",
+    "reason": "Reddit JSON API crawler: crawlSubreddit (score-filtered, sorted) + fetchRedditPost (top 10 comments by score)",
+    "timestamp": "2026-04-24T22:00:00.000Z"
+  },
+  {
+    "taskId": "ci-task-6-draft-store-manifest",
+    "agent": "senior-dev",
+    "file": "apps/content-ingestor/src/drafts/store.ts",
+    "action": "created",
+    "reason": "Draft store: draftToMarkdown/markdownToDraft (YAML frontmatter round-trip), saveDraft, loadDrafts, updateDraftStatus",
+    "timestamp": "2026-04-24T22:00:00.000Z"
+  },
+  {
+    "taskId": "ci-task-6-draft-store-manifest",
+    "agent": "senior-dev",
+    "file": "apps/content-ingestor/src/drafts/manifest.ts",
+    "action": "created",
+    "reason": "Crawl manifest: loadManifest, saveManifest, getUnprocessedEntries, markEntryProcessed",
+    "timestamp": "2026-04-24T22:00:00.000Z"
+  },
+  {
+    "taskId": "ci-task-7-extraction-pipeline-dedup",
+    "agent": "senior-dev",
+    "file": "apps/content-ingestor/src/extract/dedup.ts",
+    "action": "created",
+    "reason": "loadExistingNodes (community.json reader) + findSimilar (title substring + keyword overlap deduplication)",
+    "timestamp": "2026-04-24T00:25:00.000Z"
+  },
+  {
+    "taskId": "ci-task-7-extraction-pipeline-dedup",
+    "agent": "senior-dev",
+    "file": "apps/content-ingestor/src/extract/extract.ts",
+    "action": "created",
+    "reason": "processContent (relevance check + concept extraction + dedup) + processYouTubeVideo (full transcript-to-draft pipeline)",
+    "timestamp": "2026-04-24T00:25:00.000Z"
+  },
+  {
+    "taskId": "ci-task-8-interactive-review",
+    "agent": "senior-dev",
+    "file": "apps/content-ingestor/src/review/interactive.ts",
+    "action": "created",
+    "reason": "Interactive review CLI: findDraftDirs + reviewDrafts with approve/reject/skip/quit prompt loop",
+    "timestamp": "2026-04-24T00:25:00.000Z"
+  }
+,
+  {
+    "taskId": "ci-task-9-brain-commit",
+    "agent": "senior-dev",
+    "file": "apps/content-ingestor/src/commit/commit.ts",
+    "action": "created",
+    "reason": "commitApprovedNodes: scan draft dirs, filter approved, build brain nodes, dedup by ID, write community.json, copy screenshots",
+    "timestamp": "2026-04-24T00:32:00.000Z"
+  },
+  {
+    "taskId": "ci-task-10-cli-entry-point",
+    "agent": "senior-dev",
+    "file": "apps/content-ingestor/src/cli.ts",
+    "action": "created",
+    "reason": "CLI entry point with commander: channel, site, url, review, commit, list subcommands",
+    "timestamp": "2026-04-24T00:33:00.000Z"
+  },
+  {
+    "taskId": "bcp-task-1-event-list",
+    "agent": "senior-dev",
+    "file": "apps/content-ingestor/src/bcp/event-list.ts",
+    "action": "created",
+    "reason": "BCP event list scraper with pagination, ID extraction, and JSON save/load utilities",
+    "timestamp": "2026-04-24T23:07:00.000Z"
+  },
+  {
+    "taskId": "bcp-task-2-standings-scraper",
+    "agent": "senior-dev",
+    "file": "apps/content-ingestor/src/bcp/standings.ts",
+    "action": "created",
+    "reason": "BCP standings scraper: pure parseStandingsFromRows + Playwright scrapeStandings with multi-strategy DOM extraction and infinite-scroll handling",
+    "timestamp": "2026-04-24T23:15:00.000Z"
+  },
+  {
+    "taskId": "bcp-task-3-army-list-scraper",
+    "agent": "senior-dev",
+    "file": "apps/content-ingestor/src/bcp/army-list.ts",
+    "action": "created",
+    "reason": "BCP army list scraper: pure parseArmyListFromText + Playwright scrapeArmyList with three-strategy DOM extraction",
+    "timestamp": "2026-04-24T23:15:00.000Z"
+  },
+  {
+    "taskId": "bcp-task-4-event-parser",
+    "agent": "senior-dev",
+    "file": "apps/content-ingestor/src/bcp/event-parser.ts",
+    "action": "created",
+    "reason": "BCP event parser: toTournamentRecord, deriveFormat, normalizeDate (ISO passthrough + abbreviated month parsing), deriveMetaWindow (UTC-safe quarter calculation)",
+    "timestamp": "2026-04-24T23:15:00.000Z"
+  },
+  {
+    "taskId": "bcp-task-5-import-module",
+    "agent": "senior-dev",
+    "file": "apps/content-ingestor/src/bcp/import.ts",
+    "action": "created",
+    "reason": "prepareForImport (file-based export of valid tournament records) + generateSummaryCSV for review",
+    "timestamp": "2026-04-24T23:30:00.000Z"
+  },
+  {
+    "taskId": "bcp-task-6-cli-commands",
+    "agent": "senior-dev",
+    "file": "apps/content-ingestor/src/cli.ts",
+    "action": "modified",
+    "reason": "Add bcp-scan, bcp-scrape, bcp-import Commander commands with BCP module imports",
+    "timestamp": "2026-04-24T23:30:00.000Z"
+  }
+]

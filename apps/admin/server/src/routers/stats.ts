@@ -18,6 +18,9 @@ import {
   playerElo,
   importedTournamentResults,
   playerGlicko,
+  bcpScrapeJobs,
+  metaEvents,
+  ingestJobs,
 } from '@tabletop-tools/db'
 
 async function count(db: any, table: any): Promise<number> {
@@ -319,6 +322,165 @@ export const statsRouter = router({
       // Cascading deletes handle related data (sessions, tournament_players, etc.)
       await ctx.db.delete(authUsers).where(eq(authUsers.id, input.userId))
       return { deleted: true }
+    }),
+
+  pipeline: adminProcedure.query(async ({ ctx }) => {
+    // Meta 3NF counts
+    const events = await ctx.db.all(sql`SELECT count(*) as n FROM meta_events`).catch(() => [{ n: 0 }])
+    const players = await ctx.db.all(sql`SELECT count(*) as n FROM meta_event_players`).catch(() => [{ n: 0 }])
+    const pairings = await ctx.db.all(sql`SELECT count(*) as n FROM meta_pairings`).catch(() => [{ n: 0 }])
+    const withLists = await ctx.db.all(sql`SELECT count(*) as n FROM meta_event_players WHERE list_text IS NOT NULL`).catch(() => [{ n: 0 }])
+    const withDetachment = await ctx.db.all(sql`SELECT count(*) as n FROM meta_event_players WHERE detachment_id IS NOT NULL`).catch(() => [{ n: 0 }])
+
+    // Cube counts
+    const facts = await ctx.db.all(sql`SELECT count(*) as n FROM fact_game_results`).catch(() => [{ n: 0 }])
+    const frames = await ctx.db.all(sql`SELECT count(*) as n FROM meta_for`).catch(() => [{ n: 0 }])
+    const topRows = await ctx.db.all(sql`SELECT count(*) as n FROM meta_top`).catch(() => [{ n: 0 }])
+
+    // Cube status
+    const cubeStatus = await ctx.db.all(sql`SELECT * FROM meta_cube_status WHERE id = 1`).catch(() => [])
+
+    // Dimension counts
+    const factions = await ctx.db.all(sql`SELECT count(*) as n FROM dim_faction`).catch(() => [{ n: 0 }])
+    const detachments = await ctx.db.all(sql`SELECT count(*) as n FROM dim_detachment`).catch(() => [{ n: 0 }])
+
+    // Brain community nodes (from meta_top community counts — approximate)
+    // We can't read R2 from here, so just report cube data
+
+    // Date range
+    const dateRange = await ctx.db.all(sql`SELECT min(date) as earliest, max(date) as latest FROM meta_events`).catch(() => [{ earliest: null, latest: null }])
+
+    return {
+      meta: {
+        events: (events as any)[0]?.n ?? 0,
+        players: (players as any)[0]?.n ?? 0,
+        pairings: (pairings as any)[0]?.n ?? 0,
+        withLists: (withLists as any)[0]?.n ?? 0,
+        withDetachment: (withDetachment as any)[0]?.n ?? 0,
+        earliestEvent: (dateRange as any)[0]?.earliest ?? null,
+        latestEvent: (dateRange as any)[0]?.latest ?? null,
+      },
+      cube: {
+        factRows: (facts as any)[0]?.n ?? 0,
+        frames: (frames as any)[0]?.n ?? 0,
+        metaTopRows: (topRows as any)[0]?.n ?? 0,
+        status: (cubeStatus as any)[0]?.status ?? 'unknown',
+        lastCompleted: (cubeStatus as any)[0]?.last_completed_at ?? null,
+      },
+      dimensions: {
+        factions: (factions as any)[0]?.n ?? 0,
+        detachments: (detachments as any)[0]?.n ?? 0,
+      },
+    }
+  }),
+
+  bcpScraperStatus: adminProcedure.query(async ({ ctx }) => {
+    const [latestJob] = await ctx.db
+      .select()
+      .from(bcpScrapeJobs)
+      .orderBy(desc(bcpScrapeJobs.startedAt))
+      .limit(1)
+
+    const [totalEvents] = await ctx.db
+      .select({ count: sql<number>`count(*)` })
+      .from(metaEvents)
+
+    return {
+      latestJob: latestJob ?? null,
+      totalEvents: totalEvents.count,
+    }
+  }),
+
+  bcpScraperHistory: adminProcedure
+    .input(z.object({ limit: z.number().optional().default(20) }))
+    .query(async ({ ctx, input }) => {
+      const jobs = await ctx.db
+        .select()
+        .from(bcpScrapeJobs)
+        .orderBy(desc(bcpScrapeJobs.startedAt))
+        .limit(input.limit)
+
+      return jobs
+    }),
+
+  triggerBcpScrape: adminProcedure.mutation(async ({ ctx }) => {
+    if (!ctx.bcpScraper) {
+      return { status: 'error', message: 'BCP Scraper service binding not configured' }
+    }
+    const resp = await ctx.bcpScraper.fetch(new Request('https://bcp-scraper/scrape', { method: 'POST' }))
+    if (!resp.ok) {
+      return { status: 'error', message: `Scraper returned ${resp.status}` }
+    }
+    const result = await resp.json() as { jobId?: string }
+    return { status: 'triggered', message: 'Scrape started', jobId: result.jobId }
+  }),
+
+  triggerMetaPipeline: adminProcedure.mutation(async () => {
+    return { status: 'not-configured', message: 'Meta pipeline trigger not configured yet' }
+  }),
+
+  listParserStatus: adminProcedure.query(async ({ ctx }) => {
+    const [parsed] = await ctx.db.all(
+      sql`SELECT count(*) as n FROM meta_event_players WHERE list_ttt IS NOT NULL AND json_extract(list_ttt, '$.parseStatus') = 'ok'`,
+    ) as any[]
+    const [partial] = await ctx.db.all(
+      sql`SELECT count(*) as n FROM meta_event_players WHERE list_ttt IS NOT NULL AND json_extract(list_ttt, '$.parseStatus') = 'partial'`,
+    ) as any[]
+    const [failed] = await ctx.db.all(
+      sql`SELECT count(*) as n FROM meta_event_players WHERE list_ttt IS NOT NULL AND json_extract(list_ttt, '$.parseStatus') = 'failed'`,
+    ) as any[]
+    const [pending] = await ctx.db.all(
+      sql`SELECT count(*) as n FROM meta_event_players WHERE list_ttt IS NULL AND list_text IS NOT NULL AND list_text != ''`,
+    ) as any[]
+    return {
+      parsed: parsed?.n || 0,
+      partial: partial?.n || 0,
+      failed: failed?.n || 0,
+      pending: pending?.n || 0,
+    }
+  }),
+
+  ingestJobs: adminProcedure
+    .input(z.object({ limit: z.number().optional().default(20) }))
+    .query(async ({ ctx, input }) => {
+      const jobs = await ctx.db
+        .select()
+        .from(ingestJobs)
+        .orderBy(desc(ingestJobs.createdAt))
+        .limit(input.limit)
+      return jobs
+    }),
+
+  triggerYoutubeIngest: adminProcedure
+    .input(z.object({ url: z.string(), sourceName: z.string().optional() }))
+    .mutation(async ({ ctx, input }) => {
+      if (!ctx.contentIngestor) {
+        return { status: 'error', message: 'Content Ingestor service binding not configured' }
+      }
+      const resp = await ctx.contentIngestor.fetch(new Request('https://content-ingestor/ingest/youtube', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ url: input.url, sourceName: input.sourceName }),
+      }))
+      if (!resp.ok) return { status: 'error', message: `Ingestor returned ${resp.status}` }
+      const result = await resp.json() as { jobId?: string }
+      return { status: 'triggered', message: 'Ingestion started', jobId: result.jobId }
+    }),
+
+  triggerWebIngest: adminProcedure
+    .input(z.object({ url: z.string(), sourceName: z.string().optional() }))
+    .mutation(async ({ ctx, input }) => {
+      if (!ctx.contentIngestor) {
+        return { status: 'error', message: 'Content Ingestor service binding not configured' }
+      }
+      const resp = await ctx.contentIngestor.fetch(new Request('https://content-ingestor/ingest/web', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ url: input.url, sourceName: input.sourceName }),
+      }))
+      if (!resp.ok) return { status: 'error', message: `Ingestor returned ${resp.status}` }
+      const result = await resp.json() as { jobId?: string }
+      return { status: 'triggered', message: 'Ingestion started', jobId: result.jobId }
     }),
 
   bsdataVersion: publicProcedure.query(async () => {

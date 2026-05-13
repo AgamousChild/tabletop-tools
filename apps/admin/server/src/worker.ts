@@ -9,6 +9,8 @@ interface Env {
   TURSO_AUTH_TOKEN: string
   AUTH_SECRET: string
   ADMIN_EMAILS: string
+  BCP_SCRAPER?: { fetch(request: Request): Promise<Response> }
+  CONTENT_INGESTOR?: { fetch(request: Request): Promise<Response> }
 }
 
 export default createWorkerHandler<Env>({
@@ -22,6 +24,6 @@ export default createWorkerHandler<Env>({
       .split(',')
       .map((e) => e.trim())
       .filter(Boolean)
-    return createServer(db, adminEmails, env.AUTH_SECRET)
+    return createServer(db, adminEmails, env.AUTH_SECRET, env.BCP_SCRAPER, env.CONTENT_INGESTOR)
   },
 })

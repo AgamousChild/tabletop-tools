@@ -11,6 +11,8 @@ import { initTRPC } from '@trpc/server'
 
 export type Context = BaseContext & {
   adminEmails: string[]
+  bcpScraper?: { fetch(request: Request): Promise<Response> }
+  contentIngestor?: { fetch(request: Request): Promise<Response> }
 }
 
 const t = initTRPC.context<Context>().create()

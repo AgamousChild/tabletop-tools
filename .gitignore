@@ -39,3 +39,12 @@ game-content-data/
 *.gst
 apps/data-import/client/public/wahapedia/
 scripts/.local/
+
+# Playwright MCP logs
+.playwright-mcp/
+
+# Superpowers plugin
+.superpowers/
+
+# Brain local build
+apps/brain/server/.local/

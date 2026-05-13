@@ -1,0 +1,20 @@
+{
+  "name": "@tabletop-tools/content-ingestor-server",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "wrangler dev",
+    "deploy": "wrangler deploy",
+    "test": "vitest run --passWithNoTests"
+  },
+  "dependencies": {
+    "@libsql/client": "^0.14.0",
+    "@tabletop-tools/db": "workspace:*",
+    "@tabletop-tools/server-core": "workspace:*",
+    "hono": "^4.7.4"
+  },
+  "devDependencies": {
+    "vitest": "^3.1.1",
+    "wrangler": "^3.114.1"
+  }
+}

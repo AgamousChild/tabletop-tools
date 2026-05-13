@@ -5,8 +5,9 @@
  *   cd apps/brain/server
  *   npx tsx src/generate-page-images.ts
  *
- * Reads all PDFs from the gw-sync local directory and converts each page to a
- * PNG at 3x scale (~300 DPI equivalent). Saves to .local/brain/pages/<pdf-name>/page-<N>.png
+ * Reads all PDFs from the gw-sync local directory and the Chapter Approved directory,
+ * converts each page to a PNG at 3x scale (~300 DPI equivalent).
+ * Saves to .local/brain/pages/<pdf-name>/page-<N>.png
  *
  * After generating, upload to R2:
  *   npx tsx src/generate-page-images.ts --upload
@@ -19,35 +20,87 @@ import { join, basename } from 'path'
 import { execSync } from 'child_process'
 
 const PDF_DIR = 'C:/R/sync-data/tools/gw-sync/.local/gw/pdfs'
+const CA_PDF_DIR = 'C:/R/sync-data/tools/ChapterApproved'
 const OUTPUT_DIR = '.local/brain/pages'
 const BUCKET = 'tabletop-tools-brain'
 const SCALE = 3 // ~300 DPI (PDFs are typically 96-100 DPI base)
 
-async function generateImages() {
-  if (!existsSync(PDF_DIR)) {
-    console.error(`PDF directory not found: ${PDF_DIR}`)
-    process.exit(1)
+/** PDFs to skip — large print-and-play spreads with no brain value. */
+const CA_SKIP = new Set(['2025_MissionDeck_PrintableSpread.pdf'])
+
+/**
+ * Convert a Chapter Approved filename to a kebab-case slug.
+ * e.g. "2025_SecondaryMissions_Attacker.pdf" → "secondary-missions-attacker"
+ */
+function slugifyPdfName(filename: string): string {
+  return filename
+    .replace(/^2025_/, '')                   // strip year prefix
+    .replace(/\.pdf$/, '')                   // strip extension
+    .replace(/([a-z])([A-Z])/g, '$1-$2')    // camelCase → kebab
+    .replace(/[^a-z0-9]+/gi, '-')           // non-alphanumeric → dash
+    .replace(/^-|-$/g, '')                   // trim leading/trailing dashes
+    .toLowerCase()
+}
+
+/** One entry per PDF to process, with its output directory name resolved. */
+interface PdfEntry {
+  pdfPath: string
+  outName: string
+}
+
+async function collectPdfs(): Promise<PdfEntry[]> {
+  const entries: PdfEntry[] = []
+
+  // gw-sync PDFs — use raw filename as output name (existing behaviour)
+  if (existsSync(PDF_DIR)) {
+    const files = await fs.readdir(PDF_DIR)
+    for (const f of files) {
+      if (!f.endsWith('.pdf')) continue
+      entries.push({ pdfPath: join(PDF_DIR, f), outName: basename(f, '.pdf') })
+    }
+  } else {
+    console.warn(`gw-sync PDF directory not found: ${PDF_DIR}`)
   }
 
+  // Chapter Approved PDFs — prefix slug with 'chapter-approved-'
+  if (existsSync(CA_PDF_DIR)) {
+    const files = await fs.readdir(CA_PDF_DIR)
+    for (const f of files) {
+      if (!f.endsWith('.pdf')) continue
+      if (CA_SKIP.has(f)) {
+        console.log(`Skipping: ${f}`)
+        continue
+      }
+      entries.push({
+        pdfPath: join(CA_PDF_DIR, f),
+        outName: `chapter-approved-${slugifyPdfName(f)}`,
+      })
+    }
+  } else {
+    console.warn(`Chapter Approved PDF directory not found: ${CA_PDF_DIR}`)
+  }
+
+  return entries
+}
+
+async function generateImages() {
   await fs.mkdir(OUTPUT_DIR, { recursive: true })
 
-  const allFiles = await fs.readdir(PDF_DIR)
-  const pdfFiles = allFiles.filter(f => f.endsWith('.pdf'))
+  const pdfEntries = await collectPdfs()
 
-  if (pdfFiles.length === 0) {
+  if (pdfEntries.length === 0) {
     console.log('No PDF files found.')
     return
   }
 
-  console.log(`Found ${pdfFiles.length} PDF files\n`)
+  console.log(`Found ${pdfEntries.length} PDF files\n`)
 
   let totalPages = 0
   let totalSkipped = 0
   let errors = 0
 
-  for (const pdfFile of pdfFiles) {
-    const pdfName = basename(pdfFile, '.pdf')
-    const pdfPath = join(PDF_DIR, pdfFile)
+  for (const { pdfPath, outName: pdfName } of pdfEntries) {
+    const pdfFile = basename(pdfPath)
     const outDir = join(OUTPUT_DIR, pdfName)
 
     await fs.mkdir(outDir, { recursive: true })

@@ -5,14 +5,24 @@ import { Dashboard } from './Dashboard'
 
 const fakeFactions = [
   {
+    factionId: 'sm-1',
     faction: 'Space Marines',
-    games: 40,
+    allegiance: 'imperium',
     winRate: 0.6,
-    players: 10,
-    representationPct: 0.2,
+    drawRate: 0.05,
+    overRep: 1.3,
+    fourOhStart: 2,
+    eventWins: 3,
+    eventFinals: 1,
+    eventTop4: 2,
+    eventTop8: 4,
+    eventTop16: 6,
+    playerPopPct: 0.2,
     wins: 26,
     losses: 12,
     draws: 2,
+    games: 40,
+    players: 10,
   },
 ]
 
@@ -33,7 +43,7 @@ vi.mock('../lib/trpc', () => ({
       matchups: {
         useQuery: () => ({ data: mockMatchups, isLoading: false }),
       },
-      windows: {
+      frames: {
         useQuery: () => ({ data: [] }),
       },
     },
@@ -66,14 +76,14 @@ describe('Dashboard', () => {
     expect(screen.getByText(/loading/i)).toBeInTheDocument()
   })
 
-  it('calls onFactionSelect when a faction row is clicked', () => {
+  it('calls onFactionSelect with factionId when a faction row is clicked', () => {
     mockFactions = fakeFactions
     mockMatchups = []
     mockLoadingFactions = false
     const onFactionSelect = vi.fn()
     render(<Dashboard onFactionSelect={onFactionSelect} />)
     fireEvent.click(screen.getByText('Space Marines'))
-    expect(onFactionSelect).toHaveBeenCalledWith('Space Marines')
+    expect(onFactionSelect).toHaveBeenCalledWith('sm-1')
   })
 
   it('renders the matchup matrix section', () => {

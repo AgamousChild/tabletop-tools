@@ -5,34 +5,64 @@ import { FactionTable } from './FactionTable'
 
 const stats = [
   {
+    factionId: 'sm-1',
     faction: 'Space Marines',
-    games: 40,
+    allegiance: 'imperium',
     winRate: 0.6,
-    players: 10,
-    representationPct: 0.2,
+    drawRate: 0.05,
+    overRep: 1.3,
+    fourOhStart: 2,
+    eventWins: 3,
+    eventFinals: 1,
+    eventTop4: 2,
+    eventTop8: 4,
+    eventTop16: 6,
+    playerPopPct: 0.2,
     wins: 26,
     losses: 12,
     draws: 2,
+    games: 40,
+    players: 10,
   },
   {
+    factionId: 'ork-1',
     faction: 'Orks',
-    games: 30,
+    allegiance: 'xenos',
     winRate: 0.45,
-    players: 8,
-    representationPct: 0.15,
+    drawRate: 0.0,
+    overRep: 0.9,
+    fourOhStart: 0,
+    eventWins: 0,
+    eventFinals: 0,
+    eventTop4: 1,
+    eventTop8: 2,
+    eventTop16: 3,
+    playerPopPct: 0.15,
     wins: 13,
     losses: 17,
     draws: 0,
+    games: 30,
+    players: 8,
   },
   {
+    factionId: 'nec-1',
     faction: 'Necrons',
-    games: 20,
+    allegiance: 'xenos',
     winRate: 0.4,
-    players: 5,
-    representationPct: 0.1,
+    drawRate: 0.0,
+    overRep: 0.7,
+    fourOhStart: 0,
+    eventWins: 0,
+    eventFinals: 0,
+    eventTop4: 0,
+    eventTop8: 1,
+    eventTop16: 2,
+    playerPopPct: 0.1,
     wins: 8,
     losses: 12,
     draws: 0,
+    games: 20,
+    players: 5,
   },
 ]
 
@@ -67,11 +97,11 @@ describe('FactionTable', () => {
     expect(neutralCell.className).toMatch(/slate/)
   })
 
-  it('calls onSelect with the faction when a row is clicked', () => {
+  it('calls onSelect with the factionId when a row is clicked', () => {
     const onSelect = vi.fn()
     render(<FactionTable stats={stats} onSelect={onSelect} />)
     fireEvent.click(screen.getByText('Space Marines'))
-    expect(onSelect).toHaveBeenCalledWith('Space Marines')
+    expect(onSelect).toHaveBeenCalledWith('sm-1')
   })
 
   it('renders win counts', () => {
@@ -79,8 +109,9 @@ describe('FactionTable', () => {
     expect(screen.getByText('26')).toBeInTheDocument() // Space Marines wins
   })
 
-  it('renders representation percentages', () => {
+  it('renders meta share percentages', () => {
     render(<FactionTable stats={stats} />)
-    expect(screen.getByText('20.0%')).toBeInTheDocument() // Space Marines rep
+    // playerPopPct 0.2 = 20.0%
+    expect(screen.getByText('20.0%')).toBeInTheDocument()
   })
 })
