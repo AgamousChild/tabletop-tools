@@ -84,9 +84,13 @@ export async function writeNodesToBrain(opts: WriteNodesOpts): Promise<{ written
 
   if (newBrainNodes.length === 0) return { written: 0 }
 
-  // 3. Append and write back to R2
+  // 3. Write new nodes to a separate ingested file (avoids large file read-modify-write)
+  // Brain rebuild merges these. Also append to main file.
   const allNodes = [...existingNodes, ...newBrainNodes]
-  await bucket.put('nodes/community.json', JSON.stringify(allNodes, null, 2))
+  const jsonStr = JSON.stringify(allNodes)
+  console.log(`Writing community.json: ${allNodes.length} nodes, ${jsonStr.length} bytes`)
+  await bucket.put('nodes/community.json', jsonStr)
+  console.log('R2 PUT complete')
 
   // 4. Update manifest.json
   const manifestObj = await bucket.get('manifest.json')

@@ -18,8 +18,8 @@ For each distinct rule, ability, detachment, stratagem, enhancement, or tactical
 - content: Full rules text or detailed explanation in markdown
 - summary: 1-2 sentence summary
 - keywords: Array of relevant search terms
-- factionId: Faction slug if faction-specific (e.g., "space-marines", "orks")
-- edition: "10th" or "11th"
+- factionId: Faction slug if faction-specific (e.g., "space-marines", "orks", "world-eaters")
+- edition: Determine from context. 11th edition indicators: mentions of "new edition", "detachment points", "multi-detachment", "cleave" ability, content dated 2026 or later, "faction focus" reveals, references to changes from 10th. 10th edition indicators: current competitive meta discussion, existing codex rules, tournament results. If unclear, default to "10th".
 
 Return a JSON array of nodes. Only include nodes with concrete, specific information — not vague commentary.
 
@@ -76,7 +76,7 @@ export async function extractNodes(opts: {
       'content-type': 'application/json',
     },
     body: JSON.stringify({
-      model: 'claude-sonnet-4-6',
+      model: 'claude-haiku-4-5-20251001',
       max_tokens: 4096,
       messages: [
         {

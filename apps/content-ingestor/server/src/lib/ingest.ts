@@ -49,34 +49,60 @@ export async function startYoutubeIngest(opts: {
   }
 }
 
-export async function completeYoutubeIngest(opts: {
+/**
+ * Save transcript from Gladia callback. Fast — just a DB write.
+ */
+export async function saveTranscript(opts: {
   gladiaJobId: string
   transcript: string
   db: Db
-  anthropicKey: string
-  bucket: R2Bucket
-  vectorize: VectorizeIndex
-  ai: Ai
-  fetch?: typeof fetch
-}): Promise<void> {
+}): Promise<{ jobId: string }> {
   const [job] = await opts.db
     .select()
     .from(ingestJobs)
     .where(eq(ingestJobs.gladiaJobId, opts.gladiaJobId))
     .limit(1)
 
-  if (!job) {
-    throw new Error(`No job found for gladiaJobId: ${opts.gladiaJobId}`)
-  }
+  if (!job) throw new Error(`No job found for gladiaJobId: ${opts.gladiaJobId}`)
+
+  await opts.db
+    .update(ingestJobs)
+    .set({ transcript: opts.transcript, status: 'transcribed' })
+    .where(eq(ingestJobs.id, job.id))
+
+  return { jobId: job.id }
+}
+
+/**
+ * Process a transcribed job: extract nodes via Claude, write to R2 + Vectorize.
+ * Single step — no temporary storage needed.
+ */
+export async function processJob(opts: {
+  jobId: string
+  db: Db
+  anthropicKey: string
+  bucket: R2Bucket
+  vectorize: VectorizeIndex
+  ai: Ai
+  fetch?: typeof fetch
+}): Promise<{ nodesExtracted: number }> {
+  const [job] = await opts.db
+    .select()
+    .from(ingestJobs)
+    .where(eq(ingestJobs.id, opts.jobId))
+    .limit(1)
+
+  if (!job) throw new Error(`No job found: ${opts.jobId}`)
+  if (!job.transcript) throw new Error(`Job ${opts.jobId} has no transcript`)
 
   try {
     await opts.db
       .update(ingestJobs)
-      .set({ transcript: opts.transcript, status: 'extracting' })
+      .set({ status: 'extracting' })
       .where(eq(ingestJobs.id, job.id))
 
     const nodes = await extractNodes({
-      text: opts.transcript,
+      text: job.transcript,
       sourceUrl: job.url,
       sourceTitle: job.sourceName ?? undefined,
       apiKey: opts.anthropicKey,
@@ -96,6 +122,8 @@ export async function completeYoutubeIngest(opts: {
       .update(ingestJobs)
       .set({ status: 'completed', nodesExtracted: written, completedAt: new Date() })
       .where(eq(ingestJobs.id, job.id))
+
+    return { nodesExtracted: written }
   } catch (err) {
     await opts.db
       .update(ingestJobs)

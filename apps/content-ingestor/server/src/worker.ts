@@ -1,7 +1,7 @@
 import { Hono } from 'hono'
 import { createClient } from '@libsql/client'
 import { createDbFromClient, ingestJobs } from '@tabletop-tools/db'
-import { startYoutubeIngest, completeYoutubeIngest, ingestWebArticle } from './lib/ingest'
+import { startYoutubeIngest, saveTranscript, processJob, ingestWebArticle } from './lib/ingest'
 import { parseGladiaCallback } from './lib/gladia'
 import { desc } from 'drizzle-orm'
 
@@ -37,7 +37,35 @@ function getApp() {
 
   app.get('/health', (c) => c.json({ status: 'ok' }))
 
-  // Submit YouTube video for ingestion
+  app.get('/test-r2', async (c) => {
+    try {
+      // Test 1: basic write
+      await c.env.BRAIN_BUCKET.put('_test', 'hello ' + Date.now())
+      const obj = await c.env.BRAIN_BUCKET.get('_test')
+      const text = obj ? await obj.text() : 'null'
+      await c.env.BRAIN_BUCKET.delete('_test')
+
+      // Test 2: read community.json size
+      const community = await c.env.BRAIN_BUCKET.get('nodes/community.json')
+      const communityText = community ? await community.text() : '[]'
+      const parsed = JSON.parse(communityText)
+
+      // Test 3: write a known test node to community.json
+      parsed.push({ id: 'community:test-r2-write-' + Date.now(), layer: 'community', category: 'tactic', title: 'R2 Write Test', content: 'test', summary: 'test', sources: [], refs: [], version: 1, keywords: ['test'], edition: '11th' })
+      await c.env.BRAIN_BUCKET.put('nodes/community.json', JSON.stringify(parsed))
+
+      // Test 4: re-read and verify
+      const verify = await c.env.BRAIN_BUCKET.get('nodes/community.json')
+      const verifyText = verify ? await verify.text() : '[]'
+      const verifyParsed = JSON.parse(verifyText)
+
+      return c.json({ r2Write: 'ok', readBack: text, before: parsed.length - 1, after: verifyParsed.length })
+    } catch (err) {
+      return c.json({ r2Write: 'FAIL', error: err instanceof Error ? err.message : String(err), stack: err instanceof Error ? err.stack : '' })
+    }
+  })
+
+  // Step 0: Submit YouTube URL to Gladia
   app.post('/ingest/youtube', async (c) => {
     if (!checkAuth(c)) return c.json({ error: 'Unauthorized' }, 401)
     const { url, sourceName } = await c.req.json() as { url: string; sourceName?: string }
@@ -55,7 +83,7 @@ function getApp() {
     return c.json(result)
   })
 
-  // Submit web article for ingestion
+  // Step 0 (web): Fetch article + extract + commit in one shot (articles are fast)
   app.post('/ingest/web', async (c) => {
     if (!checkAuth(c)) return c.json({ error: 'Unauthorized' }, 401)
     const { url, sourceName } = await c.req.json() as { url: string; sourceName?: string }
@@ -72,8 +100,7 @@ function getApp() {
     return c.json(result)
   })
 
-  // Gladia callback — receives completed transcript
-  // Respond immediately, process in background via waitUntil
+  // Step 1: Gladia callback — save transcript to DB (fast, <1s)
   app.post('/ingest/callback', async (c) => {
     const body = await c.req.json()
     const parsed = parseGladiaCallback(body)
@@ -84,22 +111,33 @@ function getApp() {
     }
 
     const db = createDb(c.env)
-    const env = c.env
+    const { jobId } = await saveTranscript({
+      gladiaJobId: parsed.id,
+      transcript: parsed.transcript,
+      db,
+    })
 
-    // Process in background — respond to Gladia immediately
-    c.executionCtx.waitUntil(
-      completeYoutubeIngest({
-        gladiaJobId: parsed.id,
-        transcript: parsed.transcript,
-        db,
-        anthropicKey: env.ANTHROPIC_API_KEY,
-        bucket: env.BRAIN_BUCKET,
-        vectorize: env.BRAIN_INDEX,
-        ai: env.AI,
-      }).catch(err => console.error('Background ingest failed:', err))
-    )
+    return c.json({ received: true, jobId, status: 'transcribed' })
+  })
 
-    return c.json({ received: true })
+  // Step 2: Extract + commit (Claude API → R2 + Vectorize)
+  app.post('/ingest/process/:id', async (c) => {
+    if (!checkAuth(c)) return c.json({ error: 'Unauthorized' }, 401)
+    const jobId = c.req.param('id')
+    const db = createDb(c.env)
+
+    try {
+      const result = await processJob({
+        jobId, db,
+        anthropicKey: c.env.ANTHROPIC_API_KEY,
+        bucket: c.env.BRAIN_BUCKET,
+        vectorize: c.env.BRAIN_INDEX,
+        ai: c.env.AI,
+      })
+      return c.json(result)
+    } catch (err) {
+      return c.json({ error: err instanceof Error ? err.message : String(err) }, 500)
+    }
   })
 
   // List recent jobs
