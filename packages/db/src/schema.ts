@@ -833,3 +833,20 @@ export const bcpScrapeJobs = sqliteTable('bcp_scrape_jobs', {
   errors: text('errors'),
   triggeredBy: text('triggered_by').notNull().default('cron'),
 })
+
+// ── Content Ingestor ─────────────────────────────────────────────────────────
+
+export const ingestJobs = sqliteTable('ingest_jobs', {
+  id: text('id').primaryKey(),
+  url: text('url').notNull(),
+  sourceType: text('source_type').notNull(),
+  sourceName: text('source_name'),
+  title: text('title'),
+  status: text('status').notNull().default('pending'),
+  gladiaJobId: text('gladia_job_id'),
+  transcript: text('transcript'),
+  nodesExtracted: integer('nodes_extracted').default(0),
+  error: text('error'),
+  createdAt: integer('created_at', { mode: 'timestamp' }).notNull(),
+  completedAt: integer('completed_at', { mode: 'timestamp' }),
+})
