@@ -285,6 +285,26 @@ app.get('/browse/detachment/:id', async (c) => {
   return c.json({ detachment, stratagems, enhancements, abilities })
 })
 
+app.get('/browse/army-rule/:id', async (c) => {
+  const id = decodeURIComponent(c.req.param('id'))
+  const allNodes = await getAllNodes(c.env.BRAIN_BUCKET)
+
+  let armyRule: Node | null = null
+  const subAbilities: Node[] = []
+
+  for (const n of allNodes) {
+    if (n.id === id && n.category === 'army-rule') {
+      armyRule = n
+    } else if (n.category === 'army-ability' && n.id.startsWith(id + ':')) {
+      subAbilities.push(n)
+    }
+  }
+
+  if (!armyRule) return c.json({ error: 'Army rule not found' }, 404)
+
+  return c.json({ armyRule, subAbilities })
+})
+
 // ── Data endpoints (serve from R2) ──────────────────────────────────────────
 
 app.get('/manifest.json', async (c) => {

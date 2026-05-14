@@ -1236,6 +1236,32 @@ export function BrainScreen() {
       return
     }
 
+    // For army rules, fetch sub-abilities from API
+    if (node.category === 'army-rule') {
+      try {
+        const res = await fetch(`${API_BASE}/browse/army-rule/${encodeURIComponent(node.id)}`)
+        const data = await res.json() as { armyRule: ResultNode; subAbilities: ResultNode[] }
+        const subRules = data.subAbilities.map(a => ({
+          name: a.title.replace(/\s*\(.*\)\s*$/, ''),
+          description: a.content || a.summary || '',
+        }))
+        setActiveCard({
+          type: 'rule',
+          data: {
+            id: node.id,
+            name: node.title,
+            description: node.content || node.summary || '',
+            factionId: node.factionId || '',
+            subfaction: node.subfaction,
+            isArmyRule: true,
+            subRules: subRules.length > 0 ? subRules : undefined,
+            sources: node.sources as any[],
+          },
+        })
+        return
+      } catch { /* fall through to default */ }
+    }
+
     // For ALL other types: use resolveCardView (never PDF-first)
     const { card } = resolveCardView(node)
     if (record.errata && record.errata.length > 0) {
@@ -1272,6 +1298,32 @@ export function BrainScreen() {
       }
       setActiveCard(card)
       return
+    }
+
+    // For army rules, fetch sub-abilities from API
+    if (node.category === 'army-rule') {
+      try {
+        const res = await fetch(`${API_BASE}/browse/army-rule/${encodeURIComponent(node.id)}`)
+        const data = await res.json() as { armyRule: ResultNode; subAbilities: ResultNode[] }
+        const subRules = data.subAbilities.map(a => ({
+          name: a.title.replace(/\s*\(.*\)\s*$/, ''),
+          description: a.content || a.summary || '',
+        }))
+        setActiveCard({
+          type: 'rule',
+          data: {
+            id: node.id,
+            name: node.title,
+            description: node.content || node.summary || '',
+            factionId: node.factionId || '',
+            subfaction: node.subfaction,
+            isArmyRule: true,
+            subRules: subRules.length > 0 ? subRules : undefined,
+            sources: node.sources as any[],
+          },
+        })
+        return
+      } catch { /* fall through */ }
     }
 
     // For all other types: use resolveCardView
