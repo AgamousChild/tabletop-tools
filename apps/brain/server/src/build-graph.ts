@@ -411,10 +411,7 @@ async function main() {
   console.log(`   Detachment rules: ${fieldStats.detachmentRulesParsed} target keywords parsed`)
   console.log(`   Epic Heroes: ${fieldStats.epicHeroes} flagged`)
 
-  // ── Reclassify army rules ──
-  console.log('\n6e. Reclassify army rules')
-  const armyRuleCount = reclassifyArmyRules(allNodes)
-  console.log(`   ${armyRuleCount} faction-ability → army-rule`)
+  // Reclassify removed — parser now assigns army-rule/army-ability/faction-ability correctly
 
   // ── Detachment container nodes ──
   console.log('\n6e. Detachment container nodes')
