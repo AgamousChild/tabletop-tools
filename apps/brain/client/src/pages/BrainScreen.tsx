@@ -986,7 +986,7 @@ interface BrowseLayer {
 }
 
 interface BrowseTabProps {
-  onOpenCard: (node: ResultNode) => void
+  onOpenCard: (node: ResultNode) => void | Promise<void>
 }
 
 interface BrowsePaginatedResponse {
@@ -1042,8 +1042,12 @@ function BrowseTab({ onOpenCard }: BrowseTabProps) {
   function viewNode(nodeId: string) {
     fetch(`${API_BASE}/browse/node/${encodeURIComponent(nodeId)}`)
       .then(r => r.json())
-      .then(data => { if (data.node) onOpenCard(data.node) })
-      .catch(() => {})
+      .then(data => {
+        if (data.node) {
+          Promise.resolve(onOpenCard(data.node)).catch((err: unknown) => console.error('Card open failed:', err))
+        }
+      })
+      .catch(err => console.error('Browse node fetch failed:', err))
   }
 
   const nodes = browseResponse?.nodes ?? []
@@ -1328,6 +1332,7 @@ export function BrainScreen() {
 
     // For all other types: use resolveCardView
     const { card } = resolveCardView(node)
+    console.log('handleOpenCard setting card:', card.type, node.title)
     setActiveCard(card)
   }
 
