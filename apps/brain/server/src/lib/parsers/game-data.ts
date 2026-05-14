@@ -311,7 +311,7 @@ export function convertGameData(input: GameDataInput, retrievedAt?: string): Gam
     nodes.push({
       id: factionNodeId,
       layer: 'faction',
-      category: 'faction-ability', // closest category
+      category: 'faction',
       title: fSlug.split('-').map(w => w[0]!.toUpperCase() + w.slice(1)).join(' '),
       content: `Top-level faction entry for ${fSlug}.`,
       summary: `${fSlug} faction.`,
@@ -822,7 +822,7 @@ export function convertGameData(input: GameDataInput, retrievedAt?: string): Gam
     nodes.push({
       id: factionAbId,
       layer: 'faction',
-      category: 'faction-ability',
+      category: 'army-rule',
       title: ab.name,
       content: hasSubRules ? preamble : cleanFaDesc,
       summary: `${ab.name} — army rule for ${fSlug}. ${truncate(preamble || cleanFaDesc, 100)}`,
@@ -850,7 +850,7 @@ export function convertGameData(input: GameDataInput, retrievedAt?: string): Gam
         nodes.push({
           id: subId,
           layer: 'faction',
-          category: 'faction-ability',
+          category: 'army-ability',
           title: `${sub.name} (${ab.name})`,
           content: sub.text,
           summary: `${sub.name}, option of ${ab.name} for ${fSlug} — ${truncate(sub.text, 120)}`,

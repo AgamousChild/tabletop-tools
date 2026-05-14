@@ -156,8 +156,10 @@ function buildCardForCategory(node: ResultNode, pdfSource?: PdfSource): CardData
         },
       }
 
+    case 'army-rule':
+    case 'army-ability':
     case 'faction-ability':
-      if (!node.detachmentId) {
+      if (node.category === 'army-rule' || node.category === 'army-ability' || !node.detachmentId) {
         // Parse sub-rules from content — lines like "**NAME:** description"
         const armyContent = node.content || node.summary || ''
         const subRuleLines = armyContent.match(/^\*\*([^:*]+):\*\*\s*(.+)$/gm) || []

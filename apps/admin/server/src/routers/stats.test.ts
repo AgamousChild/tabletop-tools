@@ -255,14 +255,20 @@ beforeAll(async () => {
     );
     CREATE TABLE IF NOT EXISTS meta_events (
       id TEXT PRIMARY KEY,
-      bcp_id TEXT UNIQUE,
       name TEXT NOT NULL,
-      date TEXT NOT NULL,
-      round_count INTEGER NOT NULL DEFAULT 0,
-      player_count INTEGER NOT NULL DEFAULT 0,
-      country TEXT,
-      state TEXT,
-      scraped_at INTEGER NOT NULL
+      date INTEGER NOT NULL,
+      location TEXT,
+      gps_coords TEXT,
+      region_id INTEGER,
+      format TEXT NOT NULL,
+      rounds INTEGER,
+      player_count INTEGER NOT NULL,
+      source TEXT NOT NULL,
+      source_id TEXT,
+      imported_at INTEGER NOT NULL,
+      win_faction_id TEXT,
+      win_subfaction_id TEXT,
+      win_detachment_id TEXT
     );
     CREATE TABLE IF NOT EXISTS ingest_jobs (
       id TEXT PRIMARY KEY,
@@ -618,60 +624,33 @@ describe('stats router', () => {
     })
   })
 
-  describe('stats.importHistory', () => {
+  describe('stats.recentEvents', () => {
     beforeEach(() => clearAllData())
 
     it('rejects non-admin users', async () => {
       const caller = createCaller(nonAdminCtx)
-      await expect(caller.stats.importHistory()).rejects.toMatchObject({ code: 'FORBIDDEN' })
+      await expect(caller.stats.recentEvents()).rejects.toMatchObject({ code: 'FORBIDDEN' })
     })
 
     it('returns empty list for empty db', async () => {
       const caller = createCaller(adminCtx)
-      const result = await caller.stats.importHistory()
+      const result = await caller.stats.recentEvents()
       expect(result).toEqual([])
     })
 
-    it('returns imports with parsed player counts', async () => {
-      const now = Math.floor(Date.now() / 1000)
-      const parsedData = JSON.stringify([{
-        eventName: 'LVO 2025',
-        eventDate: '2025-01-25',
-        format: 'GT',
-        players: [
-          { placement: 1, playerName: 'Alice', faction: 'Marines', wins: 5, losses: 0, draws: 0, points: 100 },
-          { placement: 2, playerName: 'Bob', faction: 'Orks', wins: 4, losses: 1, draws: 0, points: 80 },
-          { placement: 3, playerName: 'Carol', faction: 'Eldar', wins: 3, losses: 2, draws: 0, points: 60 },
-        ],
-      }])
-
+    it('returns events sorted by date desc', async () => {
+      const now = Date.now()
       await client.executeMultiple(`
-        INSERT INTO "user" (id, name, email, email_verified, created_at, updated_at) VALUES ('u1', 'Admin', 'admin@test.com', 0, ${now}, ${now});
-        INSERT INTO imported_tournament_results (id, imported_by, event_name, event_date, format, meta_window, raw_data, parsed_data, imported_at) VALUES ('imp1', 'u1', 'LVO 2025', ${now}, 'bcp-csv', '2025-Q1', 'csv', '${parsedData.replace(/'/g, "''")}', ${now});
+        INSERT INTO meta_events (id, name, date, location, format, rounds, player_count, source, source_id, imported_at) VALUES ('evt1', 'LVO 2026', ${now - 86400000}, 'Las Vegas, NV', 'GT', 8, 200, 'bcp', 'bcp1', ${now});
+        INSERT INTO meta_events (id, name, date, location, format, rounds, player_count, source, source_id, imported_at) VALUES ('evt2', 'Adepticon 2026', ${now}, 'Milwaukee, WI', 'GT', 9, 400, 'bcp', 'bcp2', ${now});
       `)
 
       const caller = createCaller(adminCtx)
-      const result = await caller.stats.importHistory()
-      expect(result.length).toBe(1)
-      expect(result[0].eventName).toBe('LVO 2025')
-      expect(result[0].format).toBe('bcp-csv')
-      expect(result[0].metaWindow).toBe('2025-Q1')
-      expect(result[0].playerCount).toBe(3)
-    })
-
-    it('returns multiple imports sorted by imported_at desc', async () => {
-      const now = Math.floor(Date.now() / 1000)
-      await client.executeMultiple(`
-        INSERT INTO "user" (id, name, email, email_verified, created_at, updated_at) VALUES ('u1', 'Admin', 'admin@test.com', 0, ${now}, ${now});
-        INSERT INTO imported_tournament_results (id, imported_by, event_name, event_date, format, meta_window, raw_data, parsed_data, imported_at) VALUES ('imp1', 'u1', 'LVO 2025', ${now - 86400}, 'bcp-csv', '2025-Q1', 'csv', '[]', ${now - 86400});
-        INSERT INTO imported_tournament_results (id, imported_by, event_name, event_date, format, meta_window, raw_data, parsed_data, imported_at) VALUES ('imp2', 'u1', 'Adepticon 2025', ${now}, 'bcp-csv', '2025-Q1', 'csv', '[]', ${now});
-      `)
-
-      const caller = createCaller(adminCtx)
-      const result = await caller.stats.importHistory()
+      const result = await caller.stats.recentEvents()
       expect(result.length).toBe(2)
-      expect(result[0].eventName).toBe('Adepticon 2025')
-      expect(result[1].eventName).toBe('LVO 2025')
+      expect(result[0].name).toBe('Adepticon 2026')
+      expect(result[0].playerCount).toBe(400)
+      expect(result[1].name).toBe('LVO 2026')
     })
   })
 
@@ -836,8 +815,8 @@ describe('stats router', () => {
       await client.executeMultiple(`
         INSERT INTO bcp_scrape_jobs (id, started_at, completed_at, status, events_found, events_scraped, pairings_scraped, triggered_by) VALUES ('j1', ${now - 3600}, ${now - 3500}, 'completed', 10, 8, 50, 'cron');
         INSERT INTO bcp_scrape_jobs (id, started_at, status, events_found, triggered_by) VALUES ('j2', ${now}, 'running', 5, 'manual');
-        INSERT INTO meta_events (id, name, date, round_count, player_count, scraped_at) VALUES ('e1', 'GT Alpha', '2026-01-15', 5, 32, ${now});
-        INSERT INTO meta_events (id, name, date, round_count, player_count, scraped_at) VALUES ('e2', 'GT Beta', '2026-02-01', 5, 48, ${now});
+        INSERT INTO meta_events (id, name, date, format, rounds, player_count, source, source_id, imported_at) VALUES ('e1', 'GT Alpha', ${new Date('2026-01-15').getTime()}, 'GT', 5, 32, 'bcp', 'bcp-e1', ${now});
+        INSERT INTO meta_events (id, name, date, format, rounds, player_count, source, source_id, imported_at) VALUES ('e2', 'GT Beta', ${new Date('2026-02-01').getTime()}, 'GT', 5, 48, 'bcp', 'bcp-e2', ${now});
       `)
 
       const caller = createCaller(adminCtx)

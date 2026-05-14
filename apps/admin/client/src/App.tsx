@@ -22,7 +22,7 @@ const NAV: { id: Page; label: string }[] = [
   { id: 'users', label: 'Users' },
   { id: 'sessions', label: 'Sessions' },
   { id: 'activity', label: 'Activity' },
-  { id: 'imports', label: 'Imports' },
+  { id: 'imports', label: 'Events' },
 ]
 
 export default function App() {

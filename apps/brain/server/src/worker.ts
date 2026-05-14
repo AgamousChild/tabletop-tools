@@ -150,16 +150,14 @@ const BROWSE_CATEGORIES: Array<{
     filter: (n) => n.category === 'challenger',
   },
   {
+    id: 'factions',
+    label: 'Factions',
+    filter: (n) => n.category === 'faction',
+  },
+  {
     id: 'army-rules',
     label: 'Army Rules',
-    filter: (n) => {
-      if (n.category !== 'faction-ability' || n.detachmentId) return false
-      // Exclude faction parent placeholder nodes
-      if (n.summary?.endsWith(' faction.') || n.content?.includes('Top-level faction entry')) return false
-      // Exclude army-rule sub-rules (title has "(ParentName)" suffix, may have nested parens)
-      if (/\(.+\)\s*$/.test(n.title)) return false
-      return true
-    },
+    filter: (n) => n.category === 'army-rule',
   },
   {
     id: 'detachments',

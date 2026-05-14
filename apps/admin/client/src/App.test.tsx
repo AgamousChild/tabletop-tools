@@ -25,7 +25,7 @@ vi.mock('./lib/trpc', () => {
       revokeSession: { useMutation: () => ({ mutate: vi.fn(), isPending: false }) },
       revokeAllSessions: { useMutation: () => ({ mutate: vi.fn(), isPending: false }) },
       appActivity: { useQuery: vi.fn(() => ({ data: null, isLoading: true })) },
-      importHistory: { useQuery: vi.fn(() => ({ data: null, isLoading: true })) },
+      recentEvents: { useQuery: vi.fn(() => ({ data: null, isLoading: true })) },
       bsdataVersion: { useQuery: vi.fn(() => ({ data: null, isLoading: true })) },
       matchResults: { useQuery: vi.fn(() => ({ data: null, isLoading: true })) },
       topFactions: { useQuery: vi.fn(() => ({ data: null, isLoading: true })) },
@@ -80,7 +80,7 @@ describe('App', () => {
     expect(screen.getByText('Users')).toBeInTheDocument()
     expect(screen.getByText('Sessions')).toBeInTheDocument()
     expect(screen.getByText('Activity')).toBeInTheDocument()
-    expect(screen.getByText('Imports')).toBeInTheDocument()
+    expect(screen.getByText('Events')).toBeInTheDocument()
     expect(screen.getByText('Scraper')).toBeInTheDocument()
     expect(screen.getByText('Ingest')).toBeInTheDocument()
     expect(screen.getByText('Micah')).toBeInTheDocument()
@@ -124,7 +124,7 @@ describe('App', () => {
     expect(screen.getByText('Loading activity...')).toBeInTheDocument()
   })
 
-  it('clicking Imports nav renders ImportsPage', () => {
+  it('clicking Events nav renders EventsPage', () => {
     vi.mocked(authClient.useSession).mockReturnValue({
       data: { user: { id: '1', name: 'Micah', email: 'micah@test.com' }, session: {} },
       isPending: false,
@@ -132,8 +132,8 @@ describe('App', () => {
     } as any)
 
     render(<App />)
-    fireEvent.click(screen.getByText('Imports'))
-    expect(screen.getByText('Loading imports...')).toBeInTheDocument()
+    fireEvent.click(screen.getByText('Events'))
+    expect(screen.getByText('Loading events...')).toBeInTheDocument()
   })
 
   it('clicking Scraper nav renders ScraperPage', () => {

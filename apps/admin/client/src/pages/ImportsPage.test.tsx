@@ -6,7 +6,7 @@ let queryReturn: any
 vi.mock('../lib/trpc', () => ({
   trpc: {
     stats: {
-      importHistory: { useQuery: vi.fn(() => queryReturn) },
+      recentEvents: { useQuery: vi.fn(() => queryReturn) },
     },
   },
 }))
@@ -20,7 +20,7 @@ beforeEach(() => {
 describe('ImportsPage', () => {
   it('shows loading state', () => {
     render(<ImportsPage />)
-    expect(screen.getByText('Loading imports...')).toBeInTheDocument()
+    expect(screen.getByText('Loading events...')).toBeInTheDocument()
   })
 
   it('shows error message on failure', () => {
@@ -29,17 +29,17 @@ describe('ImportsPage', () => {
     expect(screen.getByText('DB error')).toBeInTheDocument()
   })
 
-  it('shows empty state when no imports', () => {
+  it('shows empty state when no events', () => {
     queryReturn = { data: [], isLoading: false, error: null }
     render(<ImportsPage />)
-    expect(screen.getByText('No tournament data imported yet.')).toBeInTheDocument()
+    expect(screen.getByText('No events scraped yet.')).toBeInTheDocument()
   })
 
-  it('renders import count in header', () => {
+  it('renders event count in header', () => {
     queryReturn = {
       data: [
-        { id: 'i1', eventName: 'GT Alpha', format: 'bcp-csv', metaWindow: '2026-W04', playerCount: 32, importedAt: 1706745600000 },
-        { id: 'i2', eventName: 'GT Beta', format: 'tabletop-admiral-csv', metaWindow: '2026-W05', playerCount: 48, importedAt: 1707350400000 },
+        { id: 'e1', name: 'GT Alpha', source: 'bcp', playerCount: 32, rounds: 5, location: 'Austin, TX', date: 1706745600000 },
+        { id: 'e2', name: 'GT Beta', source: 'bcp', playerCount: 48, rounds: 6, location: 'Denver, CO', date: 1707350400000 },
       ],
       isLoading: false,
       error: null,
@@ -48,58 +48,19 @@ describe('ImportsPage', () => {
     expect(screen.getByText('(2)')).toBeInTheDocument()
   })
 
-  it('renders table with correct columns', () => {
+  it('renders table with event data', () => {
     queryReturn = {
       data: [
-        { id: 'i1', eventName: 'GT Alpha', format: 'bcp-csv', metaWindow: '2026-W04', playerCount: 32, importedAt: 1706745600000 },
-      ],
-      isLoading: false,
-      error: null,
-    }
-    render(<ImportsPage />)
-    expect(screen.getByText('Event')).toBeInTheDocument()
-    expect(screen.getByText('Format')).toBeInTheDocument()
-    expect(screen.getByText('Meta Window')).toBeInTheDocument()
-    expect(screen.getByText('Players')).toBeInTheDocument()
-    expect(screen.getByText('Imported')).toBeInTheDocument()
-  })
-
-  it('shows format labels correctly', () => {
-    queryReturn = {
-      data: [
-        { id: 'i1', eventName: 'GT Alpha', format: 'bcp-csv', metaWindow: '2026-W04', playerCount: 32, importedAt: 1706745600000 },
-        { id: 'i2', eventName: 'GT Beta', format: 'tabletop-admiral-csv', metaWindow: '2026-W05', playerCount: 48, importedAt: 1707350400000 },
-      ],
-      isLoading: false,
-      error: null,
-    }
-    render(<ImportsPage />)
-    expect(screen.getByText('BCP')).toBeInTheDocument()
-    expect(screen.getByText('TA')).toBeInTheDocument()
-  })
-
-  it('renders event names and meta windows', () => {
-    queryReturn = {
-      data: [
-        { id: 'i1', eventName: 'GT Alpha', format: 'bcp-csv', metaWindow: '2026-W04', playerCount: 32, importedAt: 1706745600000 },
+        { id: 'e1', name: 'GT Alpha', source: 'bcp', playerCount: 32, rounds: 5, location: 'Austin, TX', date: 1706745600000 },
       ],
       isLoading: false,
       error: null,
     }
     render(<ImportsPage />)
     expect(screen.getByText('GT Alpha')).toBeInTheDocument()
-    expect(screen.getByText('2026-W04')).toBeInTheDocument()
-  })
-
-  it('renders player counts', () => {
-    queryReturn = {
-      data: [
-        { id: 'i1', eventName: 'GT Alpha', format: 'bcp-csv', metaWindow: '2026-W04', playerCount: 32, importedAt: 1706745600000 },
-      ],
-      isLoading: false,
-      error: null,
-    }
-    render(<ImportsPage />)
+    expect(screen.getByText('bcp')).toBeInTheDocument()
     expect(screen.getByText('32')).toBeInTheDocument()
+    expect(screen.getByText('5')).toBeInTheDocument()
+    expect(screen.getByText('Austin, TX')).toBeInTheDocument()
   })
 })

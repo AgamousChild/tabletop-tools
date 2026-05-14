@@ -11,7 +11,7 @@ export const NodeCategorySchema = z.enum([
   // Core rules
   'core-mechanic', 'phase-sequence', 'terrain', 'army-construction', 'mission', 'keyword',
   // Faction
-  'faction', 'army-rule', 'detachment', 'detachment-rule', 'stratagem', 'enhancement', 'faction-ability',
+  'faction', 'army-rule', 'army-ability', 'detachment', 'detachment-rule', 'stratagem', 'enhancement', 'faction-ability',
   // Unit
   'datasheet', 'weapon', 'unit-ability', 'wargear-option', 'leader-attachment', 'unit-composition',
   // Overlay

@@ -186,47 +186,24 @@ export const statsRouter = router({
     return activity
   }),
 
-  importHistory: adminProcedure
+  recentEvents: adminProcedure
     .input(z.object({ limit: z.number().int().min(1).max(100).optional() }).optional())
     .query(async ({ ctx, input }) => {
       const limit = input?.limit ?? 50
-      const rows = await ctx.db
+      return ctx.db
         .select({
-          id: importedTournamentResults.id,
-          eventName: importedTournamentResults.eventName,
-          eventDate: importedTournamentResults.eventDate,
-          format: importedTournamentResults.format,
-          metaWindow: importedTournamentResults.metaWindow,
-          parsedData: importedTournamentResults.parsedData,
-          importedAt: importedTournamentResults.importedAt,
+          id: metaEvents.id,
+          name: metaEvents.name,
+          date: metaEvents.date,
+          location: metaEvents.location,
+          rounds: metaEvents.rounds,
+          playerCount: metaEvents.playerCount,
+          source: metaEvents.source,
+          sourceId: metaEvents.sourceId,
         })
-        .from(importedTournamentResults)
-        .orderBy(desc(importedTournamentResults.importedAt))
+        .from(metaEvents)
+        .orderBy(desc(metaEvents.date))
         .limit(limit)
-
-      return rows.map((row) => {
-        let playerCount = 0
-        try {
-          const records = JSON.parse(row.parsedData)
-          if (Array.isArray(records)) {
-            for (const rec of records) {
-              if (rec.players && Array.isArray(rec.players)) {
-                playerCount += rec.players.length
-              }
-            }
-          }
-        } catch { /* ignore parse errors */ }
-
-        return {
-          id: row.id,
-          eventName: row.eventName,
-          eventDate: row.eventDate,
-          format: row.format,
-          metaWindow: row.metaWindow,
-          importedAt: row.importedAt,
-          playerCount,
-        }
-      })
     }),
 
   topFactions: adminProcedure
