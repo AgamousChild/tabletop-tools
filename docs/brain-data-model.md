@@ -10,6 +10,7 @@
 |---|---|---|
 | `faction` | A playable army — auto-generated root node | BLOOD ANGELS, ORKS |
 | `army-rule` | Army-wide rule that applies regardless of detachment | Oath of Moment, Blessings of Khorne |
+| `army-ability` | Sub-rule or component of an army rule | The Sons of Sanguinius (part of Oath of Moment for BA) |
 | `detachment` | A detachment container — holds rules, stratagems, enhancements | Wrath of the Doomed, Gladius Task Force |
 | `detachment-rule` | The passive ability a detachment grants | Fanatical Celerity, Combat Doctrines |
 | `stratagem` | A stratagem inside a detachment | Rage-Fuelled Response (1CP) |
