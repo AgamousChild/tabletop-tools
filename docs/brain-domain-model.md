@@ -7,6 +7,7 @@
 ```mermaid
 erDiagram
     FACTION ||--o{ ARMY_RULE : has
+    FACTION ||--o{ ARMY_ABILITY : "sub-rules/construction"
     FACTION ||--o{ DETACHMENT : offers
     FACTION ||--o{ UNIT : contains
     %% No "accesses" relationship — shared content has no subfaction keyword
@@ -50,26 +51,25 @@ type: faction
 fields:
   name: "BLOOD ANGELS"
   army_rule: "Oath of Moment"          # ref to army-rule node
-  parent_faction: "space-marines"       # accesses generic SM content
   edition: "10th"
   
 relationships:
   has_army_rules:
-    - "Oath of Moment"                  # inherited from space-marines
-    - "The Sons of Sanguinius"          # BA-specific
+    - "Oath of Moment"                  # shared SM rule (PRIMARY_FACTION → space-marines)
+    - "The Sons of Sanguinius"          # BA-specific (RULE_SUBFACTION → blood angels)
   offers_detachments:
     - "Wrath of the Doomed"             # BA-specific
     - "Angelic Host"                    # BA-specific
-    - "Gladius Task Force"              # from parent space-marines
-    - "Ironstorm Spearhead"            # from parent space-marines
+    - "Gladius Task Force"              # generic SM (no subfaction)
+    - "Ironstorm Spearhead"            # generic SM (no subfaction)
   contains_units:
     - "Lemartes"                        # BA-specific (BLOOD ANGELS keyword)
     - "Death Company Marines"           # BA-specific
-    - "Intercessors"                    # from parent space-marines (no subfaction lock)
-    - "Redemptor Dreadnought"          # from parent space-marines
+    - "Intercessors"                    # generic SM (no subfaction lock)
+    - "Redemptor Dreadnought"          # generic SM
 ```
 
-**What we have now:** Faction node exists. `offers_detachments` represented by `part_of` refs. `contains_units` NOT represented (no ref from units to factions). **CORRECTED (2026-05-07):** No `parent_faction` or "accesses" relationship needed. Generic SM content (units and detachments without a subfaction keyword) is available to all chapters. The query is: same factionId where subfaction matches mine OR subfaction is empty.
+**What we have now:** Faction node exists, created by `buildFactionNodes()` in combo-detection.ts (not from the game-data parser). `offers_detachments` represented by `part_of` refs. `contains_units` now represented by `part_of` refs from datasheets to faction-root nodes. **CORRECTED (2026-05-07):** No `parent_faction` or "accesses" relationship needed. Generic SM content (units and detachments without a subfaction keyword) is available to all chapters. The query is: same factionId where subfaction matches mine OR subfaction is empty.
 
 ---
 
@@ -150,7 +150,7 @@ relationships:
     - "Armour of Contempt" (targets any ADEPTUS ASTARTES)
 ```
 
-**What we have now:** Datasheet node exists. `equips_weapons` via `part_of`. `has_abilities` via `part_of`. `can_lead` exists as `interacts_with` refs but NOT typed distinctly. `eligible_for_detachments` via `eligible_for` but NO affinity scoring. `stats` NOT structured — buried in content text. `keywords.game` stored but mixed with search index keywords. `targeted_by_stratagems` NOT represented — would require parsing stratagem target text. `can_receive_enhancements` NOT represented.
+**What we have now:** Datasheet node exists. `equips_weapons` via `part_of`. `has_abilities` via `part_of`. `can_lead` now uses distinct bidirectional `can_lead` refs (from `leaderAttachments` table). `eligible_for_detachments` via `eligible_for` but NO affinity scoring. `stats` NOT structured — buried in content text. `keywords.game` stored but mixed with search index keywords. `targeted_by_stratagems` NOT represented — would require parsing stratagem target text. `can_receive_enhancements` NOT represented.
 
 ---
 
@@ -279,8 +279,7 @@ leader_abilities_that_flow:
   - "Black Rage" → already on Death Company, but Lemartes' version may differ
 ```
 
-**What we have now:** `interacts_with` ref exists between leader and unit with context text "This leader can be attached to this unit as a Bodyguard." But:
-- Not a distinct ref type (mixed in with other `interacts_with` refs)
+**What we have now:** `can_lead` ref (bidirectional) exists between leader and unit, created from the `leaderAttachments` table in the game-data parser. This is now a distinct ref type, not mixed into `interacts_with`. But:
 - Leader abilities aren't explicitly linked to the units they'd flow to
 - The graph doesn't surface "who can Lemartes lead?" as a navigation path
 
@@ -292,15 +291,15 @@ leader_abilities_that_flow:
 |---|---|---|
 | Faction → army rules | ✅ part_of | ✅ |
 | Faction → detachments | ✅ part_of | ✅ |
-| Faction → units | ❌ | part_of or similar |
-| Faction → shared faction access | ❌ | accesses ref |
+| Faction → units | ✅ part_of | ✅ (datasheets ref faction-root) |
+| Faction → shared faction access | N/A | No "accesses" ref needed — generic content has no subfaction |
 | Detachment → rule/strats/enhancements | ✅ part_of | ✅ |
 | Detachment → eligible units | ✅ eligible_for | Need affinity scoring |
 | Detachment keyword affinity | ❌ | primary_keywords field |
 | Detachment points cost | ❌ | Field on node |
 | Unit → weapons/abilities | ✅ part_of | ✅ |
 | Unit → eligible detachments | ✅ eligible_for | Need affinity scoring |
-| Unit → can lead | ⚠️ interacts_with | Distinct can_lead ref type |
+| Unit → can lead | ✅ can_lead ref | ✅ (distinct bidirectional ref type) |
 | Unit stat line | ❌ unstructured | Parsed fields |
 | Unit game keywords vs search keywords | ❌ mixed | Separate arrays |
 | Stratagem CP cost | ❌ in text | Parsed field |

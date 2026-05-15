@@ -192,7 +192,7 @@ strippedQuery = "sustained hits" (not empty) → isFactionBrowse = false
 → Reverse index: who references the core "sustained hits" node?
    → Hundreds of abilities across all factions
 → Faction filter: only keep space-marines
-→ Priority sort: faction-abilities first, then detachment rules, then unit abilities
+→ Priority sort: army-rules/army-abilities first, then faction-abilities (detachment-scoped), then detachment rules, then unit abilities
 → Cap at 30 high-priority + 30 weapons
 ```
 
@@ -241,6 +241,6 @@ strippedQuery = "sustained hits" (not empty) → isFactionBrowse = false
 ## What's NOT Connected (Gaps)
 
 1. **Detachment → eligible units (reverse)**: eligible_for only walked forward in graph. Focusing on a detachment doesn't show its units.
-2. **Units → faction node**: No direct ref. Units connect to detachments, detachments connect to factions. Two hops.
+2. **Units → faction node**: Connected via `part_of` refs from datasheets to faction-root nodes (added by game-data parser).
 3. **Community nodes → anything**: Tactic/ruling nodes have no structural refs to the rules they discuss. They're found by Vectorize similarity only.
 4. **Core rules → faction specifics**: "Sustained Hits" core rule doesn't ref every ability that grants it. That connection is via the reverse index (abilities ref the core rule via `modifies`).
