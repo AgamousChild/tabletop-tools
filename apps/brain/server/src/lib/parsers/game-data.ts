@@ -802,12 +802,35 @@ export function convertGameData(input: GameDataInput, retrievedAt?: string): Gam
     return true
   })
 
-  // Track army rules by name to prevent duplicates across factions.
-  // First faction to define a rule owns it. Others get skipped.
+  // Primary faction for shared army rules. When multiple factions list the same rule,
+  // only the primary faction's version gets created. Others are skipped.
+  const PRIMARY_FACTION: Record<string, string> = {
+    'oath-of-moment': 'space-marines',
+    'dark-pacts': 'chaos-space-marines',
+    'blessings-of-khorne': 'world-eaters',
+    'cabal-of-sorcerers': 'thousand-sons',
+    'nurgles-gift-aura': 'death-guard',
+    'synapse': 'tyranids',
+    'shadow-in-the-warp': 'tyranids',
+    'battle-focus': 'aeldari',
+    'disparate-paths': 'aeldari',
+    'assigned-agents': 'imperial-agents',
+    'kill-team': 'imperial-agents',
+    'kill-teams': 'imperial-agents',
+    'doctrina-imperatives': 'adeptus-mechanicus',
+    'super-heavy-walker': 'imperial-knights',
+    'thrill-seekers': 'emperors-children',
+  }
+
   const seenArmyRuleNames = new Set<string>()
   const seenFactionAbIds = new Set<string>()
   for (const ab of factionAbilities) {
     const ruleNameKey = slugify(ab.name)
+    const fSlugCheck = normalizeFactionId(ab.factionId)
+    const primaryFaction = PRIMARY_FACTION[ruleNameKey]
+    // If this rule has a designated primary faction and this isn't it, skip
+    if (primaryFaction && fSlugCheck !== primaryFaction) continue
+    // If we've already seen this rule name (non-primary shared rule), skip
     if (seenArmyRuleNames.has(ruleNameKey)) continue
     seenArmyRuleNames.add(ruleNameKey)
 
