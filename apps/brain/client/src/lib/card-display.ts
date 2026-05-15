@@ -156,6 +156,20 @@ function buildCardForCategory(node: ResultNode, pdfSource?: PdfSource): CardData
         },
       }
 
+    case 'faction':
+      return {
+        type: 'rule',
+        data: {
+          id: node.id,
+          name: node.title,
+          description: node.content || node.summary || '',
+          factionId: node.factionId || '',
+          isArmyRule: false,
+          isFaction: true,
+          sources: node.sources as SourceRef[],
+        },
+      }
+
     case 'army-rule':
     case 'army-ability':
     case 'faction-ability':

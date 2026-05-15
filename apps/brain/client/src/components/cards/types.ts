@@ -85,6 +85,7 @@ export interface RuleCardData {
   subfaction?: string
   detachmentName?: string
   isArmyRule: boolean
+  isFaction?: boolean
   subRules?: { name: string; description: string }[]
   appliesTo?: number
   sources?: SourceRef[]

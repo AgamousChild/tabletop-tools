@@ -48,10 +48,11 @@ function subRuleIsHighlighted(
 
 export function RuleCard({ data, context }: RuleCardProps) {
   const { highlightTerms, onContentClick } = context
-  const borderClass = data.isArmyRule ? 'border-amber-400' : 'border-blue-400'
+  const isFaction = data.isFaction
+  const borderClass = isFaction ? 'border-red-400' : data.isArmyRule ? 'border-amber-400' : 'border-blue-400'
   const subRuleNameClass = data.isArmyRule ? 'text-amber-400' : 'text-blue-400'
-  const subtitleLabel = data.isArmyRule ? 'Army Rule' : 'Detachment Ability'
-  const subtitlePrefix = data.isArmyRule ? data.factionId : (data.detachmentName ?? data.factionId)
+  const subtitleLabel = isFaction ? 'Faction' : data.isArmyRule ? 'Army Rule' : 'Detachment Ability'
+  const subtitlePrefix = data.factionId || (data.detachmentName ?? '')
 
   return (
     <div className="bg-slate-900 border border-slate-800 rounded-lg overflow-hidden">

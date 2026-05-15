@@ -1,3 +1,4 @@
+import { renderMarkdown } from "../../lib/render-markdown"
 import { useState } from 'react'
 
 import type { CardContext, TerrainLayoutCardData } from './types'
@@ -44,7 +45,7 @@ export function TerrainLayoutCard({ data }: TerrainLayoutCardProps) {
 
             {/* Error fallback — show text description */}
             {error && (
-              <div className="text-xs text-slate-300 leading-snug">{data.description}</div>
+              <div className="text-xs text-slate-300 leading-snug" dangerouslySetInnerHTML={{ __html: renderMarkdown(data.description) }} />
             )}
 
             {/* PDF page image */}
@@ -62,7 +63,7 @@ export function TerrainLayoutCard({ data }: TerrainLayoutCardProps) {
           </div>
         ) : (
           /* No image — render text description */
-          <div className="text-xs text-slate-300 leading-snug mb-1.5">{data.description}</div>
+          <div className="text-xs text-slate-300 leading-snug mb-1.5" dangerouslySetInnerHTML={{ __html: renderMarkdown(data.description) }} />
         )}
 
         {/* Quality flags */}

@@ -1,3 +1,4 @@
+import { renderMarkdown } from '../../lib/render-markdown'
 import type { CardContext, CommunityCardData } from './types'
 
 interface CommunityCardProps {
@@ -65,9 +66,9 @@ export function CommunityCard({ data, context }: CommunityCardProps) {
         </div>
 
         {/* Description */}
-        <div className="text-xs text-slate-300 leading-snug">
-          {highlightText(data.description, highlightTerms, onContentClick)}
-        </div>
+        <div className="text-xs text-slate-300 leading-snug"
+          dangerouslySetInnerHTML={{ __html: renderMarkdown(data.description) }}
+        />
 
         {/* Footer */}
         {data.sourceAttribution && (

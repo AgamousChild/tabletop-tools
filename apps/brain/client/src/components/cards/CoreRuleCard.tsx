@@ -1,4 +1,5 @@
 import { ErrataSection } from './ErrataSection'
+import { renderMarkdown } from '../../lib/render-markdown'
 import type { CardContext, CoreRuleCardData } from './types'
 
 interface CoreRuleCardProps {
@@ -63,9 +64,9 @@ export function CoreRuleCard({ data, context }: CoreRuleCardProps) {
         </div>
 
         {/* Description */}
-        <div className="text-xs text-slate-300 leading-snug">
-          {highlightText(data.description, highlightTerms, onContentClick)}
-        </div>
+        <div className="text-xs text-slate-300 leading-snug"
+          dangerouslySetInnerHTML={{ __html: renderMarkdown(data.description) }}
+        />
 
         {/* Optional HTML table */}
         {data.tableHtml && (
