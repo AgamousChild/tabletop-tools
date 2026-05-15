@@ -837,7 +837,7 @@ export function convertGameData(input: GameDataInput, retrievedAt?: string): Gam
       lower.includes('you cannot select') || lower.startsWith('- you can') ||
       lower.startsWith('if every model in your army') || lower.startsWith('each detachment rule') ||
       lower.startsWith('some imperial') || lower.startsWith('while this unit')
-    const categoryForRule = isConstruction ? 'army-construction' as const : 'army-rule' as const
+    const categoryForRule = isConstruction ? 'army-ability' as const : 'army-rule' as const
 
     // Split multi-option faction abilities
     const subRules = splitSubRules(cleanFaDesc)
