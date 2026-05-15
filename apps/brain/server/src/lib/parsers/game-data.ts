@@ -802,8 +802,15 @@ export function convertGameData(input: GameDataInput, retrievedAt?: string): Gam
     return true
   })
 
+  // Track army rules by name to prevent duplicates across factions.
+  // First faction to define a rule owns it. Others get skipped.
+  const seenArmyRuleNames = new Set<string>()
   const seenFactionAbIds = new Set<string>()
   for (const ab of factionAbilities) {
+    const ruleNameKey = slugify(ab.name)
+    if (seenArmyRuleNames.has(ruleNameKey)) continue
+    seenArmyRuleNames.add(ruleNameKey)
+
     let factionAbId = `faction:${normalizeFactionId(ab.factionId)}:${slugify(ab.name)}`
     if (seenFactionAbIds.has(factionAbId)) {
       factionAbId = `faction:${normalizeFactionId(ab.factionId)}:${slugify(ab.name)}-${ab.id}`
