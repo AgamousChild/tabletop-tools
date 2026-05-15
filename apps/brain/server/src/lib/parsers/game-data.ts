@@ -306,22 +306,8 @@ export function convertGameData(input: GameDataInput, retrievedAt?: string): Gam
   for (const ds of filteredDatasheets) factionSlugs.add(normalizeFactionId(ds.factionId))
   for (const det of filteredDetachments) factionSlugs.add(normalizeFactionId(det.factionId))
 
-  for (const fSlug of factionSlugs) {
-    const factionNodeId = `faction:${fSlug}`
-    nodes.push({
-      id: factionNodeId,
-      layer: 'faction',
-      category: 'faction',
-      title: fSlug.split('-').map(w => w[0]!.toUpperCase() + w.slice(1)).join(' '),
-      content: `Top-level faction entry for ${fSlug}.`,
-      summary: `${fSlug} faction.`,
-      factionId: fSlug,
-      sources: [source],
-      refs: [],
-      version: 1,
-      keywords: [fSlug],
-    })
-  }
+  // Faction nodes are created by buildFactionNodes in combo-detection.ts
+  // Do NOT create placeholder faction nodes here — it causes duplicates
 
   // ── 1. Datasheets → unit/datasheet nodes ──────────────────────────────────
 
@@ -540,7 +526,7 @@ export function convertGameData(input: GameDataInput, retrievedAt?: string): Gam
     // Datasheet → faction parent ref
     refs.push({
       sourceId: ds.id,
-      targetId: `faction:${normalizeFactionId(ds.factionId)}`,
+      targetId: `faction-root:${normalizeFactionId(ds.factionId)}`,
       rel: 'part_of',
       context: `${ds.name} belongs to ${normalizeFactionId(ds.factionId)}.`,
     })
@@ -867,7 +853,7 @@ export function convertGameData(input: GameDataInput, retrievedAt?: string): Gam
     if (fSlug) {
       refs.push({
         sourceId: factionAbId,
-        targetId: `faction:${fSlug}`,
+        targetId: `faction-root:${fSlug}`,
         rel: 'part_of',
         context: `${ab.name} is an army rule for ${fSlug}.`,
         bidirectional: true,
@@ -970,7 +956,7 @@ export function convertGameData(input: GameDataInput, retrievedAt?: string): Gam
     // Detachment → faction parent ref
     refs.push({
       sourceId: detNodeId,
-      targetId: `faction:${normalizeFactionId(det.factionId)}`,
+      targetId: `faction-root:${normalizeFactionId(det.factionId)}`,
       rel: 'part_of',
       context: `${det.name} is a detachment for ${normalizeFactionId(det.factionId)}.`,
       bidirectional: true,
