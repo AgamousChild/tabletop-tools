@@ -808,6 +808,23 @@ export function convertGameData(input: GameDataInput, retrievedAt?: string): Gam
     'thrill-seekers': 'emperors-children',
   }
 
+  // Chapter-specific rules that belong to a subfaction, not generic SM
+  const RULE_SUBFACTION: Record<string, string> = {
+    'templar-vows': 'black templars',
+    'heirs-of-sigismund': 'black templars',
+    'the-unforgiven': 'dark angels',
+    'the-ravenwing': 'dark angels',
+    'the-deathwing': 'dark angels',
+    'the-sons-of-sanguinius': 'blood angels',
+    'curse-of-the-wulfen': 'space wolves',
+    'sons-of-russ': 'space wolves',
+    'sagas': 'space wolves',
+    'mission-tactics': 'deathwatch',
+    'deathwatch': 'deathwatch',
+    'kill-teams': 'deathwatch',
+    'kill-team': 'deathwatch',
+  }
+
   const seenArmyRuleNames = new Set<string>()
   const seenFactionAbIds = new Set<string>()
   for (const ab of factionAbilities) {
@@ -831,12 +848,16 @@ export function convertGameData(input: GameDataInput, retrievedAt?: string): Gam
 
     // Classify: construction/mustering restrictions vs actual gameplay army rules
     const lower = cleanFaDesc.toLowerCase()
-    const isConstruction = lower.startsWith('when mustering') ||
+    // Chapter-specific rules override construction detection
+    const hasSubfaction = !!RULE_SUBFACTION[ruleNameKey]
+    const isConstruction = !hasSubfaction && (
+      lower.startsWith('when mustering') ||
       lower.startsWith('- your army') || lower.startsWith('- if an') || lower.startsWith('- if a ') ||
       lower.startsWith('the following') || lower.startsWith('you can') ||
       lower.includes('you cannot select') || lower.startsWith('- you can') ||
       lower.startsWith('if every model in your army') || lower.startsWith('each detachment rule') ||
       lower.startsWith('some imperial') || lower.startsWith('while this unit')
+    )
     const categoryForRule = isConstruction ? 'army-ability' as const : 'army-rule' as const
 
     // Split multi-option faction abilities
@@ -846,14 +867,16 @@ export function convertGameData(input: GameDataInput, retrievedAt?: string): Gam
       ? cleanFaDesc.substring(0, cleanFaDesc.indexOf(subRules[0]!.name)).trim()
       : cleanFaDesc
 
+    const ruleSubfaction = RULE_SUBFACTION[ruleNameKey]
     nodes.push({
       id: factionAbId,
       layer: 'faction',
       category: categoryForRule,
       title: ab.name,
       content: hasSubRules ? preamble : cleanFaDesc,
-      summary: `${ab.name} — army rule for ${fSlug}. ${truncate(preamble || cleanFaDesc, 100)}`,
+      summary: `${ab.name} — army rule for ${ruleSubfaction || fSlug}. ${truncate(preamble || cleanFaDesc, 100)}`,
       factionId: fSlug,
+      subfaction: ruleSubfaction,
       sources: [source],
       refs: [],
       version: 1,
