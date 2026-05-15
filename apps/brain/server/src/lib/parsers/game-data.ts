@@ -659,12 +659,34 @@ export function convertGameData(input: GameDataInput, retrievedAt?: string): Gam
       armyRuleRefs.set(ab.name.toLowerCase(), dsIds)
     }
   }
+  // Primary faction for shared army rules. When multiple factions list the same rule,
+  // only the primary faction's version gets created. Others are skipped.
+  const PRIMARY_FACTION: Record<string, string> = {
+    'oath-of-moment': 'space-marines',
+    'dark-pacts': 'chaos-space-marines',
+    'blessings-of-khorne': 'world-eaters',
+    'cabal-of-sorcerers': 'thousand-sons',
+    'nurgles-gift-aura': 'death-guard',
+    'synapse': 'tyranids',
+    'shadow-in-the-warp': 'tyranids',
+    'battle-focus': 'aeldari',
+    'disparate-paths': 'aeldari',
+    'assigned-agents': 'imperial-agents',
+    'kill-team': 'imperial-agents',
+    'kill-teams': 'imperial-agents',
+    'doctrina-imperatives': 'adeptus-mechanicus',
+    'super-heavy-walker': 'imperial-knights',
+    'thrill-seekers': 'emperors-children',
+  }
+
   // Create modifies refs from faction ability → datasheets
   for (const [abilityName, dsIds] of armyRuleRefs) {
-    // Find the faction ability node ID
+    // Find the faction ability node ID — use primary faction if shared
     const factionAb = input.abilities.find(a => a.name.toLowerCase() === abilityName)
     if (!factionAb) continue
-    const factionAbNodeId = `faction:${normalizeFactionId(factionAb.factionId)}:${slugify(factionAb.name)}`
+    const ruleSlug = slugify(factionAb.name)
+    const primaryFaction = PRIMARY_FACTION[ruleSlug] || normalizeFactionId(factionAb.factionId)
+    const factionAbNodeId = `faction:${primaryFaction}:${ruleSlug}`
     for (const dsId of dsIds) {
       const dsName = filteredDatasheets.find(d => d.id === dsId)?.name ?? dsId
       refs.push({
@@ -788,25 +810,6 @@ export function convertGameData(input: GameDataInput, retrievedAt?: string): Gam
     return true
   })
 
-  // Primary faction for shared army rules. When multiple factions list the same rule,
-  // only the primary faction's version gets created. Others are skipped.
-  const PRIMARY_FACTION: Record<string, string> = {
-    'oath-of-moment': 'space-marines',
-    'dark-pacts': 'chaos-space-marines',
-    'blessings-of-khorne': 'world-eaters',
-    'cabal-of-sorcerers': 'thousand-sons',
-    'nurgles-gift-aura': 'death-guard',
-    'synapse': 'tyranids',
-    'shadow-in-the-warp': 'tyranids',
-    'battle-focus': 'aeldari',
-    'disparate-paths': 'aeldari',
-    'assigned-agents': 'imperial-agents',
-    'kill-team': 'imperial-agents',
-    'kill-teams': 'imperial-agents',
-    'doctrina-imperatives': 'adeptus-mechanicus',
-    'super-heavy-walker': 'imperial-knights',
-    'thrill-seekers': 'emperors-children',
-  }
 
   // Chapter-specific rules that belong to a subfaction, not generic SM
   const RULE_SUBFACTION: Record<string, string> = {

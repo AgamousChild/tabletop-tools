@@ -65,7 +65,7 @@ export function buildComboRefs(allNodes: Node[]): NodeRef[] {
   // Only consider nodes that ARE game rules — not community content, errata, or balance changes
   const RULES_LAYERS = new Set(['faction', 'unit', 'core'])
   const RULES_CATEGORIES = new Set([
-    'faction-ability', 'detachment-rule', 'stratagem', 'enhancement', 'unit-ability',
+    'army-rule', 'army-ability', 'faction-ability', 'detachment-rule', 'stratagem', 'enhancement', 'unit-ability',
   ])
 
   // Collect all buffs
