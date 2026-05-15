@@ -825,7 +825,8 @@ export function convertGameData(input: GameDataInput, retrievedAt?: string): Gam
       factionAbId = `faction:${normalizeFactionId(ab.factionId)}:${slugify(ab.name)}-${ab.id}`
     }
     seenFactionAbIds.add(factionAbId)
-    const cleanFaDesc = stripHtml(ab.description)
+    // Wahapedia ability descriptions are already markdown — preserve formatting
+    const cleanFaDesc = ab.description
     const fSlug = normalizeFactionId(ab.factionId)
 
     // Split multi-option faction abilities
