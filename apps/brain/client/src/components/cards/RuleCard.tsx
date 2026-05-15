@@ -1,4 +1,5 @@
 import { ErrataSection } from './ErrataSection'
+import { renderMarkdown as renderMarkdownFn } from '../../lib/render-markdown'
 import type { CardContext, RuleCardData } from './types'
 
 interface RuleCardProps {
@@ -81,10 +82,11 @@ export function RuleCard({ data, context }: RuleCardProps) {
 
       {/* Body */}
       <div className="px-3 py-2 md:px-4 md:py-3 space-y-3">
-        {/* Main description */}
-        <p className="text-slate-300 leading-relaxed text-[13px] md:text-[15px] break-words">
-          <KeywordText text={data.description} onContentClick={onContentClick} />
-        </p>
+        {/* Main description — render markdown */}
+        <div
+          className="text-slate-300 leading-relaxed text-[13px] md:text-[15px] break-words"
+          dangerouslySetInnerHTML={{ __html: renderMarkdownFn(data.description) }}
+        />
 
         {/* Sub-rules */}
         {data.subRules && data.subRules.length > 0 && (
@@ -102,9 +104,10 @@ export function RuleCard({ data, context }: RuleCardProps) {
                   >
                     {subRule.name}
                   </span>
-                  <span className="text-slate-300 text-[13px] md:text-[15px] break-words">
-                    <KeywordText text={subRule.description} onContentClick={onContentClick} />
-                  </span>
+                  <span
+                    className="text-slate-300 text-[13px] md:text-[15px] break-words"
+                    dangerouslySetInnerHTML={{ __html: renderMarkdownFn(subRule.description) }}
+                  />
                 </div>
               )
             })}
