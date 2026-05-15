@@ -829,6 +829,16 @@ export function convertGameData(input: GameDataInput, retrievedAt?: string): Gam
     const cleanFaDesc = ab.description
     const fSlug = normalizeFactionId(ab.factionId)
 
+    // Classify: construction/mustering restrictions vs actual gameplay army rules
+    const lower = cleanFaDesc.toLowerCase()
+    const isConstruction = lower.startsWith('when mustering') ||
+      lower.startsWith('- your army') || lower.startsWith('- if an') || lower.startsWith('- if a ') ||
+      lower.startsWith('the following') || lower.startsWith('you can') ||
+      lower.includes('you cannot select') || lower.startsWith('- you can') ||
+      lower.startsWith('if every model in your army') || lower.startsWith('each detachment rule') ||
+      lower.startsWith('some imperial') || lower.startsWith('while this unit')
+    const categoryForRule = isConstruction ? 'army-construction' as const : 'army-rule' as const
+
     // Split multi-option faction abilities
     const subRules = splitSubRules(cleanFaDesc)
     const hasSubRules = subRules.length >= 2
@@ -839,7 +849,7 @@ export function convertGameData(input: GameDataInput, retrievedAt?: string): Gam
     nodes.push({
       id: factionAbId,
       layer: 'faction',
-      category: 'army-rule',
+      category: categoryForRule,
       title: ab.name,
       content: hasSubRules ? preamble : cleanFaDesc,
       summary: `${ab.name} — army rule for ${fSlug}. ${truncate(preamble || cleanFaDesc, 100)}`,
