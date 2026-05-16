@@ -23,6 +23,9 @@ export function IngestPage() {
     )
   }
 
+  // Check if URL already ingested
+  const alreadyIngested = jobs.find(j => j.url === url.trim() && j.status !== 'failed')
+
   const handleSubmit = () => {
     if (!url.trim()) return
     setActionResult(null)
@@ -121,11 +124,14 @@ export function IngestPage() {
           <div className="flex items-center gap-3">
             <button
               onClick={handleSubmit}
-              disabled={isPending || !url.trim()}
+              disabled={isPending || !url.trim() || !!alreadyIngested}
               className="px-4 py-2 bg-amber-400 text-slate-950 rounded font-medium text-sm hover:bg-amber-300 disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              {isPending ? 'Submitting...' : 'Submit'}
+              {isPending ? 'Submitting...' : alreadyIngested ? 'Already Ingested' : 'Submit'}
             </button>
+            {alreadyIngested && (
+              <p className="text-sm text-amber-400">This URL was already submitted ({alreadyIngested.status}, {alreadyIngested.nodesExtracted ?? 0} nodes)</p>
+            )}
             {actionResult && (
               <p className="text-sm text-slate-400">{actionResult}</p>
             )}

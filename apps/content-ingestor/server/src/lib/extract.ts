@@ -68,6 +68,7 @@ export async function extractNodes(opts: {
 }): Promise<ExtractedNode[]> {
   const fetchFn = opts.fetch ?? ((...args: Parameters<typeof fetch>) => fetch(...args))
 
+  // Use streaming to keep connection alive — Workers kill idle connections
   const response = await fetchFn('https://api.anthropic.com/v1/messages', {
     method: 'POST',
     headers: {
@@ -78,6 +79,7 @@ export async function extractNodes(opts: {
     body: JSON.stringify({
       model: 'claude-haiku-4-5-20251001',
       max_tokens: 4096,
+      stream: true,
       messages: [
         {
           role: 'user',
@@ -91,9 +93,27 @@ export async function extractNodes(opts: {
     throw new Error(`API error ${response.status}`)
   }
 
-  const data = (await response.json()) as { content: Array<{ type: string; text: string }> }
-  const text = data.content[0].text
+  // Read entire SSE response as text and parse events
+  const rawText = await response.text()
+  let text = ''
+  for (const line of rawText.split('\n')) {
+    if (!line.startsWith('data: ')) continue
+    const data = line.slice(6).trim()
+    if (!data || data === '[DONE]') continue
+    try {
+      const event = JSON.parse(data)
+      if (event.type === 'content_block_delta' && event.delta?.text) {
+        text += event.delta.text
+      }
+    } catch { /* skip malformed lines */ }
+  }
 
+  console.log('Streamed text length:', text.length, 'chars')
+  if (!text.trim()) {
+    console.log('Empty stream result — buffer remainder:', buffer.length)
+    throw new Error('Claude returned empty response from stream')
+  }
   const parsed = parseJsonArray(text)
+  console.log('Parsed nodes:', parsed.length)
   return parsed.filter(isValidNode)
 }

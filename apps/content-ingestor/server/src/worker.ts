@@ -120,7 +120,7 @@ function getApp() {
     return c.json({ received: true, jobId, status: 'transcribed' })
   })
 
-  // Step 2: Extract + commit (Claude API → R2 + Vectorize)
+  // Step 2: Extract + commit (Claude streaming API → R2 + Vectorize)
   app.post('/ingest/process/:id', async (c) => {
     if (!checkAuth(c)) return c.json({ error: 'Unauthorized' }, 401)
     const jobId = c.req.param('id')
