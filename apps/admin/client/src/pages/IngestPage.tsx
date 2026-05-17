@@ -23,9 +23,6 @@ export function IngestPage() {
     )
   }
 
-  // Check if URL already ingested
-  const alreadyIngested = jobs.find(j => j.url === url.trim() && j.status !== 'failed')
-
   const handleSubmit = () => {
     if (!url.trim()) return
     setActionResult(null)
@@ -47,6 +44,7 @@ export function IngestPage() {
 
   const isPending = youtubeIngest.isPending || webIngest.isPending
   const jobs = ingestJobs.data ?? []
+  const alreadyIngested = jobs.find(j => j.url === url.trim() && j.status !== 'failed')
 
   return (
     <div className="space-y-8">
@@ -163,7 +161,8 @@ export function IngestPage() {
                 {jobs.map((job) => (
                   <tr key={job.id} className="border-b border-slate-800/50 last:border-0">
                     <td className="px-4 py-3 text-slate-300 truncate max-w-[300px]" title={job.url}>
-                      {job.title || truncateUrl(job.url)}
+                      <div>{job.sourceName || ''}</div>
+                      <div className="text-xs text-slate-500 truncate">{job.url}</div>
                     </td>
                     <td className="px-4 py-3"><SourceTypeBadge type={job.sourceType} /></td>
                     <td className="px-4 py-3"><StatusBadge status={job.status} /></td>
