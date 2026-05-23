@@ -1,3 +1,7 @@
+/**
+ * @see docs/etl-data-pipelines.md — ETL diagram and function reference
+ * @see docs/schema-turso.md — Turso database schema (meta_events, bcp_scrape_jobs, etc.)
+ */
 import { Hono } from 'hono'
 import { createClient } from '@libsql/client'
 import { createDbFromClient } from '@tabletop-tools/db'

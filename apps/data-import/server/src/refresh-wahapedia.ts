@@ -1,6 +1,9 @@
 /**
  * Refresh Wahapedia data — fetch latest CSVs and save as JSON.
  * Run: cd apps/data-import/server && npx tsx src/refresh-wahapedia.ts
+ *
+ * @see docs/etl-scripts.md — ETL diagram and function reference
+ * @see docs/etl-data-pipelines.md — data-import pipeline details
  */
 import { writeFileSync, mkdirSync, existsSync } from 'fs'
 import { join } from 'path'

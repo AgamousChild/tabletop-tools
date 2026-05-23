@@ -1,3 +1,6 @@
+/**
+ * @see docs/etl-data-pipelines.md — ETL diagram and function reference
+ */
 import { parseBSDataXml } from '@tabletop-tools/game-content/src/adapters/bsdata/parser'
 import type { UnitProfile } from '@tabletop-tools/game-content/src/types'
 

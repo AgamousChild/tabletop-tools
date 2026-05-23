@@ -1,3 +1,8 @@
+/**
+ * @see docs/etl-data-pipelines.md — ETL diagram and function reference
+ * @see docs/schema-turso.md — Turso database schema (ingest_jobs)
+ * @see docs/schema-indexeddb-brain.md — Brain knowledge graph schema
+ */
 import { Hono } from 'hono'
 import { createClient } from '@libsql/client'
 import { createDbFromClient, ingestJobs } from '@tabletop-tools/db'

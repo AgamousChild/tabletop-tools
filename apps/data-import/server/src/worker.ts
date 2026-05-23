@@ -1,3 +1,7 @@
+/**
+ * @see docs/etl-data-pipelines.md — ETL diagram and function reference
+ * @see docs/schema-indexeddb-game-data.md — IndexedDB game data schema
+ */
 import { Hono } from 'hono'
 import { cors } from 'hono/cors'
 import type { Env } from './types'

@@ -1,3 +1,7 @@
+/**
+ * @see docs/schema-indexeddb-brain.md — Full node model documentation with all enums and types
+ * @see docs/etl-data-pipelines.md — Brain build pipeline that produces nodes
+ */
 import { z } from 'zod'
 
 // ── Enums ───────────────────────────────────────────────────────────────────

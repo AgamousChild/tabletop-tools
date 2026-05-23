@@ -3,6 +3,8 @@
  *
  * Ported from apps/data-import/client/src/lib/wahapedia.ts
  * Adapted to accept BSData units directly (instead of loading from IndexedDB).
+ *
+ * @see docs/etl-data-pipelines.md — ETL diagram and function reference
  */
 
 /**

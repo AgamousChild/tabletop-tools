@@ -1,5 +1,11 @@
-// Brain knowledge graph IndexedDB store
-// Separate database from game-data-store to decouple schema lifecycles.
+/**
+ * Brain knowledge graph IndexedDB store.
+ * Separate database from game-data-store to decouple schema lifecycles.
+ *
+ * @see docs/schema-indexeddb-brain.md — Full schema documentation with all stores and types
+ * @see docs/schema-overview.md — Cross-database overview
+ * @see docs/etl-data-pipelines.md — Brain build pipeline that produces nodes
+ */
 
 const DB_NAME = 'tabletop-tools-brain'
 const DB_VERSION = 1

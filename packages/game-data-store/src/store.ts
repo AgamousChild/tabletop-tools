@@ -1,3 +1,8 @@
+/**
+ * @see docs/schema-indexeddb-game-data.md — Full schema documentation with all stores, types, and indexes
+ * @see docs/schema-overview.md — Cross-database overview
+ * @see docs/etl-data-pipelines.md — Data pipeline that populates this store
+ */
 import type { UnitProfile } from '@tabletop-tools/game-content'
 
 const DB_NAME = 'tabletop-tools-game-data'

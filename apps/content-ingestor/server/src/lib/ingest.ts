@@ -1,3 +1,6 @@
+/**
+ * @see docs/etl-data-pipelines.md — ETL diagram and function reference
+ */
 import type { Db } from '@tabletop-tools/db'
 import { ingestJobs } from '@tabletop-tools/db'
 import { generateId } from '@tabletop-tools/server-core'

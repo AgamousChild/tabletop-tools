@@ -1,3 +1,8 @@
+/**
+ * @see docs/schema-turso.md — Full schema documentation with all columns, constraints, and indexes
+ * @see docs/schema-overview.md — Cross-database overview
+ * @see docs/etl-app-workers.md — Which Workers read/write which tables
+ */
 import { index, integer, real, sqliteTable, text, uniqueIndex } from 'drizzle-orm/sqlite-core'
 
 // === Auth tables — managed by Better Auth ===

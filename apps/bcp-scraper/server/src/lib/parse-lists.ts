@@ -1,3 +1,7 @@
+/**
+ * @see docs/etl-data-pipelines.md — ETL diagram and function reference
+ * @see docs/schema-turso.md — Turso database schema (meta_event_players)
+ */
 import { sql } from 'drizzle-orm'
 import type { Db } from '@tabletop-tools/db'
 import { parseList } from './list-parser'

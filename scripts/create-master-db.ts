@@ -13,6 +13,9 @@
  * Source databases:
  *   - Wahapedia: C:/R/sync-data/tools/wahapedia-sync/.local/wahapedia/data.db
  *   - BSData:    C:/R/sync-data/tools/bsdata-sync/.local/bsdata/data.db
+ *
+ * @see docs/etl-scripts.md — ETL diagram and function reference
+ * @see docs/schema-turso.md — Turso database schema
  */
 
 import Database from 'better-sqlite3'

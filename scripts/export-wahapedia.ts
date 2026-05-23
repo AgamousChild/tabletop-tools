@@ -11,6 +11,9 @@
  *
  * No GW content is committed — this script is run locally and the output
  * directory is gitignored. Users import the data at runtime via the data-import app.
+ *
+ * @see docs/etl-scripts.md — ETL diagram and function reference
+ * @see docs/schema-indexeddb-game-data.md — IndexedDB game data schema
  */
 
 import { createClient } from '@libsql/client'

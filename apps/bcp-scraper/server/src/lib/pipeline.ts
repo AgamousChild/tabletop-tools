@@ -3,6 +3,9 @@
  *
  * Only processes events that don't already have fact_game_results rows.
  * Uses INSERT OR IGNORE for frames so existing data is preserved.
+ *
+ * @see docs/etl-data-pipelines.md — ETL diagram and function reference
+ * @see docs/schema-turso.md — Turso database schema (meta_for, meta_top, fact_game_results)
  */
 
 import { sql } from 'drizzle-orm'

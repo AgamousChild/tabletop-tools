@@ -3,6 +3,9 @@
  * Writes partitioned JSON files to .local/brain/ for inspection.
  *
  * Run: cd apps/brain/server && npx tsx src/build-graph.ts
+ *
+ * @see docs/etl-data-pipelines.md — ETL diagram and function reference
+ * @see docs/schema-indexeddb-brain.md — Brain knowledge graph schema
  */
 import { readFileSync, writeFileSync, mkdirSync, readdirSync, existsSync } from 'fs'
 import { join } from 'path'

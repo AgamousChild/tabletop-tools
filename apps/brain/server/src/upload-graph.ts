@@ -14,6 +14,9 @@
  *   - wrangler authenticated (wrangler login)
  *   - R2 bucket 'tabletop-tools-brain' created
  *   - Vectorize index 'brain-nodes' created with dimension 768 (bge-base-en-v1.5)
+ *
+ * @see docs/etl-data-pipelines.md — ETL diagram and function reference
+ * @see docs/schema-indexeddb-brain.md — Brain knowledge graph schema
  */
 import { execSync } from 'child_process'
 import { readFileSync, readdirSync, existsSync } from 'fs'

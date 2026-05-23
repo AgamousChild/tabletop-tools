@@ -1,3 +1,7 @@
+/**
+ * @see docs/etl-data-pipelines.md — ETL diagram and function reference
+ * @see docs/schema-turso.md — Turso database schema (meta_events, meta_event_players, meta_pairings)
+ */
 import { authenticateBcp } from './cognito'
 import { BcpApiClient } from './bcp-api'
 import type { BcpEvent, BcpPairing } from './bcp-api'
