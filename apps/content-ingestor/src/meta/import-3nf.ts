@@ -8,10 +8,11 @@
  * Run: TURSO_DB_URL=... TURSO_AUTH_TOKEN=... npx tsx src/meta/import-3nf.ts
  */
 
-import { createClient, type Client } from '@libsql/client'
-import { readFileSync, readdirSync } from 'node:fs'
+import { readdirSync, readFileSync } from 'node:fs'
 import path from 'node:path'
-import { BCP_FACTION_TO_SLUG, SUBFACTION_PARENT } from './seed-dimensions.js'
+
+import { type Client, createClient } from '@libsql/client'
+import { createDbFromClient, getFactionAliasMap, getSubfactions } from '@tabletop-tools/db'
 
 // Inline detachment extraction (from apps/new-meta/server/src/lib/detachment.ts)
 const DETACHMENT_PATTERNS: RegExp[] = [
@@ -50,9 +51,15 @@ function deriveRegionId(location: string): number | null {
   if (!location) return null
   const loc = location.toLowerCase()
   if (/united states|us$|canada|\bca\b.*\d{5}|, [a-z]{2} \d{5}/i.test(location)) return 1 // NA
-  if (/united kingdom|gb$|de$|deutschland|germany|france|nederland|netherlands|austria|spain|italia|italy|sweden|belgium|ireland|scotland|england|poland|czech|denmark|norway|finland|portugal|hungary/i.test(location)) return 2 // Europe
+  if (
+    /united kingdom|gb$|de$|deutschland|germany|france|nederland|netherlands|austria|spain|italia|italy|sweden|belgium|ireland|scotland|england|poland|czech|denmark|norway|finland|portugal|hungary/i.test(
+      location,
+    )
+  )
+    return 2 // Europe
   if (/australia|new zealand|nz$/i.test(location)) return 3 // Oceania
-  if (/japan|korea|china|singapore|malaysia|philippines|india|indonesia|thailand/i.test(location)) return 4 // Asia
+  if (/japan|korea|china|singapore|malaysia|philippines|india|indonesia|thailand/i.test(location))
+    return 4 // Asia
   if (/brazil|argentina|chile|colombia|mexico|peru/i.test(location)) return 5 // South America
   if (loc.includes('online') || loc.includes('tts') || loc.includes('global')) return 7 // Online
   return null
@@ -60,7 +67,10 @@ function deriveRegionId(location: string): number | null {
 
 // Build a detachment slug from name + faction
 function detachmentSlug(name: string, factionSlug: string): string {
-  return `${factionSlug}:${name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '')}`
+  return `${factionSlug}:${name
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '')}`
 }
 
 interface PairingRecord {
@@ -153,7 +163,10 @@ function getClient() {
   }
   const dbUrl = process.env.TURSO_DB_URL
   const authToken = process.env.TURSO_AUTH_TOKEN
-  if (!dbUrl || !authToken) { console.error('Set TURSO_DB_URL and TURSO_AUTH_TOKEN'); process.exit(1) }
+  if (!dbUrl || !authToken) {
+    console.error('Set TURSO_DB_URL and TURSO_AUTH_TOKEN')
+    process.exit(1)
+  }
   return createClient({ url: dbUrl, authToken })
 }
 
@@ -162,11 +175,19 @@ async function main() {
 
   await createTables(client)
 
+  // Load faction alias map from dim_faction_alias table
+  const db = createDbFromClient(client)
+  const BCP_FACTION_TO_SLUG = Object.fromEntries(await getFactionAliasMap(db))
+  const subfactions = await getSubfactions(db)
+  const SUBFACTION_PARENT: Record<string, string> = Object.fromEntries(
+    subfactions.map((s) => [s.id, s.factionId]),
+  )
+
   // Load known dimension IDs for FK validation
   const detRows = await client.execute('SELECT id FROM dim_detachment')
-  const knownDetachments = new Set(detRows.rows.map(r => r.id as string))
+  const knownDetachments = new Set(detRows.rows.map((r) => r.id as string))
   const sfRows = await client.execute('SELECT id FROM dim_subfaction')
-  const knownSubfactions = new Set(sfRows.rows.map(r => r.id as string))
+  const knownSubfactions = new Set(sfRows.rows.map((r) => r.id as string))
   console.log(`Loaded ${knownDetachments.size} known detachments\n`)
 
   // Clear existing 3NF data
@@ -179,7 +200,7 @@ async function main() {
   ])
   console.log('Cleared existing 3NF data\n')
 
-  const files = readdirSync(BCP_DIR).filter(f => f.startsWith('pairings-') && f.endsWith('.json'))
+  const files = readdirSync(BCP_DIR).filter((f) => f.startsWith('pairings-') && f.endsWith('.json'))
   console.log(`Importing ${files.length} events...\n`)
 
   let totalEvents = 0
@@ -219,7 +240,18 @@ async function main() {
     await client.execute({
       sql: `INSERT OR IGNORE INTO meta_events (id, name, date, location, region_id, format, rounds, player_count, source, source_id, imported_at)
             VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'bcp', ?, ?)`,
-      args: [eventId, event.name, safeDate, event.location || null, regionId, deriveFormat(playerCount), event.rounds || null, playerCount, event.id, Date.now()],
+      args: [
+        eventId,
+        event.name,
+        safeDate,
+        event.location || null,
+        regionId,
+        deriveFormat(playerCount),
+        event.rounds || null,
+        playerCount,
+        event.id,
+        Date.now(),
+      ],
     })
 
     // Insert players
@@ -250,7 +282,19 @@ async function main() {
       return {
         sql: `INSERT OR IGNORE INTO meta_event_players (id, event_id, player_name, faction_id, subfaction_id, detachment_id, placement, list_text, wins, losses, draws)
               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-        args: [playerId, eventId, name, factionId, subfactionId, detachmentId, idx + 1, r.listText || null, r.wins, r.losses, r.draws],
+        args: [
+          playerId,
+          eventId,
+          name,
+          factionId,
+          subfactionId,
+          detachmentId,
+          idx + 1,
+          r.listText || null,
+          r.wins,
+          r.losses,
+          r.draws,
+        ],
       }
     })
 
@@ -265,7 +309,9 @@ async function main() {
             try {
               await client.execute(stmt)
             } catch (e2) {
-              console.error(`    FK error: faction_id=${stmt.args[3]} subfaction=${stmt.args[4]} player=${stmt.args[2]}`)
+              console.error(
+                `    FK error: faction_id=${stmt.args[3]} subfaction=${stmt.args[4]} player=${stmt.args[2]}`,
+              )
             }
           }
         }
@@ -287,7 +333,16 @@ async function main() {
       pairingBatch.push({
         sql: `INSERT OR IGNORE INTO meta_pairings (id, event_id, round, player1_id, player2_id, player1_score, player2_score, result)
               VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-        args: [generateId(), eventId, p.round, p1Id, p2Id, p.p1.score || null, p.p2.score || null, result],
+        args: [
+          generateId(),
+          eventId,
+          p.round,
+          p1Id,
+          p2Id,
+          p.p1.score || null,
+          p.p2.score || null,
+          result,
+        ],
       })
     }
 
@@ -350,7 +405,9 @@ async function main() {
     totalEvents++
     totalPlayers += sortedPlayers.length
     totalPairings += pairingBatch.length
-    console.log(`  ✓ ${event.name.substring(0, 50)} — ${sortedPlayers.length} players, ${pairingBatch.length} pairings`)
+    console.log(
+      `  ✓ ${event.name.substring(0, 50)} — ${sortedPlayers.length} players, ${pairingBatch.length} pairings`,
+    )
   }
 
   console.log(`\nDone. ${totalEvents} events, ${totalPlayers} players, ${totalPairings} pairings.`)

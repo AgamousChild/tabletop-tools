@@ -8,8 +8,9 @@
  * Run: TURSO_DB_URL=... TURSO_AUTH_TOKEN=... npx tsx src/meta/seed-dimensions.ts
  */
 
-import { createClient } from '@libsql/client'
 import { readFileSync } from 'node:fs'
+
+import { createClient } from '@libsql/client'
 
 // ── Faction taxonomy ──────────────────────────────────────────────────────────
 
@@ -19,139 +20,96 @@ interface WahapediaDetachment {
   name: string
 }
 
-import { fileURLToPath } from 'node:url'
 import path from 'node:path'
+import { fileURLToPath } from 'node:url'
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
-const WAHAPEDIA_DETACHMENTS_PATH = path.resolve(__dirname, '../../../data-import/client/public/wahapedia/detachments.json')
+const WAHAPEDIA_DETACHMENTS_PATH = path.resolve(
+  __dirname,
+  '../../../data-import/client/public/wahapedia/detachments.json',
+)
 
 // Wahapedia faction ID → canonical faction info
 const FACTION_MAP: Record<string, { slug: string; name: string; allegiance: string }> = {
-  AC:  { slug: 'adeptus-custodes',    name: 'Adeptus Custodes',        allegiance: 'imperium' },
-  AE:  { slug: 'aeldari',            name: 'Aeldari',                 allegiance: 'xenos' },
-  AM:  { slug: 'astra-militarum',    name: 'Astra Militarum',         allegiance: 'imperium' },
-  AS:  { slug: 'adepta-sororitas',   name: 'Adepta Sororitas',        allegiance: 'imperium' },
-  AdM: { slug: 'adeptus-mechanicus', name: 'Adeptus Mechanicus',      allegiance: 'imperium' },
-  AoI: { slug: 'imperial-agents',    name: 'Imperial Agents',         allegiance: 'imperium' },
-  CD:  { slug: 'chaos-daemons',      name: 'Chaos Daemons',           allegiance: 'chaos' },
-  CSM: { slug: 'chaos-space-marines', name: 'Chaos Space Marines',    allegiance: 'chaos' },
-  DG:  { slug: 'death-guard',        name: 'Death Guard',             allegiance: 'chaos' },
-  DRU: { slug: 'drukhari',           name: 'Drukhari',                allegiance: 'xenos' },
-  EC:  { slug: 'emperors-children',  name: "Emperor's Children",      allegiance: 'chaos' },
-  GC:  { slug: 'genestealer-cults',  name: 'Genestealer Cults',       allegiance: 'xenos' },
-  GK:  { slug: 'grey-knights',       name: 'Grey Knights',            allegiance: 'imperium' },
-  LoV: { slug: 'leagues-of-votann',  name: 'Leagues of Votann',       allegiance: 'xenos' },
-  NEC: { slug: 'necrons',            name: 'Necrons',                 allegiance: 'xenos' },
-  ORK: { slug: 'orks',               name: 'Orks',                    allegiance: 'xenos' },
-  QI:  { slug: 'imperial-knights',   name: 'Imperial Knights',        allegiance: 'imperium' },
-  QT:  { slug: 'chaos-knights',      name: 'Chaos Knights',           allegiance: 'chaos' },
-  SM:  { slug: 'space-marines',      name: 'Space Marines (Astartes)', allegiance: 'imperium' },
-  TAU: { slug: 'tau-empire',         name: "T'au Empire",             allegiance: 'xenos' },
-  TS:  { slug: 'thousand-sons',      name: 'Thousand Sons',           allegiance: 'chaos' },
-  TYR: { slug: 'tyranids',           name: 'Tyranids',                allegiance: 'xenos' },
-  WE:  { slug: 'world-eaters',       name: 'World Eaters',            allegiance: 'chaos' },
+  AC: { slug: 'adeptus-custodes', name: 'Adeptus Custodes', allegiance: 'imperium' },
+  AE: { slug: 'aeldari', name: 'Aeldari', allegiance: 'xenos' },
+  AM: { slug: 'astra-militarum', name: 'Astra Militarum', allegiance: 'imperium' },
+  AS: { slug: 'adepta-sororitas', name: 'Adepta Sororitas', allegiance: 'imperium' },
+  AdM: { slug: 'adeptus-mechanicus', name: 'Adeptus Mechanicus', allegiance: 'imperium' },
+  AoI: { slug: 'imperial-agents', name: 'Imperial Agents', allegiance: 'imperium' },
+  CD: { slug: 'chaos-daemons', name: 'Chaos Daemons', allegiance: 'chaos' },
+  CSM: { slug: 'chaos-space-marines', name: 'Chaos Space Marines', allegiance: 'chaos' },
+  DG: { slug: 'death-guard', name: 'Death Guard', allegiance: 'chaos' },
+  DRU: { slug: 'drukhari', name: 'Drukhari', allegiance: 'xenos' },
+  EC: { slug: 'emperors-children', name: "Emperor's Children", allegiance: 'chaos' },
+  GC: { slug: 'genestealer-cults', name: 'Genestealer Cults', allegiance: 'xenos' },
+  GK: { slug: 'grey-knights', name: 'Grey Knights', allegiance: 'imperium' },
+  LoV: { slug: 'leagues-of-votann', name: 'Leagues of Votann', allegiance: 'xenos' },
+  NEC: { slug: 'necrons', name: 'Necrons', allegiance: 'xenos' },
+  ORK: { slug: 'orks', name: 'Orks', allegiance: 'xenos' },
+  QI: { slug: 'imperial-knights', name: 'Imperial Knights', allegiance: 'imperium' },
+  QT: { slug: 'chaos-knights', name: 'Chaos Knights', allegiance: 'chaos' },
+  SM: { slug: 'space-marines', name: 'Space Marines (Astartes)', allegiance: 'imperium' },
+  TAU: { slug: 'tau-empire', name: "T'au Empire", allegiance: 'xenos' },
+  TS: { slug: 'thousand-sons', name: 'Thousand Sons', allegiance: 'chaos' },
+  TYR: { slug: 'tyranids', name: 'Tyranids', allegiance: 'xenos' },
+  WE: { slug: 'world-eaters', name: 'World Eaters', allegiance: 'chaos' },
 }
 
 // BCP subfactions that map to a parent faction
 const SUBFACTIONS: Array<{ slug: string; name: string; factionSlug: string }> = [
   // SM chapters
-  { slug: 'blood-angels',     name: 'Blood Angels',     factionSlug: 'space-marines' },
-  { slug: 'dark-angels',      name: 'Dark Angels',      factionSlug: 'space-marines' },
-  { slug: 'space-wolves',     name: 'Space Wolves',     factionSlug: 'space-marines' },
-  { slug: 'black-templars',   name: 'Black Templars',   factionSlug: 'space-marines' },
-  { slug: 'deathwatch',       name: 'Deathwatch',       factionSlug: 'space-marines' },
+  { slug: 'blood-angels', name: 'Blood Angels', factionSlug: 'space-marines' },
+  { slug: 'dark-angels', name: 'Dark Angels', factionSlug: 'space-marines' },
+  { slug: 'space-wolves', name: 'Space Wolves', factionSlug: 'space-marines' },
+  { slug: 'black-templars', name: 'Black Templars', factionSlug: 'space-marines' },
+  { slug: 'deathwatch', name: 'Deathwatch', factionSlug: 'space-marines' },
 ]
 
-// BCP faction name → our slug (for matching during import)
-export const BCP_FACTION_TO_SLUG: Record<string, string> = {
-  'Adepta Sororitas': 'adepta-sororitas',
-  'Adeptus Custodes': 'adeptus-custodes',
-  'Adeptus Mechanicus': 'adeptus-mechanicus',
-  'Aeldari': 'aeldari',
-  'Astra Militarum': 'astra-militarum',
-  'Blood Angels': 'blood-angels',
-  'Black Templars': 'black-templars',
-  'Chaos Daemons': 'chaos-daemons',
-  'Chaos Knights': 'chaos-knights',
-  'Chaos Space Marines': 'chaos-space-marines',
-  'Dark Angels': 'dark-angels',
-  'Death Guard': 'death-guard',
-  'Deathwatch': 'deathwatch',
-  'Drukhari': 'drukhari',
-  "Emperor's Children": 'emperors-children',
-  'Genestealer Cult': 'genestealer-cults',
-  'Genestealer Cults': 'genestealer-cults',
-  'Grey Knights': 'grey-knights',
-  'Imperial Agents': 'imperial-agents',
-  'Imperial Knights': 'imperial-knights',
-  'Leagues of Votann': 'leagues-of-votann',
-  'Necrons': 'necrons',
-  'Orks': 'orks',
-  'Space Marines (Astartes)': 'space-marines',
-  'Space Wolves': 'space-wolves',
-  "T'au Empire": 'tau-empire',
-  'Thousand Sons': 'thousand-sons',
-  'Tyranids': 'tyranids',
-  'World Eaters': 'world-eaters',
-  // Aliases from BCP
-  'Forces of the Hive Mind': 'tyranids',
-  'Hive Fleet Kronos': 'tyranids',
-  'Hive Fleet Hyrda': 'tyranids',
-  'Ultramarines': 'space-marines',
-  'Salamanders': 'space-marines',
-  'Imperial Fists': 'space-marines',
-  'Iron Hands': 'space-marines',
-  'Raven Guard': 'space-marines',
-  'White Scars': 'space-marines',
-  'Crimson Fists': 'space-marines',
-  'Carcharadons': 'space-marines',
-  'Alpha Legion': 'chaos-space-marines',
-  'Night Lords': 'chaos-space-marines',
-  'Iron Warriors': 'chaos-space-marines',
-  'Word Bearers': 'chaos-space-marines',
-  'Red Corsairs': 'chaos-space-marines',
-  'Black Legion': 'chaos-space-marines',
-  'Flesh Tearers': 'blood-angels',
-  'Deathwing': 'dark-angels',
-  'Kabal of the Flayed Skull': 'drukhari',
-  'Blood Axe': 'orks',
-  'Freebooterz': 'orks',
-  'Goffs': 'orks',
-  "T'au Sept": 'tau-empire',
-  'Farsight Enclaves': 'tau-empire',
-  'Sautekh': 'necrons',
-  'Nihilakh': 'necrons',
-  'Ymyr Conglomerate': 'leagues-of-votann',
-  'Nurgle Daemons': 'chaos-daemons',
-  'Slaanesh Daemons': 'chaos-daemons',
-  'Slaanesh': 'chaos-daemons',
-  'Cadian Shock Troops': 'astra-militarum',
-  'Catachan Jungle Fighters': 'astra-militarum',
-  'Imperium': 'imperial-agents',
-  'Chaos': 'chaos-space-marines',
-  'Xenos': 'aeldari',
-}
-
-// Slug → parent faction slug (for subfactions)
-export const SUBFACTION_PARENT: Record<string, string> = {
-  'blood-angels': 'space-marines',
-  'dark-angels': 'space-marines',
-  'space-wolves': 'space-marines',
-  'black-templars': 'space-marines',
-  'deathwatch': 'space-marines',
-}
+// BCP_FACTION_TO_SLUG and SUBFACTION_PARENT removed — now in dim_faction_alias table.
+// Use getFactionAliasMap(db) and getSubfactions(db) from @tabletop-tools/db.
 
 // ── Known game periods ────────────────────────────────────────────────────────
 
 const DATASLATES = [
-  { id: 'dataslate-2024-06', name: '10th Edition Launch', effectiveDate: '2024-06-01', endDate: '2024-09-11' },
-  { id: 'dataslate-2024-09', name: 'September 2024 Balance Dataslate', effectiveDate: '2024-09-12', endDate: '2025-01-19' },
-  { id: 'dataslate-2025-01', name: 'January 2025 Balance Dataslate', effectiveDate: '2025-01-20', endDate: '2025-04-13' },
-  { id: 'dataslate-2025-04', name: 'April 2025 Balance Dataslate', effectiveDate: '2025-04-14', endDate: null },
+  {
+    id: 'dataslate-2024-06',
+    name: '10th Edition Launch',
+    effectiveDate: '2024-06-01',
+    endDate: '2024-09-11',
+  },
+  {
+    id: 'dataslate-2024-09',
+    name: 'September 2024 Balance Dataslate',
+    effectiveDate: '2024-09-12',
+    endDate: '2025-01-19',
+  },
+  {
+    id: 'dataslate-2025-01',
+    name: 'January 2025 Balance Dataslate',
+    effectiveDate: '2025-01-20',
+    endDate: '2025-04-13',
+  },
+  {
+    id: 'dataslate-2025-04',
+    name: 'April 2025 Balance Dataslate',
+    effectiveDate: '2025-04-14',
+    endDate: null,
+  },
 ]
 
 const TOURNAMENT_PACKS = [
-  { id: 'pack-pariah-nexus', name: 'Pariah Nexus Mission Pack', effectiveDate: '2024-06-01', endDate: '2024-12-31' },
-  { id: 'pack-chapter-approved-2025', name: 'Chapter Approved 2025', effectiveDate: '2025-01-01', endDate: null },
+  {
+    id: 'pack-pariah-nexus',
+    name: 'Pariah Nexus Mission Pack',
+    effectiveDate: '2024-06-01',
+    endDate: '2024-12-31',
+  },
+  {
+    id: 'pack-chapter-approved-2025',
+    name: 'Chapter Approved 2025',
+    effectiveDate: '2025-01-01',
+    endDate: null,
+  },
 ]
 
 const EDITIONS = [
@@ -178,7 +136,10 @@ function getClient() {
   }
   const dbUrl = process.env.TURSO_DB_URL
   const authToken = process.env.TURSO_AUTH_TOKEN
-  if (!dbUrl || !authToken) { console.error('Set TURSO_DB_URL and TURSO_AUTH_TOKEN'); process.exit(1) }
+  if (!dbUrl || !authToken) {
+    console.error('Set TURSO_DB_URL and TURSO_AUTH_TOKEN')
+    process.exit(1)
+  }
   return createClient({ url: dbUrl, authToken })
 }
 
@@ -201,13 +162,19 @@ async function main() {
   ]
   for (const sql of ddl) {
     await client.execute(sql)
-    await new Promise(r => setTimeout(r, 200))
+    await new Promise((r) => setTimeout(r, 200))
   }
 
   // Indexes
-  await client.execute('CREATE INDEX IF NOT EXISTS idx_dim_subfaction_faction ON dim_subfaction(faction_id)')
-  await client.execute('CREATE INDEX IF NOT EXISTS idx_dim_detachment_faction ON dim_detachment(faction_id)')
-  await client.execute('CREATE INDEX IF NOT EXISTS idx_dim_detachment_subfaction ON dim_detachment(subfaction_id)')
+  await client.execute(
+    'CREATE INDEX IF NOT EXISTS idx_dim_subfaction_faction ON dim_subfaction(faction_id)',
+  )
+  await client.execute(
+    'CREATE INDEX IF NOT EXISTS idx_dim_detachment_faction ON dim_detachment(faction_id)',
+  )
+  await client.execute(
+    'CREATE INDEX IF NOT EXISTS idx_dim_detachment_subfaction ON dim_detachment(subfaction_id)',
+  )
 
   // Seed dim_for_type
   console.log('Seeding dim_for_type...')
@@ -232,7 +199,7 @@ async function main() {
 
   // Seed dim_faction
   console.log('Seeding dim_faction...')
-  const factionBatch = Object.values(FACTION_MAP).map(f => ({
+  const factionBatch = Object.values(FACTION_MAP).map((f) => ({
     sql: 'INSERT OR IGNORE INTO dim_faction VALUES (?, ?, ?)',
     args: [f.slug, f.name, f.allegiance],
   }))
@@ -241,7 +208,7 @@ async function main() {
 
   // Seed dim_subfaction
   console.log('Seeding dim_subfaction...')
-  const subfactionBatch = SUBFACTIONS.map(sf => ({
+  const subfactionBatch = SUBFACTIONS.map((sf) => ({
     sql: 'INSERT OR IGNORE INTO dim_subfaction VALUES (?, ?, ?)',
     args: [sf.slug, sf.name, sf.factionSlug],
   }))
@@ -254,10 +221,13 @@ async function main() {
     readFileSync(WAHAPEDIA_DETACHMENTS_PATH, 'utf-8'),
   )
   const detachmentBatch = wahapediaDetachments
-    .filter(d => FACTION_MAP[d.factionId]) // skip unknown factions
-    .map(d => {
+    .filter((d) => FACTION_MAP[d.factionId]) // skip unknown factions
+    .map((d) => {
       const faction = FACTION_MAP[d.factionId]!
-      const slug = `${faction.slug}:${d.name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '')}`
+      const slug = `${faction.slug}:${d.name
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, '-')
+        .replace(/^-+|-+$/g, '')}`
       return {
         sql: 'INSERT OR IGNORE INTO dim_detachment VALUES (?, ?, ?, ?)',
         args: [slug, d.name, faction.slug, null], // subfaction_id null for now
@@ -268,31 +238,54 @@ async function main() {
 
   // Seed dim_dataslate
   console.log('Seeding dim_dataslate...')
-  await client.batch(DATASLATES.map(ds => ({
-    sql: 'INSERT OR REPLACE INTO dim_dataslate VALUES (?, ?, ?, ?)',
-    args: [ds.id, ds.name, new Date(ds.effectiveDate).getTime(), ds.endDate ? new Date(ds.endDate).getTime() : null],
-  })))
+  await client.batch(
+    DATASLATES.map((ds) => ({
+      sql: 'INSERT OR REPLACE INTO dim_dataslate VALUES (?, ?, ?, ?)',
+      args: [
+        ds.id,
+        ds.name,
+        new Date(ds.effectiveDate).getTime(),
+        ds.endDate ? new Date(ds.endDate).getTime() : null,
+      ],
+    })),
+  )
 
   // Seed dim_tournament_pack
   console.log('Seeding dim_tournament_pack...')
-  await client.batch(TOURNAMENT_PACKS.map(tp => ({
-    sql: 'INSERT OR REPLACE INTO dim_tournament_pack VALUES (?, ?, ?, ?)',
-    args: [tp.id, tp.name, new Date(tp.effectiveDate).getTime(), tp.endDate ? new Date(tp.endDate).getTime() : null],
-  })))
+  await client.batch(
+    TOURNAMENT_PACKS.map((tp) => ({
+      sql: 'INSERT OR REPLACE INTO dim_tournament_pack VALUES (?, ?, ?, ?)',
+      args: [
+        tp.id,
+        tp.name,
+        new Date(tp.effectiveDate).getTime(),
+        tp.endDate ? new Date(tp.endDate).getTime() : null,
+      ],
+    })),
+  )
 
   // Seed dim_edition
   console.log('Seeding dim_edition...')
-  await client.batch(EDITIONS.map(e => ({
-    sql: 'INSERT OR REPLACE INTO dim_edition VALUES (?, ?, ?, ?)',
-    args: [e.id, e.name, new Date(e.startDate).getTime(), e.endDate ? new Date(e.endDate).getTime() : null],
-  })))
+  await client.batch(
+    EDITIONS.map((e) => ({
+      sql: 'INSERT OR REPLACE INTO dim_edition VALUES (?, ?, ?, ?)',
+      args: [
+        e.id,
+        e.name,
+        new Date(e.startDate).getTime(),
+        e.endDate ? new Date(e.endDate).getTime() : null,
+      ],
+    })),
+  )
 
   // Seed dim_region
   console.log('Seeding dim_region...')
-  await client.batch(REGIONS.map(r => ({
-    sql: 'INSERT OR REPLACE INTO dim_region VALUES (?, ?, ?)',
-    args: [r.id, r.name, r.country],
-  })))
+  await client.batch(
+    REGIONS.map((r) => ({
+      sql: 'INSERT OR REPLACE INTO dim_region VALUES (?, ?, ?)',
+      args: [r.id, r.name, r.country],
+    })),
+  )
 
   console.log('\nDone. All dimension tables seeded.')
   client.close()
