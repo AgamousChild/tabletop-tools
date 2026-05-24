@@ -1,5 +1,33 @@
-import { describe, it, expect } from 'vitest'
+import { createClient } from '@libsql/client'
+import { createDbFromClient } from '@tabletop-tools/db'
+import { afterAll, beforeAll, describe, expect, it } from 'vitest'
+
+import { loadFactionMap, resetFactionMapCache } from './faction-map'
 import { parseGwApp } from './gw-parser'
+import type { TTTPackage } from './ttt-types'
+
+const client = createClient({ url: ':memory:' })
+const db = createDbFromClient(client)
+
+beforeAll(async () => {
+  await client.executeMultiple(`
+    CREATE TABLE dim_faction (id TEXT PRIMARY KEY, name TEXT NOT NULL, allegiance TEXT NOT NULL);
+    CREATE TABLE dim_faction_alias (alias TEXT PRIMARY KEY, faction_id TEXT NOT NULL);
+    CREATE TABLE dim_subfaction (id TEXT PRIMARY KEY, name TEXT NOT NULL, faction_id TEXT NOT NULL);
+    INSERT INTO dim_faction VALUES ('tyranids', 'Tyranids', 'xenos');
+    INSERT INTO dim_faction VALUES ('grey-knights', 'Grey Knights', 'imperium');
+    INSERT INTO dim_faction VALUES ('space-marines', 'Space Marines', 'imperium');
+    INSERT INTO dim_faction_alias VALUES ('Tyranids', 'tyranids');
+    INSERT INTO dim_faction_alias VALUES ('Grey Knights', 'grey-knights');
+    INSERT INTO dim_faction_alias VALUES ('Space Marines', 'space-marines');
+  `)
+  await loadFactionMap(db)
+})
+
+afterAll(() => {
+  resetFactionMapCache()
+  client.close()
+})
 
 const SAMPLE_TYRANIDS = `Unearthing My First (1995 Points)TyranidsSubterranean AssaultStrike Force (2,000 Points)CHARACTERSHive Tyrant (215 Points)  \u2022 Warlord  \u2022 1x Heavy venom cannon  \u2022 1x Monstrous bonesword and lash whip  \u2022 Enhancements: Tremor SensesHyperadapted Raveners (165 Points)  \u2022 1x Ravener Prime     \u25E6 1x Prime claws and talons  \u2022 4x Raveners     \u25E6 4x Ravener heavy claws and talons     \u25E6 1x Venom boltNeurotyrant (105 Points)  \u2022 1x Neurotyrant claws and lashes  \u2022 1x Psychic scream`
 
@@ -9,7 +37,11 @@ const SAMPLE_SPACE_MARINES = `Look man, Ultramarines were my first army alright 
 
 describe('parseGwApp', () => {
   describe('Sample 1 — Tyranids', () => {
-    const result = parseGwApp(SAMPLE_TYRANIDS)
+    let result: TTTPackage
+
+    beforeAll(() => {
+      result = parseGwApp(SAMPLE_TYRANIDS)
+    })
 
     it('parses meta', () => {
       expect(result.version).toBe(1)
@@ -65,7 +97,11 @@ describe('parseGwApp', () => {
   })
 
   describe('Sample 2 — Grey Knights', () => {
-    const result = parseGwApp(SAMPLE_GREY_KNIGHTS)
+    let result: TTTPackage
+
+    beforeAll(() => {
+      result = parseGwApp(SAMPLE_GREY_KNIGHTS)
+    })
 
     it('parses meta with bare-number points', () => {
       expect(result.meta.name).toBe('Grey Knight List')
@@ -107,7 +143,11 @@ describe('parseGwApp', () => {
   })
 
   describe('Sample 3 — Space Marines with subfaction', () => {
-    const result = parseGwApp(SAMPLE_SPACE_MARINES)
+    let result: TTTPackage
+
+    beforeAll(() => {
+      result = parseGwApp(SAMPLE_SPACE_MARINES)
+    })
 
     it('parses meta', () => {
       expect(result.meta.name).toBe(
