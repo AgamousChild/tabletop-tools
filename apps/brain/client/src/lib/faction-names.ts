@@ -1,63 +1,68 @@
 /**
  * Faction display name mapping.
- * Converts internal faction slugs to preferred English display names.
- * The build pipeline will eventually add `factionName` to nodes directly;
- * this serves as the interim client-side mapping.
+ * Fetches display names from the brain server's faction nodes on first use.
+ * Falls back to slug-to-uppercase conversion while loading or if fetch fails.
  */
 
-const FACTION_DISPLAY_NAMES: Record<string, string> = {
-  'space-marines': 'SPACE MARINES',
-  'chaos-space-marines': 'CHAOS SPACE MARINES',
-  't-au-empire': "T'AU EMPIRE",
-  'astra-militarum': 'ASTRA MILITARUM',
-  'adepta-sororitas': 'ADEPTA SORORITAS',
-  'adeptus-custodes': 'ADEPTUS CUSTODES',
-  'adeptus-mechanicus': 'ADEPTUS MECHANICUS',
-  'grey-knights': 'GREY KNIGHTS',
-  'imperial-agents': 'IMPERIAL AGENTS',
-  'imperial-knights': 'IMPERIAL KNIGHTS',
-  'chaos-knights': 'CHAOS KNIGHTS',
-  'death-guard': 'DEATH GUARD',
-  'thousand-sons': 'THOUSAND SONS',
-  'world-eaters': 'WORLD EATERS',
-  'chaos-daemons': 'CHAOS DAEMONS',
-  'leagues-of-votann': 'LEAGUES OF VOTANN',
-  'genestealer-cults': 'GENESTEALER CULTS',
-  'aeldari': 'AELDARI',
-  'drukhari': 'DRUKHARI',
-  'tyranids': 'TYRANIDS',
-  'necrons': 'NECRONS',
-  'orks': 'ORKS',
-}
+const API_BASE = import.meta.env.VITE_BRAIN_API_URL || '/brain/api'
 
-const SUBFACTION_DISPLAY_NAMES: Record<string, string> = {
-  'blood angels': 'BLOOD ANGELS',
-  'dark angels': 'DARK ANGELS',
-  'space wolves': 'SPACE WOLVES',
-  'black templars': 'BLACK TEMPLARS',
-  'deathwatch': 'DEATHWATCH',
-  'ultramarines': 'ULTRAMARINES',
-  'iron hands': 'IRON HANDS',
-  'imperial fists': 'IMPERIAL FISTS',
-  'salamanders': 'SALAMANDERS',
-  'raven guard': 'RAVEN GUARD',
-  'white scars': 'WHITE SCARS',
-  'crimson fists': 'CRIMSON FISTS',
-  'blood ravens': 'BLOOD RAVENS',
-  'ynnari': 'YNNARI',
-  'harlequins': 'HARLEQUINS',
-  'asuryani': 'ASURYANI',
+/** Server-sourced faction display names: factionId slug -> display name */
+const serverFactionNames = new Map<string, string>()
+/** Server-sourced subfaction display names: lowercase subfaction -> display name */
+const serverSubfactionNames = new Map<string, string>()
+
+let fetchStarted = false
+
+/**
+ * Kick off a background fetch of faction display names from the server.
+ * Safe to call multiple times — only fetches once.
+ */
+export function initFactionNames(): void {
+  if (fetchStarted) return
+  fetchStarted = true
+
+  fetch(`${API_BASE}/browse/nodes?layer=factions&pageSize=100`)
+    .then((res) => (res.ok ? res.json() : null))
+    .then(
+      (
+        data: {
+          nodes: Array<{ factionId?: string; factionName?: string; subfaction?: string }>
+        } | null,
+      ) => {
+        if (!data?.nodes) return
+        for (const node of data.nodes) {
+          if (node.factionId && node.factionName) {
+            serverFactionNames.set(node.factionId, node.factionName)
+          }
+          if (node.subfaction && node.factionName) {
+            serverSubfactionNames.set(node.subfaction.toLowerCase(), node.factionName)
+          }
+        }
+      },
+    )
+    .catch(() => {
+      // Silently fall back to slug-based names
+    })
 }
 
 /** Convert a faction slug or name to the preferred ALL CAPS display name */
 export function factionDisplayName(slugOrName: string): string {
   if (!slugOrName) return ''
-  const fromSlug = FACTION_DISPLAY_NAMES[slugOrName]
-  if (fromSlug) return fromSlug
-  const fromSub = SUBFACTION_DISPLAY_NAMES[slugOrName.toLowerCase()]
+
+  // Ensure fetch is started on first use
+  initFactionNames()
+
+  // Check server-sourced faction names (by slug)
+  const fromServer = serverFactionNames.get(slugOrName)
+  if (fromServer) return fromServer
+
+  // Check server-sourced subfaction names (by lowercase name)
+  const fromSub = serverSubfactionNames.get(slugOrName.toLowerCase())
   if (fromSub) return fromSub
-  // Already looks like a display name (has spaces, no hyphens)
+
+  // Fallback: already looks like a display name (has spaces, no hyphens)
   if (slugOrName.includes(' ') && !slugOrName.includes('-')) return slugOrName.toUpperCase()
-  // Unknown slug — best effort
+
+  // Fallback: unknown slug — best effort
   return slugOrName.replace(/-/g, ' ').toUpperCase()
 }

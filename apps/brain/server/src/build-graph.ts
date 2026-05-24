@@ -7,26 +7,34 @@
  * @see docs/etl-data-pipelines.md — ETL diagram and function reference
  * @see docs/schema-indexeddb-brain.md — Brain knowledge graph schema
  */
-import { readFileSync, writeFileSync, mkdirSync, readdirSync, existsSync } from 'fs'
+import { createDb } from '@tabletop-tools/db'
+import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from 'fs'
 import { join } from 'path'
+
+import { build11thEditionNodes } from './data/11th-edition-detachments'
+import { buildCommunityNodes } from './lib/combat-knowledge'
+import {
+  buildComboRefs,
+  buildDetachmentNodes,
+  buildEligibleForRefs,
+  buildFactionNodes,
+} from './lib/combo-detection'
+import { extractStructuredFields } from './lib/extract-fields'
+import { loadFactionCodes } from './lib/faction-codes'
+import { massage } from './lib/massage'
+import { mergeSources } from './lib/merge-sources'
+import type { Node, NodeRef } from './lib/model'
 import { normalizeMarkdown } from './lib/normalize/normalize'
+import { parseBalanceDataslate } from './lib/parsers/balance-dataslate'
+import { parseSecondaryMissions, parseTwistCards } from './lib/parsers/chapter-approved'
 import { parseCoreRules } from './lib/parsers/core-rules'
 import { parseFactionPack } from './lib/parsers/faction-pack'
-import { parseRulesCommentary } from './lib/parsers/rules-commentary'
-import { parseBalanceDataslate } from './lib/parsers/balance-dataslate'
-import { convertGameData } from './lib/parsers/game-data'
-import { buildCommunityNodes } from './lib/combat-knowledge'
-import { parsePrimaryMissions, parseSecondaryMissions, parseTwistCards, parseChallengerCards } from './lib/parsers/chapter-approved'
-import { parseTournamentCompanion } from './lib/parsers/tournament-companion'
-import { partitionNodes, partitionRefs, buildManifest } from './lib/sync'
-import { buildComboRefs, buildEligibleForRefs, buildFactionNodes, buildDetachmentNodes, reclassifyArmyRules } from './lib/combo-detection'
-import { extractStructuredFields } from './lib/extract-fields'
-import { build11thEditionNodes } from './data/11th-edition-detachments'
-import { mergeSources } from './lib/merge-sources'
-import { massage } from './lib/massage'
-import { mapNodesToPages } from './lib/pdf-positions'
-import type { Node, NodeRef } from './lib/model'
 import type { GameDataInput } from './lib/parsers/game-data'
+import { convertGameData } from './lib/parsers/game-data'
+import { parseRulesCommentary } from './lib/parsers/rules-commentary'
+import { parseTournamentCompanion } from './lib/parsers/tournament-companion'
+import { mapNodesToPages } from './lib/pdf-positions'
+import { buildManifest, partitionNodes, partitionRefs } from './lib/sync'
 
 const MD_DIR = 'C:/R/sync-data/tools/gw-sync/.local/gw/markdown'
 const GAME_DATA_DIR = '../../data-import/client/public/wahapedia'
@@ -35,13 +43,13 @@ const RETRIEVED_AT = new Date().toISOString()
 
 // Known publication dates for GW source documents
 const SOURCE_DATES: Record<string, string> = {
-  'core-rules': '2024-06-01',                     // 10th Edition launch
-  'rules-commentary': '2025-01-01',                // Updated with each dataslate
-  'balance-dataslate': '2025-04-14',               // April 2025 dataslate
-  'chapter-approved': '2025-01-01',                // Chapter Approved 2025
+  'core-rules': '2024-06-01', // 10th Edition launch
+  'rules-commentary': '2025-01-01', // Updated with each dataslate
+  'balance-dataslate': '2025-04-14', // April 2025 dataslate
+  'chapter-approved': '2025-01-01', // Chapter Approved 2025
   'pariah-nexus-tournament-companion': '2024-10-01', // Pariah Nexus launch
   'chapter-approved-tournament-companion': '2025-01-01',
-  'wahapedia': '2025-04-20',                       // Last Wahapedia sync
+  wahapedia: '2025-04-20', // Last Wahapedia sync
 }
 
 function loadJson<T>(file: string): T[] {
@@ -59,6 +67,14 @@ function stampPublishedAt(nodes: Node[], publishedAt: string): void {
 
 async function main() {
   console.log('Building full brain graph...\n')
+
+  // Load faction code → slug mappings from DB (must happen before any normalizeFactionId calls)
+  const db = createDb({
+    url: process.env.TURSO_DB_URL ?? 'file:.local/dev.db',
+    authToken: process.env.TURSO_AUTH_TOKEN,
+  })
+  await loadFactionCodes(db)
+  console.log('Faction codes loaded from DB\n')
 
   const allNodes: Node[] = []
   const allRefs: NodeRef[] = []
@@ -106,8 +122,12 @@ async function main() {
 
   // ── 4. Faction Packs (errata/FAQ sections) ─────────────────────────────────
   console.log('4. Faction Packs')
-  const mdFiles = readdirSync(MD_DIR).filter(f => f.startsWith('faction-pack-') && f.endsWith('.md'))
-  let fpNodes = 0, fpRefs = 0, fpErrors = 0
+  const mdFiles = readdirSync(MD_DIR).filter(
+    (f) => f.startsWith('faction-pack-') && f.endsWith('.md'),
+  )
+  let fpNodes = 0,
+    fpRefs = 0,
+    fpErrors = 0
   for (const file of mdFiles) {
     const factionSlug = file.replace('faction-pack-', '').replace('.md', '')
     try {
@@ -123,7 +143,9 @@ async function main() {
       errors.push(`Faction ${factionSlug}: ${err}`)
     }
   }
-  console.log(`   ${mdFiles.length} faction packs → ${fpNodes} nodes, ${fpRefs} refs, ${fpErrors} errors`)
+  console.log(
+    `   ${mdFiles.length} faction packs → ${fpNodes} nodes, ${fpRefs} refs, ${fpErrors} errors`,
+  )
 
   // ── 5. Wahapedia/BSData Game Data ──────────────────────────────────────────
   console.log('4. Wahapedia/BSData Game Data')
@@ -167,7 +189,7 @@ async function main() {
 
     // Primary missions — use hand-transcribed structured data instead of markdown parsing
     const { PRIMARY_MISSIONS } = await import('./data/primary-missions')
-    const primaryNodes: Node[] = PRIMARY_MISSIONS.map(m => {
+    const primaryNodes: Node[] = PRIMARY_MISSIONS.map((m) => {
       const fullTitle = m.isAsymmetric ? `${m.name} - ASYMMETRIC WAR` : m.name
       const lines: string[] = []
 
@@ -189,14 +211,15 @@ async function main() {
         if (block.preamble) lines.push(block.preamble)
         for (let i = 0; i < block.conditions.length; i++) {
           const c = block.conditions[i]!
-          const connector = i < block.conditions.length - 1 ? (block.connector === 'OR' ? ' *(OR)*' : '') : ''
+          const connector =
+            i < block.conditions.length - 1 ? (block.connector === 'OR' ? ' *(OR)*' : '') : ''
           lines.push(`- ${c.condition} → **${c.vp}**${connector}`)
         }
         lines.push('')
       }
 
       if (m.maxVp) lines.push(`**Max VP:** ${m.maxVp}`)
-      if (m.designerNote) lines.push('', `*Designer\'s Note: ${m.designerNote}*`)
+      if (m.designerNote) lines.push('', `*Designer's Note: ${m.designerNote}*`)
 
       return {
         id: `ca:primary:${m.name.toLowerCase().replace(/[^a-z0-9]+/g, '-')}`,
@@ -205,11 +228,20 @@ async function main() {
         title: fullTitle,
         content: lines.join('\n').trim(),
         summary: `${fullTitle} — Primary Mission${m.maxVp ? ` (max ${m.maxVp})` : ''}`,
-        sources: [{ type: 'pdf' as const, title: 'Chapter Approved Primary Missions', publishedAt: SOURCE_DATES['chapter-approved'], retrievedAt: RETRIEVED_AT, page: m.page }],
+        sources: [
+          {
+            type: 'pdf' as const,
+            title: 'Chapter Approved Primary Missions',
+            publishedAt: SOURCE_DATES['chapter-approved'],
+            retrievedAt: RETRIEVED_AT,
+            page: m.page,
+          },
+        ],
         refs: [],
         version: 1,
         keywords: [
-          'primary mission', m.name.toLowerCase(),
+          'primary mission',
+          m.name.toLowerCase(),
           ...(m.isAsymmetric ? ['asymmetric war'] : []),
           ...(m.action ? ['action'] : []),
         ],
@@ -239,7 +271,7 @@ async function main() {
 
     // Challenger cards — use hand-transcribed structured data
     const { CHALLENGER_CARDS } = await import('./data/challenger-cards')
-    const challengerNodes: Node[] = CHALLENGER_CARDS.map(c => {
+    const challengerNodes: Node[] = CHALLENGER_CARDS.map((c) => {
       const lines: string[] = []
 
       lines.push(`**${c.timing}**`)
@@ -257,7 +289,9 @@ async function main() {
         lines.push('')
       }
 
-      lines.push(`**PAIRED STRATAGEM: ${c.stratagem.name}** (${c.stratagem.type}, ${c.stratagem.cp} CP)`)
+      lines.push(
+        `**PAIRED STRATAGEM: ${c.stratagem.name}** (${c.stratagem.type}, ${c.stratagem.cp} CP)`,
+      )
       lines.push(`- **WHEN:** ${c.stratagem.when}`)
       lines.push(`- **TARGET:** ${c.stratagem.target}`)
       lines.push(`- **EFFECT:** ${c.stratagem.effect}`)
@@ -269,10 +303,24 @@ async function main() {
         title: c.name,
         content: lines.join('\n').trim(),
         summary: `${c.name} — Challenger Mission (${c.vp}${c.maxVp ? `, max ${c.maxVp}` : ''}) + ${c.stratagem.name} stratagem`,
-        sources: [{ type: 'pdf' as const, title: 'Chapter Approved Challenger Cards', publishedAt: SOURCE_DATES['chapter-approved'], retrievedAt: RETRIEVED_AT, page: c.page }],
+        sources: [
+          {
+            type: 'pdf' as const,
+            title: 'Chapter Approved Challenger Cards',
+            publishedAt: SOURCE_DATES['chapter-approved'],
+            retrievedAt: RETRIEVED_AT,
+            page: c.page,
+          },
+        ],
         refs: [],
         version: 1,
-        keywords: ['challenger', 'challenger mission', c.name.toLowerCase(), c.stratagem.name.toLowerCase(), ...(c.action ? ['action'] : [])],
+        keywords: [
+          'challenger',
+          'challenger mission',
+          c.name.toLowerCase(),
+          c.stratagem.name.toLowerCase(),
+          ...(c.action ? ['action'] : []),
+        ],
       }
     })
     console.log(`  Challenger cards: ${challengerNodes.length} nodes`)
@@ -282,20 +330,86 @@ async function main() {
     const deployZones: Array<{
       name: string
       battleSizes: string[]
-      pages: number[]  // page numbers in the deployment zones PDF
-      dimensions: string  // key measurements from the diagram
+      pages: number[] // page numbers in the deployment zones PDF
+      dimensions: string // key measurements from the diagram
     }> = [
-      { name: 'CRUCIBLE OF BATTLE', battleSizes: ['Strike Force', 'Incursion'], pages: [2, 1], dimensions: 'Diagonal split. Strike Force (2000pts): 10"/8" from corners, 20" depth. Incursion: 12"/10" from corners, 20" depth.' },
-      { name: 'DAWN OF WAR', battleSizes: ['Strike Force', 'Incursion'], pages: [4, 3], dimensions: 'Long edges. Strike Force (2000pts): 10" deep, 12" wide no-man\'s land. Incursion: 14" deep, 12" wide no-man\'s land.' },
-      { name: 'HAMMER AND ANVIL', battleSizes: ['Strike Force', 'Incursion'], pages: [6, 5], dimensions: 'Short edges. Strike Force (2000pts): 10" deep, 18" wide. Incursion: 14" deep, 18" wide.' },
-      { name: 'SEARCH AND DESTROY', battleSizes: ['Strike Force', 'Incursion'], pages: [8, 7], dimensions: 'Opposite corners. Strike Force (2000pts): 10" square corners, 14" diagonal. Incursion: 12" square corners, 16" diagonal.' },
-      { name: 'SWEEPING ENGAGMENT', battleSizes: ['Strike Force', 'Incursion'], pages: [10, 9], dimensions: 'Offset long edges. Strike Force (2000pts): 6"/10" staggered, 18" table edge. Incursion: 8"/14" staggered, 18" table edge.' },
-      { name: 'TIPPING POINT', battleSizes: ['Strike Force', 'Incursion'], pages: [12, 11], dimensions: 'L-shaped zones. Strike Force (2000pts): 22" long arm, 8"-14" widths. Incursion: 22" long arm, 10"-16" widths.' },
-      { name: 'TIP OF THE SPEAR', battleSizes: ['Asymmetric War'], pages: [13], dimensions: 'Attacker: wide triangle from short edge, 20" deep, 26" wide. Defender: opposite short edge, 22" deep with forward wedge.' },
-      { name: 'DEFENSIVE LINE', battleSizes: ['Asymmetric War'], pages: [14], dimensions: 'Attacker: central 28" wide band. Defender: two flanking 16" strips along long edges.' },
-      { name: 'PINCER ATTACK', battleSizes: ['Asymmetric War'], pages: [15], dimensions: 'Attacker: two corner zones, 18"/12" from short edges. Defender: central 28" wide strip.' },
-      { name: 'BREAKOUT', battleSizes: ['Asymmetric War'], pages: [16], dimensions: 'Attacker: large L-shaped zone. Defender: small corner zone, 12"/10" from corner.' },
-      { name: 'LAST STAND', battleSizes: ['Asymmetric War'], pages: [17], dimensions: 'Attacker: surrounds the table edges. Defender: central zone, 14"/12" from center.' },
+      {
+        name: 'CRUCIBLE OF BATTLE',
+        battleSizes: ['Strike Force', 'Incursion'],
+        pages: [2, 1],
+        dimensions:
+          'Diagonal split. Strike Force (2000pts): 10"/8" from corners, 20" depth. Incursion: 12"/10" from corners, 20" depth.',
+      },
+      {
+        name: 'DAWN OF WAR',
+        battleSizes: ['Strike Force', 'Incursion'],
+        pages: [4, 3],
+        dimensions:
+          'Long edges. Strike Force (2000pts): 10" deep, 12" wide no-mans land. Incursion: 14" deep, 12" wide no-mans land.',
+      },
+      {
+        name: 'HAMMER AND ANVIL',
+        battleSizes: ['Strike Force', 'Incursion'],
+        pages: [6, 5],
+        dimensions:
+          'Short edges. Strike Force (2000pts): 10" deep, 18" wide. Incursion: 14" deep, 18" wide.',
+      },
+      {
+        name: 'SEARCH AND DESTROY',
+        battleSizes: ['Strike Force', 'Incursion'],
+        pages: [8, 7],
+        dimensions:
+          'Opposite corners. Strike Force (2000pts): 10" square corners, 14" diagonal. Incursion: 12" square corners, 16" diagonal.',
+      },
+      {
+        name: 'SWEEPING ENGAGMENT',
+        battleSizes: ['Strike Force', 'Incursion'],
+        pages: [10, 9],
+        dimensions:
+          'Offset long edges. Strike Force (2000pts): 6"/10" staggered, 18" table edge. Incursion: 8"/14" staggered, 18" table edge.',
+      },
+      {
+        name: 'TIPPING POINT',
+        battleSizes: ['Strike Force', 'Incursion'],
+        pages: [12, 11],
+        dimensions:
+          'L-shaped zones. Strike Force (2000pts): 22" long arm, 8"-14" widths. Incursion: 22" long arm, 10"-16" widths.',
+      },
+      {
+        name: 'TIP OF THE SPEAR',
+        battleSizes: ['Asymmetric War'],
+        pages: [13],
+        dimensions:
+          'Attacker: wide triangle from short edge, 20" deep, 26" wide. Defender: opposite short edge, 22" deep with forward wedge.',
+      },
+      {
+        name: 'DEFENSIVE LINE',
+        battleSizes: ['Asymmetric War'],
+        pages: [14],
+        dimensions:
+          'Attacker: central 28" wide band. Defender: two flanking 16" strips along long edges.',
+      },
+      {
+        name: 'PINCER ATTACK',
+        battleSizes: ['Asymmetric War'],
+        pages: [15],
+        dimensions:
+          'Attacker: two corner zones, 18"/12" from short edges. Defender: central 28" wide strip.',
+      },
+      {
+        name: 'BREAKOUT',
+        battleSizes: ['Asymmetric War'],
+        pages: [16],
+        dimensions:
+          'Attacker: large L-shaped zone. Defender: small corner zone, 12"/10" from corner.',
+      },
+      {
+        name: 'LAST STAND',
+        battleSizes: ['Asymmetric War'],
+        pages: [17],
+        dimensions:
+          'Attacker: surrounds the table edges. Defender: central zone, 14"/12" from center.',
+      },
     ]
 
     for (const zone of deployZones) {
@@ -307,7 +421,7 @@ async function main() {
         title: zone.name,
         content: `**Battle Size:** ${battleSizeText}\n\n**Layout:** ${zone.dimensions}\n\nSee PDF page images for full diagram.`,
         summary: `${zone.name} — ${battleSizeText} deployment zone layout`,
-        sources: zone.pages.map((page, i) => ({
+        sources: zone.pages.map((page) => ({
           type: 'pdf' as const,
           title: 'Chapter Approved Deployment Zones',
           publishedAt: SOURCE_DATES['chapter-approved'],
@@ -316,7 +430,12 @@ async function main() {
         })),
         refs: [],
         version: 1,
-        keywords: ['deployment', 'deployment zone', zone.name.toLowerCase(), ...zone.battleSizes.map(s => s.toLowerCase())],
+        keywords: [
+          'deployment',
+          'deployment zone',
+          zone.name.toLowerCase(),
+          ...zone.battleSizes.map((s) => s.toLowerCase()),
+        ],
       })
     }
     console.log(`  Deployment zones: ${deployZones.length} nodes`)
@@ -331,13 +450,15 @@ async function main() {
         title: `Terrain Layout ${i}`,
         content: `**Competitive terrain placement guide.**\n\nShows positions and measurements for all terrain pieces on a standard 44"×60" table. Grey pieces are >4" (large terrain), blue pieces are <4" (small terrain), L-shapes are walls. Orange measurements show distances from table edges and between pieces.`,
         summary: `Terrain Layout ${i} — competitive play terrain placement with measurements`,
-        sources: [{
-          type: 'pdf' as const,
-          title: 'Chapter Approved Terrain Layouts',
-          publishedAt: SOURCE_DATES['chapter-approved'],
-          retrievedAt: RETRIEVED_AT,
-          page: i,
-        }],
+        sources: [
+          {
+            type: 'pdf' as const,
+            title: 'Chapter Approved Terrain Layouts',
+            publishedAt: SOURCE_DATES['chapter-approved'],
+            retrievedAt: RETRIEVED_AT,
+            page: i,
+          },
+        ],
         refs: [],
         version: 1,
         keywords: ['terrain', 'terrain layout', 'competitive', `layout ${i}`],
@@ -355,7 +476,11 @@ async function main() {
 
   if (existsSync(pnTcPath)) {
     console.log('\n--- Pariah Nexus Tournament Companion ---')
-    const pnTc = parseTournamentCompanion(readFileSync(pnTcPath, 'utf8'), 'pariah-nexus', RETRIEVED_AT)
+    const pnTc = parseTournamentCompanion(
+      readFileSync(pnTcPath, 'utf8'),
+      'pariah-nexus',
+      RETRIEVED_AT,
+    )
     stampPublishedAt(pnTc.nodes, SOURCE_DATES['pariah-nexus-tournament-companion']!)
     console.log(`  ${pnTc.nodes.length} nodes, ${pnTc.refs.length} refs`)
     allNodes.push(...pnTc.nodes)
@@ -364,7 +489,11 @@ async function main() {
 
   if (existsSync(caTcPath)) {
     console.log('\n--- Chapter Approved Tournament Companion ---')
-    const caTc = parseTournamentCompanion(readFileSync(caTcPath, 'utf8'), 'chapter-approved', RETRIEVED_AT)
+    const caTc = parseTournamentCompanion(
+      readFileSync(caTcPath, 'utf8'),
+      'chapter-approved',
+      RETRIEVED_AT,
+    )
     stampPublishedAt(caTc.nodes, SOURCE_DATES['chapter-approved-tournament-companion']!)
     console.log(`  ${caTc.nodes.length} nodes, ${caTc.refs.length} refs`)
     allNodes.push(...caTc.nodes)
@@ -374,8 +503,12 @@ async function main() {
   // ── Merge and deduplicate nodes from all sources ──────────────────────────
   const mergeResult = mergeSources(allNodes, allRefs)
   console.log(`   Merged: ${mergeResult.stats.inputNodes} → ${mergeResult.stats.outputNodes} nodes`)
-  console.log(`   ${mergeResult.stats.mergedByIdCount} deduped, ${mergeResult.stats.factionNormalizedCount} factions normalized`)
-  console.log(`   ${mergeResult.stats.summaryTagged} summaries tagged, ${mergeResult.stats.refsDeduped} refs deduped`)
+  console.log(
+    `   ${mergeResult.stats.mergedByIdCount} deduped, ${mergeResult.stats.factionNormalizedCount} factions normalized`,
+  )
+  console.log(
+    `   ${mergeResult.stats.summaryTagged} summaries tagged, ${mergeResult.stats.refsDeduped} refs deduped`,
+  )
 
   allNodes.length = 0
   allNodes.push(...mergeResult.nodes)
@@ -428,7 +561,9 @@ async function main() {
   const factionResult = buildFactionNodes(allNodes)
   allNodes.push(...factionResult.nodes)
   allRefs.push(...factionResult.refs)
-  console.log(`   ${factionResult.nodes.length} faction/subfaction nodes, ${factionResult.refs.length} refs`)
+  console.log(
+    `   ${factionResult.nodes.length} faction/subfaction nodes, ${factionResult.refs.length} refs`,
+  )
 
   // ── Unit → Detachment eligibility (eligible_for refs) ──
   console.log('\n6d. Unit → Detachment eligibility')
@@ -466,7 +601,7 @@ async function main() {
   let stamped = 0
   for (const node of allNodes) {
     const layerDate = LAYER_DATES[node.layer]
-    if (!layerDate) continue  // community nodes keep their own dates (or none)
+    if (!layerDate) continue // community nodes keep their own dates (or none)
     for (const src of node.sources) {
       if (!src.publishedAt) {
         src.publishedAt = layerDate
@@ -480,14 +615,15 @@ async function main() {
   // 10th edition launched 2024-06-01. Community nodes (YouTube, etc.) with
   // source dates before that are 9th edition. Everything else is 10th.
   const TENTH_LAUNCH = '2024-06-01'
-  let stamped10th = 0, stamped9th = 0
+  let stamped10th = 0,
+    stamped9th = 0
   for (const node of allNodes) {
     if (node.edition) continue // already set (e.g., 11th edition nodes)
 
     if (node.layer === 'community') {
       // Use the earliest source date to determine edition
       const sourceDates = node.sources
-        .map(s => s.publishedAt || s.retrievedAt)
+        .map((s) => s.publishedAt || s.retrievedAt)
         .filter(Boolean)
         .sort()
       const earliest = sourceDates[0]
@@ -565,7 +701,10 @@ async function main() {
   const nodeMap = new Map<string, Node>()
   for (const n of allNodes) nodeMap.set(n.id, n)
 
-  const reverseIndex: Record<string, Array<{ sourceId: string; rel: string; context: string; factionId?: string }>> = {}
+  const reverseIndex: Record<
+    string,
+    Array<{ sourceId: string; rel: string; context: string; factionId?: string }>
+  > = {}
   const forwardIndex: Record<string, Array<{ targetId: string; rel: string; context: string }>> = {}
 
   for (const ref of allRefs) {
@@ -593,44 +732,70 @@ async function main() {
   writeFileSync(join(OUTPUT_DIR, 'refs', 'forward-index.json'), fwdJson)
   totalBytes += fwdJson.length
 
-  console.log(`Reverse index: ${Object.keys(reverseIndex).length} targets, ${(revJson.length / 1024 / 1024).toFixed(1)} MB`)
-  console.log(`Forward index: ${Object.keys(forwardIndex).length} sources, ${(fwdJson.length / 1024 / 1024).toFixed(1)} MB`)
+  console.log(
+    `Reverse index: ${Object.keys(reverseIndex).length} targets, ${(revJson.length / 1024 / 1024).toFixed(1)} MB`,
+  )
+  console.log(
+    `Forward index: ${Object.keys(forwardIndex).length} sources, ${(fwdJson.length / 1024 / 1024).toFixed(1)} MB`,
+  )
 
   // Write manifest
-  const allFiles: Record<string, unknown> = { ...nodeFiles, ...refFiles, 'refs/reverse-index.json': reverseIndex, 'refs/forward-index.json': forwardIndex }
+  const allFiles: Record<string, unknown> = {
+    ...nodeFiles,
+    ...refFiles,
+    'refs/reverse-index.json': reverseIndex,
+    'refs/forward-index.json': forwardIndex,
+  }
   const manifest = buildManifest(allFiles, null)
   writeFileSync(join(OUTPUT_DIR, 'manifest.json'), JSON.stringify(manifest, null, 2))
 
-  console.log(`\nWrote ${Object.keys(allFiles).length} files (${(totalBytes / 1024 / 1024).toFixed(1)} MB)`)
+  console.log(
+    `\nWrote ${Object.keys(allFiles).length} files (${(totalBytes / 1024 / 1024).toFixed(1)} MB)`,
+  )
   console.log(`Manifest: ${Object.keys(manifest.files).length} entries`)
 
   // ── Query tests ────────────────────────────────────────────────────────────
   console.log('\n\n=== QUERY TESTS ===\n')
 
-  function findByRef(targetId: string, rel?: string): Array<{ source: Node | undefined; ref: NodeRef }> {
+  function findByRef(
+    targetId: string,
+    rel?: string,
+  ): Array<{ source: Node | undefined; ref: NodeRef }> {
     return allRefs
-      .filter(r => r.targetId === targetId && (!rel || r.rel === rel))
-      .map(r => ({ source: allNodes.find(n => n.id === r.sourceId), ref: r }))
+      .filter((r) => r.targetId === targetId && (!rel || r.rel === rel))
+      .map((r) => ({ source: allNodes.find((n) => n.id === r.sourceId), ref: r }))
   }
 
   function search(query: string, limit = 10): Node[] {
     const q = query.toLowerCase()
     return allNodes
-      .filter(n => n.title.toLowerCase().includes(q) || n.keywords.some(k => k.includes(q)))
+      .filter((n) => n.title.toLowerCase().includes(q) || n.keywords.some((k) => k.includes(q)))
       .slice(0, limit)
   }
 
   // Query 1: Who has sustained hits?
   console.log('Q: "Who has sustained hits?"')
   const susRefs = findByRef('core:sustained-hits')
-  const susWeapons = susRefs.filter(r => r.source?.category === 'weapon')
-  const susStrats = susRefs.filter(r => r.source?.category === 'stratagem')
-  const susAbilities = susRefs.filter(r => r.source?.category === 'faction-ability' || r.source?.category === 'unit-ability')
+  const susWeapons = susRefs.filter((r) => r.source?.category === 'weapon')
+  const susStrats = susRefs.filter((r) => r.source?.category === 'stratagem')
+  const susAbilities = susRefs.filter(
+    (r) => r.source?.category === 'faction-ability' || r.source?.category === 'unit-ability',
+  )
   console.log(`  ${susWeapons.length} weapons natively have it`)
   console.log(`  ${susStrats.length} stratagems can grant it`)
   console.log(`  ${susAbilities.length} abilities reference it`)
-  console.log(`  Sample weapons: ${susWeapons.slice(0, 3).map(r => r.source?.title).join(', ')}`)
-  console.log(`  Sample stratagems: ${susStrats.slice(0, 3).map(r => r.source?.title).join(', ')}`)
+  console.log(
+    `  Sample weapons: ${susWeapons
+      .slice(0, 3)
+      .map((r) => r.source?.title)
+      .join(', ')}`,
+  )
+  console.log(
+    `  Sample stratagems: ${susStrats
+      .slice(0, 3)
+      .map((r) => r.source?.title)
+      .join(', ')}`,
+  )
 
   // Query 2: What's the wound roll rule?
   console.log('\nQ: "How does wound roll work?"')
@@ -641,18 +806,26 @@ async function main() {
 
   // Query 3: What can a Space Marine Captain attach to?
   console.log('\nQ: "What can a Captain attach to?"')
-  const captains = allNodes.filter(n => n.title.toLowerCase().includes('captain') && n.category === 'datasheet')
+  const captains = allNodes.filter(
+    (n) => n.title.toLowerCase().includes('captain') && n.category === 'datasheet',
+  )
   for (const cap of captains.slice(0, 3)) {
-    const attachRefs = allRefs.filter(r => r.sourceId === cap.id && r.rel === 'interacts_with')
-    const targets = attachRefs.map(r => allNodes.find(n => n.id === r.targetId)?.title).filter(Boolean)
+    const attachRefs = allRefs.filter((r) => r.sourceId === cap.id && r.rel === 'interacts_with')
+    const targets = attachRefs
+      .map((r) => allNodes.find((n) => n.id === r.targetId)?.title)
+      .filter(Boolean)
     if (targets.length > 0) {
-      console.log(`  ${cap.title}: can attach to ${targets.slice(0, 5).join(', ')}${targets.length > 5 ? ` (+${targets.length - 5} more)` : ''}`)
+      console.log(
+        `  ${cap.title}: can attach to ${targets.slice(0, 5).join(', ')}${targets.length > 5 ? ` (+${targets.length - 5} more)` : ''}`,
+      )
     }
   }
 
   // Query 4: What stratagems affect the shooting phase?
   console.log('\nQ: "Shooting phase stratagems"')
-  const shootingStrats = allNodes.filter(n => n.category === 'stratagem' && n.phase === 'shooting')
+  const shootingStrats = allNodes.filter(
+    (n) => n.category === 'stratagem' && n.phase === 'shooting',
+  )
   console.log(`  ${shootingStrats.length} stratagems in the shooting phase`)
   for (const s of shootingStrats.slice(0, 5)) {
     console.log(`  ${s.title} (${s.factionId})`)

@@ -274,6 +274,12 @@ importers:
 
   apps/brain/server:
     dependencies:
+      '@libsql/client':
+        specifier: ^0.14.0
+        version: 0.14.0
+      '@tabletop-tools/db':
+        specifier: workspace:*
+        version: link:../../../packages/db
       hono:
         specifier: ^4.6.0
         version: 4.12.0

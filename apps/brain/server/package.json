@@ -11,6 +11,8 @@
     "test:watch": "vitest"
   },
   "dependencies": {
+    "@libsql/client": "^0.14.0",
+    "@tabletop-tools/db": "workspace:*",
     "hono": "^4.6.0",
     "pdfjs-dist": "^5.6.205",
     "zod": "^3.23.0"
