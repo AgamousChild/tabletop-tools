@@ -1,27 +1,29 @@
-import { z } from 'zod'
-import { sql, gt, desc, eq } from 'drizzle-orm'
-import { TRPCError } from '@trpc/server'
-import { router, adminProcedure, publicProcedure } from '../trpc.js'
 import {
-  authUsers,
   authSessions,
-  diceSets,
+  authUsers,
+  bcpScrapeJobs,
   diceRollingSessions,
-  rolls,
-  simulations,
+  diceSets,
+  importedTournamentResults,
+  ingestContent,
+  ingestSources,
   lists,
   listUnits,
   matches,
-  turns,
-  tournaments,
-  tournamentPlayers,
-  playerElo,
-  importedTournamentResults,
-  playerGlicko,
-  bcpScrapeJobs,
   metaEvents,
-  ingestJobs,
+  playerElo,
+  playerGlicko,
+  rolls,
+  simulations,
+  tournamentPlayers,
+  tournaments,
+  turns,
 } from '@tabletop-tools/db'
+import { TRPCError } from '@trpc/server'
+import { desc, eq, gt, sql } from 'drizzle-orm'
+import { z } from 'zod'
+
+import { adminProcedure, publicProcedure, router } from '../trpc.js'
 
 async function count(db: any, table: any): Promise<number> {
   const [row] = await db.select({ count: sql<number>`count(*)` }).from(table)
@@ -33,18 +35,14 @@ export const statsRouter = router({
     const now = Date.now()
     const sevenDaysAgo = new Date(now - 7 * 24 * 60 * 60 * 1000)
 
-    const [totalUsers] = await ctx.db
-      .select({ count: sql<number>`count(*)` })
-      .from(authUsers)
+    const [totalUsers] = await ctx.db.select({ count: sql<number>`count(*)` }).from(authUsers)
 
     const [recentUsers] = await ctx.db
       .select({ count: sql<number>`count(*)` })
       .from(authUsers)
       .where(gt(authUsers.createdAt, sevenDaysAgo))
 
-    const [totalSessions] = await ctx.db
-      .select({ count: sql<number>`count(*)` })
-      .from(authSessions)
+    const [totalSessions] = await ctx.db.select({ count: sql<number>`count(*)` }).from(authSessions)
 
     const [activeSessions] = await ctx.db
       .select({ count: sql<number>`count(*)` })
@@ -136,7 +134,9 @@ export const statsRouter = router({
     const sevenDaysAgo = now - 7 * 24 * 60 * 60 * 1000
 
     // No-Cheat: rolling sessions
-    const [ncTotal] = await ctx.db.select({ count: sql<number>`count(*)` }).from(diceRollingSessions)
+    const [ncTotal] = await ctx.db
+      .select({ count: sql<number>`count(*)` })
+      .from(diceRollingSessions)
     const [ncRecent] = await ctx.db
       .select({ count: sql<number>`count(*)` })
       .from(diceRollingSessions)
@@ -176,7 +176,9 @@ export const statsRouter = router({
     activity.push({ app: 'tournament', total: toTotal.count, recent: toRecent.count })
 
     // New Meta: imports
-    const [nmTotal] = await ctx.db.select({ count: sql<number>`count(*)` }).from(importedTournamentResults)
+    const [nmTotal] = await ctx.db
+      .select({ count: sql<number>`count(*)` })
+      .from(importedTournamentResults)
     const [nmRecent] = await ctx.db
       .select({ count: sql<number>`count(*)` })
       .from(importedTournamentResults)
@@ -239,9 +241,7 @@ export const statsRouter = router({
       .from(matches)
       .where(eq(matches.result, 'DRAW'))
 
-    const [total] = await ctx.db
-      .select({ count: sql<number>`count(*)` })
-      .from(matches)
+    const [total] = await ctx.db.select({ count: sql<number>`count(*)` }).from(matches)
 
     const [inProgress] = await ctx.db
       .select({ count: sql<number>`count(*)` })
@@ -276,10 +276,7 @@ export const statsRouter = router({
   revokeAllSessions: adminProcedure
     .input(z.object({ userId: z.string() }))
     .mutation(async ({ ctx, input }) => {
-      const [user] = await ctx.db
-        .select()
-        .from(authUsers)
-        .where(eq(authUsers.id, input.userId))
+      const [user] = await ctx.db.select().from(authUsers).where(eq(authUsers.id, input.userId))
       if (!user) throw new TRPCError({ code: 'NOT_FOUND', message: 'User not found' })
       await ctx.db
         .update(authSessions)
@@ -291,10 +288,7 @@ export const statsRouter = router({
   deleteUser: adminProcedure
     .input(z.object({ userId: z.string() }))
     .mutation(async ({ ctx, input }) => {
-      const [user] = await ctx.db
-        .select()
-        .from(authUsers)
-        .where(eq(authUsers.id, input.userId))
+      const [user] = await ctx.db.select().from(authUsers).where(eq(authUsers.id, input.userId))
       if (!user) throw new TRPCError({ code: 'NOT_FOUND', message: 'User not found' })
       // Cascading deletes handle related data (sessions, tournament_players, etc.)
       await ctx.db.delete(authUsers).where(eq(authUsers.id, input.userId))
@@ -303,29 +297,51 @@ export const statsRouter = router({
 
   pipeline: adminProcedure.query(async ({ ctx }) => {
     // Meta 3NF counts
-    const events = await ctx.db.all(sql`SELECT count(*) as n FROM meta_events`).catch(() => [{ n: 0 }])
-    const players = await ctx.db.all(sql`SELECT count(*) as n FROM meta_event_players`).catch(() => [{ n: 0 }])
-    const pairings = await ctx.db.all(sql`SELECT count(*) as n FROM meta_pairings`).catch(() => [{ n: 0 }])
-    const withLists = await ctx.db.all(sql`SELECT count(*) as n FROM meta_event_players WHERE list_text IS NOT NULL`).catch(() => [{ n: 0 }])
-    const withDetachment = await ctx.db.all(sql`SELECT count(*) as n FROM meta_event_players WHERE detachment_id IS NOT NULL`).catch(() => [{ n: 0 }])
+    const events = await ctx.db
+      .all(sql`SELECT count(*) as n FROM meta_events`)
+      .catch(() => [{ n: 0 }])
+    const players = await ctx.db
+      .all(sql`SELECT count(*) as n FROM meta_event_players`)
+      .catch(() => [{ n: 0 }])
+    const pairings = await ctx.db
+      .all(sql`SELECT count(*) as n FROM meta_pairings`)
+      .catch(() => [{ n: 0 }])
+    const withLists = await ctx.db
+      .all(sql`SELECT count(*) as n FROM meta_event_players WHERE list_text IS NOT NULL`)
+      .catch(() => [{ n: 0 }])
+    const withDetachment = await ctx.db
+      .all(sql`SELECT count(*) as n FROM meta_event_players WHERE detachment_id IS NOT NULL`)
+      .catch(() => [{ n: 0 }])
 
     // Cube counts
-    const facts = await ctx.db.all(sql`SELECT count(*) as n FROM fact_game_results`).catch(() => [{ n: 0 }])
+    const facts = await ctx.db
+      .all(sql`SELECT count(*) as n FROM fact_game_results`)
+      .catch(() => [{ n: 0 }])
     const frames = await ctx.db.all(sql`SELECT count(*) as n FROM meta_for`).catch(() => [{ n: 0 }])
-    const topRows = await ctx.db.all(sql`SELECT count(*) as n FROM meta_top`).catch(() => [{ n: 0 }])
+    const topRows = await ctx.db
+      .all(sql`SELECT count(*) as n FROM meta_top`)
+      .catch(() => [{ n: 0 }])
 
     // Cube status
-    const cubeStatus = await ctx.db.all(sql`SELECT * FROM meta_cube_status WHERE id = 1`).catch(() => [])
+    const cubeStatus = await ctx.db
+      .all(sql`SELECT * FROM meta_cube_status WHERE id = 1`)
+      .catch(() => [])
 
     // Dimension counts
-    const factions = await ctx.db.all(sql`SELECT count(*) as n FROM dim_faction`).catch(() => [{ n: 0 }])
-    const detachments = await ctx.db.all(sql`SELECT count(*) as n FROM dim_detachment`).catch(() => [{ n: 0 }])
+    const factions = await ctx.db
+      .all(sql`SELECT count(*) as n FROM dim_faction`)
+      .catch(() => [{ n: 0 }])
+    const detachments = await ctx.db
+      .all(sql`SELECT count(*) as n FROM dim_detachment`)
+      .catch(() => [{ n: 0 }])
 
     // Brain community nodes (from meta_top community counts — approximate)
     // We can't read R2 from here, so just report cube data
 
     // Date range
-    const dateRange = await ctx.db.all(sql`SELECT min(date) as earliest, max(date) as latest FROM meta_events`).catch(() => [{ earliest: null, latest: null }])
+    const dateRange = await ctx.db
+      .all(sql`SELECT min(date) as earliest, max(date) as latest FROM meta_events`)
+      .catch(() => [{ earliest: null, latest: null }])
 
     return {
       meta: {
@@ -358,9 +374,7 @@ export const statsRouter = router({
       .orderBy(desc(bcpScrapeJobs.startedAt))
       .limit(1)
 
-    const [totalEvents] = await ctx.db
-      .select({ count: sql<number>`count(*)` })
-      .from(metaEvents)
+    const [totalEvents] = await ctx.db.select({ count: sql<number>`count(*)` }).from(metaEvents)
 
     return {
       latestJob: latestJob ?? null,
@@ -384,11 +398,13 @@ export const statsRouter = router({
     if (!ctx.bcpScraper) {
       return { status: 'error', message: 'BCP Scraper service binding not configured' }
     }
-    const resp = await ctx.bcpScraper.fetch(new Request('https://bcp-scraper/scrape', { method: 'POST' }))
+    const resp = await ctx.bcpScraper.fetch(
+      new Request('https://bcp-scraper/scrape', { method: 'POST' }),
+    )
     if (!resp.ok) {
       return { status: 'error', message: `Scraper returned ${resp.status}` }
     }
-    const result = await resp.json() as { jobId?: string }
+    const result = (await resp.json()) as { jobId?: string }
     return { status: 'triggered', message: 'Scrape started', jobId: result.jobId }
   }),
 
@@ -397,18 +413,18 @@ export const statsRouter = router({
   }),
 
   listParserStatus: adminProcedure.query(async ({ ctx }) => {
-    const [parsed] = await ctx.db.all(
+    const [parsed] = (await ctx.db.all(
       sql`SELECT count(*) as n FROM meta_event_players WHERE list_ttt IS NOT NULL AND json_extract(list_ttt, '$.parseStatus') = 'ok'`,
-    ) as any[]
-    const [partial] = await ctx.db.all(
+    )) as any[]
+    const [partial] = (await ctx.db.all(
       sql`SELECT count(*) as n FROM meta_event_players WHERE list_ttt IS NOT NULL AND json_extract(list_ttt, '$.parseStatus') = 'partial'`,
-    ) as any[]
-    const [failed] = await ctx.db.all(
+    )) as any[]
+    const [failed] = (await ctx.db.all(
       sql`SELECT count(*) as n FROM meta_event_players WHERE list_ttt IS NOT NULL AND json_extract(list_ttt, '$.parseStatus') = 'failed'`,
-    ) as any[]
-    const [pending] = await ctx.db.all(
+    )) as any[]
+    const [pending] = (await ctx.db.all(
       sql`SELECT count(*) as n FROM meta_event_players WHERE list_ttt IS NULL AND list_text IS NOT NULL AND list_text != ''`,
-    ) as any[]
+    )) as any[]
     return {
       parsed: parsed?.n || 0,
       partial: partial?.n || 0,
@@ -417,16 +433,105 @@ export const statsRouter = router({
     }
   }),
 
-  ingestJobs: adminProcedure
-    .input(z.object({ limit: z.number().optional().default(20) }))
-    .query(async ({ ctx, input }) => {
-      const jobs = await ctx.db
-        .select()
-        .from(ingestJobs)
-        .orderBy(desc(ingestJobs.createdAt))
-        .limit(input.limit)
-      return jobs
+  // ── Ingest Sources ────────────────────────────────────────────────────────
+
+  ingestSourcesList: adminProcedure.query(async ({ ctx }) => {
+    return ctx.db.select().from(ingestSources)
+  }),
+
+  addIngestSource: adminProcedure
+    .input(z.object({ name: z.string(), url: z.string(), type: z.enum(['youtube', 'web']) }))
+    .mutation(async ({ ctx, input }) => {
+      if (!ctx.contentIngestor) {
+        return { status: 'error', message: 'Content Ingestor service binding not configured' }
+      }
+      const resp = await ctx.contentIngestor.fetch(
+        new Request('https://content-ingestor/sources', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(input),
+        }),
+      )
+      if (!resp.ok) return { status: 'error', message: `Ingestor returned ${resp.status}` }
+      const result = (await resp.json()) as { id: string; status: string }
+      return { status: 'created', id: result.id }
     }),
+
+  toggleIngestSource: adminProcedure
+    .input(z.object({ id: z.string(), active: z.boolean() }))
+    .mutation(async ({ ctx, input }) => {
+      if (!ctx.contentIngestor) {
+        return { status: 'error', message: 'Content Ingestor service binding not configured' }
+      }
+      const resp = await ctx.contentIngestor.fetch(
+        new Request(`https://content-ingestor/sources/${input.id}`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ active: input.active }),
+        }),
+      )
+      if (!resp.ok) return { status: 'error', message: `Ingestor returned ${resp.status}` }
+      return { status: 'updated' }
+    }),
+
+  // ── Ingest Content ─────────────────────────────────────────────────────────
+
+  ingestJobs: adminProcedure
+    .input(z.object({ limit: z.number().optional().default(50), source: z.string().optional() }))
+    .query(async ({ ctx, input }) => {
+      const baseQuery = ctx.db
+        .select({
+          id: ingestContent.id,
+          url: ingestContent.url,
+          title: ingestContent.title,
+          sourceId: ingestContent.sourceId,
+          sourceType: ingestSources.type,
+          sourceName: ingestSources.name,
+          status: ingestContent.status,
+          nodesExtracted: ingestContent.nodesExtracted,
+          error: ingestContent.error,
+          createdAt: ingestContent.discoveredAt,
+        })
+        .from(ingestContent)
+        .innerJoin(ingestSources, eq(ingestContent.sourceId, ingestSources.id))
+
+      const rows = input.source
+        ? await baseQuery
+            .where(eq(ingestContent.sourceId, input.source))
+            .orderBy(desc(ingestContent.discoveredAt))
+            .limit(input.limit)
+        : await baseQuery.orderBy(desc(ingestContent.discoveredAt)).limit(input.limit)
+
+      return rows
+    }),
+
+  triggerDiscover: adminProcedure.mutation(async ({ ctx }) => {
+    if (!ctx.contentIngestor) {
+      return { status: 'error', message: 'Content Ingestor service binding not configured' }
+    }
+    const resp = await ctx.contentIngestor.fetch(
+      new Request('https://content-ingestor/discover', {
+        method: 'POST',
+      }),
+    )
+    if (!resp.ok) return { status: 'error', message: `Ingestor returned ${resp.status}` }
+    const result = await resp.json()
+    return { status: 'triggered', result }
+  }),
+
+  triggerProcess: adminProcedure.mutation(async ({ ctx }) => {
+    if (!ctx.contentIngestor) {
+      return { status: 'error', message: 'Content Ingestor service binding not configured' }
+    }
+    const resp = await ctx.contentIngestor.fetch(
+      new Request('https://content-ingestor/process', {
+        method: 'POST',
+      }),
+    )
+    if (!resp.ok) return { status: 'error', message: `Ingestor returned ${resp.status}` }
+    const result = await resp.json()
+    return { status: 'triggered', result }
+  }),
 
   triggerYoutubeIngest: adminProcedure
     .input(z.object({ url: z.string(), sourceName: z.string().optional() }))
@@ -434,14 +539,16 @@ export const statsRouter = router({
       if (!ctx.contentIngestor) {
         return { status: 'error', message: 'Content Ingestor service binding not configured' }
       }
-      const resp = await ctx.contentIngestor.fetch(new Request('https://content-ingestor/ingest/youtube', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ url: input.url, sourceName: input.sourceName }),
-      }))
+      const resp = await ctx.contentIngestor.fetch(
+        new Request('https://content-ingestor/ingest/youtube', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ url: input.url, sourceName: input.sourceName }),
+        }),
+      )
       if (!resp.ok) return { status: 'error', message: `Ingestor returned ${resp.status}` }
-      const result = await resp.json() as { jobId?: string }
-      return { status: 'triggered', message: 'Ingestion started', jobId: result.jobId }
+      const result = (await resp.json()) as { contentId?: string }
+      return { status: 'triggered', message: 'Ingestion started', contentId: result.contentId }
     }),
 
   triggerWebIngest: adminProcedure
@@ -450,25 +557,28 @@ export const statsRouter = router({
       if (!ctx.contentIngestor) {
         return { status: 'error', message: 'Content Ingestor service binding not configured' }
       }
-      const resp = await ctx.contentIngestor.fetch(new Request('https://content-ingestor/ingest/web', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ url: input.url, sourceName: input.sourceName }),
-      }))
+      const resp = await ctx.contentIngestor.fetch(
+        new Request('https://content-ingestor/ingest/web', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ url: input.url, sourceName: input.sourceName }),
+        }),
+      )
       if (!resp.ok) return { status: 'error', message: `Ingestor returned ${resp.status}` }
-      const result = await resp.json() as { jobId?: string }
-      return { status: 'triggered', message: 'Ingestion started', jobId: result.jobId }
+      const result = (await resp.json()) as { contentId?: string }
+      return { status: 'triggered', message: 'Ingestion started', contentId: result.contentId }
     }),
 
   bsdataVersion: publicProcedure.query(async () => {
     try {
-      const res = await fetch(
-        'https://api.github.com/repos/BSData/wh40k-10e/commits?per_page=1',
-        { headers: { Accept: 'application/vnd.github.v3+json', 'User-Agent': 'tabletop-tools-admin' } },
-      )
-      if (!res.ok) return { sha: null, date: null, message: null, error: `GitHub API: ${res.status}` }
+      const res = await fetch('https://api.github.com/repos/BSData/wh40k-10e/commits?per_page=1', {
+        headers: { Accept: 'application/vnd.github.v3+json', 'User-Agent': 'tabletop-tools-admin' },
+      })
+      if (!res.ok)
+        return { sha: null, date: null, message: null, error: `GitHub API: ${res.status}` }
       const commits = await res.json()
-      if (!Array.isArray(commits) || commits.length === 0) return { sha: null, date: null, message: null, error: 'No commits found' }
+      if (!Array.isArray(commits) || commits.length === 0)
+        return { sha: null, date: null, message: null, error: 'No commits found' }
       const latest = commits[0]
       return {
         sha: latest.sha?.slice(0, 7) ?? null,

@@ -1,11 +1,12 @@
 import { createClient } from '@libsql/client'
-import { createDbFromClient } from '@tabletop-tools/db'
 import {
-  setupAuthTables,
-  createRequestHelper,
   authCookie,
+  createRequestHelper,
+  setupAuthTables,
   TEST_SECRET,
+  TEST_USER,
 } from '@tabletop-tools/auth/src/test-helpers'
+import { createDbFromClient } from '@tabletop-tools/db'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 
 import { createServer } from './server'
@@ -115,7 +116,7 @@ describe('HTTP integration — tournament.create via session cookie', () => {
     expect(res.status).toBe(200)
     const json = (await res.json()) as any
     expect(json.result?.data?.name).toBe('GT Finals London')
-    expect(json.result.data.toUserId).toBe('user-1')
+    expect(json.result.data.toUserId).toBe(TEST_USER.id)
     expect(json.result.data.status).toBe('DRAFT')
   })
 

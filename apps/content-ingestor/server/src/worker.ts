@@ -1,14 +1,18 @@
 /**
- * @see docs/etl-data-pipelines.md — ETL diagram and function reference
- * @see docs/schema-turso.md — Turso database schema (ingest_jobs)
- * @see docs/schema-indexeddb-brain.md — Brain knowledge graph schema
+ * Content Ingestor Worker — discovers and processes 40K content into brain nodes.
+ *
+ * Daily cron: crawl active sources → discover new URLs → process through pipeline.
+ * Manual: add sources or trigger ingest via admin UI.
  */
-import { Hono } from 'hono'
 import { createClient } from '@libsql/client'
-import { createDbFromClient, ingestJobs } from '@tabletop-tools/db'
-import { startYoutubeIngest, saveTranscript, processJob, ingestWebArticle } from './lib/ingest'
+import { createDbFromClient, ingestContent, ingestSources } from '@tabletop-tools/db'
+import { generateId } from '@tabletop-tools/server-core'
+import { desc, eq } from 'drizzle-orm'
+import { Hono } from 'hono'
+
+import { discoverContent } from './lib/discover'
 import { parseGladiaCallback } from './lib/gladia'
-import { desc } from 'drizzle-orm'
+import { processDiscovered } from './lib/process'
 
 interface Env {
   TURSO_DB_URL: string
@@ -22,10 +26,12 @@ interface Env {
 }
 
 function createDb(env: Env) {
-  return createDbFromClient(createClient({
-    url: env.TURSO_DB_URL,
-    authToken: env.TURSO_AUTH_TOKEN,
-  }))
+  return createDbFromClient(
+    createClient({
+      url: env.TURSO_DB_URL,
+      authToken: env.TURSO_AUTH_TOKEN,
+    }),
+  )
 }
 
 function checkAuth(c: { env: Env; req: { header(name: string): string | undefined } }): boolean {
@@ -42,70 +48,178 @@ function getApp() {
 
   app.get('/health', (c) => c.json({ status: 'ok' }))
 
-  app.get('/test-r2', async (c) => {
-    try {
-      // Test 1: basic write
-      await c.env.BRAIN_BUCKET.put('_test', 'hello ' + Date.now())
-      const obj = await c.env.BRAIN_BUCKET.get('_test')
-      const text = obj ? await obj.text() : 'null'
-      await c.env.BRAIN_BUCKET.delete('_test')
+  // ── Sources ───────────────────────────────────────────────────────────────
 
-      // Test 2: read community.json size
-      const community = await c.env.BRAIN_BUCKET.get('nodes/community.json')
-      const communityText = community ? await community.text() : '[]'
-      const parsed = JSON.parse(communityText)
-
-      // Test 3: write a known test node to community.json
-      parsed.push({ id: 'community:test-r2-write-' + Date.now(), layer: 'community', category: 'tactic', title: 'R2 Write Test', content: 'test', summary: 'test', sources: [], refs: [], version: 1, keywords: ['test'], edition: '11th' })
-      await c.env.BRAIN_BUCKET.put('nodes/community.json', JSON.stringify(parsed))
-
-      // Test 4: re-read and verify
-      const verify = await c.env.BRAIN_BUCKET.get('nodes/community.json')
-      const verifyText = verify ? await verify.text() : '[]'
-      const verifyParsed = JSON.parse(verifyText)
-
-      return c.json({ r2Write: 'ok', readBack: text, before: parsed.length - 1, after: verifyParsed.length })
-    } catch (err) {
-      return c.json({ r2Write: 'FAIL', error: err instanceof Error ? err.message : String(err), stack: err instanceof Error ? err.stack : '' })
-    }
+  app.get('/sources', async (c) => {
+    if (!checkAuth(c)) return c.json({ error: 'Unauthorized' }, 401)
+    const db = createDb(c.env)
+    const sources = await db.select().from(ingestSources)
+    return c.json(sources)
   })
 
-  // Step 0: Submit YouTube URL to Gladia
-  app.post('/ingest/youtube', async (c) => {
+  app.post('/sources', async (c) => {
     if (!checkAuth(c)) return c.json({ error: 'Unauthorized' }, 401)
-    const { url, sourceName } = await c.req.json() as { url: string; sourceName?: string }
-    if (!url) return c.json({ error: 'url required' }, 400)
+    const { name, url, type } = (await c.req.json()) as { name: string; url: string; type: string }
+    if (!name || !url || !type) return c.json({ error: 'name, url, type required' }, 400)
+    if (type !== 'youtube' && type !== 'web')
+      return c.json({ error: 'type must be youtube or web' }, 400)
 
+    const db = createDb(c.env)
+    const id = name
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, '-')
+      .replace(/^-+|-+$/g, '')
+
+    await db.insert(ingestSources).values({
+      id,
+      name,
+      url,
+      type,
+      active: 1,
+      createdAt: new Date(),
+    })
+
+    return c.json({ id, status: 'created' })
+  })
+
+  app.patch('/sources/:id', async (c) => {
+    if (!checkAuth(c)) return c.json({ error: 'Unauthorized' }, 401)
+    const id = c.req.param('id')
+    const { active } = (await c.req.json()) as { active: boolean }
+    const db = createDb(c.env)
+    await db
+      .update(ingestSources)
+      .set({ active: active ? 1 : 0 })
+      .where(eq(ingestSources.id, id))
+    return c.json({ status: 'updated' })
+  })
+
+  // ── Content ───────────────────────────────────────────────────────────────
+
+  app.get('/content', async (c) => {
+    if (!checkAuth(c)) return c.json({ error: 'Unauthorized' }, 401)
+    const db = createDb(c.env)
+    const sourceId = c.req.query('source')
+    const limit = parseInt(c.req.query('limit') ?? '50', 10)
+
+    const baseQuery = db
+      .select({
+        id: ingestContent.id,
+        url: ingestContent.url,
+        title: ingestContent.title,
+        sourceId: ingestContent.sourceId,
+        status: ingestContent.status,
+        nodesExtracted: ingestContent.nodesExtracted,
+        error: ingestContent.error,
+        discoveredAt: ingestContent.discoveredAt,
+        processedAt: ingestContent.processedAt,
+      })
+      .from(ingestContent)
+
+    const rows = sourceId
+      ? await baseQuery
+          .where(eq(ingestContent.sourceId, sourceId))
+          .orderBy(desc(ingestContent.discoveredAt))
+          .limit(limit)
+      : await baseQuery.orderBy(desc(ingestContent.discoveredAt)).limit(limit)
+
+    return c.json(rows)
+  })
+
+  // ── Discovery + Processing ────────────────────────────────────────────────
+
+  app.post('/discover', async (c) => {
+    if (!checkAuth(c)) return c.json({ error: 'Unauthorized' }, 401)
+    const db = createDb(c.env)
+    const results = await discoverContent(db)
+    return c.json(results)
+  })
+
+  app.post('/process', async (c) => {
+    if (!checkAuth(c)) return c.json({ error: 'Unauthorized' }, 401)
     const db = createDb(c.env)
     const workerUrl = new URL(c.req.url)
-    const callbackUrl = `${workerUrl.origin}/ingest/callback`
 
-    const result = await startYoutubeIngest({
-      url, sourceName, callbackUrl,
-      gladiaKey: c.env.GLADIA_API_KEY,
+    const result = await processDiscovered({
       db,
-    })
-    return c.json(result)
-  })
-
-  // Step 0 (web): Fetch article + extract + commit in one shot (articles are fast)
-  app.post('/ingest/web', async (c) => {
-    if (!checkAuth(c)) return c.json({ error: 'Unauthorized' }, 401)
-    const { url, sourceName } = await c.req.json() as { url: string; sourceName?: string }
-    if (!url) return c.json({ error: 'url required' }, 400)
-
-    const db = createDb(c.env)
-    const result = await ingestWebArticle({
-      url, sourceName, db,
+      gladiaKey: c.env.GLADIA_API_KEY,
       anthropicKey: c.env.ANTHROPIC_API_KEY,
       bucket: c.env.BRAIN_BUCKET,
       vectorize: c.env.BRAIN_INDEX,
       ai: c.env.AI,
+      callbackUrl: `${workerUrl.origin}/ingest/callback`,
     })
     return c.json(result)
   })
 
-  // Step 1: Gladia callback — save transcript to DB (fast, <1s)
+  // ── Manual ingest (ad-hoc URLs) ───────────────────────────────────────────
+
+  app.post('/ingest/youtube', async (c) => {
+    if (!checkAuth(c)) return c.json({ error: 'Unauthorized' }, 401)
+    const { url, sourceName } = (await c.req.json()) as { url: string; sourceName?: string }
+    if (!url) return c.json({ error: 'url required' }, 400)
+
+    const db = createDb(c.env)
+    const sourceId = await ensureSource(db, sourceName, 'youtube')
+    const contentId = generateId()
+
+    await db.insert(ingestContent).values({
+      id: contentId,
+      url,
+      title: null,
+      sourceId,
+      status: 'discovered',
+      discoveredAt: Date.now(),
+    })
+
+    await processDiscovered({
+      db,
+      gladiaKey: c.env.GLADIA_API_KEY,
+      anthropicKey: c.env.ANTHROPIC_API_KEY,
+      bucket: c.env.BRAIN_BUCKET,
+      vectorize: c.env.BRAIN_INDEX,
+      ai: c.env.AI,
+      callbackUrl: `${new URL(c.req.url).origin}/ingest/callback`,
+      batchLimit: 1,
+    })
+
+    return c.json({ status: 'triggered', contentId })
+  })
+
+  app.post('/ingest/web', async (c) => {
+    if (!checkAuth(c)) return c.json({ error: 'Unauthorized' }, 401)
+    const { url, sourceName } = (await c.req.json()) as { url: string; sourceName?: string }
+    if (!url) return c.json({ error: 'url required' }, 400)
+
+    const db = createDb(c.env)
+    const sourceId = await ensureSource(db, sourceName, 'web')
+    const contentId = generateId()
+
+    await db.insert(ingestContent).values({
+      id: contentId,
+      url,
+      title: null,
+      sourceId,
+      status: 'discovered',
+      discoveredAt: Date.now(),
+    })
+
+    await processDiscovered({
+      db,
+      gladiaKey: c.env.GLADIA_API_KEY,
+      anthropicKey: c.env.ANTHROPIC_API_KEY,
+      bucket: c.env.BRAIN_BUCKET,
+      vectorize: c.env.BRAIN_INDEX,
+      ai: c.env.AI,
+      callbackUrl: `${new URL(c.req.url).origin}/ingest/callback`,
+      batchLimit: 1,
+    })
+
+    return c.json({ status: 'triggered', contentId })
+  })
+
+  // ── Gladia callback ───────────────────────────────────────────────────────
+
   app.post('/ingest/callback', async (c) => {
     const body = await c.req.json()
     const parsed = parseGladiaCallback(body)
@@ -116,47 +230,101 @@ function getApp() {
     }
 
     const db = createDb(c.env)
-    const { jobId } = await saveTranscript({
-      gladiaJobId: parsed.id,
-      transcript: parsed.transcript,
-      db,
-    })
+    const [content] = await db
+      .select()
+      .from(ingestContent)
+      .where(eq(ingestContent.gladiaJobId, parsed.id))
+      .limit(1)
 
-    return c.json({ received: true, jobId, status: 'transcribed' })
-  })
-
-  // Step 2: Extract + commit (Claude streaming API → R2 + Vectorize)
-  app.post('/ingest/process/:id', async (c) => {
-    if (!checkAuth(c)) return c.json({ error: 'Unauthorized' }, 401)
-    const jobId = c.req.param('id')
-    const db = createDb(c.env)
-
-    try {
-      const result = await processJob({
-        jobId, db,
-        anthropicKey: c.env.ANTHROPIC_API_KEY,
-        bucket: c.env.BRAIN_BUCKET,
-        vectorize: c.env.BRAIN_INDEX,
-        ai: c.env.AI,
-      })
-      return c.json(result)
-    } catch (err) {
-      return c.json({ error: err instanceof Error ? err.message : String(err) }, 500)
+    if (!content) {
+      console.warn('No ingest_content row for gladiaJobId:', parsed.id)
+      return c.json({ received: true, error: 'No matching content row' })
     }
+
+    await db
+      .update(ingestContent)
+      .set({ transcript: parsed.transcript, status: 'transcribed' })
+      .where(eq(ingestContent.id, content.id))
+
+    return c.json({ received: true, contentId: content.id, status: 'transcribed' })
   })
 
-  // List recent jobs
+  // ── Jobs list (backward compat for admin UI) ──────────────────────────────
+
   app.get('/jobs', async (c) => {
     if (!checkAuth(c)) return c.json({ error: 'Unauthorized' }, 401)
     const db = createDb(c.env)
-    const jobs = await db.select().from(ingestJobs).orderBy(desc(ingestJobs.createdAt)).limit(20)
-    return c.json(jobs)
+    const rows = await db
+      .select({
+        id: ingestContent.id,
+        url: ingestContent.url,
+        title: ingestContent.title,
+        sourceId: ingestContent.sourceId,
+        sourceType: ingestSources.type,
+        sourceName: ingestSources.name,
+        status: ingestContent.status,
+        nodesExtracted: ingestContent.nodesExtracted,
+        error: ingestContent.error,
+        createdAt: ingestContent.discoveredAt,
+      })
+      .from(ingestContent)
+      .innerJoin(ingestSources, eq(ingestContent.sourceId, ingestSources.id))
+      .orderBy(desc(ingestContent.discoveredAt))
+      .limit(20)
+    return c.json(rows)
   })
 
   cachedApp = app
   return app
 }
 
+/**
+ * Ensure a source exists for ad-hoc manual ingestion.
+ * Creates an inactive source if none exists (won't be crawled by cron).
+ */
+async function ensureSource(
+  db: ReturnType<typeof createDb>,
+  name: string | undefined,
+  type: string,
+): Promise<string> {
+  const sourceId = name ? name.toLowerCase().replace(/[^a-z0-9]+/g, '-') : 'manual'
+
+  const existing = await db
+    .select({ id: ingestSources.id })
+    .from(ingestSources)
+    .where(eq(ingestSources.id, sourceId))
+    .limit(1)
+  if (existing.length === 0) {
+    await db.insert(ingestSources).values({
+      id: sourceId,
+      name: name ?? 'Manual',
+      url: 'manual',
+      type,
+      active: 0,
+      createdAt: new Date(),
+    })
+  }
+  return sourceId
+}
+
 export default {
   fetch: (req: Request, env: Env, ctx: ExecutionContext) => getApp().fetch(req, env, ctx),
+
+  async scheduled(_event: ScheduledEvent, env: Env, ctx: ExecutionContext) {
+    const db = createDb(env)
+
+    ctx.waitUntil(
+      discoverContent(db).then(() =>
+        processDiscovered({
+          db,
+          gladiaKey: env.GLADIA_API_KEY,
+          anthropicKey: env.ANTHROPIC_API_KEY,
+          bucket: env.BRAIN_BUCKET,
+          vectorize: env.BRAIN_INDEX,
+          ai: env.AI,
+          callbackUrl: 'https://content-ingestor/ingest/callback',
+        }),
+      ),
+    )
+  },
 }

@@ -3,6 +3,7 @@ import { defineConfig, devices } from '@playwright/test'
 export default defineConfig({
   testDir: './specs',
   globalSetup: './global-setup.ts',
+  globalTeardown: './global-teardown.ts',
   timeout: 30_000,
   retries: 1,
   reporter: [['list'], ['html', { open: 'never' }]],

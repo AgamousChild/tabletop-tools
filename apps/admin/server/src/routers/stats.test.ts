@@ -284,6 +284,27 @@ beforeAll(async () => {
       created_at INTEGER NOT NULL,
       completed_at INTEGER
     );
+    CREATE TABLE IF NOT EXISTS ingest_sources (
+      id TEXT PRIMARY KEY,
+      name TEXT NOT NULL,
+      url TEXT NOT NULL UNIQUE,
+      type TEXT NOT NULL,
+      active INTEGER NOT NULL DEFAULT 1,
+      created_at INTEGER NOT NULL
+    );
+    CREATE TABLE IF NOT EXISTS ingest_content (
+      id TEXT PRIMARY KEY,
+      url TEXT NOT NULL UNIQUE,
+      title TEXT,
+      source_id TEXT NOT NULL REFERENCES ingest_sources(id),
+      status TEXT NOT NULL DEFAULT 'discovered',
+      gladia_job_id TEXT,
+      transcript TEXT,
+      nodes_extracted INTEGER DEFAULT 0,
+      error TEXT,
+      discovered_at INTEGER NOT NULL,
+      processed_at INTEGER
+    );
     CREATE TABLE IF NOT EXISTS glicko_history (
       id TEXT PRIMARY KEY,
       player_id TEXT NOT NULL REFERENCES player_glicko(id),
@@ -305,6 +326,8 @@ afterAll(() => client.close())
 // Helper to clear all data between tests in the "with data" suite
 async function clearAllData() {
   await client.executeMultiple(`
+    DELETE FROM ingest_content;
+    DELETE FROM ingest_sources;
     DELETE FROM ingest_jobs;
     DELETE FROM meta_events;
     DELETE FROM bcp_scrape_jobs;
@@ -736,12 +759,16 @@ describe('stats router', () => {
 
     it('throws NOT_FOUND for unknown session', async () => {
       const caller = createCaller(adminCtx)
-      await expect(caller.stats.revokeSession({ sessionId: 'no-such' })).rejects.toMatchObject({ code: 'NOT_FOUND' })
+      await expect(caller.stats.revokeSession({ sessionId: 'no-such' })).rejects.toMatchObject({
+        code: 'NOT_FOUND',
+      })
     })
 
     it('rejects non-admin', async () => {
       const caller = createCaller(nonAdminCtx)
-      await expect(caller.stats.revokeSession({ sessionId: 's1' })).rejects.toMatchObject({ code: 'FORBIDDEN' })
+      await expect(caller.stats.revokeSession({ sessionId: 's1' })).rejects.toMatchObject({
+        code: 'FORBIDDEN',
+      })
     })
   })
 
@@ -765,7 +792,9 @@ describe('stats router', () => {
 
     it('throws NOT_FOUND for unknown user', async () => {
       const caller = createCaller(adminCtx)
-      await expect(caller.stats.revokeAllSessions({ userId: 'no-such' })).rejects.toMatchObject({ code: 'NOT_FOUND' })
+      await expect(caller.stats.revokeAllSessions({ userId: 'no-such' })).rejects.toMatchObject({
+        code: 'NOT_FOUND',
+      })
     })
   })
 
@@ -786,12 +815,16 @@ describe('stats router', () => {
 
     it('throws NOT_FOUND for unknown user', async () => {
       const caller = createCaller(adminCtx)
-      await expect(caller.stats.deleteUser({ userId: 'no-such' })).rejects.toMatchObject({ code: 'NOT_FOUND' })
+      await expect(caller.stats.deleteUser({ userId: 'no-such' })).rejects.toMatchObject({
+        code: 'NOT_FOUND',
+      })
     })
 
     it('rejects non-admin', async () => {
       const caller = createCaller(nonAdminCtx)
-      await expect(caller.stats.deleteUser({ userId: 'u1' })).rejects.toMatchObject({ code: 'FORBIDDEN' })
+      await expect(caller.stats.deleteUser({ userId: 'u1' })).rejects.toMatchObject({
+        code: 'FORBIDDEN',
+      })
     })
   })
 
@@ -833,7 +866,9 @@ describe('stats router', () => {
 
     it('rejects non-admin users', async () => {
       const caller = createCaller(nonAdminCtx)
-      await expect(caller.stats.bcpScraperHistory({ limit: 20 })).rejects.toMatchObject({ code: 'FORBIDDEN' })
+      await expect(caller.stats.bcpScraperHistory({ limit: 20 })).rejects.toMatchObject({
+        code: 'FORBIDDEN',
+      })
     })
 
     it('returns jobs ordered by started_at desc', async () => {
@@ -899,43 +934,53 @@ describe('stats router', () => {
   describe('stats.ingestJobs', () => {
     beforeEach(() => clearAllData())
 
-    it('returns empty array when no jobs', async () => {
+    it('returns empty array when no content', async () => {
       const caller = createCaller(adminCtx)
-      const result = await caller.stats.ingestJobs({ limit: 20 })
+      const result = await caller.stats.ingestJobs({ limit: 50 })
       expect(result).toEqual([])
     })
 
-    it('returns jobs ordered by created_at desc', async () => {
-      const now = Math.floor(Date.now() / 1000)
+    it('returns content ordered by discovered_at desc', async () => {
+      const now = Date.now()
       await client.executeMultiple(`
-        INSERT INTO ingest_jobs (id, url, source_type, source_name, status, nodes_extracted, created_at) VALUES ('ij1', 'https://youtube.com/watch?v=abc', 'youtube', 'Auspex Tactics', 'completed', 5, ${now - 3600});
-        INSERT INTO ingest_jobs (id, url, source_type, source_name, status, nodes_extracted, created_at) VALUES ('ij2', 'https://example.com/article', 'web', 'WHC', 'pending', 0, ${now});
+        INSERT INTO ingest_sources (id, name, url, type, active, created_at) VALUES ('auspex', 'Auspex Tactics', 'https://youtube.com/@AuspexTactics', 'youtube', 1, ${now});
+        INSERT INTO ingest_sources (id, name, url, type, active, created_at) VALUES ('whc', 'WHC', 'https://warhammer-community.com', 'web', 1, ${now});
+        INSERT INTO ingest_content (id, url, title, source_id, status, nodes_extracted, discovered_at) VALUES ('ic1', 'https://youtube.com/watch?v=abc', 'Video Title', 'auspex', 'completed', 5, ${now - 3600000});
+        INSERT INTO ingest_content (id, url, title, source_id, status, nodes_extracted, discovered_at) VALUES ('ic2', 'https://example.com/article', 'Article Title', 'whc', 'discovered', 0, ${now});
       `)
 
       const caller = createCaller(adminCtx)
-      const result = await caller.stats.ingestJobs({ limit: 20 })
+      const result = await caller.stats.ingestJobs({ limit: 50 })
       expect(result.length).toBe(2)
-      expect(result[0].id).toBe('ij2')
-      expect(result[1].id).toBe('ij1')
+      expect(result[0].id).toBe('ic2')
+      expect(result[0].title).toBe('Article Title')
+      expect(result[0].sourceName).toBe('WHC')
+      expect(result[1].id).toBe('ic1')
     })
 
     it('rejects non-admin users', async () => {
       const caller = createCaller(nonAdminCtx)
-      await expect(caller.stats.ingestJobs({ limit: 20 })).rejects.toMatchObject({ code: 'FORBIDDEN' })
+      await expect(caller.stats.ingestJobs({ limit: 50 })).rejects.toMatchObject({
+        code: 'FORBIDDEN',
+      })
     })
   })
 
   describe('stats.triggerYoutubeIngest', () => {
     it('returns error when service binding not configured', async () => {
       const caller = createCaller(adminCtx)
-      const result = await caller.stats.triggerYoutubeIngest({ url: 'https://youtube.com/watch?v=abc' })
+      const result = await caller.stats.triggerYoutubeIngest({
+        url: 'https://youtube.com/watch?v=abc',
+      })
       expect(result.status).toBe('error')
       expect(result.message).toContain('not configured')
     })
 
     it('rejects non-admin users', async () => {
       const caller = createCaller(nonAdminCtx)
-      await expect(caller.stats.triggerYoutubeIngest({ url: 'https://youtube.com/watch?v=abc' })).rejects.toMatchObject({ code: 'FORBIDDEN' })
+      await expect(
+        caller.stats.triggerYoutubeIngest({ url: 'https://youtube.com/watch?v=abc' }),
+      ).rejects.toMatchObject({ code: 'FORBIDDEN' })
     })
   })
 
@@ -949,7 +994,9 @@ describe('stats router', () => {
 
     it('rejects non-admin users', async () => {
       const caller = createCaller(nonAdminCtx)
-      await expect(caller.stats.triggerWebIngest({ url: 'https://example.com/article' })).rejects.toMatchObject({ code: 'FORBIDDEN' })
+      await expect(
+        caller.stats.triggerWebIngest({ url: 'https://example.com/article' }),
+      ).rejects.toMatchObject({ code: 'FORBIDDEN' })
     })
   })
 })

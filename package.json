@@ -11,15 +11,18 @@
     "dev:tournament": "pnpm --parallel --filter tournament-server --filter tournament-client dev",
     "build": "pnpm -r --filter '*-client' build",
     "test": "pnpm -r test",
-    "lint": "eslint apps/*/server/src apps/*/client/src packages --ext .ts,.tsx",
+    "lint": "oxlint --deny-warnings && eslint apps/*/server/src apps/*/client/src packages --ext .ts,.tsx",
     "lint:fix": "eslint apps/*/server/src apps/*/client/src packages --ext .ts,.tsx --fix",
+    "format": "prettier --write \"apps/*/server/src/**/*.{ts,tsx}\" \"apps/*/client/src/**/*.{ts,tsx}\" \"packages/*/src/**/*.{ts,tsx}\"",
+    "format:check": "prettier --check \"apps/*/server/src/**/*.{ts,tsx}\" \"apps/*/client/src/**/*.{ts,tsx}\" \"packages/*/src/**/*.{ts,tsx}\"",
     "deploy:no-cheat": "pnpm --filter no-cheat-server wrangler deploy && pnpm --filter no-cheat-client wrangler pages deploy dist",
     "deploy:versus": "pnpm --filter versus-server wrangler deploy && pnpm --filter versus-client wrangler pages deploy dist",
     "deploy:list-builder": "pnpm --filter list-builder-server wrangler deploy && pnpm --filter list-builder-client wrangler pages deploy dist",
     "deploy:game-tracker": "pnpm --filter game-tracker-server wrangler deploy && pnpm --filter game-tracker-client wrangler pages deploy dist",
     "deploy:tournament": "pnpm --filter tournament-server wrangler deploy && pnpm --filter tournament-client wrangler pages deploy dist",
     "deploy:new-meta": "pnpm --filter new-meta-server wrangler deploy && pnpm --filter new-meta-client wrangler pages deploy dist",
-    "dev:admin": "pnpm --parallel --filter admin-server --filter admin-client dev"
+    "dev:admin": "pnpm --parallel --filter admin-server --filter admin-client dev",
+    "prepare": "husky"
   },
   "devDependencies": {
     "@playwright/test": "^1.58.2",
@@ -30,10 +33,20 @@
     "eslint-plugin-prettier": "^5.5.5",
     "eslint-plugin-react-hooks": "^7.0.1",
     "eslint-plugin-simple-import-sort": "^12.1.1",
+    "husky": "^9.1.7",
+    "lint-staged": "^17.0.5",
+    "oxlint": "^1.66.0",
     "playwright": "^1.59.1",
     "prettier": "^3.8.1",
     "typescript": "^5.4.0",
     "wrangler": "^4.87.0"
+  },
+  "lint-staged": {
+    "*.{ts,tsx}": [
+      "oxlint",
+      "eslint --fix --max-warnings=200",
+      "prettier --write"
+    ]
   },
   "engines": {
     "node": ">=20.0.0",

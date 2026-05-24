@@ -1,12 +1,12 @@
 import { createClient } from '@libsql/client'
-import { createDbFromClient } from '@tabletop-tools/db'
 import {
-  setupAuthTables,
-  createRequestHelper,
   authCookie,
-  TEST_USER,
+  createRequestHelper,
+  setupAuthTables,
   TEST_SECRET,
+  TEST_USER,
 } from '@tabletop-tools/auth/src/test-helpers'
+import { createDbFromClient } from '@tabletop-tools/db'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 
 import { createServer } from './server'
@@ -101,19 +101,19 @@ describe('HTTP integration — admin.linkPlayer via session cookie', () => {
     const res = await makeRequest('/trpc/admin.linkPlayer', {
       method: 'POST',
       cookie: await authCookie(),
-      body: { glickoId: 'glicko-1', userId: 'user-1' },
+      body: { glickoId: 'glicko-1', userId: TEST_USER.id },
     })
 
     expect(res.status).toBe(200)
     const json = (await res.json()) as any
-    expect(json.result?.data?.userId).toBe('user-1')
+    expect(json.result?.data?.userId).toBe(TEST_USER.id)
     expect(json.result.data.playerName).toBe('TestPlayer')
   })
 
   it('returns UNAUTHORIZED without a cookie', async () => {
     const res = await makeRequest('/trpc/admin.linkPlayer', {
       method: 'POST',
-      body: { glickoId: 'glicko-1', userId: 'user-1' },
+      body: { glickoId: 'glicko-1', userId: TEST_USER.id },
     })
 
     const json = (await res.json()) as any

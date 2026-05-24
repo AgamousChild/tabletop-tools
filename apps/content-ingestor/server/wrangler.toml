@@ -16,3 +16,7 @@ index_name = "brain-nodes"
 
 [ai]
 binding = "AI"
+
+# Daily content discovery + processing (6am UTC)
+[triggers]
+crons = ["0 6 * * *"]

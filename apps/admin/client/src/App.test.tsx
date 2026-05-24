@@ -1,5 +1,5 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { fireEvent, render, screen } from '@testing-library/react'
+import { describe, expect, it, vi } from 'vitest'
 
 // Mock auth client before importing App
 vi.mock('./lib/auth', () => ({
@@ -33,7 +33,14 @@ vi.mock('./lib/trpc', () => {
       bcpScraperHistory: { useQuery: vi.fn(() => ({ data: null, isLoading: true })) },
       triggerBcpScrape: { useMutation: vi.fn(() => ({ mutate: vi.fn(), isPending: false })) },
       triggerMetaPipeline: { useMutation: vi.fn(() => ({ mutate: vi.fn(), isPending: false })) },
-      ingestJobs: { useQuery: vi.fn(() => ({ data: null, isLoading: true, refetch: vi.fn() })) },
+      ingestSourcesList: {
+        useQuery: vi.fn(() => ({ data: [], isLoading: false, refetch: vi.fn() })),
+      },
+      ingestJobs: { useQuery: vi.fn(() => ({ data: [], isLoading: false, refetch: vi.fn() })) },
+      addIngestSource: { useMutation: vi.fn(() => ({ mutate: vi.fn(), isPending: false })) },
+      toggleIngestSource: { useMutation: vi.fn(() => ({ mutate: vi.fn(), isPending: false })) },
+      triggerDiscover: { useMutation: vi.fn(() => ({ mutate: vi.fn(), isPending: false })) },
+      triggerProcess: { useMutation: vi.fn(() => ({ mutate: vi.fn(), isPending: false })) },
       triggerYoutubeIngest: { useMutation: vi.fn(() => ({ mutate: vi.fn(), isPending: false })) },
       triggerWebIngest: { useMutation: vi.fn(() => ({ mutate: vi.fn(), isPending: false })) },
     },
@@ -157,7 +164,7 @@ describe('App', () => {
 
     render(<App />)
     fireEvent.click(screen.getByText('Ingest'))
-    expect(screen.getByText('Loading ingest jobs...')).toBeInTheDocument()
+    expect(screen.getByText('Content Ingestor')).toBeInTheDocument()
   })
 
   it('defaults to Overview (Dashboard) page', () => {

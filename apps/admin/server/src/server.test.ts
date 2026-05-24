@@ -1,12 +1,13 @@
 import { createClient } from '@libsql/client'
-import { createDbFromClient } from '@tabletop-tools/db'
 import {
-  setupAuthTables,
-  createRequestHelper,
   authCookie,
-  TEST_USER,
+  createRequestHelper,
+  setupAuthTables,
   TEST_SECRET,
+  TEST_TOKEN_2,
+  TEST_USER,
 } from '@tabletop-tools/auth/src/test-helpers'
+import { createDbFromClient } from '@tabletop-tools/db'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 
 import { createServer } from './server'
@@ -106,7 +107,7 @@ describe('HTTP integration — stats.overview via session cookie', () => {
 
   it('returns FORBIDDEN for non-admin user', async () => {
     const res = await makeRequest('/trpc/stats.overview', {
-      cookie: await authCookie('bob-token'),
+      cookie: await authCookie(TEST_TOKEN_2),
     })
     const json = (await res.json()) as any
     expect(json.error?.data?.code).toBe('FORBIDDEN')

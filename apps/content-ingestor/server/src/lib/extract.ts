@@ -105,12 +105,14 @@ export async function extractNodes(opts: {
       if (event.type === 'content_block_delta' && event.delta?.text) {
         text += event.delta.text
       }
-    } catch { /* skip malformed lines */ }
+    } catch {
+      /* skip malformed lines */
+    }
   }
 
   console.log('Streamed text length:', text.length, 'chars')
   if (!text.trim()) {
-    console.log('Empty stream result — buffer remainder:', buffer.length)
+    console.log('Empty stream result')
     throw new Error('Claude returned empty response from stream')
   }
   const parsed = parseJsonArray(text)
