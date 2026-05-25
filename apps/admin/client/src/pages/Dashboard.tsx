@@ -45,8 +45,7 @@ export function Dashboard() {
             value={data.sessions.active}
             sub={`${data.sessions.total} total`}
           />
-          <StatCard label="ELO Players" value={data.elo.players} />
-          <StatCard label="Glicko Players" value={data.newMeta.glickoPlayers} />
+          <StatCard label="Rated Players" value={data.newMeta.glickoPlayers} />
         </div>
       </section>
 
