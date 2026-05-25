@@ -65,10 +65,6 @@ beforeAll(async () => {
       list_locked INTEGER NOT NULL DEFAULT 0, checked_in INTEGER NOT NULL DEFAULT 0,
       dropped INTEGER NOT NULL DEFAULT 0, registered_at INTEGER NOT NULL
     );
-    CREATE TABLE IF NOT EXISTS player_elo (
-      id TEXT PRIMARY KEY, user_id TEXT NOT NULL UNIQUE, rating INTEGER NOT NULL DEFAULT 1200,
-      games_played INTEGER NOT NULL DEFAULT 0, updated_at INTEGER NOT NULL
-    );
     CREATE TABLE IF NOT EXISTS imported_tournament_results (
       id TEXT PRIMARY KEY, imported_by TEXT NOT NULL, event_name TEXT NOT NULL,
       event_date INTEGER NOT NULL, format TEXT NOT NULL, meta_window TEXT NOT NULL,

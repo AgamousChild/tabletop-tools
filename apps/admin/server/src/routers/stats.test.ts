@@ -202,23 +202,6 @@ beforeAll(async () => {
       to_override INTEGER NOT NULL DEFAULT 0,
       created_at INTEGER NOT NULL
     );
-    CREATE TABLE IF NOT EXISTS player_elo (
-      id TEXT PRIMARY KEY,
-      user_id TEXT NOT NULL UNIQUE REFERENCES "user"(id),
-      rating INTEGER NOT NULL DEFAULT 1200,
-      games_played INTEGER NOT NULL DEFAULT 0,
-      updated_at INTEGER NOT NULL
-    );
-    CREATE TABLE IF NOT EXISTS elo_history (
-      id TEXT PRIMARY KEY,
-      user_id TEXT NOT NULL REFERENCES "user"(id),
-      pairing_id TEXT NOT NULL REFERENCES pairings(id),
-      rating_before INTEGER NOT NULL,
-      rating_after INTEGER NOT NULL,
-      delta INTEGER NOT NULL,
-      opponent_id TEXT NOT NULL REFERENCES "user"(id),
-      recorded_at INTEGER NOT NULL
-    );
     CREATE TABLE IF NOT EXISTS imported_tournament_results (
       id TEXT PRIMARY KEY,
       imported_by TEXT NOT NULL REFERENCES "user"(id),
@@ -334,8 +317,6 @@ async function clearAllData() {
     DELETE FROM glicko_history;
     DELETE FROM player_glicko;
     DELETE FROM imported_tournament_results;
-    DELETE FROM elo_history;
-    DELETE FROM player_elo;
     DELETE FROM pairings;
     DELETE FROM rounds;
     DELETE FROM tournament_players;
@@ -391,7 +372,6 @@ describe('stats router', () => {
         gameTracker: { matches: 0, turns: 0 },
         tournament: { tournaments: 0, players: 0 },
         newMeta: { imports: 0, glickoPlayers: 0 },
-        elo: { players: 0 },
       })
     })
   })
@@ -458,11 +438,6 @@ describe('stats router', () => {
         INSERT INTO tournament_players (id, tournament_id, user_id, display_name, faction, registered_at) VALUES ('tp2', 'tour1', 'u2', 'Bob', 'Orks', ${now});
       `)
 
-      // ELO data
-      await client.execute(
-        `INSERT INTO player_elo (id, user_id, rating, games_played, updated_at) VALUES ('elo1', 'u1', 1250, 5, ${now})`,
-      )
-
       // New Meta data
       await client.executeMultiple(`
         INSERT INTO imported_tournament_results (id, imported_by, event_name, event_date, format, meta_window, raw_data, parsed_data, imported_at) VALUES ('imp1', 'u1', 'LVO 2025', ${now}, 'bcp-csv', '2025-Q1', 'csv', '[]', ${now});
@@ -521,12 +496,6 @@ describe('stats router', () => {
       const result = await caller.stats.overview()
       expect(result.tournament.tournaments).toBe(1)
       expect(result.tournament.players).toBe(2)
-    })
-
-    it('returns correct elo stats', async () => {
-      const caller = createCaller(adminCtx)
-      const result = await caller.stats.overview()
-      expect(result.elo.players).toBe(1)
     })
 
     it('returns correct new-meta stats', async () => {

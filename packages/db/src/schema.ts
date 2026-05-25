@@ -471,44 +471,6 @@ export const pairings = sqliteTable(
   ],
 )
 
-// === ELO tables ===
-
-export const playerElo = sqliteTable('player_elo', {
-  id: text('id').primaryKey(),
-  userId: text('user_id')
-    .notNull()
-    .unique()
-    .references(() => authUsers.id, { onDelete: 'cascade' }),
-  rating: integer('rating').notNull().default(1200),
-  gamesPlayed: integer('games_played').notNull().default(0),
-  updatedAt: integer('updated_at').notNull(),
-})
-
-export const eloHistory = sqliteTable(
-  'elo_history',
-  {
-    id: text('id').primaryKey(),
-    userId: text('user_id')
-      .notNull()
-      .references(() => authUsers.id, { onDelete: 'cascade' }),
-    pairingId: text('pairing_id')
-      .notNull()
-      .references(() => pairings.id, { onDelete: 'cascade' }),
-    ratingBefore: integer('rating_before').notNull(),
-    ratingAfter: integer('rating_after').notNull(),
-    delta: integer('delta').notNull(),
-    opponentId: text('opponent_id')
-      .notNull()
-      .references(() => authUsers.id, { onDelete: 'cascade' }),
-    recordedAt: integer('recorded_at').notNull(),
-  },
-  (table) => [
-    index('idx_elo_history_user_id').on(table.userId),
-    index('idx_elo_history_pairing_id').on(table.pairingId),
-    index('idx_elo_history_opponent_id').on(table.opponentId),
-  ],
-)
-
 // === Imported tournament results ===
 //
 // Raw + parsed tournament data imported by the operator.

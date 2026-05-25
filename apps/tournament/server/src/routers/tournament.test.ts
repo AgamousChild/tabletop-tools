@@ -80,23 +80,6 @@ beforeAll(async () => {
       to_override INTEGER NOT NULL DEFAULT 0,
       created_at INTEGER NOT NULL
     );
-    CREATE TABLE IF NOT EXISTS player_elo (
-      id TEXT PRIMARY KEY,
-      user_id TEXT NOT NULL UNIQUE REFERENCES "user"(id),
-      rating INTEGER NOT NULL DEFAULT 1200,
-      games_played INTEGER NOT NULL DEFAULT 0,
-      updated_at INTEGER NOT NULL
-    );
-    CREATE TABLE IF NOT EXISTS elo_history (
-      id TEXT PRIMARY KEY,
-      user_id TEXT NOT NULL REFERENCES "user"(id),
-      pairing_id TEXT NOT NULL REFERENCES pairings(id),
-      rating_before INTEGER NOT NULL,
-      rating_after INTEGER NOT NULL,
-      delta INTEGER NOT NULL,
-      opponent_id TEXT NOT NULL REFERENCES "user"(id),
-      recorded_at INTEGER NOT NULL
-    );
     CREATE TABLE IF NOT EXISTS imported_tournament_results (
       id TEXT PRIMARY KEY,
       imported_by TEXT NOT NULL,
@@ -317,15 +300,6 @@ describe('result.report + result.confirm', () => {
   })
 })
 
-describe('elo.get', () => {
-  it('returns default rating 1200 for a player with no ELO record', async () => {
-    const caller = createCaller(toCtx)
-    const result = await caller.elo.get('to-1')
-    expect(result.rating).toBe(1200)
-    expect(result.gamesPlayed).toBe(0)
-  })
-})
-
 describe('tournament export to new-meta on COMPLETE', () => {
   it('exports results to imported_tournament_results when advancing to COMPLETE', async () => {
     const toCaller = createCaller(toCtx)
@@ -341,7 +315,11 @@ describe('tournament export to new-meta on COMPLETE', () => {
     const p1Caller = createCaller(p1Ctx)
     const p2Caller = createCaller(p2Ctx)
     await p1Caller.player.register({ tournamentId: t!.id, displayName: 'Bob', faction: 'Orks' })
-    await p2Caller.player.register({ tournamentId: t!.id, displayName: 'Carol', faction: 'Necrons' })
+    await p2Caller.player.register({
+      tournamentId: t!.id,
+      displayName: 'Carol',
+      faction: 'Necrons',
+    })
 
     await toCaller.tournament.advanceStatus(t!.id) // → CHECK_IN
     await toCaller.tournament.advanceStatus(t!.id) // → IN_PROGRESS
@@ -362,7 +340,10 @@ describe('tournament export to new-meta on COMPLETE', () => {
     await toCaller.tournament.advanceStatus(t!.id) // → COMPLETE
 
     // Verify export was written
-    const rows = await client.execute({ sql: 'SELECT * FROM imported_tournament_results WHERE event_name = ?', args: ['Export Test GT'] })
+    const rows = await client.execute({
+      sql: 'SELECT * FROM imported_tournament_results WHERE event_name = ?',
+      args: ['Export Test GT'],
+    })
     expect(rows.rows).toHaveLength(1)
     const row = rows.rows[0]!
     expect(row['format']).toBe('2000pts')
@@ -478,7 +459,7 @@ describe('player.myProfile', () => {
 
     const p1Caller = createCaller(p1Ctx)
     const p2Caller = createCaller(p2Ctx)
-    const tp1 = await p1Caller.player.register({
+    await p1Caller.player.register({
       tournamentId: t!.id,
       displayName: 'Bob',
       faction: 'Orks',

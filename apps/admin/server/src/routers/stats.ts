@@ -11,7 +11,6 @@ import {
   listUnits,
   matches,
   metaEvents,
-  playerElo,
   playerGlicko,
   rolls,
   simulations,
@@ -81,9 +80,6 @@ export const statsRouter = router({
       newMeta: {
         imports: await count(ctx.db, importedTournamentResults),
         glickoPlayers: await count(ctx.db, playerGlicko),
-      },
-      elo: {
-        players: await count(ctx.db, playerElo),
       },
     }
   }),

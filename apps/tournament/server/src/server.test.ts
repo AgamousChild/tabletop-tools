@@ -76,23 +76,6 @@ beforeAll(async () => {
       to_override INTEGER NOT NULL DEFAULT 0,
       created_at INTEGER NOT NULL
     );
-    CREATE TABLE IF NOT EXISTS player_elo (
-      id TEXT PRIMARY KEY,
-      user_id TEXT NOT NULL UNIQUE,
-      rating INTEGER NOT NULL DEFAULT 1200,
-      games_played INTEGER NOT NULL DEFAULT 0,
-      updated_at INTEGER NOT NULL
-    );
-    CREATE TABLE IF NOT EXISTS elo_history (
-      id TEXT PRIMARY KEY,
-      user_id TEXT NOT NULL,
-      pairing_id TEXT NOT NULL,
-      rating_before INTEGER NOT NULL,
-      rating_after INTEGER NOT NULL,
-      delta INTEGER NOT NULL,
-      opponent_id TEXT NOT NULL,
-      recorded_at INTEGER NOT NULL
-    );
   `)
 })
 

@@ -7,26 +7,24 @@ import {
   authUsers,
   diceRollingSessions,
   diceSets,
-  eloHistory,
   glickoHistory,
   importedTournamentResults,
-  listUnits,
   lists,
-  matchSecondaries,
+  listUnits,
   matches,
+  matchSecondaries,
   pairings,
-  playerElo,
   playerGlicko,
   rolls,
   rounds,
   simulations,
-  trainingExamples,
-  trainingFrames,
   stratagemLog,
   tournamentAwards,
   tournamentCards,
   tournamentPlayers,
   tournaments,
+  trainingExamples,
+  trainingFrames,
   turns,
   unitRatings,
   userBans,
@@ -318,26 +316,6 @@ beforeAll(async () => {
     created_at INTEGER NOT NULL
   )`)
 
-  // ELO tables
-  await client.execute(`CREATE TABLE player_elo (
-    id TEXT PRIMARY KEY,
-    user_id TEXT NOT NULL UNIQUE REFERENCES "user"(id) ON DELETE CASCADE,
-    rating INTEGER NOT NULL DEFAULT 1200,
-    games_played INTEGER NOT NULL DEFAULT 0,
-    updated_at INTEGER NOT NULL
-  )`)
-
-  await client.execute(`CREATE TABLE elo_history (
-    id TEXT PRIMARY KEY,
-    user_id TEXT NOT NULL REFERENCES "user"(id) ON DELETE CASCADE,
-    pairing_id TEXT NOT NULL REFERENCES pairings(id) ON DELETE CASCADE,
-    rating_before INTEGER NOT NULL,
-    rating_after INTEGER NOT NULL,
-    delta INTEGER NOT NULL,
-    opponent_id TEXT NOT NULL REFERENCES "user"(id) ON DELETE CASCADE,
-    recorded_at INTEGER NOT NULL
-  )`)
-
   // Imported tournament results
   await client.execute(`CREATE TABLE imported_tournament_results (
     id TEXT PRIMARY KEY,
@@ -390,32 +368,36 @@ beforeAll(async () => {
   await client.execute('CREATE INDEX idx_rolls_session_id ON rolls(session_id)')
   // Training
   await client.execute('CREATE INDEX idx_training_examples_user_id ON training_examples(user_id)')
-  await client.execute('CREATE INDEX idx_training_examples_dice_set_id ON training_examples(dice_set_id)')
+  await client.execute(
+    'CREATE INDEX idx_training_examples_dice_set_id ON training_examples(dice_set_id)',
+  )
   await client.execute('CREATE INDEX idx_training_examples_label ON training_examples(label)')
   // Versus
   await client.execute('CREATE INDEX idx_simulations_user_id ON simulations(user_id)')
   // List Builder
   await client.execute('CREATE INDEX idx_lists_user_id ON lists(user_id)')
   await client.execute('CREATE INDEX idx_list_units_list_id ON list_units(list_id)')
-  await client.execute('CREATE INDEX idx_unit_ratings_unit_content_id ON unit_ratings(unit_content_id)')
+  await client.execute(
+    'CREATE INDEX idx_unit_ratings_unit_content_id ON unit_ratings(unit_content_id)',
+  )
   await client.execute('CREATE INDEX idx_unit_ratings_meta_window ON unit_ratings(meta_window)')
   // Game Tracker
   await client.execute('CREATE INDEX idx_matches_user_id ON matches(user_id)')
   await client.execute('CREATE INDEX idx_turns_match_id ON turns(match_id)')
   // Tournament
   await client.execute('CREATE INDEX idx_tournaments_user_id ON tournaments(to_user_id)')
-  await client.execute('CREATE INDEX idx_tournament_players_tourn_id ON tournament_players(tournament_id)')
+  await client.execute(
+    'CREATE INDEX idx_tournament_players_tourn_id ON tournament_players(tournament_id)',
+  )
   await client.execute('CREATE INDEX idx_tournament_players_user_id ON tournament_players(user_id)')
   await client.execute('CREATE INDEX idx_rounds_tournament_id ON rounds(tournament_id)')
   await client.execute('CREATE INDEX idx_pairings_round_id ON pairings(round_id)')
   await client.execute('CREATE INDEX idx_pairings_player1_id ON pairings(player1_id)')
   await client.execute('CREATE INDEX idx_pairings_player2_id ON pairings(player2_id)')
-  // ELO (player_elo.user_id already has unique index)
-  await client.execute('CREATE INDEX idx_elo_history_user_id ON elo_history(user_id)')
-  await client.execute('CREATE INDEX idx_elo_history_pairing_id ON elo_history(pairing_id)')
-  await client.execute('CREATE INDEX idx_elo_history_opponent_id ON elo_history(opponent_id)')
   // Imported results
-  await client.execute('CREATE INDEX idx_imported_results_imported_by ON imported_tournament_results(imported_by)')
+  await client.execute(
+    'CREATE INDEX idx_imported_results_imported_by ON imported_tournament_results(imported_by)',
+  )
   // Glicko
   await client.execute('CREATE INDEX idx_player_glicko_user_id ON player_glicko(user_id)')
   await client.execute('CREATE INDEX idx_glicko_history_player_id ON glicko_history(player_id)')
@@ -472,17 +454,27 @@ beforeAll(async () => {
   )`)
 
   // V3 indexes on new tables
-  await client.execute('CREATE INDEX idx_tournament_cards_tournament_id ON tournament_cards(tournament_id)')
+  await client.execute(
+    'CREATE INDEX idx_tournament_cards_tournament_id ON tournament_cards(tournament_id)',
+  )
   await client.execute('CREATE INDEX idx_tournament_cards_player_id ON tournament_cards(player_id)')
-  await client.execute('CREATE INDEX idx_tournament_awards_tournament_id ON tournament_awards(tournament_id)')
+  await client.execute(
+    'CREATE INDEX idx_tournament_awards_tournament_id ON tournament_awards(tournament_id)',
+  )
   await client.execute('CREATE INDEX idx_match_secondaries_match_id ON match_secondaries(match_id)')
   await client.execute('CREATE INDEX idx_stratagem_log_turn_id ON stratagem_log(turn_id)')
   await client.execute('CREATE INDEX idx_user_bans_user_id ON user_bans(user_id)')
 
   // --- V2: Composite unique constraints ---
-  await client.execute('CREATE UNIQUE INDEX uq_unit_ratings_unit_window ON unit_ratings(unit_content_id, meta_window)')
-  await client.execute('CREATE UNIQUE INDEX uq_tournament_players_tourn_user ON tournament_players(tournament_id, user_id)')
-  await client.execute('CREATE UNIQUE INDEX uq_rounds_tourn_number ON rounds(tournament_id, round_number)')
+  await client.execute(
+    'CREATE UNIQUE INDEX uq_unit_ratings_unit_window ON unit_ratings(unit_content_id, meta_window)',
+  )
+  await client.execute(
+    'CREATE UNIQUE INDEX uq_tournament_players_tourn_user ON tournament_players(tournament_id, user_id)',
+  )
+  await client.execute(
+    'CREATE UNIQUE INDEX uq_rounds_tourn_number ON rounds(tournament_id, round_number)',
+  )
   await client.execute('CREATE UNIQUE INDEX uq_turns_match_number ON turns(match_id, turn_number)')
 
   // Seed shared users for FK tests
@@ -622,7 +614,9 @@ describe('trainingExamples', () => {
       createdAt: Date.now(),
     })
 
-    const features = [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6]
+    const features = [
+      0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6,
+    ]
 
     await db.insert(trainingExamples).values({
       id: 'train-1',
@@ -637,7 +631,10 @@ describe('trainingExamples', () => {
       createdAt: Date.now(),
     })
 
-    const result = await db.select().from(trainingExamples).where(eq(trainingExamples.id, 'train-1'))
+    const result = await db
+      .select()
+      .from(trainingExamples)
+      .where(eq(trainingExamples.id, 'train-1'))
     expect(result).toHaveLength(1)
     expect(result[0]?.label).toBe(4)
     expect(result[0]?.guess).toBe(3)
@@ -647,7 +644,10 @@ describe('trainingExamples', () => {
 
   it('cascades delete when dice set is deleted', async () => {
     await db.delete(diceSets).where(eq(diceSets.id, 'ds-train'))
-    const result = await db.select().from(trainingExamples).where(eq(trainingExamples.id, 'train-1'))
+    const result = await db
+      .select()
+      .from(trainingExamples)
+      .where(eq(trainingExamples.id, 'train-1'))
     expect(result).toHaveLength(0)
   })
 })
@@ -876,10 +876,7 @@ describe('tournamentPlayers', () => {
       registeredAt: Date.now(),
     })
 
-    const result = await db
-      .select()
-      .from(tournamentPlayers)
-      .where(eq(tournamentPlayers.id, 'tp-1'))
+    const result = await db.select().from(tournamentPlayers).where(eq(tournamentPlayers.id, 'tp-1'))
     expect(result).toHaveLength(1)
     expect(result[0]?.faction).toBe('Test Faction')
     expect(result[0]?.listLocked).toBe(0)
@@ -955,83 +952,9 @@ describe('rounds and pairings', () => {
       createdAt: Date.now(),
     })
 
-    const result = await db
-      .select()
-      .from(pairings)
-      .where(eq(pairings.id, 'pairing-bye'))
+    const result = await db.select().from(pairings).where(eq(pairings.id, 'pairing-bye'))
     expect(result[0]?.player2Id).toBeNull()
     expect(result[0]?.result).toBe('BYE')
-  })
-})
-
-// ============================================================
-// ELO table tests
-// ============================================================
-
-describe('playerElo', () => {
-  it('creates a player ELO record at default 1200', async () => {
-    await db.insert(playerElo).values({
-      id: 'elo-1',
-      userId: 'user-1',
-      updatedAt: Date.now(),
-    })
-
-    const result = await db.select().from(playerElo).where(eq(playerElo.userId, 'user-1'))
-    expect(result).toHaveLength(1)
-    expect(result[0]?.rating).toBe(1200)
-    expect(result[0]?.gamesPlayed).toBe(0)
-  })
-
-  it('updates rating after a game', async () => {
-    await db
-      .update(playerElo)
-      .set({ rating: 1216, gamesPlayed: 1, updatedAt: Date.now() })
-      .where(eq(playerElo.userId, 'user-1'))
-
-    const result = await db.select().from(playerElo).where(eq(playerElo.userId, 'user-1'))
-    expect(result[0]?.rating).toBe(1216)
-    expect(result[0]?.gamesPlayed).toBe(1)
-  })
-
-  it('enforces unique user_id per ELO record', async () => {
-    await expect(
-      db.insert(playerElo).values({
-        id: 'elo-1-dupe',
-        userId: 'user-1',  // already exists
-        updatedAt: Date.now(),
-      }),
-    ).rejects.toThrow()
-  })
-})
-
-describe('eloHistory', () => {
-  it('records an ELO change with full audit fields', async () => {
-    // Need user-2 ELO record first
-    await db.insert(playerElo).values({
-      id: 'elo-2',
-      userId: 'user-2',
-      updatedAt: Date.now(),
-    })
-
-    await db.insert(eloHistory).values({
-      id: 'elo-hist-1',
-      userId: 'user-1',
-      pairingId: 'pairing-1',
-      ratingBefore: 1200,
-      ratingAfter: 1216,
-      delta: 16,
-      opponentId: 'user-2',
-      recordedAt: Date.now(),
-    })
-
-    const result = await db
-      .select()
-      .from(eloHistory)
-      .where(eq(eloHistory.userId, 'user-1'))
-    expect(result).toHaveLength(1)
-    expect(result[0]?.delta).toBe(16)
-    expect(result[0]?.ratingBefore).toBe(1200)
-    expect(result[0]?.ratingAfter).toBe(1216)
   })
 })
 
@@ -1224,18 +1147,29 @@ describe('V2: Index existence', () => {
       dice_sets: ['idx_dice_sets_user_id'],
       sessions: ['idx_sessions_user_id', 'idx_sessions_dice_set_id'],
       rolls: ['idx_rolls_session_id'],
-      training_examples: ['idx_training_examples_user_id', 'idx_training_examples_dice_set_id', 'idx_training_examples_label'],
+      training_examples: [
+        'idx_training_examples_user_id',
+        'idx_training_examples_dice_set_id',
+        'idx_training_examples_label',
+      ],
       simulations: ['idx_simulations_user_id'],
       lists: ['idx_lists_user_id'],
       list_units: ['idx_list_units_list_id'],
-      unit_ratings: ['idx_unit_ratings_unit_content_id', 'idx_unit_ratings_meta_window', 'uq_unit_ratings_unit_window'],
+      unit_ratings: [
+        'idx_unit_ratings_unit_content_id',
+        'idx_unit_ratings_meta_window',
+        'uq_unit_ratings_unit_window',
+      ],
       matches: ['idx_matches_user_id'],
       turns: ['idx_turns_match_id', 'uq_turns_match_number'],
       tournaments: ['idx_tournaments_user_id'],
-      tournament_players: ['idx_tournament_players_tourn_id', 'idx_tournament_players_user_id', 'uq_tournament_players_tourn_user'],
+      tournament_players: [
+        'idx_tournament_players_tourn_id',
+        'idx_tournament_players_user_id',
+        'uq_tournament_players_tourn_user',
+      ],
       rounds: ['idx_rounds_tournament_id', 'uq_rounds_tourn_number'],
       pairings: ['idx_pairings_round_id', 'idx_pairings_player1_id', 'idx_pairings_player2_id'],
-      elo_history: ['idx_elo_history_user_id', 'idx_elo_history_pairing_id', 'idx_elo_history_opponent_id'],
       imported_tournament_results: ['idx_imported_results_imported_by'],
       player_glicko: ['idx_player_glicko_user_id'],
       glicko_history: ['idx_glicko_history_player_id'],
@@ -1347,7 +1281,10 @@ describe('tournamentCards', () => {
       issuedAt: Date.now(),
     })
 
-    const result = await db.select().from(tournamentCards).where(eq(tournamentCards.tournamentId, 'tourn-1'))
+    const result = await db
+      .select()
+      .from(tournamentCards)
+      .where(eq(tournamentCards.tournamentId, 'tourn-1'))
     expect(result).toHaveLength(2)
   })
 })
@@ -1362,18 +1299,25 @@ describe('tournamentAwards', () => {
       createdAt: Date.now(),
     })
 
-    const result = await db.select().from(tournamentAwards).where(eq(tournamentAwards.id, 'award-1'))
+    const result = await db
+      .select()
+      .from(tournamentAwards)
+      .where(eq(tournamentAwards.id, 'award-1'))
     expect(result).toHaveLength(1)
     expect(result[0]?.name).toBe('Best Painted')
     expect(result[0]?.recipientId).toBeNull()
   })
 
   it('assigns a recipient to an award', async () => {
-    await db.update(tournamentAwards)
+    await db
+      .update(tournamentAwards)
       .set({ recipientId: 'tp-1' })
       .where(eq(tournamentAwards.id, 'award-1'))
 
-    const result = await db.select().from(tournamentAwards).where(eq(tournamentAwards.id, 'award-1'))
+    const result = await db
+      .select()
+      .from(tournamentAwards)
+      .where(eq(tournamentAwards.id, 'award-1'))
     expect(result[0]?.recipientId).toBe('tp-1')
   })
 })
@@ -1389,7 +1333,10 @@ describe('matchSecondaries', () => {
       vpPerRound: JSON.stringify(vpPerRound),
     })
 
-    const result = await db.select().from(matchSecondaries).where(eq(matchSecondaries.matchId, 'match-1'))
+    const result = await db
+      .select()
+      .from(matchSecondaries)
+      .where(eq(matchSecondaries.matchId, 'match-1'))
     expect(result).toHaveLength(1)
     expect(result[0]?.secondaryName).toBe('Assassination')
     expect(JSON.parse(result[0]?.vpPerRound ?? '[]')).toEqual(vpPerRound)
@@ -1443,9 +1390,7 @@ describe('userBans', () => {
   })
 
   it('lifts a ban', async () => {
-    await db.update(userBans)
-      .set({ liftedAt: Date.now() })
-      .where(eq(userBans.id, 'ban-1'))
+    await db.update(userBans).set({ liftedAt: Date.now() }).where(eq(userBans.id, 'ban-1'))
 
     const result = await db.select().from(userBans).where(eq(userBans.id, 'ban-1'))
     expect(result[0]?.liftedAt).not.toBeNull()
@@ -1595,7 +1540,7 @@ describe('V3: tournaments new columns', () => {
       description: 'A great tournament',
       startTime: '10:00',
       latitude: 40.7128,
-      longitude: -74.0060,
+      longitude: -74.006,
       missionPool: JSON.stringify(['Take and Hold', 'Supply Drop']),
       requirePhotos: 1,
       includeTwists: 0,
@@ -1627,7 +1572,10 @@ describe('V3: tournamentPlayers listId', () => {
       registeredAt: Date.now(),
     })
 
-    const result = await db.select().from(tournamentPlayers).where(eq(tournamentPlayers.id, 'tp-v3'))
+    const result = await db
+      .select()
+      .from(tournamentPlayers)
+      .where(eq(tournamentPlayers.id, 'tp-v3'))
     expect(result[0]?.listId).toBe('list-v3')
   })
 })
@@ -1641,71 +1589,131 @@ describe('V2: Cascading deletes', () => {
   beforeAll(async () => {
     // user-3 → diceSets → diceRollingSessions → rolls
     await db.insert(diceSets).values({
-      id: 'c-set-1', userId: 'user-3', name: 'Cascade Dice', createdAt: Date.now(),
+      id: 'c-set-1',
+      userId: 'user-3',
+      name: 'Cascade Dice',
+      createdAt: Date.now(),
     })
     await db.insert(diceRollingSessions).values({
-      id: 'c-sess-1', userId: 'user-3', diceSetId: 'c-set-1', createdAt: Date.now(),
+      id: 'c-sess-1',
+      userId: 'user-3',
+      diceSetId: 'c-set-1',
+      createdAt: Date.now(),
     })
     await db.insert(rolls).values({
-      id: 'c-roll-1', sessionId: 'c-sess-1', pipValues: '[1,2,3]', createdAt: Date.now(),
+      id: 'c-roll-1',
+      sessionId: 'c-sess-1',
+      pipValues: '[1,2,3]',
+      createdAt: Date.now(),
     })
 
     // user-3 → simulations
     await db.insert(simulations).values({
-      id: 'c-sim-1', userId: 'user-3', attackerContentId: 'x', attackerName: 'X',
-      defenderContentId: 'y', defenderName: 'Y', result: '{}', createdAt: Date.now(),
+      id: 'c-sim-1',
+      userId: 'user-3',
+      attackerContentId: 'x',
+      attackerName: 'X',
+      defenderContentId: 'y',
+      defenderName: 'Y',
+      result: '{}',
+      createdAt: Date.now(),
     })
 
     // user-3 → matches → turns
     await db.insert(matches).values({
-      id: 'c-match-1', userId: 'user-3', opponentFaction: 'Test', mission: 'M1', createdAt: Date.now(),
+      id: 'c-match-1',
+      userId: 'user-3',
+      opponentFaction: 'Test',
+      mission: 'M1',
+      createdAt: Date.now(),
     })
     await db.insert(turns).values({
-      id: 'c-turn-1', matchId: 'c-match-1', turnNumber: 1, createdAt: Date.now(),
+      id: 'c-turn-1',
+      matchId: 'c-match-1',
+      turnNumber: 1,
+      createdAt: Date.now(),
     })
 
     // user-3 → tournaments → tournament_players, rounds → pairings
     await db.insert(tournaments).values({
-      id: 'c-tourn-1', toUserId: 'user-3', name: 'Cascade GT', eventDate: Date.now(),
-      format: 'GT', totalRounds: 3, createdAt: Date.now(),
+      id: 'c-tourn-1',
+      toUserId: 'user-3',
+      name: 'Cascade GT',
+      eventDate: Date.now(),
+      format: 'GT',
+      totalRounds: 3,
+      createdAt: Date.now(),
     })
     await db.insert(tournamentPlayers).values({
-      id: 'c-tp-1', tournamentId: 'c-tourn-1', userId: 'user-3',
-      displayName: 'C', faction: 'X', listLocked: 0, checkedIn: 0, dropped: 0,
+      id: 'c-tp-1',
+      tournamentId: 'c-tourn-1',
+      userId: 'user-3',
+      displayName: 'C',
+      faction: 'X',
+      listLocked: 0,
+      checkedIn: 0,
+      dropped: 0,
       registeredAt: Date.now(),
     })
     await db.insert(tournamentPlayers).values({
-      id: 'c-tp-2', tournamentId: 'c-tourn-1', userId: 'user-2',
-      displayName: 'D', faction: 'Y', listLocked: 0, checkedIn: 0, dropped: 0,
+      id: 'c-tp-2',
+      tournamentId: 'c-tourn-1',
+      userId: 'user-2',
+      displayName: 'D',
+      faction: 'Y',
+      listLocked: 0,
+      checkedIn: 0,
+      dropped: 0,
       registeredAt: Date.now(),
     })
     await db.insert(rounds).values({
-      id: 'c-round-1', tournamentId: 'c-tourn-1', roundNumber: 1, createdAt: Date.now(),
+      id: 'c-round-1',
+      tournamentId: 'c-tourn-1',
+      roundNumber: 1,
+      createdAt: Date.now(),
     })
     await db.insert(pairings).values({
-      id: 'c-pairing-1', roundId: 'c-round-1', tableNumber: 1,
-      player1Id: 'c-tp-1', player2Id: 'c-tp-2', mission: 'M1', createdAt: Date.now(),
-    })
-
-    // user-3 → playerElo
-    await db.insert(playerElo).values({
-      id: 'c-elo-1', userId: 'user-3', updatedAt: Date.now(),
+      id: 'c-pairing-1',
+      roundId: 'c-round-1',
+      tableNumber: 1,
+      player1Id: 'c-tp-1',
+      player2Id: 'c-tp-2',
+      mission: 'M1',
+      createdAt: Date.now(),
     })
 
     // user-3 → importedTournamentResults
     await db.insert(importedTournamentResults).values({
-      id: 'c-import-1', importedBy: 'user-3', eventName: 'E', eventDate: Date.now(),
-      format: 'GT', metaWindow: '2025-Q3', rawData: 'x', parsedData: '[]', importedAt: Date.now(),
+      id: 'c-import-1',
+      importedBy: 'user-3',
+      eventName: 'E',
+      eventDate: Date.now(),
+      format: 'GT',
+      metaWindow: '2025-Q3',
+      rawData: 'x',
+      parsedData: '[]',
+      importedAt: Date.now(),
     })
 
     // user-3 → playerGlicko → glickoHistory
     await db.insert(playerGlicko).values({
-      id: 'c-glicko-1', userId: 'user-3', playerName: 'C', updatedAt: Date.now(),
+      id: 'c-glicko-1',
+      userId: 'user-3',
+      playerName: 'C',
+      updatedAt: Date.now(),
     })
     await db.insert(glickoHistory).values({
-      id: 'c-gh-1', playerId: 'c-glicko-1', ratingPeriod: 'p1',
-      ratingBefore: 1500, rdBefore: 350, ratingAfter: 1600, rdAfter: 200,
-      volatilityAfter: 0.06, delta: 100, gamesInPeriod: 3, recordedAt: Date.now(),
+      id: 'c-gh-1',
+      playerId: 'c-glicko-1',
+      ratingPeriod: 'p1',
+      ratingBefore: 1500,
+      rdBefore: 350,
+      ratingAfter: 1600,
+      rdAfter: 200,
+      volatilityAfter: 0.06,
+      delta: 100,
+      gamesInPeriod: 3,
+      recordedAt: Date.now(),
     })
 
     // Delete user-3 — should cascade through everything
@@ -1716,7 +1724,10 @@ describe('V2: Cascading deletes', () => {
     const sets = await db.select().from(diceSets).where(eq(diceSets.userId, 'user-3'))
     expect(sets).toHaveLength(0)
 
-    const sessions = await db.select().from(diceRollingSessions).where(eq(diceRollingSessions.id, 'c-sess-1'))
+    const sessions = await db
+      .select()
+      .from(diceRollingSessions)
+      .where(eq(diceRollingSessions.id, 'c-sess-1'))
     expect(sessions).toHaveLength(0)
 
     const rollsResult = await db.select().from(rolls).where(eq(rolls.id, 'c-roll-1'))
@@ -1745,12 +1756,20 @@ describe('V2: Cascading deletes', () => {
   it('cascade: list -> listUnits', async () => {
     // Create fresh list data to test list -> listUnits cascade in isolation
     await db.insert(lists).values({
-      id: 'list-cascade', userId: 'user-1', faction: 'T', name: 'CascadeList',
-      totalPts: 100, createdAt: Date.now(), updatedAt: Date.now(),
+      id: 'list-cascade',
+      userId: 'user-1',
+      faction: 'T',
+      name: 'CascadeList',
+      totalPts: 100,
+      createdAt: Date.now(),
+      updatedAt: Date.now(),
     })
     await db.insert(listUnits).values({
-      id: 'lu-cascade', listId: 'list-cascade', unitContentId: 'u1',
-      unitName: 'U', unitPoints: 50,
+      id: 'lu-cascade',
+      listId: 'list-cascade',
+      unitContentId: 'u1',
+      unitName: 'U',
+      unitPoints: 50,
     })
 
     // Delete the list — units should cascade
@@ -1764,26 +1783,47 @@ describe('V2: Cascading deletes', () => {
     // match-1 was deleted via user-3 cascade is gone, but match-2 exists (user-1)
     // Let's create a fresh match with secondaries to test
     await db.insert(matches).values({
-      id: 'c-match-sec', userId: 'user-1', opponentFaction: 'T', mission: 'M', createdAt: Date.now(),
+      id: 'c-match-sec',
+      userId: 'user-1',
+      opponentFaction: 'T',
+      mission: 'M',
+      createdAt: Date.now(),
     })
     await db.insert(matchSecondaries).values({
-      id: 'c-sec-1', matchId: 'c-match-sec', player: 'YOUR', secondaryName: 'Assassination',
+      id: 'c-sec-1',
+      matchId: 'c-match-sec',
+      player: 'YOUR',
+      secondaryName: 'Assassination',
     })
     await db.delete(matches).where(eq(matches.id, 'c-match-sec'))
 
-    const result = await db.select().from(matchSecondaries).where(eq(matchSecondaries.id, 'c-sec-1'))
+    const result = await db
+      .select()
+      .from(matchSecondaries)
+      .where(eq(matchSecondaries.id, 'c-sec-1'))
     expect(result).toHaveLength(0)
   })
 
   it('cascade: turn -> stratagemLog', async () => {
     await db.insert(matches).values({
-      id: 'c-match-strat', userId: 'user-1', opponentFaction: 'T', mission: 'M', createdAt: Date.now(),
+      id: 'c-match-strat',
+      userId: 'user-1',
+      opponentFaction: 'T',
+      mission: 'M',
+      createdAt: Date.now(),
     })
     await db.insert(turns).values({
-      id: 'c-turn-strat', matchId: 'c-match-strat', turnNumber: 1, createdAt: Date.now(),
+      id: 'c-turn-strat',
+      matchId: 'c-match-strat',
+      turnNumber: 1,
+      createdAt: Date.now(),
     })
     await db.insert(stratagemLog).values({
-      id: 'c-strat-1', turnId: 'c-turn-strat', player: 'YOUR', stratagemName: 'Fire Discipline', cpCost: 1,
+      id: 'c-strat-1',
+      turnId: 'c-turn-strat',
+      player: 'YOUR',
+      stratagemName: 'Fire Discipline',
+      cpCost: 1,
     })
     await db.delete(matches).where(eq(matches.id, 'c-match-strat'))
 
@@ -1793,21 +1833,40 @@ describe('V2: Cascading deletes', () => {
 
   it('cascade: tournament -> tournamentCards and tournamentAwards', async () => {
     await db.insert(tournaments).values({
-      id: 'c-tourn-cards', toUserId: 'user-1', name: 'CascadeCards', eventDate: Date.now(),
-      format: 'GT', totalRounds: 3, createdAt: Date.now(),
+      id: 'c-tourn-cards',
+      toUserId: 'user-1',
+      name: 'CascadeCards',
+      eventDate: Date.now(),
+      format: 'GT',
+      totalRounds: 3,
+      createdAt: Date.now(),
     })
     await db.insert(tournamentPlayers).values({
-      id: 'c-tp-cards', tournamentId: 'c-tourn-cards', userId: 'user-1',
-      displayName: 'X', faction: 'Y', listLocked: 0, checkedIn: 0, dropped: 0,
+      id: 'c-tp-cards',
+      tournamentId: 'c-tourn-cards',
+      userId: 'user-1',
+      displayName: 'X',
+      faction: 'Y',
+      listLocked: 0,
+      checkedIn: 0,
+      dropped: 0,
       registeredAt: Date.now(),
     })
     await db.insert(tournamentCards).values({
-      id: 'c-card-1', tournamentId: 'c-tourn-cards', playerId: 'c-tp-cards',
-      issuedBy: 'user-1', cardType: 'YELLOW', reason: 'Test', issuedAt: Date.now(),
+      id: 'c-card-1',
+      tournamentId: 'c-tourn-cards',
+      playerId: 'c-tp-cards',
+      issuedBy: 'user-1',
+      cardType: 'YELLOW',
+      reason: 'Test',
+      issuedAt: Date.now(),
     })
     await db.insert(tournamentAwards).values({
-      id: 'c-award-1', tournamentId: 'c-tourn-cards', name: 'Best Painted',
-      recipientId: 'c-tp-cards', createdAt: Date.now(),
+      id: 'c-award-1',
+      tournamentId: 'c-tourn-cards',
+      name: 'Best Painted',
+      recipientId: 'c-tp-cards',
+      createdAt: Date.now(),
     })
 
     await db.delete(tournaments).where(eq(tournaments.id, 'c-tourn-cards'))
@@ -1815,7 +1874,10 @@ describe('V2: Cascading deletes', () => {
     const cards = await db.select().from(tournamentCards).where(eq(tournamentCards.id, 'c-card-1'))
     expect(cards).toHaveLength(0)
 
-    const awards = await db.select().from(tournamentAwards).where(eq(tournamentAwards.id, 'c-award-1'))
+    const awards = await db
+      .select()
+      .from(tournamentAwards)
+      .where(eq(tournamentAwards.id, 'c-award-1'))
     expect(awards).toHaveLength(0)
   })
 
