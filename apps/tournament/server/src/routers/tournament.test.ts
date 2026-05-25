@@ -453,9 +453,9 @@ describe('tournament export to meta on COMPLETE', () => {
     expect(pairingRows.rows[0]!['player2_score']).toBe(60)
 
     // Verify Glicko-2 records were created
-    const glickoRows = await client.execute({
-      sql: `SELECT * FROM player_glicko WHERE player_name IN ('Bob', 'Carol')`,
-    })
+    const glickoRows = await client.execute(
+      `SELECT * FROM player_glicko WHERE player_name IN ('Bob', 'Carol')`,
+    )
     expect(glickoRows.rows).toHaveLength(2)
   })
 })

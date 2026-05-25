@@ -3,7 +3,7 @@ import { cors } from 'hono/cors'
 
 import { filterBrowseNodes } from './lib/browse'
 import { buildCrossRefs, loadIndexes } from './lib/cross-refs'
-import { getEntityIndex, linkEntitiesInContent } from './lib/entity-linker'
+import { type EntityMap, getEntityIndex, linkEntitiesInContent } from './lib/entity-linker'
 import { findErrataForNode } from './lib/errata-linker'
 import { assembleContext, formatConversationalAnswer } from './lib/format'
 import type { Node } from './lib/model'
@@ -12,7 +12,7 @@ import type { Env } from './types'
 
 // ── Module-scope caches (persist across requests in the same Worker isolate) ──
 let cachedErrataNodes: Node[] | null = null
-let cachedEntityIndex: Map<string, { nodeId: string; category: string }> | null = null
+let cachedEntityIndex: EntityMap | null = null
 let cachedAllNodes: Node[] | null = null
 let cacheManifestHash: string | null = null
 
@@ -43,7 +43,7 @@ async function getAllNodes(bucket: any): Promise<Node[]> {
   }
   cachedAllNodes = allNodes
   cacheManifestHash = hash
-  cachedErrataNodes = allNodes.filter(n => n.category === 'faq' || n.category === 'commentary')
+  cachedErrataNodes = allNodes.filter((n) => n.category === 'faq' || n.category === 'commentary')
   return allNodes
 }
 
@@ -106,7 +106,19 @@ const BROWSE_CATEGORIES: Array<{
     label: 'Core Rules',
     filter: (n) => {
       if (n.layer !== 'core') return false
-      if (['faq', 'commentary', 'challenger', 'primary-mission', 'secondary-mission', 'twist', 'deployment-zone', 'terrain-layout'].includes(n.category)) return false
+      if (
+        [
+          'faq',
+          'commentary',
+          'challenger',
+          'primary-mission',
+          'secondary-mission',
+          'twist',
+          'deployment-zone',
+          'terrain-layout',
+        ].includes(n.category)
+      )
+        return false
       // Filter out table fragment nodes (titles like "+", "2+", single symbols)
       if (/^[+\-\d".\s]+$/.test(n.title)) return false
       // Filter out Tournament Companion nodes (previous season rules)
@@ -173,7 +185,8 @@ const BROWSE_CATEGORIES: Array<{
     id: 'enhancements',
     label: 'Enhancements',
     // Filter out misclassified stat-line nodes (titles like "6\" 3+ 7+", "-3+ 7+", "10\" 2+ 6+")
-    filter: (n) => n.category === 'enhancement' && !/^[\d\-\u2011]/.test(n.title) && !/^\d+"/.test(n.title),
+    filter: (n) =>
+      n.category === 'enhancement' && !/^[\d\-\u2011]/.test(n.title) && !/^\d+"/.test(n.title),
   },
   {
     id: 'units',
@@ -191,10 +204,10 @@ app.get('/browse/layers', async (c) => {
   const allNodes = await getAllNodes(c.env.BRAIN_BUCKET)
   if (!allNodes.length) return c.json({ layers: [] })
 
-  const layers = BROWSE_CATEGORIES.map(cat => {
+  const layers = BROWSE_CATEGORIES.map((cat) => {
     const count = allNodes.filter(cat.filter).length
     return { id: cat.id, label: cat.label, count }
-  }).filter(l => l.count > 0)
+  }).filter((l) => l.count > 0)
 
   return c.json({ layers })
 })
@@ -209,10 +222,10 @@ app.get('/browse/nodes', async (c) => {
   const allCached = await getAllNodes(c.env.BRAIN_BUCKET)
   if (!allCached.length) return c.json({ nodes: [], total: 0, page, pageSize, totalPages: 0 })
 
-  const catDef = BROWSE_CATEGORIES.find(cat => cat.id === layer)
+  const catDef = BROWSE_CATEGORIES.find((cat) => cat.id === layer)
   const allNodes = catDef
     ? allCached.filter(catDef.filter)
-    : allCached.filter(n => n.layer === layer)
+    : allCached.filter((n) => n.layer === layer)
 
   // Filter to top-level records only
   const filtered = filterBrowseNodes(allNodes)
@@ -373,7 +386,11 @@ app.post('/search', async (c) => {
     bucket: c.env.BRAIN_BUCKET,
   }
 
-  const { detected, results, records: rawRecords } = await retrieve(
+  const {
+    detected,
+    results,
+    records: rawRecords,
+  } = await retrieve(
     {
       query: body.query,
       limit: body.limit,
@@ -392,7 +409,7 @@ app.post('/search', async (c) => {
   // Use module-scope cached errata + entity index (loaded once per isolate)
   const errataNodes = await getErrataNodes(c.env.BRAIN_BUCKET)
   const entityIndex = await getCachedEntityIndex(c.env.BRAIN_BUCKET)
-  const linkedRecords = rawRecords.map(record => ({
+  const linkedRecords = rawRecords.map((record) => ({
     ...record,
     errata: findErrataForNode(record.primaryNode, errataNodes),
     primaryNode: {
@@ -413,14 +430,26 @@ app.post('/search', async (c) => {
   // Infer faction + subfaction from top result if not detected from query
   let searchFactionScope = detected.factions
   let searchSubfaction = detected.subfaction
-  if (searchFactionScope.length === 0 && rawRecords.length > 0 && rawRecords[0].primaryNode.factionId) {
+  if (
+    searchFactionScope.length === 0 &&
+    rawRecords.length > 0 &&
+    rawRecords[0].primaryNode.factionId
+  ) {
     searchFactionScope = [rawRecords[0].primaryNode.factionId]
     searchSubfaction = rawRecords[0].primaryNode.subfaction
   }
 
   // Build cross-refs using cached indexes (loaded once per Worker isolate)
   const { fwd, rev } = await loadIndexes(c.env.BRAIN_BUCKET)
-  const records = buildCrossRefs(linkedRecords, fwd, rev, searchFactionScope, nodeFactionMap, nodeSubfactionMap, searchSubfaction)
+  const records = buildCrossRefs(
+    linkedRecords,
+    fwd,
+    rev,
+    searchFactionScope,
+    nodeFactionMap,
+    nodeSubfactionMap,
+    searchSubfaction,
+  )
 
   // Paginate
   const total = records.length
@@ -522,103 +551,6 @@ async function callGemini(
   return { answer, sources }
 }
 
-// ── Google scrape fallback ──────────────────────────────────────────────────
-
-async function scrapeGoogleSearch(
-  question: string,
-): Promise<{ answer: string; sources: GeminiSource[] }> {
-  const query = encodeURIComponent(`Warhammer 40K 10th Edition ${question}`)
-  const url = `https://www.google.com/search?q=${query}&hl=en`
-
-  const res = await fetch(url, {
-    headers: {
-      'User-Agent':
-        'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36',
-      Accept: 'text/html,application/xhtml+xml',
-      'Accept-Language': 'en-US,en;q=0.9',
-    },
-  })
-
-  if (!res.ok) throw new Error(`Google search ${res.status}`)
-  const html = await res.text()
-
-  // Extract AI Overview (data-attrid="ai_overview" or class containing "ai-dd")
-  let aiOverview = ''
-  const aiMatch =
-    html.match(/data-attrid="[^"]*ai[^"]*"[^>]*>([\s\S]*?)<\/div>\s*<\/div>\s*<\/div>/) ||
-    html.match(/class="[^"]*ai-dd[^"]*"[^>]*>([\s\S]*?)<\/div>/)
-  if (aiMatch) {
-    aiOverview = aiMatch[1]!
-      .replace(/<[^>]+>/g, ' ')
-      .replace(/&amp;/g, '&')
-      .replace(/&lt;/g, '<')
-      .replace(/&gt;/g, '>')
-      .replace(/&#39;/g, "'")
-      .replace(/&quot;/g, '"')
-      .replace(/\s+/g, ' ')
-      .trim()
-  }
-
-  // Extract featured snippet
-  let featuredSnippet = ''
-  const featuredMatch =
-    html.match(/class="[^"]*hgKElc[^"]*"[^>]*>([\s\S]*?)<\/span>/) ||
-    html.match(/data-attrid="wa:\/description"[^>]*>([\s\S]*?)<\/span>/)
-  if (featuredMatch) {
-    featuredSnippet = featuredMatch[1]!
-      .replace(/<[^>]+>/g, ' ')
-      .replace(/&amp;/g, '&')
-      .replace(/&lt;/g, '<')
-      .replace(/&gt;/g, '>')
-      .replace(/&#39;/g, "'")
-      .replace(/&quot;/g, '"')
-      .replace(/\s+/g, ' ')
-      .trim()
-  }
-
-  // Extract search result snippets + links
-  const sources: GeminiSource[] = []
-  const snippets: string[] = []
-
-  // Match result blocks: <a href="/url?q=..."><h3>...</h3></a> ... <span class="...">snippet</span>
-  const linkPattern = /href="\/url\?q=([^&"]+)[^"]*"[^>]*>[\s\S]*?<h3[^>]*>([\s\S]*?)<\/h3>/g
-  let linkMatch
-  while ((linkMatch = linkPattern.exec(html)) !== null && sources.length < 5) {
-    const linkUrl = decodeURIComponent(linkMatch[1]!)
-    const title = linkMatch[2]!.replace(/<[^>]+>/g, '').trim()
-    if (linkUrl.startsWith('http') && !linkUrl.includes('google.com')) {
-      sources.push({ url: linkUrl, title })
-    }
-  }
-
-  // Extract snippets from result descriptions
-  const snippetPattern = /class="[^"]*VwiC3b[^"]*"[^>]*>([\s\S]*?)<\/span>/g
-  let snippetMatch
-  while ((snippetMatch = snippetPattern.exec(html)) !== null && snippets.length < 5) {
-    const text = snippetMatch[1]!
-      .replace(/<[^>]+>/g, ' ')
-      .replace(/&amp;/g, '&')
-      .replace(/&lt;/g, '<')
-      .replace(/&gt;/g, '>')
-      .replace(/&#39;/g, "'")
-      .replace(/&quot;/g, '"')
-      .replace(/\s+/g, ' ')
-      .trim()
-    if (text.length > 30) snippets.push(text)
-  }
-
-  // Build answer from whatever we got
-  const parts: string[] = []
-  if (aiOverview) parts.push(aiOverview)
-  if (featuredSnippet && featuredSnippet !== aiOverview) parts.push(featuredSnippet)
-  if (snippets.length > 0) parts.push(...snippets)
-
-  const answer = parts.join('\n\n')
-  if (!answer) throw new Error('No content extracted from Google search')
-
-  return { answer, sources }
-}
-
 // ── Global entity index and linking — see lib/entity-linker.ts ─────────────
 
 // ── Q&A endpoint (RAG: Vectorize → R2 → Gemini + Brain → LLM) ─────────────
@@ -700,7 +632,7 @@ app.post('/ask', async (c) => {
   }
   const results = retrieveResult?.results ?? []
   const connected = retrieveResult?.connected ?? []
-  const parentMap = retrieveResult?.parentMap ?? {}
+  const parentMap = retrieveResult?.parentMap ?? new Map<string, string>()
 
   // Attach errata to primary results so the LLM context includes corrections
   const errataNodesForAsk = await getErrataNodes(c.env.BRAIN_BUCKET)
@@ -718,12 +650,15 @@ app.post('/ask', async (c) => {
 
   // Filter connected nodes by relevance to the actual question
   // Score each connected node: how many query keywords appear in its title/summary/content
-  const queryWords = detected.strippedQuery.toLowerCase().split(/\s+/).filter(w => w.length > 2)
-  const mechanicKeywords = detected.keywords.map(k => k.toLowerCase())
+  const queryWords = detected.strippedQuery
+    .toLowerCase()
+    .split(/\s+/)
+    .filter((w) => w.length > 2)
+  const mechanicKeywords = detected.keywords.map((k) => k.toLowerCase())
   const allQueryTerms = [...new Set([...queryWords, ...mechanicKeywords])]
 
   const MAX_CONNECTED_FOR_CONTEXT = 15
-  const scoredConnected = allConnected.map(node => {
+  const scoredConnected = allConnected.map((node) => {
     const text = `${node.title} ${node.summary} ${node.keywords.join(' ')}`.toLowerCase()
     let score = 0
     for (const term of allQueryTerms) {
@@ -734,8 +669,8 @@ app.post('/ask', async (c) => {
   scoredConnected.sort((a, b) => b.score - a.score)
   const connectedNodes = scoredConnected
     .slice(0, MAX_CONNECTED_FOR_CONTEXT)
-    .filter(s => s.score > 0) // only include nodes with at least one keyword match
-    .map(s => s.node)
+    .filter((s) => s.score > 0) // only include nodes with at least one keyword match
+    .map((s) => s.node)
 
   // Assemble Brain context
   let brainContext = retrieveResult
@@ -849,9 +784,10 @@ app.post('/ask', async (c) => {
   }
 
   // Build the combined LLM prompt
-  const factionScope = detected.factions.length > 0
-    ? `\n\nIMPORTANT FACTION SCOPE: The user is asking about ${detected.subfaction || detected.factions.join(' / ')}. ONLY discuss abilities, stratagems, enhancements, and rules that are available to this specific faction. Do NOT mention abilities from other factions or chapters unless the user explicitly asks for a comparison. If a unit or ability belongs to a different faction or chapter, do NOT include it in your answer.`
-    : ''
+  const factionScope =
+    detected.factions.length > 0
+      ? `\n\nIMPORTANT FACTION SCOPE: The user is asking about ${detected.subfaction || detected.factions.join(' / ')}. ONLY discuss abilities, stratagems, enhancements, and rules that are available to this specific faction. Do NOT mention abilities from other factions or chapters unless the user explicitly asks for a comparison. If a unit or ability belongs to a different faction or chapter, do NOT include it in your answer.`
+      : ''
 
   const systemPrompt = `You are a Warhammer 40,000 10th Edition rules expert. Answer the user's SPECIFIC question using the provided context. Do NOT summarize the entire faction — only address what was asked.${factionScope}
 
@@ -1048,7 +984,7 @@ app.post('/graph-data', async (c) => {
   if (factionSet && subfactionScope) {
     factionSet.add(subfactionScope.replace(/\s+/g, '-'))
   }
-  const allNodes = [...results, ...connected].filter(n => {
+  const allNodes = [...results, ...connected].filter((n) => {
     if (!factionSet) return true
     if (!n.factionId) return true // generic/core — always include
     if (!factionSet.has(n.factionId)) return false
@@ -1070,11 +1006,11 @@ app.post('/graph-data', async (c) => {
   ])
 
   const fwdIndex = fwdObj
-    ? await fwdObj.json() as Record<string, Array<{ targetId: string; rel: string }>>
-    : {} as Record<string, Array<{ targetId: string; rel: string }>>
+    ? ((await fwdObj.json()) as Record<string, Array<{ targetId: string; rel: string }>>)
+    : ({} as Record<string, Array<{ targetId: string; rel: string }>>)
   const revIndex = revObj
-    ? await revObj.json() as Record<string, Array<{ sourceId: string; rel: string }>>
-    : {} as Record<string, Array<{ sourceId: string; rel: string }>>
+    ? ((await revObj.json()) as Record<string, Array<{ sourceId: string; rel: string }>>)
+    : ({} as Record<string, Array<{ sourceId: string; rel: string }>>)
 
   const nodeIdSet = new Set(dedupedNodes.map((n) => n.id))
 
@@ -1147,7 +1083,7 @@ app.post('/graph-data', async (c) => {
 
   // Attach errata to graph nodes
   const graphErrataNodes = await getErrataNodes(c.env.BRAIN_BUCKET)
-  const nodesWithErrata = dedupedNodes.map(n => ({
+  const nodesWithErrata = dedupedNodes.map((n) => ({
     ...n,
     errata: findErrataForNode(n as unknown as Node, graphErrataNodes),
   }))

@@ -7,9 +7,9 @@
  * Run against live API:
  *   API_BASE=https://tabletop-tools-brain.micah-ec2.workers.dev npx vitest run src/search-validation.test.ts --reporter=verbose
  */
-import { describe, it, expect, beforeAll } from 'vitest'
-import { readFileSync, existsSync } from 'fs'
+import { existsSync, readFileSync } from 'fs'
 import { join } from 'path'
+import { beforeAll, describe, expect, it } from 'vitest'
 
 const API_BASE = process.env.API_BASE || 'https://tabletop-tools-brain.micah-ec2.workers.dev'
 
@@ -432,7 +432,13 @@ describe('record-based search', () => {
 describe('browse pagination', () => {
   it('browse returns paginated results', async () => {
     const res = await fetch(`${API_BASE}/browse/nodes?layer=core&page=1&pageSize=10`)
-    const data = await res.json()
+    const data = (await res.json()) as {
+      page: number
+      pageSize: number
+      total: number
+      totalPages: number
+      nodes: Array<{ id: string; category: string }>
+    }
     expect(data.page).toBe(1)
     expect(data.pageSize).toBe(10)
     expect(data.total).toBeGreaterThan(0)
@@ -442,7 +448,7 @@ describe('browse pagination', () => {
 
   it('browse excludes child nodes', async () => {
     const res = await fetch(`${API_BASE}/browse/nodes?layer=faction&page=1&pageSize=50`)
-    const data = await res.json()
+    const data = (await res.json()) as { nodes: Array<{ id: string; category: string }> }
     for (const node of data.nodes) {
       expect(node.category).not.toBe('weapon')
       expect(node.category).not.toBe('unit-ability')
@@ -455,8 +461,8 @@ describe('browse pagination', () => {
   it('browse page 2 returns different nodes than page 1', async () => {
     const p1 = await fetch(`${API_BASE}/browse/nodes?layer=core&page=1&pageSize=5`)
     const p2 = await fetch(`${API_BASE}/browse/nodes?layer=core&page=2&pageSize=5`)
-    const d1 = await p1.json()
-    const d2 = await p2.json()
+    const d1 = (await p1.json()) as { nodes: Array<{ id: string }> }
+    const d2 = (await p2.json()) as { nodes: Array<{ id: string }> }
     if (d2.nodes.length > 0) {
       expect(d1.nodes[0].id).not.toBe(d2.nodes[0].id)
     }
