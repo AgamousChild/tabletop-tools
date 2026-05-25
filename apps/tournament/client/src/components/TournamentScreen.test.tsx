@@ -67,8 +67,30 @@ vi.mock('../lib/trpc', () => ({
           data: {
             round: 2,
             players: [
-              { rank: 1, id: 'p1', displayName: 'Bob', faction: 'Orks', wins: 2, losses: 0, draws: 0, margin: 40, totalVP: 150, strengthOfSchedule: 0.5 },
-              { rank: 2, id: 'p2', displayName: 'Carol', faction: 'Necrons', wins: 1, losses: 1, draws: 0, margin: 10, totalVP: 120, strengthOfSchedule: 0.4 },
+              {
+                rank: 1,
+                id: 'p1',
+                displayName: 'Bob',
+                faction: 'Orks',
+                wins: 2,
+                losses: 0,
+                draws: 0,
+                margin: 40,
+                totalVP: 150,
+                strengthOfSchedule: 0.5,
+              },
+              {
+                rank: 2,
+                id: 'p2',
+                displayName: 'Carol',
+                faction: 'Necrons',
+                wins: 1,
+                losses: 1,
+                draws: 0,
+                margin: 10,
+                totalVP: 120,
+                strengthOfSchedule: 0.4,
+              },
             ],
           },
           refetch: vi.fn(),
@@ -142,7 +164,14 @@ vi.mock('../lib/trpc', () => ({
             userId: 'to-1',
             tournamentsPlayed: 3,
             tournaments: [
-              { id: 't1', name: 'Test GT 2025', status: 'COMPLETE', eventDate: 1700000000000, format: '2000pts', faction: 'Orks' },
+              {
+                id: 't1',
+                name: 'Test GT 2025',
+                status: 'COMPLETE',
+                eventDate: 1700000000000,
+                format: '2000pts',
+                faction: 'Orks',
+              },
             ],
             wins: 5,
             losses: 2,
@@ -150,7 +179,13 @@ vi.mock('../lib/trpc', () => ({
             gamesPlayed: 8,
             totalVP: 580,
             cards: [
-              { id: 'c1', cardType: 'YELLOW', reason: 'Slow play', issuedAt: 1700000000000, tournamentId: 't1' },
+              {
+                id: 'c1',
+                cardType: 'YELLOW',
+                reason: 'Slow play',
+                issuedAt: 1700000000000,
+                tournamentId: 't1',
+              },
             ],
             bans: [],
           },
@@ -183,9 +218,7 @@ vi.mock('../lib/trpc', () => ({
               factions: ['Orks', 'Death Guard'],
               yellowCards: 1,
               redCards: 0,
-              recentTournaments: [
-                { name: 'Test GT', faction: 'Orks', eventDate: 1700000000000 },
-              ],
+              recentTournaments: [{ name: 'Test GT', faction: 'Orks', eventDate: 1700000000000 }],
             },
           ],
           isPending: false,
@@ -197,7 +230,13 @@ vi.mock('../lib/trpc', () => ({
         useMutation: (opts?: { onSuccess?: (r: unknown) => void }) => ({
           mutate: (args: unknown) => {
             mockCreateRound(args)
-            opts?.onSuccess?.({ id: 'round-1', roundNumber: 1, status: 'PENDING', tournamentId: 't1', createdAt: 0 })
+            opts?.onSuccess?.({
+              id: 'round-1',
+              roundNumber: 1,
+              status: 'PENDING',
+              tournamentId: 't1',
+              createdAt: 0,
+            })
           },
           isPending: false,
         }),
@@ -213,7 +252,13 @@ vi.mock('../lib/trpc', () => ({
       },
       get: {
         useQuery: (_id: unknown, _opts: unknown) => ({
-          data: { id: 'round-1', roundNumber: 1, status: 'ACTIVE', startTime: '10:00 AM', pairings: [] },
+          data: {
+            id: 'round-1',
+            roundNumber: 1,
+            status: 'ACTIVE',
+            startTime: '10:00 AM',
+            pairings: [],
+          },
           refetch: vi.fn(),
         }),
       },
@@ -235,19 +280,7 @@ vi.mock('../lib/trpc', () => ({
         useMutation: () => ({ mutate: vi.fn(), isPending: false }),
       },
     },
-    elo: {
-      get: {
-        useQuery: () => ({ data: { rating: 1200, gamesPlayed: 5 } }),
-      },
-      leaderboard: {
-        useQuery: () => ({
-          data: [
-            { userId: 'to-1', displayName: 'Alice', rating: 1350, gamesPlayed: 10 },
-            { userId: 'p1', displayName: 'Bob', rating: 1200, gamesPlayed: 5 },
-          ],
-        }),
-      },
-    },
+    // ELO removed — Glicko-2 ratings will come from new-meta in future
     award: {
       list: {
         useQuery: () => ({ data: [], refetch: vi.fn() }),
@@ -481,7 +514,6 @@ describe('TournamentScreen', () => {
     })
   })
 
-
   // ─── Tournament Detail — new display fields ───────────────────
 
   it('shows external link on tournament detail', async () => {
@@ -580,10 +612,8 @@ describe('TournamentScreen', () => {
       window.dispatchEvent(new HashChangeEvent('hashchange'))
     })
     await waitFor(() => {
-      expect(screen.getByText('ELO Rating')).toBeInTheDocument()
+      expect(screen.getByText('Rating')).toBeInTheDocument()
     })
-    expect(screen.getByText('1200')).toBeInTheDocument()
-    expect(screen.getByText('#1')).toBeInTheDocument() // Rank
   })
 
   it('shows W-L-D record on My Info', async () => {

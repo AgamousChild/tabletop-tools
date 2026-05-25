@@ -1,4 +1,5 @@
 import { AuthScreen } from '@tabletop-tools/ui'
+
 import { TournamentScreen } from './components/TournamentScreen'
 import { authClient } from './lib/auth'
 
@@ -14,7 +15,14 @@ export default function App() {
   }
 
   if (!session) {
-    return <AuthScreen title="Tournament" subtitle="Run events. Play Swiss. Track ELO." authClient={authClient} onAuthenticated={() => void refetch()} />
+    return (
+      <AuthScreen
+        title="Tournament"
+        subtitle="Run events. Play Swiss. Track ratings."
+        authClient={authClient}
+        onAuthenticated={() => void refetch()}
+      />
+    )
   }
 
   return <TournamentScreen onSignOut={() => void refetch()} />
