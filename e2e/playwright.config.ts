@@ -36,6 +36,7 @@ export default defineConfig({
         'list-builder.spec.ts',
         'game-tracker.spec.ts',
         'tournament.spec.ts',
+        'admin.spec.ts',
       ],
       use: { ...devices['Desktop Chrome'], storageState: 'auth-state.json' },
       dependencies: ['auth-flow'],

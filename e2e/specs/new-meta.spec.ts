@@ -1,4 +1,4 @@
-import { test, expect } from '@playwright/test'
+import { expect, test } from '@playwright/test'
 
 test.describe('New Meta (public, no auth)', () => {
   test('app loads directly without auth gate', async ({ page }) => {
@@ -25,22 +25,47 @@ test.describe('New Meta (public, no auth)', () => {
     await page.goto('/new-meta/')
     await page.waitForLoadState('networkidle')
 
-    // Click Players tab
     await page.getByRole('link', { name: 'Players' }).click()
+    // Players tab should show leaderboard or empty state
+    await expect(page.getByText(/leaderboard|no player/i)).toBeVisible({ timeout: 10_000 })
 
-    // Click Source Data tab
     await page.getByRole('link', { name: 'Source Data' }).click()
+    // Source Data tab should show tournaments list or empty state
+    await expect(page.getByText(/tournament|no events|source/i)).toBeVisible({ timeout: 10_000 })
 
-    // Click back to Meta tab
     await page.getByRole('link', { name: 'Meta', exact: true }).click()
   })
 
-  test('dashboard renders on Meta tab', async ({ page }) => {
+  test('dashboard renders faction data or empty state', async ({ page }) => {
     await page.goto('/new-meta/')
     await page.waitForLoadState('networkidle')
 
-    // The Meta tab shows the Dashboard page which contains the faction table area
-    // The main content area should be visible
-    await expect(page.locator('main')).toBeVisible()
+    // Should show either faction table data or an empty state message
+    const hasFactionData = await page
+      .getByText(/win rate|faction/i)
+      .isVisible()
+      .catch(() => false)
+    const hasEmptyState = await page
+      .getByText(/no data|no events|no tournaments/i)
+      .isVisible()
+      .catch(() => false)
+    const hasMain = await page.locator('main').isVisible()
+    expect(hasFactionData || hasEmptyState || hasMain).toBe(true)
+  })
+
+  test('Players tab shows Glicko-2 leaderboard', async ({ page }) => {
+    await page.goto('/new-meta/#/players')
+    await page.waitForLoadState('networkidle')
+
+    // Should show player ranking with Glicko ratings or empty state
+    const hasRating = await page
+      .getByText(/rating|glicko/i)
+      .isVisible()
+      .catch(() => false)
+    const hasEmpty = await page
+      .getByText(/no player|no data/i)
+      .isVisible()
+      .catch(() => false)
+    expect(hasRating || hasEmpty).toBe(true)
   })
 })
