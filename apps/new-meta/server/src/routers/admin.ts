@@ -1,20 +1,17 @@
-import { z } from 'zod'
-import { eq } from 'drizzle-orm'
-import { router, adminProcedure } from '../trpc.js'
 import {
+  authUsers,
+  glickoHistory,
   importedTournamentResults,
   playerGlicko,
-  glickoHistory,
-  authUsers,
 } from '@tabletop-tools/db'
-import {
-  parseBcpCsv,
-  parseTabletopAdmiralCsv,
-  parseGenericCsv,
-} from '@tabletop-tools/game-content'
 import type { TournamentRecord } from '@tabletop-tools/game-content'
-import { updateGlicko2 } from '../lib/glicko2.js'
+import { parseBcpCsv, parseGenericCsv, parseTabletopAdmiralCsv } from '@tabletop-tools/game-content'
+import { updateGlicko2 } from '@tabletop-tools/server-core'
+import { eq } from 'drizzle-orm'
+import { z } from 'zod'
+
 import { matchPlayerName } from '../lib/playerMatch.js'
+import { adminProcedure, router } from '../trpc.js'
 
 function generateId(): string {
   return `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`
@@ -31,7 +28,7 @@ export const adminRouter = router({
         csv: z.string().min(1),
         format: z.enum(['bcp-csv', 'tabletop-admiral-csv', 'generic-csv']),
         eventName: z.string().min(1),
-        eventDate: z.string(),  // ISO date string
+        eventDate: z.string(), // ISO date string
         metaWindow: z.string().min(1),
         minRounds: z.number().int().min(1).optional(),
         minPlayers: z.number().int().min(2).optional(),
@@ -92,16 +89,16 @@ export const adminRouter = router({
     .input(z.object({ fromImportId: z.string().optional() }).optional())
     .mutation(async ({ ctx }) => {
       // Get all imports ordered by event date
-      const imports = await ctx.db
-        .select()
-        .from(importedTournamentResults)
+      const imports = await ctx.db.select().from(importedTournamentResults)
 
       let updated = 0
       for (const imp of imports) {
         let records: TournamentRecord[] = []
         try {
           records = JSON.parse(imp.parsedData)
-        } catch { continue }
+        } catch {
+          continue
+        }
         updated += await updateGlickoForImport(ctx.db, imp.id, records)
       }
 
@@ -140,11 +137,13 @@ async function updateGlickoForImport(
   records: TournamentRecord[],
 ): Promise<number> {
   // Load all platform users for name matching
-  const users = await db.select({
-    id: authUsers.id,
-    username: authUsers.username,
-    displayUsername: authUsers.displayUsername,
-  }).from(authUsers)
+  const users = await db
+    .select({
+      id: authUsers.id,
+      username: authUsers.username,
+      displayUsername: authUsers.displayUsername,
+    })
+    .from(authUsers)
 
   // Collect all player names from this import
   // Use playerName if available (from BCP/TA/generic parsers), fall back to faction as identifier
@@ -182,7 +181,17 @@ async function updateGlickoForImport(
       })
       nameToGlickoId.set(name, newId)
       // Add to map so subsequent lookups in the same import see it
-      glickoByName.set(name.toLowerCase(), { id: newId, playerName: name, userId, rating: 1500, ratingDeviation: 350, volatility: 0.06, gamesPlayed: 0, lastRatingPeriod: null, updatedAt: Date.now() })
+      glickoByName.set(name.toLowerCase(), {
+        id: newId,
+        playerName: name,
+        userId,
+        rating: 1500,
+        ratingDeviation: 350,
+        volatility: 0.06,
+        gamesPlayed: 0,
+        lastRatingPeriod: null,
+        updatedAt: Date.now(),
+      })
     }
   }
 
@@ -207,9 +216,21 @@ async function updateGlickoForImport(
       const avgOpponentRating = 1500
       const avgOpponentRD = 200
       const games = [
-        ...Array(player.wins).fill({ opponentRating: avgOpponentRating, opponentRD: avgOpponentRD, score: 1 }),
-        ...Array(player.losses).fill({ opponentRating: avgOpponentRating, opponentRD: avgOpponentRD, score: 0 }),
-        ...Array(player.draws).fill({ opponentRating: avgOpponentRating, opponentRD: avgOpponentRD, score: 0.5 }),
+        ...Array(player.wins).fill({
+          opponentRating: avgOpponentRating,
+          opponentRD: avgOpponentRD,
+          score: 1,
+        }),
+        ...Array(player.losses).fill({
+          opponentRating: avgOpponentRating,
+          opponentRD: avgOpponentRD,
+          score: 0,
+        }),
+        ...Array(player.draws).fill({
+          opponentRating: avgOpponentRating,
+          opponentRD: avgOpponentRD,
+          score: 0.5,
+        }),
       ]
 
       if (games.length === 0) continue

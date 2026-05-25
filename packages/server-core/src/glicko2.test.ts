@@ -1,5 +1,6 @@
-import { updateGlicko2 } from '@tabletop-tools/server-core'
 import { describe, expect, it } from 'vitest'
+
+import { updateGlicko2 } from './glicko2'
 
 // ============================================================
 // Tests against Glickman (2012) worked example

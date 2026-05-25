@@ -9,18 +9,18 @@
 
 const SCALE = 173.7178
 const TAU = 0.5
-const EPSILON = 0.000001  // convergence criterion for Illinois algorithm
+const EPSILON = 0.000001 // convergence criterion for Illinois algorithm
 
 export interface Glicko2Player {
-  rating: number          // r — display value, starts 1500
+  rating: number // r — display value, starts 1500
   ratingDeviation: number // RD — starts 350
-  volatility: number      // σ — starts 0.06
+  volatility: number // σ — starts 0.06
 }
 
 export interface Glicko2Game {
   opponentRating: number
   opponentRD: number
-  score: number           // 1 = win, 0.5 = draw, 0 = loss
+  score: number // 1 = win, 0.5 = draw, 0 = loss
 }
 
 export interface Glicko2Result {
@@ -123,9 +123,7 @@ function newVolatility(sigma: number, phi: number, v: number, delta: number): nu
     const d2 = delta * delta
     const phi2 = phi * phi
     const denom = phi2 + v + ex
-    return (
-      (ex * (d2 - phi2 - v - ex)) / (2 * denom * denom) - (x - a) / (TAU * TAU)
-    )
+    return (ex * (d2 - phi2 - v - ex)) / (2 * denom * denom) - (x - a) / (TAU * TAU)
   }
 
   // Step 5.2 — find bracket [A, B]
