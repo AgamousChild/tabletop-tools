@@ -80,17 +80,96 @@ beforeAll(async () => {
       to_override INTEGER NOT NULL DEFAULT 0,
       created_at INTEGER NOT NULL
     );
-    CREATE TABLE IF NOT EXISTS imported_tournament_results (
+    CREATE TABLE IF NOT EXISTS dim_faction (
       id TEXT PRIMARY KEY,
-      imported_by TEXT NOT NULL,
-      event_name TEXT NOT NULL,
-      event_date INTEGER NOT NULL,
-      format TEXT NOT NULL,
-      meta_window TEXT NOT NULL,
-      raw_data TEXT NOT NULL,
-      parsed_data TEXT NOT NULL,
-      imported_at INTEGER NOT NULL
+      name TEXT NOT NULL,
+      allegiance TEXT NOT NULL
     );
+    CREATE TABLE IF NOT EXISTS dim_faction_alias (
+      alias TEXT PRIMARY KEY,
+      faction_id TEXT NOT NULL REFERENCES dim_faction(id)
+    );
+    CREATE TABLE IF NOT EXISTS dim_subfaction (
+      id TEXT PRIMARY KEY,
+      name TEXT NOT NULL,
+      faction_id TEXT NOT NULL REFERENCES dim_faction(id)
+    );
+    CREATE TABLE IF NOT EXISTS meta_events (
+      id TEXT PRIMARY KEY,
+      name TEXT NOT NULL,
+      date INTEGER NOT NULL,
+      location TEXT,
+      gps_coords TEXT,
+      region_id INTEGER,
+      format TEXT NOT NULL,
+      rounds INTEGER,
+      player_count INTEGER NOT NULL,
+      source TEXT NOT NULL,
+      source_id TEXT,
+      imported_at INTEGER NOT NULL,
+      win_faction_id TEXT,
+      win_subfaction_id TEXT,
+      win_detachment_id TEXT,
+      UNIQUE(source, source_id)
+    );
+    CREATE TABLE IF NOT EXISTS meta_event_players (
+      id TEXT PRIMARY KEY,
+      event_id TEXT NOT NULL REFERENCES meta_events(id) ON DELETE CASCADE,
+      player_name TEXT NOT NULL,
+      source_player_id TEXT,
+      faction_id TEXT NOT NULL REFERENCES dim_faction(id),
+      subfaction_id TEXT,
+      detachment_id TEXT,
+      placement INTEGER NOT NULL,
+      list_text TEXT,
+      list_ttt TEXT,
+      wins INTEGER NOT NULL DEFAULT 0,
+      losses INTEGER NOT NULL DEFAULT 0,
+      draws INTEGER NOT NULL DEFAULT 0,
+      gl2_rating_start REAL,
+      gl2_rd_start REAL,
+      gl2_vol_start REAL,
+      gl2_rating_end REAL,
+      gl2_rd_end REAL,
+      gl2_vol_end REAL
+    );
+    CREATE TABLE IF NOT EXISTS meta_pairings (
+      id TEXT PRIMARY KEY,
+      event_id TEXT NOT NULL REFERENCES meta_events(id) ON DELETE CASCADE,
+      round INTEGER NOT NULL,
+      player1_id TEXT NOT NULL REFERENCES meta_event_players(id) ON DELETE CASCADE,
+      player2_id TEXT NOT NULL REFERENCES meta_event_players(id) ON DELETE CASCADE,
+      player1_score INTEGER,
+      player2_score INTEGER,
+      player1_gl2 REAL,
+      player2_gl2 REAL,
+      result TEXT NOT NULL
+    );
+    CREATE TABLE IF NOT EXISTS player_glicko (
+      id TEXT PRIMARY KEY,
+      user_id TEXT REFERENCES "user"(id),
+      player_name TEXT NOT NULL,
+      rating REAL NOT NULL DEFAULT 1500,
+      rating_deviation REAL NOT NULL DEFAULT 350,
+      volatility REAL NOT NULL DEFAULT 0.06,
+      games_played INTEGER NOT NULL DEFAULT 0,
+      last_rating_period TEXT,
+      updated_at INTEGER NOT NULL
+    );
+    CREATE TABLE IF NOT EXISTS glicko_history (
+      id TEXT PRIMARY KEY,
+      player_id TEXT NOT NULL REFERENCES player_glicko(id),
+      rating_period TEXT NOT NULL,
+      rating_before REAL NOT NULL,
+      rd_before REAL NOT NULL,
+      rating_after REAL NOT NULL,
+      rd_after REAL NOT NULL,
+      volatility_after REAL NOT NULL,
+      delta REAL NOT NULL,
+      games_in_period INTEGER NOT NULL,
+      recorded_at INTEGER NOT NULL
+    );
+    INSERT OR IGNORE INTO dim_faction (id, name, allegiance) VALUES ('unknown', 'Unknown', 'unknown');
     CREATE TABLE IF NOT EXISTS tournament_cards (
       id TEXT PRIMARY KEY,
       tournament_id TEXT NOT NULL REFERENCES tournaments(id),
@@ -300,8 +379,8 @@ describe('result.report + result.confirm', () => {
   })
 })
 
-describe('tournament export to new-meta on COMPLETE', () => {
-  it('exports results to imported_tournament_results when advancing to COMPLETE', async () => {
+describe('tournament export to meta on COMPLETE', () => {
+  it('exports results to meta tables when advancing to COMPLETE', async () => {
     const toCaller = createCaller(toCtx)
     const t = await toCaller.tournament.create({
       name: 'Export Test GT',
@@ -339,23 +418,45 @@ describe('tournament export to new-meta on COMPLETE', () => {
     // Advance to COMPLETE — should export
     await toCaller.tournament.advanceStatus(t!.id) // → COMPLETE
 
-    // Verify export was written
-    const rows = await client.execute({
-      sql: 'SELECT * FROM imported_tournament_results WHERE event_name = ?',
-      args: ['Export Test GT'],
+    // Verify meta event was created
+    const eventRows = await client.execute({
+      sql: `SELECT * FROM meta_events WHERE source = 'native' AND source_id = ?`,
+      args: [t!.id],
     })
-    expect(rows.rows).toHaveLength(1)
-    const row = rows.rows[0]!
-    expect(row['format']).toBe('2000pts')
-    const parsed = JSON.parse(row['parsed_data'] as string)
-    expect(parsed).toHaveLength(1)
-    expect(parsed[0].players).toHaveLength(2)
-    // Bob won, so should be first
-    expect(parsed[0].players[0].playerName).toBe('Bob')
-    expect(parsed[0].players[0].wins).toBe(1)
-    expect(parsed[0].players[0].points).toBe(85)
-    expect(parsed[0].players[1].playerName).toBe('Carol')
-    expect(parsed[0].players[1].losses).toBe(1)
+    expect(eventRows.rows).toHaveLength(1)
+    const event = eventRows.rows[0]!
+    expect(event['name']).toBe('Export Test GT')
+    expect(event['format']).toBe('2000pts')
+    expect(event['player_count']).toBe(2)
+
+    // Verify meta event players
+    const playerRows = await client.execute({
+      sql: `SELECT * FROM meta_event_players WHERE event_id = ? ORDER BY placement`,
+      args: [event['id'] as string],
+    })
+    expect(playerRows.rows).toHaveLength(2)
+    // Bob won, so should be placement 1
+    expect(playerRows.rows[0]!['player_name']).toBe('Bob')
+    expect(playerRows.rows[0]!['wins']).toBe(1)
+    expect(playerRows.rows[0]!['faction_id']).toBe('unknown') // Orks not in dim_faction
+    expect(playerRows.rows[1]!['player_name']).toBe('Carol')
+    expect(playerRows.rows[1]!['losses']).toBe(1)
+
+    // Verify meta pairings
+    const pairingRows = await client.execute({
+      sql: `SELECT * FROM meta_pairings WHERE event_id = ?`,
+      args: [event['id'] as string],
+    })
+    expect(pairingRows.rows).toHaveLength(1)
+    expect(pairingRows.rows[0]!['result']).toBe('p1')
+    expect(pairingRows.rows[0]!['player1_score']).toBe(85)
+    expect(pairingRows.rows[0]!['player2_score']).toBe(60)
+
+    // Verify Glicko-2 records were created
+    const glickoRows = await client.execute({
+      sql: `SELECT * FROM player_glicko WHERE player_name IN ('Bob', 'Carol')`,
+    })
+    expect(glickoRows.rows).toHaveLength(2)
   })
 })
 

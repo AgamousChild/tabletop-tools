@@ -202,16 +202,10 @@ beforeAll(async () => {
       to_override INTEGER NOT NULL DEFAULT 0,
       created_at INTEGER NOT NULL
     );
-    CREATE TABLE IF NOT EXISTS imported_tournament_results (
+    CREATE TABLE IF NOT EXISTS dim_faction (
       id TEXT PRIMARY KEY,
-      imported_by TEXT NOT NULL REFERENCES "user"(id),
-      event_name TEXT NOT NULL,
-      event_date INTEGER NOT NULL,
-      format TEXT NOT NULL,
-      meta_window TEXT NOT NULL,
-      raw_data TEXT NOT NULL,
-      parsed_data TEXT NOT NULL,
-      imported_at INTEGER NOT NULL
+      name TEXT NOT NULL,
+      allegiance TEXT NOT NULL
     );
     CREATE TABLE IF NOT EXISTS player_glicko (
       id TEXT PRIMARY KEY,
@@ -316,7 +310,7 @@ async function clearAllData() {
     DELETE FROM bcp_scrape_jobs;
     DELETE FROM glicko_history;
     DELETE FROM player_glicko;
-    DELETE FROM imported_tournament_results;
+    DELETE FROM dim_faction;
     DELETE FROM pairings;
     DELETE FROM rounds;
     DELETE FROM tournament_players;
@@ -371,7 +365,7 @@ describe('stats router', () => {
         listBuilder: { lists: 0, units: 0 },
         gameTracker: { matches: 0, turns: 0 },
         tournament: { tournaments: 0, players: 0 },
-        newMeta: { imports: 0, glickoPlayers: 0 },
+        newMeta: { events: 0, glickoPlayers: 0 },
       })
     })
   })
@@ -440,8 +434,8 @@ describe('stats router', () => {
 
       // New Meta data
       await client.executeMultiple(`
-        INSERT INTO imported_tournament_results (id, imported_by, event_name, event_date, format, meta_window, raw_data, parsed_data, imported_at) VALUES ('imp1', 'u1', 'LVO 2025', ${now}, 'bcp-csv', '2025-Q1', 'csv', '[]', ${now});
-        INSERT INTO imported_tournament_results (id, imported_by, event_name, event_date, format, meta_window, raw_data, parsed_data, imported_at) VALUES ('imp2', 'u1', 'Adepticon 2025', ${now}, 'bcp-csv', '2025-Q1', 'csv', '[]', ${now});
+        INSERT INTO meta_events (id, name, date, format, player_count, source, source_id, imported_at) VALUES ('evt-nm1', 'LVO 2025', ${now}, 'GT', 100, 'bcp', 'bcp-lvo', ${now});
+        INSERT INTO meta_events (id, name, date, format, player_count, source, source_id, imported_at) VALUES ('evt-nm2', 'Adepticon 2025', ${now}, 'GT', 200, 'bcp', 'bcp-adept', ${now});
         INSERT INTO player_glicko (id, player_name, rating, rating_deviation, volatility, games_played, updated_at) VALUES ('pg1', 'Alice', 1600, 150, 0.06, 10, ${now});
         INSERT INTO player_glicko (id, player_name, rating, rating_deviation, volatility, games_played, updated_at) VALUES ('pg2', 'Bob', 1500, 200, 0.06, 5, ${now});
         INSERT INTO player_glicko (id, player_name, rating, rating_deviation, volatility, games_played, updated_at) VALUES ('pg3', 'Carol', 1400, 300, 0.06, 2, ${now});
@@ -501,7 +495,7 @@ describe('stats router', () => {
     it('returns correct new-meta stats', async () => {
       const caller = createCaller(adminCtx)
       const result = await caller.stats.overview()
-      expect(result.newMeta.imports).toBe(2)
+      expect(result.newMeta.events).toBe(2)
       expect(result.newMeta.glickoPlayers).toBe(3)
     })
   })

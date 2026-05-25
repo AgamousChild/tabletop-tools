@@ -1,5 +1,5 @@
-import { trpc } from '../lib/trpc'
 import { StatCard } from '../components/StatCard'
+import { trpc } from '../lib/trpc'
 
 export function Dashboard() {
   const { data, isLoading, error } = trpc.stats.overview.useQuery()
@@ -25,15 +25,26 @@ export function Dashboard() {
     <div className="space-y-8">
       <h2 className="text-lg font-semibold text-slate-100">Platform Overview</h2>
       <p className="text-xs text-slate-500">
-        Aggregate stats across all platform apps. Use the navigation tabs above to drill into users, sessions, activity, or import history.
+        Aggregate stats across all platform apps. Use the navigation tabs above to drill into users,
+        sessions, activity, or import history.
       </p>
 
       {/* Users & Sessions */}
       <section>
-        <h3 className="text-sm font-medium text-slate-400 mb-3 uppercase tracking-wider">Users & Sessions</h3>
+        <h3 className="text-sm font-medium text-slate-400 mb-3 uppercase tracking-wider">
+          Users & Sessions
+        </h3>
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-          <StatCard label="Total Users" value={data.users.total} sub={`${data.users.recent} in last 7 days`} />
-          <StatCard label="Active Sessions" value={data.sessions.active} sub={`${data.sessions.total} total`} />
+          <StatCard
+            label="Total Users"
+            value={data.users.total}
+            sub={`${data.users.recent} in last 7 days`}
+          />
+          <StatCard
+            label="Active Sessions"
+            value={data.sessions.active}
+            sub={`${data.sessions.total} total`}
+          />
           <StatCard label="ELO Players" value={data.elo.players} />
           <StatCard label="Glicko Players" value={data.newMeta.glickoPlayers} />
         </div>
@@ -41,21 +52,41 @@ export function Dashboard() {
 
       {/* App Stats */}
       <section>
-        <h3 className="text-sm font-medium text-slate-400 mb-3 uppercase tracking-wider">App Usage</h3>
+        <h3 className="text-sm font-medium text-slate-400 mb-3 uppercase tracking-wider">
+          App Usage
+        </h3>
         <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
           <StatCard label="Versus Simulations" value={data.versus.simulations} />
-          <StatCard label="Games Tracked" value={data.gameTracker.matches} sub={`${data.gameTracker.turns} turns`} />
-          <StatCard label="Tournaments" value={data.tournament.tournaments} sub={`${data.tournament.players} players`} />
-          <StatCard label="Lists Built" value={data.listBuilder.lists} sub={`${data.listBuilder.units} units`} />
-          <StatCard label="Dice Sets" value={data.noCheat.diceSets} sub={`${data.noCheat.rollingSessions} sessions, ${data.noCheat.totalRolls} rolls`} />
-          <StatCard label="Meta Imports" value={data.newMeta.imports} />
+          <StatCard
+            label="Games Tracked"
+            value={data.gameTracker.matches}
+            sub={`${data.gameTracker.turns} turns`}
+          />
+          <StatCard
+            label="Tournaments"
+            value={data.tournament.tournaments}
+            sub={`${data.tournament.players} players`}
+          />
+          <StatCard
+            label="Lists Built"
+            value={data.listBuilder.lists}
+            sub={`${data.listBuilder.units} units`}
+          />
+          <StatCard
+            label="Dice Sets"
+            value={data.noCheat.diceSets}
+            sub={`${data.noCheat.rollingSessions} sessions, ${data.noCheat.totalRolls} rolls`}
+          />
+          <StatCard label="Meta Events" value={data.newMeta.events} />
         </div>
       </section>
 
       {/* Match Results */}
       {matchResults.data && (
         <section>
-          <h3 className="text-sm font-medium text-slate-400 mb-3 uppercase tracking-wider">Match Results</h3>
+          <h3 className="text-sm font-medium text-slate-400 mb-3 uppercase tracking-wider">
+            Match Results
+          </h3>
           <div className="grid grid-cols-2 sm:grid-cols-5 gap-4">
             <StatCard label="Wins" value={matchResults.data.wins} />
             <StatCard label="Losses" value={matchResults.data.losses} />
@@ -70,7 +101,9 @@ export function Dashboard() {
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
         {/* BSData Version */}
         <section>
-          <h3 className="text-sm font-medium text-slate-400 mb-3 uppercase tracking-wider">BSData (wh40k-10e)</h3>
+          <h3 className="text-sm font-medium text-slate-400 mb-3 uppercase tracking-wider">
+            BSData (wh40k-10e)
+          </h3>
           <div className="bg-slate-900 border border-slate-800 rounded-lg p-4">
             {bsdata.isLoading && <p className="text-slate-400 text-sm">Checking GitHub...</p>}
             {bsdata.data?.error && <p className="text-red-400 text-sm">{bsdata.data.error}</p>}
@@ -84,7 +117,11 @@ export function Dashboard() {
                   <div className="flex items-center gap-2">
                     <span className="text-sm text-slate-400">Date:</span>
                     <span className="text-sm text-slate-100">
-                      {new Date(bsdata.data.date).toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' })}
+                      {new Date(bsdata.data.date).toLocaleDateString('en-US', {
+                        year: 'numeric',
+                        month: 'short',
+                        day: 'numeric',
+                      })}
                     </span>
                   </div>
                 )}
@@ -98,7 +135,9 @@ export function Dashboard() {
 
         {/* Top Factions */}
         <section>
-          <h3 className="text-sm font-medium text-slate-400 mb-3 uppercase tracking-wider">Top Factions (Tournaments)</h3>
+          <h3 className="text-sm font-medium text-slate-400 mb-3 uppercase tracking-wider">
+            Top Factions (Tournaments)
+          </h3>
           <div className="bg-slate-900 border border-slate-800 rounded-lg p-4">
             {topFactions.isLoading && <p className="text-slate-400 text-sm">Loading...</p>}
             {topFactions.data && topFactions.data.length === 0 && (

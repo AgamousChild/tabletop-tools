@@ -65,10 +65,12 @@ beforeAll(async () => {
       list_locked INTEGER NOT NULL DEFAULT 0, checked_in INTEGER NOT NULL DEFAULT 0,
       dropped INTEGER NOT NULL DEFAULT 0, registered_at INTEGER NOT NULL
     );
-    CREATE TABLE IF NOT EXISTS imported_tournament_results (
-      id TEXT PRIMARY KEY, imported_by TEXT NOT NULL, event_name TEXT NOT NULL,
-      event_date INTEGER NOT NULL, format TEXT NOT NULL, meta_window TEXT NOT NULL,
-      raw_data TEXT NOT NULL, parsed_data TEXT NOT NULL, imported_at INTEGER NOT NULL
+    CREATE TABLE IF NOT EXISTS meta_events (
+      id TEXT PRIMARY KEY, name TEXT NOT NULL, date INTEGER NOT NULL, location TEXT,
+      gps_coords TEXT, region_id INTEGER, format TEXT NOT NULL, rounds INTEGER,
+      player_count INTEGER NOT NULL, source TEXT NOT NULL, source_id TEXT,
+      imported_at INTEGER NOT NULL, win_faction_id TEXT, win_subfaction_id TEXT,
+      win_detachment_id TEXT
     );
     CREATE TABLE IF NOT EXISTS player_glicko (
       id TEXT PRIMARY KEY, user_id TEXT, player_name TEXT NOT NULL,

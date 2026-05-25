@@ -1,5 +1,5 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, screen } from '@testing-library/react'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 let overviewReturn: any
 let bsdataReturn: any
@@ -23,7 +23,7 @@ const mockOverview = {
   users: { total: 150, recent: 12 },
   sessions: { active: 5, total: 300 },
   elo: { players: 42 },
-  newMeta: { glickoPlayers: 30, imports: 15 },
+  newMeta: { glickoPlayers: 30, events: 15 },
   versus: { simulations: 800 },
   gameTracker: { matches: 60, turns: 240 },
   tournament: { tournaments: 8, players: 64 },
@@ -77,12 +77,15 @@ describe('Dashboard', () => {
     expect(screen.getByText('Tournaments')).toBeInTheDocument()
     expect(screen.getByText('Lists Built')).toBeInTheDocument()
     expect(screen.getByText('Dice Sets')).toBeInTheDocument()
-    expect(screen.getByText('Meta Imports')).toBeInTheDocument()
+    expect(screen.getByText('Meta Events')).toBeInTheDocument()
   })
 
   it('renders Match Results section when data exists', () => {
     overviewReturn = { data: mockOverview, isLoading: false, error: null }
-    matchResultsReturn = { data: { wins: 10, losses: 8, draws: 2, inProgress: 1, total: 21 }, isLoading: false }
+    matchResultsReturn = {
+      data: { wins: 10, losses: 8, draws: 2, inProgress: 1, total: 21 },
+      isLoading: false,
+    }
     render(<Dashboard />)
     expect(screen.getByText('Match Results')).toBeInTheDocument()
     expect(screen.getByText('Wins')).toBeInTheDocument()
@@ -100,7 +103,10 @@ describe('Dashboard', () => {
 
   it('shows BSData SHA when available', () => {
     overviewReturn = { data: mockOverview, isLoading: false, error: null }
-    bsdataReturn = { data: { sha: 'abc1234', date: '2026-01-15T00:00:00Z', message: 'Update data' }, isLoading: false }
+    bsdataReturn = {
+      data: { sha: 'abc1234', date: '2026-01-15T00:00:00Z', message: 'Update data' },
+      isLoading: false,
+    }
     render(<Dashboard />)
     expect(screen.getByText('abc1234')).toBeInTheDocument()
     expect(screen.getByText('Update data')).toBeInTheDocument()

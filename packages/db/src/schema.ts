@@ -471,32 +471,6 @@ export const pairings = sqliteTable(
   ],
 )
 
-// === Imported tournament results ===
-//
-// Raw + parsed tournament data imported by the operator.
-// Used by the rating engine alongside native match records.
-// faction / unit references are user-entered strings.
-
-export const importedTournamentResults = sqliteTable(
-  'imported_tournament_results',
-  {
-    id: text('id').primaryKey(),
-    importedBy: text('imported_by')
-      .notNull()
-      .references(() => authUsers.id, { onDelete: 'cascade' }),
-    eventName: text('event_name').notNull(),
-    eventDate: integer('event_date').notNull(),
-    format: text('format').notNull(),
-    metaWindow: text('meta_window').notNull(),
-    // original CSV stored verbatim — never re-parsed into GW data
-    rawData: text('raw_data').notNull(),
-    // JSON of TournamentRecord[]
-    parsedData: text('parsed_data').notNull(),
-    importedAt: integer('imported_at').notNull(),
-  },
-  (table) => [index('idx_imported_results_imported_by').on(table.importedBy)],
-)
-
 // === Tournament management tables (V3) ===
 
 export const tournamentCards = sqliteTable(

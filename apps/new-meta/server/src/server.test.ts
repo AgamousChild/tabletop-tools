@@ -17,18 +17,8 @@ const db = createDbFromClient(client)
 beforeAll(async () => {
   await setupAuthTables(client)
   await client.executeMultiple(`
-    CREATE TABLE IF NOT EXISTS imported_tournament_results (
-      id TEXT PRIMARY KEY,
-      imported_by TEXT NOT NULL REFERENCES "user"(id),
-      event_name TEXT NOT NULL,
-      event_date INTEGER NOT NULL,
-      format TEXT NOT NULL,
-      meta_window TEXT NOT NULL,
-      raw_data TEXT NOT NULL,
-      parsed_data TEXT NOT NULL,
-      imported_at INTEGER NOT NULL
-    );
     CREATE TABLE IF NOT EXISTS dim_faction (id TEXT PRIMARY KEY, name TEXT NOT NULL, allegiance TEXT NOT NULL);
+    CREATE TABLE IF NOT EXISTS dim_faction_alias (alias TEXT PRIMARY KEY, faction_id TEXT NOT NULL REFERENCES dim_faction(id));
     CREATE TABLE IF NOT EXISTS dim_subfaction (id TEXT PRIMARY KEY, name TEXT NOT NULL, faction_id TEXT NOT NULL);
     CREATE TABLE IF NOT EXISTS dim_detachment (id TEXT PRIMARY KEY, name TEXT NOT NULL, faction_id TEXT NOT NULL, subfaction_id TEXT);
     CREATE TABLE IF NOT EXISTS dim_for_type (id INTEGER PRIMARY KEY, name TEXT NOT NULL);

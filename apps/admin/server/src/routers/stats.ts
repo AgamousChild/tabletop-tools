@@ -4,7 +4,6 @@ import {
   bcpScrapeJobs,
   diceRollingSessions,
   diceSets,
-  importedTournamentResults,
   ingestContent,
   ingestSources,
   lists,
@@ -78,7 +77,7 @@ export const statsRouter = router({
         players: await count(ctx.db, tournamentPlayers),
       },
       newMeta: {
-        imports: await count(ctx.db, importedTournamentResults),
+        events: await count(ctx.db, metaEvents),
         glickoPlayers: await count(ctx.db, playerGlicko),
       },
     }
@@ -171,14 +170,12 @@ export const statsRouter = router({
       .where(gt(tournaments.createdAt, sevenDaysAgo))
     activity.push({ app: 'tournament', total: toTotal.count, recent: toRecent.count })
 
-    // New Meta: imports
-    const [nmTotal] = await ctx.db
-      .select({ count: sql<number>`count(*)` })
-      .from(importedTournamentResults)
+    // New Meta: events
+    const [nmTotal] = await ctx.db.select({ count: sql<number>`count(*)` }).from(metaEvents)
     const [nmRecent] = await ctx.db
       .select({ count: sql<number>`count(*)` })
-      .from(importedTournamentResults)
-      .where(gt(importedTournamentResults.importedAt, sevenDaysAgo))
+      .from(metaEvents)
+      .where(gt(metaEvents.importedAt, sevenDaysAgo))
     activity.push({ app: 'new-meta', total: nmTotal.count, recent: nmRecent.count })
 
     return activity

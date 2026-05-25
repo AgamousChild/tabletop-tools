@@ -8,7 +8,6 @@ import {
   diceRollingSessions,
   diceSets,
   glickoHistory,
-  importedTournamentResults,
   lists,
   listUnits,
   matches,
@@ -316,19 +315,6 @@ beforeAll(async () => {
     created_at INTEGER NOT NULL
   )`)
 
-  // Imported tournament results
-  await client.execute(`CREATE TABLE imported_tournament_results (
-    id TEXT PRIMARY KEY,
-    imported_by TEXT NOT NULL REFERENCES "user"(id) ON DELETE CASCADE,
-    event_name TEXT NOT NULL,
-    event_date INTEGER NOT NULL,
-    format TEXT NOT NULL,
-    meta_window TEXT NOT NULL,
-    raw_data TEXT NOT NULL,
-    parsed_data TEXT NOT NULL,
-    imported_at INTEGER NOT NULL
-  )`)
-
   // Glicko-2 tables
   await client.execute(`CREATE TABLE player_glicko (
     id TEXT PRIMARY KEY,
@@ -394,10 +380,6 @@ beforeAll(async () => {
   await client.execute('CREATE INDEX idx_pairings_round_id ON pairings(round_id)')
   await client.execute('CREATE INDEX idx_pairings_player1_id ON pairings(player1_id)')
   await client.execute('CREATE INDEX idx_pairings_player2_id ON pairings(player2_id)')
-  // Imported results
-  await client.execute(
-    'CREATE INDEX idx_imported_results_imported_by ON imported_tournament_results(imported_by)',
-  )
   // Glicko
   await client.execute('CREATE INDEX idx_player_glicko_user_id ON player_glicko(user_id)')
   await client.execute('CREATE INDEX idx_glicko_history_player_id ON glicko_history(player_id)')
@@ -959,47 +941,6 @@ describe('rounds and pairings', () => {
 })
 
 // ============================================================
-// Imported tournament results tests
-// ============================================================
-
-describe('importedTournamentResults', () => {
-  it('inserts an import record with raw and parsed data', async () => {
-    const rawCsv = 'Place,Faction,W,L,D,Points\n1,Alpha,3,0,0,60\n'
-    const parsedJson = JSON.stringify([
-      {
-        eventName: 'Test Import GT',
-        eventDate: '2025-06-14',
-        format: 'GT',
-        players: [{ placement: 1, faction: 'Alpha', wins: 3, losses: 0, draws: 0, points: 60 }],
-      },
-    ])
-
-    await db.insert(importedTournamentResults).values({
-      id: 'import-1',
-      importedBy: 'user-1',
-      eventName: 'Test Import GT',
-      eventDate: Date.now(),
-      format: 'GT',
-      metaWindow: '2025-Q2',
-      rawData: rawCsv,
-      parsedData: parsedJson,
-      importedAt: Date.now(),
-    })
-
-    const result = await db
-      .select()
-      .from(importedTournamentResults)
-      .where(eq(importedTournamentResults.id, 'import-1'))
-    expect(result).toHaveLength(1)
-    expect(result[0]?.eventName).toBe('Test Import GT')
-    expect(result[0]?.metaWindow).toBe('2025-Q2')
-
-    const parsed = JSON.parse(result[0]?.parsedData ?? '[]')
-    expect(parsed[0].players[0].faction).toBe('Alpha')
-  })
-})
-
-// ============================================================
 // tournamentPlayers detachment column
 // ============================================================
 
@@ -1170,7 +1111,6 @@ describe('V2: Index existence', () => {
       ],
       rounds: ['idx_rounds_tournament_id', 'uq_rounds_tourn_number'],
       pairings: ['idx_pairings_round_id', 'idx_pairings_player1_id', 'idx_pairings_player2_id'],
-      imported_tournament_results: ['idx_imported_results_imported_by'],
       player_glicko: ['idx_player_glicko_user_id'],
       glicko_history: ['idx_glicko_history_player_id'],
       tournament_cards: ['idx_tournament_cards_tournament_id', 'idx_tournament_cards_player_id'],
@@ -1680,19 +1620,6 @@ describe('V2: Cascading deletes', () => {
       player2Id: 'c-tp-2',
       mission: 'M1',
       createdAt: Date.now(),
-    })
-
-    // user-3 → importedTournamentResults
-    await db.insert(importedTournamentResults).values({
-      id: 'c-import-1',
-      importedBy: 'user-3',
-      eventName: 'E',
-      eventDate: Date.now(),
-      format: 'GT',
-      metaWindow: '2025-Q3',
-      rawData: 'x',
-      parsedData: '[]',
-      importedAt: Date.now(),
     })
 
     // user-3 → playerGlicko → glickoHistory
