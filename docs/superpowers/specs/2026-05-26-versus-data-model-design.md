@@ -2,6 +2,8 @@
 
 > Status: **approved** (design locked in brainstorming session, 2026-05-26)
 > Scope: the Versus combat simulator's data model. Replaces the single `simulations` blob table.
+>
+> **Revised 2026-05-26:** attacker/defender are now `list_unit`s — the shared **configured unit** (see `2026-05-26-list-data-model-design.md`), not bare datasheets. Model counts, loadout, and Leader/Support attachments come from the configured unit; Versus does not re-enter them and owns no leader field. Ad-hoc sims build the configured unit **in memory** (no rows); only **saved** sims reference persisted `list_unit`s.
 
 ---
 
@@ -88,12 +90,9 @@ simulation                      -- one row per run; headline result as REAL COLU
   id PK
   user_id FK -> user
   label                         -- optional, user-given
-  attacker_datasheet_id FK -> datasheet
-  attacker_models
-  leader_datasheet_id FK -> datasheet   -- nullable
-  defender_datasheet_id FK -> datasheet
-  defender_models
-  data_version                  -- which dataslate produced this result
+  attacker_unit_id FK -> list_unit      -- configured unit: carries models, loadout, Leader/Support
+  defender_unit_id FK -> list_unit      -- configured unit
+  dataslate_id                  -- the dataslate this result was computed under
   expected_wounds
   expected_models_removed
   survivors
@@ -106,10 +105,10 @@ simulation_weapon               -- one row per weapon profile fired
   simulation_id FK -> simulation
   profile_kind                  -- 'ranged' | 'melee'
   profile_id                    -- -> ranged_profile | melee_profile (the exact profile fired)
-  model_count                   -- models firing this profile
-  weapons_per_model             -- usually 1
+  model_count                   -- FROM the configured unit's loadout (not re-entered)
+  weapons_per_model             -- FROM the loadout (usually 1)
   attacks_per_weapon            -- A, resolved (dice -> expected value)
-  total_attacks                 -- = model_count * weapons_per_model * attacks_per_weapon  (STORED)
+  total_attacks                 -- = model_count * weapons_per_model * attacks_per_weapon  (STORED, audited)
   expected_wounds               -- this profile's contribution
   expected_models_removed
 
