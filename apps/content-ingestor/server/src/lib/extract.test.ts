@@ -23,18 +23,33 @@ const VALID_NODES: ExtractedNode[] = [
   },
 ]
 
-function mockFetch(body: unknown, status = 200): typeof fetch {
+// extract.ts requests a streaming (SSE) response and reads the full body via
+// response.text(). The mock therefore returns a Response-like object whose
+// .text() resolves to a raw SSE event stream string.
+function mockFetch(body: string, status = 200): typeof fetch {
   return vi.fn().mockResolvedValue({
     ok: status >= 200 && status < 300,
     status,
-    json: () => Promise.resolve(body),
+    text: () => Promise.resolve(body),
   })
 }
 
-function claudeResponse(text: string) {
-  return {
-    content: [{ type: 'text', text }],
-  }
+// Build an Anthropic SSE event stream that emits the given text as a single
+// content_block_delta — the shape extract.ts parses out of the stream.
+function claudeResponse(text: string): string {
+  return [
+    'event: message_start',
+    `data: ${JSON.stringify({ type: 'message_start' })}`,
+    '',
+    'event: content_block_delta',
+    `data: ${JSON.stringify({ type: 'content_block_delta', delta: { type: 'text_delta', text } })}`,
+    '',
+    'event: message_stop',
+    `data: ${JSON.stringify({ type: 'message_stop' })}`,
+    '',
+    'data: [DONE]',
+    '',
+  ].join('\n')
 }
 
 describe('extractNodes', () => {
@@ -59,8 +74,9 @@ describe('extractNodes', () => {
     expect(init.headers['content-type']).toBe('application/json')
 
     const body = JSON.parse(init.body)
-    expect(body.model).toBe('claude-sonnet-4-6')
+    expect(body.model).toBe('claude-haiku-4-5-20251001')
     expect(body.max_tokens).toBe(4096)
+    expect(body.stream).toBe(true)
     expect(body.messages[0].content).toContain('Space Marines Guide')
     expect(body.messages[0].content).toContain('https://example.com/article')
     expect(body.messages[0].content).toContain('Some 40K content about Space Marines...')
@@ -99,7 +115,7 @@ describe('extractNodes', () => {
 
   it('throws on API error', async () => {
     const fetchFn = mockFetch(
-      { error: { type: 'authentication_error', message: 'Invalid API key' } },
+      JSON.stringify({ error: { type: 'authentication_error', message: 'Invalid API key' } }),
       401,
     )
 

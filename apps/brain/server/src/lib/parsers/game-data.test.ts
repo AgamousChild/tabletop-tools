@@ -198,7 +198,7 @@ describe('convertGameData', () => {
     expect(partOf).toBeDefined()
   })
 
-  it('converts army rules (abilities) to faction/faction-ability nodes', () => {
+  it('converts army rules (abilities) to faction/army-rule nodes', () => {
     const input = makeInput({
       abilities: [
         {
@@ -216,7 +216,9 @@ describe('convertGameData', () => {
 
     const armyRule = nodes.find((n) => n.title === 'Oath of Moment' && n.layer === 'faction')
     expect(armyRule).toBeDefined()
-    expect(armyRule!.category).toBe('faction-ability')
+    // Army-wide gameplay rules are classified as 'army-rule' (not 'faction-ability',
+    // which is now reserved for detachment-scoped abilities).
+    expect(armyRule!.category).toBe('army-rule')
     expect(armyRule!.factionId).toBe('space-marines')
     expect(armyRule!.content).toContain('Command phase')
   })
@@ -257,20 +259,20 @@ describe('convertGameData', () => {
 
     const { nodes } = convertGameData(input, '2026-04-08')
 
-    // Core rules should NOT appear as faction-ability nodes
+    // Core rules (empty factionId) should NOT appear as army-rule nodes
     expect(
-      nodes.find((n) => n.title === 'Deep Strike' && n.category === 'faction-ability'),
+      nodes.find((n) => n.title === 'Deep Strike' && n.category === 'army-rule'),
     ).toBeUndefined()
     expect(
-      nodes.find((n) => n.title === 'Deadly Demise' && n.category === 'faction-ability'),
+      nodes.find((n) => n.title === 'Deadly Demise' && n.category === 'army-rule'),
     ).toBeUndefined()
     expect(
-      nodes.find((n) => n.title === 'Feel No Pain' && n.category === 'faction-ability'),
+      nodes.find((n) => n.title === 'Feel No Pain' && n.category === 'army-rule'),
     ).toBeUndefined()
 
     // Real army rule should still exist
     expect(
-      nodes.find((n) => n.title === 'Oath of Moment' && n.category === 'faction-ability'),
+      nodes.find((n) => n.title === 'Oath of Moment' && n.category === 'army-rule'),
     ).toBeDefined()
   })
 
@@ -297,10 +299,10 @@ describe('convertGameData', () => {
     const { nodes } = convertGameData(input, '2026-04-08')
 
     expect(
-      nodes.find((n) => n.title === 'Designer\u2019s Note' && n.category === 'faction-ability'),
+      nodes.find((n) => n.title === 'Designer\u2019s Note' && n.category === 'army-rule'),
     ).toBeUndefined()
     expect(
-      nodes.find((n) => n.title === 'Towering Example' && n.category === 'faction-ability'),
+      nodes.find((n) => n.title === 'Towering Example' && n.category === 'army-rule'),
     ).toBeDefined()
   })
 
@@ -419,9 +421,11 @@ describe('convertGameData', () => {
 
     const { refs } = convertGameData(input, '2026-04-08')
 
-    const attachRef = refs.find((r) => r.rel === 'interacts_with' && r.targetId === 'unit-1')
+    // Leader attachments use the `can_lead` ref (bidirectional leader ↔ unit).
+    const attachRef = refs.find((r) => r.rel === 'can_lead' && r.targetId === 'unit-1')
     expect(attachRef).toBeDefined()
-    expect(attachRef!.context).toContain('Bodyguard')
+    expect(attachRef!.sourceId).toBe('leader-1')
+    expect(attachRef!.context).toContain('attached')
   })
 
   it('extracts weapon keywords from description', () => {

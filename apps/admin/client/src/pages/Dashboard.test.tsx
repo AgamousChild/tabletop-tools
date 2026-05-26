@@ -64,8 +64,7 @@ describe('Dashboard', () => {
     expect(screen.getByText('12 in last 7 days')).toBeInTheDocument()
     expect(screen.getByText('Active Sessions')).toBeInTheDocument()
     expect(screen.getByText('5')).toBeInTheDocument()
-    expect(screen.getByText('ELO Players')).toBeInTheDocument()
-    expect(screen.getByText('Glicko Players')).toBeInTheDocument()
+    expect(screen.getByText('Rated Players')).toBeInTheDocument()
   })
 
   it('renders App Usage stat cards', () => {

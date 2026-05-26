@@ -74,10 +74,10 @@ describe('classifyNode', () => {
     expect(result.containerId).toBe('ds:1')
   })
 
-  it('faction-ability without detachmentId → army-rule', () => {
+  it('army-rule → army-rule record (self)', () => {
     const node = makeNode({
       id: 'faction:adepta-sororitas:acts-of-faith',
-      category: 'faction-ability',
+      category: 'army-rule',
       title: 'Acts of Faith',
     })
     const result = classifyNode(node)
@@ -85,10 +85,10 @@ describe('classifyNode', () => {
     expect(result.containerId).toBe('faction:adepta-sororitas:acts-of-faith')
   })
 
-  it('faction-ability sub-rule with parenthetical title → groups under parent', () => {
+  it('army-rule sub-rule with parenthetical title → groups under parent', () => {
     const subRule = makeNode({
       id: 'faction:adepta-sororitas:acts-of-faith:gaining-miracle-dice',
-      category: 'faction-ability',
+      category: 'army-rule',
       title: 'GAINING MIRACLE DICE (Acts of Faith)',
     })
     const result = classifyNode(subRule)
@@ -96,11 +96,11 @@ describe('classifyNode', () => {
     expect(result.containerId).toBe('faction:adepta-sororitas:acts-of-faith')
   })
 
-  it('faction-ability sub-rule requires 4+ colon-separated segments', () => {
+  it('army-rule sub-rule requires 4+ colon-separated segments', () => {
     // Only 3 segments — not a sub-rule despite parenthetical title
     const node = makeNode({
       id: 'faction:space-marines:combat-doctrines',
-      category: 'faction-ability',
+      category: 'army-rule',
       title: 'Tactical Doctrine (Combat Doctrines)',
     })
     const result = classifyNode(node)
@@ -108,7 +108,7 @@ describe('classifyNode', () => {
     expect(result.containerId).toBe('faction:space-marines:combat-doctrines')
   })
 
-  it('faction-ability with detachmentId → rule (standalone)', () => {
+  it('faction-ability (detachment-scoped) → rule (standalone)', () => {
     const node = makeNode({
       id: 'faction:space-marines:bolter-discipline',
       category: 'faction-ability',
@@ -119,10 +119,10 @@ describe('classifyNode', () => {
     expect(result.containerId).toBe(node.id)
   })
 
-  it('detachment-rule → detachment', () => {
+  it('detachment-rule → rule', () => {
     const node = makeNode({ id: 'det:1:rule', category: 'detachment-rule' })
     const result = classifyNode(node)
-    expect(result.recordType).toBe('detachment')
+    expect(result.recordType).toBe('rule')
     expect(result.containerId).toBe(node.id)
   })
 
@@ -283,12 +283,12 @@ describe('aggregateToRecords', () => {
   it('groups army rule sub-rules under parent', () => {
     const parent = makeNode({
       id: 'faction:adepta-sororitas:acts-of-faith',
-      category: 'faction-ability',
+      category: 'army-rule',
       title: 'Acts of Faith',
     })
     const subRule = makeNode({
       id: 'faction:adepta-sororitas:acts-of-faith:gaining-miracle-dice',
-      category: 'faction-ability',
+      category: 'army-rule',
       title: 'GAINING MIRACLE DICE (Acts of Faith)',
     })
     const allNodes = new Map([['faction:adepta-sororitas:acts-of-faith', parent]])
