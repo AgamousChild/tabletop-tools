@@ -11,7 +11,7 @@
  * All operations are pure TypeScript — no external CV dependencies.
  */
 
-import { findBlobInfo, otsuBinarize, type BlobInfo } from './blobDetector'
+import { type BlobInfo, findBlobInfo, otsuBinarize } from './blobDetector'
 
 /**
  * Filter blobs by area and circularity constraints.
@@ -20,9 +20,7 @@ import { findBlobInfo, otsuBinarize, type BlobInfo } from './blobDetector'
 function filterValidBlobs(blobs: BlobInfo[], roiArea: number): BlobInfo[] {
   const minArea = Math.max(1, Math.floor(roiArea * 0.005))
   const maxArea = Math.floor(roiArea * 0.15)
-  return blobs.filter(
-    (b) => b.area >= minArea && b.area <= maxArea && b.circularity >= 0.4,
-  )
+  return blobs.filter((b) => b.area >= minArea && b.area <= maxArea && b.circularity >= 0.4)
 }
 
 /**
@@ -68,17 +66,11 @@ export function extractFeatures(roiGray: Uint8Array, w: number, h: number): numb
   const otsuBinary = otsuBinarize(roiGray)
 
   // Dark pips (target=0 in Otsu binary)
-  const otsuDarkBlobs = filterValidBlobs(
-    findBlobInfo(otsuBinary, w, h, 0),
-    roiArea,
-  )
+  const otsuDarkBlobs = filterValidBlobs(findBlobInfo(otsuBinary, w, h, 0), roiArea)
   const blobCountOtsuDark = otsuDarkBlobs.length
 
   // Light pips (target=255 in Otsu binary)
-  const otsuLightBlobs = filterValidBlobs(
-    findBlobInfo(otsuBinary, w, h, 255),
-    roiArea,
-  )
+  const otsuLightBlobs = filterValidBlobs(findBlobInfo(otsuBinary, w, h, 255), roiArea)
   const blobCountOtsuLight = otsuLightBlobs.length
 
   // Sorted pixel values for percentile thresholds
@@ -88,19 +80,13 @@ export function extractFeatures(roiGray: Uint8Array, w: number, h: number): numb
   // Percentile-25 threshold
   const p25 = percentile(sorted, 0.25)
   const p25Binary = manualBinarize(roiGray, p25)
-  const p25Blobs = filterValidBlobs(
-    findBlobInfo(p25Binary, w, h, 0),
-    roiArea,
-  )
+  const p25Blobs = filterValidBlobs(findBlobInfo(p25Binary, w, h, 0), roiArea)
   const blobCountP25 = p25Blobs.length
 
   // Percentile-75 threshold
   const p75 = percentile(sorted, 0.75)
   const p75Binary = manualBinarize(roiGray, p75)
-  const p75Blobs = filterValidBlobs(
-    findBlobInfo(p75Binary, w, h, 255),
-    roiArea,
-  )
+  const p75Blobs = filterValidBlobs(findBlobInfo(p75Binary, w, h, 255), roiArea)
   const blobCountP75 = p75Blobs.length
 
   // --- Aggregate blob geometry (from Otsu-dark blobs) ---
@@ -162,18 +148,18 @@ export function extractFeatures(roiGray: Uint8Array, w: number, h: number): numb
   const centerIntensity = centerCount > 0 ? centerSum / centerCount / 255 : meanIntensity
 
   return [
-    blobCountOtsuDark,   // [0]
-    blobCountOtsuLight,  // [1]
-    blobCountP25,        // [2]
-    blobCountP75,        // [3]
-    totalAreaRatio,      // [4]
-    meanCircularity,     // [5]
-    areaVariance,        // [6]
-    meanIntensity,       // [7]
-    stddevIntensity,     // [8]
-    darkPixelRatio,      // [9]
-    aspectRatio,         // [10]
-    normalizedSize,      // [11]
-    centerIntensity,     // [12] — center 33% mean intensity
+    blobCountOtsuDark, // [0]
+    blobCountOtsuLight, // [1]
+    blobCountP25, // [2]
+    blobCountP75, // [3]
+    totalAreaRatio, // [4]
+    meanCircularity, // [5]
+    areaVariance, // [6]
+    meanIntensity, // [7]
+    stddevIntensity, // [8]
+    darkPixelRatio, // [9]
+    aspectRatio, // [10]
+    normalizedSize, // [11]
+    centerIntensity, // [12] — center 33% mean intensity
   ]
 }

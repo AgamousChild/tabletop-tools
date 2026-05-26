@@ -1,4 +1,5 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
+
 import { fetchAndProcessWahapedia } from './wahapedia'
 
 // Mock global fetch
@@ -13,19 +14,28 @@ function makeCsvData(): Record<string, string> {
   return {
     Last_update: 'last_update\n2024-01-15',
     Factions: 'id|name\nSM|Space Marines\nAM|Astra Militarum',
-    Datasheets: 'id|name|faction_id|role|legend|transport|loadout|damaged_w|damaged_description|source_id\nds1|Intercessors|SM|Troops||||||src1',
-    Datasheets_models: 'id|datasheet_id|name|line|M|T|Sv|W|Ld|OC|inv_sv|inv_sv_descr|base_size\nm1|ds1|Intercessor|1|6"|5|3+|2|6+|2|||32mm',
-    Datasheets_wargear: 'id|datasheet_id|name|description|range|type|A|BS_WS|S|AP|D|line\nw1|ds1|Bolt rifle||30"|Ranged|2|3+|4|-1|1|1',
-    Datasheets_keywords: 'id|datasheet_id|keyword|is_faction_keyword\nk1|ds1|Infantry|false\nk2|ds1|Adeptus Astartes|true',
-    Datasheets_abilities: 'id|datasheet_id|name|description|type|ability_id|parameter|line\na1|ds1|Oath of Moment|Re-roll hits|Core|||1',
+    Datasheets:
+      'id|name|faction_id|role|legend|transport|loadout|damaged_w|damaged_description|source_id\nds1|Intercessors|SM|Troops||||||src1',
+    Datasheets_models:
+      'id|datasheet_id|name|line|M|T|Sv|W|Ld|OC|inv_sv|inv_sv_descr|base_size\nm1|ds1|Intercessor|1|6"|5|3+|2|6+|2|||32mm',
+    Datasheets_wargear:
+      'id|datasheet_id|name|description|range|type|A|BS_WS|S|AP|D|line\nw1|ds1|Bolt rifle||30"|Ranged|2|3+|4|-1|1|1',
+    Datasheets_keywords:
+      'id|datasheet_id|keyword|is_faction_keyword\nk1|ds1|Infantry|false\nk2|ds1|Adeptus Astartes|true',
+    Datasheets_abilities:
+      'id|datasheet_id|name|description|type|ability_id|parameter|line\na1|ds1|Oath of Moment|Re-roll hits|Core|||1',
     Datasheets_unit_composition: 'id|datasheet_id|line|description\nuc1|ds1|1|5 Intercessors',
     Datasheets_models_cost: 'id|datasheet_id|line|description|cost\nmc1|ds1|1|5 models|90',
-    Datasheets_options: 'id|datasheet_id|line|description\nop1|ds1|1|Sergeant can take a power sword',
+    Datasheets_options:
+      'id|datasheet_id|line|description\nop1|ds1|1|Sergeant can take a power sword',
     Datasheets_leader: 'id|leader_id|attached_id\ndl1|ds1|ds1',
     Detachments: 'id|faction_id|name|legend|type\ndet1|SM|Gladius Task Force||',
-    Detachment_abilities: 'id|detachment_id|faction_id|name|legend|description\nda1|det1|SM|Oath of Moment||<b>Re-roll</b> hits',
-    Stratagems: 'id|faction_id|detachment_id|name|type|cp_cost|turn|phase|legend|description\nst1|SM|det1|Armour of Contempt|Battle Tactic|1|Either|Any||<i>Reduce AP</i>',
-    Enhancements: 'id|faction_id|detachment_id|name|legend|description|cost\nen1|SM|det1|Fire Discipline||Improve BS|15',
+    Detachment_abilities:
+      'id|detachment_id|faction_id|name|legend|description\nda1|det1|SM|Oath of Moment||<b>Re-roll</b> hits',
+    Stratagems:
+      'id|faction_id|detachment_id|name|type|cp_cost|turn|phase|legend|description\nst1|SM|det1|Armour of Contempt|Battle Tactic|1|Either|Any||<i>Reduce AP</i>',
+    Enhancements:
+      'id|faction_id|detachment_id|name|legend|description|cost\nen1|SM|det1|Fire Discipline||Improve BS|15',
     Abilities: 'id|name|legend|faction_id|description\nab1|Leader||SM|Can be attached',
     Source: 'id|name\nsrc1|Codex: Space Marines',
     Datasheets_stratagems: 'id|datasheet_id|stratagem_id\ndss1|ds1|st1',
@@ -121,7 +131,8 @@ describe('fetchAndProcessWahapedia', () => {
 
   it('resolves ability names from abilities table', async () => {
     const csv = makeCsvData()
-    csv['Datasheets_abilities'] = 'id|datasheet_id|name|description|type|ability_id|parameter|line\na1|ds1||  |Core|ab1||1'
+    csv['Datasheets_abilities'] =
+      'id|datasheet_id|name|description|type|ability_id|parameter|line\na1|ds1||  |Core|ab1||1'
 
     mockFetch.mockImplementation(async (url: string) => {
       const name = url.split('/').pop()?.replace('.csv', '') ?? ''

@@ -1,7 +1,8 @@
-import { describe, it, expect, beforeEach } from 'vitest'
 import { renderHook, waitFor } from '@testing-library/react'
-import { useNode, useNodesByLayer, useNodeSearch, useConnectedNodes, useNodeRefs } from './hooks'
-import { saveNodes, saveRefs, clearBrainData, type BrainNode } from './store'
+import { beforeEach, describe, expect, it } from 'vitest'
+
+import { useConnectedNodes, useNode, useNodeRefs, useNodesByLayer, useNodeSearch } from './hooks'
+import { type BrainNode, clearBrainData, saveNodes, saveRefs } from './store'
 
 const testNode: BrainNode = {
   id: 'core:wound-roll',
@@ -81,12 +82,14 @@ describe('brain hooks', () => {
 
   describe('useNodeRefs', () => {
     it('returns from and to refs', async () => {
-      await saveRefs([{
-        sourceId: 'core:wound-roll',
-        targetId: 'core:shooting-phase',
-        rel: 'part_of',
-        context: 'Wound roll is part of shooting.',
-      }])
+      await saveRefs([
+        {
+          sourceId: 'core:wound-roll',
+          targetId: 'core:shooting-phase',
+          rel: 'part_of',
+          context: 'Wound roll is part of shooting.',
+        },
+      ])
 
       const { result } = renderHook(() => useNodeRefs('core:wound-roll'))
       await waitFor(() => expect(result.current.isLoading).toBe(false))
@@ -96,12 +99,14 @@ describe('brain hooks', () => {
 
   describe('useConnectedNodes', () => {
     it('returns nodes connected via refs', async () => {
-      await saveRefs([{
-        sourceId: 'core:wound-roll',
-        targetId: 'core:shooting-phase',
-        rel: 'part_of',
-        context: 'Wound roll is part of shooting.',
-      }])
+      await saveRefs([
+        {
+          sourceId: 'core:wound-roll',
+          targetId: 'core:shooting-phase',
+          rel: 'part_of',
+          context: 'Wound roll is part of shooting.',
+        },
+      ])
 
       const { result } = renderHook(() => useConnectedNodes('core:wound-roll'))
       await waitFor(() => expect(result.current.isLoading).toBe(false))

@@ -82,10 +82,7 @@ export function ChallengerCard({ data, context }: ChallengerCardProps) {
 
         {/* Structured stratagem sections */}
         {hasStructured && (
-          <div
-            data-testid="challenger-stratagem"
-            className="mt-1 border-t border-slate-800 pt-1"
-          >
+          <div data-testid="challenger-stratagem" className="mt-1 border-t border-slate-800 pt-1">
             <p className="px-3 text-[11px] font-semibold uppercase tracking-wider text-slate-500 mb-1">
               Paired Stratagem
             </p>
@@ -117,7 +114,10 @@ export function ChallengerCard({ data, context }: ChallengerCardProps) {
                 className="text-[13px] text-blue-400 hover:text-blue-300 cursor-pointer bg-transparent border-0 p-0"
                 onClick={() =>
                   context.onViewSource!(
-                    src.title.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, ''),
+                    src.title
+                      .toLowerCase()
+                      .replace(/[^a-z0-9]+/g, '-')
+                      .replace(/^-|-$/g, ''),
                     src.page!,
                     data.name,
                     src.topPct,

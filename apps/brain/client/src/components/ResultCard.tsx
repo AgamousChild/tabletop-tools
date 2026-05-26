@@ -47,15 +47,21 @@ export function ResultCard({
         </div>
         {pct > 0 && <span className="text-xs text-slate-500 shrink-0">{pct}%</span>}
       </div>
-      {parentUnit && (
-        <p className="text-xs text-slate-400 italic mb-2">on {parentUnit}</p>
-      )}
+      {parentUnit && <p className="text-xs text-slate-400 italic mb-2">on {parentUnit}</p>}
       <div className="flex flex-wrap items-center gap-2 mb-2">
-        <span className={`px-2 py-0.5 rounded text-xs font-medium text-white ${LAYER_COLORS[layer] || 'bg-slate-600'}`}>
+        <span
+          className={`px-2 py-0.5 rounded text-xs font-medium text-white ${LAYER_COLORS[layer] || 'bg-slate-600'}`}
+        >
           {category}
         </span>
-        {factionId && <span className="text-xs text-slate-400">{factionName || factionDisplayName(factionId)}</span>}
-        {subfaction && <span className="text-xs text-slate-400">{factionDisplayName(subfaction)}</span>}
+        {factionId && (
+          <span className="text-xs text-slate-400">
+            {factionName || factionDisplayName(factionId)}
+          </span>
+        )}
+        {subfaction && (
+          <span className="text-xs text-slate-400">{factionDisplayName(subfaction)}</span>
+        )}
         {phase && <span className="text-xs text-slate-400">{phase}</span>}
       </div>
       <p className="text-sm text-slate-300 line-clamp-2">{summary}</p>

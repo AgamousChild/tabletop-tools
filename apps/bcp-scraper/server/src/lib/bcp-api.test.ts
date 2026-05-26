@@ -1,4 +1,5 @@
-import { describe, it, expect, vi } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
+
 import { BcpApiClient } from './bcp-api'
 
 const BASE_URL = 'https://newprod-api.bestcoastpairings.com'
@@ -25,7 +26,12 @@ describe('BcpApiClient', () => {
         id: 'evt-1',
         name: 'GT Finals',
         dates: { start: '2026-01-10', end: '2026-01-12' },
-        location: { city: 'Austin', state: 'TX', country: 'US', point: { latitude: 30.2, longitude: -97.7 } },
+        location: {
+          city: 'Austin',
+          state: 'TX',
+          country: 'US',
+          point: { latitude: 30.2, longitude: -97.7 },
+        },
         status: { numberOfRounds: 6, started: true, ended: true },
         playerCounts: { total: 128 },
         format: { teamEvent: false },
@@ -147,12 +153,14 @@ describe('BcpApiClient', () => {
   describe('error handling', () => {
     it('throws on non-OK response from searchEvents', async () => {
       const client = new BcpApiClient('bad-token', mockFetchError(401))
-      await expect(client.searchEvents({
-        startDate: '2026-01-01',
-        endDate: '2026-01-31',
-        minPlayers: 20,
-        minRounds: 5,
-      })).rejects.toThrow('BCP API error 401')
+      await expect(
+        client.searchEvents({
+          startDate: '2026-01-01',
+          endDate: '2026-01-31',
+          minPlayers: 20,
+          minRounds: 5,
+        }),
+      ).rejects.toThrow('BCP API error 401')
     })
 
     it('throws on non-OK response from getEvent', async () => {

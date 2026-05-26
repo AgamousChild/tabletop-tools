@@ -1,6 +1,7 @@
-import type { Node, NodeRef } from './model'
 import type { BrainManifest } from '../types'
 import { mergeSources } from './merge-sources'
+import type { Node, NodeRef } from './model'
+import type { GameDataInput } from './parsers/game-data'
 
 /**
  * Partition nodes into files by layer and faction.
@@ -66,7 +67,7 @@ function hashContent(data: unknown): string {
   let hash = 0
   for (let i = 0; i < str.length; i++) {
     const char = str.charCodeAt(i)
-    hash = ((hash << 5) - hash) + char
+    hash = (hash << 5) - hash + char
     hash = hash & hash
   }
   return `hash:${Math.abs(hash).toString(16)}`
@@ -108,7 +109,7 @@ export interface BrainSyncResult {
 export async function runBrainSync(
   bucket: R2Bucket,
   markdownFiles: Record<string, string>,
-  gameData: import('./parsers/game-data').GameDataInput | null,
+  gameData: GameDataInput | null,
   retrievedAt: string,
 ): Promise<BrainSyncResult> {
   const errors: string[] = []
@@ -134,7 +135,10 @@ export async function runBrainSync(
   // Parse rules commentary
   if (markdownFiles['core-rules-updates-and-rules-commentary.md']) {
     try {
-      const result = parseRulesCommentary(markdownFiles['core-rules-updates-and-rules-commentary.md']!, retrievedAt)
+      const result = parseRulesCommentary(
+        markdownFiles['core-rules-updates-and-rules-commentary.md']!,
+        retrievedAt,
+      )
       allNodes.push(...result.nodes)
       allRefs.push(...result.refs)
     } catch (err) {
@@ -205,7 +209,10 @@ export async function runBrainSync(
 
   // Reverse index: targetId → [{sourceId, rel, context, factionId}]
   // "What points TO this node?"
-  const reverseIndex: Record<string, Array<{ sourceId: string; rel: string; context: string; factionId?: string }>> = {}
+  const reverseIndex: Record<
+    string,
+    Array<{ sourceId: string; rel: string; context: string; factionId?: string }>
+  > = {}
   // Forward index: sourceId → [{targetId, rel, context}]
   // "What does this node point TO?" (for resolving part_of parents, etc.)
   const forwardIndex: Record<string, Array<{ targetId: string; rel: string; context: string }>> = {}
@@ -240,8 +247,10 @@ export async function runBrainSync(
   let existingManifest: BrainManifest | null = null
   try {
     const obj = await bucket.get('manifest.json')
-    if (obj) existingManifest = await obj.json() as BrainManifest
-  } catch { /* no existing manifest */ }
+    if (obj) existingManifest = (await obj.json()) as BrainManifest
+  } catch {
+    /* no existing manifest */
+  }
 
   // Build and write manifest
   const manifest = buildManifest(allFiles, existingManifest)

@@ -1,8 +1,9 @@
 import { useState } from 'react'
-import { trpc } from '../lib/trpc'
+
 import { FactionTable } from '../components/FactionTable'
 import { MatchupMatrix } from '../components/MatchupMatrix'
 import { MetaWindowSelector } from '../components/MetaWindowSelector'
+import { trpc } from '../lib/trpc'
 
 interface Props {
   onFactionSelect: (factionId: string) => void
@@ -11,13 +12,12 @@ interface Props {
 export function Dashboard({ onFactionSelect }: Props) {
   const [frame, setFrame] = useState<string | undefined>()
 
-  const { data: factions = [], isLoading: loadingFactions } = trpc.meta.factions.useQuery(
-    { frame, minGames: 5 },
-  )
+  const { data: factions = [], isLoading: loadingFactions } = trpc.meta.factions.useQuery({
+    frame,
+    minGames: 5,
+  })
 
-  const { data: matchups = [] } = trpc.meta.matchups.useQuery(
-    { frame, minGames: 3 },
-  )
+  const { data: matchups = [] } = trpc.meta.matchups.useQuery({ frame, minGames: 3 })
 
   return (
     <div className="space-y-8">
@@ -26,7 +26,11 @@ export function Dashboard({ onFactionSelect }: Props) {
         <MetaWindowSelector value={frame} onChange={setFrame} />
       </div>
       <p className="text-xs text-slate-500 mb-4">
-        Faction win rates, event placements, and head-to-head matchups from {factions.length > 0 ? `${factions.reduce((s, f) => s + f.games, 0).toLocaleString()} games across ${factions.reduce((s, f) => s + f.players, 0).toLocaleString()} player entries` : 'imported tournament data'}.
+        Faction win rates, event placements, and head-to-head matchups from{' '}
+        {factions.length > 0
+          ? `${factions.reduce((s, f) => s + f.games, 0).toLocaleString()} games across ${factions.reduce((s, f) => s + f.players, 0).toLocaleString()} player entries`
+          : 'imported tournament data'}
+        .
       </p>
 
       <section>

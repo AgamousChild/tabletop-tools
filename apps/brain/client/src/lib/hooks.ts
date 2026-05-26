@@ -1,8 +1,14 @@
-import { useState, useEffect } from 'react'
+import { useEffect, useState } from 'react'
+
 import {
-  getNode, getNodesByLayer, getNodesByFaction, searchNodes,
-  getRefsFrom, getRefsTo,
-  type BrainNode, type StoredRef,
+  type BrainNode,
+  getNode,
+  getNodesByFaction,
+  getNodesByLayer,
+  getRefsFrom,
+  getRefsTo,
+  searchNodes,
+  type StoredRef,
 } from './store'
 
 function useBrainQuery<T>(
@@ -32,8 +38,10 @@ function useBrainQuery<T>(
           setIsLoading(false)
         }
       })
-    return () => { cancelled = true }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    return () => {
+      cancelled = true
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, deps)
 
   return { data, error, isLoading }

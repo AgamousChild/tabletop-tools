@@ -1,6 +1,7 @@
-import { describe, it, expect } from 'vitest'
-import { buildCardData } from './card-data-builder'
+import { describe, expect, it } from 'vitest'
+
 import type { BrainNode } from './card-data-builder'
+import { buildCardData } from './card-data-builder'
 
 // ── Mock nodes ────────────────────────────────────────────────────────────────
 
@@ -8,7 +9,8 @@ const datasheetNode: BrainNode = {
   id: '000000126',
   title: 'Infernus Squad',
   summary: 'Infernus Squad — Other',
-  content: 'Infernus Squad: M6" T4 Sv3+ W2 Ld6+ OC1\n**Keywords:** Infantry\n**Points:** 5 models: 90pts',
+  content:
+    'Infernus Squad: M6" T4 Sv3+ W2 Ld6+ OC1\n**Keywords:** Infantry\n**Points:** 5 models: 90pts',
   layer: 'unit',
   category: 'datasheet',
   factionId: 'space-marines',
@@ -20,7 +22,8 @@ const stratagemNode: BrainNode = {
   id: 'det:sm:fs:immolation',
   title: 'IMMOLATION PROTOCOLS',
   summary: 'Immolation Protocols (2CP)',
-  content: '**Type:** Battle Tactic\n**CP:** 2\n**Phase:** Shooting phase\n**WHEN:** Your Shooting phase.\n**TARGET:** One unit.\n**EFFECT:** Torrent weapons have [DEVASTATING WOUNDS].',
+  content:
+    '**Type:** Battle Tactic\n**CP:** 2\n**Phase:** Shooting phase\n**WHEN:** Your Shooting phase.\n**TARGET:** One unit.\n**EFFECT:** Torrent weapons have [DEVASTATING WOUNDS].',
   layer: 'faction',
   category: 'stratagem',
   factionId: 'space-marines',
@@ -44,7 +47,8 @@ const armyRuleNode: BrainNode = {
   id: 'faction:sm:codex-disc',
   title: 'Oath of Moment',
   summary: 'Oath of Moment — Army Rule',
-  content: 'At the start of your Command phase, select one enemy unit. All ADEPTUS ASTARTES models in your army have the Lethal Hits ability against that unit.',
+  content:
+    'At the start of your Command phase, select one enemy unit. All ADEPTUS ASTARTES models in your army have the Lethal Hits ability against that unit.',
   layer: 'faction',
   category: 'faction-ability',
   factionId: 'space-marines',
@@ -56,7 +60,8 @@ const detachmentRuleNode: BrainNode = {
   id: 'det:sm:codex:rule:1',
   title: 'Angels of Death',
   summary: 'Angels of Death — Detachment Rule',
-  content: 'Each time a unit with this ability is selected to shoot or fight, models in that unit can re-roll one hit roll.',
+  content:
+    'Each time a unit with this ability is selected to shoot or fight, models in that unit can re-roll one hit roll.',
   layer: 'faction',
   category: 'faction-ability',
   factionId: 'space-marines',
@@ -93,7 +98,7 @@ const coreMechanicNode: BrainNode = {
   id: 'core:wound-roll',
   title: 'Wound Roll',
   summary: 'Wound Roll — Core Mechanic',
-  content: 'Compare the attacking weapon\'s Strength characteristic to the target\'s Toughness.',
+  content: "Compare the attacking weapon's Strength characteristic to the target's Toughness.",
   layer: 'core',
   category: 'core-mechanic',
   keywords: [],
@@ -375,7 +380,8 @@ describe('buildCardData', () => {
     it('splits ALL-CAPS headings into subRules for army rules', () => {
       const node: BrainNode = {
         ...armyRuleNode,
-        content: 'BLESSINGS OF KHORNE\nOnce per battle round, select one KHORNE DAEMON unit.\nBLOOD FOR THE BLOOD GOD\nAt the end of each fight phase, add 1 to the attacks.',
+        content:
+          'BLESSINGS OF KHORNE\nOnce per battle round, select one KHORNE DAEMON unit.\nBLOOD FOR THE BLOOD GOD\nAt the end of each fight phase, add 1 to the attacks.',
       }
       const card = buildCardData(node)
       if (card?.type !== 'rule') return

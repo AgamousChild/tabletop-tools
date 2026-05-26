@@ -5,23 +5,17 @@ import { SpecialRulesEditor } from './SpecialRulesEditor'
 
 describe('SpecialRulesEditor', () => {
   it('renders the header', () => {
-    render(
-      <SpecialRulesEditor rules={[]} onAdd={vi.fn()} onRemove={vi.fn()} />,
-    )
+    render(<SpecialRulesEditor rules={[]} onAdd={vi.fn()} onRemove={vi.fn()} />)
     expect(screen.getByText('Additional Rules')).toBeInTheDocument()
   })
 
   it('shows add rule button', () => {
-    render(
-      <SpecialRulesEditor rules={[]} onAdd={vi.fn()} onRemove={vi.fn()} />,
-    )
+    render(<SpecialRulesEditor rules={[]} onAdd={vi.fn()} onRemove={vi.fn()} />)
     expect(screen.getByText('+ Add Rule')).toBeInTheDocument()
   })
 
   it('opens dropdown when add rule is clicked', () => {
-    render(
-      <SpecialRulesEditor rules={[]} onAdd={vi.fn()} onRemove={vi.fn()} />,
-    )
+    render(<SpecialRulesEditor rules={[]} onAdd={vi.fn()} onRemove={vi.fn()} />)
     fireEvent.click(screen.getByText('+ Add Rule'))
     expect(screen.getByText('Sustained Hits 1')).toBeInTheDocument()
     expect(screen.getByText('Lethal Hits')).toBeInTheDocument()
@@ -30,9 +24,7 @@ describe('SpecialRulesEditor', () => {
 
   it('calls onAdd with the correct rule when a dropdown option is clicked', () => {
     const onAdd = vi.fn()
-    render(
-      <SpecialRulesEditor rules={[]} onAdd={onAdd} onRemove={vi.fn()} />,
-    )
+    render(<SpecialRulesEditor rules={[]} onAdd={onAdd} onRemove={vi.fn()} />)
     fireEvent.click(screen.getByText('+ Add Rule'))
     fireEvent.click(screen.getByText('Lethal Hits'))
     expect(onAdd).toHaveBeenCalledWith({ type: 'LETHAL_HITS' })
@@ -41,10 +33,7 @@ describe('SpecialRulesEditor', () => {
   it('displays active rules as chips', () => {
     render(
       <SpecialRulesEditor
-        rules={[
-          { type: 'LETHAL_HITS' },
-          { type: 'SUSTAINED_HITS', value: 1 },
-        ]}
+        rules={[{ type: 'LETHAL_HITS' }, { type: 'SUSTAINED_HITS', value: 1 }]}
         onAdd={vi.fn()}
         onRemove={vi.fn()}
       />,
@@ -56,11 +45,7 @@ describe('SpecialRulesEditor', () => {
   it('calls onRemove when chip dismiss is clicked', () => {
     const onRemove = vi.fn()
     render(
-      <SpecialRulesEditor
-        rules={[{ type: 'LETHAL_HITS' }]}
-        onAdd={vi.fn()}
-        onRemove={onRemove}
-      />,
+      <SpecialRulesEditor rules={[{ type: 'LETHAL_HITS' }]} onAdd={vi.fn()} onRemove={onRemove} />,
     )
     // Find the dismiss button ('x') within the chip
     const dismissButtons = screen.getAllByRole('button', { name: /x/i })
@@ -69,9 +54,7 @@ describe('SpecialRulesEditor', () => {
   })
 
   it('closes dropdown after selecting a rule', () => {
-    render(
-      <SpecialRulesEditor rules={[]} onAdd={vi.fn()} onRemove={vi.fn()} />,
-    )
+    render(<SpecialRulesEditor rules={[]} onAdd={vi.fn()} onRemove={vi.fn()} />)
     fireEvent.click(screen.getByText('+ Add Rule'))
     expect(screen.getByText('Lethal Hits')).toBeInTheDocument()
     fireEvent.click(screen.getByText('Lethal Hits'))
@@ -127,14 +110,7 @@ describe('SpecialRulesEditor', () => {
   })
 
   it('does not show leader rules section when leaderRules is empty', () => {
-    render(
-      <SpecialRulesEditor
-        rules={[]}
-        leaderRules={[]}
-        onAdd={vi.fn()}
-        onRemove={vi.fn()}
-      />,
-    )
+    render(<SpecialRulesEditor rules={[]} leaderRules={[]} onAdd={vi.fn()} onRemove={vi.fn()} />)
     expect(screen.queryByText('From leader')).not.toBeInTheDocument()
   })
 
@@ -142,9 +118,7 @@ describe('SpecialRulesEditor', () => {
     render(
       <SpecialRulesEditor
         rules={[]}
-        leaderRules={[
-          { rule: { type: 'LETHAL_HITS' }, source: 'Oath of Moment' },
-        ]}
+        leaderRules={[{ rule: { type: 'LETHAL_HITS' }, source: 'Oath of Moment' }]}
         onAdd={vi.fn()}
         onRemove={vi.fn()}
       />,
@@ -157,9 +131,7 @@ describe('SpecialRulesEditor', () => {
     render(
       <SpecialRulesEditor
         rules={[]}
-        leaderRules={[
-          { rule: { type: 'REROLL_HITS' }, source: 'Rites of Battle' },
-        ]}
+        leaderRules={[{ rule: { type: 'REROLL_HITS' }, source: 'Rites of Battle' }]}
         onAdd={vi.fn()}
         onRemove={vi.fn()}
       />,

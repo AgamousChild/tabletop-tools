@@ -1,18 +1,18 @@
+import { HelpTip } from '@tabletop-tools/ui'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 
-import type { RoiResult } from '../lib/cv/pipeline'
-import { DEFAULT_CONFIG } from '../lib/cv/pipeline'
-import type { Roi } from '../lib/cv/isolate'
-import { createTrainedPipeline } from '../lib/cv/trainedPipeline'
-import { createMlPipeline } from '../lib/cv/mlPipeline'
-import { getMainCamera } from '../lib/getMainCamera'
-import { extractFeatures } from '../lib/cv/features'
-import { classifyKnn } from '../lib/cv/knnClassifier'
-import type { TrainingExample } from '../lib/cv/knnClassifier'
-import { addExample, getExamples } from '../lib/store/trainingStore'
 import { rgbaToGray } from '../lib/cv/background'
 import { detectPips } from '../lib/cv/blobDetector'
-import { HelpTip } from '@tabletop-tools/ui'
+import { extractFeatures } from '../lib/cv/features'
+import type { Roi } from '../lib/cv/isolate'
+import type { TrainingExample } from '../lib/cv/knnClassifier'
+import { classifyKnn } from '../lib/cv/knnClassifier'
+import { createMlPipeline } from '../lib/cv/mlPipeline'
+import type { RoiResult } from '../lib/cv/pipeline'
+import { DEFAULT_CONFIG } from '../lib/cv/pipeline'
+import { createTrainedPipeline } from '../lib/cv/trainedPipeline'
+import { getMainCamera } from '../lib/getMainCamera'
+import { addExample, getExamples } from '../lib/store/trainingStore'
 import { trpc } from '../lib/trpc'
 import { CalibrationWizard } from './CalibrationWizard'
 import { Camera } from './Camera'
@@ -62,7 +62,12 @@ type DiceCheckCandidate = {
 
 type RecordingSubPhase =
   | { name: 'detecting' }
-  | { name: 'confirming'; lockedResults: RoiResult[]; samples: (number | null)[][]; startTime: number }
+  | {
+      name: 'confirming'
+      lockedResults: RoiResult[]
+      samples: (number | null)[][]
+      startTime: number
+    }
   | { name: 'dice_check'; candidates: DiceCheckCandidate[] }
 
 const WINDOW_SIZE = 15
@@ -94,9 +99,13 @@ function modeValue(values: (number | null)[]): number | null {
   for (const v of values) {
     if (v !== null) freq.set(v, (freq.get(v) ?? 0) + 1)
   }
-  let best: number | null = null, bestCount = 0
+  let best: number | null = null,
+    bestCount = 0
   for (const [val, count] of freq) {
-    if (count > bestCount) { best = val; bestCount = count }
+    if (count > bestCount) {
+      best = val
+      bestCount = count
+    }
   }
   return best
 }
@@ -123,7 +132,10 @@ export function ActiveSessionScreen({ diceSet, onDone }: Props) {
     getExamples(diceSet.id).then((examples) => {
       if (examples.length > 0) {
         pipeline.setExamples(examples.map((e) => ({ features: e.features, label: e.label })))
-        trainingExamplesRef.current = examples.map((e) => ({ features: e.features, label: e.label }))
+        trainingExamplesRef.current = examples.map((e) => ({
+          features: e.features,
+          label: e.label,
+        }))
       }
     })
   }, [diceSet.id, pipeline])
@@ -131,12 +143,14 @@ export function ActiveSessionScreen({ diceSet, onDone }: Props) {
   // Attempt to load ML model (non-blocking)
   useEffect(() => {
     const ml = createMlPipeline()
-    ml.load().then(() => {
-      pipeline.setMlPipeline(ml)
-      setMlModelLoaded(true)
-    }).catch(() => {
-      // Model file doesn't exist yet — use traditional pipeline only
-    })
+    ml.load()
+      .then(() => {
+        pipeline.setMlPipeline(ml)
+        setMlModelLoaded(true)
+      })
+      .catch(() => {
+        // Model file doesn't exist yet — use traditional pipeline only
+      })
     return () => {
       ml.dispose()
       pipeline.setMlPipeline(null)
@@ -191,49 +205,46 @@ export function ActiveSessionScreen({ diceSet, onDone }: Props) {
     setSubPhase({ name: 'detecting' })
   }
 
-  const submitRoll = useCallback(
-    (pipValues: number[]) => {
-      const p = phaseRef.current
-      if (p.name !== 'recording') return
-      if (addRollRef.current.isPending) return
+  const submitRoll = useCallback((pipValues: number[]) => {
+    const p = phaseRef.current
+    if (p.name !== 'recording') return
+    if (addRollRef.current.isPending) return
 
-      addRollRef.current.mutate(
-        { sessionId: p.sessionId, pipValues },
-        {
-          onSuccess: ({ rollCount, zScore }) => {
-            // Update distribution
-            const newDist = new Map(
-              (phaseRef.current as Extract<Phase, { name: 'recording' }>).distribution,
-            )
-            for (const pip of pipValues) {
-              newDist.set(pip, (newDist.get(pip) ?? 0) + 1)
-            }
-            // Compute chi-squared from distribution
-            const total = Array.from(newDist.values()).reduce((a, b) => a + b, 0)
-            const expected = total / 6
-            let chiSq = 0
-            for (let i = 1; i <= 6; i++) {
-              const obs = newDist.get(i) ?? 0
-              chiSq += ((obs - expected) ** 2) / expected
-            }
+    addRollRef.current.mutate(
+      { sessionId: p.sessionId, pipValues },
+      {
+        onSuccess: ({ rollCount, zScore }) => {
+          // Update distribution
+          const newDist = new Map(
+            (phaseRef.current as Extract<Phase, { name: 'recording' }>).distribution,
+          )
+          for (const pip of pipValues) {
+            newDist.set(pip, (newDist.get(pip) ?? 0) + 1)
+          }
+          // Compute chi-squared from distribution
+          const total = Array.from(newDist.values()).reduce((a, b) => a + b, 0)
+          const expected = total / 6
+          let chiSq = 0
+          for (let i = 1; i <= 6; i++) {
+            const obs = newDist.get(i) ?? 0
+            chiSq += (obs - expected) ** 2 / expected
+          }
 
-            setPhase({
-              name: 'recording',
-              sessionId: p.sessionId,
-              rollCount,
-              zScore,
-              chiSquared: chiSq,
-              distribution: newDist,
-            })
-            setLastCapture({ pips: pipValues, time: Date.now() })
-            setUndoFeedback(null)
-          },
-          onError: (err) => setError(err.message),
+          setPhase({
+            name: 'recording',
+            sessionId: p.sessionId,
+            rollCount,
+            zScore,
+            chiSquared: chiSq,
+            distribution: newDist,
+          })
+          setLastCapture({ pips: pipValues, time: Date.now() })
+          setUndoFeedback(null)
         },
-      )
-    },
-    [],
-  )
+        onError: (err) => setError(err.message),
+      },
+    )
+  }, [])
 
   const handleUndo = useCallback(() => {
     const p = phaseRef.current
@@ -263,7 +274,7 @@ export function ActiveSessionScreen({ diceSet, onDone }: Props) {
             const expected = total / 6
             for (let i = 1; i <= 6; i++) {
               const obs = newDist.get(i) ?? 0
-              chiSq += ((obs - expected) ** 2) / expected
+              chiSq += (obs - expected) ** 2 / expected
             }
           }
 
@@ -388,7 +399,7 @@ export function ActiveSessionScreen({ diceSet, onDone }: Props) {
         if (counts.length > WINDOW_SIZE) counts.shift()
 
         let shouldLock = false
-        let lockResults = results
+        const lockResults = results
 
         if (counts.length >= WINDOW_SIZE) {
           // Find mode of non-zero counts (ignore empty frames)
@@ -396,12 +407,20 @@ export function ActiveSessionScreen({ diceSet, onDone }: Props) {
           for (const c of counts) {
             if (c > 0) freq.set(c, (freq.get(c) ?? 0) + 1)
           }
-          let modeVal = 0, modeCount = 0
+          let modeVal = 0,
+            modeCount = 0
           for (const [val, count] of freq) {
-            if (count > modeCount) { modeVal = val; modeCount = count }
+            if (count > modeCount) {
+              modeVal = val
+              modeCount = count
+            }
           }
 
-          if (modeVal > 0 && modeCount / WINDOW_SIZE >= STABILITY_RATIO && currentCount === modeVal) {
+          if (
+            modeVal > 0 &&
+            modeCount / WINDOW_SIZE >= STABILITY_RATIO &&
+            currentCount === modeVal
+          ) {
             shouldLock = true
           }
         }
@@ -483,7 +502,14 @@ export function ActiveSessionScreen({ diceSet, onDone }: Props) {
         const frameGray = rgbaToGray(frame.imageData.data, frame.w, frame.h)
         for (let i = 0; i < lockedResults.length; i++) {
           const r = lockedResults[i]!
-          const roiGray = extractSubImage(frameGray, frame.w, r.roi.x, r.roi.y, r.roi.width, r.roi.height)
+          const roiGray = extractSubImage(
+            frameGray,
+            frame.w,
+            r.roi.x,
+            r.roi.y,
+            r.roi.width,
+            r.roi.height,
+          )
           const pip = detectPips(roiGray, r.roi.width, r.roi.height)
           samples[i]!.push(pip)
         }
@@ -506,7 +532,8 @@ export function ActiveSessionScreen({ diceSet, onDone }: Props) {
 
           // Auto-dismiss if kNN classifies as "not a die" (label 0)
           const knnResult = classifyKnn(features, trainingExamplesRef.current)
-          const autoDismissed = knnResult !== null && knnResult.label === 0 && knnResult.confidence >= 0.6
+          const autoDismissed =
+            knnResult !== null && knnResult.label === 0 && knnResult.confidence >= 0.6
 
           return {
             roi: r.roi,
@@ -536,7 +563,10 @@ export function ActiveSessionScreen({ diceSet, onDone }: Props) {
     setSubPhase((prev) => {
       if (prev.name !== 'dice_check') return prev
       const newCandidates = [...prev.candidates]
-      newCandidates[index] = { ...newCandidates[index]!, dismissed: !newCandidates[index]!.dismissed }
+      newCandidates[index] = {
+        ...newCandidates[index]!,
+        dismissed: !newCandidates[index]!.dismissed,
+      }
       return { name: 'dice_check', candidates: newCandidates }
     })
   }
@@ -591,8 +621,8 @@ export function ActiveSessionScreen({ diceSet, onDone }: Props) {
             const base64 = (reader.result as string).replace(/^data:image\/\w+;base64,/, '')
             // Build normalized bounding box annotations
             const boxes = keptCandidates.map((c) => ({
-              x: (c.roi.cx) / frame.w,
-              y: (c.roi.cy) / frame.h,
+              x: c.roi.cx / frame.w,
+              y: c.roi.cy / frame.h,
               w: c.roi.width / frame.w,
               h: c.roi.height / frame.h,
               label: c.bestPip ?? 1,
@@ -614,7 +644,10 @@ export function ActiveSessionScreen({ diceSet, onDone }: Props) {
     // Reload training examples to include new data
     const updatedExamples = await getExamples(diceSet.id)
     pipeline.setExamples(updatedExamples.map((e) => ({ features: e.features, label: e.label })))
-    trainingExamplesRef.current = updatedExamples.map((e) => ({ features: e.features, label: e.label }))
+    trainingExamplesRef.current = updatedExamples.map((e) => ({
+      features: e.features,
+      label: e.label,
+    }))
 
     if (keptCandidates.length === 0) {
       // All dismissed — go back to detecting
@@ -700,7 +733,11 @@ export function ActiveSessionScreen({ diceSet, onDone }: Props) {
         <div className="max-w-md mx-auto space-y-4">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-3">
-              <button onClick={onDone} className="text-slate-400 hover:text-slate-200 text-sm" aria-label="Cancel">
+              <button
+                onClick={onDone}
+                className="text-slate-400 hover:text-slate-200 text-sm"
+                aria-label="Cancel"
+              >
                 ← Cancel
               </button>
               <h2 className="text-lg font-semibold text-slate-100">{diceSet.name}</h2>
@@ -787,7 +824,10 @@ export function ActiveSessionScreen({ diceSet, onDone }: Props) {
           {mlModelLoaded && (
             <span className="text-[10px] text-emerald-400 font-medium whitespace-nowrap">AI</span>
           )}
-          <p className="text-[10px] text-slate-500 flex-1">Roll dice in frame. Auto-captures when stable for ~1 second.<HelpTip text="Remove dice from view between rolls to reset detection" /></p>
+          <p className="text-[10px] text-slate-500 flex-1">
+            Roll dice in frame. Auto-captures when stable for ~1 second.
+            <HelpTip text="Remove dice from view between rolls to reset detection" />
+          </p>
           <button
             onClick={() => setShowSettings(!showSettings)}
             className="text-xs px-2 py-1 rounded border border-slate-700 text-slate-400 hover:text-slate-200 hover:border-slate-500 transition-colors"
@@ -800,7 +840,9 @@ export function ActiveSessionScreen({ diceSet, onDone }: Props) {
         {/* Detection sensitivity controls */}
         {showSettings && (
           <div className="bg-slate-900 rounded-lg p-3 space-y-3 border border-slate-800">
-            <p className="text-xs text-slate-400 font-semibold uppercase tracking-wider">Detection Settings</p>
+            <p className="text-xs text-slate-400 font-semibold uppercase tracking-wider">
+              Detection Settings
+            </p>
 
             <div className="space-y-1">
               <div className="flex items-center justify-between">
@@ -820,13 +862,17 @@ export function ActiveSessionScreen({ diceSet, onDone }: Props) {
                 }}
                 className="w-full accent-amber-400"
               />
-              <p className="text-[10px] text-slate-600">Lower = more sensitive (catches faint dice). Higher = fewer false detections.</p>
+              <p className="text-[10px] text-slate-600">
+                Lower = more sensitive (catches faint dice). Higher = fewer false detections.
+              </p>
             </div>
 
             <div className="space-y-1">
               <div className="flex items-center justify-between">
                 <label className="text-xs text-slate-400">Edge Crop</label>
-                <span className="text-xs text-slate-500 font-mono">{Math.round(centerCrop * 100)}%</span>
+                <span className="text-xs text-slate-500 font-mono">
+                  {Math.round(centerCrop * 100)}%
+                </span>
               </div>
               <input
                 type="range"
@@ -841,7 +887,9 @@ export function ActiveSessionScreen({ diceSet, onDone }: Props) {
                 }}
                 className="w-full accent-amber-400"
               />
-              <p className="text-[10px] text-slate-600">Trims edges before pip counting. Higher = ignores more table bleed.</p>
+              <p className="text-[10px] text-slate-600">
+                Trims edges before pip counting. Higher = ignores more table bleed.
+              </p>
             </div>
 
             <button
@@ -859,18 +907,9 @@ export function ActiveSessionScreen({ diceSet, onDone }: Props) {
 
         {/* Live camera with overlay */}
         <div className="relative rounded-lg overflow-hidden bg-slate-900 aspect-square">
-          <video
-            ref={videoRef}
-            autoPlay
-            playsInline
-            muted
-            className="w-full h-full object-cover"
-          />
+          <video ref={videoRef} autoPlay playsInline muted className="w-full h-full object-cover" />
           <canvas ref={canvasRef} className="hidden" />
-          <canvas
-            ref={overlayRef}
-            className="absolute inset-0 w-full h-full pointer-events-none"
-          />
+          <canvas ref={overlayRef} className="absolute inset-0 w-full h-full pointer-events-none" />
           {isConfirming && (
             <div className="absolute inset-0 border-4 border-emerald-400 rounded-lg pointer-events-none" />
           )}
@@ -883,7 +922,8 @@ export function ActiveSessionScreen({ diceSet, onDone }: Props) {
         {isConfirming && (
           <div className="space-y-2">
             <p className="text-emerald-400 text-sm text-center font-semibold">
-              Locking in {subPhase.lockedResults.length} {subPhase.lockedResults.length === 1 ? 'die' : 'dice'}...
+              Locking in {subPhase.lockedResults.length}{' '}
+              {subPhase.lockedResults.length === 1 ? 'die' : 'dice'}...
             </p>
             <div className="h-2 bg-slate-800 rounded-full overflow-hidden">
               <div
@@ -898,7 +938,8 @@ export function ActiveSessionScreen({ diceSet, onDone }: Props) {
         {isDiceCheck && (
           <div className="space-y-3">
             <p className="text-slate-100 font-semibold text-center">
-              {subPhase.candidates.filter((c) => !c.dismissed).length} of {subPhase.candidates.length} detections — tap to dismiss non-dice
+              {subPhase.candidates.filter((c) => !c.dismissed).length} of{' '}
+              {subPhase.candidates.length} detections — tap to dismiss non-dice
             </p>
 
             <div className="grid grid-cols-3 gap-2">
@@ -952,9 +993,7 @@ export function ActiveSessionScreen({ diceSet, onDone }: Props) {
           </div>
         )}
 
-        {undoFeedback && (
-          <p className="text-center text-amber-400 text-xs">{undoFeedback}</p>
-        )}
+        {undoFeedback && <p className="text-center text-amber-400 text-xs">{undoFeedback}</p>}
 
         {addRollMutation.isPending && (
           <p className="text-center text-slate-400 text-sm">Recording roll...</p>

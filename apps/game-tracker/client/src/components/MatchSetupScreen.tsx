@@ -1,5 +1,5 @@
+import { useDetachments, useLists, usePrimaryFactions } from '@tabletop-tools/game-data-store'
 import { useState } from 'react'
-import { usePrimaryFactions, useDetachments, useLists } from '@tabletop-tools/game-data-store'
 
 type MatchSetupData = {
   date: number
@@ -71,9 +71,22 @@ export function MatchSetupScreen({ onNext, onBack }: Props) {
         <button onClick={onBack} className="text-slate-400 hover:text-slate-100">
           Back
         </button>
-        <a href="/" className="flex items-center gap-1 text-xs text-slate-400 hover:text-slate-200 transition-colors" title="Back to Home">
-          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-3.5 h-3.5">
-            <path fillRule="evenodd" d="M9.293 2.293a1 1 0 0 1 1.414 0l7 7A1 1 0 0 1 17 11h-1v6a1 1 0 0 1-1 1h-2a1 1 0 0 1-1-1v-3a1 1 0 0 0-1-1H9a1 1 0 0 0-1 1v3a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1v-6H3a1 1 0 0 1-.707-1.707l7-7Z" clipRule="evenodd" />
+        <a
+          href="/"
+          className="flex items-center gap-1 text-xs text-slate-400 hover:text-slate-200 transition-colors"
+          title="Back to Home"
+        >
+          <svg
+            xmlns="http://www.w3.org/2000/svg"
+            viewBox="0 0 20 20"
+            fill="currentColor"
+            className="w-3.5 h-3.5"
+          >
+            <path
+              fillRule="evenodd"
+              d="M9.293 2.293a1 1 0 0 1 1.414 0l7 7A1 1 0 0 1 17 11h-1v6a1 1 0 0 1-1 1h-2a1 1 0 0 1-1-1v-3a1 1 0 0 0-1-1H9a1 1 0 0 0-1 1v3a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1v-6H3a1 1 0 0 1-.707-1.707l7-7Z"
+              clipRule="evenodd"
+            />
           </svg>
           Home
         </a>
@@ -81,7 +94,10 @@ export function MatchSetupScreen({ onNext, onBack }: Props) {
       </header>
 
       <div className="p-6 space-y-5 max-w-md mx-auto">
-        <p className="text-xs text-slate-500 mb-4">Fill in your army and opponent details below, then tap Next to continue. Only opponent faction is required.</p>
+        <p className="text-xs text-slate-500 mb-4">
+          Fill in your army and opponent details below, then tap Next to continue. Only opponent
+          faction is required.
+        </p>
         {/* Date & Location */}
         <div className="grid grid-cols-2 gap-3">
           <div>
@@ -107,7 +123,9 @@ export function MatchSetupScreen({ onNext, onBack }: Props) {
 
         {/* Your Info */}
         <div className="space-y-3">
-          <h2 className="text-sm font-semibold text-slate-300 uppercase tracking-wider">Your Info</h2>
+          <h2 className="text-sm font-semibold text-slate-300 uppercase tracking-wider">
+            Your Info
+          </h2>
           <div>
             <label className="block text-sm text-slate-400 mb-1">Your Faction</label>
             <select
@@ -121,7 +139,9 @@ export function MatchSetupScreen({ onNext, onBack }: Props) {
             >
               <option value="">Select faction...</option>
               {factions.map((f) => (
-                <option key={f} value={f}>{f}</option>
+                <option key={f} value={f}>
+                  {f}
+                </option>
               ))}
             </select>
           </div>
@@ -136,7 +156,9 @@ export function MatchSetupScreen({ onNext, onBack }: Props) {
               >
                 <option value="">Select detachment...</option>
                 {yourDetachments.map((d) => (
-                  <option key={d.id} value={d.name}>{d.name}</option>
+                  <option key={d.id} value={d.name}>
+                    {d.name}
+                  </option>
                 ))}
               </select>
             </div>
@@ -178,7 +200,9 @@ export function MatchSetupScreen({ onNext, onBack }: Props) {
               >
                 <option value="">No list selected</option>
                 {lists.map((l) => (
-                  <option key={l.id} value={l.id}>{l.name} ({l.totalPts}pts)</option>
+                  <option key={l.id} value={l.id}>
+                    {l.name} ({l.totalPts}pts)
+                  </option>
                 ))}
               </select>
             ) : (
@@ -196,7 +220,9 @@ export function MatchSetupScreen({ onNext, onBack }: Props) {
 
         {/* Opponent Info */}
         <div className="space-y-3">
-          <h2 className="text-sm font-semibold text-slate-300 uppercase tracking-wider">Opponent</h2>
+          <h2 className="text-sm font-semibold text-slate-300 uppercase tracking-wider">
+            Opponent
+          </h2>
           <div>
             <label className="block text-sm text-slate-400 mb-1">Opponent Name</label>
             <input
@@ -220,7 +246,9 @@ export function MatchSetupScreen({ onNext, onBack }: Props) {
             >
               <option value="">Select faction...</option>
               {factions.map((f) => (
-                <option key={f} value={f}>{f}</option>
+                <option key={f} value={f}>
+                  {f}
+                </option>
               ))}
             </select>
           </div>
@@ -235,7 +263,9 @@ export function MatchSetupScreen({ onNext, onBack }: Props) {
               >
                 <option value="">Select detachment...</option>
                 {opponentDetachments.map((d) => (
-                  <option key={d.id} value={d.name}>{d.name}</option>
+                  <option key={d.id} value={d.name}>
+                    {d.name}
+                  </option>
                 ))}
               </select>
             </div>

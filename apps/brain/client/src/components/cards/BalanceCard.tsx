@@ -1,4 +1,4 @@
-import type { CardContext, BalanceCardData } from './types'
+import type { BalanceCardData, CardContext } from './types'
 
 interface BalanceCardProps {
   data: BalanceCardData

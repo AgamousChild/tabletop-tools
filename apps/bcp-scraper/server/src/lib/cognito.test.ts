@@ -1,9 +1,11 @@
-import { describe, it, expect, vi } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
+
 import { authenticateBcp } from './cognito'
 
 describe('authenticateBcp', () => {
   it('calls BCP OAuth authorize + token exchange and returns access token', async () => {
-    const mockFetch = vi.fn()
+    const mockFetch = vi
+      .fn()
       // Step 1: authorize returns code
       .mockResolvedValueOnce({
         ok: true,
@@ -28,7 +30,9 @@ describe('authenticateBcp', () => {
     const [authorizeUrl, authorizeOpts] = mockFetch.mock.calls[0]!
     expect(authorizeUrl).toContain('/oauth/authorize')
     expect(authorizeUrl).toContain('response_type=code')
-    expect(authorizeOpts.headers['authorization']).toBe(`Basic ${btoa('test@example.com:testpass')}`)
+    expect(authorizeOpts.headers['authorization']).toBe(
+      `Basic ${btoa('test@example.com:testpass')}`,
+    )
     expect(authorizeOpts.headers['client-id']).toBe('web-app')
 
     // Verify token call
@@ -46,15 +50,18 @@ describe('authenticateBcp', () => {
       status: 401,
     })
 
-    await expect(authenticateBcp({
-      email: 'bad@example.com',
-      password: 'wrong',
-      fetch: mockFetch,
-    })).rejects.toThrow('BCP auth failed')
+    await expect(
+      authenticateBcp({
+        email: 'bad@example.com',
+        password: 'wrong',
+        fetch: mockFetch,
+      }),
+    ).rejects.toThrow('BCP auth failed')
   })
 
   it('throws on token exchange failure', async () => {
-    const mockFetch = vi.fn()
+    const mockFetch = vi
+      .fn()
       .mockResolvedValueOnce({
         ok: true,
         json: () => Promise.resolve({ code: 'bcpauth_test123' }),
@@ -64,10 +71,12 @@ describe('authenticateBcp', () => {
         status: 400,
       })
 
-    await expect(authenticateBcp({
-      email: 'test@example.com',
-      password: 'testpass',
-      fetch: mockFetch,
-    })).rejects.toThrow('BCP auth failed: token exchange')
+    await expect(
+      authenticateBcp({
+        email: 'test@example.com',
+        password: 'testpass',
+        fetch: mockFetch,
+      }),
+    ).rejects.toThrow('BCP auth failed: token exchange')
   })
 })

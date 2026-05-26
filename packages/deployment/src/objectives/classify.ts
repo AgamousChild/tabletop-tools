@@ -1,6 +1,6 @@
+import { distance } from '../geometry/point'
 import type { Objective } from '../types'
 import type { DeploymentZone } from '../zones/deployment-zones'
-import { distance } from '../geometry/point'
 
 /**
  * Classifies each objective relative to the player's deployment zone:

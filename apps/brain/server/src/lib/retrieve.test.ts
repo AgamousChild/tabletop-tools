@@ -1,7 +1,8 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { retrieve, type RetrieveEnv } from './retrieve'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
+
 import { resetManifestCache } from './fetch-nodes'
 import type { Node } from './model'
+import { retrieve, type RetrieveEnv } from './retrieve'
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -33,7 +34,9 @@ function createMockAI() {
   return { run: vi.fn(async () => ({ data: [[0.1, 0.2, 0.3]] })) }
 }
 
-function createMockVectorize(matches: Array<{ id: string; score: number; metadata?: Record<string, any> }>) {
+function createMockVectorize(
+  matches: Array<{ id: string; score: number; metadata?: Record<string, any> }>,
+) {
   return { query: vi.fn(async () => ({ matches })) }
 }
 
@@ -89,7 +92,11 @@ describe('retrieve', () => {
   it('detects faction from query and returns in detected field', async () => {
     const ai = createMockAI()
     const vectorize = createMockVectorize([
-      { id: factionNode.id, score: 0.9, metadata: { factionId: 'necrons', layer: 'faction', category: 'faction-ability' } },
+      {
+        id: factionNode.id,
+        score: 0.9,
+        metadata: { factionId: 'necrons', layer: 'faction', category: 'faction-ability' },
+      },
     ])
     const bucket = makeBucket([factionNode])
 
@@ -130,7 +137,10 @@ describe('retrieve', () => {
     const bucket = makeBucket([])
 
     const env: RetrieveEnv = { ai, vectorize, bucket }
-    const result = await retrieve({ query: 'how does feel no pain work with mortals', limit: 10 }, env)
+    const result = await retrieve(
+      { query: 'how does feel no pain work with mortals', limit: 10 },
+      env,
+    )
 
     expect(result.detected.keywords).toContain('feel no pain')
     expect(result.detected.keywords).toContain('mortal wound')
@@ -155,7 +165,11 @@ describe('retrieve', () => {
     // Generic node has higher score (0.95) but faction node should sort first
     const vectorize = createMockVectorize([
       { id: genericNode.id, score: 0.95, metadata: { layer: 'core', category: 'core-mechanic' } },
-      { id: factionNode.id, score: 0.7, metadata: { factionId: 'necrons', layer: 'faction', category: 'faction-ability' } },
+      {
+        id: factionNode.id,
+        score: 0.7,
+        metadata: { factionId: 'necrons', layer: 'faction', category: 'faction-ability' },
+      },
     ])
     const bucket = makeBucket([genericNode, factionNode])
 
@@ -164,8 +178,8 @@ describe('retrieve', () => {
 
     expect(result.results.length).toBeGreaterThanOrEqual(2)
     // The faction-matched node should appear before the generic node
-    const factionIdx = result.results.findIndex(r => r.id === factionNode.id)
-    const genericIdx = result.results.findIndex(r => r.id === genericNode.id)
+    const factionIdx = result.results.findIndex((r) => r.id === factionNode.id)
+    const genericIdx = result.results.findIndex((r) => r.id === genericNode.id)
     expect(factionIdx).toBeLessThan(genericIdx)
   })
 
@@ -191,11 +205,15 @@ describe('retrieve', () => {
 
   it('respects the limit option', async () => {
     const nodes = Array.from({ length: 20 }, (_, i) =>
-      makeNode({ id: `core:node-${i}`, title: `Node ${i}` })
+      makeNode({ id: `core:node-${i}`, title: `Node ${i}` }),
     )
     const ai = createMockAI()
     const vectorize = createMockVectorize(
-      nodes.map((n, i) => ({ id: n.id, score: 1 - i * 0.01, metadata: { layer: 'core', category: 'core-mechanic' } }))
+      nodes.map((n, i) => ({
+        id: n.id,
+        score: 1 - i * 0.01,
+        metadata: { layer: 'core', category: 'core-mechanic' },
+      })),
     )
     const bucket = makeBucket(nodes)
 
@@ -207,11 +225,15 @@ describe('retrieve', () => {
 
   it('defaults limit to 10', async () => {
     const nodes = Array.from({ length: 20 }, (_, i) =>
-      makeNode({ id: `core:node-${i}`, title: `Node ${i}` })
+      makeNode({ id: `core:node-${i}`, title: `Node ${i}` }),
     )
     const ai = createMockAI()
     const vectorize = createMockVectorize(
-      nodes.map((n, i) => ({ id: n.id, score: 1 - i * 0.01, metadata: { layer: 'core', category: 'core-mechanic' } }))
+      nodes.map((n, i) => ({
+        id: n.id,
+        score: 1 - i * 0.01,
+        metadata: { layer: 'core', category: 'core-mechanic' },
+      })),
     )
     const bucket = makeBucket(nodes)
 
@@ -223,11 +245,15 @@ describe('retrieve', () => {
 
   it('caps limit at 50', async () => {
     const nodes = Array.from({ length: 60 }, (_, i) =>
-      makeNode({ id: `core:node-${i}`, title: `Node ${i}` })
+      makeNode({ id: `core:node-${i}`, title: `Node ${i}` }),
     )
     const ai = createMockAI()
     const vectorize = createMockVectorize(
-      nodes.map((n, i) => ({ id: n.id, score: 1 - i * 0.01, metadata: { layer: 'core', category: 'core-mechanic' } }))
+      nodes.map((n, i) => ({
+        id: n.id,
+        score: 1 - i * 0.01,
+        metadata: { layer: 'core', category: 'core-mechanic' },
+      })),
     )
     const bucket = makeBucket(nodes)
 
@@ -243,7 +269,10 @@ describe('retrieve', () => {
     const bucket = makeBucket([])
 
     const env: RetrieveEnv = { ai, vectorize, bucket }
-    await retrieve({ query: 'how does feel no pain interact with mortal wounds', dualEmbedding: true }, env)
+    await retrieve(
+      { query: 'how does feel no pain interact with mortal wounds', dualEmbedding: true },
+      env,
+    )
 
     // Should have called AI twice: once for main query, once for keywords
     expect((ai.run as ReturnType<typeof vi.fn>).mock.calls.length).toBe(2)
@@ -268,29 +297,41 @@ describe('retrieve', () => {
     const nodeB = makeNode({ id: 'core:node-b', title: 'Node B' })
 
     const vectorize = {
-      query: vi.fn()
+      query: vi
+        .fn()
         // primary unfiltered
-        .mockResolvedValueOnce({ matches: [{ id: nodeA.id, score: 0.9, metadata: { layer: 'core', category: 'core-mechanic' } }] })
+        .mockResolvedValueOnce({
+          matches: [
+            { id: nodeA.id, score: 0.9, metadata: { layer: 'core', category: 'core-mechanic' } },
+          ],
+        })
         // keyword unfiltered
-        .mockResolvedValueOnce({ matches: [
-          { id: nodeA.id, score: 0.8, metadata: { layer: 'core', category: 'core-mechanic' } },
-          { id: nodeB.id, score: 0.7, metadata: { layer: 'core', category: 'core-mechanic' } },
-        ] }),
+        .mockResolvedValueOnce({
+          matches: [
+            { id: nodeA.id, score: 0.8, metadata: { layer: 'core', category: 'core-mechanic' } },
+            { id: nodeB.id, score: 0.7, metadata: { layer: 'core', category: 'core-mechanic' } },
+          ],
+        }),
     }
     const bucket = makeBucket([nodeA, nodeB])
 
     const env: RetrieveEnv = { ai, vectorize, bucket }
     const result = await retrieve({ query: 'feel no pain mortal wounds', dualEmbedding: true }, env)
 
-    const ids = result.results.map(r => r.id)
+    const ids = result.results.map((r) => r.id)
     expect(ids).toContain(nodeA.id)
     expect(ids).toContain(nodeB.id)
     // nodeA should only appear once
-    expect(ids.filter(id => id === nodeA.id)).toHaveLength(1)
+    expect(ids.filter((id) => id === nodeA.id)).toHaveLength(1)
   })
 
   it('does not return connected nodes by default (includeConnected defaults to false)', async () => {
-    const connectedNode = makeNode({ id: 'faction:blood-angels:red-thirst', title: 'Red Thirst', layer: 'faction', category: 'faction-ability' })
+    const connectedNode = makeNode({
+      id: 'faction:blood-angels:red-thirst',
+      title: 'Red Thirst',
+      layer: 'faction',
+      category: 'faction-ability',
+    })
     const ai = createMockAI()
     const vectorize = createMockVectorize([
       { id: coreNode.id, score: 0.9, metadata: { layer: 'core', category: 'core-mechanic' } },
@@ -299,7 +340,14 @@ describe('retrieve', () => {
       'manifest.json': { files: { 'nodes/test.json': 'v1' } },
       'nodes/test.json': [coreNode, connectedNode],
       'refs/reverse-index.json': {
-        'core:wound-roll': [{ sourceId: connectedNode.id, rel: 'modifies', context: 'BA wound roll', factionId: 'blood-angels' }],
+        'core:wound-roll': [
+          {
+            sourceId: connectedNode.id,
+            rel: 'modifies',
+            context: 'BA wound roll',
+            factionId: 'blood-angels',
+          },
+        ],
       },
       'refs/forward-index.json': {},
     })
@@ -326,7 +374,14 @@ describe('retrieve', () => {
       'manifest.json': { files: { 'nodes/test.json': 'v1' } },
       'nodes/test.json': [coreNode, connectedNode],
       'refs/reverse-index.json': {
-        'core:wound-roll': [{ sourceId: connectedNode.id, rel: 'modifies', context: 'BA wound roll', factionId: 'blood-angels' }],
+        'core:wound-roll': [
+          {
+            sourceId: connectedNode.id,
+            rel: 'modifies',
+            context: 'BA wound roll',
+            factionId: 'blood-angels',
+          },
+        ],
       },
       'refs/forward-index.json': {},
     })
@@ -335,7 +390,7 @@ describe('retrieve', () => {
     const result = await retrieve({ query: 'wound roll', includeConnected: true }, env)
 
     expect(result.connected.length).toBeGreaterThan(0)
-    const ids = result.connected.map(r => r.id)
+    const ids = result.connected.map((r) => r.id)
     expect(ids).toContain(connectedNode.id)
   })
 
@@ -362,17 +417,26 @@ describe('retrieve', () => {
       'manifest.json': { files: { 'nodes/test.json': 'v1' } },
       'nodes/test.json': [coreNode, datashetNode, abilityNode],
       'refs/reverse-index.json': {
-        'core:wound-roll': [{ sourceId: abilityNode.id, rel: 'modifies', context: 'ability context', factionId: 'blood-angels' }],
+        'core:wound-roll': [
+          {
+            sourceId: abilityNode.id,
+            rel: 'modifies',
+            context: 'ability context',
+            factionId: 'blood-angels',
+          },
+        ],
       },
       'refs/forward-index.json': {
-        'ability:blood-angels:rites': [{ targetId: datashetNode.id, rel: 'part_of', context: 'belongs to' }],
+        'ability:blood-angels:rites': [
+          { targetId: datashetNode.id, rel: 'part_of', context: 'belongs to' },
+        ],
       },
     })
 
     const env: RetrieveEnv = { ai, vectorize, bucket }
     const result = await retrieve({ query: 'wound roll', includeConnected: true }, env)
 
-    const ability = result.connected.find(r => r.id === abilityNode.id)
+    const ability = result.connected.find((r) => r.id === abilityNode.id)
     expect(ability).toBeDefined()
     expect(ability!.parentUnit).toBe('Captain [Blood Angels only]')
   })
@@ -397,17 +461,30 @@ describe('retrieve', () => {
     // Generic score is highest, but subfaction should sort first
     const vectorize = createMockVectorize([
       { id: genericNode.id, score: 0.99, metadata: { layer: 'core', category: 'core-mechanic' } },
-      { id: factionOnlyNode.id, score: 0.8, metadata: { factionId: 'space-marines', layer: 'faction', category: 'faction-ability' } },
-      { id: subfactionNode.id, score: 0.6, metadata: { factionId: 'space-marines', subfaction: 'blood angels', layer: 'faction', category: 'faction-ability' } },
+      {
+        id: factionOnlyNode.id,
+        score: 0.8,
+        metadata: { factionId: 'space-marines', layer: 'faction', category: 'faction-ability' },
+      },
+      {
+        id: subfactionNode.id,
+        score: 0.6,
+        metadata: {
+          factionId: 'space-marines',
+          subfaction: 'blood angels',
+          layer: 'faction',
+          category: 'faction-ability',
+        },
+      },
     ])
     const bucket = makeBucket([genericNode, factionOnlyNode, subfactionNode])
 
     const env: RetrieveEnv = { ai, vectorize, bucket }
     const result = await retrieve({ query: 'blood angels stratagems', limit: 10 }, env)
 
-    const subfactionIdx = result.results.findIndex(r => r.id === subfactionNode.id)
-    const factionIdx = result.results.findIndex(r => r.id === factionOnlyNode.id)
-    const genericIdx = result.results.findIndex(r => r.id === genericNode.id)
+    const subfactionIdx = result.results.findIndex((r) => r.id === subfactionNode.id)
+    const factionIdx = result.results.findIndex((r) => r.id === factionOnlyNode.id)
+    const genericIdx = result.results.findIndex((r) => r.id === genericNode.id)
 
     expect(subfactionIdx).toBeLessThan(factionIdx)
     expect(factionIdx).toBeLessThan(genericIdx)
@@ -416,7 +493,11 @@ describe('retrieve', () => {
   it('includes factionId and subfaction in enriched results', async () => {
     const ai = createMockAI()
     const vectorize = createMockVectorize([
-      { id: factionNode.id, score: 0.9, metadata: { factionId: 'necrons', layer: 'faction', category: 'faction-ability' } },
+      {
+        id: factionNode.id,
+        score: 0.9,
+        metadata: { factionId: 'necrons', layer: 'faction', category: 'faction-ability' },
+      },
     ])
     const bucket = makeBucket([factionNode])
 
@@ -468,7 +549,13 @@ describe('retrieve', () => {
     const ai = createMockAI()
     const vectorize = createMockVectorize([]) // should NOT be called
     const bucket = createMockBucket({
-      'manifest.json': { files: { 'nodes/faction-space-marines.json': 'h', 'nodes/faction-orks.json': 'h', 'nodes/core.json': 'h' } },
+      'manifest.json': {
+        files: {
+          'nodes/faction-space-marines.json': 'h',
+          'nodes/faction-orks.json': 'h',
+          'nodes/core.json': 'h',
+        },
+      },
       'nodes/faction-space-marines.json': [baNode, smNode],
       'nodes/faction-orks.json': [orkNode],
       'nodes/core.json': [coreNode],
@@ -480,13 +567,13 @@ describe('retrieve', () => {
     // Should NOT call Vectorize — this is a direct R2 fetch
     expect((vectorize.query as ReturnType<typeof vi.fn>).mock.calls.length).toBe(0)
     // Should return BA and generic SM content, not orks
-    const ids = result.results.map(r => r.id)
+    const ids = result.results.map((r) => r.id)
     expect(ids).toContain(baNode.id)
     expect(ids).toContain(smNode.id)
     expect(ids).not.toContain(orkNode.id)
     // BA-specific should come before generic SM
-    const baIdx = result.results.findIndex(r => r.id === baNode.id)
-    const smIdx = result.results.findIndex(r => r.id === smNode.id)
+    const baIdx = result.results.findIndex((r) => r.id === baNode.id)
+    const smIdx = result.results.findIndex((r) => r.id === smNode.id)
     expect(baIdx).toBeLessThan(smIdx)
   })
 
@@ -510,7 +597,9 @@ describe('retrieve', () => {
     const ai = createMockAI()
     const vectorize = createMockVectorize([])
     const bucket = createMockBucket({
-      'manifest.json': { files: { 'nodes/faction-space-marines.json': 'h', 'nodes/core.json': 'h' } },
+      'manifest.json': {
+        files: { 'nodes/faction-space-marines.json': 'h', 'nodes/core.json': 'h' },
+      },
       'nodes/faction-space-marines.json': [baNode, swNode],
       'nodes/core.json': [],
     })
@@ -518,7 +607,7 @@ describe('retrieve', () => {
     const env: RetrieveEnv = { ai, vectorize, bucket }
     const result = await retrieve({ query: 'blood angels', limit: 50 }, env)
 
-    const ids = result.results.map(r => r.id)
+    const ids = result.results.map((r) => r.id)
     expect(ids).toContain(baNode.id)
     expect(ids).not.toContain(swNode.id)
   })
@@ -536,7 +625,7 @@ describe('retrieve', () => {
     const result = await retrieve({ query: 'necrons', limit: 50 }, env)
 
     expect((vectorize.query as ReturnType<typeof vi.fn>).mock.calls.length).toBe(0)
-    expect(result.results.map(r => r.id)).toContain(factionNode.id)
+    expect(result.results.map((r) => r.id)).toContain(factionNode.id)
   })
 
   it('post-filters results by faction: keeps faction-match and generic, drops other-faction', async () => {
@@ -557,15 +646,23 @@ describe('retrieve', () => {
     const ai = createMockAI()
     const vectorize = createMockVectorize([
       { id: genericNode.id, score: 0.9, metadata: { layer: 'core', category: 'core-mechanic' } },
-      { id: necronNode.id, score: 0.85, metadata: { factionId: 'necrons', layer: 'faction', category: 'faction-ability' } },
-      { id: orkNode.id, score: 0.8, metadata: { factionId: 'orks', layer: 'faction', category: 'faction-ability' } },
+      {
+        id: necronNode.id,
+        score: 0.85,
+        metadata: { factionId: 'necrons', layer: 'faction', category: 'faction-ability' },
+      },
+      {
+        id: orkNode.id,
+        score: 0.8,
+        metadata: { factionId: 'orks', layer: 'faction', category: 'faction-ability' },
+      },
     ])
     const bucket = makeBucket([genericNode, necronNode, orkNode])
 
     const env: RetrieveEnv = { ai, vectorize, bucket }
     const result = await retrieve({ query: 'necrons advance', limit: 10 }, env)
 
-    const ids = result.results.map(r => r.id)
+    const ids = result.results.map((r) => r.id)
     expect(ids).toContain(genericNode.id)
     expect(ids).toContain(necronNode.id)
     expect(ids).not.toContain(orkNode.id)
@@ -599,12 +696,20 @@ describe('retrieve with returnRecords', () => {
 
   it('returns records array when returnRecords is true', async () => {
     const datasheet = makeDatasheet('datasheet:necrons:warriors', 'Necron Warriors', 'necrons')
-    const weapon = makeWeapon('weapon:necrons:warriors:gauss', 'Gauss Flayer', 'datasheet:necrons:warriors')
+    const weapon = makeWeapon(
+      'weapon:necrons:warriors:gauss',
+      'Gauss Flayer',
+      'datasheet:necrons:warriors',
+    )
 
     const ai = createMockAI()
     // Vectorize returns the weapon — its parent datasheet is NOT in the results
     const vectorize = createMockVectorize([
-      { id: weapon.id, score: 0.85, metadata: { layer: 'unit', category: 'weapon', datasheetId: datasheet.id } },
+      {
+        id: weapon.id,
+        score: 0.85,
+        metadata: { layer: 'unit', category: 'weapon', datasheetId: datasheet.id },
+      },
     ])
     const bucket = createMockBucket({
       'manifest.json': { files: { 'nodes/necrons.json': 'v1' } },
@@ -640,7 +745,10 @@ describe('retrieve with returnRecords', () => {
     })
 
     const env: RetrieveEnv = { ai, vectorize, bucket }
-    const result = await retrieve({ query: 'necron warriors', limit: 10, returnRecords: false }, env)
+    const result = await retrieve(
+      { query: 'necron warriors', limit: 10, returnRecords: false },
+      env,
+    )
 
     expect(result.records).toBeUndefined()
   })

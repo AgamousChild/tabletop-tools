@@ -10,12 +10,7 @@ function toSlug(name: string): string {
 }
 
 /** Known battle size keywords that appear in GW App format lists. */
-const BATTLE_SIZE_KEYWORDS = [
-  'incursion',
-  'strike force',
-  'onslaught',
-  'combat patrol',
-]
+const BATTLE_SIZE_KEYWORDS = ['incursion', 'strike force', 'onslaught', 'combat patrol']
 
 function isBattleSizeLine(line: string): boolean {
   const lower = line.toLowerCase()
@@ -28,10 +23,7 @@ function isBattleSizeLine(line: string): boolean {
  * Strategy 1: BattleScribe structured format — `+ DETACHMENT: Name (Optional) +`
  * Strategy 2: GW App format — detachment appears on line 2 or 3 (before battle size line)
  */
-export function extractDetachment(
-  listText: string,
-  _factionSlug: string,
-): string | null {
+export function extractDetachment(listText: string, _factionSlug: string): string | null {
   if (!listText.trim()) return null
 
   // Strategy 1: BattleScribe DETACHMENT line

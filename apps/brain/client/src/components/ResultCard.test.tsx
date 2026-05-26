@@ -1,5 +1,6 @@
-import { describe, it, expect } from 'vitest'
 import { render, screen } from '@testing-library/react'
+import { describe, expect, it } from 'vitest'
+
 import { ResultCard } from './ResultCard'
 
 const baseProps = {
@@ -45,7 +46,9 @@ describe('ResultCard', () => {
 
   it('shows summary text', () => {
     render(<ResultCard {...baseProps} />)
-    expect(screen.getByText('How to resolve wound rolls in the shooting phase.')).toBeInTheDocument()
+    expect(
+      screen.getByText('How to resolve wound rolls in the shooting phase.'),
+    ).toBeInTheDocument()
   })
 
   it('shows category badge', () => {

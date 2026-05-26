@@ -1,3 +1,12 @@
+import { distance } from './geometry/point'
+import { classifyObjectives } from './objectives/classify'
+import type { Formation } from './placement/formations'
+import { generateFormations } from './placement/formations'
+import { isLegalPlacement } from './placement/legal-check'
+import type { ScoringContext } from './placement/scoring'
+import { scorePosition } from './placement/scoring'
+import { findHidingSpots } from './threats/los-analysis'
+import { generateThreatMap } from './threats/threat-map'
 import type {
   DeploymentInput,
   DeploymentPlan,
@@ -5,21 +14,13 @@ import type {
   FormationType,
   ModelPlacement,
   Point,
+  TerrainPiece,
   UnitPlacement,
 } from './types'
-import { computeDeploymentZone, computeEnemyZone } from './zones/deployment-zones'
-import type { DeploymentZone } from './zones/deployment-zones'
-import { generateThreatMap } from './threats/threat-map'
-import { findHidingSpots } from './threats/los-analysis'
-import { classifyObjectives } from './objectives/classify'
-import { assignRoles } from './units/role-assignment'
 import { computeDropOrder } from './units/drop-order'
-import { generateFormations } from './placement/formations'
-import type { Formation } from './placement/formations'
-import { isLegalPlacement } from './placement/legal-check'
-import { scorePosition } from './placement/scoring'
-import type { ScoringContext } from './placement/scoring'
-import { distance } from './geometry/point'
+import { assignRoles } from './units/role-assignment'
+import type { DeploymentZone } from './zones/deployment-zones'
+import { computeDeploymentZone, computeEnemyZone } from './zones/deployment-zones'
 
 // ── Constants ────────────────────────────────────────────────────────────────
 
@@ -234,9 +235,7 @@ export function solveDeployment(input: DeploymentInput): DeploymentPlan {
           occupiedPositions,
           unit.baseSize,
           rules,
-          isInfiltrator
-            ? { method: 'infiltrate', enemyModels: [], enemyZone }
-            : undefined,
+          isInfiltrator ? { method: 'infiltrate', enemyModels: [], enemyZone } : undefined,
         )
         if (!legal) continue
 
@@ -315,7 +314,7 @@ export function solveDeployment(input: DeploymentInput): DeploymentPlan {
 function findScoutDestination(
   deployCenter: Point,
   unit: DeploymentUnit,
-  terrain: import('./types').TerrainPiece[],
+  terrain: TerrainPiece[],
   playerZone: DeploymentZone,
   scoutRange: number,
 ): Point | undefined {

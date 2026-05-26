@@ -1,7 +1,7 @@
-import { describe, expect, it, vi } from 'vitest'
 import { Hono } from 'hono'
+import { describe, expect, it, vi } from 'vitest'
 
-import { createWorkerHandler, type BaseEnv } from './worker'
+import { type BaseEnv, createWorkerHandler } from './worker'
 
 function makeTestApp() {
   const app = new Hono()
@@ -14,7 +14,11 @@ describe('createWorkerHandler', () => {
     const createApp = vi.fn().mockResolvedValue(makeTestApp())
 
     const handler = createWorkerHandler({ createApp })
-    const env = { TURSO_DB_URL: 'file:./test.db', TURSO_AUTH_TOKEN: '', AUTH_SECRET: 'test' } satisfies BaseEnv
+    const env = {
+      TURSO_DB_URL: 'file:./test.db',
+      TURSO_AUTH_TOKEN: '',
+      AUTH_SECRET: 'test',
+    } satisfies BaseEnv
     const res = await handler.fetch!(new Request('http://localhost/health'), env, {} as any)
 
     expect(res.status).toBe(200)
@@ -27,7 +31,11 @@ describe('createWorkerHandler', () => {
     const createApp = vi.fn().mockResolvedValue(makeTestApp())
 
     const handler = createWorkerHandler({ createApp })
-    const env = { TURSO_DB_URL: 'file:./test.db', TURSO_AUTH_TOKEN: '', AUTH_SECRET: 'test' } satisfies BaseEnv
+    const env = {
+      TURSO_DB_URL: 'file:./test.db',
+      TURSO_AUTH_TOKEN: '',
+      AUTH_SECRET: 'test',
+    } satisfies BaseEnv
 
     await handler.fetch!(new Request('http://localhost/health'), env, {} as any)
     await handler.fetch!(new Request('http://localhost/health'), env, {} as any)
@@ -42,7 +50,11 @@ describe('createWorkerHandler', () => {
 
     const handler1 = createWorkerHandler({ createApp: createApp1 })
     const handler2 = createWorkerHandler({ createApp: createApp2 })
-    const env = { TURSO_DB_URL: 'file:./test.db', TURSO_AUTH_TOKEN: '', AUTH_SECRET: 'test' } satisfies BaseEnv
+    const env = {
+      TURSO_DB_URL: 'file:./test.db',
+      TURSO_AUTH_TOKEN: '',
+      AUTH_SECRET: 'test',
+    } satisfies BaseEnv
 
     await handler1.fetch!(new Request('http://localhost/health'), env, {} as any)
     await handler2.fetch!(new Request('http://localhost/health'), env, {} as any)
@@ -53,7 +65,11 @@ describe('createWorkerHandler', () => {
 
   it('returns 404 for unknown paths', async () => {
     const handler = createWorkerHandler({ createApp: async () => makeTestApp() })
-    const env = { TURSO_DB_URL: 'file:./test.db', TURSO_AUTH_TOKEN: '', AUTH_SECRET: 'test' } satisfies BaseEnv
+    const env = {
+      TURSO_DB_URL: 'file:./test.db',
+      TURSO_AUTH_TOKEN: '',
+      AUTH_SECRET: 'test',
+    } satisfies BaseEnv
     const res = await handler.fetch!(new Request('http://localhost/unknown'), env, {} as any)
 
     expect(res.status).toBe(404)

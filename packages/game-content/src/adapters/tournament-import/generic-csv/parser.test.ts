@@ -114,9 +114,7 @@ describe('parseGenericCsv — edge cases', () => {
 
   it('returns empty array for headers-only CSV', () => {
     expect(
-      parseGenericCsv(
-        'event_name,event_date,format,placement,faction,wins,losses,draws,points\n',
-      ),
+      parseGenericCsv('event_name,event_date,format,placement,faction,wins,losses,draws,points\n'),
     ).toHaveLength(0)
   })
 

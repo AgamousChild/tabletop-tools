@@ -104,8 +104,14 @@ export async function saveNodes(nodes: BrainNode[]): Promise<void> {
     store.put(node)
   }
   return new Promise((resolve, reject) => {
-    tx.oncomplete = () => { db.close(); resolve() }
-    tx.onerror = () => { db.close(); reject(tx.error) }
+    tx.oncomplete = () => {
+      db.close()
+      resolve()
+    }
+    tx.onerror = () => {
+      db.close()
+      reject(tx.error)
+    }
   })
 }
 
@@ -114,8 +120,14 @@ export async function getNode(id: string): Promise<BrainNode | null> {
   return new Promise((resolve, reject) => {
     const tx = db.transaction(NODES_STORE, 'readonly')
     const request = tx.objectStore(NODES_STORE).get(id)
-    request.onsuccess = () => { db.close(); resolve(request.result ?? null) }
-    request.onerror = () => { db.close(); reject(request.error) }
+    request.onsuccess = () => {
+      db.close()
+      resolve(request.result ?? null)
+    }
+    request.onerror = () => {
+      db.close()
+      reject(request.error)
+    }
   })
 }
 
@@ -128,13 +140,15 @@ export async function searchNodes(query: string): Promise<BrainNode[]> {
     request.onsuccess = () => {
       db.close()
       const lower = query.toLowerCase()
-      const results = (request.result as BrainNode[]).filter(n =>
-        n.title.toLowerCase().includes(lower) ||
-        n.keywords.some(k => k.includes(lower))
+      const results = (request.result as BrainNode[]).filter(
+        (n) => n.title.toLowerCase().includes(lower) || n.keywords.some((k) => k.includes(lower)),
       )
       resolve(results)
     }
-    request.onerror = () => { db.close(); reject(request.error) }
+    request.onerror = () => {
+      db.close()
+      reject(request.error)
+    }
   })
 }
 
@@ -144,8 +158,14 @@ export async function getNodesByLayer(layer: string): Promise<BrainNode[]> {
     const tx = db.transaction(NODES_STORE, 'readonly')
     const index = tx.objectStore(NODES_STORE).index('layer')
     const request = index.getAll(layer)
-    request.onsuccess = () => { db.close(); resolve(request.result) }
-    request.onerror = () => { db.close(); reject(request.error) }
+    request.onsuccess = () => {
+      db.close()
+      resolve(request.result)
+    }
+    request.onerror = () => {
+      db.close()
+      reject(request.error)
+    }
   })
 }
 
@@ -155,8 +175,14 @@ export async function getNodesByFaction(factionId: string): Promise<BrainNode[]>
     const tx = db.transaction(NODES_STORE, 'readonly')
     const index = tx.objectStore(NODES_STORE).index('factionId')
     const request = index.getAll(factionId)
-    request.onsuccess = () => { db.close(); resolve(request.result) }
-    request.onerror = () => { db.close(); reject(request.error) }
+    request.onsuccess = () => {
+      db.close()
+      resolve(request.result)
+    }
+    request.onerror = () => {
+      db.close()
+      reject(request.error)
+    }
   })
 }
 
@@ -170,8 +196,14 @@ export async function saveRefs(refs: StoredRef[]): Promise<void> {
     store.add(ref)
   }
   return new Promise((resolve, reject) => {
-    tx.oncomplete = () => { db.close(); resolve() }
-    tx.onerror = () => { db.close(); reject(tx.error) }
+    tx.oncomplete = () => {
+      db.close()
+      resolve()
+    }
+    tx.onerror = () => {
+      db.close()
+      reject(tx.error)
+    }
   })
 }
 
@@ -181,8 +213,14 @@ export async function getRefsFrom(sourceId: string): Promise<StoredRef[]> {
     const tx = db.transaction(REFS_STORE, 'readonly')
     const index = tx.objectStore(REFS_STORE).index('sourceId')
     const request = index.getAll(sourceId)
-    request.onsuccess = () => { db.close(); resolve(request.result) }
-    request.onerror = () => { db.close(); reject(request.error) }
+    request.onsuccess = () => {
+      db.close()
+      resolve(request.result)
+    }
+    request.onerror = () => {
+      db.close()
+      reject(request.error)
+    }
   })
 }
 
@@ -192,8 +230,14 @@ export async function getRefsTo(targetId: string): Promise<StoredRef[]> {
     const tx = db.transaction(REFS_STORE, 'readonly')
     const index = tx.objectStore(REFS_STORE).index('targetId')
     const request = index.getAll(targetId)
-    request.onsuccess = () => { db.close(); resolve(request.result) }
-    request.onerror = () => { db.close(); reject(request.error) }
+    request.onsuccess = () => {
+      db.close()
+      resolve(request.result)
+    }
+    request.onerror = () => {
+      db.close()
+      reject(request.error)
+    }
   })
 }
 
@@ -204,8 +248,14 @@ export async function setBrainMeta(meta: BrainMeta): Promise<void> {
   const tx = db.transaction(META_STORE, 'readwrite')
   tx.objectStore(META_STORE).put({ key: 'sync', ...meta })
   return new Promise((resolve, reject) => {
-    tx.oncomplete = () => { db.close(); resolve() }
-    tx.onerror = () => { db.close(); reject(tx.error) }
+    tx.oncomplete = () => {
+      db.close()
+      resolve()
+    }
+    tx.onerror = () => {
+      db.close()
+      reject(tx.error)
+    }
   })
 }
 
@@ -224,7 +274,10 @@ export async function getBrainMeta(): Promise<BrainMeta | null> {
         resolve(null)
       }
     }
-    request.onerror = () => { db.close(); reject(request.error) }
+    request.onerror = () => {
+      db.close()
+      reject(request.error)
+    }
   })
 }
 
@@ -237,7 +290,13 @@ export async function clearBrainData(): Promise<void> {
   tx.objectStore(REFS_STORE).clear()
   tx.objectStore(META_STORE).clear()
   return new Promise((resolve, reject) => {
-    tx.oncomplete = () => { db.close(); resolve() }
-    tx.onerror = () => { db.close(); reject(tx.error) }
+    tx.oncomplete = () => {
+      db.close()
+      resolve()
+    }
+    tx.onerror = () => {
+      db.close()
+      reject(tx.error)
+    }
   })
 }

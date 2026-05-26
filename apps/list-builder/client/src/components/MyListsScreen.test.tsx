@@ -6,8 +6,22 @@ import { MyListsScreen } from './MyListsScreen'
 vi.mock('@tabletop-tools/game-data-store', () => ({
   useLists: () => ({
     data: [
-      { id: 'list-1', faction: 'Space Marines', name: 'My Crusade', totalPts: 1850, createdAt: 0, updatedAt: 0 },
-      { id: 'list-2', faction: 'Orks', name: 'Speed Freeks', totalPts: 1000, createdAt: 0, updatedAt: 0 },
+      {
+        id: 'list-1',
+        faction: 'Space Marines',
+        name: 'My Crusade',
+        totalPts: 1850,
+        createdAt: 0,
+        updatedAt: 0,
+      },
+      {
+        id: 'list-2',
+        faction: 'Orks',
+        name: 'Speed Freeks',
+        totalPts: 1000,
+        createdAt: 0,
+        updatedAt: 0,
+      },
     ],
     refetch: vi.fn(),
   }),

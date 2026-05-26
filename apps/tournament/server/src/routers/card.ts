@@ -1,9 +1,9 @@
+import { tournamentCards, tournamentPlayers, tournaments } from '@tabletop-tools/db'
 import { TRPCError } from '@trpc/server'
-import { eq, and } from 'drizzle-orm'
+import { and, eq } from 'drizzle-orm'
 import { z } from 'zod'
 
-import { tournaments, tournamentPlayers, tournamentCards } from '@tabletop-tools/db'
-import { router, protectedProcedure } from '../trpc'
+import { protectedProcedure, router } from '../trpc'
 
 export const cardRouter = router({
   issue: protectedProcedure
@@ -85,10 +85,7 @@ export const cardRouter = router({
         .all()
       const regIds = allRegs.map((r) => r.id)
       if (regIds.length === 0) return []
-      const allCards = await ctx.db
-        .select()
-        .from(tournamentCards)
-        .all()
+      const allCards = await ctx.db.select().from(tournamentCards).all()
       return allCards.filter((c) => regIds.includes(c.playerId))
     }),
 })

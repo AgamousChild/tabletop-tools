@@ -5,10 +5,11 @@ import type { Db } from '@tabletop-tools/db'
 import { ingestJobs } from '@tabletop-tools/db'
 import { generateId } from '@tabletop-tools/server-core'
 import { eq } from 'drizzle-orm'
-import { submitTranscription } from './gladia'
+
 import { extractNodes } from './extract'
-import { writeNodesToBrain } from './nodes'
+import { submitTranscription } from './gladia'
 import { fetchArticleText } from './html'
+import { writeNodesToBrain } from './nodes'
 
 export async function startYoutubeIngest(opts: {
   url: string
@@ -99,10 +100,7 @@ export async function processJob(opts: {
   if (!job.transcript) throw new Error(`Job ${opts.jobId} has no transcript`)
 
   try {
-    await opts.db
-      .update(ingestJobs)
-      .set({ status: 'extracting' })
-      .where(eq(ingestJobs.id, job.id))
+    await opts.db.update(ingestJobs).set({ status: 'extracting' }).where(eq(ingestJobs.id, job.id))
 
     const nodes = await extractNodes({
       text: job.transcript,

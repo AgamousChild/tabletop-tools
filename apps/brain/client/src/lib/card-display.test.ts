@@ -1,6 +1,7 @@
-import { describe, it, expect } from 'vitest'
-import { resolveCardView } from './card-display'
+import { describe, expect, it } from 'vitest'
+
 import type { ResultNode } from './card-display'
+import { resolveCardView } from './card-display'
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -91,7 +92,12 @@ describe('resolveCardView', () => {
     const result = resolveCardView(
       makeNode({
         sources: [
-          { type: 'pdf', title: 'Chapter Approved Deployment Zones', page: 1, retrievedAt: '2026-01-01' },
+          {
+            type: 'pdf',
+            title: 'Chapter Approved Deployment Zones',
+            page: 1,
+            retrievedAt: '2026-01-01',
+          },
         ],
       }),
     )
@@ -117,9 +123,7 @@ describe('resolveCardView', () => {
   })
 
   it('surfaces qualityFlags from node', () => {
-    const result = resolveCardView(
-      makeNode({ qualityFlags: ['content-inferred', 'orphan'] }),
-    )
+    const result = resolveCardView(makeNode({ qualityFlags: ['content-inferred', 'orphan'] }))
     expect(result.qualityFlags).toEqual(['content-inferred', 'orphan'])
   })
 
@@ -131,7 +135,9 @@ describe('resolveCardView', () => {
   // ── Category-specific ────────────────────────────────────────────────────
 
   it('maps datasheet to unit card (minimal stub)', () => {
-    const result = resolveCardView(makeNode({ category: 'datasheet', title: 'Intercessors', factionId: 'space-marines' }))
+    const result = resolveCardView(
+      makeNode({ category: 'datasheet', title: 'Intercessors', factionId: 'space-marines' }),
+    )
     expect(result.card.type).toBe('unit')
     if (result.card.type === 'unit') {
       expect(result.card.data.name).toBe('Intercessors')
@@ -243,7 +249,9 @@ describe('resolveCardView', () => {
   })
 
   it('maps primary-mission with correct missionType', () => {
-    const result = resolveCardView(makeNode({ category: 'primary-mission', title: 'Purge the Foe' }))
+    const result = resolveCardView(
+      makeNode({ category: 'primary-mission', title: 'Purge the Foe' }),
+    )
     expect(result.card.type).toBe('mission')
     if (result.card.type === 'mission') {
       expect(result.card.data.missionType).toBe('primary')
@@ -251,9 +259,15 @@ describe('resolveCardView', () => {
   })
 
   it('maps secondary-mission and detects attacker/defender from id', () => {
-    const resultAtk = resolveCardView(makeNode({ category: 'secondary-mission', id: 'mission:sm:atk:001' }))
-    const resultDef = resolveCardView(makeNode({ category: 'secondary-mission', id: 'mission:sm:def:001' }))
-    const resultNeither = resolveCardView(makeNode({ category: 'secondary-mission', id: 'mission:001' }))
+    const resultAtk = resolveCardView(
+      makeNode({ category: 'secondary-mission', id: 'mission:sm:atk:001' }),
+    )
+    const resultDef = resolveCardView(
+      makeNode({ category: 'secondary-mission', id: 'mission:sm:def:001' }),
+    )
+    const resultNeither = resolveCardView(
+      makeNode({ category: 'secondary-mission', id: 'mission:001' }),
+    )
 
     if (resultAtk.card.type === 'mission') expect(resultAtk.card.data.side).toBe('attacker')
     if (resultDef.card.type === 'mission') expect(resultDef.card.data.side).toBe('defender')
@@ -304,9 +318,7 @@ describe('resolveCardView', () => {
   })
 
   it('maps deployment-zone without PDF — pdfImages is undefined', () => {
-    const result = resolveCardView(
-      makeNode({ category: 'deployment-zone', sources: [] }),
-    )
+    const result = resolveCardView(makeNode({ category: 'deployment-zone', sources: [] }))
     expect(result.card.type).toBe('deployment-zone')
     if (result.card.type === 'deployment-zone') {
       expect(result.card.data.pdfImages).toBeUndefined()
@@ -342,9 +354,7 @@ describe('resolveCardView', () => {
   })
 
   it('maps balance-change to balance card', () => {
-    const result = resolveCardView(
-      makeNode({ category: 'balance-change', title: 'Points Update' }),
-    )
+    const result = resolveCardView(makeNode({ category: 'balance-change', title: 'Points Update' }))
     expect(result.card.type).toBe('balance')
     if (result.card.type === 'balance') {
       expect(result.card.data.name).toBe('Points Update')
@@ -389,9 +399,7 @@ describe('formatDetachmentName (via stratagem)', () => {
   })
 
   it('returns empty string when no detachmentId', () => {
-    const result = resolveCardView(
-      makeNode({ category: 'stratagem', detachmentId: undefined }),
-    )
+    const result = resolveCardView(makeNode({ category: 'stratagem', detachmentId: undefined }))
     if (result.card.type === 'stratagem') {
       expect(result.card.data.detachmentName).toBe('')
     }

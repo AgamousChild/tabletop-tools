@@ -17,9 +17,7 @@ export function rgbaToGray(rgba: Uint8ClampedArray, width: number, height: numbe
   const N = width * height
   const out = new Uint8Array(N)
   for (let i = 0; i < N; i++) {
-    out[i] = Math.round(
-      0.299 * rgba[i * 4]! + 0.587 * rgba[i * 4 + 1]! + 0.114 * rgba[i * 4 + 2]!,
-    )
+    out[i] = Math.round(0.299 * rgba[i * 4]! + 0.587 * rgba[i * 4 + 1]! + 0.114 * rgba[i * 4 + 2]!)
   }
   return out
 }

@@ -1,7 +1,7 @@
 import { renderHook } from '@testing-library/react'
-import { describe, expect, it, vi, beforeEach } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 
-import { useUnits, useGameFactions, useGameUnit } from './useGameData'
+import { useGameFactions, useGameUnit, useUnits } from './useGameData'
 
 // ---- Mocks ----
 

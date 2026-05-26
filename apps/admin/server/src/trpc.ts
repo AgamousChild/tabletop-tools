@@ -1,10 +1,10 @@
 import {
   type BaseContext,
-  type User,
-  router,
-  publicProcedure,
-  protectedProcedure,
   createCallerFactory,
+  protectedProcedure,
+  publicProcedure,
+  router,
+  type User,
 } from '@tabletop-tools/server-core'
 import { TRPCError } from '@trpc/server'
 import { initTRPC } from '@trpc/server'
@@ -27,4 +27,4 @@ export const adminProcedure = t.procedure.use(({ ctx, next }) => {
   return next({ ctx: { ...ctx, user: ctx.user } })
 })
 
-export { type User, router, publicProcedure, protectedProcedure, createCallerFactory }
+export { createCallerFactory, protectedProcedure, publicProcedure, router, type User }

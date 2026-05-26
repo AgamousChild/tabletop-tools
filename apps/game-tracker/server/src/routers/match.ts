@@ -1,10 +1,18 @@
+import {
+  matches,
+  matchSecondaries,
+  pairings,
+  rounds,
+  tournamentPlayers,
+  tournaments,
+  turns,
+} from '@tabletop-tools/db'
 import { TRPCError } from '@trpc/server'
 import { and, eq, isNull } from 'drizzle-orm'
 import { z } from 'zod'
-import { matches, turns, matchSecondaries, tournaments, tournamentPlayers, pairings, rounds } from '@tabletop-tools/db'
 
-import { protectedProcedure, router } from '../trpc'
 import { deriveResult } from '../lib/scoring/result'
+import { protectedProcedure, router } from '../trpc'
 
 function generateId(): string {
   return `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`
@@ -66,33 +74,28 @@ export const matchRouter = router({
         tournamentName: input.tournamentName ?? null,
         tournamentId: input.tournamentId ?? null,
       })
-      const [match] = await ctx.db
-        .select()
-        .from(matches)
-        .where(eq(matches.id, id))
+      const [match] = await ctx.db.select().from(matches).where(eq(matches.id, id))
       return match!
     }),
 
   startFromPairing: protectedProcedure
     .input(z.object({ pairingId: z.string() }))
     .mutation(async ({ ctx, input }) => {
-      const [pairing] = await ctx.db
-        .select()
-        .from(pairings)
-        .where(eq(pairings.id, input.pairingId))
+      const [pairing] = await ctx.db.select().from(pairings).where(eq(pairings.id, input.pairingId))
       if (!pairing) throw new TRPCError({ code: 'NOT_FOUND', message: 'Pairing not found' })
 
       // Determine which player the caller is
       const players = await ctx.db
         .select()
         .from(tournamentPlayers)
-        .where(
-          eq(tournamentPlayers.id, pairing.player1Id),
-        )
+        .where(eq(tournamentPlayers.id, pairing.player1Id))
       const player1 = players[0]
 
       const players2 = pairing.player2Id
-        ? await ctx.db.select().from(tournamentPlayers).where(eq(tournamentPlayers.id, pairing.player2Id))
+        ? await ctx.db
+            .select()
+            .from(tournamentPlayers)
+            .where(eq(tournamentPlayers.id, pairing.player2Id))
         : []
       const player2 = players2[0] ?? null
 
@@ -112,7 +115,11 @@ export const matchRouter = router({
         .where(eq(rounds.id, pairing.roundId))
         .get()
       const tournament = roundRow
-        ? await ctx.db.select().from(tournaments).where(eq(tournaments.id, roundRow.tournamentId)).get()
+        ? await ctx.db
+            .select()
+            .from(tournaments)
+            .where(eq(tournaments.id, roundRow.tournamentId))
+            .get()
         : null
 
       const id = generateId()
@@ -153,26 +160,21 @@ export const matchRouter = router({
       .where(and(eq(matches.userId, ctx.user.id), isNull(matches.hiddenAt)))
   }),
 
-  get: protectedProcedure
-    .input(z.object({ id: z.string() }))
-    .query(async ({ ctx, input }) => {
-      const [match] = await ctx.db
-        .select()
-        .from(matches)
-        .where(and(eq(matches.id, input.id), eq(matches.userId, ctx.user.id)))
-      if (!match) {
-        throw new TRPCError({ code: 'NOT_FOUND', message: 'Match not found' })
-      }
-      const matchTurns = await ctx.db
-        .select()
-        .from(turns)
-        .where(eq(turns.matchId, input.id))
-      const secondaries = await ctx.db
-        .select()
-        .from(matchSecondaries)
-        .where(eq(matchSecondaries.matchId, input.id))
-      return { ...match, turns: matchTurns, secondaries }
-    }),
+  get: protectedProcedure.input(z.object({ id: z.string() })).query(async ({ ctx, input }) => {
+    const [match] = await ctx.db
+      .select()
+      .from(matches)
+      .where(and(eq(matches.id, input.id), eq(matches.userId, ctx.user.id)))
+    if (!match) {
+      throw new TRPCError({ code: 'NOT_FOUND', message: 'Match not found' })
+    }
+    const matchTurns = await ctx.db.select().from(turns).where(eq(turns.matchId, input.id))
+    const secondaries = await ctx.db
+      .select()
+      .from(matchSecondaries)
+      .where(eq(matchSecondaries.matchId, input.id))
+    return { ...match, turns: matchTurns, secondaries }
+  }),
 
   delete: protectedProcedure
     .input(z.object({ id: z.string() }))
@@ -185,10 +187,7 @@ export const matchRouter = router({
 
       if (match.tournamentId) {
         // Tournament matches: hide from list, but keep for tournament
-        await ctx.db
-          .update(matches)
-          .set({ hiddenAt: Date.now() })
-          .where(eq(matches.id, input.id))
+        await ctx.db.update(matches).set({ hiddenAt: Date.now() }).where(eq(matches.id, input.id))
       } else {
         // Non-tournament matches: delete entirely (cascade handles turns, secondaries)
         await ctx.db.delete(matches).where(eq(matches.id, input.id))

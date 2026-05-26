@@ -19,7 +19,7 @@
  * @see docs/schema-indexeddb-brain.md — Brain knowledge graph schema
  */
 import { execSync } from 'child_process'
-import { readFileSync, readdirSync, existsSync } from 'fs'
+import { existsSync, readdirSync, readFileSync } from 'fs'
 import { join } from 'path'
 
 const OUTPUT_DIR = '.local/brain'

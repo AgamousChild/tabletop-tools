@@ -1,10 +1,10 @@
 // Components
-export { AuthScreen } from './components/AuthScreen'
 export { AppShell } from './components/AppShell'
+export { AuthScreen } from './components/AuthScreen'
+export { CollapsibleSection } from './components/CollapsibleSection'
 export { ErrorBoundary } from './components/ErrorBoundary'
 export { GameContentDisclaimer } from './components/GameContentDisclaimer'
 export { HelpTip } from './components/HelpTip'
-export { CollapsibleSection } from './components/CollapsibleSection'
 export { SimpleMarkdown } from './components/SimpleMarkdown'
 
 // Auth client factory

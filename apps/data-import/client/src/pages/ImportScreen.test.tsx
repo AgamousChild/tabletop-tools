@@ -1,10 +1,12 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { render, screen, waitFor, fireEvent } from '@testing-library/react'
+import type * as GameDataStore from '@tabletop-tools/game-data-store'
+import { fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
+
 import { ImportScreen } from './ImportScreen'
 
 // Mock the game-data-store module partially
 vi.mock('@tabletop-tools/game-data-store', async () => {
-  const actual = await vi.importActual<typeof import('@tabletop-tools/game-data-store')>('@tabletop-tools/game-data-store')
+  const actual = await vi.importActual<typeof GameDataStore>('@tabletop-tools/game-data-store')
   return {
     ...actual,
     getImportMeta: vi.fn(actual.getImportMeta),
@@ -14,7 +16,12 @@ vi.mock('@tabletop-tools/game-data-store', async () => {
   }
 })
 
-import { getImportMeta, getRulesImportMeta, listFactions as listStoredFactions, searchUnits } from '@tabletop-tools/game-data-store'
+import {
+  getImportMeta,
+  getRulesImportMeta,
+  listFactions as listStoredFactions,
+  searchUnits,
+} from '@tabletop-tools/game-data-store'
 const mockGetImportMeta = vi.mocked(getImportMeta)
 const mockGetRulesImportMeta = vi.mocked(getRulesImportMeta)
 const mockListStoredFactions = vi.mocked(listStoredFactions)
@@ -174,7 +181,12 @@ describe('ImportScreen', () => {
   })
 
   it('shows current data status when meta exists', async () => {
-    mockGetImportMeta.mockResolvedValue({ lastImport: 1700000000000, factions: ['Orks'], totalUnits: 42, parserVersion: 999 })
+    mockGetImportMeta.mockResolvedValue({
+      lastImport: 1700000000000,
+      factions: ['Orks'],
+      totalUnits: 42,
+      parserVersion: 999,
+    })
     mockListStoredFactions.mockResolvedValue(['Orks'])
     mockSearchUnits.mockResolvedValue([])
 
@@ -195,10 +207,25 @@ describe('ImportScreen', () => {
   })
 
   it('shows stored data summary when data exists', async () => {
-    mockGetImportMeta.mockResolvedValue({ lastImport: 1700000000000, factions: ['Orks'], totalUnits: 42, parserVersion: 999 })
+    mockGetImportMeta.mockResolvedValue({
+      lastImport: 1700000000000,
+      factions: ['Orks'],
+      totalUnits: 42,
+      parserVersion: 999,
+    })
     mockGetRulesImportMeta.mockResolvedValue({
       lastImport: 1700000000000,
-      counts: { detachments: 10, stratagems: 20, enhancements: 5, leaderAttachments: 15, unitCompositions: 30, unitCosts: 25, wargearOptions: 40, unitKeywords: 100, unitAbilities: 50 },
+      counts: {
+        detachments: 10,
+        stratagems: 20,
+        enhancements: 5,
+        leaderAttachments: 15,
+        unitCompositions: 30,
+        unitCosts: 25,
+        wargearOptions: 40,
+        unitKeywords: 100,
+        unitAbilities: 50,
+      },
     })
     mockListStoredFactions.mockResolvedValue(['Orks'])
     mockSearchUnits.mockResolvedValue([])
@@ -213,10 +240,49 @@ describe('ImportScreen', () => {
   })
 
   it('shows weapon counts in stored data tab', async () => {
-    mockGetImportMeta.mockResolvedValue({ lastImport: 1700000000000, factions: ['Orks'], totalUnits: 10, parserVersion: 999 })
+    mockGetImportMeta.mockResolvedValue({
+      lastImport: 1700000000000,
+      factions: ['Orks'],
+      totalUnits: 10,
+      parserVersion: 999,
+    })
     mockListStoredFactions.mockResolvedValue(['Orks'])
     mockSearchUnits.mockResolvedValue([
-      { id: '1', faction: 'Orks', name: 'U1', move: 6, toughness: 4, save: 3, wounds: 2, leadership: 6, oc: 1, weapons: [{ name: 'Gun', range: 24, attacks: 2, skill: 3, strength: 4, ap: 0, damage: 1, abilities: [] }, { name: 'Blade', range: 'melee' as const, attacks: 3, skill: 3, strength: 4, ap: 0, damage: 1, abilities: [] }], abilities: [], points: 50 },
+      {
+        id: '1',
+        faction: 'Orks',
+        name: 'U1',
+        move: 6,
+        toughness: 4,
+        save: 3,
+        wounds: 2,
+        leadership: 6,
+        oc: 1,
+        weapons: [
+          {
+            name: 'Gun',
+            range: 24,
+            attacks: 2,
+            skill: 3,
+            strength: 4,
+            ap: 0,
+            damage: 1,
+            abilities: [],
+          },
+          {
+            name: 'Blade',
+            range: 'melee' as const,
+            attacks: 3,
+            skill: 3,
+            strength: 4,
+            ap: 0,
+            damage: 1,
+            abilities: [],
+          },
+        ],
+        abilities: [],
+        points: 50,
+      },
     ])
 
     render(<ImportScreen />)

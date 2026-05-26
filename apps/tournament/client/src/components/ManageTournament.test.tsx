@@ -71,7 +71,14 @@ vi.mock('../lib/trpc', () => ({
       playerHistory: {
         useQuery: (_id: unknown, _opts: unknown) => ({
           data: [
-            { id: 'h1', tournamentId: 't-other', playerId: 'p-other', cardType: 'RED', reason: 'Cheating in past event', issuedAt: 500 },
+            {
+              id: 'h1',
+              tournamentId: 't-other',
+              playerId: 'p-other',
+              cardType: 'RED',
+              reason: 'Cheating in past event',
+              issuedAt: 500,
+            },
           ],
         }),
       },
@@ -79,9 +86,7 @@ vi.mock('../lib/trpc', () => ({
     award: {
       list: {
         useQuery: () => ({
-          data: [
-            { id: 'a1', name: 'Best Painted', description: 'Top paint', recipientId: null },
-          ],
+          data: [{ id: 'a1', name: 'Best Painted', description: 'Top paint', recipientId: null }],
           refetch: vi.fn(),
         }),
       },
@@ -154,9 +159,7 @@ describe('ManageTournament', () => {
   it('clicking reinstate calls mutation', async () => {
     render(<ManageTournament tournamentId="t1" onBack={vi.fn()} />)
     fireEvent.click(screen.getByRole('button', { name: 'Reinstate' }))
-    await waitFor(() =>
-      expect(mockReinstate).toHaveBeenCalledWith({ playerId: 'p2' }),
-    )
+    await waitFor(() => expect(mockReinstate).toHaveBeenCalledWith({ playerId: 'p2' }))
   })
 
   it('clicking Yellow opens card dialog', () => {

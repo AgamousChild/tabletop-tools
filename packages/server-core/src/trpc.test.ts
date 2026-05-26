@@ -1,13 +1,13 @@
 import { createDb, type Db } from '@tabletop-tools/db'
-import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import { TRPCError } from '@trpc/server'
+import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 
 import {
-  router,
-  publicProcedure,
-  protectedProcedure,
-  createCallerFactory,
   type BaseContext,
+  createCallerFactory,
+  protectedProcedure,
+  publicProcedure,
+  router,
   type User,
 } from './trpc'
 

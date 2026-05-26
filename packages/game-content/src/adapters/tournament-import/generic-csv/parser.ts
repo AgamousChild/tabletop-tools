@@ -1,4 +1,4 @@
-import type { TournamentRecord, TournamentPlayer, UnitResult } from '../../../types.js'
+import type { TournamentPlayer, TournamentRecord, UnitResult } from '../../../types.js'
 
 // ============================================================
 // Generic CSV parser — platform's own documented format
@@ -43,7 +43,7 @@ export function parseGenericCsv(csv: string): TournamentRecord[] {
 
     const eventName = col.eventName >= 0 ? (cells[col.eventName] ?? '').trim() : ''
     const eventDate = col.eventDate >= 0 ? (cells[col.eventDate] ?? '').trim() : ''
-    const format    = col.format    >= 0 ? (cells[col.format]    ?? '').trim() : 'GT'
+    const format = col.format >= 0 ? (cells[col.format] ?? '').trim() : 'GT'
 
     if (!eventName || !eventDate) continue
 
@@ -66,14 +66,16 @@ export function parseGenericCsv(csv: string): TournamentRecord[] {
     if (!player) {
       player = {
         placement,
-        playerName: col.playerName >= 0 ? (cells[col.playerName] ?? '').trim() || undefined : undefined,
+        playerName:
+          col.playerName >= 0 ? (cells[col.playerName] ?? '').trim() || undefined : undefined,
         faction,
-        detachment: col.detachment >= 0 ? (cells[col.detachment] ?? '').trim() || undefined : undefined,
-        wins:       col.wins       >= 0 ? parseInt(cells[col.wins]     ?? '0', 10) : 0,
-        losses:     col.losses     >= 0 ? parseInt(cells[col.losses]   ?? '0', 10) : 0,
-        draws:      col.draws      >= 0 ? parseInt(cells[col.draws]    ?? '0', 10) : 0,
-        points:     col.points     >= 0 ? parseInt(cells[col.points]   ?? '0', 10) : 0,
-        listText:   col.listText   >= 0 ? (cells[col.listText] ?? '').trim() || undefined : undefined,
+        detachment:
+          col.detachment >= 0 ? (cells[col.detachment] ?? '').trim() || undefined : undefined,
+        wins: col.wins >= 0 ? parseInt(cells[col.wins] ?? '0', 10) : 0,
+        losses: col.losses >= 0 ? parseInt(cells[col.losses] ?? '0', 10) : 0,
+        draws: col.draws >= 0 ? parseInt(cells[col.draws] ?? '0', 10) : 0,
+        points: col.points >= 0 ? parseInt(cells[col.points] ?? '0', 10) : 0,
+        listText: col.listText >= 0 ? (cells[col.listText] ?? '').trim() || undefined : undefined,
         unitResults: [],
       }
       players.set(playerKey, player)
@@ -85,8 +87,10 @@ export function parseGenericCsv(csv: string): TournamentRecord[] {
       if (unitName) {
         const unitResult: UnitResult = {
           unitName,
-          contentId: col.contentId >= 0 ? (cells[col.contentId] ?? '').trim() || undefined : undefined,
-          gamesPlayed: col.unitGamesPlayed >= 0 ? parseInt(cells[col.unitGamesPlayed] ?? '0', 10) : 0,
+          contentId:
+            col.contentId >= 0 ? (cells[col.contentId] ?? '').trim() || undefined : undefined,
+          gamesPlayed:
+            col.unitGamesPlayed >= 0 ? parseInt(cells[col.unitGamesPlayed] ?? '0', 10) : 0,
           averagePoints: col.unitAvgPoints >= 0 ? parseFloat(cells[col.unitAvgPoints] ?? '0') : 0,
         }
         player.unitResults ??= []
@@ -138,22 +142,22 @@ interface ColumnMap {
 }
 
 const HEADER_ALIASES: Record<keyof ColumnMap, string[]> = {
-  eventName:       ['event_name', 'event name', 'event'],
-  eventDate:       ['event_date', 'event date', 'date'],
-  format:          ['format', 'event_format', 'event format'],
-  placement:       ['placement', 'place', 'rank', 'finish'],
-  playerName:      ['player_name', 'player name', 'player', 'name'],
-  faction:         ['faction', 'army'],
-  detachment:      ['detachment', 'sub_faction', 'sub faction', 'subfaction'],
-  wins:            ['wins', 'w', 'win'],
-  losses:          ['losses', 'l', 'loss'],
-  draws:           ['draws', 'd', 'draw'],
-  points:          ['points', 'vp', 'total_points', 'total points'],
-  listText:        ['list_text', 'list text', 'list', 'army list'],
-  unitName:        ['unit_name', 'unit name', 'unit'],
-  contentId:       ['content_id', 'content id', 'bsdata_id'],
+  eventName: ['event_name', 'event name', 'event'],
+  eventDate: ['event_date', 'event date', 'date'],
+  format: ['format', 'event_format', 'event format'],
+  placement: ['placement', 'place', 'rank', 'finish'],
+  playerName: ['player_name', 'player name', 'player', 'name'],
+  faction: ['faction', 'army'],
+  detachment: ['detachment', 'sub_faction', 'sub faction', 'subfaction'],
+  wins: ['wins', 'w', 'win'],
+  losses: ['losses', 'l', 'loss'],
+  draws: ['draws', 'd', 'draw'],
+  points: ['points', 'vp', 'total_points', 'total points'],
+  listText: ['list_text', 'list text', 'list', 'army list'],
+  unitName: ['unit_name', 'unit name', 'unit'],
+  contentId: ['content_id', 'content id', 'bsdata_id'],
   unitGamesPlayed: ['unit_games_played', 'games_played', 'games played'],
-  unitAvgPoints:   ['unit_avg_points', 'avg_points', 'avg points', 'average points'],
+  unitAvgPoints: ['unit_avg_points', 'avg_points', 'avg points', 'average points'],
 }
 
 function buildColumnMap(headers: string[]): ColumnMap {

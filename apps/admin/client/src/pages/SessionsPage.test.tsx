@@ -1,5 +1,5 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, screen } from '@testing-library/react'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 let queryReturn: any
 
@@ -11,7 +11,10 @@ vi.mock('../lib/trpc', () => ({
       activeSessions: { useQuery: vi.fn(() => queryReturn) },
       revokeSession: {
         useMutation: (opts?: { onSuccess?: () => void }) => ({
-          mutate: (args: unknown) => { mockRevokeSession(args); opts?.onSuccess?.() },
+          mutate: (args: unknown) => {
+            mockRevokeSession(args)
+            opts?.onSuccess?.()
+          },
           isPending: false,
         }),
       },
@@ -45,7 +48,15 @@ describe('SessionsPage', () => {
 
   it('renders table headers when sessions exist', () => {
     queryReturn = {
-      data: [{ id: 's1', userName: 'Alice', userEmail: 'alice@test.com', ipAddress: '1.2.3.4', expiresAt: '2026-03-01T00:00:00Z' }],
+      data: [
+        {
+          id: 's1',
+          userName: 'Alice',
+          userEmail: 'alice@test.com',
+          ipAddress: '1.2.3.4',
+          expiresAt: '2026-03-01T00:00:00Z',
+        },
+      ],
       isLoading: false,
       error: null,
     }
@@ -59,7 +70,13 @@ describe('SessionsPage', () => {
   it('renders session rows with user data', () => {
     queryReturn = {
       data: [
-        { id: 's1', userName: 'Alice', userEmail: 'alice@test.com', ipAddress: '1.2.3.4', expiresAt: '2026-03-01T00:00:00Z' },
+        {
+          id: 's1',
+          userName: 'Alice',
+          userEmail: 'alice@test.com',
+          ipAddress: '1.2.3.4',
+          expiresAt: '2026-03-01T00:00:00Z',
+        },
         { id: 's2', userName: 'Bob', userEmail: 'bob@test.com', ipAddress: null, expiresAt: null },
       ],
       isLoading: false,
@@ -76,7 +93,13 @@ describe('SessionsPage', () => {
   it('shows session count in header', () => {
     queryReturn = {
       data: [
-        { id: 's1', userName: 'Alice', userEmail: 'alice@test.com', ipAddress: '1.2.3.4', expiresAt: '2026-03-01T00:00:00Z' },
+        {
+          id: 's1',
+          userName: 'Alice',
+          userEmail: 'alice@test.com',
+          ipAddress: '1.2.3.4',
+          expiresAt: '2026-03-01T00:00:00Z',
+        },
       ],
       isLoading: false,
       error: null,

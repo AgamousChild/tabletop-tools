@@ -8,8 +8,9 @@
  * For each node, finds the matching heading block and calculates the region from
  * that heading to the next heading of same or higher level (the full rule section).
  */
+import { existsSync, readFileSync } from 'fs'
 import { join } from 'path'
-import { readFileSync, existsSync } from 'fs'
+
 import type { Node } from './model'
 
 /** Block position from gw-sync sidecar. */
@@ -27,7 +28,11 @@ interface BlockPosition {
 
 /** Normalize text for matching — lowercase, collapse whitespace. */
 function normalize(text: string): string {
-  return text.toLowerCase().replace(/[^a-z0-9\s]/g, ' ').replace(/\s+/g, ' ').trim()
+  return text
+    .toLowerCase()
+    .replace(/[^a-z0-9\s]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
 }
 
 /**
@@ -64,7 +69,11 @@ function findRegion(
   // Strategy 2: Match the node title as a substring of any sidecar block
   if (startIdx === -1 && titleNorm.length >= 5) {
     for (let i = 0; i < positions.length; i++) {
-      if (normalize(positions[i]!.text).includes(titleNorm.substring(0, Math.min(titleNorm.length, 30)))) {
+      if (
+        normalize(positions[i]!.text).includes(
+          titleNorm.substring(0, Math.min(titleNorm.length, 30)),
+        )
+      ) {
         startIdx = i
         break
       }
@@ -74,7 +83,10 @@ function findRegion(
   // Strategy 3: Match content lines against sidecar blocks
   // (fallback for nodes whose title doesn't appear in any block)
   if (startIdx === -1 && contentNorm.length >= 10) {
-    const contentLines = nodeContent.split('\n').map(l => normalize(l)).filter(l => l.length >= 10)
+    const contentLines = nodeContent
+      .split('\n')
+      .map((l) => normalize(l))
+      .filter((l) => l.length >= 10)
 
     for (const line of contentLines.slice(0, 3)) {
       if (startIdx >= 0) break
@@ -163,14 +175,20 @@ export async function mapNodesToPages(
     // Direct PDF source
     for (const src of node.sources) {
       if (src.type === 'pdf') {
-        const pdfName = src.title.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '')
+        const pdfName = src.title
+          .toLowerCase()
+          .replace(/[^a-z0-9]+/g, '-')
+          .replace(/^-|-$/g, '')
         if (!nodesByPdf.has(pdfName)) nodesByPdf.set(pdfName, [])
         nodesByPdf.get(pdfName)!.push(node)
       }
     }
     // Wahapedia-sourced faction/stratagem/enhancement nodes — match to faction pack PDF
-    if (node.sources[0]?.type === 'wahapedia' && node.factionId &&
-        ['stratagem', 'enhancement', 'faction-ability', 'detachment-rule'].includes(node.category)) {
+    if (
+      node.sources[0]?.type === 'wahapedia' &&
+      node.factionId &&
+      ['stratagem', 'enhancement', 'faction-ability', 'detachment-rule'].includes(node.category)
+    ) {
       const pdfName = `faction-pack-${node.factionId}`
       if (!nodesByPdf.has(pdfName)) nodesByPdf.set(pdfName, [])
       nodesByPdf.get(pdfName)!.push(node)
@@ -194,12 +212,20 @@ export async function mapNodesToPages(
       if (region) {
         // Check if this node already has a PDF source for this PDF
         const existingPdfIdx = node.sources.findIndex(
-          s => s.type === 'pdf' && s.title.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') === pdfName
+          (s) =>
+            s.type === 'pdf' &&
+            s.title
+              .toLowerCase()
+              .replace(/[^a-z0-9]+/g, '-')
+              .replace(/^-|-$/g, '') === pdfName,
         )
 
         const pdfSource = {
           type: 'pdf' as const,
-          title: pdfName.split('-').map(w => w[0]!.toUpperCase() + w.slice(1)).join(' '),
+          title: pdfName
+            .split('-')
+            .map((w) => w[0]!.toUpperCase() + w.slice(1))
+            .join(' '),
           publishedAt: node.sources[0]?.publishedAt,
           retrievedAt: node.sources[0]?.retrievedAt ?? new Date().toISOString(),
           page: region.page,

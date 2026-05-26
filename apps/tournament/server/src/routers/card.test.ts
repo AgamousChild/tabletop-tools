@@ -82,11 +82,19 @@ afterAll(() => client.close())
 const createCaller = createCallerFactory(appRouter)
 
 function toCaller() {
-  return createCaller({ db, user: { id: 'to-1', email: 'alice@example.com', name: 'Alice' }, req: new Request('http://test') })
+  return createCaller({
+    db,
+    user: { id: 'to-1', email: 'alice@example.com', name: 'Alice' },
+    req: new Request('http://test'),
+  })
 }
 
 function playerCaller() {
-  return createCaller({ db, user: { id: 'player-1', email: 'bob@example.com', name: 'Bob' }, req: new Request('http://test') })
+  return createCaller({
+    db,
+    user: { id: 'player-1', email: 'bob@example.com', name: 'Bob' },
+    req: new Request('http://test'),
+  })
 }
 
 describe('card router', () => {

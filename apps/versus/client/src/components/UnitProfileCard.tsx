@@ -1,6 +1,6 @@
-import { useState } from 'react'
 import type { UnitProfile } from '@tabletop-tools/game-content'
 import type { DatasheetModel } from '@tabletop-tools/game-data-store'
+import { useState } from 'react'
 
 type Props = {
   unit: UnitProfile
@@ -50,7 +50,9 @@ export function UnitProfileCard({ unit, invulnSave, fnp, additionalModels }: Pro
         <div className="mb-2 rounded bg-amber-900/20 border border-amber-800/50 px-2 py-1.5 text-xs text-amber-300">
           <p className="font-semibold">Data quality issues:</p>
           <ul className="mt-0.5 space-y-0.5">
-            {warnings.map((w, i) => <li key={i}>{w}</li>)}
+            {warnings.map((w, i) => (
+              <li key={i}>{w}</li>
+            ))}
           </ul>
         </div>
       )}
@@ -66,8 +68,10 @@ export function UnitProfileCard({ unit, invulnSave, fnp, additionalModels }: Pro
       {additionalModels && additionalModels.length > 1 && (
         <div className="mt-2 border-t border-slate-700 pt-2 space-y-1.5">
           {additionalModels.map((model, i) => {
-            const invSv = model.invSv && model.invSv !== '-' && model.invSv !== '\u2013'
-              ? parseModelStatStr(model.invSv) : 0
+            const invSv =
+              model.invSv && model.invSv !== '-' && model.invSv !== '\u2013'
+                ? parseModelStatStr(model.invSv)
+                : 0
             return (
               <div key={i}>
                 <p className="text-[10px] text-slate-500 uppercase mb-0.5">{model.name}</p>
@@ -85,11 +89,7 @@ export function UnitProfileCard({ unit, invulnSave, fnp, additionalModels }: Pro
           })}
         </div>
       )}
-      {displayFnp && (
-        <div className="mt-1 text-xs text-slate-400">
-          Feel No Pain: {displayFnp}+
-        </div>
-      )}
+      {displayFnp && <div className="mt-1 text-xs text-slate-400">Feel No Pain: {displayFnp}+</div>}
       {unit.abilities.length > 0 && (
         <div className="mt-2 border-t border-slate-700 pt-2">
           <p className="text-[10px] text-slate-500 uppercase mb-1">Abilities</p>

@@ -1,6 +1,6 @@
-import { createWorkerHandler } from '@tabletop-tools/server-core'
 import { createClient } from '@libsql/client/web'
 import { createDbFromClient } from '@tabletop-tools/db'
+import { createWorkerHandler } from '@tabletop-tools/server-core'
 
 import { createServer } from './server'
 
@@ -18,7 +18,10 @@ export default createWorkerHandler<Env>({
       authToken: env.TURSO_AUTH_TOKEN,
     })
     const db = createDbFromClient(client)
-    const adminEmails = env.ADMIN_EMAILS?.split(',').map((e) => e.trim()).filter(Boolean) ?? []
+    const adminEmails =
+      env.ADMIN_EMAILS?.split(',')
+        .map((e) => e.trim())
+        .filter(Boolean) ?? []
     return createServer(db, adminEmails, env.AUTH_SECRET)
   },
 })

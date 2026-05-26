@@ -25,9 +25,7 @@ export function ListCard({ list }: Props) {
           <div className="flex items-center gap-2">
             <span className="text-amber-400 font-semibold text-sm">#{list.placement}</span>
             <span className="text-slate-100 font-medium">{list.faction}</span>
-            {list.detachment && (
-              <span className="text-slate-400 text-sm">· {list.detachment}</span>
-            )}
+            {list.detachment && <span className="text-slate-400 text-sm">· {list.detachment}</span>}
           </div>
           <div className="text-slate-500 text-xs mt-0.5">
             {list.eventName} · {new Date(list.eventDate).toLocaleDateString()}

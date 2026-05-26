@@ -1,4 +1,5 @@
-import { describe, it, expect } from 'vitest'
+import { describe, expect, it } from 'vitest'
+
 import { massage } from './massage'
 import type { Node } from './model'
 
@@ -95,7 +96,7 @@ describe('massage — Pass 2: short-content non-structural nodes', () => {
     const node = makeNode({
       id: 'short:enhancement',
       category: 'enhancement',
-      content: 'INVULNERABLE SAVE',   // 17 chars
+      content: 'INVULNERABLE SAVE', // 17 chars
     })
     const { nodes, stats } = massage([node])
     expect(nodes).toHaveLength(0)
@@ -106,7 +107,7 @@ describe('massage — Pass 2: short-content non-structural nodes', () => {
     const node = makeNode({
       id: 'short:stratagem',
       category: 'stratagem',
-      content: 'Reroll wounds.',   // 14 chars
+      content: 'Reroll wounds.', // 14 chars
     })
     const { nodes, stats } = massage([node])
     expect(nodes).toHaveLength(0)
@@ -117,7 +118,7 @@ describe('massage — Pass 2: short-content non-structural nodes', () => {
     const node = makeNode({
       id: 'borderline:content',
       category: 'stratagem',
-      content: '12345678901234567890',   // exactly 20 chars
+      content: '12345678901234567890', // exactly 20 chars
     })
     const { nodes } = massage([node])
     expect(nodes).toHaveLength(1)
@@ -127,7 +128,7 @@ describe('massage — Pass 2: short-content non-structural nodes', () => {
     const node = makeNode({
       id: 'short:deployment-zone',
       category: 'deployment-zone',
-      content: 'See PDF',   // 7 chars — structural, allowed
+      content: 'See PDF', // 7 chars — structural, allowed
     })
     const { nodes, stats } = massage([node])
     expect(nodes).toHaveLength(1)
@@ -138,7 +139,7 @@ describe('massage — Pass 2: short-content non-structural nodes', () => {
     const node = makeNode({
       id: 'short:datasheet',
       category: 'datasheet',
-      content: 'See PDF.',   // 8 chars — structural, allowed
+      content: 'See PDF.', // 8 chars — structural, allowed
     })
     const { nodes, stats } = massage([node])
     expect(nodes).toHaveLength(1)
@@ -149,7 +150,7 @@ describe('massage — Pass 2: short-content non-structural nodes', () => {
     const node = makeNode({
       id: 'short:detachment-rule',
       category: 'detachment-rule',
-      content: 'See PDF page.',   // 13 chars — structural, allowed
+      content: 'See PDF page.', // 13 chars — structural, allowed
     })
     const { nodes, stats } = massage([node])
     expect(nodes).toHaveLength(1)
@@ -160,7 +161,7 @@ describe('massage — Pass 2: short-content non-structural nodes', () => {
     const node = makeNode({
       id: 'short:terrain-layout',
       category: 'terrain-layout',
-      content: 'See diagram.',   // 12 chars — structural, allowed
+      content: 'See diagram.', // 12 chars — structural, allowed
     })
     const { nodes, stats } = massage([node])
     expect(nodes).toHaveLength(1)
@@ -171,7 +172,8 @@ describe('massage — Pass 2: short-content non-structural nodes', () => {
 // ── Pass 3 — duplicate summaries ─────────────────────────────────────────────
 
 describe('massage — Pass 3: duplicate summaries', () => {
-  const LONG_CONTENT = 'This is a valid test node with enough content to pass the minimum length check.'
+  const LONG_CONTENT =
+    'This is a valid test node with enough content to pass the minimum length check.'
 
   it('drops the second node when two nodes share summary+category+factionId', () => {
     const first = makeNode({
@@ -259,12 +261,25 @@ describe('massage — Pass 3: duplicate summaries', () => {
 
 describe('massage — stats', () => {
   it('returns correct counts across all three passes', () => {
-    const LONG_CONTENT = 'This is a valid test node with enough content to pass the minimum length check.'
+    const LONG_CONTENT =
+      'This is a valid test node with enough content to pass the minimum length check.'
 
     const phantom = makeNode({ id: 'p:phantom', title: '+' })
     const shortNode = makeNode({ id: 'p:short', category: 'enhancement', content: 'Too short.' })
-    const dup1 = makeNode({ id: 'p:dup1', category: 'stratagem', factionId: 'orks', summary: 'Waaagh!', content: LONG_CONTENT })
-    const dup2 = makeNode({ id: 'p:dup2', category: 'stratagem', factionId: 'orks', summary: 'Waaagh!', content: LONG_CONTENT })
+    const dup1 = makeNode({
+      id: 'p:dup1',
+      category: 'stratagem',
+      factionId: 'orks',
+      summary: 'Waaagh!',
+      content: LONG_CONTENT,
+    })
+    const dup2 = makeNode({
+      id: 'p:dup2',
+      category: 'stratagem',
+      factionId: 'orks',
+      summary: 'Waaagh!',
+      content: LONG_CONTENT,
+    })
     const good = makeNode({ id: 'p:good', content: LONG_CONTENT })
 
     const { nodes, stats } = massage([phantom, shortNode, dup1, dup2, good])
@@ -313,7 +328,13 @@ describe('massage — content independence', () => {
   it('flags nodes where content just echoes the title', () => {
     // Use a structural category so Pass 2 does not drop the node before Pass 4 runs.
     const nodes = [
-      makeNode({ id: 'echo', category: 'datasheet', title: 'INVULNERABLE SAVE', content: 'INVULNERABLE SAVE', summary: 'The invulnerable save rule from the Core Rules book.' }),
+      makeNode({
+        id: 'echo',
+        category: 'datasheet',
+        title: 'INVULNERABLE SAVE',
+        content: 'INVULNERABLE SAVE',
+        summary: 'The invulnerable save rule from the Core Rules book.',
+      }),
     ]
     const result = massage(nodes)
     expect(result.nodes[0].qualityFlags).toContain('content-inferred')
@@ -323,7 +344,12 @@ describe('massage — content independence', () => {
   it('flags nodes with content under 30 chars', () => {
     // Content is 20–29 chars (survives Pass 2 at ≥20) but < 30 (flagged by Pass 4).
     const nodes = [
-      makeNode({ id: 'short', title: 'Something', content: 'Too short; see detail.', summary: 'A longer summary that should replace the short content field.' }),
+      makeNode({
+        id: 'short',
+        title: 'Something',
+        content: 'Too short; see detail.',
+        summary: 'A longer summary that should replace the short content field.',
+      }),
     ]
     const result = massage(nodes)
     expect(result.nodes[0].qualityFlags).toContain('content-inferred')
@@ -332,7 +358,11 @@ describe('massage — content independence', () => {
 
   it('does NOT flag nodes with good content', () => {
     const nodes = [
-      makeNode({ id: 'good', title: 'Wound Roll', content: 'Each time an attack scores a hit, make a wound roll by rolling one D6.' }),
+      makeNode({
+        id: 'good',
+        title: 'Wound Roll',
+        content: 'Each time an attack scores a hit, make a wound roll by rolling one D6.',
+      }),
     ]
     const result = massage(nodes)
     expect(result.nodes[0].qualityFlags).toBeUndefined()
@@ -346,7 +376,18 @@ describe('massage — PDF reference validation', () => {
     const nodes = [
       makeNode({
         id: 'bad-top',
-        sources: [{ type: 'pdf' as const, title: 'Core Rules', retrievedAt: '2026-01-01T00:00:00Z', page: 5, topPct: -10, heightPct: 20, leftPct: 10, widthPct: 50 }],
+        sources: [
+          {
+            type: 'pdf' as const,
+            title: 'Core Rules',
+            retrievedAt: '2026-01-01T00:00:00Z',
+            page: 5,
+            topPct: -10,
+            heightPct: 20,
+            leftPct: 10,
+            widthPct: 50,
+          },
+        ],
       }),
     ]
     const result = massage(nodes)
@@ -357,7 +398,18 @@ describe('massage — PDF reference validation', () => {
     const nodes = [
       makeNode({
         id: 'zero',
-        sources: [{ type: 'pdf' as const, title: 'Core Rules', retrievedAt: '2026-01-01T00:00:00Z', page: 1, topPct: 50, heightPct: 0, leftPct: 10, widthPct: 0 }],
+        sources: [
+          {
+            type: 'pdf' as const,
+            title: 'Core Rules',
+            retrievedAt: '2026-01-01T00:00:00Z',
+            page: 1,
+            topPct: 50,
+            heightPct: 0,
+            leftPct: 10,
+            widthPct: 0,
+          },
+        ],
       }),
     ]
     const result = massage(nodes)
@@ -368,7 +420,18 @@ describe('massage — PDF reference validation', () => {
     const nodes = [
       makeNode({
         id: 'valid',
-        sources: [{ type: 'pdf' as const, title: 'Core Rules', retrievedAt: '2026-01-01T00:00:00Z', page: 28, topPct: 7.69, heightPct: 27.19, leftPct: 44.32, widthPct: 40.42 }],
+        sources: [
+          {
+            type: 'pdf' as const,
+            title: 'Core Rules',
+            retrievedAt: '2026-01-01T00:00:00Z',
+            page: 28,
+            topPct: 7.69,
+            heightPct: 27.19,
+            leftPct: 44.32,
+            widthPct: 40.42,
+          },
+        ],
       }),
     ]
     const result = massage(nodes)
@@ -382,31 +445,53 @@ describe('massage — hierarchy validation', () => {
   it('flags weapons without valid datasheetId', () => {
     const nodes = [
       makeNode({ id: 'ds:001', category: 'datasheet', title: 'Intercessors' }),
-      makeNode({ id: 'w:good', category: 'weapon', title: 'Bolt Rifle', summary: 'The Bolt Rifle weapon profile.', datasheetId: 'ds:001' }),
-      makeNode({ id: 'w:orphan', category: 'weapon', title: 'Orphan Gun', summary: 'The Orphan Gun weapon profile.', datasheetId: 'ds:missing' }),
+      makeNode({
+        id: 'w:good',
+        category: 'weapon',
+        title: 'Bolt Rifle',
+        summary: 'The Bolt Rifle weapon profile.',
+        datasheetId: 'ds:001',
+      }),
+      makeNode({
+        id: 'w:orphan',
+        category: 'weapon',
+        title: 'Orphan Gun',
+        summary: 'The Orphan Gun weapon profile.',
+        datasheetId: 'ds:missing',
+      }),
     ]
     const result = massage(nodes)
-    const orphan = result.nodes.find(n => n.id === 'w:orphan')!
+    const orphan = result.nodes.find((n) => n.id === 'w:orphan')!
     expect(orphan.qualityFlags).toContain('orphan')
-    const good = result.nodes.find(n => n.id === 'w:good')!
+    const good = result.nodes.find((n) => n.id === 'w:good')!
     expect(good.qualityFlags).toBeUndefined()
   })
 
   it('flags stratagems without valid detachmentId', () => {
     const nodes = [
       makeNode({ id: 'det:test', category: 'detachment-rule', title: 'Test Det' }),
-      makeNode({ id: 's:good', category: 'stratagem', title: 'Good Strat', summary: 'The good stratagem summary text.', detachmentId: 'det:test' }),
-      makeNode({ id: 's:orphan', category: 'stratagem', title: 'Orphan Strat', summary: 'The orphan stratagem summary text.', detachmentId: 'det:missing' }),
+      makeNode({
+        id: 's:good',
+        category: 'stratagem',
+        title: 'Good Strat',
+        summary: 'The good stratagem summary text.',
+        detachmentId: 'det:test',
+      }),
+      makeNode({
+        id: 's:orphan',
+        category: 'stratagem',
+        title: 'Orphan Strat',
+        summary: 'The orphan stratagem summary text.',
+        detachmentId: 'det:missing',
+      }),
     ]
     const result = massage(nodes)
-    const orphan = result.nodes.find(n => n.id === 's:orphan')!
+    const orphan = result.nodes.find((n) => n.id === 's:orphan')!
     expect(orphan.qualityFlags).toContain('orphan')
   })
 
   it('does not flag nodes without datasheetId/detachmentId', () => {
-    const nodes = [
-      makeNode({ id: 'rule', category: 'core-mechanic', title: 'Some Rule' }),
-    ]
+    const nodes = [makeNode({ id: 'rule', category: 'core-mechanic', title: 'Some Rule' })]
     const result = massage(nodes)
     expect(result.nodes[0].qualityFlags).toBeUndefined()
   })
@@ -418,8 +503,28 @@ describe('massage — stats: flag counts', () => {
   it('reports correct flag counts', () => {
     const nodes = [
       // Structural category bypasses Pass 2 so Pass 4 can flag the echo
-      makeNode({ id: 'echo', category: 'datasheet', title: 'ECHO RULE', content: 'ECHO RULE', summary: 'A longer description of this rule for content inference.' }),
-      makeNode({ id: 'bad-pdf', sources: [{ type: 'pdf' as const, title: 'X', retrievedAt: '2026-01-01T00:00:00Z', page: 1, topPct: -5, heightPct: 10, leftPct: 0, widthPct: 50 }] }),
+      makeNode({
+        id: 'echo',
+        category: 'datasheet',
+        title: 'ECHO RULE',
+        content: 'ECHO RULE',
+        summary: 'A longer description of this rule for content inference.',
+      }),
+      makeNode({
+        id: 'bad-pdf',
+        sources: [
+          {
+            type: 'pdf' as const,
+            title: 'X',
+            retrievedAt: '2026-01-01T00:00:00Z',
+            page: 1,
+            topPct: -5,
+            heightPct: 10,
+            leftPct: 0,
+            widthPct: 50,
+          },
+        ],
+      }),
       makeNode({ id: 'orphan', category: 'weapon', title: 'Gun', datasheetId: 'ds:missing' }),
     ]
     const result = massage(nodes)

@@ -1,16 +1,17 @@
-import { useMemo } from 'react'
 import {
-  useDetachments,
+  useAllDatasheets,
   useDetachment,
   useDetachmentAbilities,
+  useDetachments,
   useEnhancements,
-  useUnitKeywords,
-  useUnitCompositions,
-  useUnitCosts,
-  useAllDatasheets,
   usePrimaryFactions,
   usePrimaryUnitSearch,
+  useUnitCompositions,
+  useUnitCosts,
+  useUnitKeywords,
 } from '@tabletop-tools/game-data-store'
+import { useMemo } from 'react'
+
 import { parseModelOptions } from './modelOptions'
 
 export function useUnits(query: { faction?: string; name?: string }, enabled: boolean) {
@@ -79,6 +80,6 @@ export function useUnitRoles(): Map<string, string> {
 export function useIsCharacter(unitId: string): boolean {
   const { data: keywords } = useUnitKeywords(unitId)
   return useMemo(() => {
-    return keywords.some(k => k.keyword.toUpperCase() === 'CHARACTER')
+    return keywords.some((k) => k.keyword.toUpperCase() === 'CHARACTER')
   }, [keywords])
 }

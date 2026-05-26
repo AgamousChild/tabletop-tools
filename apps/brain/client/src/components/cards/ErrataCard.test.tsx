@@ -1,7 +1,8 @@
-import { describe, it, expect, vi } from 'vitest'
-import { render, screen, fireEvent } from '@testing-library/react'
+import { fireEvent, render, screen } from '@testing-library/react'
+import { describe, expect, it, vi } from 'vitest'
+
 import { ErrataCard } from './ErrataCard'
-import type { ErrataCardData, CardContext } from './types'
+import type { CardContext, ErrataCardData } from './types'
 
 const mockContext: CardContext = {
   highlightTerms: [],
@@ -66,7 +67,11 @@ describe('ErrataCard', () => {
   })
 
   it('renders source and effectiveDate in footer when present', () => {
-    const data: ErrataCardData = { ...mockData, source: 'Chapter Approved 2024', effectiveDate: '2024-01-01' }
+    const data: ErrataCardData = {
+      ...mockData,
+      source: 'Chapter Approved 2024',
+      effectiveDate: '2024-01-01',
+    }
     render(<ErrataCard data={data} context={mockContext} />)
     expect(screen.getByText('Chapter Approved 2024')).toBeInTheDocument()
     expect(screen.getByText('2024-01-01')).toBeInTheDocument()

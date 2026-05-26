@@ -17,7 +17,9 @@ export interface RateLimitInfo {
 export class RateLimitError extends Error {
   resetAt: Date
   constructor(resetAt: Date, message?: string) {
-    super(message ?? `GitHub API rate limit exceeded. Try again at ${resetAt.toLocaleTimeString()}.`)
+    super(
+      message ?? `GitHub API rate limit exceeded. Try again at ${resetAt.toLocaleTimeString()}.`,
+    )
     this.name = 'RateLimitError'
     this.resetAt = resetAt
   }
@@ -79,10 +81,9 @@ export async function getLatestCommitSha(
   branch: string = DEFAULT_BRANCH,
 ): Promise<string | null> {
   try {
-    const res = await fetch(
-      `https://api.github.com/repos/${repo}/commits/${branch}`,
-      { headers: { Accept: 'application/vnd.github.v3+json' } },
-    )
+    const res = await fetch(`https://api.github.com/repos/${repo}/commits/${branch}`, {
+      headers: { Accept: 'application/vnd.github.v3+json' },
+    })
     if (!res.ok) return null
     const data = await res.json()
     return data.sha ?? null

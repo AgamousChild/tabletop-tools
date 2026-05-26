@@ -2,9 +2,9 @@ import { createClient } from '@libsql/client'
 import { createDbFromClient } from '@tabletop-tools/db'
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest'
 
+import type { R2Storage } from '../lib/storage/r2'
 import { createCallerFactory } from '../trpc'
 import { appRouter } from './index'
-import type { R2Storage } from '../lib/storage/r2'
 
 const mockStorage: R2Storage = {
   upload: vi.fn().mockResolvedValue('https://cdn.example.com/evidence/test.jpg'),
@@ -55,8 +55,18 @@ afterAll(() => client.close())
 
 const createCaller = createCallerFactory(appRouter)
 const req = new Request('http://localhost')
-const alice = { user: { id: 'user-1', email: 'alice@example.com', name: 'Alice' }, req, db, storage: mockStorage }
-const bob = { user: { id: 'user-2', email: 'bob@example.com', name: 'Bob' }, req, db, storage: mockStorage }
+const alice = {
+  user: { id: 'user-1', email: 'alice@example.com', name: 'Alice' },
+  req,
+  db,
+  storage: mockStorage,
+}
+const bob = {
+  user: { id: 'user-2', email: 'bob@example.com', name: 'Bob' },
+  req,
+  db,
+  storage: mockStorage,
+}
 
 // Minimal base64 JPEG header to pass validation
 const fakeBase64 = Buffer.from('fake-jpeg-data').toString('base64')

@@ -30,7 +30,8 @@ function deriveStrategicPurpose(unit: DeploymentUnit): StrategicPurpose {
 
 // ── Tactical Role ─────────────────────────────────────────────────────────────
 
-const TRANSPORT_NAME_PATTERNS = /\b(transport|rhino|chimera|razorback|land raider|repulsor|impulsor|devilfish|ghost ark|night scythe)\b/i
+const TRANSPORT_NAME_PATTERNS =
+  /\b(transport|rhino|chimera|razorback|land raider|repulsor|impulsor|devilfish|ghost ark|night scythe)\b/i
 
 function deriveTransport(unit: DeploymentUnit): boolean {
   return (
@@ -46,9 +47,7 @@ function allOrMostlyRanged(unit: DeploymentUnit): boolean {
 }
 
 function maxRangedRange(unit: DeploymentUnit): number {
-  const rangedRanges = unit.weapons
-    .filter((w) => w.range !== 'melee')
-    .map((w) => w.range as number)
+  const rangedRanges = unit.weapons.filter((w) => w.range !== 'melee').map((w) => w.range as number)
   return rangedRanges.length > 0 ? Math.max(...rangedRanges) : 0
 }
 

@@ -1,11 +1,12 @@
-import { describe, it, expect } from 'vitest'
+import { describe, expect, it } from 'vitest'
+
 import {
-  FACTION_PATTERNS,
-  SUBFACTION_TO_PARENT,
-  MECHANIC_ALIASES,
   detectFactions,
-  stripFactionFromQuery,
   extractMechanicKeywords,
+  FACTION_PATTERNS,
+  MECHANIC_ALIASES,
+  stripFactionFromQuery,
+  SUBFACTION_TO_PARENT,
 } from './faction-detect'
 
 // ── FACTION_PATTERNS structure ──────────────────────────────────────────────
@@ -16,26 +17,50 @@ describe('FACTION_PATTERNS', () => {
   })
 
   it('has chaos space marine before space marine (substring safety)', () => {
-    const csmIdx = FACTION_PATTERNS.findIndex(p => p.pattern === 'chaos space marine')
-    const smIdx = FACTION_PATTERNS.findIndex(p => p.pattern === 'space marine')
+    const csmIdx = FACTION_PATTERNS.findIndex((p) => p.pattern === 'chaos space marine')
+    const smIdx = FACTION_PATTERNS.findIndex((p) => p.pattern === 'space marine')
     expect(csmIdx).toBeGreaterThanOrEqual(0)
     expect(smIdx).toBeGreaterThanOrEqual(0)
     expect(csmIdx).toBeLessThan(smIdx)
   })
 
   it('does NOT contain SM chapter entries (those belong in SUBFACTION_TO_PARENT)', () => {
-    const chapterSlugs = ['blood-angels', 'dark-angels', 'space-wolves', 'black-templars',
-      'deathwatch', 'iron-hands', 'ultramarines', 'salamanders', 'raven-guard',
-      'imperial-fists', 'white-scars', 'crimson-fists']
+    const chapterSlugs = [
+      'blood-angels',
+      'dark-angels',
+      'space-wolves',
+      'black-templars',
+      'deathwatch',
+      'iron-hands',
+      'ultramarines',
+      'salamanders',
+      'raven-guard',
+      'imperial-fists',
+      'white-scars',
+      'crimson-fists',
+    ]
     for (const slug of chapterSlugs) {
-      const found = FACTION_PATTERNS.find(p => p.slug === slug)
+      const found = FACTION_PATTERNS.find((p) => p.slug === slug)
       expect(found, `${slug} should not be in FACTION_PATTERNS`).toBeUndefined()
     }
   })
 
   it('has no duplicate slugs (except aliases like eldar→aeldari)', () => {
-    const slugs = FACTION_PATTERNS.map(p => p.slug)
-    const allowedDupes = new Set(['aeldari', 't-au-empire', 'adepta-sororitas', 'astra-militarum', 'drukhari', 'chaos-space-marines', 'grey-knights', 'death-guard', 'thousand-sons', 'world-eaters', 'genestealer-cults', 'adeptus-mechanicus'])
+    const slugs = FACTION_PATTERNS.map((p) => p.slug)
+    const allowedDupes = new Set([
+      'aeldari',
+      't-au-empire',
+      'adepta-sororitas',
+      'astra-militarum',
+      'drukhari',
+      'chaos-space-marines',
+      'grey-knights',
+      'death-guard',
+      'thousand-sons',
+      'world-eaters',
+      'genestealer-cults',
+      'adeptus-mechanicus',
+    ])
     const seen = new Map<string, number>()
     for (const s of slugs) {
       seen.set(s, (seen.get(s) ?? 0) + 1)
@@ -52,9 +77,21 @@ describe('FACTION_PATTERNS', () => {
 
 describe('SUBFACTION_TO_PARENT', () => {
   it('maps all SM chapters to space-marines', () => {
-    const chapters = ['blood angels', 'dark angels', 'space wolves', 'black templars',
-      'deathwatch', 'iron hands', 'ultramarines', 'salamanders', 'raven guard',
-      'imperial fists', 'white scars', 'crimson fists', 'blood ravens']
+    const chapters = [
+      'blood angels',
+      'dark angels',
+      'space wolves',
+      'black templars',
+      'deathwatch',
+      'iron hands',
+      'ultramarines',
+      'salamanders',
+      'raven guard',
+      'imperial fists',
+      'white scars',
+      'crimson fists',
+      'blood ravens',
+    ]
     for (const ch of chapters) {
       expect(SUBFACTION_TO_PARENT[ch], `${ch} should map to space-marines`).toBe('space-marines')
     }
@@ -249,7 +286,9 @@ describe('stripFactionFromQuery', () => {
   })
 
   it('removes "in blood angels" completely', () => {
-    const result = stripFactionFromQuery('in blood angels who has sustained hits', ['space-marines'])
+    const result = stripFactionFromQuery('in blood angels who has sustained hits', [
+      'space-marines',
+    ])
     expect(result.toLowerCase()).not.toContain('blood angel')
     expect(result).toContain('who has sustained hits')
   })
@@ -348,7 +387,10 @@ describe('MECHANIC_ALIASES', () => {
     // We can't import MECHANIC_TERMS directly, but we can verify via extractMechanicKeywords
     for (const { alias, canonical } of MECHANIC_ALIASES) {
       const result = extractMechanicKeywords(canonical)
-      expect(result.length, `canonical "${canonical}" for alias "${alias}" should be in mechanics list`).toBeGreaterThan(0)
+      expect(
+        result.length,
+        `canonical "${canonical}" for alias "${alias}" should be in mechanics list`,
+      ).toBeGreaterThan(0)
     }
   })
 })

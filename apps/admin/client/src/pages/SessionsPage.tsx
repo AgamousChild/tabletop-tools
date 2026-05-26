@@ -31,7 +31,8 @@ export function SessionsPage() {
         Active Sessions <span className="text-slate-400 font-normal text-sm">({data.length})</span>
       </h2>
       <p className="text-xs text-slate-500 mb-4">
-        Currently active auth sessions across the platform. Revoke a session to force that user to sign in again.
+        Currently active auth sessions across the platform. Revoke a session to force that user to
+        sign in again.
       </p>
       <div className="bg-slate-900 border border-slate-800 rounded-lg overflow-hidden">
         <table className="w-full text-sm">
@@ -73,5 +74,11 @@ export function SessionsPage() {
 
 function formatDate(ts: Date | number | string): string {
   const d = ts instanceof Date ? ts : new Date(typeof ts === 'number' ? ts * 1000 : ts)
-  return d.toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })
+  return d.toLocaleDateString('en-US', {
+    year: 'numeric',
+    month: 'short',
+    day: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+  })
 }

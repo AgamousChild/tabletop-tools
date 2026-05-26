@@ -1,17 +1,27 @@
-import { useState } from 'react'
 import { AuthScreen } from '@tabletop-tools/ui'
-import { authClient } from './lib/auth'
-import { Dashboard } from './pages/Dashboard'
-import { UsersPage } from './pages/UsersPage'
-import { SessionsPage } from './pages/SessionsPage'
-import { ActivityPage } from './pages/ActivityPage'
-import { ImportsPage } from './pages/ImportsPage'
-import { PipelinePage } from './pages/PipelinePage'
-import { TasksPage } from './pages/TasksPage'
-import { ScraperPage } from './pages/ScraperPage'
-import { IngestPage } from './pages/IngestPage'
+import { useState } from 'react'
 
-type Page = 'dashboard' | 'users' | 'sessions' | 'activity' | 'imports' | 'pipeline' | 'tasks' | 'scraper' | 'ingest'
+import { authClient } from './lib/auth'
+import { ActivityPage } from './pages/ActivityPage'
+import { Dashboard } from './pages/Dashboard'
+import { ImportsPage } from './pages/ImportsPage'
+import { IngestPage } from './pages/IngestPage'
+import { PipelinePage } from './pages/PipelinePage'
+import { ScraperPage } from './pages/ScraperPage'
+import { SessionsPage } from './pages/SessionsPage'
+import { TasksPage } from './pages/TasksPage'
+import { UsersPage } from './pages/UsersPage'
+
+type Page =
+  | 'dashboard'
+  | 'users'
+  | 'sessions'
+  | 'activity'
+  | 'imports'
+  | 'pipeline'
+  | 'tasks'
+  | 'scraper'
+  | 'ingest'
 
 const NAV: { id: Page; label: string }[] = [
   { id: 'dashboard', label: 'Overview' },
@@ -38,27 +48,49 @@ export default function App() {
   }
 
   if (!session) {
-    return <AuthScreen title="Admin Dashboard" authClient={authClient} onAuthenticated={() => refetch()} />
+    return (
+      <AuthScreen
+        title="Admin Dashboard"
+        authClient={authClient}
+        onAuthenticated={() => refetch()}
+      />
+    )
   }
 
   return (
     <div className="min-h-screen bg-slate-950">
       <nav className="border-b border-slate-800 px-6 py-3 flex items-center gap-6">
-        <a href="/" className="flex items-center gap-1 text-xs text-slate-400 hover:text-slate-200 transition-colors" title="Back to Home">
-          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-3.5 h-3.5">
-            <path fillRule="evenodd" d="M9.293 2.293a1 1 0 0 1 1.414 0l7 7A1 1 0 0 1 17 11h-1v6a1 1 0 0 1-1 1h-2a1 1 0 0 1-1-1v-3a1 1 0 0 0-1-1H9a1 1 0 0 0-1 1v3a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1v-6H3a1 1 0 0 1-.707-1.707l7-7Z" clipRule="evenodd" />
+        <a
+          href="/"
+          className="flex items-center gap-1 text-xs text-slate-400 hover:text-slate-200 transition-colors"
+          title="Back to Home"
+        >
+          <svg
+            xmlns="http://www.w3.org/2000/svg"
+            viewBox="0 0 20 20"
+            fill="currentColor"
+            className="w-3.5 h-3.5"
+          >
+            <path
+              fillRule="evenodd"
+              d="M9.293 2.293a1 1 0 0 1 1.414 0l7 7A1 1 0 0 1 17 11h-1v6a1 1 0 0 1-1 1h-2a1 1 0 0 1-1-1v-3a1 1 0 0 0-1-1H9a1 1 0 0 0-1 1v3a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1v-6H3a1 1 0 0 1-.707-1.707l7-7Z"
+              clipRule="evenodd"
+            />
           </svg>
           Home
         </a>
-        <a href="/" className="text-amber-400 font-bold text-sm tracking-wider hover:text-amber-300 transition-colors">ADMIN</a>
+        <a
+          href="/"
+          className="text-amber-400 font-bold text-sm tracking-wider hover:text-amber-300 transition-colors"
+        >
+          ADMIN
+        </a>
         {NAV.map((nav) => (
           <button
             key={nav.id}
             onClick={() => setPage(nav.id)}
             className={`text-sm ${
-              page === nav.id
-                ? 'text-slate-100 font-medium'
-                : 'text-slate-400 hover:text-slate-300'
+              page === nav.id ? 'text-slate-100 font-medium' : 'text-slate-400 hover:text-slate-300'
             }`}
           >
             {nav.label}

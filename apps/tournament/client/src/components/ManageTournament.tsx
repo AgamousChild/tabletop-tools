@@ -1,4 +1,5 @@
 import { useState } from 'react'
+
 import { trpc } from '../lib/trpc'
 
 type Props = {
@@ -78,7 +79,8 @@ export function ManageTournament({ tournamentId, onBack }: Props) {
       </button>
       <h2 className="text-xl font-bold mb-4">Manage Tournament</h2>
       <p className="text-xs text-slate-500 mb-4">
-        Use the tabs to manage players (drop or reinstate), issue yellow/red cards, and create awards.
+        Use the tabs to manage players (drop or reinstate), issue yellow/red cards, and create
+        awards.
       </p>
 
       {/* Tab bar */}
@@ -172,7 +174,9 @@ export function ManageTournament({ tournamentId, onBack }: Props) {
                 {/* Player card history panel */}
                 {historyPlayerId === p.id && (
                   <div className="col-span-full mt-2 p-3 rounded bg-slate-800 border border-slate-700">
-                    <h5 className="text-xs font-medium text-slate-400 mb-2">Card History (all tournaments)</h5>
+                    <h5 className="text-xs font-medium text-slate-400 mb-2">
+                      Card History (all tournaments)
+                    </h5>
                     {playerHistory.length === 0 ? (
                       <p className="text-xs text-slate-500">No card history</p>
                     ) : (
@@ -189,7 +193,9 @@ export function ManageTournament({ tournamentId, onBack }: Props) {
                               {h.cardType}
                             </span>
                             <span className="text-slate-400">{h.reason}</span>
-                            <span className="text-slate-600 ml-auto">{new Date(h.issuedAt).toLocaleDateString()}</span>
+                            <span className="text-slate-600 ml-auto">
+                              {new Date(h.issuedAt).toLocaleDateString()}
+                            </span>
                           </div>
                         ))}
                       </div>
@@ -206,7 +212,10 @@ export function ManageTournament({ tournamentId, onBack }: Props) {
                 Dropped ({droppedPlayers.length})
               </h3>
               {droppedPlayers.map((p) => (
-                <div key={p.id} className="bg-slate-900 rounded p-3 flex justify-between items-center opacity-60">
+                <div
+                  key={p.id}
+                  className="bg-slate-900 rounded p-3 flex justify-between items-center opacity-60"
+                >
                   <div>
                     <p className="font-medium text-slate-100">{p.displayName}</p>
                     <p className="text-sm text-slate-400">{p.faction}</p>
@@ -226,8 +235,7 @@ export function ManageTournament({ tournamentId, onBack }: Props) {
           {cardPlayerId && (
             <div className="p-4 rounded-lg bg-slate-800 border border-slate-700 space-y-3">
               <h4 className="font-medium text-slate-300">
-                Issue {cardType} Card to{' '}
-                {players.find((p) => p.id === cardPlayerId)?.displayName}
+                Issue {cardType} Card to {players.find((p) => p.id === cardPlayerId)?.displayName}
               </h4>
               <input
                 type="text"
@@ -267,9 +275,7 @@ export function ManageTournament({ tournamentId, onBack }: Props) {
       {/* Cards tab */}
       {tab === 'cards' && (
         <div className="space-y-3">
-          {cards.length === 0 && (
-            <p className="text-slate-500 text-sm">No cards issued.</p>
-          )}
+          {cards.length === 0 && <p className="text-slate-500 text-sm">No cards issued.</p>}
           {cards.map((c) => {
             const player = players.find((p) => p.id === c.playerId)
             return (
@@ -310,9 +316,7 @@ export function ManageTournament({ tournamentId, onBack }: Props) {
                 <div className="flex justify-between items-start">
                   <div>
                     <p className="font-medium text-amber-400">{a.name}</p>
-                    {a.description && (
-                      <p className="text-sm text-slate-400">{a.description}</p>
-                    )}
+                    {a.description && <p className="text-sm text-slate-400">{a.description}</p>}
                   </div>
                   {recipient ? (
                     <span className="text-sm text-emerald-400">{recipient.displayName}</span>
@@ -335,7 +339,9 @@ export function ManageTournament({ tournamentId, onBack }: Props) {
                     >
                       <option value="">Select player...</option>
                       {activePlayers.map((p) => (
-                        <option key={p.id} value={p.id}>{p.displayName}</option>
+                        <option key={p.id} value={p.id}>
+                          {p.displayName}
+                        </option>
                       ))}
                     </select>
                     <button

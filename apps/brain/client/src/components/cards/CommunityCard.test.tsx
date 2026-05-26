@@ -1,7 +1,8 @@
-import { describe, it, expect, vi } from 'vitest'
 import { render, screen } from '@testing-library/react'
+import { describe, expect, it, vi } from 'vitest'
+
 import { CommunityCard } from './CommunityCard'
-import type { CommunityCardData, CardContext } from './types'
+import type { CardContext, CommunityCardData } from './types'
 
 const mockContext: CardContext = {
   highlightTerms: [],
@@ -38,14 +39,20 @@ describe('CommunityCard', () => {
   })
 
   it('shows quality flags when present', () => {
-    const data: CommunityCardData = { ...mockData, qualityFlags: ['Community Consensus', 'Disputed'] }
+    const data: CommunityCardData = {
+      ...mockData,
+      qualityFlags: ['Community Consensus', 'Disputed'],
+    }
     render(<CommunityCard data={data} context={mockContext} />)
     expect(screen.getByText('Community Consensus')).toBeInTheDocument()
     expect(screen.getByText('Disputed')).toBeInTheDocument()
   })
 
   it('renders sourceAttribution in footer when present', () => {
-    const data: CommunityCardData = { ...mockData, sourceAttribution: 'r/WarhammerCompetitive — 2024' }
+    const data: CommunityCardData = {
+      ...mockData,
+      sourceAttribution: 'r/WarhammerCompetitive — 2024',
+    }
     render(<CommunityCard data={data} context={mockContext} />)
     expect(screen.getByText('r/WarhammerCompetitive — 2024')).toBeInTheDocument()
   })

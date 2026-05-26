@@ -1,5 +1,5 @@
-import { createBaseServer } from '@tabletop-tools/server-core'
 import type { Db } from '@tabletop-tools/db'
+import { createBaseServer } from '@tabletop-tools/server-core'
 
 import { appRouter } from './routers/index.js'
 import type { Context } from './trpc.js'

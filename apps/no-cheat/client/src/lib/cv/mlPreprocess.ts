@@ -11,18 +11,14 @@
  * Convert RGBA pixels to RGB CHW float32 tensor normalized to [0, 1].
  * Output shape: [3, height, width] — channel-first layout for YOLO.
  */
-export function rgbaToRgbChw(
-  rgba: Uint8ClampedArray,
-  width: number,
-  height: number,
-): Float32Array {
+export function rgbaToRgbChw(rgba: Uint8ClampedArray, width: number, height: number): Float32Array {
   const pixels = width * height
   const out = new Float32Array(3 * pixels)
 
   for (let i = 0; i < pixels; i++) {
     const rgbaIdx = i * 4
-    out[i] = rgba[rgbaIdx]! / 255            // R channel
-    out[pixels + i] = rgba[rgbaIdx + 1]! / 255  // G channel
+    out[i] = rgba[rgbaIdx]! / 255 // R channel
+    out[pixels + i] = rgba[rgbaIdx + 1]! / 255 // G channel
     out[2 * pixels + i] = rgba[rgbaIdx + 2]! / 255 // B channel
   }
 
@@ -76,10 +72,10 @@ export function resizeBilinear(
 
 /** A detected bounding box with confidence and class. */
 export interface Detection {
-  x: number      // center x (pixel coords in model input space)
-  y: number      // center y
-  w: number      // width
-  h: number      // height
+  x: number // center x (pixel coords in model input space)
+  y: number // center y
+  w: number // width
+  h: number // height
   confidence: number
   classId: number
 }
@@ -124,13 +120,19 @@ export function nonMaxSuppression(
  * Boxes are in center format (cx, cy, w, h).
  */
 function computeIoU(a: Detection, b: Detection): number {
-  const ax1 = a.x - a.w / 2, ay1 = a.y - a.h / 2
-  const ax2 = a.x + a.w / 2, ay2 = a.y + a.h / 2
-  const bx1 = b.x - b.w / 2, by1 = b.y - b.h / 2
-  const bx2 = b.x + b.w / 2, by2 = b.y + b.h / 2
+  const ax1 = a.x - a.w / 2,
+    ay1 = a.y - a.h / 2
+  const ax2 = a.x + a.w / 2,
+    ay2 = a.y + a.h / 2
+  const bx1 = b.x - b.w / 2,
+    by1 = b.y - b.h / 2
+  const bx2 = b.x + b.w / 2,
+    by2 = b.y + b.h / 2
 
-  const ix1 = Math.max(ax1, bx1), iy1 = Math.max(ay1, by1)
-  const ix2 = Math.min(ax2, bx2), iy2 = Math.min(ay2, by2)
+  const ix1 = Math.max(ax1, bx1),
+    iy1 = Math.max(ay1, by1)
+  const ix2 = Math.min(ax2, bx2),
+    iy2 = Math.min(ay2, by2)
 
   const iw = Math.max(0, ix2 - ix1)
   const ih = Math.max(0, iy2 - iy1)

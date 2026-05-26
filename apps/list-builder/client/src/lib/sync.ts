@@ -1,5 +1,9 @@
-import { getList, getListUnits, getLists } from '@tabletop-tools/game-data-store'
-import { createList as createListInDb, addListUnit as addListUnitInDb } from '@tabletop-tools/game-data-store'
+import { getList, getLists, getListUnits } from '@tabletop-tools/game-data-store'
+import {
+  addListUnit as addListUnitInDb,
+  createList as createListInDb,
+} from '@tabletop-tools/game-data-store'
+
 import { trpcClient } from './trpc'
 
 /** Sync a single list (with its units) to the server. Fire-and-forget. */

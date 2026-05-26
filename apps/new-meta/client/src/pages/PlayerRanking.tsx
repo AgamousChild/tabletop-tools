@@ -1,6 +1,7 @@
 import { useState } from 'react'
-import { trpc } from '../lib/trpc'
+
 import { GlickoBar } from '../components/GlickoBar'
+import { trpc } from '../lib/trpc'
 
 interface Props {
   onPlayerSelect?: (playerId: string) => void
@@ -40,7 +41,8 @@ export function PlayerRanking({ onPlayerSelect }: Props) {
       </div>
 
       <p className="text-xs text-slate-500">
-        Glicko-2 leaderboard based on tournament performance. Click a player to view their profile and rating history.
+        Glicko-2 leaderboard based on tournament performance. Click a player to view their profile
+        and rating history.
       </p>
 
       {/* Player search */}
@@ -49,7 +51,9 @@ export function PlayerRanking({ onPlayerSelect }: Props) {
           type="text"
           value={searchQuery}
           onChange={(e) => setSearchQuery(e.target.value)}
-          onKeyDown={(e) => { if (e.key === 'Enter') setActiveSearch(searchQuery.trim()) }}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter') setActiveSearch(searchQuery.trim())
+          }}
           placeholder="Search players by name..."
           className="flex-1 px-3 py-2 rounded-lg bg-slate-900 border border-slate-800 text-slate-100 text-sm placeholder:text-slate-500 focus:outline-none focus:border-amber-400"
           aria-label="Search players"
@@ -62,7 +66,10 @@ export function PlayerRanking({ onPlayerSelect }: Props) {
         </button>
         {activeSearch && (
           <button
-            onClick={() => { setActiveSearch(''); setSearchQuery('') }}
+            onClick={() => {
+              setActiveSearch('')
+              setSearchQuery('')
+            }}
             className="px-3 py-2 rounded-lg bg-slate-800 text-slate-400 text-sm hover:text-slate-200 transition-colors"
           >
             Clear
@@ -89,7 +96,9 @@ export function PlayerRanking({ onPlayerSelect }: Props) {
           <p className="text-slate-400 text-sm p-4 text-center">Loading…</p>
         ) : displayPlayers.length === 0 ? (
           <p className="text-slate-400 text-sm p-4 text-center">
-            {activeSearch ? `No players matching "${activeSearch}".` : `No players with ${minGames}+ games yet.`}
+            {activeSearch
+              ? `No players matching "${activeSearch}".`
+              : `No players with ${minGames}+ games yet.`}
           </p>
         ) : (
           displayPlayers.map((player, i) => (
@@ -111,8 +120,8 @@ export function PlayerRanking({ onPlayerSelect }: Props) {
       </div>
 
       <p className="text-slate-500 text-xs">
-        Rating shown as <span className="font-mono text-slate-400">1687 ± 94</span>
-        {' '}(±2×RD uncertainty band). Wide band = fewer games played.
+        Rating shown as <span className="font-mono text-slate-400">1687 ± 94</span> (±2×RD
+        uncertainty band). Wide band = fewer games played.
       </p>
     </div>
   )

@@ -15,7 +15,7 @@
 
 export interface ToughnessTier {
   name: string
-  range: [number, number]  // min, max inclusive
+  range: [number, number] // min, max inclusive
   description: string
   examples: string
   /** Weapon strength needed to wound on 2+ */
@@ -146,18 +146,43 @@ export const STRENGTH_TIERS: StrengthTier[] = [
 
 export interface SaveTier {
   name: string
-  save: number        // the characteristic (2, 3, 4, 5, 6)
+  save: number // the characteristic (2, 3, 4, 5, 6)
   description: string
   /** AP needed to degrade to 4+ (the "break even" point) */
   apBreakpoint: number
 }
 
 export const SAVE_TIERS: SaveTier[] = [
-  { name: 'heavy-armour', save: 2, description: '2+ save — needs AP-1+ to degrade, AP-4 to seriously threaten', apBreakpoint: 2 },
-  { name: 'power-armour', save: 3, description: '3+ save — standard elite save, AP-1 brings to 4+', apBreakpoint: 1 },
-  { name: 'medium-armour', save: 4, description: '4+ save — moderate protection, already at the break point', apBreakpoint: 0 },
-  { name: 'light-armour', save: 5, description: '5+ save — minimal protection, AP is mostly wasted', apBreakpoint: -1 },
-  { name: 'no-armour', save: 6, description: '6+ or worse — effectively no save, AP irrelevant', apBreakpoint: -2 },
+  {
+    name: 'heavy-armour',
+    save: 2,
+    description: '2+ save — needs AP-1+ to degrade, AP-4 to seriously threaten',
+    apBreakpoint: 2,
+  },
+  {
+    name: 'power-armour',
+    save: 3,
+    description: '3+ save — standard elite save, AP-1 brings to 4+',
+    apBreakpoint: 1,
+  },
+  {
+    name: 'medium-armour',
+    save: 4,
+    description: '4+ save — moderate protection, already at the break point',
+    apBreakpoint: 0,
+  },
+  {
+    name: 'light-armour',
+    save: 5,
+    description: '5+ save — minimal protection, AP is mostly wasted',
+    apBreakpoint: -1,
+  },
+  {
+    name: 'no-armour',
+    save: 6,
+    description: '6+ or worse — effectively no save, AP irrelevant',
+    apBreakpoint: -2,
+  },
 ]
 
 /**
@@ -175,17 +200,17 @@ export function usefulApCap(baseSave: number, invuln: number): number {
 
 /** Get the save tier for a given save characteristic. */
 export function getSaveTier(save: number): SaveTier | undefined {
-  return SAVE_TIERS.find(t => t.save === save) ?? SAVE_TIERS[SAVE_TIERS.length - 1]
+  return SAVE_TIERS.find((t) => t.save === save) ?? SAVE_TIERS[SAVE_TIERS.length - 1]
 }
 
 /** Get the toughness tier for a given toughness value. */
 export function getToughnessTier(toughness: number): ToughnessTier | undefined {
-  return TOUGHNESS_TIERS.find(t => toughness >= t.range[0] && toughness <= t.range[1])
+  return TOUGHNESS_TIERS.find((t) => toughness >= t.range[0] && toughness <= t.range[1])
 }
 
 /** Get the strength tier for a given strength value. */
 export function getStrengthTier(strength: number): StrengthTier | undefined {
-  return STRENGTH_TIERS.find(t => strength >= t.range[0] && strength <= t.range[1])
+  return STRENGTH_TIERS.find((t) => strength >= t.range[0] && strength <= t.range[1])
 }
 
 /** Calculate wound roll needed for a given S vs T. */
@@ -200,18 +225,18 @@ export function woundRollNeeded(strength: number, toughness: number): number {
 /** Calculate average damage per attack for a weapon against a target. */
 export function avgDamagePerAttack(
   attacks: number,
-  skill: number,     // BS/WS as the number needed (e.g., 3 for 3+)
+  skill: number, // BS/WS as the number needed (e.g., 3 for 3+)
   strength: number,
   toughness: number,
   ap: number,
-  save: number,      // base save characteristic (e.g., 3 for 3+)
+  save: number, // base save characteristic (e.g., 3 for 3+)
   damage: number,
-  invuln?: number,   // invulnerable save (e.g., 4 for 4+)
+  invuln?: number, // invulnerable save (e.g., 4 for 4+)
 ): number {
   const hitProb = (7 - skill) / 6
   const woundNeeded = woundRollNeeded(strength, toughness)
   const woundProb = (7 - woundNeeded) / 6
-  const modifiedSave = save + ap  // ap is positive (e.g., 4 for AP-4), makes save worse
+  const modifiedSave = save + ap // ap is positive (e.g., 4 for AP-4), makes save worse
   const effectiveSave = invuln ? Math.min(modifiedSave, invuln) : modifiedSave
   const saveProb = effectiveSave >= 2 ? (7 - effectiveSave) / 6 : 0
   const unsavedProb = 1 - saveProb

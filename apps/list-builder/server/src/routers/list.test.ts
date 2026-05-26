@@ -1,8 +1,8 @@
 import { createClient } from '@libsql/client'
 import { createDbFromClient } from '@tabletop-tools/db'
+import { createCallerFactory } from '@tabletop-tools/server-core'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 
-import { createCallerFactory } from '@tabletop-tools/server-core'
 import { appRouter } from './index'
 
 const client = createClient({ url: ':memory:' })
@@ -88,7 +88,14 @@ describe('list.sync', () => {
       name: 'My Marines',
       totalPts: 270,
       units: [
-        { id: 'lu-1', unitContentId: 'uc-1', unitName: 'Intercessors', unitPoints: 90, modelCount: 5, count: 1 },
+        {
+          id: 'lu-1',
+          unitContentId: 'uc-1',
+          unitName: 'Intercessors',
+          unitPoints: 90,
+          modelCount: 5,
+          count: 1,
+        },
         { id: 'lu-2', unitContentId: 'uc-2', unitName: 'Hellblasters', unitPoints: 180, count: 1 },
       ],
     })
@@ -165,7 +172,14 @@ describe('list.syncAll', () => {
           name: 'Silver Tide',
           totalPts: 1000,
           units: [
-            { id: 'blu-1', unitContentId: 'uc-n1', unitName: 'Warriors', unitPoints: 100, modelCount: 10, count: 1 },
+            {
+              id: 'blu-1',
+              unitContentId: 'uc-n1',
+              unitName: 'Warriors',
+              unitPoints: 100,
+              modelCount: 10,
+              count: 1,
+            },
           ],
         },
         {

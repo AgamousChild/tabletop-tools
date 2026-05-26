@@ -85,9 +85,7 @@ describe('pipeline', () => {
     const bgData = makeRgbaBuffer(W, H, [])
     pipeline.captureBackground(bgData, W, H)
 
-    const frameData = makeRgbaBuffer(W, H, [
-      { x: 30, y: 30, size: 45, pips: [[52, 52]] },
-    ])
+    const frameData = makeRgbaBuffer(W, H, [{ x: 30, y: 30, size: 45, pips: [[52, 52]] }])
     const result = pipeline.processFrame(frameData, W, H)
     expect(result.length).toBeGreaterThanOrEqual(1)
   })
@@ -110,9 +108,7 @@ describe('pipeline', () => {
     const bgData = makeRgbaBuffer(W, H, [])
     pipeline.captureBackground(bgData, W, H)
 
-    const frameData = makeRgbaBuffer(W, H, [
-      { x: 30, y: 30, size: 45, pips: [[52, 52]] },
-    ])
+    const frameData = makeRgbaBuffer(W, H, [{ x: 30, y: 30, size: 45, pips: [[52, 52]] }])
     const result = pipeline.processFrame(frameData, W, H)
     expect(result.length).toBeGreaterThanOrEqual(1)
     expect(result[0]).toHaveProperty('roi')

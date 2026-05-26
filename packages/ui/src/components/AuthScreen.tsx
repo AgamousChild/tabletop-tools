@@ -1,8 +1,19 @@
 import { useState } from 'react'
 
 type AuthClient = {
-  signIn: { email: (opts: { email: string; password: string }) => Promise<{ error?: { message?: string } | null }> }
-  signUp: { email: (opts: { email: string; password: string; name: string }) => Promise<{ error?: { message?: string } | null }> }
+  signIn: {
+    email: (opts: {
+      email: string
+      password: string
+    }) => Promise<{ error?: { message?: string } | null }>
+  }
+  signUp: {
+    email: (opts: {
+      email: string
+      password: string
+      name: string
+    }) => Promise<{ error?: { message?: string } | null }>
+  }
 }
 
 type AuthScreenProps = {
@@ -97,7 +108,10 @@ export function AuthScreen({ title, subtitle, onAuthenticated, authClient }: Aut
             <>
               No account?{' '}
               <button
-                onClick={() => { setMode('register'); setError(null) }}
+                onClick={() => {
+                  setMode('register')
+                  setError(null)
+                }}
                 className="text-amber-400 hover:underline"
               >
                 Register
@@ -107,7 +121,10 @@ export function AuthScreen({ title, subtitle, onAuthenticated, authClient }: Aut
             <>
               Have an account?{' '}
               <button
-                onClick={() => { setMode('login'); setError(null) }}
+                onClick={() => {
+                  setMode('login')
+                  setError(null)
+                }}
                 className="text-amber-400 hover:underline"
               >
                 Sign in

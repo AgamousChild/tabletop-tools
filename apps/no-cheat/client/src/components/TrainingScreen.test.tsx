@@ -1,5 +1,5 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 // ── Mocks ───────────────────────────────────────────────────────────────────
 
@@ -51,9 +51,9 @@ vi.mock('../lib/trpc', () => ({
   },
 }))
 
-import { TrainingScreen } from './TrainingScreen'
 import { createTrainedPipeline } from '../lib/cv/trainedPipeline'
-import { getExamples, getStats, clearAll } from '../lib/store/trainingStore'
+import { clearAll, getExamples, getStats } from '../lib/store/trainingStore'
+import { TrainingScreen } from './TrainingScreen'
 
 beforeEach(() => {
   vi.clearAllMocks()

@@ -247,7 +247,6 @@ describe('validateSession with HMAC verification', () => {
 
     expect(user).toBeNull()
   })
-
 })
 
 // ============================================================

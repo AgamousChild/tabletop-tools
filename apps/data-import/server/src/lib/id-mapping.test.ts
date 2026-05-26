@@ -1,11 +1,12 @@
-import { describe, it, expect } from 'vitest'
+import { describe, expect, it } from 'vitest'
+
 import {
-  normalizeName,
   buildIdMapping,
-  rekeyRecords,
+  normalizeName,
+  rekeyAllWahapediaFiles,
   rekeyFactionIds,
   rekeyLeaderAttachments,
-  rekeyAllWahapediaFiles,
+  rekeyRecords,
 } from './id-mapping'
 
 describe('normalizeName', () => {
@@ -14,7 +15,7 @@ describe('normalizeName', () => {
   })
 
   it('normalizes curly apostrophes', () => {
-    expect(normalizeName("Mortarion\u2019s Anvil")).toBe("mortarion's anvil")
+    expect(normalizeName('Mortarion\u2019s Anvil')).toBe("mortarion's anvil")
   })
 
   it('strips special characters but keeps hyphens and apostrophes', () => {
@@ -61,12 +62,8 @@ describe('buildIdMapping', () => {
   })
 
   it('disambiguates by faction when multiple BSData units share a name', () => {
-    const datasheets = [
-      { id: 'w1', name: 'Daemon Prince', factionId: 'CSM' },
-    ]
-    const factions = [
-      { id: 'CSM', name: 'Chaos Space Marines' },
-    ]
+    const datasheets = [{ id: 'w1', name: 'Daemon Prince', factionId: 'CSM' }]
+    const factions = [{ id: 'CSM', name: 'Chaos Space Marines' }]
     const bsdataUnits = [
       { id: 'b1', name: 'Daemon Prince', faction: 'Chaos Space Marines' },
       { id: 'b2', name: 'Daemon Prince', faction: 'Chaos Daemons' },
@@ -77,9 +74,7 @@ describe('buildIdMapping', () => {
   })
 
   it('falls back to first candidate when faction disambiguation fails', () => {
-    const datasheets = [
-      { id: 'w1', name: 'Daemon Prince', factionId: 'XX' },
-    ]
+    const datasheets = [{ id: 'w1', name: 'Daemon Prince', factionId: 'XX' }]
     const factions = [{ id: 'XX', name: 'Unknown Faction' }]
     const bsdataUnits = [
       { id: 'b1', name: 'Daemon Prince', faction: 'Chaos Space Marines' },
@@ -149,10 +144,11 @@ describe('rekeyFactionIds', () => {
 
 describe('rekeyLeaderAttachments', () => {
   it('re-keys both leaderId and attachedId', () => {
-    const records = [
-      { id: '1', leaderId: 'w1', attachedId: 'w2' },
-    ]
-    const idMap = new Map([['w1', 'b1'], ['w2', 'b2']])
+    const records = [{ id: '1', leaderId: 'w1', attachedId: 'w2' }]
+    const idMap = new Map([
+      ['w1', 'b1'],
+      ['w2', 'b2'],
+    ])
 
     const result = rekeyLeaderAttachments(records, idMap)
     expect(result[0]!.leaderId).toBe('b1')
@@ -196,7 +192,10 @@ describe('rekeyAllWahapediaFiles', () => {
     const data: Record<string, unknown[]> = {
       leader_attachments: [{ id: '1', leaderId: 'w1', attachedId: 'w2' }],
     }
-    const idMap = new Map([['w1', 'b1'], ['w2', 'b2']])
+    const idMap = new Map([
+      ['w1', 'b1'],
+      ['w2', 'b2'],
+    ])
 
     const result = rekeyAllWahapediaFiles(data, idMap, new Map())
     const la = result['leader_attachments']![0] as Record<string, unknown>

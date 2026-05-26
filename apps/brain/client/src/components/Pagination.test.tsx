@@ -1,5 +1,6 @@
-import { describe, it, expect, vi } from 'vitest'
-import { render, screen, fireEvent } from '@testing-library/react'
+import { fireEvent, render, screen } from '@testing-library/react'
+import { describe, expect, it, vi } from 'vitest'
+
 import { Pagination } from './Pagination'
 
 describe('Pagination', () => {
@@ -35,7 +36,7 @@ describe('Pagination', () => {
 
   it('returns null when only 1 page', () => {
     const { container } = render(
-      <Pagination page={1} totalPages={1} total={5} pageSize={10} onPageChange={() => {}} />
+      <Pagination page={1} totalPages={1} total={5} pageSize={10} onPageChange={() => {}} />,
     )
     expect(container.innerHTML).toBe('')
   })

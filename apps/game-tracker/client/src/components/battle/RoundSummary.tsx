@@ -78,9 +78,7 @@ function TurnSummaryCard({ label, turn }: { label: string; turn: TurnData }) {
             Destroyed: {turn.unitsDestroyed.map((u) => u.name).join(', ')}
           </div>
         )}
-        {turn.notes && (
-          <div className="text-slate-500 text-xs mt-1 italic">{turn.notes}</div>
-        )}
+        {turn.notes && <div className="text-slate-500 text-xs mt-1 italic">{turn.notes}</div>}
       </div>
     </div>
   )

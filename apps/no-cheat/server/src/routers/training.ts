@@ -15,10 +15,12 @@ const exampleInput = z.object({
 
 export const trainingRouter = router({
   saveExamples: protectedProcedure
-    .input(z.object({
-      diceSetId: z.string(),
-      examples: z.array(exampleInput).min(1).max(20),
-    }))
+    .input(
+      z.object({
+        diceSetId: z.string(),
+        examples: z.array(exampleInput).min(1).max(20),
+      }),
+    )
     .mutation(async ({ ctx, input }) => {
       // Verify dice set belongs to user
       const [diceSet] = await ctx.db
@@ -62,13 +64,15 @@ export const trainingRouter = router({
     }),
 
   list: protectedProcedure
-    .input(z.object({
-      diceSetId: z.string().optional(),
-      myOnly: z.boolean().optional(),
-      label: z.number().int().min(0).max(6).optional(),
-      limit: z.number().int().min(1).max(100).optional().default(50),
-      offset: z.number().int().min(0).optional().default(0),
-    }))
+    .input(
+      z.object({
+        diceSetId: z.string().optional(),
+        myOnly: z.boolean().optional(),
+        label: z.number().int().min(0).max(6).optional(),
+        limit: z.number().int().min(1).max(100).optional().default(50),
+        offset: z.number().int().min(0).optional().default(0),
+      }),
+    )
     .query(async ({ ctx, input }) => {
       const conditions = []
 
@@ -96,9 +100,11 @@ export const trainingRouter = router({
     }),
 
   getStats: protectedProcedure
-    .input(z.object({
-      diceSetId: z.string(),
-    }))
+    .input(
+      z.object({
+        diceSetId: z.string(),
+      }),
+    )
     .query(async ({ ctx, input }) => {
       const allExamples = await ctx.db
         .select({
@@ -121,9 +127,11 @@ export const trainingRouter = router({
     }),
 
   delete: protectedProcedure
-    .input(z.object({
-      id: z.string(),
-    }))
+    .input(
+      z.object({
+        id: z.string(),
+      }),
+    )
     .mutation(async ({ ctx, input }) => {
       // Verify the example belongs to the user
       const [example] = await ctx.db
@@ -145,19 +153,23 @@ export const trainingRouter = router({
   // --- Full-frame training data for YOLO ---
 
   saveFrame: protectedProcedure
-    .input(z.object({
-      diceSetId: z.string(),
-      imageBase64: z.string(), // full-frame PNG as base64
-      frameWidth: z.number().int().positive(),
-      frameHeight: z.number().int().positive(),
-      boxes: z.array(z.object({
-        x: z.number().min(0).max(1),
-        y: z.number().min(0).max(1),
-        w: z.number().min(0).max(1),
-        h: z.number().min(0).max(1),
-        label: z.number().int().min(1).max(6),
-      })),
-    }))
+    .input(
+      z.object({
+        diceSetId: z.string(),
+        imageBase64: z.string(), // full-frame PNG as base64
+        frameWidth: z.number().int().positive(),
+        frameHeight: z.number().int().positive(),
+        boxes: z.array(
+          z.object({
+            x: z.number().min(0).max(1),
+            y: z.number().min(0).max(1),
+            w: z.number().min(0).max(1),
+            h: z.number().min(0).max(1),
+            label: z.number().int().min(1).max(6),
+          }),
+        ),
+      }),
+    )
     .mutation(async ({ ctx, input }) => {
       const [diceSet] = await ctx.db
         .select()
@@ -188,11 +200,13 @@ export const trainingRouter = router({
     }),
 
   listFrames: protectedProcedure
-    .input(z.object({
-      diceSetId: z.string().optional(),
-      limit: z.number().int().min(1).max(500).optional().default(50),
-      offset: z.number().int().min(0).optional().default(0),
-    }))
+    .input(
+      z.object({
+        diceSetId: z.string().optional(),
+        limit: z.number().int().min(1).max(500).optional().default(50),
+        offset: z.number().int().min(0).optional().default(0),
+      }),
+    )
     .query(async ({ ctx, input }) => {
       const conditions = [eq(trainingFrames.userId, ctx.user.id)]
       if (input.diceSetId) {
@@ -210,15 +224,23 @@ export const trainingRouter = router({
       return {
         frames: frames.map((f) => ({
           ...f,
-          boxes: JSON.parse(f.boxesJson) as { x: number; y: number; w: number; h: number; label: number }[],
+          boxes: JSON.parse(f.boxesJson) as {
+            x: number
+            y: number
+            w: number
+            h: number
+            label: number
+          }[],
         })),
       }
     }),
 
   exportDataset: protectedProcedure
-    .input(z.object({
-      diceSetId: z.string().optional(),
-    }))
+    .input(
+      z.object({
+        diceSetId: z.string().optional(),
+      }),
+    )
     .query(async ({ ctx, input }) => {
       const conditions = [eq(trainingFrames.userId, ctx.user.id)]
       if (input.diceSetId) {
@@ -235,7 +257,13 @@ export const trainingRouter = router({
       const classNames = { 0: '1', 1: '2', 2: '3', 3: '4', 4: '5', 5: '6' }
 
       const dataset = frames.map((f) => {
-        const boxes = JSON.parse(f.boxesJson) as { x: number; y: number; w: number; h: number; label: number }[]
+        const boxes = JSON.parse(f.boxesJson) as {
+          x: number
+          y: number
+          w: number
+          h: number
+          label: number
+        }[]
         return {
           imageUrl: f.imageUrl,
           boxes: boxes.map((b) => ({
@@ -252,9 +280,11 @@ export const trainingRouter = router({
     }),
 
   deleteFrame: protectedProcedure
-    .input(z.object({
-      id: z.string(),
-    }))
+    .input(
+      z.object({
+        id: z.string(),
+      }),
+    )
     .mutation(async ({ ctx, input }) => {
       const [frame] = await ctx.db
         .select()

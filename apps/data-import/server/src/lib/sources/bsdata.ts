@@ -32,18 +32,17 @@ export async function fetchAndProcessBSData(
   githubToken?: string,
 ): Promise<BSDataResult> {
   const ghHeaders: Record<string, string> = {
-    'Accept': 'application/vnd.github.v3+json',
+    Accept: 'application/vnd.github.v3+json',
     'User-Agent': 'tabletop-tools',
   }
   if (githubToken) ghHeaders['Authorization'] = `token ${githubToken}`
 
   // Get latest commit SHA
-  const commitResp = await fetch(
-    `https://api.github.com/repos/${repo}/commits/${branch}`,
-    { headers: ghHeaders },
-  )
+  const commitResp = await fetch(`https://api.github.com/repos/${repo}/commits/${branch}`, {
+    headers: ghHeaders,
+  })
   if (!commitResp.ok) throw new Error(`GitHub commit API: HTTP ${commitResp.status}`)
-  const commitData = await commitResp.json() as { sha: string }
+  const commitData = (await commitResp.json()) as { sha: string }
   const commitSha = commitData.sha
 
   if (previousCommitSha && commitSha === previousCommitSha) {
@@ -56,11 +55,11 @@ export async function fetchAndProcessBSData(
     { headers: ghHeaders },
   )
   if (!treeResp.ok) throw new Error(`GitHub tree API: HTTP ${treeResp.status}`)
-  const treeData = await treeResp.json() as { tree: GitHubTreeItem[] }
+  const treeData = (await treeResp.json()) as { tree: GitHubTreeItem[] }
 
   // Filter to .cat files only
-  const catFiles = treeData.tree.filter(item =>
-    item.type === 'blob' && item.path.endsWith('.cat')
+  const catFiles = treeData.tree.filter(
+    (item) => item.type === 'blob' && item.path.endsWith('.cat'),
   )
 
   // Fetch and parse each catalog
@@ -68,9 +67,7 @@ export async function fetchAndProcessBSData(
   const errors: string[] = []
 
   for (const file of catFiles) {
-    const faction = normalizeFactionName(
-      file.path.replace(/\.cat$/, '').replace(/.*\//, '')
-    )
+    const faction = normalizeFactionName(file.path.replace(/\.cat$/, '').replace(/.*\//, ''))
 
     try {
       const rawResp = await fetch(

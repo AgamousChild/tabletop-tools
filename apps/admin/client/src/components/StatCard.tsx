@@ -9,7 +9,14 @@ export function StatCard({
   sub?: string
   color?: 'emerald' | 'red' | 'amber'
 }) {
-  const textColor = color === 'emerald' ? 'text-emerald-400' : color === 'red' ? 'text-red-400' : color === 'amber' ? 'text-amber-400' : 'text-slate-100'
+  const textColor =
+    color === 'emerald'
+      ? 'text-emerald-400'
+      : color === 'red'
+        ? 'text-red-400'
+        : color === 'amber'
+          ? 'text-amber-400'
+          : 'text-slate-100'
 
   return (
     <div className="bg-slate-900 border border-slate-800 rounded-lg p-4">

@@ -1,16 +1,18 @@
 import 'fake-indexeddb/auto'
-import { describe, it, expect, beforeEach } from 'vitest'
+
+import { beforeEach, describe, expect, it } from 'vitest'
+
 import {
   addExample,
-  getExamples,
-  getAllExamples,
-  deleteExample,
-  clearExamples,
-  getStats,
-  updateStats,
   clearAll,
+  clearExamples,
+  deleteExample,
+  getAllExamples,
+  getExamples,
+  getStats,
   type StoredExample,
   type TrainingStats,
+  updateStats,
 } from './trainingStore'
 
 const DB_NAME = 'no-cheat-training'
@@ -74,7 +76,7 @@ describe('trainingStore', () => {
 
       const examples = await getExamples('dice-set-1')
       expect(examples).toHaveLength(3)
-      expect(examples.map(e => e.label).sort()).toEqual([1, 2, 5])
+      expect(examples.map((e) => e.label).sort()).toEqual([1, 2, 5])
     })
 
     it('returns empty array for unknown diceSetId', async () => {
@@ -93,7 +95,7 @@ describe('trainingStore', () => {
 
       const all = await getAllExamples()
       expect(all).toHaveLength(3)
-      expect(all.map(e => e.diceSetId).sort()).toEqual(['dice-set-1', 'dice-set-2', 'dice-set-3'])
+      expect(all.map((e) => e.diceSetId).sort()).toEqual(['dice-set-1', 'dice-set-2', 'dice-set-3'])
     })
   })
 

@@ -1,5 +1,6 @@
-import { describe, it, expect, vi } from 'vitest'
-import { render, screen, fireEvent } from '@testing-library/react'
+import { fireEvent, render, screen } from '@testing-library/react'
+import { describe, expect, it, vi } from 'vitest'
+
 import { FactionBanner } from './FactionBanner'
 
 describe('FactionBanner', () => {
@@ -9,7 +10,9 @@ describe('FactionBanner', () => {
   })
 
   it('shows subfaction when present', () => {
-    render(<FactionBanner factions={['space-marines']} subfaction="ultramarines" onDismiss={() => {}} />)
+    render(
+      <FactionBanner factions={['space-marines']} subfaction="ultramarines" onDismiss={() => {}} />,
+    )
     expect(screen.getByText(/ULTRAMARINES/)).toBeInTheDocument()
   })
 
@@ -31,7 +34,9 @@ describe('FactionBanner', () => {
   })
 
   it('prefers subfaction over faction list in display', () => {
-    render(<FactionBanner factions={['space-marines']} subfaction="iron hands" onDismiss={() => {}} />)
+    render(
+      <FactionBanner factions={['space-marines']} subfaction="iron hands" onDismiss={() => {}} />,
+    )
     expect(screen.getByText(/IRON HANDS/)).toBeInTheDocument()
     expect(screen.queryByText(/SPACE MARINES/)).not.toBeInTheDocument()
   })

@@ -8,6 +8,7 @@
 
 import { existsSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
+
 import type { Node, NodeRef } from './model'
 import { communityId } from './slugify'
 
@@ -38,17 +39,42 @@ export function buildCommunityNodes(): { nodes: Node[]; refs: NodeRef[] } {
 **Key principle:** One reroll per die. Can't reroll a reroll. The decision is binary — keep the result or reroll once.
 
 **Why it works:** Rerolls are offensive tools, not defensive ones. The value isn't fixing misses — it's fishing for crits. With enough dice volume, you reliably convert rerolls into crit triggers.`,
-    summary: 'Reroll successful hits/wounds to fish for 6s that trigger sustained hits, lethal hits, or devastating wounds. Rerolls are offensive, not defensive.',
+    summary:
+      'Reroll successful hits/wounds to fish for 6s that trigger sustained hits, lethal hits, or devastating wounds. Rerolls are offensive, not defensive.',
     sources: [source],
     refs: [],
     version: 1,
-    keywords: ['fishing', 'reroll', 'sustained hits', 'lethal hits', 'devastating wounds', 'crit', 'twin-linked'],
+    keywords: [
+      'fishing',
+      'reroll',
+      'sustained hits',
+      'lethal hits',
+      'devastating wounds',
+      'crit',
+      'twin-linked',
+    ],
   })
 
   refs.push(
-    { sourceId: communityId('fishing-for-crits'), targetId: 'core:sustained-hits', rel: 'interacts_with', context: 'Fishing for 6s triggers sustained hits — extra hits per crit.' },
-    { sourceId: communityId('fishing-for-crits'), targetId: 'core:lethal-hits', rel: 'interacts_with', context: 'Fishing for 6s triggers lethal hits — auto-wounds that skip the wound roll.' },
-    { sourceId: communityId('fishing-for-crits'), targetId: 'core:devastating-wounds', rel: 'interacts_with', context: 'Fishing for 6s on wound rolls triggers devastating wounds — mortal wounds that skip all saves.' },
+    {
+      sourceId: communityId('fishing-for-crits'),
+      targetId: 'core:sustained-hits',
+      rel: 'interacts_with',
+      context: 'Fishing for 6s triggers sustained hits — extra hits per crit.',
+    },
+    {
+      sourceId: communityId('fishing-for-crits'),
+      targetId: 'core:lethal-hits',
+      rel: 'interacts_with',
+      context: 'Fishing for 6s triggers lethal hits — auto-wounds that skip the wound roll.',
+    },
+    {
+      sourceId: communityId('fishing-for-crits'),
+      targetId: 'core:devastating-wounds',
+      rel: 'interacts_with',
+      context:
+        'Fishing for 6s on wound rolls triggers devastating wounds — mortal wounds that skip all saves.',
+    },
   )
 
   // ── 2. Attack Volume ─────────────────────────────────────────────────────
@@ -71,16 +97,20 @@ Volume is the multiplier for everything:
 - Fishing for crits with rerolls is only profitable at volume.
 
 This is why horde units with weapon abilities are disproportionately strong — the abilities scale with dice count, not per-model quality.`,
-    summary: 'Total unit output = models × weapons × attacks. Volume multiplies weapon abilities — sustained hits, lethal hits, and rerolls all scale with dice count.',
+    summary:
+      'Total unit output = models × weapons × attacks. Volume multiplies weapon abilities — sustained hits, lethal hits, and rerolls all scale with dice count.',
     sources: [source],
     refs: [],
     version: 1,
     keywords: ['volume', 'attacks', 'models', 'dice pool', 'sustained hits', 'lethal hits'],
   })
 
-  refs.push(
-    { sourceId: communityId('attack-volume'), targetId: communityId('fishing-for-crits'), rel: 'requires', context: 'Volume is what makes fishing for crits profitable — more dice = more 6s.' },
-  )
+  refs.push({
+    sourceId: communityId('attack-volume'),
+    targetId: communityId('fishing-for-crits'),
+    rel: 'requires',
+    context: 'Volume is what makes fishing for crits profitable — more dice = more 6s.',
+  })
 
   // ── 3. Toughness Breakpoints ─────────────────────────────────────────────
 
@@ -100,16 +130,21 @@ This is why horde units with weapon abilities are disproportionately strong — 
 Tiers: T3 (guard/eldar), T4 (marines), T5 (gravis), T6 (custodes), T7-8 (vehicles), T9-10 (heavy vehicles), T11-12 (knights), T13+ (titans).
 
 A S8 weapon wounds T4 marines on 2+ but T8 vehicles on 4+. A S4 bolter wounds T4 on 4+ but T6 custodes on 5+. Choosing the right weapon for the target toughness tier is fundamental.`,
-    summary: 'Units cluster into toughness tiers. Weapon strength must match the target tier — S >= 2×T wounds on 2+, S = T wounds on 4+.',
+    summary:
+      'Units cluster into toughness tiers. Weapon strength must match the target tier — S >= 2×T wounds on 2+, S = T wounds on 4+.',
     sources: [source],
     refs: [],
     version: 1,
     keywords: ['toughness', 'strength', 'wound roll', 'breakpoint', 'tier'],
   })
 
-  refs.push(
-    { sourceId: communityId('toughness-breakpoints'), targetId: 'core:2-wound-roll', rel: 'clarifies', context: 'Explains the practical toughness tiers that determine which wound roll bracket applies.' },
-  )
+  refs.push({
+    sourceId: communityId('toughness-breakpoints'),
+    targetId: 'core:2-wound-roll',
+    rel: 'clarifies',
+    context:
+      'Explains the practical toughness tiers that determine which wound roll bracket applies.',
+  })
 
   // ── 4. Save and Invuln Breakpoints ───────────────────────────────────────
 
@@ -129,7 +164,8 @@ Example: 3+ save with 4++ invuln:
 **The AP Cap:** For any model with an invuln, AP beyond (base save - invuln) is wasted. A 2+ save / 4++ model has an AP cap of 2. A 3+ save / 4++ model has an AP cap of 1.
 
 This means: high-AP weapons (lascannon AP-3) are wasted on invuln-heavy targets. Use volume + moderate AP instead. Against targets WITHOUT invulns, stack AP to remove their save entirely.`,
-    summary: 'AP modifies armour but not invulns. AP beyond the invuln is wasted. Calculate AP cap: base save minus invuln value.',
+    summary:
+      'AP modifies armour but not invulns. AP beyond the invuln is wasted. Calculate AP cap: base save minus invuln value.',
     sources: [source],
     refs: [],
     version: 1,
@@ -157,7 +193,8 @@ This means: high-AP weapons (lascannon AP-3) are wasted on invuln-heavy targets.
 - Dd6/D6+1 weapons against W8+ models (vehicles, monsters)
 
 Multi-damage weapons are wasted on single-wound models. Single-damage weapons are inefficient against multi-wound models.`,
-    summary: 'Match weapon damage to target wounds. Overkill is wasted — D6 on W1 models wastes 4.5 damage per kill. D1 on W6 models needs too many saves.',
+    summary:
+      'Match weapon damage to target wounds. Overkill is wasted — D6 on W1 models wastes 4.5 damage per kill. D1 on W6 models needs too many saves.',
     sources: [source],
     refs: [],
     version: 1,
@@ -182,7 +219,8 @@ Multi-damage weapons are wasted on single-wound models. Single-damage weapons ar
 - **Hazardous** — self-inflicted mortals as a cost (be aware of this risk)
 
 All mortal wound sources benefit from volume — more dice = more mortals. Grenades on a 20-model unit is devastating. Grenades on a 3-model unit is weak.`,
-    summary: 'Mortal wounds bypass hit/wound/save entirely. Sources: devastating wounds, grenades (model count), tank shock, charge abilities, psychic. Volume multiplies them all.',
+    summary:
+      'Mortal wounds bypass hit/wound/save entirely. Sources: devastating wounds, grenades (model count), tank shock, charge abilities, psychic. Volume multiplies them all.',
     sources: [source],
     refs: [],
     version: 1,
@@ -190,9 +228,26 @@ All mortal wound sources benefit from volume — more dice = more mortals. Grena
   })
 
   refs.push(
-    { sourceId: communityId('mortal-wound-sources'), targetId: 'core:mortal-wounds', rel: 'clarifies', context: 'Lists all practical sources of mortal wounds and their volume scaling.' },
-    { sourceId: communityId('mortal-wound-sources'), targetId: 'core:devastating-wounds', rel: 'interacts_with', context: 'Devastating wounds are a key source of mortal wounds, especially when fishing with twin-linked.' },
-    { sourceId: communityId('mortal-wound-sources'), targetId: communityId('fishing-for-crits'), rel: 'requires', context: 'Fishing for devastating wounds is the main way to generate mortal wounds at volume.' },
+    {
+      sourceId: communityId('mortal-wound-sources'),
+      targetId: 'core:mortal-wounds',
+      rel: 'clarifies',
+      context: 'Lists all practical sources of mortal wounds and their volume scaling.',
+    },
+    {
+      sourceId: communityId('mortal-wound-sources'),
+      targetId: 'core:devastating-wounds',
+      rel: 'interacts_with',
+      context:
+        'Devastating wounds are a key source of mortal wounds, especially when fishing with twin-linked.',
+    },
+    {
+      sourceId: communityId('mortal-wound-sources'),
+      targetId: communityId('fishing-for-crits'),
+      rel: 'requires',
+      context:
+        'Fishing for devastating wounds is the main way to generate mortal wounds at volume.',
+    },
   )
 
   // ── 7. Reactive Capabilities ─────────────────────────────────────────────
@@ -213,16 +268,28 @@ All mortal wound sources benefit from volume — more dice = more mortals. Grena
 - **Grenades** — keyword that enables the Grenades stratagem for mortal wounds.
 
 These are threat modifiers, not just stats. They change WHAT THE OPPONENT DOES, not just what the unit outputs.`,
-    summary: 'Units that act outside their turn (overwatch, fight on death, heroic intervention, fall back + shoot) change the opponent\'s decisions. Threat modifiers, not just stats.',
+    summary:
+      "Units that act outside their turn (overwatch, fight on death, heroic intervention, fall back + shoot) change the opponent's decisions. Threat modifiers, not just stats.",
     sources: [source],
     refs: [],
     version: 1,
-    keywords: ['reactive', 'overwatch', 'fight on death', 'heroic intervention', 'fall back', 'advance and charge', 'grenades'],
+    keywords: [
+      'reactive',
+      'overwatch',
+      'fight on death',
+      'heroic intervention',
+      'fall back',
+      'advance and charge',
+      'grenades',
+    ],
   })
 
-  refs.push(
-    { sourceId: communityId('reactive-capabilities'), targetId: 'core:fire-overwatch', rel: 'interacts_with', context: 'Overwatch is a key reactive capability — shooting in the opponent\'s charge phase.' },
-  )
+  refs.push({
+    sourceId: communityId('reactive-capabilities'),
+    targetId: 'core:fire-overwatch',
+    rel: 'interacts_with',
+    context: "Overwatch is a key reactive capability — shooting in the opponent's charge phase.",
+  })
 
   // ── 8. Unit Type Movement Rules ──────────────────────────────────────────
 
@@ -247,11 +314,22 @@ These aren't just labels — they're rules triggers that determine:
 - Whether terrain blocks line of sight
 - Which stratagems can target the unit
 - What abilities affect them`,
-    summary: 'Infantry and Beasts move through terrain freely. Vehicles/Monsters go around. Fly moves over everything. Unit type determines positioning, charges, and stratagem eligibility.',
+    summary:
+      'Infantry and Beasts move through terrain freely. Vehicles/Monsters go around. Fly moves over everything. Unit type determines positioning, charges, and stratagem eligibility.',
     sources: [source],
     refs: [],
     version: 1,
-    keywords: ['infantry', 'beast', 'vehicle', 'monster', 'fly', 'mounted', 'terrain', 'movement', 'keyword'],
+    keywords: [
+      'infantry',
+      'beast',
+      'vehicle',
+      'monster',
+      'fly',
+      'mounted',
+      'terrain',
+      'movement',
+      'keyword',
+    ],
   })
 
   // ── 9. Commonly Missed Rules ─────────────────────────────────────────────
@@ -284,11 +362,26 @@ These aren't just labels — they're rules triggers that determine:
 **Stratagem Vecting:** Abilities that increase stratagem cost override abilities that make stratagems free. If a 2CP stratagem is vected (+1CP), using a "free stratagem" ability still costs 1CP.
 
 **One Stratagem Per Unit Per Phase:** In 11th edition, each unit can only be affected by one stratagem per phase.`,
-    summary: 'Frequently missed rules: tactical mission CP, towering LOS, reanimation coherency, move through friendlies, attached characters VP, firing deck vs overwatch, reserve limits.',
+    summary:
+      'Frequently missed rules: tactical mission CP, towering LOS, reanimation coherency, move through friendlies, attached characters VP, firing deck vs overwatch, reserve limits.',
     sources: [source],
     refs: [],
     version: 1,
-    keywords: ['rules', 'faq', 'errata', 'commonly missed', 'towering', 'reanimation', 'coherency', 'firing deck', 'overwatch', 'reserve', 'battleshock', 'stratagem', 'vecting'],
+    keywords: [
+      'rules',
+      'faq',
+      'errata',
+      'commonly missed',
+      'towering',
+      'reanimation',
+      'coherency',
+      'firing deck',
+      'overwatch',
+      'reserve',
+      'battleshock',
+      'stratagem',
+      'vecting',
+    ],
   })
 
   // ── 10. Competitive Combos ──────────────────────────────────────────────
@@ -319,16 +412,39 @@ Some units apply debuffs to enemies (+1 to be hit, -1 save, etc.). Stack multipl
 
 **Aura + Attached Leader:**
 Leader abilities affect only the attached unit. Aura abilities affect all nearby units. These are different mechanics. A leader grants its ability to ONE unit. An aura grants its ability to MULTIPLE units within range.`,
-    summary: 'Competitive combo patterns: re-roll + weapon ability fishing, leader + unit + stratagem stacking, debuff stacking, aura vs leader distinction.',
+    summary:
+      'Competitive combo patterns: re-roll + weapon ability fishing, leader + unit + stratagem stacking, debuff stacking, aura vs leader distinction.',
     sources: [source],
     refs: [],
     version: 1,
-    keywords: ['combo', 'competitive', 'fishing', 'stacking', 'reroll', 'sustained hits', 'lethal hits', 'devastating wounds', 'leader', 'aura', 'debuff'],
+    keywords: [
+      'combo',
+      'competitive',
+      'fishing',
+      'stacking',
+      'reroll',
+      'sustained hits',
+      'lethal hits',
+      'devastating wounds',
+      'leader',
+      'aura',
+      'debuff',
+    ],
   })
 
   refs.push(
-    { sourceId: communityId('competitive-combos'), targetId: communityId('fishing-for-crits'), rel: 'interacts_with', context: 'Competitive combos build on the fishing for crits concept.' },
-    { sourceId: communityId('competitive-combos'), targetId: communityId('attack-volume'), rel: 'requires', context: 'Combos require attack volume to be effective — more dice = more crit triggers.' },
+    {
+      sourceId: communityId('competitive-combos'),
+      targetId: communityId('fishing-for-crits'),
+      rel: 'interacts_with',
+      context: 'Competitive combos build on the fishing for crits concept.',
+    },
+    {
+      sourceId: communityId('competitive-combos'),
+      targetId: communityId('attack-volume'),
+      rel: 'requires',
+      context: 'Combos require attack volume to be effective — more dice = more crit triggers.',
+    },
   )
 
   // ── Deployment Tactics ───────────────────────────────────────────────────
@@ -339,7 +455,8 @@ Leader abilities affect only the attached unit. Aura abilities affect all nearby
     category: 'tactic',
     title: 'Deploy Hidden — The #1 Deployment Rule',
     content: `If the enemy has any shooting at all, deploy everything behind LOS-blocking terrain. Being visible at deployment means taking damage before you act. Hide everything, push out on your own turn when you control the timing.\n\nThe only units that deploy in the open are cheap expendable screens you're OK losing (Jakhals, chaff infantry). Everything else — transports, gunline, hammers, anchors, characters — hides behind terrain.\n\n**Exception:** If the enemy has zero shooting (pure melee army like some World Eaters builds), deploy for board position instead — spread wide, take space, control objectives.`,
-    summary: 'Default deployment: hide everything behind terrain. Only cheap sacrificial screens go in the open. Push out on your own turn.',
+    summary:
+      'Default deployment: hide everything behind terrain. Only cheap sacrificial screens go in the open. Push out on your own turn.',
     sources: [source],
     refs: [],
     version: 1,
@@ -352,7 +469,8 @@ Leader abilities affect only the attached unit. Aura abilities affect all nearby
     category: 'tactic',
     title: 'Transport Deployment — Hide Your Cargo',
     content: `Transports (Rhinos, Impulsors, Wave Serpents, etc.) are high-priority targets because they carry your valuable cargo. If the enemy can see a transport at deployment, they shoot it turn 1 before it moves — killing both the transport and stranding the cargo.\n\n**Always deploy transports behind LOS-blocking terrain.** Forward position is irrelevant if the transport is dead. On your turn 1, the transport pushes forward safely because you choose when and where to expose it.\n\n**Common mistake:** Deploying transports at the front of the deployment zone for a faster delivery. This gets them killed before they move.`,
-    summary: 'Always hide transports behind terrain. A dead transport delivers nothing. Push forward on your own turn.',
+    summary:
+      'Always hide transports behind terrain. A dead transport delivers nothing. Push forward on your own turn.',
     sources: [source],
     refs: [],
     version: 1,
@@ -365,11 +483,20 @@ Leader abilities affect only the attached unit. Aura abilities affect all nearby
     category: 'tactic',
     title: 'Gunline Deployment — Survive First, Shoot Later',
     content: `Shooting units don't need to deploy with a firing lane. They deploy hidden behind terrain and move to a firing position on your turn 1 or 2.\n\n**Without Indirect Fire:** Deploy hidden, then move to a position where you can see targets through a terrain gap. Ideal position: behind terrain with a narrow firing lane through a corridor — you can see the enemy but they have limited angles on you.\n\n**With Indirect Fire:** Deploy completely hidden. Firing lanes are irrelevant since you shoot without LOS. Pure cover score.\n\n**Convoy tactic:** Deploy a gunline unit behind advancing transports. The transports push forward as mobile LOS blockers, and the gunline follows behind them. The enemy must deal with the transports before they can shoot the gunline.`,
-    summary: 'Deploy gunline hidden. Move to a firing lane on your turn. With Indirect, hide completely. Without Indirect, move to a terrain gap.',
+    summary:
+      'Deploy gunline hidden. Move to a firing lane on your turn. With Indirect, hide completely. Without Indirect, move to a terrain gap.',
     sources: [source],
     refs: [],
     version: 1,
-    keywords: ['deployment', 'gunline', 'shooting', 'indirect', 'firing lane', 'terrain gap', 'convoy'],
+    keywords: [
+      'deployment',
+      'gunline',
+      'shooting',
+      'indirect',
+      'firing lane',
+      'terrain gap',
+      'convoy',
+    ],
   })
 
   nodes.push({
@@ -378,11 +505,20 @@ Leader abilities affect only the attached unit. Aura abilities affect all nearby
     category: 'tactic',
     title: 'Forward Screens Against Melee Armies',
     content: `Against melee-heavy armies with Advance and Charge (World Eaters, some Chaos), forward screens only work with cheap expendable units you don't care about losing.\n\n**Do:** Put cheap chaff (Jakhals, Cultists, Kroot) forward to absorb the first charge wave. They die, but they delay the enemy one turn and let your valuable units act.\n\n**Don't:** Put expensive melee units (Sacresants, Terminators) forward in the open. Against Advance+Charge armies with 24" threat range, they die turn 1 without fighting. Deploy them hidden in terrain and counter-charge on YOUR turn.\n\n**Key math:** Standard charge threat = Move + 12" (max). Advance+Charge threat = Move + 6" + 12" = Move + 18" (max). A 6" move unit with Advance+Charge threatens 24" — that reaches almost anywhere from the deployment zone edge.`,
-    summary: 'Against advance+charge armies, only cheap expendable units screen forward. Valuable melee units hide in terrain and counter-charge.',
+    summary:
+      'Against advance+charge armies, only cheap expendable units screen forward. Valuable melee units hide in terrain and counter-charge.',
     sources: [source],
     refs: [],
     version: 1,
-    keywords: ['deployment', 'screen', 'melee', 'advance and charge', 'world eaters', 'counter-charge', 'chaff'],
+    keywords: [
+      'deployment',
+      'screen',
+      'melee',
+      'advance and charge',
+      'world eaters',
+      'counter-charge',
+      'chaff',
+    ],
   })
 
   nodes.push({
@@ -391,7 +527,8 @@ Leader abilities affect only the attached unit. Aura abilities affect all nearby
     category: 'tactic',
     title: 'Slow Units Must Deploy Forward',
     content: `Units with 6" or less movement and primarily melee or short-range weapons (18" or less) must deploy at the front edge of the deployment zone. A slow unit in the backfield takes 3+ turns to reach combat — by then the game is decided.\n\n**Examples:** Helbrute (6" move, melee + multi-melta 18"), Terminators without Deep Strike, heavy melee infantry.\n\n**Exception:** Slow units with long-range weapons (36"+) can deploy in the backfield — their guns reach the fight even if their legs don't.`,
-    summary: "Slow melee/short-range units deploy at the zone edge. They can't waste turns walking to the fight.",
+    summary:
+      "Slow melee/short-range units deploy at the zone edge. They can't waste turns walking to the fight.",
     sources: [source],
     refs: [],
     version: 1,
@@ -404,11 +541,20 @@ Leader abilities affect only the attached unit. Aura abilities affect all nearby
     category: 'tactic',
     title: 'Character Deployment — Proximity Protection',
     content: `Characters with conditional protection abilities (Lone Operative, -1 to wound auras, Look Out Sir) must deploy within range of the units that trigger those abilities.\n\n**Example:** A Daemon Prince of Khorne has "Lord of Murder" — gains Lone Operative when within 3" of friendly World Eaters Infantry. Deploy him within 3" of an Infantry unit, not isolated in a corner.\n\n**Attached characters** (10th ed Leader ability) deploy as part of their unit — one drop, one formation. They don't need separate positioning.\n\n**Solo characters** without protection abilities should deploy hidden behind terrain like everything else.\n\n**Common mistake:** Deploying characters alone, exposed, away from protective units. An isolated character is a priority target.`,
-    summary: 'Characters with proximity-based protection deploy next to their escort unit. Attached characters deploy as part of their unit.',
+    summary:
+      'Characters with proximity-based protection deploy next to their escort unit. Attached characters deploy as part of their unit.',
     sources: [source],
     refs: [],
     version: 1,
-    keywords: ['deployment', 'character', 'lone operative', 'look out sir', 'leader', 'attachment', 'protection'],
+    keywords: [
+      'deployment',
+      'character',
+      'lone operative',
+      'look out sir',
+      'leader',
+      'attachment',
+      'protection',
+    ],
   })
 
   nodes.push({
@@ -417,7 +563,8 @@ Leader abilities affect only the attached unit. Aura abilities affect all nearby
     category: 'tactic',
     title: 'Objective-Based Deployment Roles',
     content: `Each objective on the table requires a different deployment approach:\n\n**Home objective:** Cheap unit deployed directly on it. Jakhals, Cultists, basic Infantry. Their only job is to stand there and score.\n\n**Safe objective** (no man's land, closer to you): Chaff/screen holds it, backed by shooting from your deployment zone or mid-range shooters. It's safe because you CONTROL the space with firepower, not because of what's standing on it.\n\n**Center objective(s):** The fight zone. Deploy your combat units toward these with screens in front.\n\n**Expansion objective** (no man's land, further out): Commit strong durable units. You're fighting to take and hold this under pressure. Fast forward-deploying units (Chaos Spawn, Bikes) can grab it early.\n\n**Enemy home:** Ignore at deployment. Deep strike or late-game push.`,
-    summary: 'Home: cheap holder. Safe: chaff + gunline cover. Center: fighting units. Expansion: strong push. Enemy home: late game.',
+    summary:
+      'Home: cheap holder. Safe: chaff + gunline cover. Center: fighting units. Expansion: strong push. Enemy home: late game.',
     sources: [source],
     refs: [],
     version: 1,
@@ -430,11 +577,20 @@ Leader abilities affect only the attached unit. Aura abilities affect all nearby
     category: 'tactic',
     title: 'Deployment Posture — Match Your Army Identity',
     content: `Your army's identity determines the entire deployment strategy:\n\n**Aggressive melee army** (World Eaters, Daemons): Don't screen. Every unit is a killer, objective holder, or forward objective grabber. Push fast, take space, force the enemy to react.\n\n**Defensive shooting army** (Tau, Astra Militarum): Castle behind terrain, layer screens, create overlapping fire lanes. Make the enemy come to you through a kill zone.\n\n**Mixed army** (Space Marines, Sisters): Hide valuable units, screen with chaff, deploy transport hammers hidden for turn 1 delivery.\n\n**Three deployment plans:** For any army against an unknown opponent, prepare three mental deployments — anti-shooting (hide everything), anti-mixed (hide valuable, screen forward), anti-melee (spread wide, take space). Choose based on the enemy list.`,
-    summary: "Aggressive armies push, defensive armies castle, mixed armies hide and screen. Prepare three deployment plans for different matchups.",
+    summary:
+      'Aggressive armies push, defensive armies castle, mixed armies hide and screen. Prepare three deployment plans for different matchups.',
     sources: [source],
     refs: [],
     version: 1,
-    keywords: ['deployment', 'army identity', 'aggressive', 'defensive', 'mixed', 'posture', 'matchup'],
+    keywords: [
+      'deployment',
+      'army identity',
+      'aggressive',
+      'defensive',
+      'mixed',
+      'posture',
+      'matchup',
+    ],
   })
 
   nodes.push({
@@ -443,7 +599,8 @@ Leader abilities affect only the attached unit. Aura abilities affect all nearby
     category: 'tactic',
     title: 'Deploy for the Plan, Not the Position',
     content: `The best deployment position isn't where a unit is most effective at the start of the game — it's where the unit needs to START so that its turn 1-2 movement puts it in the ideal position.\n\n**Example:** An Exorcist (36" range, no Indirect) deploys completely hidden with zero firing lanes. Why? Because its turn 1 plan is to move behind advancing Rhinos into the midboard, where it has firing lanes AND mobile cover. The deployment position serves the plan.\n\n**Think backwards:** Where does this unit need to be at the end of turn 2? What's its turn 1 move? That tells you where to deploy.\n\n**Unit convoys:** Some units deploy together because they move together. Transport + gunline behind it. Screen in front of an anchor. The deployment positions only make sense as a group.`,
-    summary: 'Deploy for where the unit needs to BE after moving, not where it starts. Think backwards from the turn 2 position.',
+    summary:
+      'Deploy for where the unit needs to BE after moving, not where it starts. Think backwards from the turn 2 position.',
     sources: [source],
     refs: [],
     version: 1,
@@ -456,7 +613,8 @@ Leader abilities affect only the attached unit. Aura abilities affect all nearby
     category: 'tactic',
     title: 'Backfield Deep Strike Denial',
     content: `Cheap infantry units in the backfield aren't just holding objectives — they're creating 9" denial bubbles that prevent enemy deep strikers from landing behind your lines.\n\n**The threat:** If you leave your backfield empty, the enemy drops Seraphim, Terminators, or other deep strike units behind your army turn 2. They grab uncontested objectives or shoot your gunline in the back.\n\n**The fix:** Spread 10 cheap bodies across your backfield corners. Each model creates a 9" no-deep-strike bubble. 10 models spread out cover a huge area. Cost: ~65-105pts for complete backfield denial.\n\n**Key insight:** The unit doesn't need to fight or shoot effectively. It just needs to exist in the right places. Boltgun damage is a bonus, not the reason they're there.`,
-    summary: "Spread cheap infantry in the backfield to create 9\" deep strike denial zones. They exist to deny space, not to fight.",
+    summary:
+      'Spread cheap infantry in the backfield to create 9" deep strike denial zones. They exist to deny space, not to fight.',
     sources: [source],
     refs: [],
     version: 1,
@@ -468,7 +626,7 @@ Leader abilities affect only the attached unit. Aura abilities affect all nearby
   if (existsSync(communityJsonPath)) {
     try {
       const ingested = JSON.parse(readFileSync(communityJsonPath, 'utf-8')) as Node[]
-      const existingIds = new Set(nodes.map(n => n.id))
+      const existingIds = new Set(nodes.map((n) => n.id))
       let added = 0
       for (const node of ingested) {
         if (!existingIds.has(node.id)) {

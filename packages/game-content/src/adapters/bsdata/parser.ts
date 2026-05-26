@@ -52,7 +52,13 @@ export function parseBSDataXml(xml: string, faction: string): ParseResult {
 
     try {
       // Enrich the body by resolving <infoLink> and <entryLink> references
-      const enrichedBody = enrichBody(entry.fullBody, profileMap, entryMap, selectionEntryGroupMap, infoGroupMap)
+      const enrichedBody = enrichBody(
+        entry.fullBody,
+        profileMap,
+        entryMap,
+        selectionEntryGroupMap,
+        infoGroupMap,
+      )
       const enrichedStripped = stripNestedSelectionEntries(enrichedBody)
       const unit = parseUnitEntry(id, name, faction, enrichedStripped, enrichedBody)
       // Validate parsed data and add warnings for suspicious values
@@ -122,7 +128,9 @@ function buildEntryMap(xml: string): Map<string, string> {
   const openTag = /<selectionEntry\b([^>]*)>/g
   const closeTag = /<\/selectionEntry>/g
 
-  type TagPos = { type: 'open'; index: number; end: number; attrs: string } | { type: 'close'; index: number; end: number }
+  type TagPos =
+    | { type: 'open'; index: number; end: number; attrs: string }
+    | { type: 'close'; index: number; end: number }
   const tags: TagPos[] = []
 
   let m: RegExpExecArray | null
@@ -163,7 +171,9 @@ function buildSelectionEntryGroupMap(xml: string): Map<string, string> {
   const openTag = /<selectionEntryGroup\b([^>]*)>/g
   const closeTag = /<\/selectionEntryGroup>/g
 
-  type TagPos = { type: 'open'; index: number; end: number; attrs: string } | { type: 'close'; index: number; end: number }
+  type TagPos =
+    | { type: 'open'; index: number; end: number; attrs: string }
+    | { type: 'close'; index: number; end: number }
   const tags: TagPos[] = []
 
   let m: RegExpExecArray | null
@@ -203,7 +213,9 @@ function buildInfoGroupMap(xml: string): Map<string, string> {
   const openTag = /<infoGroup\b([^>]*)>/g
   const closeTag = /<\/infoGroup>/g
 
-  type TagPos = { type: 'open'; index: number; end: number; attrs: string } | { type: 'close'; index: number; end: number }
+  type TagPos =
+    | { type: 'open'; index: number; end: number; attrs: string }
+    | { type: 'close'; index: number; end: number }
   const tags: TagPos[] = []
 
   let m: RegExpExecArray | null
@@ -275,7 +287,14 @@ function enrichBody(
       const groupContent = infoGroupMap.get(targetId)
       if (groupContent) {
         // Recursively enrich — infoGroups may contain <infoLink type="profile">
-        const enrichedGroup = enrichBody(groupContent, profileMap, entryMap, selectionEntryGroupMap, infoGroupMap, depth + 1)
+        const enrichedGroup = enrichBody(
+          groupContent,
+          profileMap,
+          entryMap,
+          selectionEntryGroupMap,
+          infoGroupMap,
+          depth + 1,
+        )
         extra += '\n' + enrichedGroup
       }
     }
@@ -291,7 +310,14 @@ function enrichBody(
       const entryBody = entryMap.get(targetId) ?? selectionEntryGroupMap.get(targetId)
       if (entryBody) {
         // Recursively enrich the entry's body to resolve nested references
-        const enrichedEntry = enrichBody(entryBody, profileMap, entryMap, selectionEntryGroupMap, infoGroupMap, depth + 1)
+        const enrichedEntry = enrichBody(
+          entryBody,
+          profileMap,
+          entryMap,
+          selectionEntryGroupMap,
+          infoGroupMap,
+          depth + 1,
+        )
         extra += '\n' + enrichedEntry
       }
     }
@@ -331,14 +357,18 @@ function findSharedSelectionEntryRanges(xml: string): Array<{ start: number; end
  *
  * Returns `isShared` flag indicating whether the entry is within <sharedSelectionEntries>.
  */
-function extractSelectionEntries(xml: string): Array<{ attrs: string; body: string; fullBody: string; isShared: boolean }> {
+function extractSelectionEntries(
+  xml: string,
+): Array<{ attrs: string; body: string; fullBody: string; isShared: boolean }> {
   const results: Array<{ attrs: string; body: string; fullBody: string; isShared: boolean }> = []
   const sharedRanges = findSharedSelectionEntryRanges(xml)
   const openTag = /<selectionEntry\b([^>]*)>/g
   const closeTag = /<\/selectionEntry>/g
 
   // Find all open and close tag positions
-  type TagPos = { type: 'open'; index: number; end: number; attrs: string } | { type: 'close'; index: number; end: number }
+  type TagPos =
+    | { type: 'open'; index: number; end: number; attrs: string }
+    | { type: 'close'; index: number; end: number }
   const tags: TagPos[] = []
 
   let m: RegExpExecArray | null
@@ -366,7 +396,9 @@ function extractSelectionEntries(xml: string): Array<{ attrs: string; body: stri
       const entry = stack.pop()!
       if (entry.depth === 0) {
         const fullBody = xml.slice(entry.bodyStart, tag.index)
-        const isShared = sharedRanges.some(r => entry.position >= r.start && entry.position < r.end)
+        const isShared = sharedRanges.some(
+          (r) => entry.position >= r.start && entry.position < r.end,
+        )
         results.push({
           attrs: entry.attrs,
           body: stripNestedSelectionEntries(fullBody),
@@ -388,7 +420,9 @@ function stripNestedSelectionEntries(body: string): string {
   const openTag = /<selectionEntry\b[^>]*>/g
   const closeTag = /<\/selectionEntry>/g
 
-  type TagPos = { type: 'open'; index: number; end: number } | { type: 'close'; index: number; end: number }
+  type TagPos =
+    | { type: 'open'; index: number; end: number }
+    | { type: 'close'; index: number; end: number }
   const tags: TagPos[] = []
 
   let m: RegExpExecArray | null
@@ -494,8 +528,7 @@ function extractCharacteristics(body: string): Record<string, string> {
   const profileMatch = profilePattern.exec(body)
   if (!profileMatch) return stats
 
-  const charPattern =
-    /<characteristic\b[^>]*name="([^"]+)"[^>]*>([\s\S]*?)<\/characteristic>/g
+  const charPattern = /<characteristic\b[^>]*name="([^"]+)"[^>]*>([\s\S]*?)<\/characteristic>/g
   let m: RegExpExecArray | null
   while ((m = charPattern.exec(profileMatch[1] ?? '')) !== null) {
     stats[m[1]!.trim()] = m[2]!.trim()
@@ -544,8 +577,7 @@ function extractWeapons(body: string): WeaponProfile[] {
 
 function extractWeaponCharacteristics(profileBody: string): Record<string, string> {
   const stats: Record<string, string> = {}
-  const charPattern =
-    /<characteristic\b[^>]*name="([^"]+)"[^>]*>([\s\S]*?)<\/characteristic>/g
+  const charPattern = /<characteristic\b[^>]*name="([^"]+)"[^>]*>([\s\S]*?)<\/characteristic>/g
   let m: RegExpExecArray | null
   while ((m = charPattern.exec(profileBody)) !== null) {
     stats[m[1]!.trim()] = m[2]!.trim()
@@ -557,18 +589,24 @@ function extractWeaponAbilityNames(profileBody: string): string[] {
   const statsObj = extractWeaponCharacteristics(profileBody)
   // Check multiple characteristic names BSData might use for weapon abilities
   const abilityText =
-    statsObj['Abilities'] ?? statsObj['Special Rules'] ?? statsObj['Keywords']
-    ?? statsObj['Special'] ?? statsObj['Rules Text'] ?? statsObj['Type']
-    ?? ''
+    statsObj['Abilities'] ??
+    statsObj['Special Rules'] ??
+    statsObj['Keywords'] ??
+    statsObj['Special'] ??
+    statsObj['Rules Text'] ??
+    statsObj['Type'] ??
+    ''
   if (!abilityText) return []
-  return abilityText
-    .split(/[,;—–]/)  // Split on commas, semicolons, em-dashes, en-dashes
-    .map((s) => s.trim())
-    // Strip square brackets: [TORRENT] → TORRENT
-    .map((s) => s.replace(/^\[(.+)\]$/, '$1'))
-    // Strip trailing periods: "Lethal Hits." → "Lethal Hits"
-    .map((s) => s.replace(/\.+$/, ''))
-    .filter((s) => s.length > 0 && s !== '-' && s !== 'N/A')
+  return (
+    abilityText
+      .split(/[,;—–]/) // Split on commas, semicolons, em-dashes, en-dashes
+      .map((s) => s.trim())
+      // Strip square brackets: [TORRENT] → TORRENT
+      .map((s) => s.replace(/^\[(.+)\]$/, '$1'))
+      // Strip trailing periods: "Lethal Hits." → "Lethal Hits"
+      .map((s) => s.replace(/\.+$/, ''))
+      .filter((s) => s.length > 0 && s !== '-' && s !== 'N/A')
+  )
 }
 
 // ---- Ability name + description extraction ----
@@ -588,8 +626,7 @@ function extractAbilityNames(body: string): string[] {
 
 function extractAbilityDescriptions(body: string): Record<string, string> {
   const descriptions: Record<string, string> = {}
-  const profilePattern =
-    /<profile\b([^>]*)type(?:Name)?="Abilities"([^>]*)>([\s\S]*?)<\/profile>/gi
+  const profilePattern = /<profile\b([^>]*)type(?:Name)?="Abilities"([^>]*)>([\s\S]*?)<\/profile>/gi
   let m: RegExpExecArray | null
   while ((m = profilePattern.exec(body)) !== null) {
     const allAttrs = (m[1] ?? '') + (m[2] ?? '')
@@ -597,7 +634,8 @@ function extractAbilityDescriptions(body: string): Record<string, string> {
     const nameMatch = /\bname="([^"]+)"/i.exec(allAttrs)
     if (!nameMatch) continue
     const abilityName = nameMatch[1]!.trim()
-    const descPattern = /<characteristic\b[^>]*name="Description"[^>]*>([\s\S]*?)<\/characteristic>/i
+    const descPattern =
+      /<characteristic\b[^>]*name="Description"[^>]*>([\s\S]*?)<\/characteristic>/i
     const descMatch = descPattern.exec(profileBody)
     if (descMatch && descMatch[1]?.trim()) {
       descriptions[abilityName] = descMatch[1].trim()
@@ -642,7 +680,10 @@ function extractInvulnerableSave(body: string): number | undefined {
 
 // ---- Feel No Pain extraction ----
 
-function extractFeelNoPain(body: string, abilityDescriptions: Record<string, string>): number | undefined {
+function extractFeelNoPain(
+  body: string,
+  abilityDescriptions: Record<string, string>,
+): number | undefined {
   // Multiple FNP text patterns: "Feel No Pain X+", "Feel No Pain (X+)", "has a X+ FNP"
   const fnpPatterns = [
     /feel\s+no\s+pain\s+(\d)\+/i,
@@ -686,38 +727,56 @@ function extractPoints(body: string): number {
 
 const ABILITY_KEYWORDS: Array<{ pattern: RegExp; create: (name: string) => WeaponAbility }> = [
   // Handle both "Sustained Hits 1" and "Sustained Hits (1)" formats
-  { pattern: /sustained hits\s*\(?(\d+)\)?/i, create: (n) => {
-    const m = /sustained hits\s*\(?(\d+)\)?/i.exec(n)
-    return { type: 'SUSTAINED_HITS', value: m ? parseInt(m[1]!) : 1 }
-  }},
+  {
+    pattern: /sustained hits\s*\(?(\d+)\)?/i,
+    create: (n) => {
+      const m = /sustained hits\s*\(?(\d+)\)?/i.exec(n)
+      return { type: 'SUSTAINED_HITS', value: m ? parseInt(m[1]!) : 1 }
+    },
+  },
   { pattern: /lethal hits/i, create: () => ({ type: 'LETHAL_HITS' }) },
   { pattern: /devastating wounds/i, create: () => ({ type: 'DEVASTATING_WOUNDS' }) },
   { pattern: /torrent/i, create: () => ({ type: 'TORRENT' }) },
   { pattern: /twin.linked/i, create: () => ({ type: 'TWIN_LINKED' }) },
   { pattern: /blast/i, create: () => ({ type: 'BLAST' }) },
-  { pattern: /re-?roll\s+(all\s+)?hit\s+rolls?\s+of\s+1/i, create: () => ({ type: 'REROLL_HITS_OF_1' }) },
-  { pattern: /re-?roll\s+(all\s+)?hit\s+rolls?(?!\s+of)/i, create: () => ({ type: 'REROLL_HITS' }) },
+  {
+    pattern: /re-?roll\s+(all\s+)?hit\s+rolls?\s+of\s+1/i,
+    create: () => ({ type: 'REROLL_HITS_OF_1' }),
+  },
+  {
+    pattern: /re-?roll\s+(all\s+)?hit\s+rolls?(?!\s+of)/i,
+    create: () => ({ type: 'REROLL_HITS' }),
+  },
   { pattern: /re-?roll\s+(all\s+)?wound\s+rolls?/i, create: () => ({ type: 'REROLL_WOUNDS' }) },
   { pattern: /heavy/i, create: () => ({ type: 'HIT_MOD', value: 1 }) },
   // Handle both "Rapid Fire 1" and "Rapid Fire (1)" formats
-  { pattern: /rapid fire\s*\(?(\d+)\)?/i, create: (n) => {
-    const m = /rapid fire\s*\(?(\d+)\)?/i.exec(n)
-    return { type: 'ATTACKS_MOD', value: m ? parseInt(m[1]!) : 1 }
-  }},
+  {
+    pattern: /rapid fire\s*\(?(\d+)\)?/i,
+    create: (n) => {
+      const m = /rapid fire\s*\(?(\d+)\)?/i.exec(n)
+      return { type: 'ATTACKS_MOD', value: m ? parseInt(m[1]!) : 1 }
+    },
+  },
   { pattern: /extra attacks/i, create: () => ({ type: 'ATTACKS_MOD', value: 0 }) },
   { pattern: /lance/i, create: () => ({ type: 'WOUND_MOD', value: 1 }) },
   // Anti-keyword X+ — improved wound roll vs keyword targets
   // Handle both "Anti-Infantry 4+" and "Anti-Infantry (4+)" formats
-  { pattern: /anti-(.+?)\s*\(?(\d)\+\)?/i, create: (n) => {
-    const m = /anti-(.+?)\s*\(?(\d)\+\)?/i.exec(n)
-    return { type: 'ANTI', keyword: m?.[1]?.trim() ?? '', value: m ? parseInt(m[2]!) : 4 }
-  }},
+  {
+    pattern: /anti-(.+?)\s*\(?(\d)\+\)?/i,
+    create: (n) => {
+      const m = /anti-(.+?)\s*\(?(\d)\+\)?/i.exec(n)
+      return { type: 'ANTI', keyword: m?.[1]?.trim() ?? '', value: m ? parseInt(m[2]!) : 4 }
+    },
+  },
   // Melta X — bonus damage at half range
   // Handle both "Melta 2" and "Melta (2)" formats
-  { pattern: /melta\s*\(?(\d+)\)?/i, create: (n) => {
-    const m = /melta\s*\(?(\d+)\)?/i.exec(n)
-    return { type: 'MELTA', value: m ? parseInt(m[1]!) : 1 }
-  }},
+  {
+    pattern: /melta\s*\(?(\d+)\)?/i,
+    create: (n) => {
+      const m = /melta\s*\(?(\d+)\)?/i.exec(n)
+      return { type: 'MELTA', value: m ? parseInt(m[1]!) : 1 }
+    },
+  },
   { pattern: /ignores cover/i, create: () => ({ type: 'IGNORES_COVER' }) },
   { pattern: /hazardous/i, create: () => ({ type: 'HAZARDOUS' }) },
   { pattern: /precision/i, create: () => ({ type: 'PRECISION' }) },
@@ -758,10 +817,17 @@ function parseStatNumber(value: string): number {
   // Strip trailing '+' (e.g. "3+", "4+"), quotes, inch marks, and common non-numeric markers
   const cleaned = value
     .replace(/\+$/, '')
-    .replace(/["'"″″'']/g, '')  // ASCII and Unicode quotes/inch marks
+    .replace(/["'"″″'']/g, '') // ASCII and Unicode quotes/inch marks
     .trim()
-  if (cleaned === '' || cleaned === '-' || cleaned === '–' || cleaned === '—'
-    || cleaned === 'N/A' || cleaned === 'n/a' || cleaned === '*') {
+  if (
+    cleaned === '' ||
+    cleaned === '-' ||
+    cleaned === '–' ||
+    cleaned === '—' ||
+    cleaned === 'N/A' ||
+    cleaned === 'n/a' ||
+    cleaned === '*'
+  ) {
     return 0
   }
   const n = parseInt(cleaned, 10)
@@ -773,7 +839,7 @@ function parseDiceOrNumber(value: string): number | string {
   const trimmed = value.trim().replace(/\s+/g, '').toUpperCase()
   if (/^\d+$/.test(trimmed)) return parseInt(trimmed, 10)
   if (trimmed === '' || trimmed === '-' || trimmed === '–') return 1
-  return trimmed  // e.g. "D6", "2D6", "D3+1"
+  return trimmed // e.g. "D6", "2D6", "D3+1"
 }
 
 function parseRangeValue(value: string): number | 'melee' {

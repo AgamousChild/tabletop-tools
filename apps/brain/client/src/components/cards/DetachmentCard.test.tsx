@@ -1,5 +1,6 @@
-import { describe, expect, it } from 'vitest'
 import { fireEvent, render, screen } from '@testing-library/react'
+import { describe, expect, it } from 'vitest'
+
 import { DetachmentCard } from './DetachmentCard'
 import type { CardContext, DetachmentCardData } from './types'
 

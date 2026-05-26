@@ -1,4 +1,5 @@
-import { describe, it, expect } from 'vitest'
+import { describe, expect, it } from 'vitest'
+
 import { fetchArticleText } from './html'
 
 function mockFetch(html: string, status = 200): typeof fetch {
@@ -59,7 +60,7 @@ describe('fetchArticleText', () => {
   it('decodes HTML entities', async () => {
     const html = '<body><p>Tom &amp; Jerry &lt;3 &gt; fun &quot;yes&quot; it&#39;s great</p></body>'
     const text = await fetchArticleText('https://example.com', mockFetch(html))
-    expect(text).toBe("Tom & Jerry <3 > fun \"yes\" it's great")
+    expect(text).toBe('Tom & Jerry <3 > fun "yes" it\'s great')
   })
 
   it('decodes numeric HTML entities', async () => {

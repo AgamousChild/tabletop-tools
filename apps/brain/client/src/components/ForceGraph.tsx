@@ -1,16 +1,17 @@
-import { useState, useCallback, useRef } from 'react'
+import '@xyflow/react/dist/style.css'
+
 import {
-  ReactFlow,
   Background,
   Controls,
+  type Edge as RFEdge,
+  Handle,
   MiniMap,
   type Node as RFNode,
-  type Edge as RFEdge,
   type NodeTypes,
-  Handle,
   Position,
+  ReactFlow,
 } from '@xyflow/react'
-import '@xyflow/react/dist/style.css'
+import { useCallback, useRef, useState } from 'react'
 
 const API_BASE = import.meta.env.VITE_BRAIN_API_URL || '/brain/api'
 
@@ -71,7 +72,9 @@ function BrainNode({ data }: { data: BrainNodeData }) {
   const opacity = data.depth > 1 ? 'opacity-60' : ''
 
   return (
-    <div className={`rounded-lg ${borderWidth} ${bg} ${opacity} px-3 py-2 min-w-[180px] max-w-[260px] cursor-pointer hover:brightness-125 transition-all`}>
+    <div
+      className={`rounded-lg ${borderWidth} ${bg} ${opacity} px-3 py-2 min-w-[180px] max-w-[260px] cursor-pointer hover:brightness-125 transition-all`}
+    >
       <Handle type="target" position={Position.Top} className="!bg-slate-500 !w-2 !h-2" />
       <Handle type="target" position={Position.Left} className="!bg-slate-500 !w-2 !h-2" />
       <div className="flex items-center gap-1.5 mb-1">
@@ -183,7 +186,8 @@ function layoutFromState(
     // Apply category filter (if any toggles are active)
     if (categoryFilters && categoryFilters.size > 0 && !categoryFilters.has(n.category)) continue
     // Apply edition filter
-    if (editionFilter && editionFilter !== 'all' && n.edition && n.edition !== editionFilter) continue
+    if (editionFilter && editionFilter !== 'all' && n.edition && n.edition !== editionFilter)
+      continue
     connected.push(n)
   }
 
@@ -349,7 +353,9 @@ export function ForceGraph() {
       for (const n of newNodes) {
         if (!state.allNodes.has(n.id)) state.allNodes.set(n.id, n)
       }
-      const existingEdgeKeys = new Set(state.allEdges.map(e => `${e.source}|${e.target}|${e.rel}`))
+      const existingEdgeKeys = new Set(
+        state.allEdges.map((e) => `${e.source}|${e.target}|${e.rel}`),
+      )
       for (const e of newEdges) {
         const key = `${e.source}|${e.target}|${e.rel}`
         if (!existingEdgeKeys.has(key)) {
@@ -383,7 +389,7 @@ export function ForceGraph() {
   }, [])
 
   const toggleCategory = useCallback((cat: string) => {
-    setCategoryFilters(prev => {
+    setCategoryFilters((prev) => {
       const next = new Set(prev)
       if (next.has(cat)) next.delete(cat)
       else next.add(cat)
@@ -393,7 +399,10 @@ export function ForceGraph() {
 
   // Apply filters whenever they change
   const prevFiltersRef = useRef({ categoryFilters, editionFilter })
-  if (prevFiltersRef.current.categoryFilters !== categoryFilters || prevFiltersRef.current.editionFilter !== editionFilter) {
+  if (
+    prevFiltersRef.current.categoryFilters !== categoryFilters ||
+    prevFiltersRef.current.editionFilter !== editionFilter
+  ) {
     prevFiltersRef.current = { categoryFilters, editionFilter }
     if (graphState.current) {
       const { nodes, edges } = layoutFromState(graphState.current, categoryFilters, editionFilter)
@@ -407,12 +416,15 @@ export function ForceGraph() {
     setSelectedNode(data)
   }, [])
 
-  const onNodeDoubleClick = useCallback((_: any, node: RFNode) => {
-    const data = node.data as unknown as BrainNodeData
-    if (data.nodeId && data.nodeId !== '') {
-      refocusOnNode(data.nodeId)
-    }
-  }, [refocusOnNode])
+  const onNodeDoubleClick = useCallback(
+    (_: any, node: RFNode) => {
+      const data = node.data as unknown as BrainNodeData
+      if (data.nodeId && data.nodeId !== '') {
+        refocusOnNode(data.nodeId)
+      }
+    },
+    [refocusOnNode],
+  )
 
   return (
     <div className="flex flex-col" style={{ height: 'calc(100vh - 60px)' }}>
@@ -439,7 +451,7 @@ export function ForceGraph() {
       {rfNodes.length > 0 && (
         <div className="flex flex-wrap items-center gap-2 px-3 py-2 border-b border-slate-800 bg-slate-900/50">
           <span className="text-[10px] text-slate-500 uppercase tracking-wide mr-1">Show:</span>
-          {CATEGORY_FILTERS.map(f => (
+          {CATEGORY_FILTERS.map((f) => (
             <button
               key={f.key}
               onClick={() => toggleCategory(f.key)}
@@ -464,7 +476,10 @@ export function ForceGraph() {
           </select>
           {(categoryFilters.size > 0 || editionFilter !== 'all') && (
             <button
-              onClick={() => { setCategoryFilters(new Set()); setEditionFilter('all') }}
+              onClick={() => {
+                setCategoryFilters(new Set())
+                setEditionFilter('all')
+              }}
               className="text-[10px] text-slate-500 hover:text-slate-300 underline ml-1"
             >
               Clear filters
@@ -503,7 +518,9 @@ export function ForceGraph() {
           </ReactFlow>
         ) : (
           <div className="flex items-center justify-center h-full text-slate-500 text-sm">
-            {loading ? 'Loading...' : 'Search to explore the knowledge graph. Double-click nodes to navigate.'}
+            {loading
+              ? 'Loading...'
+              : 'Search to explore the knowledge graph. Double-click nodes to navigate.'}
           </div>
         )}
 
@@ -511,7 +528,9 @@ export function ForceGraph() {
         {selectedNode && (
           <div className="absolute top-3 right-3 w-80 bg-slate-900/95 backdrop-blur border border-slate-700 rounded-lg p-4 shadow-xl z-10">
             <div className="flex items-start justify-between mb-2">
-              <h3 className="text-sm font-bold text-amber-400 pr-2">{selectedNode.fullTitle || selectedNode.label}</h3>
+              <h3 className="text-sm font-bold text-amber-400 pr-2">
+                {selectedNode.fullTitle || selectedNode.label}
+              </h3>
               <button
                 onClick={() => setSelectedNode(null)}
                 className="text-slate-500 hover:text-slate-300 text-lg leading-none shrink-0"
@@ -541,31 +560,37 @@ export function ForceGraph() {
               )}
             </div>
             {/* Connection stats */}
-            {graphState.current && selectedNode.nodeId && (() => {
-              const edges = graphState.current!.allEdges
-              const id = selectedNode.nodeId
-              const direct = new Set<string>()
-              for (const e of edges) {
-                if (e.source === id) direct.add(e.target)
-                if (e.target === id) direct.add(e.source)
-              }
-              return direct.size > 0 ? (
-                <p className="text-[10px] text-slate-500 mb-2">
-                  {direct.size} direct connection{direct.size !== 1 ? 's' : ''} loaded
-                </p>
-              ) : (
-                <p className="text-[10px] text-slate-600 mb-2 italic">
-                  No connections loaded — double-click to explore
-                </p>
-              )
-            })()}
+            {graphState.current &&
+              selectedNode.nodeId &&
+              (() => {
+                const edges = graphState.current!.allEdges
+                const id = selectedNode.nodeId
+                const direct = new Set<string>()
+                for (const e of edges) {
+                  if (e.source === id) direct.add(e.target)
+                  if (e.target === id) direct.add(e.source)
+                }
+                return direct.size > 0 ? (
+                  <p className="text-[10px] text-slate-500 mb-2">
+                    {direct.size} direct connection{direct.size !== 1 ? 's' : ''} loaded
+                  </p>
+                ) : (
+                  <p className="text-[10px] text-slate-600 mb-2 italic">
+                    No connections loaded — double-click to explore
+                  </p>
+                )
+              })()}
             {selectedNode.summary && (
               <p className="text-xs text-slate-300 mb-2">{selectedNode.summary}</p>
             )}
             {selectedNode.content && selectedNode.content !== selectedNode.summary && (
               <details className="text-xs text-slate-400">
-                <summary className="cursor-pointer text-amber-400 hover:text-amber-300 mb-1">Full content</summary>
-                <div className="max-h-48 overflow-y-auto whitespace-pre-wrap">{selectedNode.content}</div>
+                <summary className="cursor-pointer text-amber-400 hover:text-amber-300 mb-1">
+                  Full content
+                </summary>
+                <div className="max-h-48 overflow-y-auto whitespace-pre-wrap">
+                  {selectedNode.content}
+                </div>
               </details>
             )}
             {selectedNode.nodeId && !selectedNode.isCenter && (

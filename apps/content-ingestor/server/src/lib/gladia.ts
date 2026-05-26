@@ -1,5 +1,4 @@
-const defaultFetch = ((...args: Parameters<typeof fetch>) =>
-  fetch(...args)) as typeof fetch
+const defaultFetch = ((...args: Parameters<typeof fetch>) => fetch(...args)) as typeof fetch
 
 export async function submitTranscription(opts: {
   youtubeUrl: string
@@ -51,19 +50,14 @@ export function parseGladiaCallback(body: unknown): {
   const status = String(payload.status ?? 'unknown')
 
   if (status === 'done') {
-    const result = payload.result as
-      | { transcription?: { full_transcript?: string } }
-      | undefined
-    const transcript =
-      result?.transcription?.full_transcript ?? null
+    const result = payload.result as { transcription?: { full_transcript?: string } } | undefined
+    const transcript = result?.transcription?.full_transcript ?? null
 
     return { id, status, transcript, error: null }
   }
 
   const error =
-    typeof payload.error === 'string'
-      ? payload.error
-      : `Transcription not complete: ${status}`
+    typeof payload.error === 'string' ? payload.error : `Transcription not complete: ${status}`
 
   return { id, status, transcript: null, error }
 }

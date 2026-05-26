@@ -1,10 +1,11 @@
-import { describe, it, expect } from 'vitest'
+import { describe, expect, it } from 'vitest'
+
 import {
+  convertDescriptions,
+  htmlToMarkdown,
   parsePipeCsv,
   stripHtml,
-  htmlToMarkdown,
   titleCase,
-  convertDescriptions,
 } from './wahapedia-csv'
 
 describe('parsePipeCsv', () => {
@@ -122,7 +123,7 @@ describe('titleCase', () => {
   })
 
   it('normalizes curly apostrophes', () => {
-    expect(titleCase("HELL\u2019S GATE")).toBe("Hell's Gate")
+    expect(titleCase('HELL\u2019S GATE')).toBe("Hell's Gate")
   })
 
   it('handles single word', () => {

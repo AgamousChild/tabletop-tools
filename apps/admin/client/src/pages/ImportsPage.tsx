@@ -54,7 +54,9 @@ export function ImportsPage() {
                   </span>
                 </td>
                 <td className="px-4 py-3 text-slate-100 text-right font-mono">{evt.playerCount}</td>
-                <td className="px-4 py-3 text-slate-100 text-right font-mono">{evt.rounds ?? '—'}</td>
+                <td className="px-4 py-3 text-slate-100 text-right font-mono">
+                  {evt.rounds ?? '—'}
+                </td>
                 <td className="px-4 py-3 text-slate-400 text-xs">{evt.location ?? '—'}</td>
                 <td className="px-4 py-3 text-slate-400">{formatDate(evt.date)}</td>
               </tr>

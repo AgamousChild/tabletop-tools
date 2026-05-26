@@ -1,7 +1,8 @@
-import { describe, it, expect, vi } from 'vitest'
-import { render, screen, fireEvent } from '@testing-library/react'
-import { LinkedText } from './LinkedText'
+import { fireEvent, render, screen } from '@testing-library/react'
+import { describe, expect, it, vi } from 'vitest'
+
 import type { EntityMap } from '../lib/entity-linker'
+import { LinkedText } from './LinkedText'
 
 const entities: EntityMap = new Map([
   ['infernus squad', { type: 'unit' as const, nodeId: '000000126' }],
@@ -17,7 +18,7 @@ describe('LinkedText', () => {
         text="This is plain text with no entities."
         entities={emptyEntities}
         onEntityClick={vi.fn()}
-      />
+      />,
     )
     expect(screen.getByText('This is plain text with no entities.')).toBeInTheDocument()
   })
@@ -28,7 +29,7 @@ describe('LinkedText', () => {
         text="The Infernus Squad is a unit."
         entities={entities}
         onEntityClick={vi.fn()}
-      />
+      />,
     )
     const link = screen.getByRole('button', { name: /Infernus Squad/i })
     expect(link).toBeInTheDocument()
@@ -42,7 +43,7 @@ describe('LinkedText', () => {
         text="The Infernus Squad is a unit."
         entities={entities}
         onEntityClick={onEntityClick}
-      />
+      />,
     )
     fireEvent.click(screen.getByRole('button', { name: /Infernus Squad/i }))
     expect(onEntityClick).toHaveBeenCalledOnce()
@@ -55,7 +56,7 @@ describe('LinkedText', () => {
         text="Infernus Squad has [TORRENT] and [DEVASTATING WOUNDS]."
         entities={entities}
         onEntityClick={vi.fn()}
-      />
+      />,
     )
     expect(screen.getByRole('button', { name: 'Infernus Squad' })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: '[TORRENT]' })).toBeInTheDocument()
@@ -69,7 +70,7 @@ describe('LinkedText', () => {
         text="This weapon has [TORRENT]."
         entities={entities}
         onEntityClick={onEntityClick}
-      />
+      />,
     )
     const btn = screen.getByRole('button', { name: '[TORRENT]' })
     expect(btn).toBeInTheDocument()
@@ -83,7 +84,7 @@ describe('LinkedText', () => {
         text="Use INFERNUS SQUAD carefully."
         entities={entities}
         onEntityClick={vi.fn()}
-      />
+      />,
     )
     expect(screen.getByRole('button', { name: 'INFERNUS SQUAD' })).toBeInTheDocument()
   })
@@ -94,13 +95,13 @@ describe('LinkedText', () => {
         text="The Infernus Squad is a unit."
         entities={entities}
         onEntityClick={vi.fn()}
-      />
+      />,
     )
     // "The " should be plain text, not a button
     expect(screen.queryByRole('button', { name: /^The / })).not.toBeInTheDocument()
     // Plain text segments are rendered as spans
     const spans = container.querySelectorAll('span')
-    const spanTexts = Array.from(spans).map(s => s.textContent)
+    const spanTexts = Array.from(spans).map((s) => s.textContent)
     expect(spanTexts).toContain('The ')
   })
 })

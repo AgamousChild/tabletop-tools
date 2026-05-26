@@ -1,25 +1,32 @@
-import { useMemo } from 'react'
+import type {
+  DatasheetModel,
+  Detachment,
+  DetachmentAbility,
+  Enhancement,
+  Stratagem,
+  UnitCost,
+} from '@tabletop-tools/game-data-store'
 import {
+  useAllDatasheets,
+  useDatasheetModels,
+  useDetachmentAbilities,
+  useDetachments,
+  useEnhancements,
   useLeaderAttachments,
   useLeadersForUnit,
+  useLegendsUnitIds,
+  usePrimaryFactions,
+  usePrimaryUnit,
+  usePrimaryUnitSearch,
+  useStratagems,
   useUnitAbilities,
   useUnitCompositions,
   useUnitCosts,
   useUnitKeywords,
-  useWargearOptions,
-  useDatasheetModels,
-  useDetachments,
-  useDetachmentAbilities,
-  useEnhancements,
-  useStratagems,
-  useLegendsUnitIds,
-  usePrimaryFactions,
-  usePrimaryUnitSearch,
-  usePrimaryUnit,
   useWargearAsWeapons,
-  useAllDatasheets,
+  useWargearOptions,
 } from '@tabletop-tools/game-data-store'
-import type { DatasheetModel, Detachment, DetachmentAbility, Enhancement, Stratagem, UnitCost } from '@tabletop-tools/game-data-store'
+import { useMemo } from 'react'
 
 export function useUnits(query: { faction?: string; name?: string }, showLegends = false) {
   const result = usePrimaryUnitSearch(query)
@@ -28,7 +35,7 @@ export function useUnits(query: { faction?: string; name?: string }, showLegends
   const filtered = useMemo(() => {
     if (!query.faction) return []
     if (showLegends) return result.data
-    return result.data.filter(u => !legendsIds.has(u.id))
+    return result.data.filter((u) => !legendsIds.has(u.id))
   }, [query.faction, result.data, legendsIds, showLegends])
   if (!query.faction) return { data: [], isLoading: false }
   return { data: filtered, isLoading: result.isLoading }
@@ -121,7 +128,10 @@ export function useGameEnhancements(detachmentId: string | null) {
 }
 
 export function useGameStratagems(factionId: string | undefined, detachmentId: string | null) {
-  const result = useStratagems({ factionId: factionId ?? '', detachmentId: detachmentId ?? undefined })
+  const result = useStratagems({
+    factionId: factionId ?? '',
+    detachmentId: detachmentId ?? undefined,
+  })
   if (!factionId) return { data: [] as Stratagem[], isLoading: false }
   return { data: result.data, isLoading: result.isLoading }
 }

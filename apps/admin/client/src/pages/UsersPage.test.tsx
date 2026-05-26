@@ -1,5 +1,5 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, screen } from '@testing-library/react'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 let queryReturn: any
 
@@ -12,7 +12,10 @@ vi.mock('../lib/trpc', () => ({
       recentUsers: { useQuery: vi.fn(() => queryReturn) },
       deleteUser: {
         useMutation: (opts?: { onSuccess?: () => void }) => ({
-          mutate: (args: unknown) => { mockDeleteUser(args); opts?.onSuccess?.() },
+          mutate: (args: unknown) => {
+            mockDeleteUser(args)
+            opts?.onSuccess?.()
+          },
           isPending: false,
         }),
       },

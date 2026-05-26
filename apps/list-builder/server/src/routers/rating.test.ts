@@ -1,8 +1,8 @@
 import { createClient } from '@libsql/client'
 import { createDbFromClient } from '@tabletop-tools/db'
+import { createCallerFactory } from '@tabletop-tools/server-core'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 
-import { createCallerFactory } from '@tabletop-tools/server-core'
 import { appRouter } from './index'
 
 const client = createClient({ url: ':memory:' })
@@ -102,8 +102,6 @@ describe('rating.alternatives', () => {
 
   it('rejects unauthenticated callers', async () => {
     const caller = createCaller(unauthCtx)
-    await expect(
-      caller.rating.alternatives({}),
-    ).rejects.toMatchObject({ code: 'UNAUTHORIZED' })
+    await expect(caller.rating.alternatives({})).rejects.toMatchObject({ code: 'UNAUTHORIZED' })
   })
 })

@@ -1,6 +1,7 @@
-import { describe, expect, it } from 'vitest'
-import { parseModelOptions } from './modelOptions'
 import type { UnitComposition, UnitCost } from '@tabletop-tools/game-data-store'
+import { describe, expect, it } from 'vitest'
+
+import { parseModelOptions } from './modelOptions'
 
 describe('parseModelOptions', () => {
   it('returns empty array when no compositions or costs', () => {
@@ -15,9 +16,7 @@ describe('parseModelOptions', () => {
       { id: 'k1', datasheetId: 'ds1', line: '1', description: '5 models', cost: '90' },
     ]
     const result = parseModelOptions(compositions, costs)
-    expect(result).toEqual([
-      { modelCount: 5, points: 90, description: '5 models' },
-    ])
+    expect(result).toEqual([{ modelCount: 5, points: 90, description: '5 models' }])
   })
 
   it('parses multiple size options for a unit', () => {
@@ -54,16 +53,19 @@ describe('parseModelOptions', () => {
 
   it('handles descriptions with extra text around the number', () => {
     const compositions: UnitComposition[] = [
-      { id: 'c1', datasheetId: 'ds1', line: '1', description: '1 Intercessor Sergeant, 4 Intercessors' },
+      {
+        id: 'c1',
+        datasheetId: 'ds1',
+        line: '1',
+        description: '1 Intercessor Sergeant, 4 Intercessors',
+      },
     ]
     const costs: UnitCost[] = [
       { id: 'k1', datasheetId: 'ds1', line: '1', description: '5 models', cost: '90' },
     ]
     const result = parseModelOptions(compositions, costs)
     // Falls back to cost description for model count
-    expect(result).toEqual([
-      { modelCount: 5, points: 90, description: '5 models' },
-    ])
+    expect(result).toEqual([{ modelCount: 5, points: 90, description: '5 models' }])
   })
 
   it('skips costs with no matching composition line gracefully', () => {
@@ -73,9 +75,7 @@ describe('parseModelOptions', () => {
     ]
     // Falls back to using costs alone
     const result = parseModelOptions(compositions, costs)
-    expect(result).toEqual([
-      { modelCount: 5, points: 90, description: '5 models' },
-    ])
+    expect(result).toEqual([{ modelCount: 5, points: 90, description: '5 models' }])
   })
 
   it('handles non-numeric cost gracefully', () => {
@@ -86,9 +86,7 @@ describe('parseModelOptions', () => {
       { id: 'k1', datasheetId: 'ds1', line: '1', description: '5 models', cost: 'free' },
     ]
     const result = parseModelOptions(compositions, costs)
-    expect(result).toEqual([
-      { modelCount: 5, points: 0, description: '5 models' },
-    ])
+    expect(result).toEqual([{ modelCount: 5, points: 0, description: '5 models' }])
   })
 
   it('sorts options by model count ascending', () => {

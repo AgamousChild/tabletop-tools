@@ -23,9 +23,18 @@ export function isLegends(datasheet: { isLegends?: boolean }): boolean {
 // ── Chapter Detection ───────────────────────────────────────────────────────
 
 const CHAPTERS = [
-  'Ultramarines', 'Space Wolves', 'Dark Angels', 'Blood Angels',
-  'Black Templars', 'Deathwatch', 'Iron Hands', 'White Scars', 'Raven Guard',
-  'Salamanders', 'Imperial Fists', 'Crimson Fists',
+  'Ultramarines',
+  'Space Wolves',
+  'Dark Angels',
+  'Blood Angels',
+  'Black Templars',
+  'Deathwatch',
+  'Iron Hands',
+  'White Scars',
+  'Raven Guard',
+  'Salamanders',
+  'Imperial Fists',
+  'Crimson Fists',
 ]
 
 /**
@@ -51,7 +60,7 @@ export function detectChapterFromText(text: string): string | undefined {
       `is ${chapter}`,
       `are ${chapter}`,
     ]
-    if (rulesPatterns.some(p => text.includes(p))) {
+    if (rulesPatterns.some((p) => text.includes(p))) {
       return chapter.toLowerCase()
     }
   }
@@ -67,8 +76,8 @@ export function buildDetachmentChapterMap(
 ): Map<string, string> {
   const map = new Map<string, string>()
   for (const det of detachments) {
-    const abilities = detachmentAbilities.filter(a => a.detachmentId === det.id)
-    const allText = abilities.map(a => a.description).join(' ')
+    const abilities = detachmentAbilities.filter((a) => a.detachmentId === det.id)
+    const allText = abilities.map((a) => a.description).join(' ')
     const chapter = detectChapterFromText(allText)
     if (chapter) map.set(det.id, chapter)
   }
@@ -85,10 +94,16 @@ export type AbilityScope = 'bearer' | 'unit' | 'army' | 'stratagem' | 'aura'
 export function detectScope(category: string, content: string): AbilityScope {
   const lower = content.toLowerCase()
   if (category === 'stratagem') return 'stratagem'
-  if (category === 'enhancement' && (lower.includes('the bearer') || lower.includes("bearer's"))) return 'bearer'
+  if (category === 'enhancement' && (lower.includes('the bearer') || lower.includes("bearer's")))
+    return 'bearer'
   if (lower.includes('aura') && lower.includes('within') && lower.includes('"')) return 'aura'
   if (category === 'faction-ability' && !lower.includes('models in this unit')) return 'army'
-  if (lower.includes('models in this unit') || lower.includes('models in that unit') || lower.includes('leading a unit')) return 'unit'
+  if (
+    lower.includes('models in this unit') ||
+    lower.includes('models in that unit') ||
+    lower.includes('leading a unit')
+  )
+    return 'unit'
   return 'unit'
 }
 
@@ -153,7 +168,10 @@ export function detectChapterFromHeading(heading: string, body: string): string 
 
 /** Truncate text to maxLen chars, appending "..." if truncated. */
 export function truncate(text: string, maxLen: number): string {
-  const clean = text.replace(/<[^>]+>/g, '').replace(/\n+/g, ' ').trim()
+  const clean = text
+    .replace(/<[^>]+>/g, '')
+    .replace(/\n+/g, ' ')
+    .trim()
   return clean.length > maxLen ? clean.substring(0, maxLen - 3) + '...' : clean
 }
 
@@ -186,7 +204,17 @@ export function stripHtml(text: string): string {
 
 /** Chapter keywords list for parent resolution in graph traversal. */
 export const CHAPTER_KEYWORDS = [
-  'space wolves', 'dark angels', 'blood angels', 'black templars',
-  'deathwatch', 'iron hands', 'ultramarines', 'salamanders', 'raven guard',
-  'imperial fists', 'white scars', 'crimson fists', 'any chapter',
+  'space wolves',
+  'dark angels',
+  'blood angels',
+  'black templars',
+  'deathwatch',
+  'iron hands',
+  'ultramarines',
+  'salamanders',
+  'raven guard',
+  'imperial fists',
+  'white scars',
+  'crimson fists',
+  'any chapter',
 ]

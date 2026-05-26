@@ -1,5 +1,5 @@
-import type { Point, GameRulesConfig, BaseSize } from '../types'
 import { distance } from '../geometry/point'
+import type { BaseSize, GameRulesConfig, Point } from '../types'
 
 // 1 inch = 25.4 mm
 
@@ -33,7 +33,12 @@ export function isCoherent(positions: Point[], rules: GameRulesConfig): boolean 
   if (n === 0) return false
   if (n === 1) return true
 
-  const { distance: coherencyDist, minConnections, minConnectionsLarge, largeUnitThreshold } = rules.coherency
+  const {
+    distance: coherencyDist,
+    minConnections,
+    minConnectionsLarge,
+    largeUnitThreshold,
+  } = rules.coherency
   const requiredConnections = n >= largeUnitThreshold ? minConnectionsLarge : minConnections
 
   for (let i = 0; i < n; i++) {

@@ -177,10 +177,12 @@ function buildCardForCategory(node: ResultNode, pdfSource?: PdfSource): CardData
         // Parse sub-rules from content — lines like "**NAME:** description"
         const armyContent = node.content || node.summary || ''
         const subRuleLines = armyContent.match(/^\*\*([^:*]+):\*\*\s*(.+)$/gm) || []
-        const subRules = subRuleLines.map(line => {
-          const m = line.match(/^\*\*([^:*]+):\*\*\s*(.+)$/)
-          return m ? { name: m[1]!.trim(), description: m[2]!.trim() } : null
-        }).filter((sr): sr is { name: string; description: string } => sr !== null)
+        const subRules = subRuleLines
+          .map((line) => {
+            const m = line.match(/^\*\*([^:*]+):\*\*\s*(.+)$/)
+            return m ? { name: m[1]!.trim(), description: m[2]!.trim() } : null
+          })
+          .filter((sr): sr is { name: string; description: string } => sr !== null)
 
         // Description is the content before the first sub-rule
         const firstSubIdx = armyContent.search(/^\*\*[A-Z][^:*]+:\*\*/m)
@@ -279,7 +281,10 @@ function buildCardForCategory(node: ResultNode, pdfSource?: PdfSource): CardData
       const deployImages = (node.sources ?? [])
         .filter((s: any) => s.type === 'pdf' && s.page)
         .map((s: any) => ({
-          pdfName: s.title.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, ''),
+          pdfName: s.title
+            .toLowerCase()
+            .replace(/[^a-z0-9]+/g, '-')
+            .replace(/^-|-$/g, ''),
           page: s.page as number,
         }))
       return {
@@ -302,9 +307,7 @@ function buildCardForCategory(node: ResultNode, pdfSource?: PdfSource): CardData
           id: node.id,
           name: node.title,
           description: node.content || node.summary,
-          pdfImage: pdfSource
-            ? { pdfName: pdfSource.pdfName, page: pdfSource.page }
-            : undefined,
+          pdfImage: pdfSource ? { pdfName: pdfSource.pdfName, page: pdfSource.page } : undefined,
           sources: node.sources as SourceRef[],
           qualityFlags: node.qualityFlags,
         },
@@ -369,18 +372,12 @@ function buildCardForCategory(node: ResultNode, pdfSource?: PdfSource): CardData
 /** Extract a FIELD: value from content — handles both **FIELD:** (bold) and plain FIELD: formats */
 function extractField(content: string, field: string): string {
   // Try bold format first: **FIELD:** value
-  const boldRe = new RegExp(
-    `\\*\\*${field}:\\*\\*\\s*([\\s\\S]*?)(?=\\*\\*[A-Z]+:\\*\\*|$)`,
-    'i',
-  )
+  const boldRe = new RegExp(`\\*\\*${field}:\\*\\*\\s*([\\s\\S]*?)(?=\\*\\*[A-Z]+:\\*\\*|$)`, 'i')
   const boldMatch = content.match(boldRe)
   if (boldMatch) return boldMatch[1]!.trim()
 
   // Try plain format: FIELD: value (stops at next ALLCAPS label or double newline)
-  const plainRe = new RegExp(
-    `(?:^|\\n)${field}:\\s*([\\s\\S]*?)(?=\\n[A-Z]+:|$)`,
-    'i',
-  )
+  const plainRe = new RegExp(`(?:^|\\n)${field}:\\s*([\\s\\S]*?)(?=\\n[A-Z]+:|$)`, 'i')
   const plainMatch = content.match(plainRe)
   return plainMatch ? plainMatch[1]!.trim() : ''
 }
@@ -394,25 +391,21 @@ function extractInlineField(content: string, field: string): string {
 
 /** Strip a **FIELD:** section from content, returning the remainder */
 function stripField(content: string, field: string): string {
-  return content
-    .replace(new RegExp(`\\*\\*${field}:\\*\\*\\s*\\S+\\s*`, 'i'), '')
-    .trim()
+  return content.replace(new RegExp(`\\*\\*${field}:\\*\\*\\s*\\S+\\s*`, 'i'), '').trim()
 }
 
 /** Extract restriction line ("X model only") from content */
 function extractRestriction(content: string): string | undefined {
   const lines = content
     .split('\n')
-    .map(l => l.trim())
+    .map((l) => l.trim())
     .filter(Boolean)
-  return lines.find(l => /model only/i.test(l))
+  return lines.find((l) => /model only/i.test(l))
 }
 
 /** Format a detachmentId slug into a display name */
 function formatDetachmentName(detId?: string): string {
   if (!detId) return ''
   const slug = detId.includes(':') ? detId.split(':').pop()! : detId
-  return slug
-    .replace(/-/g, ' ')
-    .replace(/\b\w/g, c => c.toUpperCase())
+  return slug.replace(/-/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase())
 }

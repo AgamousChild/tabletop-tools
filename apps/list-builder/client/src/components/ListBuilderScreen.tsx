@@ -1,24 +1,27 @@
-import { useState, useCallback } from 'react'
-
-import { authClient } from '../lib/auth'
-import {
-  createList as createListInDb,
-  useLists,
-} from '@tabletop-tools/game-data-store'
 import type { LocalList } from '@tabletop-tools/game-data-store'
-import { MyListsScreen } from './MyListsScreen'
+import { createList as createListInDb, useLists } from '@tabletop-tools/game-data-store'
+import { HelpTip } from '@tabletop-tools/ui'
+import { useCallback, useState } from 'react'
+
+import type { BattleSize } from '../lib/armyRules'
+import { authClient } from '../lib/auth'
+import { restoreFromServer, syncAllToServer, syncListToServer } from '../lib/sync'
 import { BattleSizeScreen } from './BattleSizeScreen'
 import { FactionDetachmentScreen } from './FactionDetachmentScreen'
+import { MyListsScreen } from './MyListsScreen'
 import { UnitSelectionScreen } from './UnitSelectionScreen'
-import type { BattleSize } from '../lib/armyRules'
-import { syncListToServer, syncAllToServer, restoreFromServer } from '../lib/sync'
-import { HelpTip } from '@tabletop-tools/ui'
 
 type Screen =
   | { type: 'my-lists' }
   | { type: 'battle-size' }
   | { type: 'faction-detachment'; battleSize: BattleSize }
-  | { type: 'unit-selection'; listId: string; faction: string; detachment: string; battleSize: BattleSize }
+  | {
+      type: 'unit-selection'
+      listId: string
+      faction: string
+      detachment: string
+      battleSize: BattleSize
+    }
 
 type Props = {
   onSignOut: () => void
@@ -56,7 +59,12 @@ export function ListBuilderScreen({ onSignOut }: Props) {
       listId: list.id,
       faction: list.faction,
       detachment: list.detachment ?? '',
-      battleSize: sizeMap[pts] ?? { name: 'Strike Force', points: pts, maxDuplicates: 3, description: '' },
+      battleSize: sizeMap[pts] ?? {
+        name: 'Strike Force',
+        points: pts,
+        maxDuplicates: 3,
+        description: '',
+      },
     })
   }, [])
 
@@ -64,33 +72,39 @@ export function ListBuilderScreen({ onSignOut }: Props) {
     setScreen({ type: 'faction-detachment', battleSize: size })
   }, [])
 
-  const handleFactionDetachmentSelect = useCallback(async (faction: string, detachment: string) => {
-    const bs = screen.type === 'faction-detachment' ? screen.battleSize : { name: 'Strike Force', points: 2000, maxDuplicates: 3, description: '' }
+  const handleFactionDetachmentSelect = useCallback(
+    async (faction: string, detachment: string) => {
+      const bs =
+        screen.type === 'faction-detachment'
+          ? screen.battleSize
+          : { name: 'Strike Force', points: 2000, maxDuplicates: 3, description: '' }
 
-    // Create the list in IndexedDB
-    const id = generateId()
-    const now = Date.now()
-    await createListInDb({
-      id,
-      faction,
-      name: `${faction} ${bs.points}pts`,
-      detachment,
-      battleSize: bs.points,
-      totalPts: 0,
-      createdAt: now,
-      updatedAt: now,
-    })
-    refetchLists()
-    syncListToServer(id)
+      // Create the list in IndexedDB
+      const id = generateId()
+      const now = Date.now()
+      await createListInDb({
+        id,
+        faction,
+        name: `${faction} ${bs.points}pts`,
+        detachment,
+        battleSize: bs.points,
+        totalPts: 0,
+        createdAt: now,
+        updatedAt: now,
+      })
+      refetchLists()
+      syncListToServer(id)
 
-    setScreen({
-      type: 'unit-selection',
-      listId: id,
-      faction,
-      detachment,
-      battleSize: bs,
-    })
-  }, [screen, refetchLists])
+      setScreen({
+        type: 'unit-selection',
+        listId: id,
+        faction,
+        detachment,
+        battleSize: bs,
+      })
+    },
+    [screen, refetchLists],
+  )
 
   const handleDone = useCallback(() => {
     refetchLists()
@@ -102,13 +116,33 @@ export function ListBuilderScreen({ onSignOut }: Props) {
       {/* Header */}
       <header className="border-b border-slate-800 px-6 py-4 flex items-center justify-between">
         <div className="flex items-center gap-3">
-          <a href="/" className="flex items-center gap-1 text-xs text-slate-400 hover:text-slate-200 transition-colors" title="Back to Home">
-            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-3.5 h-3.5">
-              <path fillRule="evenodd" d="M9.293 2.293a1 1 0 0 1 1.414 0l7 7A1 1 0 0 1 17 11h-1v6a1 1 0 0 1-1 1h-2a1 1 0 0 1-1-1v-3a1 1 0 0 0-1-1H9a1 1 0 0 0-1 1v3a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1v-6H3a1 1 0 0 1-.707-1.707l7-7Z" clipRule="evenodd" />
+          <a
+            href="/"
+            className="flex items-center gap-1 text-xs text-slate-400 hover:text-slate-200 transition-colors"
+            title="Back to Home"
+          >
+            <svg
+              xmlns="http://www.w3.org/2000/svg"
+              viewBox="0 0 20 20"
+              fill="currentColor"
+              className="w-3.5 h-3.5"
+            >
+              <path
+                fillRule="evenodd"
+                d="M9.293 2.293a1 1 0 0 1 1.414 0l7 7A1 1 0 0 1 17 11h-1v6a1 1 0 0 1-1 1h-2a1 1 0 0 1-1-1v-3a1 1 0 0 0-1-1H9a1 1 0 0 0-1 1v3a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1v-6H3a1 1 0 0 1-.707-1.707l7-7Z"
+                clipRule="evenodd"
+              />
             </svg>
             Home
           </a>
-          <h1><a href="/" className="text-2xl font-bold text-amber-400 hover:text-amber-300 transition-colors">List Builder</a></h1>
+          <h1>
+            <a
+              href="/"
+              className="text-2xl font-bold text-amber-400 hover:text-amber-300 transition-colors"
+            >
+              List Builder
+            </a>
+          </h1>
         </div>
         <div className="flex items-center gap-3">
           {syncStatus && <span className="text-xs text-green-400">{syncStatus}</span>}
@@ -151,14 +185,14 @@ export function ListBuilderScreen({ onSignOut }: Props) {
         </div>
       </header>
 
-      <p className="text-xs text-slate-500 px-6 pt-2 mb-4">Create a new list or select an existing one to edit. Use Sync to back up lists to your account, or Restore to download them to this device.</p>
+      <p className="text-xs text-slate-500 px-6 pt-2 mb-4">
+        Create a new list or select an existing one to edit. Use Sync to back up lists to your
+        account, or Restore to download them to this device.
+      </p>
 
       <div className="max-w-4xl mx-auto p-6">
         {screen.type === 'my-lists' && (
-          <MyListsScreen
-            onCreateNew={handleCreateNew}
-            onSelectList={handleSelectList}
-          />
+          <MyListsScreen onCreateNew={handleCreateNew} onSelectList={handleSelectList} />
         )}
 
         {screen.type === 'battle-size' && (

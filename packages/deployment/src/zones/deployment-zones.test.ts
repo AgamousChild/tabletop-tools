@@ -1,4 +1,5 @@
-import { describe, it, expect } from 'vitest'
+import { describe, expect, it } from 'vitest'
+
 import { computeDeploymentZone, computeEnemyZone } from './deployment-zones'
 
 // Standard 60x44 table, origin at center.

@@ -9,20 +9,41 @@ vi.mock('@tabletop-tools/game-data-store', () => ({
     isLoading: false,
   }),
   useDetachments: (factionId: string) => ({
-    data: factionId === 'Space Marines'
-      ? [
-          { id: 'det-1', factionId: 'Space Marines', name: 'Gladius Task Force', legend: '', type: '' },
-          { id: 'det-2', factionId: 'Space Marines', name: 'Ironstorm Spearhead', legend: '', type: '' },
-        ]
-      : factionId === 'Orks'
-        ? [{ id: 'det-3', factionId: 'Orks', name: 'Waaagh! Tribe', legend: '', type: '' }]
-        : [],
+    data:
+      factionId === 'Space Marines'
+        ? [
+            {
+              id: 'det-1',
+              factionId: 'Space Marines',
+              name: 'Gladius Task Force',
+              legend: '',
+              type: '',
+            },
+            {
+              id: 'det-2',
+              factionId: 'Space Marines',
+              name: 'Ironstorm Spearhead',
+              legend: '',
+              type: '',
+            },
+          ]
+        : factionId === 'Orks'
+          ? [{ id: 'det-3', factionId: 'Orks', name: 'Waaagh! Tribe', legend: '', type: '' }]
+          : [],
     error: null,
     isLoading: false,
   }),
   useLists: () => ({
     data: [
-      { id: 'list-1', name: 'My List', faction: 'Space Marines', detachment: 'Gladius Task Force', totalPts: 2000, createdAt: 0, updatedAt: 0 },
+      {
+        id: 'list-1',
+        name: 'My List',
+        faction: 'Space Marines',
+        detachment: 'Gladius Task Force',
+        totalPts: 2000,
+        createdAt: 0,
+        updatedAt: 0,
+      },
     ],
     refetch: vi.fn(),
   }),
@@ -79,9 +100,7 @@ describe('MatchSetupScreen', () => {
     })
     fireEvent.click(screen.getByRole('button', { name: /next/i }))
 
-    expect(onNext).toHaveBeenCalledWith(
-      expect.objectContaining({ opponentFaction: 'Orks' }),
-    )
+    expect(onNext).toHaveBeenCalledWith(expect.objectContaining({ opponentFaction: 'Orks' }))
   })
 
   it('calls onBack when back is clicked', () => {
@@ -134,9 +153,13 @@ describe('MatchSetupScreen', () => {
     const onNext = vi.fn()
     render(<MatchSetupScreen onNext={onNext} onBack={vi.fn()} />)
     fireEvent.change(screen.getByLabelText('Your faction'), { target: { value: 'Space Marines' } })
-    fireEvent.change(screen.getByLabelText('Your detachment'), { target: { value: 'Gladius Task Force' } })
+    fireEvent.change(screen.getByLabelText('Your detachment'), {
+      target: { value: 'Gladius Task Force' },
+    })
     fireEvent.change(screen.getByLabelText('Opponent faction'), { target: { value: 'Orks' } })
-    fireEvent.change(screen.getByLabelText('Opponent detachment'), { target: { value: 'Waaagh! Tribe' } })
+    fireEvent.change(screen.getByLabelText('Opponent detachment'), {
+      target: { value: 'Waaagh! Tribe' },
+    })
     fireEvent.click(screen.getByRole('button', { name: /next/i }))
     expect(onNext).toHaveBeenCalledWith(
       expect.objectContaining({

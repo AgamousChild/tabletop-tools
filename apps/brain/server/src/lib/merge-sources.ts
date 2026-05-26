@@ -1,5 +1,5 @@
-import type { Node, NodeRef } from './model'
 import { normalizeFactionId } from './faction-codes'
+import type { Node, NodeRef } from './model'
 
 /** Slug → preferred English display name (ALL CAPS). */
 const FACTION_DISPLAY_NAMES: Record<string, string> = {
@@ -20,13 +20,13 @@ const FACTION_DISPLAY_NAMES: Record<string, string> = {
   'chaos-daemons': 'CHAOS DAEMONS',
   'leagues-of-votann': 'LEAGUES OF VOTANN',
   'genestealer-cults': 'GENESTEALER CULTS',
-  'aeldari': 'AELDARI',
-  'drukhari': 'DRUKHARI',
-  'tyranids': 'TYRANIDS',
-  'necrons': 'NECRONS',
-  'orks': 'ORKS',
+  aeldari: 'AELDARI',
+  drukhari: 'DRUKHARI',
+  tyranids: 'TYRANIDS',
+  necrons: 'NECRONS',
+  orks: 'ORKS',
   'emperors-children': "EMPEROR'S CHILDREN",
-  'unaligned': 'UNALIGNED',
+  unaligned: 'UNALIGNED',
 }
 
 export interface MergeStats {
@@ -46,7 +46,10 @@ export interface MergeResult {
 
 /** Convert a kebab-case slug to Title Case for display. */
 function slugToTitleCase(slug: string): string {
-  return slug.split('-').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ')
+  return slug
+    .split('-')
+    .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
+    .join(' ')
 }
 
 /**
@@ -80,7 +83,8 @@ export function mergeSources(allNodes: Node[], allRefs: NodeRef[]): MergeResult 
         stats.factionNormalizedCount++
       }
       // Assign display name from slug
-      node.factionName = FACTION_DISPLAY_NAMES[canonical] ?? canonical.replace(/-/g, ' ').toUpperCase()
+      node.factionName =
+        FACTION_DISPLAY_NAMES[canonical] ?? canonical.replace(/-/g, ' ').toUpperCase()
     }
   }
 
@@ -121,10 +125,17 @@ export function mergeSources(allNodes: Node[], allRefs: NodeRef[]): MergeResult 
   // Keep the one with more content, redirect refs from the dropped ID to the kept ID.
   // Map subfaction factionIds to their canonical subfaction name for dedup matching
   const SUBFACTION_ALIASES: Record<string, string> = {
-    'blood-angels': 'blood angels', 'dark-angels': 'dark angels', 'space-wolves': 'space wolves',
-    'black-templars': 'black templars', 'deathwatch': 'deathwatch', 'ultramarines': 'ultramarines',
-    'iron-hands': 'iron hands', 'imperial-fists': 'imperial fists', 'raven-guard': 'raven guard',
-    'salamanders': 'salamanders', 'white-scars': 'white scars',
+    'blood-angels': 'blood angels',
+    'dark-angels': 'dark angels',
+    'space-wolves': 'space wolves',
+    'black-templars': 'black templars',
+    deathwatch: 'deathwatch',
+    ultramarines: 'ultramarines',
+    'iron-hands': 'iron hands',
+    'imperial-fists': 'imperial fists',
+    'raven-guard': 'raven guard',
+    salamanders: 'salamanders',
+    'white-scars': 'white scars',
   }
 
   // Step 2c: Normalize subfactions on SM nodes before dedup
@@ -132,10 +143,18 @@ export function mergeSources(allNodes: Node[], allRefs: NodeRef[]): MergeResult 
   // but doesn't set subfaction. The faction pack parser uses factionId: "dark-angels" etc.
   // Unify by detecting chapter slugs in node IDs and setting subfaction.
   const CHAPTER_SLUGS_TO_SUBFACTION: Record<string, string> = {
-    'blood-angels': 'blood angels', 'dark-angels': 'dark angels', 'space-wolves': 'space wolves',
-    'black-templars': 'black templars', 'deathwatch': 'deathwatch', 'ultramarines': 'ultramarines',
-    'iron-hands': 'iron hands', 'imperial-fists': 'imperial fists', 'raven-guard': 'raven guard',
-    'salamanders': 'salamanders', 'white-scars': 'white scars', 'blood-ravens': 'blood ravens',
+    'blood-angels': 'blood angels',
+    'dark-angels': 'dark angels',
+    'space-wolves': 'space wolves',
+    'black-templars': 'black templars',
+    deathwatch: 'deathwatch',
+    ultramarines: 'ultramarines',
+    'iron-hands': 'iron hands',
+    'imperial-fists': 'imperial fists',
+    'raven-guard': 'raven guard',
+    salamanders: 'salamanders',
+    'white-scars': 'white scars',
+    'blood-ravens': 'blood ravens',
   }
   for (const node of nodeMap.values()) {
     if (node.factionId === 'space-marines' && !node.subfaction) {
@@ -150,16 +169,22 @@ export function mergeSources(allNodes: Node[], allRefs: NodeRef[]): MergeResult 
     }
   }
 
-  const DEDUP_CATEGORIES = new Set(['detachment-rule', 'stratagem', 'enhancement', 'faction-ability'])
+  const DEDUP_CATEGORIES = new Set([
+    'detachment-rule',
+    'stratagem',
+    'enhancement',
+    'faction-ability',
+  ])
   const byTitleFaction = new Map<string, Node[]>()
   for (const node of nodeMap.values()) {
     if (!DEDUP_CATEGORIES.has(node.category)) continue
     // For detachment-rules, dedup by title only — the same detachment often appears
     // under different factionIds (e.g., "Wrath of the Rock" under both "dark-angels" and "space-marines")
     // For other categories, include faction to avoid collapsing legitimately different abilities
-    const faction = node.category === 'detachment-rule'
-      ? '' // title-only dedup for detachments
-      : (node.subfaction || SUBFACTION_ALIASES[node.factionId ?? ''] || node.factionId || '')
+    const faction =
+      node.category === 'detachment-rule'
+        ? '' // title-only dedup for detachments
+        : node.subfaction || SUBFACTION_ALIASES[node.factionId ?? ''] || node.factionId || ''
     const key = `${node.category}|${node.title.toLowerCase().trim()}|${faction}`
     if (!byTitleFaction.has(key)) byTitleFaction.set(key, [])
     byTitleFaction.get(key)!.push(node)
@@ -185,7 +210,9 @@ export function mergeSources(allNodes: Node[], allRefs: NodeRef[]): MergeResult 
     }
   }
 
-  console.log(`   Title-based dedup: ${titleDeduped} nodes removed, ${redirectIds.size} IDs redirected`)
+  console.log(
+    `   Title-based dedup: ${titleDeduped} nodes removed, ${redirectIds.size} IDs redirected`,
+  )
 
   // Redirect refs that pointed to dropped nodes
   if (redirectIds.size > 0) {
@@ -226,10 +253,13 @@ export function mergeSources(allNodes: Node[], allRefs: NodeRef[]): MergeResult 
 
       if (!alreadyTagged) {
         const tag =
-          node.category === 'faction-ability' ? 'faction rule' :
-          node.category === 'enhancement'     ? 'enhancement rule' :
-          node.category === 'unit-ability'    ? 'ability rule' :
-          'rule'
+          node.category === 'faction-ability'
+            ? 'faction rule'
+            : node.category === 'enhancement'
+              ? 'enhancement rule'
+              : node.category === 'unit-ability'
+                ? 'ability rule'
+                : 'rule'
         node.summary = `${node.summary} (${tag})`
         stats.summaryTagged++
       }
@@ -240,7 +270,7 @@ export function mergeSources(allNodes: Node[], allRefs: NodeRef[]): MergeResult 
   stats.outputNodes = nodes.length
 
   // Step 5 + 6: Deduplicate refs and drop orphans (either endpoint missing)
-  const nodeIdSet = new Set(nodes.map(n => n.id))
+  const nodeIdSet = new Set(nodes.map((n) => n.id))
   const refKeySet = new Set<string>()
   const dedupedRefs: NodeRef[] = []
 

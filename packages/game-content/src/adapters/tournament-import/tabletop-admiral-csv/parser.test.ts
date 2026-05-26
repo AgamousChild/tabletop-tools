@@ -89,7 +89,8 @@ describe('parseTabletopAdmiralCsv — edge cases', () => {
   })
 
   it('skips rows where placement is not a number', () => {
-    const csv = 'Rank,Faction,Win,Loss,Draw,CP\n1,Alpha,3,0,0,60\nnope,Beta,2,1,0,50\n2,Gamma,2,0,1,55\n'
+    const csv =
+      'Rank,Faction,Win,Loss,Draw,CP\n1,Alpha,3,0,0,60\nnope,Beta,2,1,0,50\n2,Gamma,2,0,1,55\n'
     const record = parseTabletopAdmiralCsv(csv, BASE_OPTIONS)
     expect(record.players).toHaveLength(2)
   })

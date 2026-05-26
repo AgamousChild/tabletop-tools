@@ -48,9 +48,7 @@ describe('MissionSetupScreen', () => {
     })
     fireEvent.click(screen.getByRole('button', { name: /next/i }))
 
-    expect(onNext).toHaveBeenCalledWith(
-      expect.objectContaining({ mission: 'Take and Hold' }),
-    )
+    expect(onNext).toHaveBeenCalledWith(expect.objectContaining({ mission: 'Take and Hold' }))
   })
 
   it('shows twist cards checkbox', () => {
@@ -114,9 +112,13 @@ describe('MissionSetupScreen', () => {
     const onNext = vi.fn()
     render(<MissionSetupScreen onNext={onNext} onBack={vi.fn()} />)
 
-    fireEvent.change(screen.getByLabelText('Select mission'), { target: { value: 'Take and Hold' } })
+    fireEvent.change(screen.getByLabelText('Select mission'), {
+      target: { value: 'Take and Hold' },
+    })
     fireEvent.click(screen.getByLabelText('Include Twist Cards'))
-    fireEvent.change(screen.getByLabelText('Twist card name'), { target: { value: 'Chilling Rain' } })
+    fireEvent.change(screen.getByLabelText('Twist card name'), {
+      target: { value: 'Chilling Rain' },
+    })
     // Click the Add button next to the twist input
     const addButtons = screen.getAllByRole('button', { name: /add/i })
     fireEvent.click(addButtons[0]!)
@@ -134,7 +136,9 @@ describe('MissionSetupScreen', () => {
   it('removes twist card when x clicked', () => {
     render(<MissionSetupScreen onNext={vi.fn()} onBack={vi.fn()} />)
     fireEvent.click(screen.getByLabelText('Include Twist Cards'))
-    fireEvent.change(screen.getByLabelText('Twist card name'), { target: { value: 'Chilling Rain' } })
+    fireEvent.change(screen.getByLabelText('Twist card name'), {
+      target: { value: 'Chilling Rain' },
+    })
     const addButtons = screen.getAllByRole('button', { name: /add/i })
     fireEvent.click(addButtons[0]!)
 
@@ -147,9 +151,13 @@ describe('MissionSetupScreen', () => {
     const onNext = vi.fn()
     render(<MissionSetupScreen onNext={onNext} onBack={vi.fn()} />)
 
-    fireEvent.change(screen.getByLabelText('Select mission'), { target: { value: 'Take and Hold' } })
+    fireEvent.change(screen.getByLabelText('Select mission'), {
+      target: { value: 'Take and Hold' },
+    })
     fireEvent.click(screen.getByLabelText('Include Challenger Cards'))
-    fireEvent.change(screen.getByLabelText('Challenger card name'), { target: { value: 'Double Down' } })
+    fireEvent.change(screen.getByLabelText('Challenger card name'), {
+      target: { value: 'Double Down' },
+    })
     const addButtons = screen.getAllByRole('button', { name: /add/i })
     fireEvent.click(addButtons[0]!)
 
@@ -197,8 +205,12 @@ describe('MissionSetupScreen', () => {
     ]
     const onNext = vi.fn()
     render(<MissionSetupScreen onNext={onNext} onBack={vi.fn()} />)
-    fireEvent.change(screen.getByLabelText('Select mission'), { target: { value: 'Scorched Earth' } })
-    fireEvent.change(screen.getByLabelText('Select deployment zone'), { target: { value: 'Dawn of War' } })
+    fireEvent.change(screen.getByLabelText('Select mission'), {
+      target: { value: 'Scorched Earth' },
+    })
+    fireEvent.change(screen.getByLabelText('Select deployment zone'), {
+      target: { value: 'Dawn of War' },
+    })
     fireEvent.click(screen.getByRole('button', { name: /next/i }))
     expect(onNext).toHaveBeenCalledWith(
       expect.objectContaining({

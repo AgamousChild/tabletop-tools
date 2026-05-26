@@ -1,5 +1,5 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, screen } from '@testing-library/react'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 let queryReturn: any
 
@@ -38,8 +38,24 @@ describe('ImportsPage', () => {
   it('renders event count in header', () => {
     queryReturn = {
       data: [
-        { id: 'e1', name: 'GT Alpha', source: 'bcp', playerCount: 32, rounds: 5, location: 'Austin, TX', date: 1706745600000 },
-        { id: 'e2', name: 'GT Beta', source: 'bcp', playerCount: 48, rounds: 6, location: 'Denver, CO', date: 1707350400000 },
+        {
+          id: 'e1',
+          name: 'GT Alpha',
+          source: 'bcp',
+          playerCount: 32,
+          rounds: 5,
+          location: 'Austin, TX',
+          date: 1706745600000,
+        },
+        {
+          id: 'e2',
+          name: 'GT Beta',
+          source: 'bcp',
+          playerCount: 48,
+          rounds: 6,
+          location: 'Denver, CO',
+          date: 1707350400000,
+        },
       ],
       isLoading: false,
       error: null,
@@ -51,7 +67,15 @@ describe('ImportsPage', () => {
   it('renders table with event data', () => {
     queryReturn = {
       data: [
-        { id: 'e1', name: 'GT Alpha', source: 'bcp', playerCount: 32, rounds: 5, location: 'Austin, TX', date: 1706745600000 },
+        {
+          id: 'e1',
+          name: 'GT Alpha',
+          source: 'bcp',
+          playerCount: 32,
+          rounds: 5,
+          location: 'Austin, TX',
+          date: 1706745600000,
+        },
       ],
       isLoading: false,
       error: null,

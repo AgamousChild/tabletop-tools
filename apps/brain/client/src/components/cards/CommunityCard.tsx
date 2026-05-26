@@ -36,7 +36,8 @@ export function CommunityCard({ data }: CommunityCardProps) {
         </div>
 
         {/* Description */}
-        <div className="text-xs text-slate-300 leading-snug"
+        <div
+          className="text-xs text-slate-300 leading-snug"
           dangerouslySetInnerHTML={{ __html: renderMarkdown(data.description) }}
         />
 

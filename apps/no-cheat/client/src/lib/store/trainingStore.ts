@@ -3,12 +3,12 @@
 export interface StoredExample {
   id: string
   diceSetId: string
-  label: number  // 1-6
+  label: number // 1-6
   features: number[]
   roiGray: Uint8Array
   roiWidth: number
   roiHeight: number
-  createdAt: number  // timestamp
+  createdAt: number // timestamp
 }
 
 export interface TrainingStats {
@@ -47,7 +47,7 @@ function openDb(): Promise<IDBDatabase> {
 // ── Examples CRUD ────────────────────────────────────────────────────────────
 
 export async function addExample(
-  example: Omit<StoredExample, 'id' | 'createdAt'>
+  example: Omit<StoredExample, 'id' | 'createdAt'>,
 ): Promise<string> {
   const id = crypto.randomUUID()
   const record: StoredExample = {
@@ -59,8 +59,14 @@ export async function addExample(
   return new Promise((resolve, reject) => {
     const tx = db.transaction(EXAMPLES_STORE, 'readwrite')
     tx.objectStore(EXAMPLES_STORE).put(record)
-    tx.oncomplete = () => { db.close(); resolve(id) }
-    tx.onerror = () => { db.close(); reject(tx.error) }
+    tx.oncomplete = () => {
+      db.close()
+      resolve(id)
+    }
+    tx.onerror = () => {
+      db.close()
+      reject(tx.error)
+    }
   })
 }
 
@@ -92,8 +98,14 @@ export async function deleteExample(id: string): Promise<void> {
   return new Promise((resolve, reject) => {
     const tx = db.transaction(EXAMPLES_STORE, 'readwrite')
     tx.objectStore(EXAMPLES_STORE).delete(id)
-    tx.oncomplete = () => { db.close(); resolve() }
-    tx.onerror = () => { db.close(); reject(tx.error) }
+    tx.oncomplete = () => {
+      db.close()
+      resolve()
+    }
+    tx.onerror = () => {
+      db.close()
+      reject(tx.error)
+    }
   })
 }
 
@@ -110,8 +122,14 @@ export async function clearExamples(diceSetId: string): Promise<void> {
         cursor.continue()
       }
     }
-    tx.oncomplete = () => { db.close(); resolve() }
-    tx.onerror = () => { db.close(); reject(tx.error) }
+    tx.oncomplete = () => {
+      db.close()
+      resolve()
+    }
+    tx.onerror = () => {
+      db.close()
+      reject(tx.error)
+    }
   })
 }
 
@@ -133,8 +151,14 @@ export async function updateStats(stats: TrainingStats): Promise<void> {
   return new Promise((resolve, reject) => {
     const tx = db.transaction(STATS_STORE, 'readwrite')
     tx.objectStore(STATS_STORE).put(stats)
-    tx.oncomplete = () => { db.close(); resolve() }
-    tx.onerror = () => { db.close(); reject(tx.error) }
+    tx.oncomplete = () => {
+      db.close()
+      resolve()
+    }
+    tx.onerror = () => {
+      db.close()
+      reject(tx.error)
+    }
   })
 }
 
@@ -159,7 +183,13 @@ export async function clearAll(diceSetId: string): Promise<void> {
     // Delete stats for this dice set
     tx.objectStore(STATS_STORE).delete(diceSetId)
 
-    tx.oncomplete = () => { db.close(); resolve() }
-    tx.onerror = () => { db.close(); reject(tx.error) }
+    tx.oncomplete = () => {
+      db.close()
+      resolve()
+    }
+    tx.onerror = () => {
+      db.close()
+      reject(tx.error)
+    }
   })
 }

@@ -3,11 +3,11 @@ export interface EntityInfo {
   nodeId: string
 }
 
-export type EntityMap = Map<string, EntityInfo>  // lowercase name → info
+export type EntityMap = Map<string, EntityInfo> // lowercase name → info
 
 export interface TextSegment {
   text: string
-  entity?: EntityInfo  // present if this segment is a linked entity
+  entity?: EntityInfo // present if this segment is a linked entity
 }
 
 /**
@@ -56,12 +56,12 @@ export function linkEntities(text: string, entities: EntityMap): TextSegment[] {
     }
   }
 
-  return segments.filter(s => s.text !== '')
+  return segments.filter((s) => s.text !== '')
 }
 
 interface MatchResult {
   end: number
-  raw: string       // original text slice (preserves casing)
+  raw: string // original text slice (preserves casing)
   info: EntityInfo
 }
 

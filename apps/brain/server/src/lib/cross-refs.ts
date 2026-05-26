@@ -104,12 +104,15 @@ export function buildCrossRefs(
     const allMyIds = [myId, ...record.childNodes.map((c) => c.id)]
 
     // targetRecordId → accumulated edge data
-    const refCounts = new Map<string, {
-      rel: string
-      context: string
-      count: number
-      title: string
-    }>()
+    const refCounts = new Map<
+      string,
+      {
+        rel: string
+        context: string
+        count: number
+        title: string
+      }
+    >()
 
     for (const nodeId of allMyIds) {
       // Forward refs: this record → something else

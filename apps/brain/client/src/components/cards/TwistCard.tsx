@@ -1,4 +1,4 @@
-import { renderMarkdown } from "../../lib/render-markdown"
+import { renderMarkdown } from '../../lib/render-markdown'
 import { ErrataSection } from './ErrataSection'
 import type { CardContext, TwistCardData } from './types'
 
@@ -49,7 +49,10 @@ export function TwistCard({ data, context }: TwistCardProps) {
                 className="text-[13px] text-blue-400 hover:text-blue-300 cursor-pointer bg-transparent border-0 p-0"
                 onClick={() =>
                   context.onViewSource!(
-                    src.title.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, ''),
+                    src.title
+                      .toLowerCase()
+                      .replace(/[^a-z0-9]+/g, '-')
+                      .replace(/^-|-$/g, ''),
                     src.page!,
                     data.name,
                     src.topPct,

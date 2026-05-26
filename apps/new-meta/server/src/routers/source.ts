@@ -1,10 +1,18 @@
 import { sql } from 'drizzle-orm'
 import { z } from 'zod'
-import { router, publicProcedure } from '../trpc.js'
+
+import { publicProcedure, router } from '../trpc.js'
 
 export const sourceRouter = router({
   tournaments: publicProcedure
-    .input(z.object({ format: z.string().optional(), limit: z.number().int().min(1).max(200).default(50) }).optional())
+    .input(
+      z
+        .object({
+          format: z.string().optional(),
+          limit: z.number().int().min(1).max(200).default(50),
+        })
+        .optional(),
+    )
     .query(async ({ ctx, input }) => {
       const rows = input?.format
         ? await ctx.db.all(sql`
@@ -21,9 +29,14 @@ export const sourceRouter = router({
             ORDER BY me.date DESC LIMIT ${input?.limit ?? 50}
           `)
 
-      return (rows as any[]).map(r => ({
-        eventId: r.id, eventName: r.name, eventDate: r.date, format: r.format,
-        location: r.location, playerCount: r.player_count, rounds: r.rounds,
+      return (rows as any[]).map((r) => ({
+        eventId: r.id,
+        eventName: r.name,
+        eventDate: r.date,
+        format: r.format,
+        location: r.location,
+        playerCount: r.player_count,
+        rounds: r.rounds,
         winnerFaction: r.winner_faction,
       }))
     }),
@@ -56,16 +69,28 @@ export const sourceRouter = router({
       `)
 
       return {
-        eventId: event.id, eventName: event.name, eventDate: event.date,
-        format: event.format, location: event.location, rounds: event.rounds,
-        playerCount: event.player_count, winnerFaction: event.winner_faction,
-        players: (playerRows as any[]).map(r => ({
-          playerName: r.player_name, placement: r.placement, faction: r.faction,
-          detachment: r.detachment, wins: r.wins, losses: r.losses, draws: r.draws,
+        eventId: event.id,
+        eventName: event.name,
+        eventDate: event.date,
+        format: event.format,
+        location: event.location,
+        rounds: event.rounds,
+        playerCount: event.player_count,
+        winnerFaction: event.winner_faction,
+        players: (playerRows as any[]).map((r) => ({
+          playerName: r.player_name,
+          placement: r.placement,
+          faction: r.faction,
+          detachment: r.detachment,
+          wins: r.wins,
+          losses: r.losses,
+          draws: r.draws,
           listText: r.list_text,
         })),
-        winDistribution: (distRows as any[]).map(r => ({
-          wins: r.wins, playerCount: r.player_count, playerPct: r.player_pct,
+        winDistribution: (distRows as any[]).map((r) => ({
+          wins: r.wins,
+          playerCount: r.player_count,
+          playerPct: r.player_pct,
         })),
       }
     }),

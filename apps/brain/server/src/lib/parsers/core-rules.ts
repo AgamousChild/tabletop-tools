@@ -1,4 +1,4 @@
-import type { Node, NodeRef, Source, NodeCategory, GamePhase } from '../model'
+import type { GamePhase, Node, NodeCategory, NodeRef, Source } from '../model'
 import { coreId } from '../slugify'
 
 /** Map of heading keywords to game phases. */
@@ -22,12 +22,15 @@ function detectPhase(heading: string): GamePhase | undefined {
 /** Detect category from heading and content. */
 function detectCategory(heading: string): NodeCategory {
   const upper = heading.toUpperCase()
-  if (upper.includes('TERRAIN') || upper.includes('COVER') || upper.includes('RUINS')) return 'terrain'
-  if (upper.includes('MUSTER') || upper.includes('ARMY') || upper.includes('DETACHMENT')) return 'army-construction'
-  if (upper.includes('MISSION') || upper.includes('OBJECTIVE') || upper.includes('DEPLOYMENT')) return 'mission'
+  if (upper.includes('TERRAIN') || upper.includes('COVER') || upper.includes('RUINS'))
+    return 'terrain'
+  if (upper.includes('MUSTER') || upper.includes('ARMY') || upper.includes('DETACHMENT'))
+    return 'army-construction'
+  if (upper.includes('MISSION') || upper.includes('OBJECTIVE') || upper.includes('DEPLOYMENT'))
+    return 'mission'
   if (upper.includes('KEYWORD')) return 'keyword'
   if (upper.includes('STRATAGEM')) return 'stratagem'
-  if (PHASE_KEYWORDS.some(p => upper.includes(p.pattern))) return 'phase-sequence'
+  if (PHASE_KEYWORDS.some((p) => upper.includes(p.pattern))) return 'phase-sequence'
   return 'core-mechanic'
 }
 
@@ -35,31 +38,82 @@ function detectCategory(heading: string): NodeCategory {
 function extractKeywords(title: string, content: string): string[] {
   const combined = `${title} ${content}`.toLowerCase()
   const gameTerms = [
-    'wound', 'hit', 'save', 'strength', 'toughness', 'leadership', 'movement',
-    'charge', 'shoot', 'fight', 'advance', 'fall back', 'overwatch', 'morale',
-    'battle-shock', 'deep strike', 'infiltrate', 'stratagem', 'command',
-    'engagement range', 'coherency', 'visibility', 'cover', 'terrain',
-    'objective', 'deployment', 'roll', 'modifier', 'ability', 'keyword',
-    'damage', 'mortal wound', 'feel no pain', 'invulnerable', 'transport',
-    'aircraft', 'vehicle', 'monster', 'character', 'infantry', 'leader',
-    'attached', 'bodyguard', 'lone operative', 'deadly demise', 'scouts',
-    'stealth', 'firing deck', 'lethal hits', 'sustained hits', 'devastating wounds',
-    'hazardous', 'blast', 'torrent', 'twin-linked', 'anti', 'melta',
-    'pistol', 'rapid fire', 'heavy', 'assault', 'ignores cover',
+    'wound',
+    'hit',
+    'save',
+    'strength',
+    'toughness',
+    'leadership',
+    'movement',
+    'charge',
+    'shoot',
+    'fight',
+    'advance',
+    'fall back',
+    'overwatch',
+    'morale',
+    'battle-shock',
+    'deep strike',
+    'infiltrate',
+    'stratagem',
+    'command',
+    'engagement range',
+    'coherency',
+    'visibility',
+    'cover',
+    'terrain',
+    'objective',
+    'deployment',
+    'roll',
+    'modifier',
+    'ability',
+    'keyword',
+    'damage',
+    'mortal wound',
+    'feel no pain',
+    'invulnerable',
+    'transport',
+    'aircraft',
+    'vehicle',
+    'monster',
+    'character',
+    'infantry',
+    'leader',
+    'attached',
+    'bodyguard',
+    'lone operative',
+    'deadly demise',
+    'scouts',
+    'stealth',
+    'firing deck',
+    'lethal hits',
+    'sustained hits',
+    'devastating wounds',
+    'hazardous',
+    'blast',
+    'torrent',
+    'twin-linked',
+    'anti',
+    'melta',
+    'pistol',
+    'rapid fire',
+    'heavy',
+    'assault',
+    'ignores cover',
   ]
-  return gameTerms.filter(term => combined.includes(term))
+  return gameTerms.filter((term) => combined.includes(term))
 }
 
 /** Generate a 1-2 sentence summary from the content. */
 function generateSummary(title: string, content: string): string {
   // Strip markdown formatting for summary
   const clean = content
-    .replace(/\*\*[A-Z]+:\*\*/g, '')  // Remove **WHEN:** etc
-    .replace(/^- .*/gm, '')            // Remove bullet points
+    .replace(/\*\*[A-Z]+:\*\*/g, '') // Remove **WHEN:** etc
+    .replace(/^- .*/gm, '') // Remove bullet points
     .replace(/\n+/g, ' ')
     .trim()
 
-  const sentences = clean.split(/(?<=[.!?])\s+/).filter(s => s.length > 10)
+  const sentences = clean.split(/(?<=[.!?])\s+/).filter((s) => s.length > 10)
   if (sentences.length === 0) return title
   const first = sentences[0]!.trim()
   if (first.length > 150 || sentences.length === 1) {
@@ -78,9 +132,9 @@ export interface ParseResult {
 /** A section parsed from structured markdown with heading depth. */
 interface Section {
   heading: string
-  depth: number       // 2 = ##, 3 = ###, 4 = ####, 5 = #####
+  depth: number // 2 = ##, 3 = ###, 4 = ####, 5 = #####
   body: string
-  lineIndex: number   // for ordering
+  lineIndex: number // for ordering
 }
 
 /** Parse sections from multi-level ## / ### / #### / ##### formatted markdown. */
@@ -166,10 +220,11 @@ export function parseCoreRules(normalizedMarkdown: string, retrievedAt: string):
   const sections = parseFormattedSections(normalizedMarkdown)
 
   // Filter out TOC entries and very short sections
-  const realSections = sections.filter(s => !isTocEntry(s) && s.body.length > 30)
+  const realSections = sections.filter((s) => !isTocEntry(s) && s.body.length > 30)
 
   // Track the parent at each depth level for part_of refs and category inheritance
-  const parentStack: Array<{ id: string; heading: string; depth: number; category: NodeCategory }> = []
+  const parentStack: Array<{ id: string; heading: string; depth: number; category: NodeCategory }> =
+    []
   // Track phase sections for sequence_adjacent refs
   const phaseSections: Array<{ id: string; heading: string }> = []
 

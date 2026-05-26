@@ -1,7 +1,8 @@
-import { describe, it, expect } from 'vitest'
 import { render, screen } from '@testing-library/react'
-import { NodeCard } from './NodeCard'
+import { describe, expect, it } from 'vitest'
+
 import type { BrainNode } from '../lib/store'
+import { NodeCard } from './NodeCard'
 
 const testNode: BrainNode = {
   id: 'core:wound-roll',

@@ -28,7 +28,12 @@ export interface BlobInfo {
  * Find all 4-connected blob regions in a binary image via BFS.
  * target = the pixel value to search for (0 or 255).
  */
-export function findBlobInfo(binary: Uint8Array, width: number, height: number, target = 255): BlobInfo[] {
+export function findBlobInfo(
+  binary: Uint8Array,
+  width: number,
+  height: number,
+  target = 255,
+): BlobInfo[] {
   const visited = new Uint8Array(width * height)
   const blobs: BlobInfo[] = []
 
@@ -52,7 +57,10 @@ export function findBlobInfo(binary: Uint8Array, width: number, height: number, 
       sumY += y
 
       const neighbors: [number, number][] = [
-        [x - 1, y], [x + 1, y], [x, y - 1], [x, y + 1],
+        [x - 1, y],
+        [x + 1, y],
+        [x, y - 1],
+        [x, y + 1],
       ]
 
       let isEdge = false
@@ -123,14 +131,8 @@ export function otsuBinarize(gray: Uint8Array): Uint8Array {
 /**
  * Filter blobs by area and circularity, return count.
  */
-function countValidBlobs(
-  blobs: BlobInfo[],
-  minArea: number,
-  maxArea: number,
-): number {
-  return blobs.filter((b) =>
-    b.area >= minArea && b.area <= maxArea && b.circularity >= 0.4,
-  ).length
+function countValidBlobs(blobs: BlobInfo[], minArea: number, maxArea: number): number {
+  return blobs.filter((b) => b.area >= minArea && b.area <= maxArea && b.circularity >= 0.4).length
 }
 
 /**
@@ -201,9 +203,7 @@ export function detectBlobs(binary: Uint8Array, size = 64): number | null {
   const maxArea = Math.floor(size * size * 0.15)
 
   const blobs = findBlobInfo(binary, size, size, 255)
-  const pips = blobs.filter(
-    (b) => b.area >= minArea && b.area <= maxArea && b.circularity >= 0.4,
-  )
+  const pips = blobs.filter((b) => b.area >= minArea && b.area <= maxArea && b.circularity >= 0.4)
 
   if (pips.length === 0) return 0
   if (pips.length > 6) return null

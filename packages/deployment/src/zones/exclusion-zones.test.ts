@@ -1,7 +1,8 @@
-import { describe, it, expect } from 'vitest'
-import { canInfiltrate, canScoutMoveTo, canDeepStrike } from './exclusion-zones'
-import { computeEnemyZone } from './deployment-zones'
+import { describe, expect, it } from 'vitest'
+
 import type { GameRulesConfig } from '../types'
+import { computeEnemyZone } from './deployment-zones'
+import { canDeepStrike, canInfiltrate, canScoutMoveTo } from './exclusion-zones'
 
 const rules: GameRulesConfig = {
   deepStrikeExclusion: 9,

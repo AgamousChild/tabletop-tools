@@ -8,9 +8,9 @@
  * @see docs/schema-turso.md — Turso database schema (meta_for, meta_top, fact_game_results)
  */
 
-import { sql } from 'drizzle-orm'
 import type { Db } from '@tabletop-tools/db'
 import { generateId } from '@tabletop-tools/server-core'
+import { sql } from 'drizzle-orm'
 
 // ── Frame of Reference generation ─────────────────────────────────────────────
 
@@ -58,21 +58,15 @@ export function generateFrames(
 
     const dsId =
       dataslates.find(
-        (ds) =>
-          event.date >= ds.effective_date &&
-          (!ds.end_date || event.date <= ds.end_date),
+        (ds) => event.date >= ds.effective_date && (!ds.end_date || event.date <= ds.end_date),
       )?.id || null
     const tpId =
       packs.find(
-        (tp) =>
-          event.date >= tp.effective_date &&
-          (!tp.end_date || event.date <= tp.end_date),
+        (tp) => event.date >= tp.effective_date && (!tp.end_date || event.date <= tp.end_date),
       )?.id || null
     const edId =
       editions.find(
-        (ed) =>
-          event.date >= ed.start_date &&
-          (!ed.end_date || event.date <= ed.end_date),
+        (ed) => event.date >= ed.start_date && (!ed.end_date || event.date <= ed.end_date),
       )?.id || null
 
     const dayOfWeek = d.getUTCDay()
@@ -80,24 +74,120 @@ export function generateFrames(
     saturday.setUTCDate(d.getUTCDate() - dayOfWeek + 6)
     const weekendStr = saturday.toISOString().slice(0, 10)
 
-    add({ id: `event:${event.id}`, typeId: 1, date: event.date, endDate: null, day, month, quarter: null, year, dataslateId: dsId, packId: tpId, editionId: edId })
-    add({ id: `weekend:${weekendStr}`, typeId: 2, date: saturday.getTime(), endDate: null, day: null, month, quarter: null, year, dataslateId: dsId, packId: tpId, editionId: edId })
-    add({ id: `month:${year}-${String(month).padStart(2, '0')}`, typeId: 3, date: new Date(Date.UTC(year, month - 1, 1)).getTime(), endDate: new Date(Date.UTC(year, month, 0)).getTime(), day: null, month, quarter: null, year, dataslateId: dsId, packId: tpId, editionId: edId })
-    add({ id: `quarter:${year}:${quarter}`, typeId: 4, date: new Date(Date.UTC(year, (quarter - 1) * 3, 1)).getTime(), endDate: new Date(Date.UTC(year, quarter * 3, 0)).getTime(), day: null, month: null, quarter, year, dataslateId: dsId, packId: tpId, editionId: edId })
-    add({ id: `year:${year}`, typeId: 5, date: new Date(Date.UTC(year, 0, 1)).getTime(), endDate: new Date(Date.UTC(year, 11, 31)).getTime(), day: null, month: null, quarter: null, year, dataslateId: null, packId: null, editionId: edId })
+    add({
+      id: `event:${event.id}`,
+      typeId: 1,
+      date: event.date,
+      endDate: null,
+      day,
+      month,
+      quarter: null,
+      year,
+      dataslateId: dsId,
+      packId: tpId,
+      editionId: edId,
+    })
+    add({
+      id: `weekend:${weekendStr}`,
+      typeId: 2,
+      date: saturday.getTime(),
+      endDate: null,
+      day: null,
+      month,
+      quarter: null,
+      year,
+      dataslateId: dsId,
+      packId: tpId,
+      editionId: edId,
+    })
+    add({
+      id: `month:${year}-${String(month).padStart(2, '0')}`,
+      typeId: 3,
+      date: new Date(Date.UTC(year, month - 1, 1)).getTime(),
+      endDate: new Date(Date.UTC(year, month, 0)).getTime(),
+      day: null,
+      month,
+      quarter: null,
+      year,
+      dataslateId: dsId,
+      packId: tpId,
+      editionId: edId,
+    })
+    add({
+      id: `quarter:${year}:${quarter}`,
+      typeId: 4,
+      date: new Date(Date.UTC(year, (quarter - 1) * 3, 1)).getTime(),
+      endDate: new Date(Date.UTC(year, quarter * 3, 0)).getTime(),
+      day: null,
+      month: null,
+      quarter,
+      year,
+      dataslateId: dsId,
+      packId: tpId,
+      editionId: edId,
+    })
+    add({
+      id: `year:${year}`,
+      typeId: 5,
+      date: new Date(Date.UTC(year, 0, 1)).getTime(),
+      endDate: new Date(Date.UTC(year, 11, 31)).getTime(),
+      day: null,
+      month: null,
+      quarter: null,
+      year,
+      dataslateId: null,
+      packId: null,
+      editionId: edId,
+    })
   }
 
   for (const ds of dataslates) {
     const d = new Date(ds.effective_date)
-    add({ id: `dataslate:${ds.id}`, typeId: 6, date: ds.effective_date, endDate: ds.end_date, day: null, month: null, quarter: null, year: d.getUTCFullYear(), dataslateId: ds.id, packId: null, editionId: null })
+    add({
+      id: `dataslate:${ds.id}`,
+      typeId: 6,
+      date: ds.effective_date,
+      endDate: ds.end_date,
+      day: null,
+      month: null,
+      quarter: null,
+      year: d.getUTCFullYear(),
+      dataslateId: ds.id,
+      packId: null,
+      editionId: null,
+    })
   }
   for (const tp of packs) {
     const d = new Date(tp.effective_date)
-    add({ id: `pack:${tp.id}`, typeId: 7, date: tp.effective_date, endDate: tp.end_date, day: null, month: null, quarter: null, year: d.getUTCFullYear(), dataslateId: null, packId: tp.id, editionId: null })
+    add({
+      id: `pack:${tp.id}`,
+      typeId: 7,
+      date: tp.effective_date,
+      endDate: tp.end_date,
+      day: null,
+      month: null,
+      quarter: null,
+      year: d.getUTCFullYear(),
+      dataslateId: null,
+      packId: tp.id,
+      editionId: null,
+    })
   }
   for (const ed of editions) {
     const d = new Date(ed.start_date)
-    add({ id: `edition:${ed.id}`, typeId: 8, date: ed.start_date, endDate: ed.end_date, day: null, month: null, quarter: null, year: d.getUTCFullYear(), dataslateId: null, packId: null, editionId: ed.id })
+    add({
+      id: `edition:${ed.id}`,
+      typeId: 8,
+      date: ed.start_date,
+      endDate: ed.end_date,
+      day: null,
+      month: null,
+      quarter: null,
+      year: d.getUTCFullYear(),
+      dataslateId: null,
+      packId: null,
+      editionId: ed.id,
+    })
   }
 
   return frames
@@ -112,7 +202,9 @@ export async function runPipeline(db: Db): Promise<void> {
 
   try {
     // Find events imported since last cube build
-    const cubeStatus = (await db.all(sql`SELECT last_completed_at FROM meta_cube_status WHERE id = 1`)) as any[]
+    const cubeStatus = (await db.all(
+      sql`SELECT last_completed_at FROM meta_cube_status WHERE id = 1`,
+    )) as any[]
     const lastCompleted = cubeStatus[0]?.last_completed_at || 0
 
     const newEvents = (await db.all(sql`
@@ -143,7 +235,7 @@ export async function runPipeline(db: Db): Promise<void> {
     }
 
     // Build fact rows for new events only
-    const newEventIds = newEvents.map(e => e.id)
+    const newEventIds = newEvents.map((e) => e.id)
     for (const eventId of newEventIds) {
       const pairingRows = await db.all(sql`
         SELECT mp.id, mp.event_id, mp.round, mp.result,
@@ -182,7 +274,7 @@ export async function runPipeline(db: Db): Promise<void> {
 
     // Rebuild meta_top for affected frames only
     // Delete existing meta_top rows for frames that include new events
-    const affectedFrameIds = frames.map(f => f.id)
+    const affectedFrameIds = frames.map((f) => f.id)
     for (const frameId of affectedFrameIds) {
       await db.run(sql`DELETE FROM meta_top WHERE meta_for_id = ${frameId}`)
     }
@@ -231,7 +323,8 @@ export async function runPipeline(db: Db): Promise<void> {
         const drawRate = games > 0 ? draws / games : 0
         const playerPct = totalPlayers > 0 ? (row.players as number) / totalPlayers : 0
         const overRep = expectedPct > 0 ? playerPct / expectedPct : 0
-        const fourOhStart = (row.players as number) > 0 ? (row.event_top8 as number) / (row.players as number) : 0
+        const fourOhStart =
+          (row.players as number) > 0 ? (row.event_top8 as number) / (row.players as number) : 0
         const topId = `faction:${row.faction_id}:${frame.id}`
 
         await db.run(sql`INSERT OR REPLACE INTO meta_top
@@ -250,9 +343,7 @@ export async function runPipeline(db: Db): Promise<void> {
       sql`UPDATE meta_cube_status SET status = 'complete', last_completed_at = ${Date.now()} WHERE id = 1`,
     )
   } catch (err) {
-    await db.run(
-      sql`UPDATE meta_cube_status SET status = 'failed' WHERE id = 1`,
-    )
+    await db.run(sql`UPDATE meta_cube_status SET status = 'failed' WHERE id = 1`)
     throw err
   }
 }

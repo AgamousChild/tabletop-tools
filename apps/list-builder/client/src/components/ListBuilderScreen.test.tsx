@@ -36,30 +36,40 @@ vi.mock('../lib/sync', () => ({
 }))
 
 const mockUseLists = vi.fn(() => ({
-  data: [{ id: 'list-1', faction: 'Space Marines', name: 'My Crusade', totalPts: 90, createdAt: 0, updatedAt: 0 }],
+  data: [
+    {
+      id: 'list-1',
+      faction: 'Space Marines',
+      name: 'My Crusade',
+      totalPts: 90,
+      createdAt: 0,
+      updatedAt: 0,
+    },
+  ],
   refetch: vi.fn(),
 }))
 const mockUseList = vi.fn((_id: string | null) => ({
-  data: _id === 'list-1'
-    ? {
-        id: 'list-1',
-        faction: 'Space Marines',
-        name: 'My Crusade',
-        totalPts: 90,
-        createdAt: 0,
-        updatedAt: 0,
-        units: [
-          {
-            id: 'lu1',
-            listId: 'list-1',
-            unitContentId: 'u1',
-            unitName: 'Intercessors',
-            unitPoints: 90,
-            count: 1,
-          },
-        ],
-      }
-    : null,
+  data:
+    _id === 'list-1'
+      ? {
+          id: 'list-1',
+          faction: 'Space Marines',
+          name: 'My Crusade',
+          totalPts: 90,
+          createdAt: 0,
+          updatedAt: 0,
+          units: [
+            {
+              id: 'lu1',
+              listId: 'list-1',
+              unitContentId: 'u1',
+              unitName: 'Intercessors',
+              unitPoints: 90,
+              count: 1,
+            },
+          ],
+        }
+      : null,
   refetch: vi.fn(),
 }))
 const mockCreateList = vi.fn()
@@ -71,7 +81,14 @@ const mockUpdateList = vi.fn()
 vi.mock('@tabletop-tools/game-data-store', () => ({
   useUnitSearch: () => ({
     data: [
-      { id: 'u1', name: 'Intercessors', faction: 'Space Marines', points: 90, weapons: [], abilities: [] },
+      {
+        id: 'u1',
+        name: 'Intercessors',
+        faction: 'Space Marines',
+        points: 90,
+        weapons: [],
+        abilities: [],
+      },
     ],
     error: null,
     isLoading: false,
@@ -87,7 +104,14 @@ vi.mock('@tabletop-tools/game-data-store', () => ({
   }),
   usePrimaryUnitSearch: () => ({
     data: [
-      { id: 'u1', name: 'Intercessors', faction: 'Space Marines', points: 90, weapons: [], abilities: [] },
+      {
+        id: 'u1',
+        name: 'Intercessors',
+        faction: 'Space Marines',
+        points: 90,
+        weapons: [],
+        abilities: [],
+      },
     ],
     isLoading: false,
   }),
@@ -145,14 +169,43 @@ vi.mock('@tabletop-tools/game-data-store', () => ({
     isLoading: false,
   }),
   useDetachmentAbilities: () => ({
-    data: [{ id: 'da1', detachmentId: 'det1', factionId: 'f1', name: 'Test Ability', legend: '', description: 'All INFANTRY gain +1 to hit' }],
+    data: [
+      {
+        id: 'da1',
+        detachmentId: 'det1',
+        factionId: 'f1',
+        name: 'Test Ability',
+        legend: '',
+        description: 'All INFANTRY gain +1 to hit',
+      },
+    ],
     error: null,
     isLoading: false,
   }),
   useAllDatasheets: () => ({
     data: [
-      { id: 'u1', name: 'Intercessors', factionId: 'SM', role: 'Battleline', legend: '', transport: '', loadout: '', damagedW: '', damagedDescription: '' },
-      { id: 'u2', name: 'Captain', factionId: 'SM', role: 'Character', legend: '', transport: '', loadout: '', damagedW: '', damagedDescription: '' },
+      {
+        id: 'u1',
+        name: 'Intercessors',
+        factionId: 'SM',
+        role: 'Battleline',
+        legend: '',
+        transport: '',
+        loadout: '',
+        damagedW: '',
+        damagedDescription: '',
+      },
+      {
+        id: 'u2',
+        name: 'Captain',
+        factionId: 'SM',
+        role: 'Character',
+        legend: '',
+        transport: '',
+        loadout: '',
+        damagedW: '',
+        damagedDescription: '',
+      },
     ],
     error: null,
     isLoading: false,
@@ -161,11 +214,26 @@ vi.mock('@tabletop-tools/game-data-store', () => ({
   useGameDataAvailable: () => true,
   useLists: (...args: unknown[]) => mockUseLists(...args),
   useList: (...args: unknown[]) => mockUseList(...(args as [string | null])),
-  createList: (...args: unknown[]) => { mockCreateList(...args); return Promise.resolve() },
-  addListUnit: (...args: unknown[]) => { mockAddListUnit(...args); return Promise.resolve() },
-  removeListUnit: (...args: unknown[]) => { mockRemoveListUnit(...args); return Promise.resolve() },
-  updateList: (...args: unknown[]) => { mockUpdateList(...args); return Promise.resolve() },
-  deleteList: (...args: unknown[]) => { mockDeleteList(...args); return Promise.resolve() },
+  createList: (...args: unknown[]) => {
+    mockCreateList(...args)
+    return Promise.resolve()
+  },
+  addListUnit: (...args: unknown[]) => {
+    mockAddListUnit(...args)
+    return Promise.resolve()
+  },
+  removeListUnit: (...args: unknown[]) => {
+    mockRemoveListUnit(...args)
+    return Promise.resolve()
+  },
+  updateList: (...args: unknown[]) => {
+    mockUpdateList(...args)
+    return Promise.resolve()
+  },
+  deleteList: (...args: unknown[]) => {
+    mockDeleteList(...args)
+    return Promise.resolve()
+  },
 }))
 
 beforeEach(() => {

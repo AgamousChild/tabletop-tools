@@ -29,7 +29,15 @@ export interface TTTPackage {
 
 export interface TTTUnit {
   name: string
-  role: 'Epic Hero' | 'Character' | 'Battleline' | 'Other' | 'Dedicated Transport' | 'Fortification' | 'Allied' | 'unknown'
+  role:
+    | 'Epic Hero'
+    | 'Character'
+    | 'Battleline'
+    | 'Other'
+    | 'Dedicated Transport'
+    | 'Fortification'
+    | 'Allied'
+    | 'unknown'
   models: number
   points: number
   wargear: string[]

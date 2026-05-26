@@ -1,13 +1,40 @@
+import type { WeaponProfile } from '@tabletop-tools/game-content'
 import { fireEvent, render, screen } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
 
 import { WeaponSelector } from './WeaponSelector'
-import type { WeaponProfile } from '@tabletop-tools/game-content'
 
 const weapons: WeaponProfile[] = [
-  { name: 'Bolt Rifle', range: 30, attacks: 2, skill: 3, strength: 4, ap: -1, damage: 1, abilities: [] },
-  { name: 'Bolt Pistol', range: 12, attacks: 1, skill: 3, strength: 4, ap: 0, damage: 1, abilities: [] },
-  { name: 'Close Combat Weapon', range: 'melee', attacks: 3, skill: 3, strength: 4, ap: 0, damage: 1, abilities: [] },
+  {
+    name: 'Bolt Rifle',
+    range: 30,
+    attacks: 2,
+    skill: 3,
+    strength: 4,
+    ap: -1,
+    damage: 1,
+    abilities: [],
+  },
+  {
+    name: 'Bolt Pistol',
+    range: 12,
+    attacks: 1,
+    skill: 3,
+    strength: 4,
+    ap: 0,
+    damage: 1,
+    abilities: [],
+  },
+  {
+    name: 'Close Combat Weapon',
+    range: 'melee',
+    attacks: 3,
+    skill: 3,
+    strength: 4,
+    ap: 0,
+    damage: 1,
+    abilities: [],
+  },
 ]
 
 describe('WeaponSelector', () => {
@@ -117,7 +144,16 @@ describe('WeaponSelector', () => {
 
   it('shows no weapons message when type has none', () => {
     const rangedOnly: WeaponProfile[] = [
-      { name: 'Bolter', range: 24, attacks: 2, skill: 3, strength: 4, ap: 0, damage: 1, abilities: [] },
+      {
+        name: 'Bolter',
+        range: 24,
+        attacks: 2,
+        skill: 3,
+        strength: 4,
+        ap: 0,
+        damage: 1,
+        abilities: [],
+      },
     ]
     render(
       <WeaponSelector

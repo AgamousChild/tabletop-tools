@@ -45,7 +45,9 @@ function extractRestrictionText(description: string): string | null {
  */
 function parseChapterName(text: string): string | null {
   // Pattern 1: "can include **X** **Y** units" with bold markers
-  const boldMatch = text.match(/can include \*\*(\w[\w\s]*?)\*\*(?:\s+\*\*(\w[\w\s]*?)\*\*)?\s+units/i)
+  const boldMatch = text.match(
+    /can include \*\*(\w[\w\s]*?)\*\*(?:\s+\*\*(\w[\w\s]*?)\*\*)?\s+units/i,
+  )
   if (boldMatch) {
     const name = boldMatch[2] ? `${boldMatch[1]} ${boldMatch[2]}` : boldMatch[1]!
     return name.trim()
@@ -66,7 +68,8 @@ function parseChapterName(text: string): string | null {
 function classifyRestriction(text: string): DetachmentRestriction['type'] {
   if (/cannot include.*(?:chapter|drawn from)/i.test(text)) return 'chapter'
   if (/combined points cost/i.test(text)) return 'points_cap'
-  if (/cannot select.*keyword/i.test(text) || /can only.*if both units share/i.test(text)) return 'keyword'
+  if (/cannot select.*keyword/i.test(text) || /can only.*if both units share/i.test(text))
+    return 'keyword'
   return 'other'
 }
 

@@ -1,5 +1,11 @@
-import { describe, it, expect } from 'vitest'
-import { getToughnessTier, getStrengthTier, woundRollNeeded, avgDamagePerAttack } from './combat-tiers'
+import { describe, expect, it } from 'vitest'
+
+import {
+  avgDamagePerAttack,
+  getStrengthTier,
+  getToughnessTier,
+  woundRollNeeded,
+} from './combat-tiers'
 
 describe('woundRollNeeded', () => {
   it('S >= 2×T → 2+', () => {

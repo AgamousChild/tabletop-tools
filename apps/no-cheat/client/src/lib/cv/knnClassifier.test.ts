@@ -1,8 +1,6 @@
 import { describe, expect, it } from 'vitest'
-import {
-  classifyKnn,
-  type TrainingExample,
-} from './knnClassifier'
+
+import { classifyKnn, type TrainingExample } from './knnClassifier'
 
 function makeExample(features: number[], label: number): TrainingExample {
   return { features, label }
@@ -23,10 +21,10 @@ describe('classifyKnn', () => {
   it('returns correct majority vote with k=3 and mixed labels', () => {
     // Query at origin; 3 nearest neighbors labeled 2, 2, 5
     const examples = [
-      makeExample([1, 0, 0], 2),   // distance 1
-      makeExample([2, 0, 0], 2),   // distance 2
-      makeExample([3, 0, 0], 5),   // distance 3
-      makeExample([10, 0, 0], 1),  // distance 10 — too far, not in top 3
+      makeExample([1, 0, 0], 2), // distance 1
+      makeExample([2, 0, 0], 2), // distance 2
+      makeExample([3, 0, 0], 5), // distance 3
+      makeExample([10, 0, 0], 1), // distance 10 — too far, not in top 3
     ]
     const result = classifyKnn([0, 0, 0], examples, 3)
     expect(result).not.toBeNull()
@@ -35,11 +33,7 @@ describe('classifyKnn', () => {
   })
 
   it('returns confidence 1.0 when all k neighbors agree', () => {
-    const examples = [
-      makeExample([1, 0], 3),
-      makeExample([2, 0], 3),
-      makeExample([3, 0], 3),
-    ]
+    const examples = [makeExample([1, 0], 3), makeExample([2, 0], 3), makeExample([3, 0], 3)]
     const result = classifyKnn([0, 0], examples, 3)
     expect(result).not.toBeNull()
     expect(result!.label).toBe(3)
@@ -47,11 +41,7 @@ describe('classifyKnn', () => {
   })
 
   it('returns confidence 2/3 when 2 of 3 agree', () => {
-    const examples = [
-      makeExample([1, 0], 6),
-      makeExample([2, 0], 6),
-      makeExample([3, 0], 1),
-    ]
+    const examples = [makeExample([1, 0], 6), makeExample([2, 0], 6), makeExample([3, 0], 1)]
     const result = classifyKnn([0, 0], examples, 3)
     expect(result).not.toBeNull()
     expect(result!.label).toBe(6)
@@ -59,10 +49,7 @@ describe('classifyKnn', () => {
   })
 
   it('handles case where fewer examples than k (uses all available)', () => {
-    const examples = [
-      makeExample([1, 0], 5),
-      makeExample([2, 0], 5),
-    ]
+    const examples = [makeExample([1, 0], 5), makeExample([2, 0], 5)]
     // k=3 but only 2 examples — should use all 2
     const result = classifyKnn([0, 0], examples, 3)
     expect(result).not.toBeNull()
@@ -74,8 +61,8 @@ describe('classifyKnn', () => {
     // Place query at (3, 4). Example A at origin = distance 5.
     // Example B at (3, 4.1) = distance 0.1. B should be nearest.
     const examples = [
-      makeExample([0, 0], 1),       // distance = 5
-      makeExample([3, 4.1], 2),     // distance = 0.1
+      makeExample([0, 0], 1), // distance = 5
+      makeExample([3, 4.1], 2), // distance = 0.1
     ]
     const result = classifyKnn([3, 4], examples, 1)
     expect(result).not.toBeNull()
@@ -86,10 +73,10 @@ describe('classifyKnn', () => {
     // k=4: two label-1 neighbors and two label-2 neighbors (2-2 tie)
     // The closest neighbor overall is label 1, so label 1 should win
     const examples = [
-      makeExample([1, 0], 1),   // distance 1 — closest
-      makeExample([2, 0], 2),   // distance 2
-      makeExample([3, 0], 2),   // distance 3
-      makeExample([4, 0], 1),   // distance 4
+      makeExample([1, 0], 1), // distance 1 — closest
+      makeExample([2, 0], 2), // distance 2
+      makeExample([3, 0], 2), // distance 3
+      makeExample([4, 0], 1), // distance 4
     ]
     const result = classifyKnn([0, 0], examples, 4)
     expect(result).not.toBeNull()
@@ -101,10 +88,10 @@ describe('classifyKnn', () => {
     // k=4: two label-1 neighbors and two label-2 neighbors (2-2 tie)
     // The closest neighbor overall is label 2, so label 2 should win
     const examples = [
-      makeExample([1, 0], 2),   // distance 1 — closest, label 2
-      makeExample([2, 0], 1),   // distance 2
-      makeExample([3, 0], 1),   // distance 3
-      makeExample([4, 0], 2),   // distance 4
+      makeExample([1, 0], 2), // distance 1 — closest, label 2
+      makeExample([2, 0], 1), // distance 2
+      makeExample([3, 0], 1), // distance 3
+      makeExample([4, 0], 2), // distance 4
     ]
     const result = classifyKnn([0, 0], examples, 4)
     expect(result).not.toBeNull()
@@ -134,8 +121,8 @@ describe('classifyKnn', () => {
     const queryFeatures = [3, 0, 3, 2, 0.05, 0.85, 10, 0.45, 0.12, 0.55, 1.0, 0.64]
     const examples = [
       makeExample([3, 0, 3, 2, 0.05, 0.85, 10, 0.45, 0.12, 0.55, 1.0, 0.64], 3), // exact match
-      makeExample([5, 1, 5, 4, 0.08, 0.80, 15, 0.40, 0.15, 0.60, 0.98, 0.62], 5),
-      makeExample([1, 0, 1, 1, 0.02, 0.90, 5, 0.50, 0.10, 0.50, 1.02, 0.66], 1),
+      makeExample([5, 1, 5, 4, 0.08, 0.8, 15, 0.4, 0.15, 0.6, 0.98, 0.62], 5),
+      makeExample([1, 0, 1, 1, 0.02, 0.9, 5, 0.5, 0.1, 0.5, 1.02, 0.66], 1),
     ]
     const result = classifyKnn(queryFeatures, examples, 1)
     expect(result).not.toBeNull()

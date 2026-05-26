@@ -1,6 +1,6 @@
-import type { Point, GameRulesConfig } from '../types'
-import type { DeploymentZone } from './deployment-zones'
 import { distance } from '../geometry/point'
+import type { GameRulesConfig, Point } from '../types'
+import type { DeploymentZone } from './deployment-zones'
 
 // ── Shared helpers ────────────────────────────────────────────────────────────
 
@@ -95,10 +95,6 @@ export function canScoutMoveTo(
  *   1. More than `rules.deepStrikeExclusion` (9") from all enemy models.
  *   2. No deployment zone restriction.
  */
-export function canDeepStrike(
-  point: Point,
-  enemyModels: Point[],
-  rules: GameRulesConfig,
-): boolean {
+export function canDeepStrike(point: Point, enemyModels: Point[], rules: GameRulesConfig): boolean {
   return clearOfEnemyModels(point, enemyModels, rules.deepStrikeExclusion)
 }

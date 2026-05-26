@@ -1,23 +1,53 @@
-import { describe, it, expect, beforeEach } from 'vitest'
-import { renderHook, waitFor, act } from '@testing-library/react'
 import type { UnitProfile } from '@tabletop-tools/game-content'
+import { act, renderHook, waitFor } from '@testing-library/react'
+import { beforeEach, describe, expect, it } from 'vitest'
+
 import {
-  saveUnits, clearAll, setImportMeta, createList, addListUnit,
-  saveDetachments, saveDetachmentAbilities, saveStratagems,
-  saveEnhancements, saveLeaderAttachments, saveUnitCompositions,
-  saveUnitCosts, saveWargearOptions, saveUnitKeywords,
-  saveUnitAbilities, saveMissions, setRulesImportMeta,
-} from './store'
+  useDetachment,
+  useDetachmentAbilities,
+  useDetachments,
+  useEnhancements,
+  useFactions,
+  useGameDataAvailable,
+  useLeaderAttachments,
+  useLeadersForUnit,
+  useList,
+  useLists,
+  useMissions,
+  useRulesImportMeta,
+  useStratagems,
+  useUnit,
+  useUnitAbilities,
+  useUnitCompositions,
+  useUnitCosts,
+  useUnitKeywords,
+  useUnitSearch,
+  useWargearOptions,
+} from './hooks'
 import type { LocalList } from './store'
 import {
-  useUnit, useUnitSearch, useFactions, useGameDataAvailable, useLists, useList,
-  useDetachments, useDetachment, useDetachmentAbilities,
-  useStratagems, useEnhancements, useLeaderAttachments, useLeadersForUnit,
-  useUnitCompositions, useUnitCosts, useWargearOptions,
-  useUnitKeywords, useUnitAbilities, useMissions, useRulesImportMeta,
-} from './hooks'
+  addListUnit,
+  clearAll,
+  createList,
+  saveDetachmentAbilities,
+  saveDetachments,
+  saveEnhancements,
+  saveLeaderAttachments,
+  saveMissions,
+  saveStratagems,
+  saveUnitAbilities,
+  saveUnitCompositions,
+  saveUnitCosts,
+  saveUnitKeywords,
+  saveUnits,
+  saveWargearOptions,
+  setImportMeta,
+  setRulesImportMeta,
+} from './store'
 
-function makeUnit(overrides: Partial<UnitProfile> & { id: string; name: string; faction: string }): UnitProfile {
+function makeUnit(
+  overrides: Partial<UnitProfile> & { id: string; name: string; faction: string },
+): UnitProfile {
   return {
     move: 6,
     toughness: 4,
@@ -205,9 +235,7 @@ describe('useDetachments', () => {
 
 describe('useDetachment', () => {
   it('returns a single detachment by id', async () => {
-    await saveDetachments([
-      { id: 'd1', factionId: 'SM', name: 'Gladius', legend: '', type: '' },
-    ])
+    await saveDetachments([{ id: 'd1', factionId: 'SM', name: 'Gladius', legend: '', type: '' }])
     const { result } = renderHook(() => useDetachment('d1'))
     await waitFor(() => expect(result.current.isLoading).toBe(false))
     expect(result.current.data).not.toBeNull()
@@ -224,8 +252,22 @@ describe('useDetachment', () => {
 describe('useDetachmentAbilities', () => {
   it('returns abilities for a detachment', async () => {
     await saveDetachmentAbilities([
-      { id: 'da1', detachmentId: 'd1', factionId: 'SM', name: 'Combat Doctrines', legend: '', description: 'Re-roll hits' },
-      { id: 'da2', detachmentId: 'd2', factionId: 'SM', name: 'Other', legend: '', description: 'Something' },
+      {
+        id: 'da1',
+        detachmentId: 'd1',
+        factionId: 'SM',
+        name: 'Combat Doctrines',
+        legend: '',
+        description: 'Re-roll hits',
+      },
+      {
+        id: 'da2',
+        detachmentId: 'd2',
+        factionId: 'SM',
+        name: 'Other',
+        legend: '',
+        description: 'Something',
+      },
     ])
     const { result } = renderHook(() => useDetachmentAbilities('d1'))
     await waitFor(() => expect(result.current.isLoading).toBe(false))
@@ -239,9 +281,42 @@ describe('useDetachmentAbilities', () => {
 describe('useStratagems', () => {
   beforeEach(async () => {
     await saveStratagems([
-      { id: 's1', factionId: 'SM', detachmentId: 'd1', name: 'Fire Discipline', type: 'Battle Tactic', cpCost: '1', turn: 'Your turn', phase: 'Shooting', legend: '', description: '' },
-      { id: 's2', factionId: 'SM', detachmentId: 'd2', name: 'Firestorm', type: 'Battle Tactic', cpCost: '2', turn: 'Your turn', phase: 'Shooting', legend: '', description: '' },
-      { id: 's3', factionId: 'ORK', detachmentId: 'd3', name: 'Waaagh!', type: 'Epic Deed', cpCost: '1', turn: 'Your turn', phase: 'Command', legend: '', description: '' },
+      {
+        id: 's1',
+        factionId: 'SM',
+        detachmentId: 'd1',
+        name: 'Fire Discipline',
+        type: 'Battle Tactic',
+        cpCost: '1',
+        turn: 'Your turn',
+        phase: 'Shooting',
+        legend: '',
+        description: '',
+      },
+      {
+        id: 's2',
+        factionId: 'SM',
+        detachmentId: 'd2',
+        name: 'Firestorm',
+        type: 'Battle Tactic',
+        cpCost: '2',
+        turn: 'Your turn',
+        phase: 'Shooting',
+        legend: '',
+        description: '',
+      },
+      {
+        id: 's3',
+        factionId: 'ORK',
+        detachmentId: 'd3',
+        name: 'Waaagh!',
+        type: 'Epic Deed',
+        cpCost: '1',
+        turn: 'Your turn',
+        phase: 'Command',
+        legend: '',
+        description: '',
+      },
     ])
   })
 
@@ -264,8 +339,24 @@ describe('useStratagems', () => {
 describe('useEnhancements', () => {
   it('returns enhancements for a detachment', async () => {
     await saveEnhancements([
-      { id: 'e1', factionId: 'SM', detachmentId: 'd1', name: 'Artificer Armour', legend: '', description: '', cost: '25' },
-      { id: 'e2', factionId: 'SM', detachmentId: 'd2', name: 'Other', legend: '', description: '', cost: '10' },
+      {
+        id: 'e1',
+        factionId: 'SM',
+        detachmentId: 'd1',
+        name: 'Artificer Armour',
+        legend: '',
+        description: '',
+        cost: '25',
+      },
+      {
+        id: 'e2',
+        factionId: 'SM',
+        detachmentId: 'd2',
+        name: 'Other',
+        legend: '',
+        description: '',
+        cost: '10',
+      },
     ])
     const { result } = renderHook(() => useEnhancements('d1'))
     await waitFor(() => expect(result.current.isLoading).toBe(false))
@@ -353,8 +444,20 @@ describe('useUnitKeywords', () => {
 describe('useUnitAbilities', () => {
   it('returns abilities for a datasheet', async () => {
     await saveUnitAbilities([
-      { id: 'ab1', datasheetId: 'ds1', name: 'Oath of Moment', description: 'Re-roll hits', type: 'Faction' },
-      { id: 'ab2', datasheetId: 'ds1', name: 'Bolter Discipline', description: 'Rapid fire', type: 'Core' },
+      {
+        id: 'ab1',
+        datasheetId: 'ds1',
+        name: 'Oath of Moment',
+        description: 'Re-roll hits',
+        type: 'Faction',
+      },
+      {
+        id: 'ab2',
+        datasheetId: 'ds1',
+        name: 'Bolter Discipline',
+        description: 'Rapid fire',
+        type: 'Core',
+      },
     ])
     const { result } = renderHook(() => useUnitAbilities('ds1'))
     await waitFor(() => expect(result.current.isLoading).toBe(false))
@@ -394,7 +497,22 @@ describe('useRulesImportMeta', () => {
   it('returns rules import meta after save', async () => {
     await setRulesImportMeta({
       lastImport: Date.now(),
-      counts: { detachments: 10, stratagems: 20, enhancements: 5, leaderAttachments: 15, unitCompositions: 30, unitCosts: 25, wargearOptions: 40, unitKeywords: 100, unitAbilities: 50, missions: 0, abilities: 0, datasheetStratagems: 0, datasheetEnhancements: 0, datasheetDetachmentAbilities: 0 },
+      counts: {
+        detachments: 10,
+        stratagems: 20,
+        enhancements: 5,
+        leaderAttachments: 15,
+        unitCompositions: 30,
+        unitCosts: 25,
+        wargearOptions: 40,
+        unitKeywords: 100,
+        unitAbilities: 50,
+        missions: 0,
+        abilities: 0,
+        datasheetStratagems: 0,
+        datasheetEnhancements: 0,
+        datasheetDetachmentAbilities: 0,
+      },
     })
     const { result } = renderHook(() => useRulesImportMeta())
     await waitFor(() => expect(result.current.isLoading).toBe(false))

@@ -1,6 +1,7 @@
-import { describe, it, expect, vi } from 'vitest'
-import { classifyNode, aggregateToRecords, fetchAllChildren } from './records'
+import { describe, expect, it, vi } from 'vitest'
+
 import type { Node } from './model'
+import { aggregateToRecords, classifyNode, fetchAllChildren } from './records'
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -269,7 +270,10 @@ describe('aggregateToRecords', () => {
     // ds2 weapon seen first, then ds1, then strat
     const w2 = makeNode({ id: 'w:2', category: 'weapon', datasheetId: 'ds:2' })
     const w1 = makeNode({ id: 'w:1', category: 'weapon', datasheetId: 'ds:1' })
-    const allNodes = new Map([['ds:1', ds1], ['ds:2', ds2]])
+    const allNodes = new Map([
+      ['ds:1', ds1],
+      ['ds:2', ds2],
+    ])
     const records = aggregateToRecords([w2, w1, strat], allNodes)
     expect(records[0].primaryNode.id).toBe('ds:2')
     expect(records[1].primaryNode.id).toBe('ds:1')
@@ -287,9 +291,7 @@ describe('aggregateToRecords', () => {
       category: 'faction-ability',
       title: 'GAINING MIRACLE DICE (Acts of Faith)',
     })
-    const allNodes = new Map([
-      ['faction:adepta-sororitas:acts-of-faith', parent],
-    ])
+    const allNodes = new Map([['faction:adepta-sororitas:acts-of-faith', parent]])
     const records = aggregateToRecords([subRule], allNodes)
     expect(records).toHaveLength(1)
     expect(records[0].primaryNode.id).toBe('faction:adepta-sororitas:acts-of-faith')
@@ -303,8 +305,8 @@ describe('aggregateToRecords', () => {
     const s2 = makeNode({ id: 'strat:2', category: 'stratagem', title: 'Strat B' })
     const records = aggregateToRecords([s1, s2], new Map())
     expect(records).toHaveLength(2)
-    expect(records.map(r => r.primaryNode.id)).toContain('strat:1')
-    expect(records.map(r => r.primaryNode.id)).toContain('strat:2')
+    expect(records.map((r) => r.primaryNode.id)).toContain('strat:1')
+    expect(records.map((r) => r.primaryNode.id)).toContain('strat:2')
   })
 
   it('skips containers where primary node not found', () => {
@@ -335,8 +337,8 @@ describe('aggregateToRecords', () => {
     const w2 = makeNode({ id: 'w:2', category: 'weapon', datasheetId: 'ds:1', title: 'Plasma' })
     const records = aggregateToRecords([ds, w1, w2], new Map())
     expect(records[0].childNodes).toHaveLength(2)
-    expect(records[0].childNodes.map(n => n.id)).toContain('w:1')
-    expect(records[0].childNodes.map(n => n.id)).toContain('w:2')
+    expect(records[0].childNodes.map((n) => n.id)).toContain('w:1')
+    expect(records[0].childNodes.map((n) => n.id)).toContain('w:2')
   })
 
   it('unit-ability children are included in matchedChildIds', () => {
@@ -360,9 +362,9 @@ describe('fetchAllChildren', () => {
       'nodes/unit.json': [w1, w2, w3],
     })
     const result = await fetchAllChildren(bucket, [ds1Id])
-    expect(result.map(n => n.id)).toContain('w:1')
-    expect(result.map(n => n.id)).toContain('w:2')
-    expect(result.map(n => n.id)).not.toContain('w:3')
+    expect(result.map((n) => n.id)).toContain('w:1')
+    expect(result.map((n) => n.id)).toContain('w:2')
+    expect(result.map((n) => n.id)).not.toContain('w:3')
   })
 
   it('returns empty array when manifest is missing', async () => {
@@ -388,8 +390,8 @@ describe('fetchAllChildren', () => {
       'nodes/unit.json': [w1, w2],
     })
     const result = await fetchAllChildren(bucket, ['ds:1', 'ds:2'])
-    expect(result.map(n => n.id)).toContain('w:1')
-    expect(result.map(n => n.id)).toContain('w:2')
+    expect(result.map((n) => n.id)).toContain('w:1')
+    expect(result.map((n) => n.id)).toContain('w:2')
   })
 
   it('scans all node files, not just the first', async () => {
@@ -401,8 +403,8 @@ describe('fetchAllChildren', () => {
       'nodes/file2.json': [w2],
     })
     const result = await fetchAllChildren(bucket, ['ds:1'])
-    expect(result.map(n => n.id)).toContain('w:1')
-    expect(result.map(n => n.id)).toContain('w:2')
+    expect(result.map((n) => n.id)).toContain('w:1')
+    expect(result.map((n) => n.id)).toContain('w:2')
   })
 
   it('skips non-node files in manifest', async () => {
@@ -411,7 +413,7 @@ describe('fetchAllChildren', () => {
       'manifest.json': {
         files: {
           'nodes/unit.json': 'v1',
-          'refs/reverse-index.json': 'v1',  // not a node file
+          'refs/reverse-index.json': 'v1', // not a node file
         },
       },
       'nodes/unit.json': [w1],

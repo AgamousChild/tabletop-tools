@@ -13,7 +13,7 @@ export function resolveAttacks(attacks: number | string): number {
   const count = m[1] ? parseInt(m[1]) : 1
   const sides = parseInt(m[2]!)
   const mod = m[3] ? parseInt(m[3]) : 0
-  return count * (1 + sides) / 2 + mod
+  return (count * (1 + sides)) / 2 + mod
 }
 
 /**
@@ -54,14 +54,14 @@ export function woundTarget(strength: number, toughness: number): number {
   if (strength > toughness) return 3
   if (strength === toughness) return 4
   if (toughness < 2 * strength) return 5
-  return 6  // toughness >= 2 × strength
+  return 6 // toughness >= 2 × strength
 }
 
 // ── Hit resolution ────────────────────────────────────────────────────────────
 
 export interface HitResult {
-  normalHits: number   // hits that proceed to the wound roll
-  lethalHits: number   // auto-wounds from LETHAL_HITS (bypass wound roll)
+  normalHits: number // hits that proceed to the wound roll
+  lethalHits: number // auto-wounds from LETHAL_HITS (bypass wound roll)
 }
 
 /**
@@ -69,11 +69,7 @@ export interface HitResult {
  *
  * Handles: TORRENT, LETHAL_HITS, SUSTAINED_HITS, REROLL_HITS, REROLL_HITS_OF_1, HIT_MOD.
  */
-export function resolveHits(
-  attacks: number,
-  skill: number,
-  abilities: WeaponAbility[],
-): HitResult {
+export function resolveHits(attacks: number, skill: number, abilities: WeaponAbility[]): HitResult {
   // TORRENT: all attacks auto-hit (no dice roll)
   if (abilities.some((a) => a.type === 'TORRENT')) {
     return { normalHits: attacks, lethalHits: 0 }
@@ -88,7 +84,7 @@ export function resolveHits(
   // Base hit rates (before rerolls)
   // Unmodified 6s always hit and are checked for LETHAL/SUSTAINED regardless of effective skill
   const baseTotalHitRate = (7 - effectiveSkill) / 6
-  const baseSixRate = 1 / 6  // rate of rolling an unmodified 6
+  const baseSixRate = 1 / 6 // rate of rolling an unmodified 6
 
   // Apply rerolls to get the adjusted rates
   let totalHitRate: number
@@ -140,8 +136,8 @@ export function resolveHits(
 // ── Wound resolution ──────────────────────────────────────────────────────────
 
 export interface WoundResult {
-  wounds: number    // wounds that proceed to the save roll
-  mortals: number   // mortal wounds from DEVASTATING_WOUNDS (bypass saves)
+  wounds: number // wounds that proceed to the save roll
+  mortals: number // mortal wounds from DEVASTATING_WOUNDS (bypass saves)
 }
 
 /**
@@ -172,12 +168,10 @@ export function resolveWounds(
   // ANTI: if defender has matching keyword, use lower of normal target or anti value
   if (defenderKeywords && defenderKeywords.length > 0) {
     const antiAbilities = abilities.filter(
-      (a): a is { type: 'ANTI'; keyword: string; value: number } => a.type === 'ANTI'
+      (a): a is { type: 'ANTI'; keyword: string; value: number } => a.type === 'ANTI',
     )
     for (const anti of antiAbilities) {
-      const matches = defenderKeywords.some(
-        (k) => k.toLowerCase() === anti.keyword.toLowerCase()
-      )
+      const matches = defenderKeywords.some((k) => k.toLowerCase() === anti.keyword.toLowerCase())
       if (matches) {
         effectiveTarget = Math.min(effectiveTarget, anti.value)
       }
@@ -228,7 +222,7 @@ export function effectiveSave(save: number, ap: number, invulnSave?: number): nu
   // AP penalty: ap is negative, so subtracting it raises the target (harder to save)
   const armorSave = save - ap
   const best = invulnSave !== undefined ? Math.min(armorSave, invulnSave) : armorSave
-  return Math.min(7, best)  // 7 means impossible to save (0% rate)
+  return Math.min(7, best) // 7 means impossible to save (0% rate)
 }
 
 /**
@@ -342,7 +336,7 @@ function mcRollWounds(
 
   if (defenderKeywords && defenderKeywords.length > 0) {
     const antiAbilities = abilities.filter(
-      (a): a is { type: 'ANTI'; keyword: string; value: number } => a.type === 'ANTI'
+      (a): a is { type: 'ANTI'; keyword: string; value: number } => a.type === 'ANTI',
     )
     for (const anti of antiAbilities) {
       if (defenderKeywords.some((k) => k.toLowerCase() === anti.keyword.toLowerCase())) {
@@ -351,7 +345,9 @@ function mcRollWounds(
     }
   }
 
-  const hasRerollWounds = abilities.some((a) => a.type === 'REROLL_WOUNDS' || a.type === 'TWIN_LINKED')
+  const hasRerollWounds = abilities.some(
+    (a) => a.type === 'REROLL_WOUNDS' || a.type === 'TWIN_LINKED',
+  )
   const hasDevWounds = abilities.some((a) => a.type === 'DEVASTATING_WOUNDS')
 
   let wounds = lethalHits
@@ -541,8 +537,13 @@ export function runMonteCarlo(
 
       const { normalHits, lethalHits } = mcRollHits(attackCount, weapon.skill, weapon.abilities)
       const { wounds, mortals } = mcRollWounds(
-        normalHits, lethalHits, effectiveStrength, mcEffectiveToughness,
-        weapon.abilities, defenderKeywords, weapon.damage,
+        normalHits,
+        lethalHits,
+        effectiveStrength,
+        mcEffectiveToughness,
+        weapon.abilities,
+        defenderKeywords,
+        weapon.damage,
       )
 
       const meltaBonus = weapon.abilities
@@ -558,8 +559,14 @@ export function runMonteCarlo(
         const useFnp = hasPrecision ? characterProfile.fnp : defenderFnp
 
         const dmg = mcRollRawDamage(
-          wounds, mortals, weapon.ap, useSave,
-          weapon.damage, meltaBonus, useInvuln, useFnp,
+          wounds,
+          mortals,
+          weapon.ap,
+          useSave,
+          weapon.damage,
+          meltaBonus,
+          useInvuln,
+          useFnp,
         )
 
         if (hasPrecision) {
@@ -581,10 +588,16 @@ export function runMonteCarlo(
         }
       } else {
         totalDamage += mcRollSaves(
-          wounds, mortals, weapon.ap, defenderSave,
-          weapon.damage, meltaBonus,
-          defenderWoundsPerModel, defenderModelCount,
-          defenderInvulnSave, defenderFnp,
+          wounds,
+          mortals,
+          weapon.ap,
+          defenderSave,
+          weapon.damage,
+          meltaBonus,
+          defenderWoundsPerModel,
+          defenderModelCount,
+          defenderInvulnSave,
+          defenderFnp,
         )
       }
     }
@@ -718,10 +731,7 @@ export function simulateWeapon(
   const maxDamagePerAttack = resolveMax(weapon.damage) + meltaBonus
   const bestUnsaved = attackCount * throughRate
   const bestDamage = bestUnsaved * maxDamagePerAttack
-  const bestWounds = Math.min(
-    bestDamage,
-    defenderModelCount * defenderWoundsPerModel,
-  )
+  const bestWounds = Math.min(bestDamage, defenderModelCount * defenderWoundsPerModel)
 
   // Worst case: 1 attack gets through saves at minimum damage
   const minDamagePerAttack = resolveMin(weapon.damage) + meltaBonus

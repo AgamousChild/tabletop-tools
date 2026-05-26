@@ -1,18 +1,18 @@
+import type { WeaponAbility } from '@tabletop-tools/game-content'
 import { describe, expect, it } from 'vitest'
 
 import {
   effectiveSave,
   resolveAttacks,
-  resolveMin,
-  resolveMax,
   resolveHits,
+  resolveMax,
+  resolveMin,
   resolveSaves,
   resolveWounds,
-  simulateWeapon,
   runMonteCarlo,
+  simulateWeapon,
   woundTarget,
 } from './pipeline'
-import type { WeaponAbility } from '@tabletop-tools/game-content'
 
 const noAbilities: WeaponAbility[] = []
 
@@ -128,8 +128,8 @@ describe('resolveHits', () => {
     //   6s = 1/6 per attack → lethalHits = 1
     //   non-6 hits on 3,4,5 = 3/6 → normalHits = 3
     const r = resolveHits(6, 3, [{ type: 'LETHAL_HITS' }])
-    expect(r.lethalHits).toBeCloseTo(1)   // 6 × 1/6
-    expect(r.normalHits).toBeCloseTo(3)   // 6 × 3/6
+    expect(r.lethalHits).toBeCloseTo(1) // 6 × 1/6
+    expect(r.normalHits).toBeCloseTo(3) // 6 × 3/6
   })
 
   it('SUSTAINED_HITS 1: 6s grant +1 extra hit', () => {
@@ -222,21 +222,42 @@ describe('resolveWounds', () => {
   it('ANTI with matching keyword uses lower wound target', () => {
     // S4 vs T8 normally wounds on 6+ (1/6). Anti-Monster 4+ changes to 4+ (3/6)
     const base = resolveWounds(6, 0, 4, 8, noAbilities)
-    const withAnti = resolveWounds(6, 0, 4, 8, [{ type: 'ANTI', keyword: 'Monster', value: 4 }], ['Monster'])
+    const withAnti = resolveWounds(
+      6,
+      0,
+      4,
+      8,
+      [{ type: 'ANTI', keyword: 'Monster', value: 4 }],
+      ['Monster'],
+    )
     expect(base.wounds).toBeCloseTo(1) // 6+ = 1/6 of 6 hits
     expect(withAnti.wounds).toBeCloseTo(3) // 4+ = 3/6 of 6 hits
   })
 
   it('ANTI without matching keyword has no effect', () => {
     const base = resolveWounds(6, 0, 4, 8, noAbilities, ['Vehicle'])
-    const withAnti = resolveWounds(6, 0, 4, 8, [{ type: 'ANTI', keyword: 'Monster', value: 4 }], ['Vehicle'])
+    const withAnti = resolveWounds(
+      6,
+      0,
+      4,
+      8,
+      [{ type: 'ANTI', keyword: 'Monster', value: 4 }],
+      ['Vehicle'],
+    )
     expect(withAnti.wounds).toBeCloseTo(base.wounds)
   })
 
   it('ANTI does not increase wound target beyond normal', () => {
     // S8 vs T4 normally wounds on 2+. Anti-Monster 4+ should not change to 4+
     const base = resolveWounds(6, 0, 8, 4, noAbilities, ['Monster'])
-    const withAnti = resolveWounds(6, 0, 8, 4, [{ type: 'ANTI', keyword: 'Monster', value: 4 }], ['Monster'])
+    const withAnti = resolveWounds(
+      6,
+      0,
+      8,
+      4,
+      [{ type: 'ANTI', keyword: 'Monster', value: 4 }],
+      ['Monster'],
+    )
     expect(withAnti.wounds).toBeCloseTo(base.wounds)
   })
 })
@@ -288,7 +309,7 @@ describe('resolveSaves', () => {
   it('FNP 5+ reduces damage by 2/6', () => {
     // 6 unsaved wounds (no mortals), FNP 5+
     // FNP rate = 2/6 → effective damage = 6 × (1 - 2/6) = 6 × 4/6 = 4
-    const r = resolveSaves(6, 0, 0, 7, undefined, 5)   // save=7 = no save at all
+    const r = resolveSaves(6, 0, 0, 7, undefined, 5) // save=7 = no save at all
     expect(r).toBeCloseTo(4)
   })
 })
@@ -303,8 +324,20 @@ describe('simulateWeapon', () => {
     // Unsaved = 0.667 × (1 - 4/6) ≈ 0.667 × 2/6 ≈ 0.222
     // Damage = 0.222 × 1 ≈ 0.222
     const r = simulateWeapon(
-      { name: 'Bolter', range: 24, attacks: 2, skill: 3, strength: 4, ap: 0, damage: 1, abilities: [] },
-      4, 3, 2, 5,
+      {
+        name: 'Bolter',
+        range: 24,
+        attacks: 2,
+        skill: 3,
+        strength: 4,
+        ap: 0,
+        damage: 1,
+        abilities: [],
+      },
+      4,
+      3,
+      2,
+      5,
     )
     expect(r.expectedWounds).toBeCloseTo(0.22, 1)
   })
@@ -316,8 +349,20 @@ describe('simulateWeapon', () => {
     // Unsaved = 0.0833 × 5/6 ≈ 0.0694
     // Damage D6 = 3.5 → 0.0694 × 3.5 ≈ 0.243
     const r = simulateWeapon(
-      { name: 'Melta', range: 12, attacks: 1, skill: 4, strength: 4, ap: -4, damage: 'D6', abilities: [] },
-      8, 2, 12, 1,
+      {
+        name: 'Melta',
+        range: 12,
+        attacks: 1,
+        skill: 4,
+        strength: 4,
+        ap: -4,
+        damage: 'D6',
+        abilities: [],
+      },
+      8,
+      2,
+      12,
+      1,
     )
     expect(r.expectedWounds).toBeCloseTo(0.24, 1)
   })
@@ -326,21 +371,57 @@ describe('simulateWeapon', () => {
     // 1 attack with BLAST vs 6+ models → 3 effective attacks
     // Then regular math
     const r = simulateWeapon(
-      { name: 'Frag', range: 24, attacks: 1, skill: 3, strength: 4, ap: 0, damage: 1, abilities: [{ type: 'BLAST' }] },
-      4, 4, 1, 10,  // 10 defender models
+      {
+        name: 'Frag',
+        range: 24,
+        attacks: 1,
+        skill: 3,
+        strength: 4,
+        ap: 0,
+        damage: 1,
+        abilities: [{ type: 'BLAST' }],
+      },
+      4,
+      4,
+      1,
+      10, // 10 defender models
     )
     // With BLAST: 3 effective attacks instead of 1
     const rNoBlast = simulateWeapon(
-      { name: 'Frag', range: 24, attacks: 1, skill: 3, strength: 4, ap: 0, damage: 1, abilities: [] },
-      4, 4, 1, 5,  // < 6 models, no BLAST bonus
+      {
+        name: 'Frag',
+        range: 24,
+        attacks: 1,
+        skill: 3,
+        strength: 4,
+        ap: 0,
+        damage: 1,
+        abilities: [],
+      },
+      4,
+      4,
+      1,
+      5, // < 6 models, no BLAST bonus
     )
     expect(r.expectedWounds).toBeGreaterThan(rNoBlast.expectedWounds)
   })
 
   it('worstCase accounts for save probability', () => {
     const r = simulateWeapon(
-      { name: 'Bolter', range: 24, attacks: 2, skill: 3, strength: 4, ap: 0, damage: 1, abilities: [] },
-      4, 3, 2, 5,
+      {
+        name: 'Bolter',
+        range: 24,
+        attacks: 2,
+        skill: 3,
+        strength: 4,
+        ap: 0,
+        damage: 1,
+        abilities: [],
+      },
+      4,
+      3,
+      2,
+      5,
     )
     // With AP0 vs Sv3+, save rate = 4/6, fail rate = 2/6 = 0.333
     // Worst case: 1 damage × throughRate ≈ 0.33
@@ -350,8 +431,20 @@ describe('simulateWeapon', () => {
 
   it('worstCase uses minimum dice roll for variable damage', () => {
     const r = simulateWeapon(
-      { name: 'Melta', range: 12, attacks: 1, skill: 4, strength: 9, ap: -4, damage: 'D6', abilities: [] },
-      4, 3, 2, 5,
+      {
+        name: 'Melta',
+        range: 12,
+        attacks: 1,
+        skill: 4,
+        strength: 9,
+        ap: -4,
+        damage: 'D6',
+        abilities: [],
+      },
+      4,
+      3,
+      2,
+      5,
     )
     // D6 min = 1, AP-4 vs Sv3+ = Sv7+ (impossible), fail rate = 1.0
     // Worst: 1 × 1.0 = 1
@@ -361,8 +454,20 @@ describe('simulateWeapon', () => {
   it('bestCase accounts for save probability', () => {
     // 2 attacks, D6 damage each, vs T4 Sv3+ 2W 5 models, AP-4
     const r = simulateWeapon(
-      { name: 'Melta', range: 12, attacks: 2, skill: 4, strength: 9, ap: -4, damage: 'D6', abilities: [] },
-      4, 3, 2, 5,
+      {
+        name: 'Melta',
+        range: 12,
+        attacks: 2,
+        skill: 4,
+        strength: 9,
+        ap: -4,
+        damage: 'D6',
+        abilities: [],
+      },
+      4,
+      3,
+      2,
+      5,
     )
     // AP-4 vs Sv3+ = Sv7+ (impossible to save), throughRate = 1.0
     // Best: 2 × 1.0 × 6 = 12, capped at 10
@@ -373,8 +478,20 @@ describe('simulateWeapon', () => {
   it('bestCase with good saves reduces damage', () => {
     // AP0 vs Sv2+, throughRate = 1/6
     const r = simulateWeapon(
-      { name: 'Bolter', range: 24, attacks: 10, skill: 3, strength: 4, ap: 0, damage: 1, abilities: [] },
-      4, 2, 1, 20,
+      {
+        name: 'Bolter',
+        range: 24,
+        attacks: 10,
+        skill: 3,
+        strength: 4,
+        ap: 0,
+        damage: 1,
+        abilities: [],
+      },
+      4,
+      2,
+      1,
+      20,
     )
     // Best: 10 attacks × (1/6 fail save) × 1 damage = ~1.67
     expect(r.bestCase.wounds).toBeCloseTo(1.67, 0)
@@ -384,12 +501,36 @@ describe('simulateWeapon', () => {
     // Without mod: S4 vs T4 = 4+ to wound (3/6)
     // With +1 strength: S5 vs T4 = 3+ to wound (4/6) — more damage
     const base = simulateWeapon(
-      { name: 'Bolter', range: 24, attacks: 10, skill: 3, strength: 4, ap: 0, damage: 1, abilities: [] },
-      4, 3, 2, 10,
+      {
+        name: 'Bolter',
+        range: 24,
+        attacks: 10,
+        skill: 3,
+        strength: 4,
+        ap: 0,
+        damage: 1,
+        abilities: [],
+      },
+      4,
+      3,
+      2,
+      10,
     )
     const withMod = simulateWeapon(
-      { name: 'Bolter', range: 24, attacks: 10, skill: 3, strength: 4, ap: 0, damage: 1, abilities: [{ type: 'STRENGTH_MOD', value: 1 }] },
-      4, 3, 2, 10,
+      {
+        name: 'Bolter',
+        range: 24,
+        attacks: 10,
+        skill: 3,
+        strength: 4,
+        ap: 0,
+        damage: 1,
+        abilities: [{ type: 'STRENGTH_MOD', value: 1 }],
+      },
+      4,
+      3,
+      2,
+      10,
     )
     expect(withMod.expectedWounds).toBeGreaterThan(base.expectedWounds)
   })
@@ -397,12 +538,36 @@ describe('simulateWeapon', () => {
   it('STRENGTH_MOD +2: S4 vs T4 becomes S6 vs T4 (3+ to wound)', () => {
     // S6 vs T4 = 3+ to wound (same bracket as S5 vs T4)
     const plus1 = simulateWeapon(
-      { name: 'Bolter', range: 24, attacks: 10, skill: 3, strength: 4, ap: 0, damage: 1, abilities: [{ type: 'STRENGTH_MOD', value: 1 }] },
-      4, 3, 2, 10,
+      {
+        name: 'Bolter',
+        range: 24,
+        attacks: 10,
+        skill: 3,
+        strength: 4,
+        ap: 0,
+        damage: 1,
+        abilities: [{ type: 'STRENGTH_MOD', value: 1 }],
+      },
+      4,
+      3,
+      2,
+      10,
     )
     const plus2 = simulateWeapon(
-      { name: 'Bolter', range: 24, attacks: 10, skill: 3, strength: 4, ap: 0, damage: 1, abilities: [{ type: 'STRENGTH_MOD', value: 2 }] },
-      4, 3, 2, 10,
+      {
+        name: 'Bolter',
+        range: 24,
+        attacks: 10,
+        skill: 3,
+        strength: 4,
+        ap: 0,
+        damage: 1,
+        abilities: [{ type: 'STRENGTH_MOD', value: 2 }],
+      },
+      4,
+      3,
+      2,
+      10,
     )
     // S5 and S6 are both 3+ vs T4, so same result
     expect(plus2.expectedWounds).toBeCloseTo(plus1.expectedWounds)
@@ -410,24 +575,72 @@ describe('simulateWeapon', () => {
 
   it('STRENGTH_MOD -1: S4 vs T4 becomes S3 vs T4 (5+ to wound)', () => {
     const base = simulateWeapon(
-      { name: 'Bolter', range: 24, attacks: 10, skill: 3, strength: 4, ap: 0, damage: 1, abilities: [] },
-      4, 3, 2, 10,
+      {
+        name: 'Bolter',
+        range: 24,
+        attacks: 10,
+        skill: 3,
+        strength: 4,
+        ap: 0,
+        damage: 1,
+        abilities: [],
+      },
+      4,
+      3,
+      2,
+      10,
     )
     const withMod = simulateWeapon(
-      { name: 'Bolter', range: 24, attacks: 10, skill: 3, strength: 4, ap: 0, damage: 1, abilities: [{ type: 'STRENGTH_MOD', value: -1 }] },
-      4, 3, 2, 10,
+      {
+        name: 'Bolter',
+        range: 24,
+        attacks: 10,
+        skill: 3,
+        strength: 4,
+        ap: 0,
+        damage: 1,
+        abilities: [{ type: 'STRENGTH_MOD', value: -1 }],
+      },
+      4,
+      3,
+      2,
+      10,
     )
     expect(withMod.expectedWounds).toBeLessThan(base.expectedWounds)
   })
 
   it('ATTACKS_MOD +1: 2 attacks becomes 3', () => {
     const base = simulateWeapon(
-      { name: 'Bolter', range: 24, attacks: 2, skill: 3, strength: 4, ap: 0, damage: 1, abilities: [] },
-      4, 3, 2, 10,
+      {
+        name: 'Bolter',
+        range: 24,
+        attacks: 2,
+        skill: 3,
+        strength: 4,
+        ap: 0,
+        damage: 1,
+        abilities: [],
+      },
+      4,
+      3,
+      2,
+      10,
     )
     const withMod = simulateWeapon(
-      { name: 'Bolter', range: 24, attacks: 2, skill: 3, strength: 4, ap: 0, damage: 1, abilities: [{ type: 'ATTACKS_MOD', value: 1 }] },
-      4, 3, 2, 10,
+      {
+        name: 'Bolter',
+        range: 24,
+        attacks: 2,
+        skill: 3,
+        strength: 4,
+        ap: 0,
+        damage: 1,
+        abilities: [{ type: 'ATTACKS_MOD', value: 1 }],
+      },
+      4,
+      3,
+      2,
+      10,
     )
     // +1 attack = 50% more attacks, so 50% more damage
     expect(withMod.expectedWounds).toBeCloseTo(base.expectedWounds * 1.5, 2)
@@ -435,12 +648,36 @@ describe('simulateWeapon', () => {
 
   it('ATTACKS_MOD +2: 2 attacks becomes 4', () => {
     const base = simulateWeapon(
-      { name: 'Bolter', range: 24, attacks: 2, skill: 3, strength: 4, ap: 0, damage: 1, abilities: [] },
-      4, 3, 2, 10,
+      {
+        name: 'Bolter',
+        range: 24,
+        attacks: 2,
+        skill: 3,
+        strength: 4,
+        ap: 0,
+        damage: 1,
+        abilities: [],
+      },
+      4,
+      3,
+      2,
+      10,
     )
     const withMod = simulateWeapon(
-      { name: 'Bolter', range: 24, attacks: 2, skill: 3, strength: 4, ap: 0, damage: 1, abilities: [{ type: 'ATTACKS_MOD', value: 2 }] },
-      4, 3, 2, 10,
+      {
+        name: 'Bolter',
+        range: 24,
+        attacks: 2,
+        skill: 3,
+        strength: 4,
+        ap: 0,
+        damage: 1,
+        abilities: [{ type: 'ATTACKS_MOD', value: 2 }],
+      },
+      4,
+      3,
+      2,
+      10,
     )
     // +2 attacks = double, so double damage
     expect(withMod.expectedWounds).toBeCloseTo(base.expectedWounds * 2, 2)
@@ -448,8 +685,20 @@ describe('simulateWeapon', () => {
 
   it('ATTACKS_MOD enforces minimum 1 attack', () => {
     const r = simulateWeapon(
-      { name: 'Bolter', range: 24, attacks: 1, skill: 3, strength: 4, ap: 0, damage: 1, abilities: [{ type: 'ATTACKS_MOD', value: -5 }] },
-      4, 3, 2, 10,
+      {
+        name: 'Bolter',
+        range: 24,
+        attacks: 1,
+        skill: 3,
+        strength: 4,
+        ap: 0,
+        damage: 1,
+        abilities: [{ type: 'ATTACKS_MOD', value: -5 }],
+      },
+      4,
+      3,
+      2,
+      10,
     )
     // Should still do some damage (1 attack minimum)
     expect(r.expectedWounds).toBeGreaterThan(0)
@@ -457,12 +706,36 @@ describe('simulateWeapon', () => {
 
   it('MELTA adds bonus damage per unsaved wound', () => {
     const base = simulateWeapon(
-      { name: 'Melta', range: 12, attacks: 1, skill: 4, strength: 9, ap: -4, damage: 'D6', abilities: [] },
-      4, 3, 2, 5,
+      {
+        name: 'Melta',
+        range: 12,
+        attacks: 1,
+        skill: 4,
+        strength: 9,
+        ap: -4,
+        damage: 'D6',
+        abilities: [],
+      },
+      4,
+      3,
+      2,
+      5,
     )
     const withMelta = simulateWeapon(
-      { name: 'Melta', range: 12, attacks: 1, skill: 4, strength: 9, ap: -4, damage: 'D6', abilities: [{ type: 'MELTA', value: 2 }] },
-      4, 3, 2, 5,
+      {
+        name: 'Melta',
+        range: 12,
+        attacks: 1,
+        skill: 4,
+        strength: 9,
+        ap: -4,
+        damage: 'D6',
+        abilities: [{ type: 'MELTA', value: 2 }],
+      },
+      4,
+      3,
+      2,
+      5,
     )
     // Melta 2 adds +2 to average damage: D6 avg = 3.5, with melta = 5.5
     expect(withMelta.expectedWounds).toBeGreaterThan(base.expectedWounds)
@@ -472,12 +745,37 @@ describe('simulateWeapon', () => {
 
   it('invuln save is passed through to resolveSaves', () => {
     const noInvuln = simulateWeapon(
-      { name: 'Bolter', range: 24, attacks: 10, skill: 3, strength: 4, ap: -2, damage: 1, abilities: [] },
-      4, 3, 2, 10,
+      {
+        name: 'Bolter',
+        range: 24,
+        attacks: 10,
+        skill: 3,
+        strength: 4,
+        ap: -2,
+        damage: 1,
+        abilities: [],
+      },
+      4,
+      3,
+      2,
+      10,
     )
     const withInvuln = simulateWeapon(
-      { name: 'Bolter', range: 24, attacks: 10, skill: 3, strength: 4, ap: -2, damage: 1, abilities: [] },
-      4, 3, 2, 10, 4,
+      {
+        name: 'Bolter',
+        range: 24,
+        attacks: 10,
+        skill: 3,
+        strength: 4,
+        ap: -2,
+        damage: 1,
+        abilities: [],
+      },
+      4,
+      3,
+      2,
+      10,
+      4,
     )
     // Invuln 4+ is better than 3+ armor with AP-2 (which becomes 5+)
     expect(withInvuln.expectedWounds).toBeLessThan(noInvuln.expectedWounds)
@@ -485,12 +783,42 @@ describe('simulateWeapon', () => {
 
   it('ANTI ability improves wound rate when defender keyword matches', () => {
     const base = simulateWeapon(
-      { name: 'Bolter', range: 24, attacks: 10, skill: 3, strength: 4, ap: 0, damage: 1, abilities: [] },
-      8, 3, 3, 5, undefined, undefined, [],
+      {
+        name: 'Bolter',
+        range: 24,
+        attacks: 10,
+        skill: 3,
+        strength: 4,
+        ap: 0,
+        damage: 1,
+        abilities: [],
+      },
+      8,
+      3,
+      3,
+      5,
+      undefined,
+      undefined,
+      [],
     )
     const withAnti = simulateWeapon(
-      { name: 'Anti-Monster Gun', range: 24, attacks: 10, skill: 3, strength: 4, ap: 0, damage: 1, abilities: [{ type: 'ANTI', keyword: 'Monster', value: 4 }] },
-      8, 3, 3, 5, undefined, undefined, ['Monster', 'Infantry'],
+      {
+        name: 'Anti-Monster Gun',
+        range: 24,
+        attacks: 10,
+        skill: 3,
+        strength: 4,
+        ap: 0,
+        damage: 1,
+        abilities: [{ type: 'ANTI', keyword: 'Monster', value: 4 }],
+      },
+      8,
+      3,
+      3,
+      5,
+      undefined,
+      undefined,
+      ['Monster', 'Infantry'],
     )
     // S4 vs T8 normally wounds on 6+, but Anti-Monster 4+ changes it to 4+
     expect(withAnti.expectedWounds).toBeGreaterThan(base.expectedWounds)
@@ -498,26 +826,74 @@ describe('simulateWeapon', () => {
 
   it('ANTI ability has no effect when defender keyword does not match', () => {
     const base = simulateWeapon(
-      { name: 'Bolter', range: 24, attacks: 10, skill: 3, strength: 4, ap: 0, damage: 1, abilities: [] },
-      8, 3, 3, 5, undefined, undefined, ['Vehicle'],
+      {
+        name: 'Bolter',
+        range: 24,
+        attacks: 10,
+        skill: 3,
+        strength: 4,
+        ap: 0,
+        damage: 1,
+        abilities: [],
+      },
+      8,
+      3,
+      3,
+      5,
+      undefined,
+      undefined,
+      ['Vehicle'],
     )
     const withAnti = simulateWeapon(
-      { name: 'Anti-Monster Gun', range: 24, attacks: 10, skill: 3, strength: 4, ap: 0, damage: 1, abilities: [{ type: 'ANTI', keyword: 'Monster', value: 4 }] },
-      8, 3, 3, 5, undefined, undefined, ['Vehicle'],
+      {
+        name: 'Anti-Monster Gun',
+        range: 24,
+        attacks: 10,
+        skill: 3,
+        strength: 4,
+        ap: 0,
+        damage: 1,
+        abilities: [{ type: 'ANTI', keyword: 'Monster', value: 4 }],
+      },
+      8,
+      3,
+      3,
+      5,
+      undefined,
+      undefined,
+      ['Vehicle'],
     )
     // No matching keyword, so ANTI should not change anything
     expect(withAnti.expectedWounds).toBeCloseTo(base.expectedWounds, 4)
   })
 
   it('attackerModelCount=1 gives same results as default', () => {
-    const weapon = { name: 'Bolter', range: 24, attacks: 2, skill: 3, strength: 4, ap: 0, damage: 1, abilities: [] as WeaponAbility[] }
+    const weapon = {
+      name: 'Bolter',
+      range: 24,
+      attacks: 2,
+      skill: 3,
+      strength: 4,
+      ap: 0,
+      damage: 1,
+      abilities: [] as WeaponAbility[],
+    }
     const base = simulateWeapon(weapon, 4, 3, 2, 5)
     const withOne = simulateWeapon(weapon, 4, 3, 2, 5, undefined, undefined, undefined, 1)
     expect(withOne.expectedWounds).toBeCloseTo(base.expectedWounds, 4)
   })
 
   it('attackerModelCount multiplies attacks proportionally', () => {
-    const weapon = { name: 'Bolter', range: 24, attacks: 2, skill: 3, strength: 4, ap: 0, damage: 1, abilities: [] as WeaponAbility[] }
+    const weapon = {
+      name: 'Bolter',
+      range: 24,
+      attacks: 2,
+      skill: 3,
+      strength: 4,
+      ap: 0,
+      damage: 1,
+      abilities: [] as WeaponAbility[],
+    }
     const oneModel = simulateWeapon(weapon, 4, 3, 2, 10, undefined, undefined, undefined, 1)
     const fiveModels = simulateWeapon(weapon, 4, 3, 2, 10, undefined, undefined, undefined, 5)
     // 5 models = 5× the attacks, so 5× the expected wounds (damage is linear with attacks)
@@ -525,7 +901,16 @@ describe('simulateWeapon', () => {
   })
 
   it('attackerModelCount=10 with D6 attacks multiplies expected value', () => {
-    const weapon = { name: 'Flamer', range: 12, attacks: 'D6' as string | number, skill: 3, strength: 4, ap: 0, damage: 1, abilities: [] as WeaponAbility[] }
+    const weapon = {
+      name: 'Flamer',
+      range: 12,
+      attacks: 'D6' as string | number,
+      skill: 3,
+      strength: 4,
+      ap: 0,
+      damage: 1,
+      abilities: [] as WeaponAbility[],
+    }
     const oneModel = simulateWeapon(weapon, 4, 3, 2, 10, undefined, undefined, undefined, 1)
     const tenModels = simulateWeapon(weapon, 4, 3, 2, 10, undefined, undefined, undefined, 10)
     expect(tenModels.expectedWounds).toBeCloseTo(oneModel.expectedWounds * 10, 2)
@@ -623,9 +1008,18 @@ describe('runMonteCarlo', () => {
     }
     const charProfile = { wounds: 3, save: 4, invulnSave: undefined, fnp: undefined }
     const dist = runMonteCarlo(
-      [precisionWeapon], 4, 3, 2, 5,
-      undefined, undefined, undefined,
-      10000, 1, undefined, charProfile,
+      [precisionWeapon],
+      4,
+      3,
+      2,
+      5,
+      undefined,
+      undefined,
+      undefined,
+      10000,
+      1,
+      undefined,
+      charProfile,
     )
     // With character attached (5 bodyguards × 2W + 3W character = 13 HP total)
     // Should deal more total damage than max bodyguard HP alone (10)
@@ -649,9 +1043,18 @@ describe('runMonteCarlo', () => {
     const charProfile = { wounds: 4, save: 2, invulnSave: 4, fnp: undefined }
     // 2 bodyguards (2W each = 4 HP) + character (4W, Sv2+, inv4+)
     const dist = runMonteCarlo(
-      [normalWeapon], 4, 4, 2, 2,
-      undefined, undefined, undefined,
-      10000, 1, undefined, charProfile,
+      [normalWeapon],
+      4,
+      4,
+      2,
+      2,
+      undefined,
+      undefined,
+      undefined,
+      10000,
+      1,
+      undefined,
+      charProfile,
     )
     // Total HP = 2×2 + 4 = 8. Mean should be positive.
     expect(dist.mean).toBeGreaterThan(0)
@@ -675,9 +1078,18 @@ describe('runMonteCarlo', () => {
     const charProfile = { wounds: 5, save: 6 }
     // 3 bodyguards × 1W + 5W character = 8 HP total
     const dist = runMonteCarlo(
-      [bigGun], 3, 6, 1, 3,
-      undefined, undefined, undefined,
-      5000, 1, undefined, charProfile,
+      [bigGun],
+      3,
+      6,
+      1,
+      3,
+      undefined,
+      undefined,
+      undefined,
+      5000,
+      1,
+      undefined,
+      charProfile,
     )
     // Every iteration should produce <= 8 damage
     const maxKey = Math.max(...Array.from(dist.histogram.keys()))
@@ -694,12 +1106,26 @@ describe('runMonteCarlo', () => {
       abilities: [{ type: 'PRECISION' as const }] as WeaponAbility[],
     }
     const withPrecision = runMonteCarlo(
-      [precisionWeapon], 4, 3, 1, 5,
-      undefined, undefined, undefined, 5000,
+      [precisionWeapon],
+      4,
+      3,
+      1,
+      5,
+      undefined,
+      undefined,
+      undefined,
+      5000,
     )
     const withoutPrecision = runMonteCarlo(
-      [bolter], 4, 3, 1, 5,
-      undefined, undefined, undefined, 5000,
+      [bolter],
+      4,
+      3,
+      1,
+      5,
+      undefined,
+      undefined,
+      undefined,
+      5000,
     )
     // Should produce similar means (PRECISION alone doesn't change damage math)
     expect(Math.abs(withPrecision.mean - withoutPrecision.mean)).toBeLessThan(0.5)

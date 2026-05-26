@@ -1,5 +1,5 @@
-import { useState } from 'react'
 import type { ReactNode } from 'react'
+import { useState } from 'react'
 
 type Props = {
   title: string
@@ -30,11 +30,7 @@ export function CollapsibleSection({ title, count, children, defaultOpen = false
         </span>
         <span className="text-slate-600 text-[10px]">{open ? '▲' : '▼'}</span>
       </button>
-      {open && (
-        <div className="px-3 pb-3 pt-0">
-          {children}
-        </div>
-      )}
+      {open && <div className="px-3 pb-3 pt-0">{children}</div>}
     </div>
   )
 }

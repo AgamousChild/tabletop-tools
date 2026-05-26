@@ -49,7 +49,12 @@ interface BlobRegion {
   sumXY: number
 }
 
-function findRegions(binary: Uint8Array, width: number, height: number, minArea: number): BlobRegion[] {
+function findRegions(
+  binary: Uint8Array,
+  width: number,
+  height: number,
+  minArea: number,
+): BlobRegion[] {
   const visited = new Uint8Array(width * height)
   const regions: BlobRegion[] = []
 
@@ -60,11 +65,16 @@ function findRegions(binary: Uint8Array, width: number, height: number, minArea:
     const queue: number[] = [startIdx]
     visited[startIdx] = 1
 
-    let minX = width, maxX = 0
-    let minY = height, maxY = 0
+    let minX = width,
+      maxX = 0
+    let minY = height,
+      maxY = 0
     let area = 0
-    let sumX = 0, sumY = 0
-    let sumXX = 0, sumYY = 0, sumXY = 0
+    let sumX = 0,
+      sumY = 0
+    let sumXX = 0,
+      sumYY = 0,
+      sumXY = 0
 
     while (queue.length > 0) {
       const idx = queue.shift()!
@@ -83,7 +93,12 @@ function findRegions(binary: Uint8Array, width: number, height: number, minArea:
       if (y > maxY) maxY = y
 
       // 4-connected neighbors
-      for (const [dx, dy] of [[-1, 0], [1, 0], [0, -1], [0, 1]] as const) {
+      for (const [dx, dy] of [
+        [-1, 0],
+        [1, 0],
+        [0, -1],
+        [0, 1],
+      ] as const) {
         const nx = x + dx
         const ny = y + dy
         if (nx >= 0 && nx < width && ny >= 0 && ny < height) {
@@ -98,8 +113,16 @@ function findRegions(binary: Uint8Array, width: number, height: number, minArea:
 
     if (area >= minArea) {
       regions.push({
-        minX, maxX, minY, maxY, area,
-        sumX, sumY, sumXX, sumYY, sumXY,
+        minX,
+        maxX,
+        minY,
+        maxY,
+        area,
+        sumX,
+        sumY,
+        sumXX,
+        sumYY,
+        sumXY,
       })
     }
   }
@@ -160,8 +183,16 @@ function mergeRegions(regions: BlobRegion[], mergeDistance: number): BlobRegion[
     const sumYY = group.reduce((s, r) => s + r.sumYY, 0)
     const sumXY = group.reduce((s, r) => s + r.sumXY, 0)
     return {
-      minX, maxX, minY, maxY, area,
-      sumX, sumY, sumXX, sumYY, sumXY,
+      minX,
+      maxX,
+      minY,
+      maxY,
+      area,
+      sumX,
+      sumY,
+      sumXX,
+      sumYY,
+      sumXY,
     }
   })
 }

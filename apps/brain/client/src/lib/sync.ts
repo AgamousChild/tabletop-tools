@@ -1,6 +1,6 @@
 /// <reference types="vite/client" />
 
-import { saveNodes, saveRefs, setBrainMeta, type BrainNode, type StoredRef } from './store'
+import { type BrainNode, saveNodes, saveRefs, setBrainMeta, type StoredRef } from './store'
 
 export interface BrainManifest {
   version: number

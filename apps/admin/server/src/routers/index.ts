@@ -1,4 +1,4 @@
-import { router, publicProcedure } from '../trpc.js'
+import { publicProcedure, router } from '../trpc.js'
 import { statsRouter } from './stats.js'
 
 export const appRouter = router({

@@ -14,30 +14,54 @@ function formatAbilities(weapon: WeaponProfile): string {
   return weapon.abilities
     .map((a) => {
       switch (a.type) {
-        case 'SUSTAINED_HITS': return `Sustained Hits ${a.value}`
-        case 'LETHAL_HITS': return 'Lethal Hits'
-        case 'DEVASTATING_WOUNDS': return 'Devastating Wounds'
-        case 'TORRENT': return 'Torrent'
-        case 'TWIN_LINKED': return 'Twin-linked'
-        case 'BLAST': return 'Blast'
-        case 'REROLL_HITS_OF_1': return 'Re-roll hits of 1'
-        case 'REROLL_HITS': return 'Re-roll all hits'
-        case 'REROLL_WOUNDS': return 'Re-roll wounds'
-        case 'HIT_MOD': return `Hit ${a.value > 0 ? '+' : ''}${a.value}`
-        case 'WOUND_MOD': return `Wound ${a.value > 0 ? '+' : ''}${a.value}`
-        case 'STRENGTH_MOD': return `Str ${a.value > 0 ? '+' : ''}${a.value}`
-        case 'ATTACKS_MOD': return `Attacks ${a.value > 0 ? '+' : ''}${a.value}`
-        case 'ANTI': return `Anti-${a.keyword} ${a.value}+`
-        case 'MELTA': return `Melta ${a.value}`
-        case 'IGNORES_COVER': return 'Ignores Cover'
-        case 'HAZARDOUS': return 'Hazardous'
-        case 'PRECISION': return 'Precision'
-        case 'INDIRECT_FIRE': return 'Indirect Fire'
-        case 'ASSAULT': return 'Assault'
-        case 'PISTOL': return 'Pistol'
-        case 'ONE_SHOT': return 'One Shot'
-        case 'PSYCHIC': return 'Psychic'
-        default: return ''
+        case 'SUSTAINED_HITS':
+          return `Sustained Hits ${a.value}`
+        case 'LETHAL_HITS':
+          return 'Lethal Hits'
+        case 'DEVASTATING_WOUNDS':
+          return 'Devastating Wounds'
+        case 'TORRENT':
+          return 'Torrent'
+        case 'TWIN_LINKED':
+          return 'Twin-linked'
+        case 'BLAST':
+          return 'Blast'
+        case 'REROLL_HITS_OF_1':
+          return 'Re-roll hits of 1'
+        case 'REROLL_HITS':
+          return 'Re-roll all hits'
+        case 'REROLL_WOUNDS':
+          return 'Re-roll wounds'
+        case 'HIT_MOD':
+          return `Hit ${a.value > 0 ? '+' : ''}${a.value}`
+        case 'WOUND_MOD':
+          return `Wound ${a.value > 0 ? '+' : ''}${a.value}`
+        case 'STRENGTH_MOD':
+          return `Str ${a.value > 0 ? '+' : ''}${a.value}`
+        case 'ATTACKS_MOD':
+          return `Attacks ${a.value > 0 ? '+' : ''}${a.value}`
+        case 'ANTI':
+          return `Anti-${a.keyword} ${a.value}+`
+        case 'MELTA':
+          return `Melta ${a.value}`
+        case 'IGNORES_COVER':
+          return 'Ignores Cover'
+        case 'HAZARDOUS':
+          return 'Hazardous'
+        case 'PRECISION':
+          return 'Precision'
+        case 'INDIRECT_FIRE':
+          return 'Indirect Fire'
+        case 'ASSAULT':
+          return 'Assault'
+        case 'PISTOL':
+          return 'Pistol'
+        case 'ONE_SHOT':
+          return 'One Shot'
+        case 'PSYCHIC':
+          return 'Psychic'
+        default:
+          return ''
       }
     })
     .filter(Boolean)
@@ -114,14 +138,14 @@ export function WeaponSelector({
                   <div className="flex flex-wrap gap-x-3 gap-y-0.5 text-xs text-slate-400 mt-0.5">
                     {weapon.range !== 'melee' && <span>R:{weapon.range}"</span>}
                     <span>A:{weapon.attacks}</span>
-                    <span>{weapon.range === 'melee' ? 'WS' : 'BS'}:{weapon.skill}+</span>
+                    <span>
+                      {weapon.range === 'melee' ? 'WS' : 'BS'}:{weapon.skill}+
+                    </span>
                     <span>S:{weapon.strength}</span>
                     <span>AP:{weapon.ap}</span>
                     <span>D:{weapon.damage}</span>
                   </div>
-                  {abilities && (
-                    <p className="text-xs text-amber-400/70 mt-0.5">[{abilities}]</p>
-                  )}
+                  {abilities && <p className="text-xs text-amber-400/70 mt-0.5">[{abilities}]</p>}
                 </div>
               </label>
             )

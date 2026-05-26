@@ -1,9 +1,9 @@
-import { fetchRequestHandler } from '@trpc/server/adapters/fetch'
-import type { AnyRouter } from '@trpc/server'
-import { Hono } from 'hono'
-import { cors } from 'hono/cors'
 import { validateSession } from '@tabletop-tools/auth'
 import type { Db } from '@tabletop-tools/db'
+import type { AnyRouter } from '@trpc/server'
+import { fetchRequestHandler } from '@trpc/server/adapters/fetch'
+import { Hono } from 'hono'
+import { cors } from 'hono/cors'
 
 import type { BaseContext } from './trpc'
 

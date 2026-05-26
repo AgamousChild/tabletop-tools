@@ -3,10 +3,10 @@
  * @see docs/schema-indexeddb-game-data.md — IndexedDB game data schema
  */
 import type { Manifest } from '../types'
-import { fetchAndProcessWahapedia } from './sources/wahapedia'
-import { fetchAndProcessBSData } from './sources/bsdata'
 import { buildIdMapping, rekeyAllWahapediaFiles } from './id-mapping'
+import { fetchAndProcessBSData } from './sources/bsdata'
 import { fetchAndProcessMissions } from './sources/missions'
+import { fetchAndProcessWahapedia } from './sources/wahapedia'
 
 export interface SyncResult {
   success: boolean
@@ -29,7 +29,11 @@ async function writeDataFile(bucket: R2Bucket, filename: string, data: unknown):
   await bucket.put(`data/${filename}`, JSON.stringify(data))
 }
 
-export async function runSync(bucket: R2Bucket, githubToken?: string, force = false): Promise<SyncResult> {
+export async function runSync(
+  bucket: R2Bucket,
+  githubToken?: string,
+  force = false,
+): Promise<SyncResult> {
   const errors: string[] = []
   const skipped: string[] = []
   const existing = await readManifest(bucket)
@@ -39,7 +43,9 @@ export async function runSync(bucket: R2Bucket, githubToken?: string, force = fa
   let wahapediaData: Record<string, unknown[]> | null = null
   let wahapediaMeta: Manifest['wahapedia'] = existing?.wahapedia
   try {
-    const result = await fetchAndProcessWahapedia(force ? undefined : existing?.wahapedia?.lastUpdate)
+    const result = await fetchAndProcessWahapedia(
+      force ? undefined : existing?.wahapedia?.lastUpdate,
+    )
     if (result.skipped) {
       skipped.push('wahapedia (unchanged)')
     } else {
@@ -60,16 +66,21 @@ export async function runSync(bucket: R2Bucket, githubToken?: string, force = fa
   let bsdataUnits: Array<{ id: string; name: string; faction: string }> = []
   let bsdataMeta: Manifest['bsdata'] = existing?.bsdata
   try {
-    const result = await fetchAndProcessBSData(force ? undefined : existing?.bsdata?.commitSha, undefined, undefined, githubToken)
+    const result = await fetchAndProcessBSData(
+      force ? undefined : existing?.bsdata?.commitSha,
+      undefined,
+      undefined,
+      githubToken,
+    )
     if (result.skipped) {
       skipped.push('bsdata (unchanged)')
     } else {
       // Extract only the fields needed for ID mapping
-      bsdataUnits = result.units.map(u => ({ id: u.id, name: u.name, faction: u.faction }))
+      bsdataUnits = result.units.map((u) => ({ id: u.id, name: u.name, faction: u.faction }))
       bsdataMeta = {
         commitSha: result.commitSha,
         unitCount: result.units.length,
-        factionCount: new Set(result.units.map(u => u.faction)).size,
+        factionCount: new Set(result.units.map((u) => u.faction)).size,
       }
       await writeDataFile(bucket, 'bsdata-units.json', result.units)
       files.add('bsdata-units.json')
@@ -85,13 +96,17 @@ export async function runSync(bucket: R2Bucket, githubToken?: string, force = fa
       if (bsdataUnits.length === 0) {
         const obj = await bucket.get('data/bsdata-units.json')
         if (obj) {
-          const stored = await obj.json() as Array<{ id: string; name: string; faction: string }>
+          const stored = (await obj.json()) as Array<{ id: string; name: string; faction: string }>
           bsdataUnits = stored
         }
       }
 
       const factions = (wahapediaData['factions'] ?? []) as Array<{ id: string; name: string }>
-      const datasheets = (wahapediaData['datasheets'] ?? []) as Array<{ id: string; name: string; factionId: string }>
+      const datasheets = (wahapediaData['datasheets'] ?? []) as Array<{
+        id: string
+        name: string
+        factionId: string
+      }>
 
       const { map: idMap, factionCodeToName } = buildIdMapping(datasheets, factions, bsdataUnits)
       const rekeyed = rekeyAllWahapediaFiles(wahapediaData, idMap, factionCodeToName)

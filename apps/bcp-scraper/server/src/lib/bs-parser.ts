@@ -1,8 +1,12 @@
-import type { TTTPackage, TTTUnit } from './ttt-types'
 import { normalizeFaction } from './faction-map'
+import type { TTTPackage, TTTUnit } from './ttt-types'
 
 function slugifyDetachment(name: string): string {
-  return name.replace(/\s*\(.*\)/, '').trim().toLowerCase().replace(/\s+/g, '-')
+  return name
+    .replace(/\s*\(.*\)/, '')
+    .trim()
+    .toLowerCase()
+    .replace(/\s+/g, '-')
 }
 
 function fail(text: string, error: string): TTTPackage {
@@ -11,7 +15,13 @@ function fail(text: string, error: string): TTTPackage {
     parsedWith: 'battlescribe-v1',
     parseStatus: 'failed',
     parseError: error,
-    meta: { name: '', totalPoints: 0, edition: '10th', battleSize: 'unknown', source: 'bcp-import' },
+    meta: {
+      name: '',
+      totalPoints: 0,
+      edition: '10th',
+      battleSize: 'unknown',
+      source: 'bcp-import',
+    },
     list: { factionId: '', factionName: '', units: [] },
     exports: { rawSource: text },
   }
@@ -62,7 +72,8 @@ export function parseBattleScribe(text: string): TTTPackage {
   }
 
   // --- Units ---
-  const unitRegex = /(?:Char\d+:\s*)?(\d+)x\s+(.+?)\s+\((\d+)\s+pts\)(?::\s*(.+?))?(?=(?:Char\d+:|$))/g
+  const unitRegex =
+    /(?:Char\d+:\s*)?(\d+)x\s+(.+?)\s+\((\d+)\s+pts\)(?::\s*(.+?))?(?=(?:Char\d+:|$))/g
   const units: TTTUnit[] = []
   let unitMatch: RegExpExecArray | null
   while ((unitMatch = unitRegex.exec(text)) !== null) {
@@ -71,11 +82,16 @@ export function parseBattleScribe(text: string): TTTPackage {
     const points = parseInt(unitMatch[3]!, 10)
     const gearStr = unitMatch[4]?.trim() ?? ''
 
-    const gearItems = gearStr ? gearStr.split(',').map(s => s.trim()).filter(Boolean) : []
+    const gearItems = gearStr
+      ? gearStr
+          .split(',')
+          .map((s) => s.trim())
+          .filter(Boolean)
+      : []
 
     // Detect warlord from wargear list
     const isWarlord = gearItems.includes('Warlord') || name === warlordName
-    const wargear = gearItems.filter(g => g !== 'Warlord')
+    const wargear = gearItems.filter((g) => g !== 'Warlord')
 
     // Detect enhancement — either from header map or from wargear matching header enhancement
     let enhancement: string | undefined

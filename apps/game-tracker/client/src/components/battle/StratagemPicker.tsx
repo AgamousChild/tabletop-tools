@@ -13,7 +13,13 @@ type Props = {
   availableStratagems?: Stratagem[]
 }
 
-export function StratagemPicker({ stratagems, onAdd, onRemove, label = 'Stratagems', availableStratagems = [] }: Props) {
+export function StratagemPicker({
+  stratagems,
+  onAdd,
+  onRemove,
+  label = 'Stratagems',
+  availableStratagems = [],
+}: Props) {
   function handleDropdownSelect(e: React.ChangeEvent<HTMLSelectElement>) {
     const id = e.target.value
     if (!id) return
@@ -49,7 +55,10 @@ export function StratagemPicker({ stratagems, onAdd, onRemove, label = 'Stratage
       {stratagems.length > 0 && (
         <div className="space-y-1">
           {stratagems.map((s, i) => (
-            <div key={i} className="flex items-center justify-between px-2 py-1.5 rounded bg-slate-800/50 border border-slate-800">
+            <div
+              key={i}
+              className="flex items-center justify-between px-2 py-1.5 rounded bg-slate-800/50 border border-slate-800"
+            >
               <span className="text-sm text-slate-200">{s.stratagemName}</span>
               <div className="flex items-center gap-2">
                 <span className="text-xs text-slate-500">{s.cpCost} CP</span>

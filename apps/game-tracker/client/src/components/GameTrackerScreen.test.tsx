@@ -45,7 +45,10 @@ vi.mock('@tabletop-tools/game-data-store', () => ({
   }),
 }))
 
-let matchGetData: ReturnType<typeof createInProgressMatch> | ReturnType<typeof createCompletedMatch> | null = null
+let matchGetData:
+  | ReturnType<typeof createInProgressMatch>
+  | ReturnType<typeof createCompletedMatch>
+  | null = null
 
 function createInProgressMatch() {
   return {
@@ -125,8 +128,22 @@ vi.mock('../lib/trpc', () => ({
       list: {
         useQuery: () => ({
           data: [
-            { id: 'm1', opponentFaction: 'Orks', opponentName: null, mission: 'Scorched Earth', result: 'WIN', isTournament: 0 },
-            { id: 'm2', opponentFaction: 'Necrons', opponentName: null, mission: 'Priority Targets', result: null, isTournament: 1 },
+            {
+              id: 'm1',
+              opponentFaction: 'Orks',
+              opponentName: null,
+              mission: 'Scorched Earth',
+              result: 'WIN',
+              isTournament: 0,
+            },
+            {
+              id: 'm2',
+              opponentFaction: 'Necrons',
+              opponentName: null,
+              mission: 'Priority Targets',
+              result: null,
+              isTournament: 1,
+            },
           ],
           refetch: vi.fn(),
         }),

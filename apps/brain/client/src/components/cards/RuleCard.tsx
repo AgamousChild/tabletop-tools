@@ -1,7 +1,7 @@
 import type { MouseEvent } from 'react'
 
-import { ErrataSection } from './ErrataSection'
 import { renderMarkdown as renderMarkdownFn } from '../../lib/render-markdown'
+import { ErrataSection } from './ErrataSection'
 import type { CardContext, RuleCardData } from './types'
 
 interface RuleCardProps {
@@ -31,11 +31,17 @@ function renderContentHtml(text: string): string {
 export function RuleCard({ data, context }: RuleCardProps) {
   const { highlightTerms, onContentClick } = context
   const isFaction = data.isFaction
-  const borderClass = isFaction ? 'border-red-400' : data.isArmyRule ? 'border-amber-400' : 'border-blue-400'
+  const borderClass = isFaction
+    ? 'border-red-400'
+    : data.isArmyRule
+      ? 'border-amber-400'
+      : 'border-blue-400'
   const subRuleNameClass = data.isArmyRule ? 'text-amber-400' : 'text-blue-400'
   const subtitleLabel = isFaction ? 'Faction' : data.isArmyRule ? 'Army Rule' : 'Detachment Ability'
   const subtitlePrefix =
-    isFaction || data.isArmyRule ? data.factionId || '' : (data.detachmentName ?? data.factionId ?? '')
+    isFaction || data.isArmyRule
+      ? data.factionId || ''
+      : (data.detachmentName ?? data.factionId ?? '')
 
   // Delegate clicks on [KEYWORD] buttons (rendered via dangerouslySetInnerHTML) to onContentClick.
   const handleKeywordClick = (e: MouseEvent<HTMLElement>) => {
@@ -55,7 +61,9 @@ export function RuleCard({ data, context }: RuleCardProps) {
             <h2 className="font-['Oswald'] uppercase tracking-wide text-white text-[17px] font-semibold">
               {data.name}
             </h2>
-            <p className={`text-[13px] mt-0.5 ${data.isArmyRule ? 'text-amber-400' : 'text-blue-400'}`}>
+            <p
+              className={`text-[13px] mt-0.5 ${data.isArmyRule ? 'text-amber-400' : 'text-blue-400'}`}
+            >
               {subtitlePrefix} — {subtitleLabel}
             </p>
           </div>

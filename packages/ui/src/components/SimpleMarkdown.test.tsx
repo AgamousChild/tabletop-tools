@@ -1,6 +1,7 @@
-import { describe, it, expect } from 'vitest'
 import { render, screen } from '@testing-library/react'
-import { SimpleMarkdown, renderMarkdown } from './SimpleMarkdown'
+import { describe, expect, it } from 'vitest'
+
+import { renderMarkdown, SimpleMarkdown } from './SimpleMarkdown'
 
 describe('renderMarkdown', () => {
   it('renders bold text', () => {

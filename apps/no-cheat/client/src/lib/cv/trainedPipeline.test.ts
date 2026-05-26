@@ -1,6 +1,7 @@
-import { describe, expect, it, vi, beforeEach } from 'vitest'
-import type { Pipeline, RoiResult, PipelineState, PipelineConfig } from './pipeline'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
+
 import type { TrainingExample } from './knnClassifier'
+import type { Pipeline, PipelineConfig, PipelineState, RoiResult } from './pipeline'
 
 // Mock the dependencies
 vi.mock('./pipeline', () => ({
@@ -19,10 +20,10 @@ vi.mock('./background', () => ({
   rgbaToGray: vi.fn(),
 }))
 
-import { createPipeline } from './pipeline'
+import { rgbaToGray } from './background'
 import { extractFeatures } from './features'
 import { classifyKnn } from './knnClassifier'
-import { rgbaToGray } from './background'
+import { createPipeline } from './pipeline'
 import { createTrainedPipeline } from './trainedPipeline'
 
 const W = 100
@@ -45,7 +46,13 @@ function makeMockPipeline(): Pipeline {
   }
 }
 
-function makeRoiResult(x: number, y: number, w: number, h: number, pipCount: number | null): RoiResult {
+function makeRoiResult(
+  x: number,
+  y: number,
+  w: number,
+  h: number,
+  pipCount: number | null,
+): RoiResult {
   return { roi: { x, y, width: w, height: h }, pipCount }
 }
 
@@ -92,10 +99,7 @@ describe('trainedPipeline', () => {
   })
 
   it('returns same ROI bounding boxes as base pipeline', () => {
-    const baseResults = [
-      makeRoiResult(5, 10, 20, 25, 2),
-      makeRoiResult(60, 70, 15, 18, 5),
-    ]
+    const baseResults = [makeRoiResult(5, 10, 20, 25, 2), makeRoiResult(60, 70, 15, 18, 5)]
     vi.mocked(mockPipeline.processFrame).mockReturnValue(baseResults)
     vi.mocked(classifyKnn).mockReturnValue(null)
 
@@ -275,17 +279,12 @@ describe('trainedPipeline', () => {
   })
 
   it('handles multiple ROIs — applies k-NN independently to each', () => {
-    const baseResults = [
-      makeRoiResult(5, 5, 20, 20, 1),
-      makeRoiResult(60, 60, 20, 20, 2),
-    ]
+    const baseResults = [makeRoiResult(5, 5, 20, 20, 1), makeRoiResult(60, 60, 20, 20, 2)]
     vi.mocked(mockPipeline.processFrame).mockReturnValue(baseResults)
 
     // First ROI: k-NN confident => override
     // Second ROI: k-NN not confident => keep base
-    vi.mocked(extractFeatures)
-      .mockReturnValueOnce([1, 0, 0])
-      .mockReturnValueOnce([0, 1, 0])
+    vi.mocked(extractFeatures).mockReturnValueOnce([1, 0, 0]).mockReturnValueOnce([0, 1, 0])
     vi.mocked(classifyKnn)
       .mockReturnValueOnce({ label: 4, confidence: 0.9 })
       .mockReturnValueOnce({ label: 3, confidence: 0.3 })

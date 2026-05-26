@@ -1,13 +1,15 @@
-import { describe, it, expect, vi } from 'vitest'
-import { render, screen, fireEvent } from '@testing-library/react'
+import { fireEvent, render, screen } from '@testing-library/react'
+import { describe, expect, it, vi } from 'vitest'
+
 import { MissionCard } from './MissionCard'
-import type { MissionCardData, CardContext } from './types'
+import type { CardContext, MissionCardData } from './types'
 
 const mockPrimary: MissionCardData = {
   id: 'mission:ca25:primary:take-and-hold',
   name: 'Take and Hold',
   missionType: 'primary',
-  content: 'At the end of each player\'s Command phase, the player whose turn it is scores 4VP for each objective marker they control.',
+  content:
+    "At the end of each player's Command phase, the player whose turn it is scores 4VP for each objective marker they control.",
 }
 
 const mockSecondary: MissionCardData = {
@@ -16,7 +18,8 @@ const mockSecondary: MissionCardData = {
   missionType: 'secondary',
   side: 'attacker',
   isFixed: false,
-  content: 'Score 3VP at the end of your turn for each objective marker you control in your opponent\'s deployment zone.',
+  content:
+    "Score 3VP at the end of your turn for each objective marker you control in your opponent's deployment zone.",
 }
 
 const mockFixed: MissionCardData = {
@@ -119,13 +122,28 @@ describe('MissionCard', () => {
     }
     render(<MissionCard data={data} context={{ ...baseContext, onViewSource }} />)
     fireEvent.click(screen.getByTestId('view-source'))
-    expect(onViewSource).toHaveBeenCalledWith('chapter-approved-2025', 42, 'Take and Hold', undefined, undefined, undefined, undefined)
+    expect(onViewSource).toHaveBeenCalledWith(
+      'chapter-approved-2025',
+      42,
+      'Take and Hold',
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+    )
   })
 
   it('shows errata section when present', () => {
     const data: MissionCardData = {
       ...mockPrimary,
-      errata: [{ nodeId: 'e1', title: 'FAQ Q1', content: 'Clarified.', source: { type: 'pdf', title: 'CA', page: 10 } }],
+      errata: [
+        {
+          nodeId: 'e1',
+          title: 'FAQ Q1',
+          content: 'Clarified.',
+          source: { type: 'pdf', title: 'CA', page: 10 },
+        },
+      ],
     }
     render(<MissionCard data={data} context={baseContext} />)
     expect(screen.getByText('Errata & FAQ')).toBeInTheDocument()

@@ -1,7 +1,11 @@
+import { EnhancementCard } from '../components/cards/EnhancementCard'
 import { RuleCard } from '../components/cards/RuleCard'
 import { StratagemCard } from '../components/cards/StratagemCard'
-import { EnhancementCard } from '../components/cards/EnhancementCard'
-import type { RuleCardData, StratagemCardData, EnhancementCardData } from '../components/cards/types'
+import type {
+  EnhancementCardData,
+  RuleCardData,
+  StratagemCardData,
+} from '../components/cards/types'
 
 export interface DetachmentPageProps {
   detachmentName: string

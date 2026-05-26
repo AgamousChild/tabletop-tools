@@ -1,12 +1,12 @@
-import { useState, useMemo } from 'react'
+import { useList, useMissions, useStratagems } from '@tabletop-tools/game-data-store'
+import { useMemo, useState } from 'react'
 
 import { trpc } from '../lib/trpc'
-import { useStratagems, useList, useMissions } from '@tabletop-tools/game-data-store'
-import { Scoreboard } from './battle/Scoreboard'
-import { RoundWizard } from './battle/RoundWizard'
 import { RoundEditor } from './battle/RoundEditor'
-import type { TurnData } from './battle/types'
+import { RoundWizard } from './battle/RoundWizard'
+import { Scoreboard } from './battle/Scoreboard'
 import type { SecondaryMission } from './battle/SecondaryPicker'
+import type { TurnData } from './battle/types'
 
 type Props = {
   matchId: string
@@ -41,19 +41,34 @@ export function BattleScreen({ matchId, onBack, onClose }: Props) {
   })
 
   // Secondary mutations (optional — may not exist if server not updated yet)
-  const setSecondary = trpc.secondary?.set?.useMutation?.() ?? { mutate: () => {}, isPending: false }
-  const removeSecondary = trpc.secondary?.remove?.useMutation?.() ?? { mutate: () => {}, isPending: false }
-  const scoreSecondary = trpc.secondary?.score?.useMutation?.() ?? { mutate: () => {}, isPending: false }
+  const setSecondary = trpc.secondary?.set?.useMutation?.() ?? {
+    mutate: () => {},
+    isPending: false,
+  }
+  const removeSecondary = trpc.secondary?.remove?.useMutation?.() ?? {
+    mutate: () => {},
+    isPending: false,
+  }
+  const scoreSecondary = trpc.secondary?.score?.useMutation?.() ?? {
+    mutate: () => {},
+    isPending: false,
+  }
 
   // Load stratagems from IndexedDB based on match faction/detachment
   const yourFaction = match?.yourFaction ?? ''
   const yourDetachment = match?.yourDetachment ?? ''
-  const { data: yourStratagems } = useStratagems({ factionId: yourFaction, detachmentId: yourDetachment || undefined })
+  const { data: yourStratagems } = useStratagems({
+    factionId: yourFaction,
+    detachmentId: yourDetachment || undefined,
+  })
 
   // Load opponent stratagems if we know their faction
   const opponentFaction = match?.opponentFaction ?? ''
   const opponentDetachment = match?.opponentDetachment ?? ''
-  const { data: theirStratagems } = useStratagems({ factionId: opponentFaction, detachmentId: opponentDetachment || undefined })
+  const { data: theirStratagems } = useStratagems({
+    factionId: opponentFaction,
+    detachmentId: opponentDetachment || undefined,
+  })
 
   // Load army list units from IndexedDB (if match has a listId)
   const listId = match?.listId ?? null
@@ -78,24 +93,33 @@ export function BattleScreen({ matchId, onBack, onClose }: Props) {
   if (!match) return <div className="p-6 text-slate-400">Loading...</div>
 
   const turns = match.turns ?? []
-  const secondaries: SecondaryMission[] = (match.secondaries ?? []).map((s: {
-    id: string
-    secondaryName: string
-    vpPerRound: string
-    player: string
-  }) => ({
-    id: s.id,
-    secondaryName: s.secondaryName,
-    vpPerRound: JSON.parse(s.vpPerRound) as number[],
-    player: s.player,
-  }))
+  const secondaries: SecondaryMission[] = (match.secondaries ?? []).map(
+    (s: { id: string; secondaryName: string; vpPerRound: string; player: string }) => ({
+      id: s.id,
+      secondaryName: s.secondaryName,
+      vpPerRound: JSON.parse(s.vpPerRound) as number[],
+      player: s.player,
+    }),
+  )
 
-  const yourSecondaries = secondaries.filter((s) => (s as SecondaryMission & { player: string }).player === 'YOUR')
-  const theirSecondaries = secondaries.filter((s) => (s as SecondaryMission & { player: string }).player === 'THEIRS')
+  const yourSecondaries = secondaries.filter(
+    (s) => (s as SecondaryMission & { player: string }).player === 'YOUR',
+  )
+  const theirSecondaries = secondaries.filter(
+    (s) => (s as SecondaryMission & { player: string }).player === 'THEIRS',
+  )
 
   // Compute VP totals from V3 per-player columns
   const yourTotalVp = turns.reduce(
-    (sum: number, t: { yourPrimary?: number; yourSecondary?: number; primaryScored?: number; secondaryScored?: number }) =>
+    (
+      sum: number,
+      t: {
+        yourPrimary?: number
+        yourSecondary?: number
+        primaryScored?: number
+        secondaryScored?: number
+      },
+    ) =>
       sum + (t.yourPrimary ?? t.primaryScored ?? 0) + (t.yourSecondary ?? t.secondaryScored ?? 0),
     0,
   )
@@ -128,8 +152,16 @@ export function BattleScreen({ matchId, onBack, onClose }: Props) {
     const theirStratCp = theirTurn.stratagems.reduce((sum, s) => sum + s.cpCost, 0)
 
     const allStratagems = [
-      ...yourTurn.stratagems.map((s) => ({ player: 'YOUR' as const, stratagemName: s.stratagemName, cpCost: s.cpCost })),
-      ...theirTurn.stratagems.map((s) => ({ player: 'THEIRS' as const, stratagemName: s.stratagemName, cpCost: s.cpCost })),
+      ...yourTurn.stratagems.map((s) => ({
+        player: 'YOUR' as const,
+        stratagemName: s.stratagemName,
+        cpCost: s.cpCost,
+      })),
+      ...theirTurn.stratagems.map((s) => ({
+        player: 'THEIRS' as const,
+        stratagemName: s.stratagemName,
+        cpCost: s.cpCost,
+      })),
     ]
 
     addTurn.mutate({
@@ -162,21 +194,30 @@ export function BattleScreen({ matchId, onBack, onClose }: Props) {
   }
 
   function handleAddSecondary(player: 'YOUR' | 'THEIRS', name: string) {
-    setSecondary.mutate({ matchId, player, secondaryName: name } as never, {
-      onSuccess: () => void refetch(),
-    } as never)
+    setSecondary.mutate(
+      { matchId, player, secondaryName: name } as never,
+      {
+        onSuccess: () => void refetch(),
+      } as never,
+    )
   }
 
   function handleRemoveSecondary(id: string) {
-    removeSecondary.mutate({ secondaryId: id } as never, {
-      onSuccess: () => void refetch(),
-    } as never)
+    removeSecondary.mutate(
+      { secondaryId: id } as never,
+      {
+        onSuccess: () => void refetch(),
+      } as never,
+    )
   }
 
   function handleScoreSecondary(id: string, roundNumber: number, vp: number) {
-    scoreSecondary.mutate({ secondaryId: id, roundNumber, vp } as never, {
-      onSuccess: () => void refetch(),
-    } as never)
+    scoreSecondary.mutate(
+      { secondaryId: id, roundNumber, vp } as never,
+      {
+        onSuccess: () => void refetch(),
+      } as never,
+    )
   }
 
   return (
@@ -185,9 +226,22 @@ export function BattleScreen({ matchId, onBack, onClose }: Props) {
         <button onClick={onBack} className="text-slate-400 hover:text-slate-100">
           Back
         </button>
-        <a href="/" className="flex items-center gap-1 text-xs text-slate-400 hover:text-slate-200 transition-colors" title="Back to Home">
-          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-3.5 h-3.5">
-            <path fillRule="evenodd" d="M9.293 2.293a1 1 0 0 1 1.414 0l7 7A1 1 0 0 1 17 11h-1v6a1 1 0 0 1-1 1h-2a1 1 0 0 1-1-1v-3a1 1 0 0 0-1-1H9a1 1 0 0 0-1 1v3a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1v-6H3a1 1 0 0 1-.707-1.707l7-7Z" clipRule="evenodd" />
+        <a
+          href="/"
+          className="flex items-center gap-1 text-xs text-slate-400 hover:text-slate-200 transition-colors"
+          title="Back to Home"
+        >
+          <svg
+            xmlns="http://www.w3.org/2000/svg"
+            viewBox="0 0 20 20"
+            fill="currentColor"
+            className="w-3.5 h-3.5"
+          >
+            <path
+              fillRule="evenodd"
+              d="M9.293 2.293a1 1 0 0 1 1.414 0l7 7A1 1 0 0 1 17 11h-1v6a1 1 0 0 1-1 1h-2a1 1 0 0 1-1-1v-3a1 1 0 0 0-1-1H9a1 1 0 0 0-1 1v3a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1v-6H3a1 1 0 0 1-.707-1.707l7-7Z"
+              clipRule="evenodd"
+            />
           </svg>
           Home
         </a>
@@ -200,7 +254,10 @@ export function BattleScreen({ matchId, onBack, onClose }: Props) {
         </div>
       </header>
 
-      <p className="text-xs text-slate-500 px-6 pt-4">Record each round's VP, CP, and unit losses below. Tap a completed round to edit it. Use End Game to enter final scores.</p>
+      <p className="text-xs text-slate-500 px-6 pt-4">
+        Record each round's VP, CP, and unit losses below. Tap a completed round to edit it. Use End
+        Game to enter final scores.
+      </p>
 
       <Scoreboard
         roundNumber={nextRound}
@@ -214,43 +271,48 @@ export function BattleScreen({ matchId, onBack, onClose }: Props) {
       {/* Round history — click to edit */}
       {turns.length > 0 && (
         <div className="px-6 pt-4">
-          <h3 className="text-sm font-medium text-slate-400 mb-2">Rounds recorded <span className="text-slate-600 text-xs">(tap to edit)</span></h3>
+          <h3 className="text-sm font-medium text-slate-400 mb-2">
+            Rounds recorded <span className="text-slate-600 text-xs">(tap to edit)</span>
+          </h3>
           <div className="space-y-2">
-            {turns.map((turn: {
-              id: string
-              turnNumber: number
-              yourPrimary?: number
-              theirPrimary?: number
-              yourCpGained?: number
-              theirCpGained?: number
-              yourCpSpent?: number
-              theirCpSpent?: number
-              primaryScored?: number
-              secondaryScored?: number
-              cpSpent?: number
-              notes?: string | null
-            }) => editingTurnId === turn.id ? (
-              <RoundEditor
-                key={turn.id}
-                turn={turn}
-                onSave={(data) => updateTurn.mutate({ turnId: turn.id, ...data })}
-                onCancel={() => setEditingTurnId(null)}
-                isSaving={updateTurn.isPending}
-              />
-            ) : (
-              <button
-                key={turn.id}
-                onClick={() => setEditingTurnId(turn.id)}
-                className="w-full flex items-center justify-between p-3 rounded-lg bg-slate-900 border border-slate-800 hover:border-amber-400/50 transition-colors text-left"
-              >
-                <span className="text-slate-300 font-medium">Round {turn.turnNumber}</span>
-                <span className="text-amber-400 text-sm">
-                  You: {(turn.yourPrimary ?? turn.primaryScored ?? 0)}VP
-                  {' · '}
-                  Them: {(turn.theirPrimary ?? 0)}VP
-                </span>
-              </button>
-            ))}
+            {turns.map(
+              (turn: {
+                id: string
+                turnNumber: number
+                yourPrimary?: number
+                theirPrimary?: number
+                yourCpGained?: number
+                theirCpGained?: number
+                yourCpSpent?: number
+                theirCpSpent?: number
+                primaryScored?: number
+                secondaryScored?: number
+                cpSpent?: number
+                notes?: string | null
+              }) =>
+                editingTurnId === turn.id ? (
+                  <RoundEditor
+                    key={turn.id}
+                    turn={turn}
+                    onSave={(data) => updateTurn.mutate({ turnId: turn.id, ...data })}
+                    onCancel={() => setEditingTurnId(null)}
+                    isSaving={updateTurn.isPending}
+                  />
+                ) : (
+                  <button
+                    key={turn.id}
+                    onClick={() => setEditingTurnId(turn.id)}
+                    className="w-full flex items-center justify-between p-3 rounded-lg bg-slate-900 border border-slate-800 hover:border-amber-400/50 transition-colors text-left"
+                  >
+                    <span className="text-slate-300 font-medium">Round {turn.turnNumber}</span>
+                    <span className="text-amber-400 text-sm">
+                      You: {turn.yourPrimary ?? turn.primaryScored ?? 0}VP
+                      {' · '}
+                      Them: {turn.theirPrimary ?? 0}VP
+                    </span>
+                  </button>
+                ),
+            )}
           </div>
         </div>
       )}

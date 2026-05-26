@@ -1,7 +1,8 @@
-import { describe, it, expect } from 'vitest'
-import { partitionNodes, partitionRefs, buildManifest } from './sync'
-import type { Node, NodeRef } from './model'
+import { describe, expect, it } from 'vitest'
+
 import type { BrainManifest } from '../types'
+import type { Node, NodeRef } from './model'
+import { buildManifest, partitionNodes, partitionRefs } from './sync'
 
 const makeNode = (overrides: Partial<Node>): Node => ({
   id: 'core:test',
@@ -20,10 +21,25 @@ const makeNode = (overrides: Partial<Node>): Node => ({
 describe('partitionNodes', () => {
   const nodes: Node[] = [
     makeNode({ id: 'core:wound-roll', layer: 'core' }),
-    makeNode({ id: 'faction:space-marines:oath', layer: 'faction', category: 'faction-ability', factionId: 'space-marines' }),
-    makeNode({ id: 'faction:necrons:reanimation', layer: 'faction', category: 'faction-ability', factionId: 'necrons' }),
+    makeNode({
+      id: 'faction:space-marines:oath',
+      layer: 'faction',
+      category: 'faction-ability',
+      factionId: 'space-marines',
+    }),
+    makeNode({
+      id: 'faction:necrons:reanimation',
+      layer: 'faction',
+      category: 'faction-ability',
+      factionId: 'necrons',
+    }),
     makeNode({ id: 'errata:core:p10:1', layer: 'errata', category: 'commentary' }),
-    makeNode({ id: 'balance:aeldari:fate', layer: 'balance', category: 'balance-change', factionId: 'aeldari' }),
+    makeNode({
+      id: 'balance:aeldari:fate',
+      layer: 'balance',
+      category: 'balance-change',
+      factionId: 'aeldari',
+    }),
   ]
 
   it('partitions core nodes into core.json', () => {
@@ -52,7 +68,12 @@ describe('partitionRefs', () => {
       ['core:shooting-phase', 'nodes/core.json'],
     ])
     const refs: NodeRef[] = [
-      { sourceId: 'core:shooting-phase', targetId: 'core:wound-roll', rel: 'part_of', context: 'test' },
+      {
+        sourceId: 'core:shooting-phase',
+        targetId: 'core:wound-roll',
+        rel: 'part_of',
+        context: 'test',
+      },
     ]
     const files = partitionRefs(refs, nodeFileMap)
     expect(files['refs/core-refs.json']).toHaveLength(1)

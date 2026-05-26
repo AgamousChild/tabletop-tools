@@ -1,6 +1,7 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { checkForBrainUpdates, syncBrainData } from './sync'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
+
 import type { BrainManifest } from './sync'
+import { checkForBrainUpdates, syncBrainData } from './sync'
 
 const mockFetch = vi.fn()
 vi.stubGlobal('fetch', mockFetch)
@@ -91,7 +92,11 @@ describe('syncBrainData', () => {
     const result = await syncBrainData(manifest, {}, onProgress)
     expect(result.errors).toHaveLength(0)
     expect(result.nodeCount).toBe(1)
-    expect(onProgress).toHaveBeenCalledWith({ current: 1, total: 1, currentFile: 'nodes/core.json' })
+    expect(onProgress).toHaveBeenCalledWith({
+      current: 1,
+      total: 1,
+      currentFile: 'nodes/core.json',
+    })
   })
 
   it('skips files with matching hashes', async () => {
@@ -138,7 +143,8 @@ describe('syncBrainData', () => {
     }
     mockFetch.mockResolvedValue({
       ok: true,
-      json: () => Promise.resolve([{ sourceId: 'a', targetId: 'b', rel: 'part_of', context: 'test' }]),
+      json: () =>
+        Promise.resolve([{ sourceId: 'a', targetId: 'b', rel: 'part_of', context: 'test' }]),
     })
 
     const result = await syncBrainData(manifest, {}, vi.fn())

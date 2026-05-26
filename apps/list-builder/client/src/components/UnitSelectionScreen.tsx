@@ -1,24 +1,33 @@
-import { useState, useMemo, useRef, useEffect } from 'react'
-
-import { htmlToText, CollapsibleSection } from '@tabletop-tools/ui'
-import { parseDetachmentRestrictions, formatRestrictionText } from '../lib/detachmentRestrictions'
-import type { DetachmentRestriction } from '../lib/detachmentRestrictions'
-import { trpc, trpcClient } from '../lib/trpc'
-import { useUnits, useUnitModelOptions, useGameEnhancements, useGameUnitKeywords, useGameDetachmentAbilities, useGameDetachment, useLegendsUnitIds, useUnitRoles } from '../lib/useGameData'
+import type { Enhancement, LocalListUnit } from '@tabletop-tools/game-data-store'
 import {
   addListUnit as addListUnitInDb,
-  removeListUnit as removeListUnitInDb,
-  updateListUnit as updateListUnitInDb,
-  updateList as updateListInDb,
   deleteList as deleteListInDb,
+  removeListUnit as removeListUnitInDb,
+  updateList as updateListInDb,
+  updateListUnit as updateListUnitInDb,
   useList,
   useUnit as useUnitProfile,
 } from '@tabletop-tools/game-data-store'
-import type { LocalListUnit, Enhancement } from '@tabletop-tools/game-data-store'
-import { RatingBadge } from './RatingBadge'
-import { validateArmy } from '../lib/armyRules'
+import { CollapsibleSection, htmlToText } from '@tabletop-tools/ui'
+import { useEffect, useMemo, useRef, useState } from 'react'
+
 import type { BattleSize, ValidationError } from '../lib/armyRules'
-import { syncListToServer, deleteListFromServer } from '../lib/sync'
+import { validateArmy } from '../lib/armyRules'
+import type { DetachmentRestriction } from '../lib/detachmentRestrictions'
+import { formatRestrictionText, parseDetachmentRestrictions } from '../lib/detachmentRestrictions'
+import { deleteListFromServer, syncListToServer } from '../lib/sync'
+import { trpc, trpcClient } from '../lib/trpc'
+import {
+  useGameDetachment,
+  useGameDetachmentAbilities,
+  useGameEnhancements,
+  useGameUnitKeywords,
+  useLegendsUnitIds,
+  useUnitModelOptions,
+  useUnitRoles,
+  useUnits,
+} from '../lib/useGameData'
+import { RatingBadge } from './RatingBadge'
 
 type Props = {
   listId: string
@@ -33,7 +42,13 @@ function generateId(): string {
   return `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`
 }
 
-function ModelCountPicker({ unitId, unitName, defaultPoints, remaining, onSelect }: {
+function ModelCountPicker({
+  unitId,
+  unitName,
+  defaultPoints,
+  remaining,
+  onSelect,
+}: {
   unitId: string
   unitName: string
   defaultPoints: number
@@ -77,12 +92,22 @@ function ModelCountPicker({ unitId, unitName, defaultPoints, remaining, onSelect
 function UnitKeywordBadges({ unitId }: { unitId: string }) {
   const { data: keywords } = useGameUnitKeywords(unitId)
   const charKeyword = keywords.find((k) => k.keyword.toUpperCase() === 'CHARACTER')
-  const legendKeyword = keywords.find((k) => k.keyword.toUpperCase() === 'LEGENDS' || k.keyword.toUpperCase() === 'LEGEND')
+  const legendKeyword = keywords.find(
+    (k) => k.keyword.toUpperCase() === 'LEGENDS' || k.keyword.toUpperCase() === 'LEGEND',
+  )
 
   return (
     <>
-      {charKeyword && <span className="text-[10px] px-1.5 py-0.5 rounded bg-amber-400/20 text-amber-400 font-semibold">CHARACTER</span>}
-      {legendKeyword && <span className="text-[10px] px-1.5 py-0.5 rounded bg-red-400/20 text-red-400 font-semibold">LEGENDS</span>}
+      {charKeyword && (
+        <span className="text-[10px] px-1.5 py-0.5 rounded bg-amber-400/20 text-amber-400 font-semibold">
+          CHARACTER
+        </span>
+      )}
+      {legendKeyword && (
+        <span className="text-[10px] px-1.5 py-0.5 rounded bg-red-400/20 text-red-400 font-semibold">
+          LEGENDS
+        </span>
+      )}
     </>
   )
 }
@@ -116,10 +141,18 @@ function WarlordButton({ unit, onToggle }: { unit: LocalListUnit; onToggle: () =
 }
 
 /** Enhancement picker dropdown for a character unit */
-function EnhancementPicker({ unit, detachment, onSelect }: {
+function EnhancementPicker({
+  unit,
+  detachment,
+  onSelect,
+}: {
   unit: LocalListUnit
   detachment: string
-  onSelect: (enhId: string | undefined, enhName: string | undefined, enhCost: number | undefined) => void
+  onSelect: (
+    enhId: string | undefined,
+    enhName: string | undefined,
+    enhCost: number | undefined,
+  ) => void
 }) {
   const { data: enhancements } = useGameEnhancements(detachment)
 
@@ -156,13 +189,22 @@ function UnitStatLine({ unitContentId }: { unitContentId: string }) {
   if (!profile) return null
   return (
     <span className="text-[11px] text-slate-500 font-mono" data-testid="unit-stat-line">
-      M{profile.move}" T{profile.toughness} Sv{profile.save}+{profile.invulnSave ? `/${profile.invulnSave}++` : ''} W{profile.wounds} Ld{profile.leadership}+ OC{profile.oc}
+      M{profile.move}" T{profile.toughness} Sv{profile.save}+
+      {profile.invulnSave ? `/${profile.invulnSave}++` : ''} W{profile.wounds} Ld
+      {profile.leadership}+ OC{profile.oc}
     </span>
   )
 }
 
-const ROLE_FILTERS = ['All', 'Battleline', 'Characters', 'Other', 'Dedicated Transports', 'Fortifications'] as const
-type RoleFilter = typeof ROLE_FILTERS[number]
+const ROLE_FILTERS = [
+  'All',
+  'Battleline',
+  'Characters',
+  'Other',
+  'Dedicated Transports',
+  'Fortifications',
+] as const
+type RoleFilter = (typeof ROLE_FILTERS)[number]
 
 // ── Screen 1: My List (chosen units) ────────────────────────────────────────
 
@@ -218,7 +260,12 @@ function MyArmyView({
   onAddUnit: () => void
   onRemoveUnit: (id: string, pts: number, count: number) => void
   onToggleWarlord: (unit: LocalListUnit) => void
-  onSetEnhancement: (unit: LocalListUnit, enhId: string | undefined, enhName: string | undefined, enhCost: number | undefined) => void
+  onSetEnhancement: (
+    unit: LocalListUnit,
+    enhId: string | undefined,
+    enhName: string | undefined,
+    enhCost: number | undefined,
+  ) => void
   onExport: () => void
   onDone: () => void
   onDeleteList: () => void
@@ -242,7 +289,9 @@ function MyArmyView({
       {/* Header */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-3">
-          <button onClick={onBack} className="text-slate-400 hover:text-slate-200 text-sm">&larr; Lists</button>
+          <button onClick={onBack} className="text-slate-400 hover:text-slate-200 text-sm">
+            &larr; Lists
+          </button>
           <div>
             {editingName ? (
               <input
@@ -250,7 +299,9 @@ function MyArmyView({
                 value={nameValue}
                 onChange={(e) => onChangeName(e.target.value)}
                 onBlur={onSaveName}
-                onKeyDown={(e) => { if (e.key === 'Enter') onSaveName() }}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') onSaveName()
+                }}
                 className="bg-slate-900 border border-amber-400 rounded px-2 py-0.5 text-slate-100 font-semibold focus:outline-none"
               />
             ) : (
@@ -262,11 +313,16 @@ function MyArmyView({
                 {activeList?.name ?? 'List'}
               </h2>
             )}
-            <p className="text-xs text-slate-400">{faction} — {detachmentName}</p>
+            <p className="text-xs text-slate-400">
+              {faction} — {detachmentName}
+            </p>
           </div>
         </div>
         <div className="text-right">
-          <p className="text-2xl font-bold text-amber-400 tabular-nums">{totalPts}<span className="text-sm text-slate-500">/{battleSize.points}pts</span></p>
+          <p className="text-2xl font-bold text-amber-400 tabular-nums">
+            {totalPts}
+            <span className="text-sm text-slate-500">/{battleSize.points}pts</span>
+          </p>
           <p className="text-xs text-slate-400">{remaining}pts remaining</p>
         </div>
       </div>
@@ -299,7 +355,9 @@ function MyArmyView({
               <div key={ability.id} className="text-xs">
                 <p className="font-semibold text-amber-400">{ability.name}</p>
                 {ability.legend && <p className="text-slate-500 italic">{ability.legend}</p>}
-                <p className="text-slate-400 mt-0.5 whitespace-pre-wrap">{htmlToText(ability.description)}</p>
+                <p className="text-slate-400 mt-0.5 whitespace-pre-wrap">
+                  {htmlToText(ability.description)}
+                </p>
               </div>
             ))}
           </div>
@@ -310,14 +368,24 @@ function MyArmyView({
       {restrictions.length > 0 && (
         <div className="space-y-2">
           {restrictions.map((r, i) => (
-            <div key={i} className="px-3 py-2 rounded-lg bg-red-900/20 border border-red-500/30" data-testid="restriction-banner">
+            <div
+              key={i}
+              className="px-3 py-2 rounded-lg bg-red-900/20 border border-red-500/30"
+              data-testid="restriction-banner"
+            >
               <div className="flex items-center gap-2 mb-1">
-                <span className="text-xs font-bold text-red-400 uppercase tracking-wider">Restriction</span>
+                <span className="text-xs font-bold text-red-400 uppercase tracking-wider">
+                  Restriction
+                </span>
                 {r.chapterName && (
-                  <span className="text-xs px-1.5 py-0.5 rounded bg-red-400/20 text-red-300 font-semibold">{r.chapterName} only</span>
+                  <span className="text-xs px-1.5 py-0.5 rounded bg-red-400/20 text-red-300 font-semibold">
+                    {r.chapterName} only
+                  </span>
                 )}
               </div>
-              <p className="text-xs text-slate-300 whitespace-pre-wrap">{formatRestrictionText(r.text)}</p>
+              <p className="text-xs text-slate-300 whitespace-pre-wrap">
+                {formatRestrictionText(r.text)}
+              </p>
             </div>
           ))}
         </div>
@@ -325,7 +393,10 @@ function MyArmyView({
 
       {/* Validation errors */}
       {errors.map((err, i) => (
-        <div key={i} className={`px-3 py-2 rounded-lg text-sm ${err.type === 'NO_WARLORD' ? 'bg-amber-900/20 border border-amber-500/30 text-amber-400' : 'bg-red-900/20 border border-red-500/30 text-red-400'}`}>
+        <div
+          key={i}
+          className={`px-3 py-2 rounded-lg text-sm ${err.type === 'NO_WARLORD' ? 'bg-amber-900/20 border border-amber-500/30 text-amber-400' : 'bg-red-900/20 border border-red-500/30 text-red-400'}`}
+        >
           {err.message}
         </div>
       ))}
@@ -342,7 +413,10 @@ function MyArmyView({
       {/* Suggestion banner */}
       {suggestion && (
         <div className="p-3 rounded-lg bg-slate-800 border border-amber-400/30 text-sm">
-          <p className="text-slate-400">Added: <span className="text-slate-100">{suggestion.addedName}</span> <RatingBadge rating={suggestion.addedRating} /></p>
+          <p className="text-slate-400">
+            Added: <span className="text-slate-100">{suggestion.addedName}</span>{' '}
+            <RatingBadge rating={suggestion.addedRating} />
+          </p>
           <p className="text-amber-400 mt-1 mb-1">Better alternatives at same or lower cost:</p>
           {suggestion.alternatives.map((alt, i) => (
             <p key={i} className="text-slate-300 ml-2">
@@ -355,7 +429,9 @@ function MyArmyView({
       {/* Chosen units list */}
       <div className="space-y-2">
         {listUnits.length === 0 && (
-          <p className="text-slate-500 text-sm text-center py-8">No units yet. Tap "Add Unit" to get started.</p>
+          <p className="text-slate-500 text-sm text-center py-8">
+            No units yet. Tap "Add Unit" to get started.
+          </p>
         )}
         {listUnits.map((unit: LocalListUnit) => (
           <div
@@ -368,7 +444,9 @@ function MyArmyView({
                   <span className="font-medium text-slate-100">{unit.unitName}</span>
                   <RatingBadge rating={ratingMap.get(unit.unitContentId) ?? null} />
                   {unit.isWarlord && (
-                    <span className="text-[10px] px-1.5 py-0.5 rounded bg-amber-400 text-slate-950 font-bold">WARLORD</span>
+                    <span className="text-[10px] px-1.5 py-0.5 rounded bg-amber-400 text-slate-950 font-bold">
+                      WARLORD
+                    </span>
                   )}
                 </div>
                 <p className="text-sm text-slate-400 mt-0.5">
@@ -376,20 +454,22 @@ function MyArmyView({
                   {unit.count > 1 && ` (${unit.count}x${unit.unitPoints})`}
                   {unit.modelCount && ` · ${unit.modelCount} models`}
                   {unit.enhancementName && (
-                    <span className="text-amber-400"> · {unit.enhancementName} +{unit.enhancementCost}pts</span>
+                    <span className="text-amber-400">
+                      {' '}
+                      · {unit.enhancementName} +{unit.enhancementCost}pts
+                    </span>
                   )}
                 </p>
                 <UnitStatLine unitContentId={unit.unitContentId} />
               </div>
               <div className="flex items-center gap-1 ml-2">
-                <WarlordButton
-                  unit={unit}
-                  onToggle={() => onToggleWarlord(unit)}
-                />
+                <WarlordButton unit={unit} onToggle={() => onToggleWarlord(unit)} />
                 <EnhancementPicker
                   unit={unit}
                   detachment={detachment}
-                  onSelect={(enhId, enhName, enhCost) => onSetEnhancement(unit, enhId, enhName, enhCost)}
+                  onSelect={(enhId, enhName, enhCost) =>
+                    onSetEnhancement(unit, enhId, enhName, enhCost)
+                  }
                 />
                 <button
                   onClick={() => onRemoveUnit(unit.id, unit.unitPoints, unit.count)}
@@ -469,14 +549,29 @@ function AddUnitView({
     <div className="space-y-4">
       {/* Header */}
       <div className="flex items-center justify-between">
-        <button onClick={onBack} className="text-slate-400 hover:text-slate-200 text-sm flex items-center gap-1">
-          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-4 h-4">
-            <path fillRule="evenodd" d="M17 10a.75.75 0 0 1-.75.75H5.612l4.158 3.96a.75.75 0 1 1-1.04 1.08l-5.5-5.25a.75.75 0 0 1 0-1.08l5.5-5.25a.75.75 0 1 1 1.04 1.08L5.612 9.25H16.25A.75.75 0 0 1 17 10Z" clipRule="evenodd" />
+        <button
+          onClick={onBack}
+          className="text-slate-400 hover:text-slate-200 text-sm flex items-center gap-1"
+        >
+          <svg
+            xmlns="http://www.w3.org/2000/svg"
+            viewBox="0 0 20 20"
+            fill="currentColor"
+            className="w-4 h-4"
+          >
+            <path
+              fillRule="evenodd"
+              d="M17 10a.75.75 0 0 1-.75.75H5.612l4.158 3.96a.75.75 0 1 1-1.04 1.08l-5.5-5.25a.75.75 0 0 1 0-1.08l5.5-5.25a.75.75 0 1 1 1.04 1.08L5.612 9.25H16.25A.75.75 0 0 1 17 10Z"
+              clipRule="evenodd"
+            />
           </svg>
           Back to List
         </button>
         <div className="text-right">
-          <p className="text-lg font-bold text-amber-400 tabular-nums">{totalPts}<span className="text-sm text-slate-500">/{battleSize.points}pts</span></p>
+          <p className="text-lg font-bold text-amber-400 tabular-nums">
+            {totalPts}
+            <span className="text-sm text-slate-500">/{battleSize.points}pts</span>
+          </p>
           <p className="text-xs text-slate-400">{remaining}pts remaining</p>
         </div>
       </div>
@@ -487,11 +582,22 @@ function AddUnitView({
       {restrictions.length > 0 && (
         <div className="space-y-1">
           {restrictions.map((r, i) => (
-            <div key={i} className="px-3 py-1.5 rounded-lg bg-red-900/20 border border-red-500/30 text-xs text-red-300" data-testid="restriction-reminder">
+            <div
+              key={i}
+              className="px-3 py-1.5 rounded-lg bg-red-900/20 border border-red-500/30 text-xs text-red-300"
+              data-testid="restriction-reminder"
+            >
               {r.chapterName ? (
-                <span><span className="font-bold text-red-400">{r.chapterName} only</span> — {formatRestrictionText(r.text).slice(0, 100)}{r.text.length > 100 ? '...' : ''}</span>
+                <span>
+                  <span className="font-bold text-red-400">{r.chapterName} only</span> —{' '}
+                  {formatRestrictionText(r.text).slice(0, 100)}
+                  {r.text.length > 100 ? '...' : ''}
+                </span>
               ) : (
-                <span>{formatRestrictionText(r.text).slice(0, 120)}{r.text.length > 120 ? '...' : ''}</span>
+                <span>
+                  {formatRestrictionText(r.text).slice(0, 120)}
+                  {r.text.length > 120 ? '...' : ''}
+                </span>
               )}
             </div>
           ))}
@@ -577,7 +683,14 @@ function AddUnitView({
 
 // ── Main component ──────────────────────────────────────────────────────────
 
-export function UnitSelectionScreen({ listId, faction, detachment, battleSize, onDone, onBack }: Props) {
+export function UnitSelectionScreen({
+  listId,
+  faction,
+  detachment,
+  battleSize,
+  onDone,
+  onBack,
+}: Props) {
   const [subScreen, setSubScreen] = useState<'list' | 'add'>('list')
   const [searchQuery, setSearchQuery] = useState('')
   const [showLegends, setShowLegends] = useState(false)
@@ -615,7 +728,10 @@ export function UnitSelectionScreen({ listId, faction, detachment, battleSize, o
     return filtered
   }, [allUnits, legendsIds, showLegends, roleFilter, unitRoles])
   const { data: detachmentAbilities = [] } = useGameDetachmentAbilities(detachment)
-  const restrictions = useMemo(() => parseDetachmentRestrictions(detachmentAbilities), [detachmentAbilities])
+  const restrictions = useMemo(
+    () => parseDetachmentRestrictions(detachmentAbilities),
+    [detachmentAbilities],
+  )
   const { data: activeList, refetch: refetchList } = useList(listId)
 
   // Fetch all ratings for rating badges in the unit browser
@@ -648,7 +764,8 @@ export function UnitSelectionScreen({ listId, faction, detachment, battleSize, o
 
   const listUnits = activeList?.units ?? []
   const enhancementPtsCost = listUnits.reduce((sum, u) => sum + (u.enhancementCost ?? 0), 0)
-  const totalPts = listUnits.reduce((sum, u) => sum + u.unitPoints * u.count, 0) + enhancementPtsCost
+  const totalPts =
+    listUnits.reduce((sum, u) => sum + u.unitPoints * u.count, 0) + enhancementPtsCost
   const remaining = battleSize.points - totalPts
 
   const errors: ValidationError[] = activeList
@@ -665,7 +782,12 @@ export function UnitSelectionScreen({ listId, faction, detachment, battleSize, o
       )
     : []
 
-  async function handleAddUnit(unitId: string, unitName: string, unitPoints: number, modelCount?: number) {
+  async function handleAddUnit(
+    unitId: string,
+    unitName: string,
+    unitPoints: number,
+    modelCount?: number,
+  ) {
     if (!activeList) return
     const luId = generateId()
     await addListUnitInDb({
@@ -744,7 +866,12 @@ export function UnitSelectionScreen({ listId, faction, detachment, battleSize, o
     syncListToServer(listId)
   }
 
-  async function handleSetEnhancement(unit: LocalListUnit, enhId: string | undefined, enhName: string | undefined, enhCost: number | undefined) {
+  async function handleSetEnhancement(
+    unit: LocalListUnit,
+    enhId: string | undefined,
+    enhName: string | undefined,
+    enhCost: number | undefined,
+  ) {
     if (!activeList) return
     await updateListUnitInDb(unit.id, {
       enhancementId: enhId,
@@ -801,15 +928,18 @@ export function UnitSelectionScreen({ listId, faction, detachment, battleSize, o
     if (warlord) {
       lines.push(`Warlord: ${warlord.unitName}`)
       if (warlord.enhancementName) {
-        lines.push(`  Enhancement: ${warlord.enhancementName} (+${warlord.enhancementCost ?? 0}pts)`)
+        lines.push(
+          `  Enhancement: ${warlord.enhancementName} (+${warlord.enhancementCost ?? 0}pts)`,
+        )
       }
       lines.push('')
     }
     for (const unit of listUnits) {
       const count = unit.count > 1 ? `${unit.count}x ` : ''
-      const enhStr = unit.enhancementName && !unit.isWarlord
-        ? ` [${unit.enhancementName} +${unit.enhancementCost ?? 0}pts]`
-        : ''
+      const enhStr =
+        unit.enhancementName && !unit.isWarlord
+          ? ` [${unit.enhancementName} +${unit.enhancementCost ?? 0}pts]`
+          : ''
       lines.push(`${count}${unit.unitName} [${unit.unitPoints * unit.count}pts]${enhStr}`)
     }
     lines.push('')
@@ -819,13 +949,16 @@ export function UnitSelectionScreen({ listId, faction, detachment, battleSize, o
 
   function handleExport() {
     const text = exportList()
-    navigator.clipboard.writeText(text).then(() => {
-      setExportCopied(true)
-      setTimeout(() => setExportCopied(false), 2000)
-    }).catch(() => {
-      const w = window.open('')
-      w?.document.write(`<pre>${text}</pre>`)
-    })
+    navigator.clipboard
+      .writeText(text)
+      .then(() => {
+        setExportCopied(true)
+        setTimeout(() => setExportCopied(false), 2000)
+      })
+      .catch(() => {
+        const w = window.open('')
+        w?.document.write(`<pre>${text}</pre>`)
+      })
   }
 
   if (subScreen === 'add') {
@@ -864,10 +997,15 @@ export function UnitSelectionScreen({ listId, faction, detachment, battleSize, o
       errors={errors}
       suggestion={suggestion}
       ratingMap={ratingMap}
-      onAddUnit={() => { setSuggestion(null); setSubScreen('add') }}
+      onAddUnit={() => {
+        setSuggestion(null)
+        setSubScreen('add')
+      }}
       onRemoveUnit={(id, pts, count) => void handleRemoveUnit(id, pts, count)}
       onToggleWarlord={(u) => void handleToggleWarlord(u)}
-      onSetEnhancement={(u, enhId, enhName, enhCost) => void handleSetEnhancement(u, enhId, enhName, enhCost)}
+      onSetEnhancement={(u, enhId, enhName, enhCost) =>
+        void handleSetEnhancement(u, enhId, enhName, enhCost)
+      }
       onExport={handleExport}
       onDone={onDone}
       onDeleteList={() => void handleDeleteList()}

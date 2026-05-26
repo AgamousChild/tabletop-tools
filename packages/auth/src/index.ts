@@ -1,3 +1,4 @@
+import { scryptAsync } from '@noble/hashes/scrypt.js'
 import {
   authAccounts,
   authSessions,
@@ -8,7 +9,6 @@ import {
 import { betterAuth } from 'better-auth'
 import { drizzleAdapter } from 'better-auth/adapters/drizzle'
 import { username } from 'better-auth/plugins'
-import { scryptAsync } from '@noble/hashes/scrypt.js'
 import { and, eq, gt } from 'drizzle-orm'
 
 // Lighter scrypt params that fit within Cloudflare Workers CPU limits.
@@ -95,7 +95,11 @@ async function verifySignature(signedValue: string, secret: string): Promise<str
 
   const encoder = new TextEncoder()
   const key = await crypto.subtle.importKey(
-    'raw', encoder.encode(secret), { name: 'HMAC', hash: 'SHA-256' }, false, ['sign'],
+    'raw',
+    encoder.encode(secret),
+    { name: 'HMAC', hash: 'SHA-256' },
+    false,
+    ['sign'],
   )
   const expectedBuf = new Uint8Array(await crypto.subtle.sign('HMAC', key, encoder.encode(token)))
 
@@ -161,7 +165,11 @@ export type User = {
  *
  * @param secret - AUTH_SECRET for HMAC verification (required).
  */
-export async function validateSession(db: Db, headers: Headers, secret: string): Promise<User | null> {
+export async function validateSession(
+  db: Db,
+  headers: Headers,
+  secret: string,
+): Promise<User | null> {
   const cookieHeader = headers.get('cookie') ?? ''
   // Better Auth uses '__Secure-better-auth.session_token' on HTTPS (production)
   // and 'better-auth.session_token' on HTTP (local dev)

@@ -1,5 +1,5 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, screen, waitFor } from '@testing-library/react'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 let startResult: any = null
 let startError: any = null
@@ -92,11 +92,7 @@ vi.mock('./ResultScreen', () => ({
 }))
 
 vi.mock('./CalibrationWizard', () => ({
-  CalibrationWizard: ({
-    onComplete,
-  }: {
-    onComplete: () => void
-  }) => (
+  CalibrationWizard: ({ onComplete }: { onComplete: () => void }) => (
     <div data-testid="calibration-wizard">
       <button onClick={onComplete}>Complete Calibration</button>
     </div>

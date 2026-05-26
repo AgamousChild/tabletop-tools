@@ -1,6 +1,7 @@
-import { describe, it, expect } from 'vitest'
-import { lineIntersectsRect, hasLOS, isHiddenFromAllPositions } from './los'
-import type { TerrainPiece, Rect } from '../types'
+import { describe, expect, it } from 'vitest'
+
+import type { Rect, TerrainPiece } from '../types'
+import { hasLOS, isHiddenFromAllPositions, lineIntersectsRect } from './los'
 
 // Helper to create terrain
 function makeTerrain(
@@ -132,8 +133,8 @@ describe('isHiddenFromAllPositions', () => {
   it('returns false when target is visible from at least one position', () => {
     // Target inside wall, one position is also inside wall (can see)
     const positions = [
-      { x: 0, y: 10 },   // outside wall — cannot see target inside
-      { x: 14, y: 9 },   // inside wall — can see target
+      { x: 0, y: 10 }, // outside wall — cannot see target inside
+      { x: 14, y: 9 }, // inside wall — can see target
     ]
     expect(isHiddenFromAllPositions({ x: 15, y: 10 }, positions, [wall])).toBe(false)
   })
@@ -149,7 +150,10 @@ describe('isHiddenFromAllPositions', () => {
   it('returns false when target is visible from all positions (no blocking terrain between)', () => {
     // Terrain is far away, not blocking
     const farWall = makeTerrain('far', 50, 50, 4, 4)
-    const positions = [{ x: 0, y: 0 }, { x: 10, y: 0 }]
+    const positions = [
+      { x: 0, y: 0 },
+      { x: 10, y: 0 },
+    ]
     expect(isHiddenFromAllPositions({ x: 5, y: 5 }, positions, [farWall])).toBe(false)
   })
 })

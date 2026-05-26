@@ -12,7 +12,13 @@ export interface R2Storage {
  * The bucket is provided by the Worker environment (`env.EVIDENCE_BUCKET`).
  */
 export function createR2Storage(
-  bucket: { put(key: string, value: ArrayBuffer, options?: { httpMetadata?: { contentType: string } }): Promise<unknown> },
+  bucket: {
+    put(
+      key: string,
+      value: ArrayBuffer,
+      options?: { httpMetadata?: { contentType: string } },
+    ): Promise<unknown>
+  },
   publicUrl: string,
 ): R2Storage {
   return {

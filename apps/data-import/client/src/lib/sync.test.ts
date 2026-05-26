@@ -1,6 +1,7 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { checkForUpdates, syncAllData } from './sync'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
+
 import type { Manifest } from './sync'
+import { checkForUpdates, syncAllData } from './sync'
 
 const mockFetch = vi.fn()
 vi.stubGlobal('fetch', mockFetch)

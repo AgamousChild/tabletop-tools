@@ -1,5 +1,6 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { fetchNodesFromR2, fetchConnectedNodes, resetManifestCache } from './fetch-nodes'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
+
+import { fetchConnectedNodes, fetchNodesFromR2, resetManifestCache } from './fetch-nodes'
 import type { Node } from './model'
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
@@ -36,19 +37,29 @@ describe('fetchNodesFromR2', () => {
   })
 
   it('fetches nodes by ID from mock R2', async () => {
-    const baNode = makeNode({ id: 'faction:blood-angels:sustained-hits', factionId: 'blood-angels', subfaction: 'blood angels', title: 'Sustained Hits' })
+    const baNode = makeNode({
+      id: 'faction:blood-angels:sustained-hits',
+      factionId: 'blood-angels',
+      subfaction: 'blood angels',
+      title: 'Sustained Hits',
+    })
     const coreNode = makeNode({ id: 'core:wound-roll', title: 'Wound Roll' })
 
     const bucket = createMockBucket({
-      'manifest.json': { files: { 'nodes/faction-blood-angels.json': 'v1', 'nodes/core.json': 'v1' } },
+      'manifest.json': {
+        files: { 'nodes/faction-blood-angels.json': 'v1', 'nodes/core.json': 'v1' },
+      },
       'nodes/faction-blood-angels.json': [baNode],
       'nodes/core.json': [coreNode],
     })
 
-    const result = await fetchNodesFromR2(bucket, ['faction:blood-angels:sustained-hits', 'core:wound-roll'])
+    const result = await fetchNodesFromR2(bucket, [
+      'faction:blood-angels:sustained-hits',
+      'core:wound-roll',
+    ])
     expect(result).toHaveLength(2)
-    expect(result.map(n => n.id)).toContain('faction:blood-angels:sustained-hits')
-    expect(result.map(n => n.id)).toContain('core:wound-roll')
+    expect(result.map((n) => n.id)).toContain('faction:blood-angels:sustained-hits')
+    expect(result.map((n) => n.id)).toContain('core:wound-roll')
   })
 
   it('returns empty array when manifest is missing', async () => {
@@ -76,15 +87,18 @@ describe('fetchNodesFromR2', () => {
     await fetchNodesFromR2(bucket, ['core:wound-roll'])
     await fetchNodesFromR2(bucket, ['core:wound-roll'])
 
-    const manifestCalls = (bucket.get as ReturnType<typeof vi.fn>).mock.calls
-      .filter((args: string[]) => args[0] === 'manifest.json')
+    const manifestCalls = (bucket.get as ReturnType<typeof vi.fn>).mock.calls.filter(
+      (args: string[]) => args[0] === 'manifest.json',
+    )
     expect(manifestCalls).toHaveLength(1)
   })
 
   it('stops early once all nodeIds are found', async () => {
     const node = makeNode({ id: 'core:wound-roll' })
     const bucket = createMockBucket({
-      'manifest.json': { files: { 'nodes/core.json': 'v1', 'nodes/faction-blood-angels.json': 'v1' } },
+      'manifest.json': {
+        files: { 'nodes/core.json': 'v1', 'nodes/faction-blood-angels.json': 'v1' },
+      },
       'nodes/core.json': [node],
       'nodes/faction-blood-angels.json': [makeNode({ id: 'faction:blood-angels:x' })],
     })
@@ -92,8 +106,9 @@ describe('fetchNodesFromR2', () => {
     const result = await fetchNodesFromR2(bucket, ['core:wound-roll'])
     expect(result).toHaveLength(1)
     // Should not have fetched the second file since idSet was exhausted
-    const fileCalls = (bucket.get as ReturnType<typeof vi.fn>).mock.calls
-      .filter((args: string[]) => args[0] === 'nodes/faction-blood-angels.json')
+    const fileCalls = (bucket.get as ReturnType<typeof vi.fn>).mock.calls.filter(
+      (args: string[]) => args[0] === 'nodes/faction-blood-angels.json',
+    )
     expect(fileCalls).toHaveLength(0)
   })
 })
@@ -139,9 +154,24 @@ describe('fetchConnectedNodes', () => {
 
   const reverseIndex = {
     'core:sustained-hits': [
-      { sourceId: 'faction:blood-angels:red-thirst', rel: 'modifies', context: 'BA sustained hits', factionId: 'blood-angels' },
-      { sourceId: 'faction:space-wolves:savage-fury', rel: 'modifies', context: 'SW sustained hits', factionId: 'space-wolves' },
-      { sourceId: 'faction:space-marines:gene-seed', rel: 'modifies', context: 'Generic', factionId: 'space-marines' },
+      {
+        sourceId: 'faction:blood-angels:red-thirst',
+        rel: 'modifies',
+        context: 'BA sustained hits',
+        factionId: 'blood-angels',
+      },
+      {
+        sourceId: 'faction:space-wolves:savage-fury',
+        rel: 'modifies',
+        context: 'SW sustained hits',
+        factionId: 'space-wolves',
+      },
+      {
+        sourceId: 'faction:space-marines:gene-seed',
+        rel: 'modifies',
+        context: 'Generic',
+        factionId: 'space-marines',
+      },
     ],
   }
 
@@ -149,7 +179,13 @@ describe('fetchConnectedNodes', () => {
 
   function makeBucket() {
     return createMockBucket({
-      'manifest.json': { files: { 'nodes/faction-blood-angels.json': 'v1', 'nodes/faction-space-wolves.json': 'v1', 'nodes/faction-space-marines.json': 'v1' } },
+      'manifest.json': {
+        files: {
+          'nodes/faction-blood-angels.json': 'v1',
+          'nodes/faction-space-wolves.json': 'v1',
+          'nodes/faction-space-marines.json': 'v1',
+        },
+      },
       'nodes/faction-blood-angels.json': [baAbility],
       'nodes/faction-space-wolves.json': [swAbility],
       'nodes/faction-space-marines.json': [genericAbility],
@@ -177,7 +213,7 @@ describe('fetchConnectedNodes', () => {
     const bucket = makeBucket()
     const result = await fetchConnectedNodes(bucket, ['core:sustained-hits'], 1)
     expect(result.nodes.length).toBeGreaterThan(0)
-    const ids = result.nodes.map(n => n.id)
+    const ids = result.nodes.map((n) => n.id)
     expect(ids).toContain('faction:blood-angels:red-thirst')
     expect(ids).toContain('faction:space-wolves:savage-fury')
   })
@@ -188,7 +224,7 @@ describe('fetchConnectedNodes', () => {
       subfaction: 'blood angels',
     })
     expect(result.nodes.length).toBeGreaterThan(0)
-    const ids = result.nodes.map(n => n.id)
+    const ids = result.nodes.map((n) => n.id)
     // Blood Angels node should be included (subfaction matches)
     expect(ids).toContain('faction:blood-angels:red-thirst')
     // Generic node (no subfaction) should also be included
@@ -201,7 +237,7 @@ describe('fetchConnectedNodes', () => {
       subfaction: 'blood angels',
     })
     expect(result.nodes.length).toBeGreaterThan(0)
-    const ids = result.nodes.map(n => n.id)
+    const ids = result.nodes.map((n) => n.id)
     // Space Wolves node must NOT be included
     expect(ids).not.toContain('faction:space-wolves:savage-fury')
   })
@@ -223,11 +259,18 @@ describe('fetchConnectedNodes', () => {
 
     const revIdx = {
       'core:sustained-hits': [
-        { sourceId: 'ability:blood-angels:rites-of-battle', rel: 'modifies', context: 'test', factionId: 'blood-angels' },
+        {
+          sourceId: 'ability:blood-angels:rites-of-battle',
+          rel: 'modifies',
+          context: 'test',
+          factionId: 'blood-angels',
+        },
       ],
     }
     const fwdIdx = {
-      'ability:blood-angels:rites-of-battle': [{ targetId: 'datasheet:blood-angels:captain', rel: 'part_of', context: 'belongs to' }],
+      'ability:blood-angels:rites-of-battle': [
+        { targetId: 'datasheet:blood-angels:captain', rel: 'part_of', context: 'belongs to' },
+      ],
     }
 
     const bucket = createMockBucket({

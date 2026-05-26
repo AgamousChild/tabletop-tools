@@ -1,18 +1,19 @@
-import { useState, useEffect, useCallback } from 'react'
 import { PARSER_VERSION } from '@tabletop-tools/game-content/src/adapters/bsdata/parser'
+import type { ImportMeta, RulesImportMeta } from '@tabletop-tools/game-data-store'
 import {
-  getImportMeta,
-  listFactions as listStoredFactions,
-  searchUnits,
   clearAll,
   clearGameRules,
-  getRulesImportMeta,
+  getImportMeta,
   getIncludeLegends,
+  getRulesImportMeta,
+  listFactions as listStoredFactions,
+  searchUnits,
   setIncludeLegends,
 } from '@tabletop-tools/game-data-store'
-import type { ImportMeta, RulesImportMeta } from '@tabletop-tools/game-data-store'
-import { checkForUpdates, syncAllData } from '../lib/sync'
+import { useCallback, useEffect, useState } from 'react'
+
 import type { Manifest, SyncProgress, SyncResult } from '../lib/sync'
+import { checkForUpdates, syncAllData } from '../lib/sync'
 
 type Tab = 'sync' | 'stored'
 
@@ -138,24 +139,40 @@ export function ImportScreen() {
 
   // ── Helpers ─────────────────────────────────────────────────────────────
 
-  const totalRulesCount = rulesMeta
-    ? Object.values(rulesMeta.counts).reduce((a, b) => a + b, 0)
-    : 0
+  const totalRulesCount = rulesMeta ? Object.values(rulesMeta.counts).reduce((a, b) => a + b, 0) : 0
 
   return (
     <div className="min-h-screen bg-slate-950 p-6">
       <div className="mx-auto max-w-3xl">
         <header className="mb-6">
           <div className="flex items-center gap-3">
-            <a href="/" className="flex items-center gap-1 text-xs text-slate-400 hover:text-slate-200 transition-colors" title="Back to Home">
-              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-3.5 h-3.5">
-                <path fillRule="evenodd" d="M9.293 2.293a1 1 0 0 1 1.414 0l7 7A1 1 0 0 1 17 11h-1v6a1 1 0 0 1-1 1h-2a1 1 0 0 1-1-1v-3a1 1 0 0 0-1-1H9a1 1 0 0 0-1 1v3a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1v-6H3a1 1 0 0 1-.707-1.707l7-7Z" clipRule="evenodd" />
+            <a
+              href="/"
+              className="flex items-center gap-1 text-xs text-slate-400 hover:text-slate-200 transition-colors"
+              title="Back to Home"
+            >
+              <svg
+                xmlns="http://www.w3.org/2000/svg"
+                viewBox="0 0 20 20"
+                fill="currentColor"
+                className="w-3.5 h-3.5"
+              >
+                <path
+                  fillRule="evenodd"
+                  d="M9.293 2.293a1 1 0 0 1 1.414 0l7 7A1 1 0 0 1 17 11h-1v6a1 1 0 0 1-1 1h-2a1 1 0 0 1-1-1v-3a1 1 0 0 0-1-1H9a1 1 0 0 0-1 1v3a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1v-6H3a1 1 0 0 1-.707-1.707l7-7Z"
+                  clipRule="evenodd"
+                />
               </svg>
               Home
             </a>
-            <h1><a href="/" className="text-3xl font-bold text-slate-100 hover:text-slate-300 transition-colors">
-              Data <span className="text-amber-400">Import</span>
-            </a></h1>
+            <h1>
+              <a
+                href="/"
+                className="text-3xl font-bold text-slate-100 hover:text-slate-300 transition-colors"
+              >
+                Data <span className="text-amber-400">Import</span>
+              </a>
+            </h1>
           </div>
           <p className="mt-1 text-slate-400">
             Load game data into your browser for use across all apps.
@@ -164,10 +181,10 @@ export function ImportScreen() {
 
         {/* Tab bar */}
         <div className="mb-6 flex gap-1 rounded-lg border border-slate-800 bg-slate-900 p-1">
-          {([
+          {[
             { key: 'sync' as Tab, label: 'Sync' },
             { key: 'stored' as Tab, label: 'Stored Data' },
-          ]).map(({ key, label }) => (
+          ].map(({ key, label }) => (
             <button
               key={key}
               onClick={() => setActiveTab(key)}
@@ -186,8 +203,8 @@ export function ImportScreen() {
         {activeTab === 'sync' && (
           <>
             <p className="mb-4 text-xs text-slate-500">
-              Sync all game data (unit profiles, rules, weapons, missions) from the server.
-              Data stays in your browser.
+              Sync all game data (unit profiles, rules, weapons, missions) from the server. Data
+              stays in your browser.
             </p>
 
             {/* Current data status */}
@@ -203,7 +220,9 @@ export function ImportScreen() {
                   </span>
                 </div>
                 {(currentMeta.parserVersion ?? 0) < PARSER_VERSION && (
-                  <p className="mt-1 text-amber-400 text-xs">Outdated parser — re-sync recommended.</p>
+                  <p className="mt-1 text-amber-400 text-xs">
+                    Outdated parser — re-sync recommended.
+                  </p>
                 )}
               </div>
             )}
@@ -212,8 +231,8 @@ export function ImportScreen() {
             <section className="mb-6 rounded-lg border border-slate-800 bg-slate-900 p-4">
               <h2 className="mb-3 text-lg font-semibold text-slate-100">Game Data Sync</h2>
               <p className="mb-4 text-sm text-slate-400">
-                Check for updates from BSData (unit profiles) and Wahapedia (game rules, stratagems, enhancements, weapons).
-                All data is pre-processed on the server — just click sync.
+                Check for updates from BSData (unit profiles) and Wahapedia (game rules, stratagems,
+                enhancements, weapons). All data is pre-processed on the server — just click sync.
               </p>
 
               <div className="flex gap-3">
@@ -236,21 +255,35 @@ export function ImportScreen() {
                 )}
               </div>
 
-              {checkError && (
-                <p className="mt-3 text-sm text-red-400">{checkError}</p>
-              )}
+              {checkError && <p className="mt-3 text-sm text-red-400">{checkError}</p>}
 
               {manifest && !updateAvailable && !syncing && !syncResult && (
                 <p className="mt-3 text-sm text-emerald-400">
-                  Data is up to date (v{manifest.version}, updated {new Date(manifest.updatedAt).toLocaleDateString()}).
+                  Data is up to date (v{manifest.version}, updated{' '}
+                  {new Date(manifest.updatedAt).toLocaleDateString()}).
                 </p>
               )}
 
               {manifest && updateAvailable && (
                 <div className="mt-3 rounded border border-amber-800 bg-amber-900/20 px-3 py-2 text-sm text-amber-300">
-                  Update available (v{manifest.version}, updated {new Date(manifest.updatedAt).toLocaleDateString()}).
-                  {manifest.bsdata && <> {manifest.bsdata.unitCount} units across {manifest.bsdata.factionCount} factions.</>}
-                  {manifest.wahapedia && <> {Object.values(manifest.wahapedia.recordCounts).reduce((a, b) => a + b, 0).toLocaleString()} rules records.</>}
+                  Update available (v{manifest.version}, updated{' '}
+                  {new Date(manifest.updatedAt).toLocaleDateString()}).
+                  {manifest.bsdata && (
+                    <>
+                      {' '}
+                      {manifest.bsdata.unitCount} units across {manifest.bsdata.factionCount}{' '}
+                      factions.
+                    </>
+                  )}
+                  {manifest.wahapedia && (
+                    <>
+                      {' '}
+                      {Object.values(manifest.wahapedia.recordCounts)
+                        .reduce((a, b) => a + b, 0)
+                        .toLocaleString()}{' '}
+                      rules records.
+                    </>
+                  )}
                 </div>
               )}
             </section>
@@ -275,8 +308,12 @@ export function ImportScreen() {
               <section className="mb-6 rounded-lg border border-emerald-800 bg-emerald-900/20 p-4">
                 <h2 className="mb-2 text-lg font-semibold text-emerald-400">Sync Complete</h2>
                 <div className="text-sm text-slate-200">
-                  {syncResult.unitCount > 0 && <p>{syncResult.unitCount.toLocaleString()} unit profiles synced.</p>}
-                  {syncResult.rulesCount > 0 && <p>{syncResult.rulesCount.toLocaleString()} rules items synced.</p>}
+                  {syncResult.unitCount > 0 && (
+                    <p>{syncResult.unitCount.toLocaleString()} unit profiles synced.</p>
+                  )}
+                  {syncResult.rulesCount > 0 && (
+                    <p>{syncResult.rulesCount.toLocaleString()} rules items synced.</p>
+                  )}
                 </div>
                 {syncResult.errors.length > 0 && (
                   <details className="mt-2">
@@ -345,7 +382,8 @@ export function ImportScreen() {
                       <span className="text-sm text-slate-200">
                         {faction}{' '}
                         <span className="text-slate-500">
-                          ({factionCounts[faction] ?? 0} units, {factionWeaponCounts[faction] ?? 0} weapons)
+                          ({factionCounts[faction] ?? 0} units, {factionWeaponCounts[faction] ?? 0}{' '}
+                          weapons)
                         </span>
                       </span>
                     </div>
@@ -399,23 +437,41 @@ export function ImportScreen() {
                   </p>
                   <div className="grid grid-cols-2 gap-2 text-sm">
                     <div className="text-slate-400">Detachments</div>
-                    <div className="text-slate-200">{rulesMeta.counts.detachments.toLocaleString()}</div>
+                    <div className="text-slate-200">
+                      {rulesMeta.counts.detachments.toLocaleString()}
+                    </div>
                     <div className="text-slate-400">Stratagems</div>
-                    <div className="text-slate-200">{rulesMeta.counts.stratagems.toLocaleString()}</div>
+                    <div className="text-slate-200">
+                      {rulesMeta.counts.stratagems.toLocaleString()}
+                    </div>
                     <div className="text-slate-400">Enhancements</div>
-                    <div className="text-slate-200">{rulesMeta.counts.enhancements.toLocaleString()}</div>
+                    <div className="text-slate-200">
+                      {rulesMeta.counts.enhancements.toLocaleString()}
+                    </div>
                     <div className="text-slate-400">Leader Attachments</div>
-                    <div className="text-slate-200">{rulesMeta.counts.leaderAttachments.toLocaleString()}</div>
+                    <div className="text-slate-200">
+                      {rulesMeta.counts.leaderAttachments.toLocaleString()}
+                    </div>
                     <div className="text-slate-400">Unit Compositions</div>
-                    <div className="text-slate-200">{rulesMeta.counts.unitCompositions.toLocaleString()}</div>
+                    <div className="text-slate-200">
+                      {rulesMeta.counts.unitCompositions.toLocaleString()}
+                    </div>
                     <div className="text-slate-400">Unit Costs</div>
-                    <div className="text-slate-200">{rulesMeta.counts.unitCosts.toLocaleString()}</div>
+                    <div className="text-slate-200">
+                      {rulesMeta.counts.unitCosts.toLocaleString()}
+                    </div>
                     <div className="text-slate-400">Wargear Options</div>
-                    <div className="text-slate-200">{rulesMeta.counts.wargearOptions.toLocaleString()}</div>
+                    <div className="text-slate-200">
+                      {rulesMeta.counts.wargearOptions.toLocaleString()}
+                    </div>
                     <div className="text-slate-400">Unit Keywords</div>
-                    <div className="text-slate-200">{rulesMeta.counts.unitKeywords.toLocaleString()}</div>
+                    <div className="text-slate-200">
+                      {rulesMeta.counts.unitKeywords.toLocaleString()}
+                    </div>
                     <div className="text-slate-400">Unit Abilities</div>
-                    <div className="text-slate-200">{rulesMeta.counts.unitAbilities.toLocaleString()}</div>
+                    <div className="text-slate-200">
+                      {rulesMeta.counts.unitAbilities.toLocaleString()}
+                    </div>
                   </div>
                 </>
               ) : (
@@ -426,7 +482,8 @@ export function ImportScreen() {
         )}
 
         <footer className="mt-8 text-center text-sm text-slate-600">
-          Data sourced from BSData and Wahapedia (community-maintained). Not affiliated with Games Workshop.
+          Data sourced from BSData and Wahapedia (community-maintained). Not affiliated with Games
+          Workshop.
         </footer>
       </div>
     </div>

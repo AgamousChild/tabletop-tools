@@ -1,5 +1,6 @@
-import { describe, it, expect, vi } from 'vitest'
-import { extractNodes, type ExtractedNode } from './extract'
+import { describe, expect, it, vi } from 'vitest'
+
+import { type ExtractedNode, extractNodes } from './extract'
 
 const VALID_NODES: ExtractedNode[] = [
   {
@@ -102,9 +103,7 @@ describe('extractNodes', () => {
       401,
     )
 
-    await expect(extractNodes({ ...baseOpts, fetch: fetchFn })).rejects.toThrow(
-      /API error 401/,
-    )
+    await expect(extractNodes({ ...baseOpts, fetch: fetchFn })).rejects.toThrow(/API error 401/)
   })
 
   it('throws when response contains no valid JSON array', async () => {

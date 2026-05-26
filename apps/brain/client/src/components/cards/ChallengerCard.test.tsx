@@ -1,7 +1,8 @@
-import { describe, it, expect, vi } from 'vitest'
-import { render, screen, fireEvent } from '@testing-library/react'
+import { fireEvent, render, screen } from '@testing-library/react'
+import { describe, expect, it, vi } from 'vitest'
+
 import { ChallengerCard } from './ChallengerCard'
-import type { ChallengerCardData, CardContext } from './types'
+import type { CardContext, ChallengerCardData } from './types'
 
 const mockChallengerPlain: ChallengerCardData = {
   id: 'mission:ca25:challenger:seize-the-initiative',
@@ -12,7 +13,8 @@ const mockChallengerPlain: ChallengerCardData = {
 const mockChallengerStructured: ChallengerCardData = {
   id: 'mission:ca25:challenger:flanking-manoeuvre',
   name: 'Flanking Manoeuvre',
-  content: 'Score 3VP if you control a flank objective.\n**WHEN:** Your Movement phase.\n**TARGET:** One INFANTRY unit from your army.\n**EFFECT:** That unit can move up to 6" as if it were the Movement phase.',
+  content:
+    'Score 3VP if you control a flank objective.\n**WHEN:** Your Movement phase.\n**TARGET:** One INFANTRY unit from your army.\n**EFFECT:** That unit can move up to 6" as if it were the Movement phase.',
 }
 
 const baseContext: CardContext = {
@@ -71,7 +73,12 @@ describe('ChallengerCard', () => {
     const data: ChallengerCardData = {
       ...mockChallengerPlain,
       errata: [
-        { nodeId: 'e1', title: 'Timing clarification', content: 'Scored at start of first battle round.', source: { type: 'pdf', title: 'Chapter Approved', page: 22 } },
+        {
+          nodeId: 'e1',
+          title: 'Timing clarification',
+          content: 'Scored at start of first battle round.',
+          source: { type: 'pdf', title: 'Chapter Approved', page: 22 },
+        },
       ],
     }
     render(<ChallengerCard data={data} context={baseContext} />)
@@ -98,7 +105,15 @@ describe('ChallengerCard', () => {
     const context: CardContext = { ...baseContext, onViewSource }
     render(<ChallengerCard data={data} context={context} />)
     fireEvent.click(screen.getByTestId('view-source'))
-    expect(onViewSource).toHaveBeenCalledWith('chapter-approved-2025', 35, 'Seize the Initiative', undefined, undefined, undefined, undefined)
+    expect(onViewSource).toHaveBeenCalledWith(
+      'chapter-approved-2025',
+      35,
+      'Seize the Initiative',
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+    )
   })
 
   it('does not show view-source button for non-pdf sources', () => {

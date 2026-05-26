@@ -2,9 +2,10 @@
 // No real GW unit names, stats, or ability text appear here.
 
 import { mkdir, rm, writeFile } from 'node:fs/promises'
-import { join } from 'node:path'
 import { tmpdir } from 'node:os'
-import { describe, expect, it, afterAll } from 'vitest'
+import { join } from 'node:path'
+
+import { afterAll, describe, expect, it } from 'vitest'
 
 import { BSDataAdapter } from './loader.js'
 

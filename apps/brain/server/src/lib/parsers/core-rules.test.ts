@@ -1,6 +1,7 @@
-import { describe, it, expect, beforeAll } from 'vitest'
-import { parseCoreRules } from './core-rules'
+import { beforeAll, describe, expect, it } from 'vitest'
+
 import type { Node, NodeRef } from '../model'
+import { parseCoreRules } from './core-rules'
 
 // Multi-level headings matching the new structured parser output
 const SAMPLE_NORMALIZED = `
@@ -94,7 +95,7 @@ describe('parseCoreRules', () => {
   })
 
   it('creates nodes from all heading levels', () => {
-    const titles = nodes.map(n => n.title)
+    const titles = nodes.map((n) => n.title)
     // ## level
     expect(titles).toContain('CORE CONCEPTS')
     expect(titles).toContain('MOVEMENT PHASE')
@@ -114,18 +115,18 @@ describe('parseCoreRules', () => {
   })
 
   it('assigns phase annotations to phase sections', () => {
-    const commandPhase = nodes.find(n => n.title === 'COMMAND PHASE')
+    const commandPhase = nodes.find((n) => n.title === 'COMMAND PHASE')
     expect(commandPhase?.phase).toBe('command')
 
-    const movementPhase = nodes.find(n => n.title === 'MOVEMENT PHASE')
+    const movementPhase = nodes.find((n) => n.title === 'MOVEMENT PHASE')
     expect(movementPhase?.phase).toBe('movement')
 
-    const shootingPhase = nodes.find(n => n.title === 'SHOOTING PHASE')
+    const shootingPhase = nodes.find((n) => n.title === 'SHOOTING PHASE')
     expect(shootingPhase?.phase).toBe('shooting')
   })
 
   it('generates deterministic IDs', () => {
-    const woundRoll = nodes.find(n => n.title === 'WOUND ROLL')
+    const woundRoll = nodes.find((n) => n.title === 'WOUND ROLL')
     expect(woundRoll?.id).toBe('core:wound-roll')
   })
 
@@ -138,48 +139,48 @@ describe('parseCoreRules', () => {
   })
 
   it('generates part_of refs for sub-sections under parent sections', () => {
-    const partOfRefs = refs.filter(r => r.rel === 'part_of')
+    const partOfRefs = refs.filter((r) => r.rel === 'part_of')
     expect(partOfRefs.length).toBeGreaterThan(0)
 
     // NORMAL MOVES should be part_of MOVEMENT PHASE
-    const normalMovesRef = partOfRefs.find(r =>
-      r.context.includes('NORMAL MOVES') && r.context.includes('MOVEMENT PHASE')
+    const normalMovesRef = partOfRefs.find(
+      (r) => r.context.includes('NORMAL MOVES') && r.context.includes('MOVEMENT PHASE'),
     )
     expect(normalMovesRef).toBeDefined()
 
     // WOUND ROLL should be part_of MAKING ATTACKS
-    const woundRollRef = partOfRefs.find(r =>
-      r.context.includes('WOUND ROLL') && r.context.includes('MAKING ATTACKS')
+    const woundRollRef = partOfRefs.find(
+      (r) => r.context.includes('WOUND ROLL') && r.context.includes('MAKING ATTACKS'),
     )
     expect(woundRollRef).toBeDefined()
 
     // ENGAGEMENT RANGE should be part_of CORE CONCEPTS
-    const engagementRef = partOfRefs.find(r =>
-      r.context.includes('ENGAGEMENT RANGE') && r.context.includes('CORE CONCEPTS')
+    const engagementRef = partOfRefs.find(
+      (r) => r.context.includes('ENGAGEMENT RANGE') && r.context.includes('CORE CONCEPTS'),
     )
     expect(engagementRef).toBeDefined()
   })
 
   it('generates sequence_adjacent refs between phases', () => {
-    const seqRefs = refs.filter(r => r.rel === 'sequence_adjacent')
+    const seqRefs = refs.filter((r) => r.rel === 'sequence_adjacent')
     expect(seqRefs.length).toBeGreaterThan(0)
 
     // Command -> Movement -> Shooting -> Charge -> Fight
-    const commandToMovement = seqRefs.find(r =>
-      r.context.includes('COMMAND') && r.context.includes('MOVEMENT')
+    const commandToMovement = seqRefs.find(
+      (r) => r.context.includes('COMMAND') && r.context.includes('MOVEMENT'),
     )
     expect(commandToMovement).toBeDefined()
   })
 
   it('generates keywords from content', () => {
-    const woundRoll = nodes.find(n => n.title === 'WOUND ROLL')
+    const woundRoll = nodes.find((n) => n.title === 'WOUND ROLL')
     expect(woundRoll?.keywords).toContain('wound')
     expect(woundRoll?.keywords).toContain('strength')
     expect(woundRoll?.keywords).toContain('toughness')
   })
 
   it('populates content and summary', () => {
-    const woundRoll = nodes.find(n => n.title === 'WOUND ROLL')
+    const woundRoll = nodes.find((n) => n.title === 'WOUND ROLL')
     expect(woundRoll?.content).toContain('Compare the Strength')
     expect(woundRoll?.summary.length).toBeGreaterThan(10)
   })
@@ -192,7 +193,7 @@ describe('parseCoreRules', () => {
 
   it('is idempotent', () => {
     const result2 = parseCoreRules(SAMPLE_NORMALIZED, '2026-04-08')
-    expect(result2.nodes.map(n => n.id)).toEqual(nodes.map(n => n.id))
+    expect(result2.nodes.map((n) => n.id)).toEqual(nodes.map((n) => n.id))
   })
 
   it('deduplicates node IDs when headings repeat', () => {
@@ -207,13 +208,13 @@ Second section with same heading.
 `.trim()
 
     const result = parseCoreRules(dupeInput, '2026-04-08')
-    const ids = result.nodes.map(n => n.id)
+    const ids = result.nodes.map((n) => n.id)
     const unique = new Set(ids)
     expect(unique.size).toBe(ids.length)
   })
 
   it('detects stratagem category for stratagem sections', () => {
-    const overwatch = nodes.find(n => n.title === 'FIRE OVERWATCH')
+    const overwatch = nodes.find((n) => n.title === 'FIRE OVERWATCH')
     expect(overwatch?.category).toBe('stratagem')
   })
 
@@ -238,7 +239,7 @@ This is real content about the battle round with enough text to not be filtered.
 
     const result = parseCoreRules(tocInput, '2026-04-08')
     // The (PG X-Y) entries should be filtered out
-    const titles = result.nodes.map(n => n.title)
+    const titles = result.nodes.map((n) => n.title)
     expect(titles).not.toContain('(PG 5-9)')
     expect(titles).not.toContain('(PG 10-36)')
     expect(titles).toContain('ACTUAL CONTENT')

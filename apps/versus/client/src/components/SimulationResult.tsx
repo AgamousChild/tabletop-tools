@@ -1,4 +1,5 @@
 import { useState } from 'react'
+
 import type { DistributionData } from '../lib/rules/pipeline'
 
 export type Result = {
@@ -34,7 +35,9 @@ function DistributionChart({ data }: { data: DistributionData }) {
 
   return (
     <div className="space-y-2">
-      <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Damage Distribution</p>
+      <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider">
+        Damage Distribution
+      </p>
 
       {/* Percentiles row */}
       <div className="flex justify-between text-[10px] text-slate-500 tabular-nums">
@@ -53,7 +56,9 @@ function DistributionChart({ data }: { data: DistributionData }) {
           const isMedian = dmg === data.percentiles.median
           return (
             <div key={dmg} className="flex items-center gap-1.5 h-4">
-              <span className="w-5 text-right text-[10px] text-slate-500 tabular-nums shrink-0">{dmg}</span>
+              <span className="w-5 text-right text-[10px] text-slate-500 tabular-nums shrink-0">
+                {dmg}
+              </span>
               <div className="flex-1 h-3 bg-slate-800 rounded-sm overflow-hidden">
                 <div
                   className={`h-full rounded-sm ${isMedian ? 'bg-amber-400' : 'bg-amber-400/40'}`}
@@ -73,7 +78,14 @@ function DistributionChart({ data }: { data: DistributionData }) {
   )
 }
 
-export function SimulationResult({ attackerName, defenderName, result, weaponBreakdowns, distribution, onSave }: Props) {
+export function SimulationResult({
+  attackerName,
+  defenderName,
+  result,
+  weaponBreakdowns,
+  distribution,
+  onSave,
+}: Props) {
   const [showDist, setShowDist] = useState(false)
 
   return (
@@ -101,9 +113,7 @@ export function SimulationResult({ attackerName, defenderName, result, weaponBre
         </div>
         <div className="flex justify-between items-center">
           <span className="text-slate-400">Survivors</span>
-          <span className="text-slate-100 tabular-nums">
-            {result.survivors.toFixed(2)}
-          </span>
+          <span className="text-slate-100 tabular-nums">{result.survivors.toFixed(2)}</span>
         </div>
       </div>
 
@@ -132,14 +142,20 @@ export function SimulationResult({ attackerName, defenderName, result, weaponBre
           >
             {showDist ? '▾ Hide distribution' : '▸ Show damage distribution'}
           </button>
-          {showDist && <div className="mt-2"><DistributionChart data={distribution} /></div>}
+          {showDist && (
+            <div className="mt-2">
+              <DistributionChart data={distribution} />
+            </div>
+          )}
         </div>
       )}
 
       {/* Per-weapon breakdown */}
       {weaponBreakdowns && weaponBreakdowns.length >= 1 && (
         <div className="space-y-1">
-          <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider">Per-weapon breakdown</p>
+          <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider">
+            Per-weapon breakdown
+          </p>
           {weaponBreakdowns.map((wb, i) => (
             <div key={i} className="text-xs">
               <div className="flex justify-between items-center">

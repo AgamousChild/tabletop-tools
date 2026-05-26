@@ -8,13 +8,14 @@
  * Keep in sync with the shared file.
  */
 export function deriveUnitType(keywords: string[]): string {
-  const kw = new Set(keywords.map(k => k.toLowerCase()))
+  const kw = new Set(keywords.map((k) => k.toLowerCase()))
   const has = (k: string) => kw.has(k)
 
   if (has('epic hero')) return 'Epic Hero'
   if (has('imperial knights')) return 'Imperial Knight'
   if (has('chaos knights')) return 'Chaos Knight'
-  if (has('daemon') && (has('vehicle') || has('walker') || has('dreadnought'))) return 'Daemon Engine'
+  if (has('daemon') && (has('vehicle') || has('walker') || has('dreadnought')))
+    return 'Daemon Engine'
   if (has('daemon')) return 'Daemon'
   if (has('dreadknight')) return 'Dreadknight'
   if (has('dreadnought')) return 'Dreadnought'

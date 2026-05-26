@@ -1,7 +1,7 @@
+import { matches, stratagemLog, turns } from '@tabletop-tools/db'
 import { TRPCError } from '@trpc/server'
 import { and, eq } from 'drizzle-orm'
 import { z } from 'zod'
-import { matches, turns, stratagemLog } from '@tabletop-tools/db'
 
 import { protectedProcedure, router } from '../trpc'
 
@@ -42,11 +42,15 @@ export const turnRouter = router({
         theirPhotoDataUrl: z.string().optional(),
         yourUnitsDestroyed: z.string().optional(),
         theirUnitsDestroyed: z.string().optional(),
-        stratagems: z.array(z.object({
-          player: z.enum(['YOUR', 'THEIRS']),
-          stratagemName: z.string(),
-          cpCost: z.number().int().min(0).default(1),
-        })).optional(),
+        stratagems: z
+          .array(
+            z.object({
+              player: z.enum(['YOUR', 'THEIRS']),
+              stratagemName: z.string(),
+              cpCost: z.number().int().min(0).default(1),
+            }),
+          )
+          .optional(),
       }),
     )
     .mutation(async ({ ctx, input }) => {
@@ -119,10 +123,7 @@ export const turnRouter = router({
         }
       }
 
-      const [turn] = await ctx.db
-        .select()
-        .from(turns)
-        .where(eq(turns.id, id))
+      const [turn] = await ctx.db.select().from(turns).where(eq(turns.id, id))
       return turn!
     }),
 
@@ -151,10 +152,7 @@ export const turnRouter = router({
     )
     .mutation(async ({ ctx, input }) => {
       // Verify the turn's match belongs to user
-      const [turn] = await ctx.db
-        .select()
-        .from(turns)
-        .where(eq(turns.id, input.turnId))
+      const [turn] = await ctx.db.select().from(turns).where(eq(turns.id, input.turnId))
       if (!turn) {
         throw new TRPCError({ code: 'NOT_FOUND', message: 'Turn not found' })
       }
@@ -183,17 +181,16 @@ export const turnRouter = router({
       if (input.theirPrimary !== undefined) updates.theirPrimary = input.theirPrimary
       if (input.yourSecondary !== undefined) updates.yourSecondary = input.yourSecondary
       if (input.theirSecondary !== undefined) updates.theirSecondary = input.theirSecondary
-      if (input.yourUnitsDestroyed !== undefined) updates.yourUnitsDestroyed = input.yourUnitsDestroyed
-      if (input.theirUnitsDestroyed !== undefined) updates.theirUnitsDestroyed = input.theirUnitsDestroyed
+      if (input.yourUnitsDestroyed !== undefined)
+        updates.yourUnitsDestroyed = input.yourUnitsDestroyed
+      if (input.theirUnitsDestroyed !== undefined)
+        updates.theirUnitsDestroyed = input.theirUnitsDestroyed
 
       if (Object.keys(updates).length > 0) {
         await ctx.db.update(turns).set(updates).where(eq(turns.id, input.turnId))
       }
 
-      const [updated] = await ctx.db
-        .select()
-        .from(turns)
-        .where(eq(turns.id, input.turnId))
+      const [updated] = await ctx.db.select().from(turns).where(eq(turns.id, input.turnId))
       return updated!
     }),
 })

@@ -1,10 +1,15 @@
-import { describe, it, expect, beforeEach } from 'vitest'
+import { beforeEach, describe, expect, it } from 'vitest'
+
 import { buildCrossRefs, loadIndexes, resetCrossRefCache } from './cross-refs'
 import type { AggregatedRecord } from './records'
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
-function makeRecord(id: string, title: string, type: AggregatedRecord['type'] = 'rule'): AggregatedRecord {
+function makeRecord(
+  id: string,
+  title: string,
+  type: AggregatedRecord['type'] = 'rule',
+): AggregatedRecord {
   const primaryNode = {
     id,
     layer: 'core' as const,
@@ -27,7 +32,11 @@ function makeRecord(id: string, title: string, type: AggregatedRecord['type'] = 
   }
 }
 
-function makeChild(id: string, title: string, parentId: string): AggregatedRecord['childNodes'][number] {
+function makeChild(
+  id: string,
+  title: string,
+  parentId: string,
+): AggregatedRecord['childNodes'][number] {
   return {
     id,
     layer: 'unit' as const,
@@ -88,7 +97,7 @@ describe('buildCrossRefs', () => {
       'a:weapon2': [{ targetId: 'b', rel: 'interacts_with', context: 'Plasma interacts with B' }],
     }
     const result = buildCrossRefs([recordA, recordB], fwd, {})
-    const crossRef = result[0]!.crossRefs.find(r => r.targetRecordId === 'b')
+    const crossRef = result[0]!.crossRefs.find((r) => r.targetRecordId === 'b')
     expect(crossRef).toBeDefined()
     expect(crossRef!.refCount).toBe(2)
   })
@@ -149,7 +158,9 @@ describe('buildCrossRefs', () => {
 
   it('defaults targetType to rule for nodes not in the result set', () => {
     const records = [makeRecord('a', 'Rule A')]
-    const fwd = { a: [{ targetId: 'external:node', rel: 'interacts_with', context: 'points to external' }] }
+    const fwd = {
+      a: [{ targetId: 'external:node', rel: 'interacts_with', context: 'points to external' }],
+    }
     const result = buildCrossRefs(records, fwd, {})
     // external node not in records → defaults to 'rule'
     if (result[0]!.crossRefs.length > 0) {
@@ -179,9 +190,7 @@ describe('buildCrossRefs', () => {
         { targetId: 'a', rel: 'interacts_with', context: 'c1 → a' },
         { targetId: 'b', rel: 'interacts_with', context: 'c1 → b' },
       ],
-      'main:c2': [
-        { targetId: 'b', rel: 'interacts_with', context: 'c2 → b' },
-      ],
+      'main:c2': [{ targetId: 'b', rel: 'interacts_with', context: 'c2 → b' }],
     }
     const result = buildCrossRefs([main, recordA, recordB], fwd, {})
     const crossRefs = result[0]!.crossRefs
@@ -196,7 +205,9 @@ describe('buildCrossRefs', () => {
     const targetRecord = makeRecord('target', 'Target', 'unit')
     targetRecord.childNodes = [makeChild('target:child', 'Child', 'target')]
     // main has a forward ref to a child node of targetRecord
-    const fwd = { main: [{ targetId: 'target:child', rel: 'interacts_with', context: 'refs child' }] }
+    const fwd = {
+      main: [{ targetId: 'target:child', rel: 'interacts_with', context: 'refs child' }],
+    }
     const result = buildCrossRefs([mainRecord, targetRecord], fwd, {})
     // Should resolve to parent record id 'target'
     expect(result[0]!.crossRefs[0]!.targetRecordId).toBe('target')
@@ -211,8 +222,8 @@ describe('loadIndexes', () => {
   })
 
   it('loads forward and reverse indexes from bucket', async () => {
-    const fwdData = { 'a': [{ targetId: 'b', rel: 'interacts_with', context: 'ctx' }] }
-    const revData = { 'b': [{ sourceId: 'a', rel: 'interacts_with', context: 'ctx' }] }
+    const fwdData = { a: [{ targetId: 'b', rel: 'interacts_with', context: 'ctx' }] }
+    const revData = { b: [{ sourceId: 'a', rel: 'interacts_with', context: 'ctx' }] }
     const mockBucket = {
       get: async (key: string) => {
         if (key === 'refs/forward-index.json') return { json: async () => fwdData }

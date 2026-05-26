@@ -1,10 +1,11 @@
-import { useState } from 'react'
 import type { Stratagem } from '@tabletop-tools/game-data-store'
+import { useState } from 'react'
+
+import { ActionPhaseScreen } from './ActionPhaseScreen'
+import { CommandPhaseScreen } from './CommandPhaseScreen'
+import { PhotoCaptureScreen } from './PhotoCaptureScreen'
 import type { SecondaryMission } from './SecondaryPicker'
 import type { TurnData } from './types'
-import { CommandPhaseScreen } from './CommandPhaseScreen'
-import { ActionPhaseScreen } from './ActionPhaseScreen'
-import { PhotoCaptureScreen } from './PhotoCaptureScreen'
 
 type Phase = 'command' | 'action' | 'photo'
 

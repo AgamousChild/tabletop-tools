@@ -1,22 +1,37 @@
-import { useState, useMemo, useCallback, useRef, useEffect } from 'react'
-import type { WeaponAbility, WeaponProfile, UnitProfile } from '@tabletop-tools/game-content'
-import { useGameDataAvailable, useUnitCompositions } from '@tabletop-tools/game-data-store'
+import type { UnitProfile, WeaponAbility, WeaponProfile } from '@tabletop-tools/game-content'
 import type { DatasheetModel } from '@tabletop-tools/game-data-store'
+import { useGameDataAvailable, useUnitCompositions } from '@tabletop-tools/game-data-store'
+import { CollapsibleSection, HelpTip, htmlToText } from '@tabletop-tools/ui'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 
-import { HelpTip, CollapsibleSection, htmlToText } from '@tabletop-tools/ui'
 import { authClient } from '../lib/auth'
-import { trpc } from '../lib/trpc'
-import { useUnits, useGameFactions, useGameUnit, useGameLeadersForUnit, useGameUnitAbilities, useGameUnitKeywords, useGameWargearOptions, useGameDatasheetWeapons, useGameDatasheetModels, useGameDetachments, useGameDetachmentAbilities, useGameEnhancements, useGameStratagems, useGameUnitCosts } from '../lib/useGameData'
 import { extractLeaderRules } from '../lib/leaderAbilities'
 import { parseModelCount, parseModelOptions } from '../lib/modelCount'
-import { simulateWeapon, runMonteCarlo } from '../lib/rules/pipeline'
-import type { SimResult, DistributionData } from '../lib/rules/pipeline'
-import { SimulationResult } from './SimulationResult'
+import type { DistributionData, SimResult } from '../lib/rules/pipeline'
+import { runMonteCarlo, simulateWeapon } from '../lib/rules/pipeline'
+import { trpc } from '../lib/trpc'
+import {
+  useGameDatasheetModels,
+  useGameDatasheetWeapons,
+  useGameDetachmentAbilities,
+  useGameDetachments,
+  useGameEnhancements,
+  useGameFactions,
+  useGameLeadersForUnit,
+  useGameStratagems,
+  useGameUnit,
+  useGameUnitAbilities,
+  useGameUnitCosts,
+  useGameUnitKeywords,
+  useGameWargearOptions,
+  useUnits,
+} from '../lib/useGameData'
 import type { WeaponBreakdown } from './SimulationResult'
-import { UnitSelector } from './UnitSelector'
-import { UnitProfileCard } from './UnitProfileCard'
-import { WeaponSelector } from './WeaponSelector'
+import { SimulationResult } from './SimulationResult'
 import { SpecialRulesEditor } from './SpecialRulesEditor'
+import { UnitProfileCard } from './UnitProfileCard'
+import { UnitSelector } from './UnitSelector'
+import { WeaponSelector } from './WeaponSelector'
 
 type AttackType = 'ranged' | 'melee'
 
@@ -42,9 +57,10 @@ function resolveUnitFromModel(unit: UnitProfile, model: DatasheetModel): UnitPro
   const wWounds = parseModelStat(model.wounds)
   const wLd = parseModelStat(model.leadership)
   const wOc = parseModelStat(model.oc)
-  const wInvSv = model.invSv && model.invSv !== '-' && model.invSv !== '\u2013'
-    ? parseModelStat(model.invSv)
-    : undefined
+  const wInvSv =
+    model.invSv && model.invSv !== '-' && model.invSv !== '\u2013'
+      ? parseModelStat(model.invSv)
+      : undefined
 
   return {
     ...unit,
@@ -60,28 +76,46 @@ function resolveUnitFromModel(unit: UnitProfile, model: DatasheetModel): UnitPro
 
 function formatAbility(a: WeaponAbility): string {
   switch (a.type) {
-    case 'SUSTAINED_HITS': return `Sustained Hits ${a.value}`
-    case 'LETHAL_HITS': return 'Lethal Hits'
-    case 'DEVASTATING_WOUNDS': return 'Devastating Wounds'
-    case 'TORRENT': return 'Torrent'
-    case 'TWIN_LINKED': return 'Twin-linked'
-    case 'BLAST': return 'Blast'
-    case 'REROLL_HITS_OF_1': return 'Re-roll hits of 1'
-    case 'REROLL_HITS': return 'Re-roll all hits'
-    case 'REROLL_WOUNDS': return 'Re-roll wounds'
-    case 'HIT_MOD': return `${a.value > 0 ? '+' : ''}${a.value} to hit`
-    case 'WOUND_MOD': return `${a.value > 0 ? '+' : ''}${a.value} to wound`
-    case 'STRENGTH_MOD': return `Str ${a.value > 0 ? '+' : ''}${a.value}`
-    case 'ATTACKS_MOD': return a.value === 0 ? 'Extra Attacks' : `Attacks ${a.value > 0 ? '+' : ''}${a.value}`
-    case 'ANTI': return `Anti-${a.keyword} ${a.value}+`
-    case 'MELTA': return `Melta ${a.value}`
-    case 'IGNORES_COVER': return 'Ignores Cover'
-    case 'PRECISION': return 'Precision'
-    case 'TOUGHNESS_MOD': return `Toughness ${a.value > 0 ? '+' : ''}${a.value}`
-    default: return a.type
+    case 'SUSTAINED_HITS':
+      return `Sustained Hits ${a.value}`
+    case 'LETHAL_HITS':
+      return 'Lethal Hits'
+    case 'DEVASTATING_WOUNDS':
+      return 'Devastating Wounds'
+    case 'TORRENT':
+      return 'Torrent'
+    case 'TWIN_LINKED':
+      return 'Twin-linked'
+    case 'BLAST':
+      return 'Blast'
+    case 'REROLL_HITS_OF_1':
+      return 'Re-roll hits of 1'
+    case 'REROLL_HITS':
+      return 'Re-roll all hits'
+    case 'REROLL_WOUNDS':
+      return 'Re-roll wounds'
+    case 'HIT_MOD':
+      return `${a.value > 0 ? '+' : ''}${a.value} to hit`
+    case 'WOUND_MOD':
+      return `${a.value > 0 ? '+' : ''}${a.value} to wound`
+    case 'STRENGTH_MOD':
+      return `Str ${a.value > 0 ? '+' : ''}${a.value}`
+    case 'ATTACKS_MOD':
+      return a.value === 0 ? 'Extra Attacks' : `Attacks ${a.value > 0 ? '+' : ''}${a.value}`
+    case 'ANTI':
+      return `Anti-${a.keyword} ${a.value}+`
+    case 'MELTA':
+      return `Melta ${a.value}`
+    case 'IGNORES_COVER':
+      return 'Ignores Cover'
+    case 'PRECISION':
+      return 'Precision'
+    case 'TOUGHNESS_MOD':
+      return `Toughness ${a.value > 0 ? '+' : ''}${a.value}`
+    default:
+      return a.type
   }
 }
-
 
 /** Simple FNV-1a hash for cache key. Not cryptographic. */
 function simpleHash(str: string): string {
@@ -121,15 +155,21 @@ export function SimulatorScreen({ onSignOut }: Props) {
   const gameDataAvailable = useGameDataAvailable()
   const { data: factions = [] } = useGameFactions()
 
-  const { data: attackerUnits = [], isLoading: loadingAttackers } = useUnits({
-    faction: attackerFaction,
-    name: attackerQuery || undefined,
-  }, showLegends)
+  const { data: attackerUnits = [], isLoading: loadingAttackers } = useUnits(
+    {
+      faction: attackerFaction,
+      name: attackerQuery || undefined,
+    },
+    showLegends,
+  )
 
-  const { data: defenderUnits = [], isLoading: loadingDefenders } = useUnits({
-    faction: defenderFaction,
-    name: defenderQuery || undefined,
-  }, showLegends)
+  const { data: defenderUnits = [], isLoading: loadingDefenders } = useUnits(
+    {
+      faction: defenderFaction,
+      name: defenderQuery || undefined,
+    },
+    showLegends,
+  )
 
   const { data: attacker } = useGameUnit(attackerId)
   const { data: defender } = useGameUnit(defenderId)
@@ -231,31 +271,28 @@ export function SimulatorScreen({ onSignOut }: Props) {
   }, [])
 
   // Resolve effective model counts: user override > composition data > default
-  const effectiveAttackerModels = attackerModelCount === -1
-    ? (defaultAttackerModels ?? 1)
-    : attackerModelCount
+  const effectiveAttackerModels =
+    attackerModelCount === -1 ? (defaultAttackerModels ?? 1) : attackerModelCount
 
-  const effectiveDefenderModels = defenderModelCount === -1
-    ? (defaultDefenderModels ?? 5)
-    : defenderModelCount
+  const effectiveDefenderModels =
+    defenderModelCount === -1 ? (defaultDefenderModels ?? 5) : defenderModelCount
 
   // Combine attacker weapons with leader weapons.
   // Prefers Wahapedia weapon profiles when available (cleaner, normalized data).
   // Tracks which indices are leader weapons (fired by 1 model, not the full unit).
   const { combinedWeapons, leaderWeaponIndices } = useMemo(() => {
-    if (!resolvedAttacker) return { combinedWeapons: [] as WeaponProfile[], leaderWeaponIndices: new Set<number>() }
+    if (!resolvedAttacker)
+      return { combinedWeapons: [] as WeaponProfile[], leaderWeaponIndices: new Set<number>() }
     // Use Wahapedia weapons if available, fall back to BSData-parsed weapons
-    const baseWeapons = wahapediaAttackerWeapons.length > 0
-      ? wahapediaAttackerWeapons
-      : resolvedAttacker.weapons
+    const baseWeapons =
+      wahapediaAttackerWeapons.length > 0 ? wahapediaAttackerWeapons : resolvedAttacker.weapons
     const weapons = [...baseWeapons]
     const leaderIndices = new Set<number>()
     // Merge leader weapons
-    const leaderWeapons = wahapediaLeaderWeapons.length > 0
-      ? wahapediaLeaderWeapons
-      : (attackerLeader?.weapons ?? [])
+    const leaderWeapons =
+      wahapediaLeaderWeapons.length > 0 ? wahapediaLeaderWeapons : (attackerLeader?.weapons ?? [])
     for (const w of leaderWeapons) {
-      if (!weapons.some(ew => ew.name === w.name)) {
+      if (!weapons.some((ew) => ew.name === w.name)) {
         leaderIndices.add(weapons.length)
         weapons.push(w)
       }
@@ -273,7 +310,8 @@ export function SimulatorScreen({ onSignOut }: Props) {
     let meleeSelected = false
     combinedWeapons.forEach((w, i) => {
       const isRanged = w.range !== 'melee'
-      const isExtraAttacks = !isRanged && w.abilities.some(a => a.type === 'ATTACKS_MOD' && a.value === 0)
+      const isExtraAttacks =
+        !isRanged && w.abilities.some((a) => a.type === 'ATTACKS_MOD' && a.value === 0)
       let defaultSelected: boolean
       if (attackType === 'ranged') {
         defaultSelected = isRanged
@@ -311,15 +349,18 @@ export function SimulatorScreen({ onSignOut }: Props) {
     return labels
   }, [combinedWeapons, selectedWeapons])
 
-  const handleToggleWeapon = useCallback((index: number) => {
-    setWeaponOverrides((prev) => {
-      const next = new Map(prev)
-      // If already overridden, flip the override; otherwise set to opposite of current selection
-      const isCurrentlySelected = selectedWeapons.has(index)
-      next.set(index, !isCurrentlySelected)
-      return next
-    })
-  }, [selectedWeapons])
+  const handleToggleWeapon = useCallback(
+    (index: number) => {
+      setWeaponOverrides((prev) => {
+        const next = new Map(prev)
+        // If already overridden, flip the override; otherwise set to opposite of current selection
+        const isCurrentlySelected = selectedWeapons.has(index)
+        next.set(index, !isCurrentlySelected)
+        return next
+      })
+    },
+    [selectedWeapons],
+  )
 
   // Get selected weapon profiles with merged special rules (user-added + leader auto-applied)
   const leaderWeaponAbilities = useMemo(() => leaderRules.map((lr) => lr.rule), [leaderRules])
@@ -373,7 +414,9 @@ export function SimulatorScreen({ onSignOut }: Props) {
       const weapon = weapons[wi]!
       const defKeywords = defenderKeywordRecords.map((k) => k.keyword)
       // Leader weapons fire once (1 model), unit weapons fire × model count
-      const weaponModelCount = leaderWeaponIndices.has(weaponIndices[wi]!) ? 1 : effectiveAttackerModels
+      const weaponModelCount = leaderWeaponIndices.has(weaponIndices[wi]!)
+        ? 1
+        : effectiveAttackerModels
       const r = simulateWeapon(
         weapon,
         resolvedDefender.toughness,
@@ -398,20 +441,11 @@ export function SimulatorScreen({ onSignOut }: Props) {
       })
     }
 
-    totalExpectedModelsRemoved = Math.min(
-      effectiveDefenderModels,
-      totalExpectedModelsRemoved,
-    )
+    totalExpectedModelsRemoved = Math.min(effectiveDefenderModels, totalExpectedModelsRemoved)
     const survivors = Math.max(0, effectiveDefenderModels - totalExpectedModelsRemoved)
 
-    bestCaseWounds = Math.min(
-      bestCaseWounds,
-      effectiveDefenderModels * resolvedDefender.wounds,
-    )
-    worstCaseWounds = Math.min(
-      worstCaseWounds,
-      effectiveDefenderModels * resolvedDefender.wounds,
-    )
+    bestCaseWounds = Math.min(bestCaseWounds, effectiveDefenderModels * resolvedDefender.wounds)
+    worstCaseWounds = Math.min(worstCaseWounds, effectiveDefenderModels * resolvedDefender.wounds)
 
     return {
       result: {
@@ -429,7 +463,18 @@ export function SimulatorScreen({ onSignOut }: Props) {
       },
       breakdowns,
     }
-  }, [resolvedAttacker, resolvedDefender, effectiveAttackerModels, effectiveDefenderModels, invulnSave, fnp, getSelectedWeapons, getSelectedWeaponIndices, leaderWeaponIndices, defenderKeywordRecords])
+  }, [
+    resolvedAttacker,
+    resolvedDefender,
+    effectiveAttackerModels,
+    effectiveDefenderModels,
+    invulnSave,
+    fnp,
+    getSelectedWeapons,
+    getSelectedWeaponIndices,
+    leaderWeaponIndices,
+    defenderKeywordRecords,
+  ])
 
   // Monte Carlo distribution (runs alongside deterministic sim)
   const [distribution, setDistribution] = useState<DistributionData | null>(null)
@@ -439,7 +484,10 @@ export function SimulatorScreen({ onSignOut }: Props) {
     if (!resolvedAttacker || !resolvedDefender) return
     const weapons = getSelectedWeapons()
     const weaponIndices = getSelectedWeaponIndices()
-    if (weapons.length === 0) { setDistribution(null); return }
+    if (weapons.length === 0) {
+      setDistribution(null)
+      return
+    }
 
     const effectiveInvuln = invulnSave ?? resolvedDefender.invulnSave
     const effectiveFnp = fnp ?? resolvedDefender.fnp
@@ -478,7 +526,19 @@ export function SimulatorScreen({ onSignOut }: Props) {
     if (resultsRef.current && typeof resultsRef.current.scrollIntoView === 'function') {
       resultsRef.current.scrollIntoView({ behavior: 'smooth' })
     }
-  }, [resolvedAttacker, resolvedDefender, resolvedDefenderLeader, effectiveAttackerModels, effectiveDefenderModels, invulnSave, fnp, getSelectedWeapons, getSelectedWeaponIndices, leaderWeaponIndices, defenderKeywordRecords])
+  }, [
+    resolvedAttacker,
+    resolvedDefender,
+    resolvedDefenderLeader,
+    effectiveAttackerModels,
+    effectiveDefenderModels,
+    invulnSave,
+    fnp,
+    getSelectedWeapons,
+    getSelectedWeaponIndices,
+    leaderWeaponIndices,
+    defenderKeywordRecords,
+  ])
 
   const resultsRef = useRef<HTMLDivElement>(null)
 
@@ -496,7 +556,18 @@ export function SimulatorScreen({ onSignOut }: Props) {
       leaderContentId: attackerLeaderId ?? undefined,
     }
     return simpleHash(JSON.stringify(weaponConfig))
-  }, [simData, attackType, effectiveAttackerModels, effectiveDefenderModels, invulnSave, fnp, specialRules, getSelectedWeapons, attackerLeaderId, resolvedDefender])
+  }, [
+    simData,
+    attackType,
+    effectiveAttackerModels,
+    effectiveDefenderModels,
+    invulnSave,
+    fnp,
+    specialRules,
+    getSelectedWeapons,
+    attackerLeaderId,
+    resolvedDefender,
+  ])
 
   // Look up cached result from server
   const cachedResult = trpc.simulate.lookup.useQuery(
@@ -547,9 +618,22 @@ export function SimulatorScreen({ onSignOut }: Props) {
       {/* Header */}
       <header className="border-b border-slate-800 px-4 py-2 flex items-center justify-between">
         <div className="flex items-center gap-3">
-          <a href="/" className="flex items-center gap-1 text-xs text-slate-400 hover:text-slate-200 transition-colors" title="Back to Home">
-            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-3.5 h-3.5">
-              <path fillRule="evenodd" d="M9.293 2.293a1 1 0 0 1 1.414 0l7 7A1 1 0 0 1 17 11h-1v6a1 1 0 0 1-1 1h-2a1 1 0 0 1-1-1v-3a1 1 0 0 0-1-1H9a1 1 0 0 0-1 1v3a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1v-6H3a1 1 0 0 1-.707-1.707l7-7Z" clipRule="evenodd" />
+          <a
+            href="/"
+            className="flex items-center gap-1 text-xs text-slate-400 hover:text-slate-200 transition-colors"
+            title="Back to Home"
+          >
+            <svg
+              xmlns="http://www.w3.org/2000/svg"
+              viewBox="0 0 20 20"
+              fill="currentColor"
+              className="w-3.5 h-3.5"
+            >
+              <path
+                fillRule="evenodd"
+                d="M9.293 2.293a1 1 0 0 1 1.414 0l7 7A1 1 0 0 1 17 11h-1v6a1 1 0 0 1-1 1h-2a1 1 0 0 1-1-1v-3a1 1 0 0 0-1-1H9a1 1 0 0 0-1 1v3a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1v-6H3a1 1 0 0 1-.707-1.707l7-7Z"
+                clipRule="evenodd"
+              />
             </svg>
             Home
           </a>
@@ -564,7 +648,10 @@ export function SimulatorScreen({ onSignOut }: Props) {
       </header>
 
       <div className="max-w-2xl mx-auto p-4 space-y-6">
-        <p className="text-xs text-slate-500 mb-4">Select factions, pick attacker and defender units, then configure weapons and abilities to simulate combat. Click "Run Simulation" to see expected wounds and models removed.</p>
+        <p className="text-xs text-slate-500 mb-4">
+          Select factions, pick attacker and defender units, then configure weapons and abilities to
+          simulate combat. Click "Run Simulation" to see expected wounds and models removed.
+        </p>
 
         {/* No data warning */}
         {!gameDataAvailable && (
@@ -572,7 +659,9 @@ export function SimulatorScreen({ onSignOut }: Props) {
             <p className="text-slate-200 font-semibold">No game data imported</p>
             <p className="text-slate-400 text-sm mt-1">
               Import unit profiles from the{' '}
-              <a href="/data-import/" className="text-amber-400 hover:underline">Data Import</a>{' '}
+              <a href="/data-import/" className="text-amber-400 hover:underline">
+                Data Import
+              </a>{' '}
               app (Unit Profiles tab) to use the combat simulator.
             </p>
           </div>
@@ -607,11 +696,15 @@ export function SimulatorScreen({ onSignOut }: Props) {
             />
             {resolvedAttacker && (
               <>
-                <UnitProfileCard unit={resolvedAttacker} additionalModels={wahapediaAttackerModels} />
+                <UnitProfileCard
+                  unit={resolvedAttacker}
+                  additionalModels={wahapediaAttackerModels}
+                />
                 <div className="flex gap-3">
                   <div className="flex-1">
                     <label className="block text-xs text-slate-400 mb-1">
-                      Models{attackerModelCount === -1 && defaultAttackerModels ? ' (from data)' : ''}
+                      Models
+                      {attackerModelCount === -1 && defaultAttackerModels ? ' (from data)' : ''}
                       <HelpTip text="Number of models in the attacking unit. Each model fires the selected weapons." />
                     </label>
                     {attackerModelOptions.length > 0 ? (
@@ -632,7 +725,9 @@ export function SimulatorScreen({ onSignOut }: Props) {
                         min={1}
                         max={30}
                         value={effectiveAttackerModels}
-                        onChange={(e) => setAttackerModelCount(Math.max(1, parseInt(e.target.value) || 1))}
+                        onChange={(e) =>
+                          setAttackerModelCount(Math.max(1, parseInt(e.target.value) || 1))
+                        }
                         className="w-full px-3 py-1.5 rounded-lg bg-slate-900 border border-slate-800 text-slate-100 text-sm focus:outline-none focus:border-amber-400"
                       />
                     )}
@@ -646,7 +741,9 @@ export function SimulatorScreen({ onSignOut }: Props) {
                   {attackerAbilities.map((a, i) => (
                     <div key={i}>
                       <p className="text-xs font-medium text-amber-400">{a.name}</p>
-                      <p className="text-xs text-slate-400 leading-relaxed whitespace-pre-wrap">{htmlToText(a.description)}</p>
+                      <p className="text-xs text-slate-400 leading-relaxed whitespace-pre-wrap">
+                        {htmlToText(a.description)}
+                      </p>
                     </div>
                   ))}
                 </div>
@@ -656,7 +753,10 @@ export function SimulatorScreen({ onSignOut }: Props) {
               <CollapsibleSection title="Keywords" count={attackerKeywordRecords.length}>
                 <div className="flex flex-wrap gap-1">
                   {attackerKeywordRecords.map((k, i) => (
-                    <span key={i} className={`px-1.5 py-0.5 rounded text-[10px] ${k.isFactionKeyword ? 'bg-amber-400/20 text-amber-300' : 'bg-slate-800 text-slate-400'}`}>
+                    <span
+                      key={i}
+                      className={`px-1.5 py-0.5 rounded text-[10px] ${k.isFactionKeyword ? 'bg-amber-400/20 text-amber-300' : 'bg-slate-800 text-slate-400'}`}
+                    >
                       {k.keyword}
                     </span>
                   ))}
@@ -666,7 +766,9 @@ export function SimulatorScreen({ onSignOut }: Props) {
             {attackerWargear.length > 0 && (
               <CollapsibleSection title="Wargear Options" count={attackerWargear.length}>
                 {attackerWargear.map((w, i) => (
-                  <p key={i} className="text-xs text-slate-500 whitespace-pre-wrap">{htmlToText(w.description)}</p>
+                  <p key={i} className="text-xs text-slate-500 whitespace-pre-wrap">
+                    {htmlToText(w.description)}
+                  </p>
                 ))}
               </CollapsibleSection>
             )}
@@ -686,11 +788,17 @@ export function SimulatorScreen({ onSignOut }: Props) {
             />
             {resolvedDefender && (
               <>
-                <UnitProfileCard unit={resolvedDefender} invulnSave={invulnSave} fnp={fnp} additionalModels={wahapediaDefenderModels} />
+                <UnitProfileCard
+                  unit={resolvedDefender}
+                  invulnSave={invulnSave}
+                  fnp={fnp}
+                  additionalModels={wahapediaDefenderModels}
+                />
                 <div className="flex gap-3">
                   <div className="flex-1">
                     <label className="block text-xs text-slate-400 mb-1">
-                      Models{defenderModelCount === -1 && defaultDefenderModels ? ' (from data)' : ''}
+                      Models
+                      {defenderModelCount === -1 && defaultDefenderModels ? ' (from data)' : ''}
                       <HelpTip text="Number of models in the defending unit." />
                     </label>
                     {defenderModelOptions.length > 0 ? (
@@ -711,16 +819,23 @@ export function SimulatorScreen({ onSignOut }: Props) {
                         min={1}
                         max={30}
                         value={effectiveDefenderModels}
-                        onChange={(e) => setDefenderModelCount(Math.max(1, parseInt(e.target.value) || 1))}
+                        onChange={(e) =>
+                          setDefenderModelCount(Math.max(1, parseInt(e.target.value) || 1))
+                        }
                         className="w-full px-3 py-1.5 rounded-lg bg-slate-900 border border-slate-800 text-slate-100 text-sm focus:outline-none focus:border-amber-400"
                       />
                     )}
                   </div>
                   <div className="flex-1">
-                    <label className="block text-xs text-slate-400 mb-1">Invuln<HelpTip text="Invulnerable save. Ignores AP. Overrides unit data if set." /></label>
+                    <label className="block text-xs text-slate-400 mb-1">
+                      Invuln
+                      <HelpTip text="Invulnerable save. Ignores AP. Overrides unit data if set." />
+                    </label>
                     <select
                       value={invulnSave ?? resolvedDefender.invulnSave ?? ''}
-                      onChange={(e) => setInvulnSave(e.target.value ? parseInt(e.target.value) : undefined)}
+                      onChange={(e) =>
+                        setInvulnSave(e.target.value ? parseInt(e.target.value) : undefined)
+                      }
                       className="w-full px-3 py-1.5 rounded-lg bg-slate-900 border border-slate-800 text-slate-100 text-sm focus:outline-none focus:border-amber-400"
                     >
                       <option value="">None</option>
@@ -732,10 +847,15 @@ export function SimulatorScreen({ onSignOut }: Props) {
                     </select>
                   </div>
                   <div className="flex-1">
-                    <label className="block text-xs text-slate-400 mb-1">FNP<HelpTip text="Feel No Pain. Each point of damage is ignored on this roll. Applied after saves." /></label>
+                    <label className="block text-xs text-slate-400 mb-1">
+                      FNP
+                      <HelpTip text="Feel No Pain. Each point of damage is ignored on this roll. Applied after saves." />
+                    </label>
                     <select
                       value={fnp ?? resolvedDefender.fnp ?? ''}
-                      onChange={(e) => setFnp(e.target.value ? parseInt(e.target.value) : undefined)}
+                      onChange={(e) =>
+                        setFnp(e.target.value ? parseInt(e.target.value) : undefined)
+                      }
                       className="w-full px-3 py-1.5 rounded-lg bg-slate-900 border border-slate-800 text-slate-100 text-sm focus:outline-none focus:border-amber-400"
                     >
                       <option value="">None</option>
@@ -753,7 +873,9 @@ export function SimulatorScreen({ onSignOut }: Props) {
                       {defenderAbilities.map((a, i) => (
                         <div key={i}>
                           <p className="text-xs font-medium text-amber-400">{a.name}</p>
-                          <p className="text-xs text-slate-400 leading-relaxed whitespace-pre-wrap">{htmlToText(a.description)}</p>
+                          <p className="text-xs text-slate-400 leading-relaxed whitespace-pre-wrap">
+                            {htmlToText(a.description)}
+                          </p>
                         </div>
                       ))}
                     </div>
@@ -763,7 +885,10 @@ export function SimulatorScreen({ onSignOut }: Props) {
                   <CollapsibleSection title="Keywords" count={defenderKeywordRecords.length}>
                     <div className="flex flex-wrap gap-1">
                       {defenderKeywordRecords.map((k, i) => (
-                        <span key={i} className={`px-1.5 py-0.5 rounded text-[10px] ${k.isFactionKeyword ? 'bg-amber-400/20 text-amber-300' : 'bg-slate-800 text-slate-400'}`}>
+                        <span
+                          key={i}
+                          className={`px-1.5 py-0.5 rounded text-[10px] ${k.isFactionKeyword ? 'bg-amber-400/20 text-amber-300' : 'bg-slate-800 text-slate-400'}`}
+                        >
                           {k.keyword}
                         </span>
                       ))}
@@ -773,7 +898,9 @@ export function SimulatorScreen({ onSignOut }: Props) {
                 {defenderWargear.length > 0 && (
                   <CollapsibleSection title="Wargear Options" count={defenderWargear.length}>
                     {defenderWargear.map((w, i) => (
-                      <p key={i} className="text-xs text-slate-500 whitespace-pre-wrap">{htmlToText(w.description)}</p>
+                      <p key={i} className="text-xs text-slate-500 whitespace-pre-wrap">
+                        {htmlToText(w.description)}
+                      </p>
                     ))}
                   </CollapsibleSection>
                 )}
@@ -785,7 +912,10 @@ export function SimulatorScreen({ onSignOut }: Props) {
         {/* Leader attachment (if available) */}
         {resolvedAttacker && availableLeaders.length > 0 && (
           <div className="rounded-lg border border-slate-800 bg-slate-900 p-4">
-            <label className="block text-xs text-slate-400 mb-2">Attach Leader<HelpTip text="Add a leader to the attacker. Leaders provide additional weapons and abilities." /></label>
+            <label className="block text-xs text-slate-400 mb-2">
+              Attach Leader
+              <HelpTip text="Add a leader to the attacker. Leaders provide additional weapons and abilities." />
+            </label>
             <select
               value={attackerLeaderId ?? ''}
               onChange={(e) => {
@@ -806,7 +936,10 @@ export function SimulatorScreen({ onSignOut }: Props) {
         {/* Defender leader attachment (for Precision targeting) */}
         {resolvedDefender && availableDefenderLeaders.length > 0 && (
           <div className="rounded-lg border border-slate-800 bg-slate-900 p-4">
-            <label className="block text-xs text-slate-400 mb-2">Defender Leader<HelpTip text="Attach a leader to the defender. Precision weapons will target the character, while other attacks hit bodyguards first (Look Out, Sir)." /></label>
+            <label className="block text-xs text-slate-400 mb-2">
+              Defender Leader
+              <HelpTip text="Attach a leader to the defender. Precision weapons will target the character, while other attacks hit bodyguards first (Look Out, Sir)." />
+            </label>
             <select
               value={defenderLeaderId ?? ''}
               onChange={(e) => setDefenderLeaderId(e.target.value || null)}
@@ -826,7 +959,9 @@ export function SimulatorScreen({ onSignOut }: Props) {
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             {/* Attacker Detachment */}
             <div className="rounded-lg border border-slate-800 bg-slate-900 p-4 space-y-3">
-              <p className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider">Attacker Detachment</p>
+              <p className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider">
+                Attacker Detachment
+              </p>
               {attackerDetachments.length > 0 ? (
                 <>
                   <select
@@ -839,16 +974,23 @@ export function SimulatorScreen({ onSignOut }: Props) {
                   >
                     <option value="">No detachment</option>
                     {attackerDetachments.map((d) => (
-                      <option key={d.id} value={d.id}>{d.name}</option>
+                      <option key={d.id} value={d.id}>
+                        {d.name}
+                      </option>
                     ))}
                   </select>
                   {atkDetachmentAbilities.length > 0 && (
-                    <CollapsibleSection title="Detachment Abilities" count={atkDetachmentAbilities.length}>
+                    <CollapsibleSection
+                      title="Detachment Abilities"
+                      count={atkDetachmentAbilities.length}
+                    >
                       <div className="text-xs space-y-1.5">
                         {atkDetachmentAbilities.map((a) => (
                           <div key={a.id}>
                             <p className="font-medium text-amber-400">{a.name}</p>
-                            <p className="text-slate-400 leading-relaxed whitespace-pre-wrap">{htmlToText(a.description)}</p>
+                            <p className="text-slate-400 leading-relaxed whitespace-pre-wrap">
+                              {htmlToText(a.description)}
+                            </p>
                           </div>
                         ))}
                       </div>
@@ -864,19 +1006,26 @@ export function SimulatorScreen({ onSignOut }: Props) {
                       >
                         <option value="">No enhancement</option>
                         {atkDetachmentEnhancements.map((enh) => (
-                          <option key={enh.id} value={enh.id}>{enh.name} ({enh.cost}pts)</option>
+                          <option key={enh.id} value={enh.id}>
+                            {enh.name} ({enh.cost}pts)
+                          </option>
                         ))}
                       </select>
-                      {attackerEnhancementId && (() => {
-                        const enh = atkDetachmentEnhancements.find(e => e.id === attackerEnhancementId)
-                        if (!enh) return null
-                        return (
-                          <div className="mt-1.5 text-xs">
-                            <p className="font-medium text-amber-400">{enh.name}</p>
-                            <p className="text-slate-400 leading-relaxed whitespace-pre-wrap">{htmlToText(enh.description)}</p>
-                          </div>
-                        )
-                      })()}
+                      {attackerEnhancementId &&
+                        (() => {
+                          const enh = atkDetachmentEnhancements.find(
+                            (e) => e.id === attackerEnhancementId,
+                          )
+                          if (!enh) return null
+                          return (
+                            <div className="mt-1.5 text-xs">
+                              <p className="font-medium text-amber-400">{enh.name}</p>
+                              <p className="text-slate-400 leading-relaxed whitespace-pre-wrap">
+                                {htmlToText(enh.description)}
+                              </p>
+                            </div>
+                          )
+                        })()}
                     </div>
                   )}
                 </>
@@ -886,7 +1035,9 @@ export function SimulatorScreen({ onSignOut }: Props) {
             </div>
             {/* Defender Detachment */}
             <div className="rounded-lg border border-slate-800 bg-slate-900 p-4 space-y-3">
-              <p className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider">Defender Detachment</p>
+              <p className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider">
+                Defender Detachment
+              </p>
               {defenderDetachments.length > 0 ? (
                 <>
                   <select
@@ -896,16 +1047,23 @@ export function SimulatorScreen({ onSignOut }: Props) {
                   >
                     <option value="">No detachment</option>
                     {defenderDetachments.map((d) => (
-                      <option key={d.id} value={d.id}>{d.name}</option>
+                      <option key={d.id} value={d.id}>
+                        {d.name}
+                      </option>
                     ))}
                   </select>
                   {defDetachmentAbilities.length > 0 && (
-                    <CollapsibleSection title="Detachment Abilities" count={defDetachmentAbilities.length}>
+                    <CollapsibleSection
+                      title="Detachment Abilities"
+                      count={defDetachmentAbilities.length}
+                    >
                       <div className="text-xs space-y-1.5">
                         {defDetachmentAbilities.map((a) => (
                           <div key={a.id}>
                             <p className="font-medium text-amber-400">{a.name}</p>
-                            <p className="text-slate-400 leading-relaxed whitespace-pre-wrap">{htmlToText(a.description)}</p>
+                            <p className="text-slate-400 leading-relaxed whitespace-pre-wrap">
+                              {htmlToText(a.description)}
+                            </p>
                           </div>
                         ))}
                       </div>
@@ -1009,7 +1167,6 @@ export function SimulatorScreen({ onSignOut }: Props) {
   )
 }
 
-
 function LeaderSelectOption({ leaderId }: { leaderId: string }) {
   const { data: unit } = useGameUnit(leaderId)
   return <option value={leaderId}>{unit?.name ?? leaderId}</option>
@@ -1026,25 +1183,39 @@ interface StratagemItem {
   description: string
 }
 
-function StratagemReference({ attackerStratagems, defenderStratagems }: {
+function StratagemReference({
+  attackerStratagems,
+  defenderStratagems,
+}: {
   attackerStratagems: StratagemItem[]
   defenderStratagems: StratagemItem[]
 }) {
   return (
-    <CollapsibleSection title="Stratagems" count={attackerStratagems.length + defenderStratagems.length}>
+    <CollapsibleSection
+      title="Stratagems"
+      count={attackerStratagems.length + defenderStratagems.length}
+    >
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4 max-h-96 overflow-y-auto">
         {attackerStratagems.length > 0 && (
           <div>
-            <p className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider mb-2">Attacker</p>
+            <p className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider mb-2">
+              Attacker
+            </p>
             <div className="space-y-2">
               {attackerStratagems.map((s) => (
                 <div key={s.id} className="text-xs">
                   <div className="flex items-center gap-2">
                     <span className="font-medium text-amber-400">{s.name}</span>
-                    <span className="px-1 py-0.5 rounded bg-slate-800 text-slate-400 text-[10px]">{s.cpCost}CP</span>
-                    <span className="px-1 py-0.5 rounded bg-slate-800 text-slate-500 text-[10px]">{s.phase}</span>
+                    <span className="px-1 py-0.5 rounded bg-slate-800 text-slate-400 text-[10px]">
+                      {s.cpCost}CP
+                    </span>
+                    <span className="px-1 py-0.5 rounded bg-slate-800 text-slate-500 text-[10px]">
+                      {s.phase}
+                    </span>
                   </div>
-                  <p className="text-slate-500 mt-0.5 leading-relaxed whitespace-pre-wrap">{htmlToText(s.legend)}</p>
+                  <p className="text-slate-500 mt-0.5 leading-relaxed whitespace-pre-wrap">
+                    {htmlToText(s.legend)}
+                  </p>
                 </div>
               ))}
             </div>
@@ -1052,16 +1223,24 @@ function StratagemReference({ attackerStratagems, defenderStratagems }: {
         )}
         {defenderStratagems.length > 0 && (
           <div>
-            <p className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider mb-2">Defender</p>
+            <p className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider mb-2">
+              Defender
+            </p>
             <div className="space-y-2">
               {defenderStratagems.map((s) => (
                 <div key={s.id} className="text-xs">
                   <div className="flex items-center gap-2">
                     <span className="font-medium text-amber-400">{s.name}</span>
-                    <span className="px-1 py-0.5 rounded bg-slate-800 text-slate-400 text-[10px]">{s.cpCost}CP</span>
-                    <span className="px-1 py-0.5 rounded bg-slate-800 text-slate-500 text-[10px]">{s.phase}</span>
+                    <span className="px-1 py-0.5 rounded bg-slate-800 text-slate-400 text-[10px]">
+                      {s.cpCost}CP
+                    </span>
+                    <span className="px-1 py-0.5 rounded bg-slate-800 text-slate-500 text-[10px]">
+                      {s.phase}
+                    </span>
                   </div>
-                  <p className="text-slate-500 mt-0.5 leading-relaxed whitespace-pre-wrap">{htmlToText(s.legend)}</p>
+                  <p className="text-slate-500 mt-0.5 leading-relaxed whitespace-pre-wrap">
+                    {htmlToText(s.legend)}
+                  </p>
                 </div>
               ))}
             </div>
@@ -1082,7 +1261,9 @@ interface HistorySimulation {
   createdAt: number
 }
 
-function SimulationHistory({ onLoadSimulation }: {
+function SimulationHistory({
+  onLoadSimulation,
+}: {
   onLoadSimulation: (sim: HistorySimulation) => void
 }) {
   const [showHistory, setShowHistory] = useState(false)
@@ -1097,9 +1278,7 @@ function SimulationHistory({ onLoadSimulation }: {
       {/* Trigger data fetch when section opens */}
       <HistoryLoader onShow={() => setShowHistory(true)} />
       <div className="space-y-2 max-h-80 overflow-y-auto">
-        {!showHistory && (
-          <p className="text-sm text-slate-500">Loading...</p>
-        )}
+        {!showHistory && <p className="text-sm text-slate-500">Loading...</p>}
         {showHistory && history.length === 0 && (
           <p className="text-sm text-slate-500">No saved simulations yet.</p>
         )}
@@ -1107,7 +1286,9 @@ function SimulationHistory({ onLoadSimulation }: {
           let result: { expectedWounds: number; expectedModelsRemoved: number } | null = null
           try {
             result = JSON.parse(sim.result as string)
-          } catch { /* empty */ }
+          } catch {
+            /* empty */
+          }
 
           return (
             <div key={sim.id as string} className="relative group">
@@ -1117,9 +1298,13 @@ function SimulationHistory({ onLoadSimulation }: {
               >
                 <div className="flex items-center justify-between">
                   <div>
-                    <span className="text-sm font-medium text-amber-400">{sim.attackerName as string}</span>
+                    <span className="text-sm font-medium text-amber-400">
+                      {sim.attackerName as string}
+                    </span>
                     <span className="text-xs text-slate-500 mx-2">vs</span>
-                    <span className="text-sm font-medium text-slate-200">{sim.defenderName as string}</span>
+                    <span className="text-sm font-medium text-slate-200">
+                      {sim.defenderName as string}
+                    </span>
                   </div>
                   <span className="text-xs text-slate-500">
                     {new Date(sim.createdAt as number).toLocaleDateString()}
@@ -1127,7 +1312,8 @@ function SimulationHistory({ onLoadSimulation }: {
                 </div>
                 {result && (
                   <p className="text-xs text-slate-400 mt-1">
-                    {(result.expectedWounds ?? 0).toFixed(1)} wounds, {result.expectedModelsRemoved ?? 0} models removed
+                    {(result.expectedWounds ?? 0).toFixed(1)} wounds,{' '}
+                    {result.expectedModelsRemoved ?? 0} models removed
                   </p>
                 )}
               </button>
@@ -1140,8 +1326,17 @@ function SimulationHistory({ onLoadSimulation }: {
                 className="absolute top-2 right-2 text-slate-600 hover:text-red-400 opacity-0 group-hover:opacity-100 transition-opacity"
                 title="Delete"
               >
-                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-4 h-4">
-                  <path fillRule="evenodd" d="M8.75 1A2.75 2.75 0 006 3.75v.443c-.795.077-1.584.176-2.365.298a.75.75 0 10.23 1.482l.149-.022.841 10.518A2.75 2.75 0 007.596 19h4.807a2.75 2.75 0 002.742-2.53l.841-10.52.149.023a.75.75 0 00.23-1.482A41.03 41.03 0 0014 4.193V3.75A2.75 2.75 0 0011.25 1h-2.5zM10 4c.84 0 1.673.025 2.5.075V3.75c0-.69-.56-1.25-1.25-1.25h-2.5c-.69 0-1.25.56-1.25 1.25v.325C8.327 4.025 9.16 4 10 4zM8.58 7.72a.75.75 0 01.78.72l.5 6a.75.75 0 01-1.499.12l-.5-6a.75.75 0 01.72-.78zm2.84 0a.75.75 0 01.72.78l-.5 6a.75.75 0 11-1.499-.12l.5-6a.75.75 0 01.78-.72z" clipRule="evenodd" />
+                <svg
+                  xmlns="http://www.w3.org/2000/svg"
+                  viewBox="0 0 20 20"
+                  fill="currentColor"
+                  className="w-4 h-4"
+                >
+                  <path
+                    fillRule="evenodd"
+                    d="M8.75 1A2.75 2.75 0 006 3.75v.443c-.795.077-1.584.176-2.365.298a.75.75 0 10.23 1.482l.149-.022.841 10.518A2.75 2.75 0 007.596 19h4.807a2.75 2.75 0 002.742-2.53l.841-10.52.149.023a.75.75 0 00.23-1.482A41.03 41.03 0 0014 4.193V3.75A2.75 2.75 0 0011.25 1h-2.5zM10 4c.84 0 1.673.025 2.5.075V3.75c0-.69-.56-1.25-1.25-1.25h-2.5c-.69 0-1.25.56-1.25 1.25v.325C8.327 4.025 9.16 4 10 4zM8.58 7.72a.75.75 0 01.78.72l.5 6a.75.75 0 01-1.499.12l-.5-6a.75.75 0 01.72-.78zm2.84 0a.75.75 0 01.72.78l-.5 6a.75.75 0 11-1.499-.12l.5-6a.75.75 0 01.78-.72z"
+                    clipRule="evenodd"
+                  />
                 </svg>
               </button>
             </div>

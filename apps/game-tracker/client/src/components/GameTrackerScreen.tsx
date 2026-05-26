@@ -1,13 +1,13 @@
+import { HelpTip } from '@tabletop-tools/ui'
 import { useState } from 'react'
 
 import { authClient } from '../lib/auth'
-import { HelpTip } from '@tabletop-tools/ui'
 import { trpc } from '../lib/trpc'
-import { MatchSetupScreen, type MatchSetupData } from './MatchSetupScreen'
-import { MissionSetupScreen, type MissionSetupData } from './MissionSetupScreen'
-import { PregameScreen, type PregameData } from './PregameScreen'
 import { BattleScreen } from './BattleScreen'
 import { EndGameScreen } from './EndGameScreen'
+import { type MatchSetupData, MatchSetupScreen } from './MatchSetupScreen'
+import { type MissionSetupData, MissionSetupScreen } from './MissionSetupScreen'
+import { type PregameData, PregameScreen } from './PregameScreen'
 
 type Props = {
   onSignOut: () => void
@@ -59,7 +59,9 @@ export function GameTrackerScreen({ onSignOut }: Props) {
       terrainLayout: missionData.terrainLayout || undefined,
       deploymentZone: missionData.deploymentZone || undefined,
       twistCards: missionData.includeTwists ? JSON.stringify(missionData.twistCards) : undefined,
-      challengerCards: missionData.includeChallenger ? JSON.stringify(missionData.challengerCards) : undefined,
+      challengerCards: missionData.includeChallenger
+        ? JSON.stringify(missionData.challengerCards)
+        : undefined,
       requirePhotos: missionData.requirePhotos,
       attackerDefender: pregameData.attackerDefender || undefined,
       whoGoesFirst: pregameData.whoGoesFirst || undefined,
@@ -76,13 +78,33 @@ export function GameTrackerScreen({ onSignOut }: Props) {
       <div className="min-h-screen bg-slate-950 text-slate-100">
         <header className="border-b border-slate-800 px-6 py-4 flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <a href="/" className="flex items-center gap-1 text-xs text-slate-400 hover:text-slate-200 transition-colors" title="Back to Home">
-              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-3.5 h-3.5">
-                <path fillRule="evenodd" d="M9.293 2.293a1 1 0 0 1 1.414 0l7 7A1 1 0 0 1 17 11h-1v6a1 1 0 0 1-1 1h-2a1 1 0 0 1-1-1v-3a1 1 0 0 0-1-1H9a1 1 0 0 0-1 1v3a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1v-6H3a1 1 0 0 1-.707-1.707l7-7Z" clipRule="evenodd" />
+            <a
+              href="/"
+              className="flex items-center gap-1 text-xs text-slate-400 hover:text-slate-200 transition-colors"
+              title="Back to Home"
+            >
+              <svg
+                xmlns="http://www.w3.org/2000/svg"
+                viewBox="0 0 20 20"
+                fill="currentColor"
+                className="w-3.5 h-3.5"
+              >
+                <path
+                  fillRule="evenodd"
+                  d="M9.293 2.293a1 1 0 0 1 1.414 0l7 7A1 1 0 0 1 17 11h-1v6a1 1 0 0 1-1 1h-2a1 1 0 0 1-1-1v-3a1 1 0 0 0-1-1H9a1 1 0 0 0-1 1v3a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1v-6H3a1 1 0 0 1-.707-1.707l7-7Z"
+                  clipRule="evenodd"
+                />
               </svg>
               Home
             </a>
-            <h1><a href="/" className="text-2xl font-bold text-amber-400 hover:text-amber-300 transition-colors">Game Tracker</a></h1>
+            <h1>
+              <a
+                href="/"
+                className="text-2xl font-bold text-amber-400 hover:text-amber-300 transition-colors"
+              >
+                Game Tracker
+              </a>
+            </h1>
           </div>
           <button
             onClick={() => void handleSignOut()}
@@ -92,7 +114,9 @@ export function GameTrackerScreen({ onSignOut }: Props) {
           </button>
         </header>
 
-        <p className="text-[10px] text-slate-500 px-6 pt-2">Track 40K matches turn-by-turn: setup, mission, scoring, and end-game summary.</p>
+        <p className="text-[10px] text-slate-500 px-6 pt-2">
+          Track 40K matches turn-by-turn: setup, mission, scoring, and end-game summary.
+        </p>
 
         <div className="p-6">
           <button
@@ -102,7 +126,10 @@ export function GameTrackerScreen({ onSignOut }: Props) {
             + New Match
           </button>
 
-          <h2 className="text-lg font-semibold text-slate-300 mb-3">Match History<HelpTip text="Tap a match to view details or resume an in-progress game" /></h2>
+          <h2 className="text-lg font-semibold text-slate-300 mb-3">
+            Match History
+            <HelpTip text="Tap a match to view details or resume an in-progress game" />
+          </h2>
 
           {matches.length === 0 && (
             <p className="text-slate-500 text-sm">No matches yet. Start a new match above.</p>
@@ -124,7 +151,10 @@ export function GameTrackerScreen({ onSignOut }: Props) {
                   <div className="flex items-center justify-between">
                     <div>
                       <p className="font-medium text-slate-100">
-                        vs {match.opponentName ? `${match.opponentName} (${match.opponentFaction})` : match.opponentFaction}
+                        vs{' '}
+                        {match.opponentName
+                          ? `${match.opponentName} (${match.opponentFaction})`
+                          : match.opponentFaction}
                       </p>
                       <p className="text-sm text-slate-400">{match.mission}</p>
                     </div>
@@ -160,8 +190,17 @@ export function GameTrackerScreen({ onSignOut }: Props) {
                   className="absolute top-2 right-2 text-slate-600 hover:text-red-400 opacity-0 group-hover:opacity-100 transition-opacity"
                   title={match.tournamentId ? 'Hide' : 'Delete'}
                 >
-                  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-4 h-4">
-                    <path fillRule="evenodd" d="M8.75 1A2.75 2.75 0 006 3.75v.443c-.795.077-1.584.176-2.365.298a.75.75 0 10.23 1.482l.149-.022.841 10.518A2.75 2.75 0 007.596 19h4.807a2.75 2.75 0 002.742-2.53l.841-10.52.149.023a.75.75 0 00.23-1.482A41.03 41.03 0 0014 4.193V3.75A2.75 2.75 0 0011.25 1h-2.5zM10 4c.84 0 1.673.025 2.5.075V3.75c0-.69-.56-1.25-1.25-1.25h-2.5c-.69 0-1.25.56-1.25 1.25v.325C8.327 4.025 9.16 4 10 4zM8.58 7.72a.75.75 0 01.78.72l.5 6a.75.75 0 01-1.499.12l-.5-6a.75.75 0 01.72-.78zm2.84 0a.75.75 0 01.72.78l-.5 6a.75.75 0 11-1.499-.12l.5-6a.75.75 0 01.78-.72z" clipRule="evenodd" />
+                  <svg
+                    xmlns="http://www.w3.org/2000/svg"
+                    viewBox="0 0 20 20"
+                    fill="currentColor"
+                    className="w-4 h-4"
+                  >
+                    <path
+                      fillRule="evenodd"
+                      d="M8.75 1A2.75 2.75 0 006 3.75v.443c-.795.077-1.584.176-2.365.298a.75.75 0 10.23 1.482l.149-.022.841 10.518A2.75 2.75 0 007.596 19h4.807a2.75 2.75 0 002.742-2.53l.841-10.52.149.023a.75.75 0 00.23-1.482A41.03 41.03 0 0014 4.193V3.75A2.75 2.75 0 0011.25 1h-2.5zM10 4c.84 0 1.673.025 2.5.075V3.75c0-.69-.56-1.25-1.25-1.25h-2.5c-.69 0-1.25.56-1.25 1.25v.325C8.327 4.025 9.16 4 10 4zM8.58 7.72a.75.75 0 01.78.72l.5 6a.75.75 0 01-1.499.12l-.5-6a.75.75 0 01.72-.78zm2.84 0a.75.75 0 01.72.78l-.5 6a.75.75 0 11-1.499-.12l.5-6a.75.75 0 01.78-.72z"
+                      clipRule="evenodd"
+                    />
                   </svg>
                 </button>
               </div>
@@ -203,9 +242,7 @@ export function GameTrackerScreen({ onSignOut }: Props) {
         onStart={(pregameData) =>
           handleStartBattle(screen.setupData, screen.missionData, pregameData)
         }
-        onBack={() =>
-          setScreen({ type: 'mission-setup', setupData: screen.setupData })
-        }
+        onBack={() => setScreen({ type: 'mission-setup', setupData: screen.setupData })}
       />
     )
   }
@@ -223,12 +260,7 @@ export function GameTrackerScreen({ onSignOut }: Props) {
 
   // ─── Summary ─────────────────────────────────────────────────────
   if (screen.type === 'summary') {
-    return (
-      <EndGameScreen
-        matchId={screen.matchId}
-        onBack={() => setScreen({ type: 'list' })}
-      />
-    )
+    return <EndGameScreen matchId={screen.matchId} onBack={() => setScreen({ type: 'list' })} />
   }
 
   return null

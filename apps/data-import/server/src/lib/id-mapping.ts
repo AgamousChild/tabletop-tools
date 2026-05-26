@@ -73,8 +73,7 @@ export function buildIdMapping(
     // Multiple matches — try faction-based disambiguation
     const wahapediaFactionName = factionCodeToName.get(ds.factionId)
     const factionMatch = wahapediaFactionName
-      ? candidates.find(c =>
-          normalizeName(c.faction) === normalizeName(wahapediaFactionName))
+      ? candidates.find((c) => normalizeName(c.faction) === normalizeName(wahapediaFactionName))
       : null
 
     if (factionMatch) {
@@ -97,7 +96,7 @@ export function rekeyRecords<T extends Record<string, unknown>>(
   idMap: Map<string, string>,
   field = 'datasheetId',
 ): T[] {
-  return records.map(r => {
+  return records.map((r) => {
     const oldId = r[field] as string | undefined
     if (oldId) {
       const bsdataId = idMap.get(oldId)
@@ -116,7 +115,7 @@ export function rekeyFactionIds<T extends Record<string, unknown>>(
   records: T[],
   factionCodeToName: Map<string, string>,
 ): T[] {
-  return records.map(r => {
+  return records.map((r) => {
     const factionId = r['factionId'] as string | undefined
     if (factionId) {
       const fullName = factionCodeToName.get(factionId)
@@ -135,7 +134,7 @@ export function rekeyLeaderAttachments(
   records: Array<Record<string, unknown>>,
   idMap: Map<string, string>,
 ): Array<Record<string, unknown>> {
-  return records.map(r => ({
+  return records.map((r) => ({
     ...r,
     leaderId: idMap.get(r['leaderId'] as string) ?? r['leaderId'],
     attachedId: idMap.get(r['attachedId'] as string) ?? r['attachedId'],
@@ -155,15 +154,27 @@ export function rekeyAllWahapediaFiles(
 
   // Files that need factionId re-keying (use Wahapedia faction codes)
   const factionIdFiles = [
-    'factions', 'detachments', 'detachment_abilities', 'stratagems',
-    'enhancements', 'abilities', 'datasheets',
+    'factions',
+    'detachments',
+    'detachment_abilities',
+    'stratagems',
+    'enhancements',
+    'abilities',
+    'datasheets',
   ]
 
   // Files that need datasheetId re-keying
   const datasheetIdFiles = [
-    'unit_compositions', 'unit_costs', 'wargear_options', 'unit_keywords',
-    'unit_abilities', 'datasheet_wargear', 'datasheet_models',
-    'datasheet_stratagems', 'datasheet_enhancements', 'datasheet_detachment_abilities',
+    'unit_compositions',
+    'unit_costs',
+    'wargear_options',
+    'unit_keywords',
+    'unit_abilities',
+    'datasheet_wargear',
+    'datasheet_models',
+    'datasheet_stratagems',
+    'datasheet_enhancements',
+    'datasheet_detachment_abilities',
   ]
 
   for (const [name, records] of Object.entries(data)) {
@@ -181,7 +192,7 @@ export function rekeyAllWahapediaFiles(
 
     // Re-key datasheets: both the ID itself and factionId
     if (name === 'datasheets') {
-      rekeyed = rekeyed.map(ds => {
+      rekeyed = rekeyed.map((ds) => {
         const bsdataId = idMap.get(ds['id'] as string)
         return {
           ...ds,

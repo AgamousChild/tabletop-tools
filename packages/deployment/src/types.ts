@@ -89,7 +89,15 @@ export type DeploymentType =
   | 'tipping-point'
   | 'sweeping-engagement'
 
-export type PlayerZone = 'top-left' | 'top-right' | 'bottom-left' | 'bottom-right' | 'top' | 'bottom' | 'left' | 'right'
+export type PlayerZone =
+  | 'top-left'
+  | 'top-right'
+  | 'bottom-left'
+  | 'bottom-right'
+  | 'top'
+  | 'bottom'
+  | 'left'
+  | 'right'
 
 export interface Battlefield {
   width: number
@@ -105,9 +113,17 @@ export interface Battlefield {
 export type StrategicPurpose = 'scoring' | 'killing' | 'holding'
 
 export type TacticalRole =
-  | 'holder' | 'screen' | 'hammer' | 'gunline' | 'mid-range-shooter'
-  | 'transport' | 'infiltrator' | 'scout' | 'deep-strike'
-  | 'anchor' | 'counter-charge'
+  | 'holder'
+  | 'screen'
+  | 'hammer'
+  | 'gunline'
+  | 'mid-range-shooter'
+  | 'transport'
+  | 'infiltrator'
+  | 'scout'
+  | 'deep-strike'
+  | 'anchor'
+  | 'counter-charge'
 
 export type BaseSize = 25 | 28 | 32 | 40 | 50 | 60 | 80 | 'oval-75x42' | 'hull'
 

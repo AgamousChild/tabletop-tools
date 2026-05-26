@@ -1,8 +1,8 @@
 import { createClient } from '@libsql/client'
 import { createDbFromClient } from '@tabletop-tools/db'
+import { createCallerFactory } from '@tabletop-tools/server-core'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 
-import { createCallerFactory } from '@tabletop-tools/server-core'
 import { appRouter } from './index'
 
 const client = createClient({ url: ':memory:' })
@@ -113,7 +113,7 @@ describe('simulate.delete', () => {
     expect(history.find((s) => s.id === saved.id)).toBeUndefined()
   })
 
-  it('rejects deleting another user\'s simulation', async () => {
+  it("rejects deleting another user's simulation", async () => {
     const caller = createCaller(ctx)
     const saved = await caller.simulate.save({
       attackerId: 'a-other',
@@ -160,8 +160,8 @@ describe('simulate.lookup', () => {
 
   it('rejects unauthenticated callers', async () => {
     const caller = createCaller(unauthCtx)
-    await expect(
-      caller.simulate.lookup({ configHash: 'test-hash-123' }),
-    ).rejects.toMatchObject({ code: 'UNAUTHORIZED' })
+    await expect(caller.simulate.lookup({ configHash: 'test-hash-123' })).rejects.toMatchObject({
+      code: 'UNAUTHORIZED',
+    })
   })
 })

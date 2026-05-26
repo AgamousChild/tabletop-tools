@@ -27,36 +27,21 @@ describe('SimulationResult', () => {
 
   it('shows expected wounds', () => {
     render(
-      <SimulationResult
-        attackerName="A"
-        defenderName="D"
-        result={baseResult}
-        onSave={vi.fn()}
-      />,
+      <SimulationResult attackerName="A" defenderName="D" result={baseResult} onSave={vi.fn()} />,
     )
     expect(screen.getByText('2.50')).toBeInTheDocument()
   })
 
   it('shows expected models removed', () => {
     render(
-      <SimulationResult
-        attackerName="A"
-        defenderName="D"
-        result={baseResult}
-        onSave={vi.fn()}
-      />,
+      <SimulationResult attackerName="A" defenderName="D" result={baseResult} onSave={vi.fn()} />,
     )
     expect(screen.getByText('1.20')).toBeInTheDocument()
   })
 
   it('shows best and worst case', () => {
     render(
-      <SimulationResult
-        attackerName="A"
-        defenderName="D"
-        result={baseResult}
-        onSave={vi.fn()}
-      />,
+      <SimulationResult attackerName="A" defenderName="D" result={baseResult} onSave={vi.fn()} />,
     )
     expect(screen.getByText(/best case/i)).toBeInTheDocument()
     expect(screen.getByText(/worst case/i)).toBeInTheDocument()
@@ -64,12 +49,7 @@ describe('SimulationResult', () => {
 
   it('shows a save button', () => {
     render(
-      <SimulationResult
-        attackerName="A"
-        defenderName="D"
-        result={baseResult}
-        onSave={vi.fn()}
-      />,
+      <SimulationResult attackerName="A" defenderName="D" result={baseResult} onSave={vi.fn()} />,
     )
     expect(screen.getByRole('button', { name: /save/i })).toBeInTheDocument()
   })
@@ -77,12 +57,7 @@ describe('SimulationResult', () => {
   it('calls onSave when save button is clicked', () => {
     const onSave = vi.fn()
     render(
-      <SimulationResult
-        attackerName="A"
-        defenderName="D"
-        result={baseResult}
-        onSave={onSave}
-      />,
+      <SimulationResult attackerName="A" defenderName="D" result={baseResult} onSave={onSave} />,
     )
     fireEvent.click(screen.getByRole('button', { name: /save/i }))
     expect(onSave).toHaveBeenCalledTimes(1)
@@ -90,12 +65,7 @@ describe('SimulationResult', () => {
 
   it('renders survivors count correctly', () => {
     render(
-      <SimulationResult
-        attackerName="A"
-        defenderName="D"
-        result={baseResult}
-        onSave={vi.fn()}
-      />,
+      <SimulationResult attackerName="A" defenderName="D" result={baseResult} onSave={vi.fn()} />,
     )
     expect(screen.getByText('3.80')).toBeInTheDocument()
   })

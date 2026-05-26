@@ -2,8 +2,9 @@
  * @see docs/etl-data-pipelines.md — ETL diagram and function reference
  * @see docs/schema-turso.md — Turso database schema (meta_event_players)
  */
-import { sql } from 'drizzle-orm'
 import type { Db } from '@tabletop-tools/db'
+import { sql } from 'drizzle-orm'
+
 import { parseList } from './list-parser'
 
 export async function parsePendingLists(db: Db): Promise<{
@@ -39,9 +40,7 @@ export async function parsePendingLists(db: Db): Promise<{
     const result = parseList(text)
     const json = JSON.stringify(result)
 
-    await db.run(
-      sql`UPDATE meta_event_players SET list_ttt = ${json} WHERE id = ${row.id}`
-    )
+    await db.run(sql`UPDATE meta_event_players SET list_ttt = ${json} WHERE id = ${row.id}`)
 
     if (result.parseStatus === 'ok') parsed++
     else if (result.parseStatus === 'partial') partial++

@@ -1,11 +1,11 @@
 import { createClient } from '@libsql/client'
-import { createDbFromClient } from '@tabletop-tools/db'
 import {
-  setupAuthTables,
-  createRequestHelper,
   authCookie,
+  createRequestHelper,
+  setupAuthTables,
   TEST_SECRET,
 } from '@tabletop-tools/auth/src/test-helpers'
+import { createDbFromClient } from '@tabletop-tools/db'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 
 import { createServer } from './server'

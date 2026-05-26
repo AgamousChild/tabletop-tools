@@ -1,7 +1,8 @@
-import { describe, it, expect, vi } from 'vitest'
-import { render, screen, fireEvent } from '@testing-library/react'
+import { fireEvent, render, screen } from '@testing-library/react'
+import { describe, expect, it, vi } from 'vitest'
+
+import type { CardContext, UnitCardData } from './types'
 import { UnitCard } from './UnitCard'
-import type { UnitCardData, CardContext } from './types'
 
 const mockUnit: UnitCardData = {
   id: '000000126',
@@ -11,13 +12,46 @@ const mockUnit: UnitCardData = {
   points: '5 models: 90pts',
   stats: { move: '6"', toughness: '4', save: '3+', wounds: '2', leadership: '6+', oc: '1' },
   rangedWeapons: [
-    { name: 'Bolt pistol', range: '12"', attacks: '1', skill: '3+', strength: '4', ap: '0', damage: '1', abilities: '[PISTOL]' },
-    { name: 'Pyreblaster', range: '12"', attacks: 'D6', skill: 'N/A', strength: '5', ap: '-1', damage: '1', abilities: '[IGNORES COVER] [TORRENT]' },
+    {
+      name: 'Bolt pistol',
+      range: '12"',
+      attacks: '1',
+      skill: '3+',
+      strength: '4',
+      ap: '0',
+      damage: '1',
+      abilities: '[PISTOL]',
+    },
+    {
+      name: 'Pyreblaster',
+      range: '12"',
+      attacks: 'D6',
+      skill: 'N/A',
+      strength: '5',
+      ap: '-1',
+      damage: '1',
+      abilities: '[IGNORES COVER] [TORRENT]',
+    },
   ],
   meleeWeapons: [
-    { name: 'Close combat weapon', range: 'Melee', attacks: '3', skill: '3+', strength: '4', ap: '0', damage: '1', abilities: '' },
+    {
+      name: 'Close combat weapon',
+      range: 'Melee',
+      attacks: '3',
+      skill: '3+',
+      strength: '4',
+      ap: '0',
+      damage: '1',
+      abilities: '',
+    },
   ],
-  abilities: [{ name: 'Incendiary Terror', description: 'After shooting, select one enemy INFANTRY unit hit — Battle-shock test.', type: 'Datasheet' }],
+  abilities: [
+    {
+      name: 'Incendiary Terror',
+      description: 'After shooting, select one enemy INFANTRY unit hit — Battle-shock test.',
+      type: 'Datasheet',
+    },
+  ],
   coreAbilities: ['Grenades'],
   keywords: ['Infantry', 'Grenades', 'Imperium', 'Tacticus'],
   factionKeywords: ['Adeptus Astartes'],
@@ -91,7 +125,9 @@ describe('UnitCard', () => {
   it('renders ability names and descriptions', () => {
     render(<UnitCard data={mockUnit} context={makeContext()} />)
     expect(screen.getByText('Incendiary Terror')).toBeInTheDocument()
-    expect(screen.getByText(/After shooting, select one enemy INFANTRY unit hit/)).toBeInTheDocument()
+    expect(
+      screen.getByText(/After shooting, select one enemy INFANTRY unit hit/),
+    ).toBeInTheDocument()
   })
 
   it('renders core abilities as badges', () => {
@@ -143,7 +179,9 @@ describe('UnitCard', () => {
     render(<UnitCard data={mockUnit} context={context} />)
     // Bolt pistol only has [PISTOL] — should NOT be highlighted
     const allRows = document.querySelectorAll('tr[data-weapon]')
-    const nonHighlighted = Array.from(allRows).filter(r => r.getAttribute('data-highlight') !== 'true')
+    const nonHighlighted = Array.from(allRows).filter(
+      (r) => r.getAttribute('data-highlight') !== 'true',
+    )
     expect(nonHighlighted.length).toBeGreaterThan(0)
   })
 
@@ -180,7 +218,12 @@ describe('UnitCard', () => {
     const data = {
       ...mockUnit,
       errata: [
-        { nodeId: 'e1', title: 'Datasheet FAQ', content: 'The ability triggers once per turn.', source: { type: 'pdf', title: 'Chapter Approved', page: 8 } },
+        {
+          nodeId: 'e1',
+          title: 'Datasheet FAQ',
+          content: 'The ability triggers once per turn.',
+          source: { type: 'pdf', title: 'Chapter Approved', page: 8 },
+        },
       ],
     }
     render(<UnitCard data={data} context={makeContext()} />)
@@ -191,7 +234,12 @@ describe('UnitCard', () => {
     const data = {
       ...mockUnit,
       errata: [
-        { nodeId: 'e1', title: 'Datasheet FAQ', content: 'The ability triggers once per turn.', source: { type: 'pdf', title: 'Chapter Approved', page: 8 } },
+        {
+          nodeId: 'e1',
+          title: 'Datasheet FAQ',
+          content: 'The ability triggers once per turn.',
+          source: { type: 'pdf', title: 'Chapter Approved', page: 8 },
+        },
       ],
     }
     render(<UnitCard data={data} context={makeContext()} />)

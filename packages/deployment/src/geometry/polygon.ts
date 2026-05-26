@@ -39,8 +39,7 @@ export function pointInPolygon(p: Point, polygon: Point[]): boolean {
     const xj = polygon[j]!.x
     const yj = polygon[j]!.y
 
-    const intersects =
-      yi > p.y !== yj > p.y && p.x < ((xj - xi) * (p.y - yi)) / (yj - yi) + xi
+    const intersects = yi > p.y !== yj > p.y && p.x < ((xj - xi) * (p.y - yi)) / (yj - yi) + xi
 
     if (intersects) inside = !inside
   }

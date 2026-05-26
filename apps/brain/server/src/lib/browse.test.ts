@@ -1,12 +1,19 @@
-import { describe, it, expect } from 'vitest'
+import { describe, expect, it } from 'vitest'
+
 import { filterBrowseNodes } from './browse'
 import type { Node } from './model'
 
 const makeNode = (overrides: Partial<Node>): Node => ({
-  id: 'test', layer: 'core', category: 'core-mechanic',
-  title: 'Test', content: 'test', summary: 'test',
+  id: 'test',
+  layer: 'core',
+  category: 'core-mechanic',
+  title: 'Test',
+  content: 'test',
+  summary: 'test',
   sources: [{ type: 'pdf', title: 'Core Rules', retrievedAt: '2026-04-20' }],
-  refs: [], version: 1, keywords: [],
+  refs: [],
+  version: 1,
+  keywords: [],
   ...overrides,
 })
 
@@ -22,9 +29,7 @@ describe('filterBrowseNodes', () => {
   })
 
   it('excludes unit-ability nodes', () => {
-    const nodes = [
-      makeNode({ id: 'a:1', category: 'unit-ability', datasheetId: 'ds:1' }),
-    ]
+    const nodes = [makeNode({ id: 'a:1', category: 'unit-ability', datasheetId: 'ds:1' })]
     expect(filterBrowseNodes(nodes)).toHaveLength(0)
   })
 
@@ -40,7 +45,11 @@ describe('filterBrowseNodes', () => {
   it('excludes army-rule sub-rules with parenthetical title', () => {
     const nodes = [
       makeNode({ id: 'f:1', category: 'faction-ability', title: 'Acts of Faith' }),
-      makeNode({ id: 'f:2', category: 'faction-ability', title: 'GAINING MIRACLE DICE (Acts of Faith)' }),
+      makeNode({
+        id: 'f:2',
+        category: 'faction-ability',
+        title: 'GAINING MIRACLE DICE (Acts of Faith)',
+      }),
     ]
     const result = filterBrowseNodes(nodes)
     expect(result).toHaveLength(1)
@@ -49,7 +58,11 @@ describe('filterBrowseNodes', () => {
 
   it('keeps faction-ability with detachmentId even with parenthetical', () => {
     const nodes = [
-      makeNode({ category: 'faction-ability', detachmentId: 'det:1', title: 'Some Rule (Detachment)' }),
+      makeNode({
+        category: 'faction-ability',
+        detachmentId: 'det:1',
+        title: 'Some Rule (Detachment)',
+      }),
     ]
     expect(filterBrowseNodes(nodes)).toHaveLength(1)
   })

@@ -1,6 +1,6 @@
-import type { TerrainPiece, Point } from '../types'
-import type { DeploymentZone } from '../zones/deployment-zones'
 import { distance } from '../geometry/point'
+import type { Point, TerrainPiece } from '../types'
+import type { DeploymentZone } from '../zones/deployment-zones'
 
 const MM_PER_INCH = 25.4
 
@@ -45,10 +45,7 @@ export function findHidingSpots(
  *  - Base circle area in sq inches (diameter = baseSizeMm / 25.4)
  *  - Divide, floor, return at least 1
  */
-export function estimateTerrainCapacity(
-  terrain: TerrainPiece,
-  baseSizeMm: number,
-): number {
+export function estimateTerrainCapacity(terrain: TerrainPiece, baseSizeMm: number): number {
   const footprintArea = terrain.footprint.width * terrain.footprint.height
   const baseDiameterIn = baseSizeMm / MM_PER_INCH
   const baseRadius = baseDiameterIn / 2

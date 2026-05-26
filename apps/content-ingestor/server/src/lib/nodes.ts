@@ -21,7 +21,10 @@ interface BrainNode {
 }
 
 function slugify(title: string): string {
-  return title.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '')
+  return title
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '')
 }
 
 function vectorizeId(nodeId: string): string {
@@ -40,12 +43,14 @@ function toBrainNode(extracted: ExtractedNode, sourceUrl: string, sourceName: st
     summary: extracted.summary,
     factionId: extracted.factionId,
     edition: extracted.edition,
-    sources: [{
-      type: sourceUrl.includes('youtube') ? 'youtube' : 'manual',
-      title: sourceName,
-      url: sourceUrl,
-      retrievedAt: new Date().toISOString(),
-    }],
+    sources: [
+      {
+        type: sourceUrl.includes('youtube') ? 'youtube' : 'manual',
+        title: sourceName,
+        url: sourceUrl,
+        retrievedAt: new Date().toISOString(),
+      },
+    ],
     refs: [],
     version: 1,
     keywords: extracted.keywords,
@@ -68,10 +73,10 @@ export async function writeNodesToBrain(opts: WriteNodesOpts): Promise<{ written
   let existingNodes: BrainNode[] = []
   const communityObj = await bucket.get('nodes/community.json')
   if (communityObj) {
-    existingNodes = await communityObj.json() as BrainNode[]
+    existingNodes = (await communityObj.json()) as BrainNode[]
   }
 
-  const existingIds = new Set(existingNodes.map(n => n.id))
+  const existingIds = new Set(existingNodes.map((n) => n.id))
 
   // 2. Convert and deduplicate
   const newBrainNodes: BrainNode[] = []
@@ -96,7 +101,7 @@ export async function writeNodesToBrain(opts: WriteNodesOpts): Promise<{ written
   const manifestObj = await bucket.get('manifest.json')
   let manifest: { files: Record<string, string> } = { files: {} }
   if (manifestObj) {
-    manifest = await manifestObj.json() as typeof manifest
+    manifest = (await manifestObj.json()) as typeof manifest
   }
   manifest.files['nodes/community.json'] = String(Date.now())
   await bucket.put('manifest.json', JSON.stringify(manifest))
@@ -105,9 +110,11 @@ export async function writeNodesToBrain(opts: WriteNodesOpts): Promise<{ written
   const BATCH_SIZE = 50
   for (let i = 0; i < newBrainNodes.length; i += BATCH_SIZE) {
     const batch = newBrainNodes.slice(i, i + BATCH_SIZE)
-    const texts = batch.map(n => `${n.title}. ${n.summary}. ${n.keywords.join(', ')}`)
+    const texts = batch.map((n) => `${n.title}. ${n.summary}. ${n.keywords.join(', ')}`)
 
-    const embResult = await ai.run('@cf/baai/bge-base-en-v1.5', { text: texts }) as { data: number[][] }
+    const embResult = (await ai.run('@cf/baai/bge-base-en-v1.5', { text: texts })) as {
+      data: number[][]
+    }
 
     const vectors = batch.map((node, idx) => ({
       id: vectorizeId(node.id),

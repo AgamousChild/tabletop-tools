@@ -1,5 +1,5 @@
-import type { TTTPackage, TTTUnit } from './ttt-types'
 import { normalizeFaction } from './faction-map'
+import type { TTTPackage, TTTUnit } from './ttt-types'
 
 /** Canonical faction names as they appear in GW App exports. Longer names first. */
 const FACTION_NAMES = [
@@ -78,12 +78,7 @@ const ROLE_MAP: Record<string, TTTUnit['role']> = {
 
 type BattleSize = TTTPackage['meta']['battleSize']
 
-const BATTLE_SIZES: BattleSize[] = [
-  'Combat Patrol',
-  'Incursion',
-  'Strike Force',
-  'Onslaught',
-]
+const BATTLE_SIZES: BattleSize[] = ['Combat Patrol', 'Incursion', 'Strike Force', 'Onslaught']
 
 function slugifyDetachment(name: string): string {
   return name
@@ -130,8 +125,7 @@ export function parseGwApp(text: string): TTTPackage {
   // 1. Find the FIRST parenthesized number — that's the list name+points.
   //    Try bare-number first (stops at first paren), then "Points" variant.
   const nameMatch =
-    text.match(/^(.*?)\((\d[\d,]*)\)/) ??
-    text.match(/^(.*?)\((\d[\d,]*)\s*[Pp]oints?\)/)
+    text.match(/^(.*?)\((\d[\d,]*)\)/) ?? text.match(/^(.*?)\((\d[\d,]*)\s*[Pp]oints?\)/)
 
   if (!nameMatch) {
     base.parseStatus = 'failed'
@@ -153,9 +147,7 @@ export function parseGwApp(text: string): TTTPackage {
   }
 
   const preamble =
-    firstRolePos !== -1
-      ? text.slice(afterNamePos, firstRolePos)
-      : text.slice(afterNamePos)
+    firstRolePos !== -1 ? text.slice(afterNamePos, firstRolePos) : text.slice(afterNamePos)
 
   // 3. Parse preamble
   parsePreamble(preamble, base)
@@ -318,12 +310,7 @@ function findNameStart(beforeParen: string): number {
   return pos
 }
 
-function parseUnitBody(
-  name: string,
-  points: number,
-  role: TTTUnit['role'],
-  body: string,
-): TTTUnit {
+function parseUnitBody(name: string, points: number, role: TTTUnit['role'], body: string): TTTUnit {
   const wargear: string[] = []
   let enhancement: string | undefined
   let isWarlord = false

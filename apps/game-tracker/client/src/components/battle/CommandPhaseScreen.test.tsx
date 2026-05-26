@@ -19,7 +19,7 @@ const defaultProps = {
 describe('CommandPhaseScreen', () => {
   it('shows command phase title for "You"', () => {
     render(<CommandPhaseScreen {...defaultProps} />)
-    expect(screen.getByText("Your Command Phase")).toBeInTheDocument()
+    expect(screen.getByText('Your Command Phase')).toBeInTheDocument()
   })
 
   it('shows opponent name in title', () => {

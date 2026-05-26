@@ -61,7 +61,10 @@ export function classifyKnn(
 
   for (const neighbor of neighbors) {
     votes.set(neighbor.label, (votes.get(neighbor.label) ?? 0) + 1)
-    if (!closestDistance.has(neighbor.label) || neighbor.distance < closestDistance.get(neighbor.label)!) {
+    if (
+      !closestDistance.has(neighbor.label) ||
+      neighbor.distance < closestDistance.get(neighbor.label)!
+    ) {
       closestDistance.set(neighbor.label, neighbor.distance)
     }
   }

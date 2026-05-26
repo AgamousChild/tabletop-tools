@@ -5,8 +5,9 @@
  * @see docs/etl-scripts.md — ETL diagram and function reference
  * @see docs/etl-data-pipelines.md — data-import pipeline details
  */
-import { writeFileSync, mkdirSync, existsSync } from 'fs'
+import { existsSync, mkdirSync, writeFileSync } from 'fs'
 import { join } from 'path'
+
 import { fetchAndProcessWahapedia } from './lib/sources/wahapedia'
 
 const OUTPUT_DIR = '../client/public/wahapedia'
@@ -30,7 +31,9 @@ async function main() {
     const filename = `${name}.json`
     const json = JSON.stringify(rows)
     writeFileSync(join(OUTPUT_DIR, filename), json)
-    console.log(`  ${filename}: ${(rows as unknown[]).length} records (${(json.length / 1024).toFixed(0)} KB)`)
+    console.log(
+      `  ${filename}: ${(rows as unknown[]).length} records (${(json.length / 1024).toFixed(0)} KB)`,
+    )
   }
 
   console.log('\nDone!')

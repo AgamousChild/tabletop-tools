@@ -26,10 +26,7 @@ export type ValidationError = {
   message: string
 }
 
-export function validateArmy(
-  units: ListUnit[],
-  battleSize: BattleSize,
-): ValidationError[] {
+export function validateArmy(units: ListUnit[], battleSize: BattleSize): ValidationError[] {
   const errors: ValidationError[] = []
 
   // Check points total

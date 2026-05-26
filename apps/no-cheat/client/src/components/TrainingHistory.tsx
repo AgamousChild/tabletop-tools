@@ -1,5 +1,6 @@
-import { useState } from 'react'
 import JSZip from 'jszip'
+import { useState } from 'react'
+
 import { trpc } from '../lib/trpc'
 
 type Props = {
@@ -27,7 +28,11 @@ export function TrainingHistory({ diceSetId, onBack }: Props) {
     onSuccess: () => refetch(),
   })
 
-  const { data: framesData, isLoading: framesLoading, refetch: refetchFrames } = trpc.training.listFrames.useQuery({
+  const {
+    data: framesData,
+    isLoading: framesLoading,
+    refetch: refetchFrames,
+  } = trpc.training.listFrames.useQuery({
     diceSetId,
     limit: 100,
   })
@@ -59,10 +64,12 @@ export function TrainingHistory({ diceSetId, onBack }: Props) {
 
         // Generate YOLO label file
         // YOLO format: class_id cx cy w h (normalized 0-1)
-        const lines = frame.boxes.map((b: { x: number; y: number; w: number; h: number; label: number }) => {
-          const classId = b.label - 1 // pip 1 → class 0
-          return `${classId} ${b.x.toFixed(6)} ${b.y.toFixed(6)} ${b.w.toFixed(6)} ${b.h.toFixed(6)}`
-        })
+        const lines = frame.boxes.map(
+          (b: { x: number; y: number; w: number; h: number; label: number }) => {
+            const classId = b.label - 1 // pip 1 → class 0
+            return `${classId} ${b.x.toFixed(6)} ${b.y.toFixed(6)} ${b.w.toFixed(6)} ${b.h.toFixed(6)}`
+          },
+        )
         lblFolder.file(`${fileName}.txt`, lines.join('\n'))
       }
 
@@ -100,7 +107,11 @@ export function TrainingHistory({ diceSetId, onBack }: Props) {
       <div className="max-w-md mx-auto space-y-4">
         {/* Header */}
         <div className="flex items-center gap-3">
-          <button onClick={onBack} className="text-slate-400 hover:text-slate-200 text-sm" aria-label="Back">
+          <button
+            onClick={onBack}
+            className="text-slate-400 hover:text-slate-200 text-sm"
+            aria-label="Back"
+          >
             ← Back
           </button>
           <h2 className="text-lg font-semibold text-slate-100">Training History</h2>
@@ -142,12 +153,15 @@ export function TrainingHistory({ diceSetId, onBack }: Props) {
                 <div className="flex justify-between text-sm">
                   <span className="text-slate-400">Accuracy</span>
                   <span className="text-slate-100 font-mono font-bold">
-                    {stats.total > 0 ? ((stats.accuracy * 100).toFixed(1) + '%') : '—'}
+                    {stats.total > 0 ? (stats.accuracy * 100).toFixed(1) + '%' : '—'}
                   </span>
                 </div>
                 <div className="grid grid-cols-7 gap-1 pt-1">
                   {[0, 1, 2, 3, 4, 5, 6].map((pip) => (
-                    <div key={pip} className="flex flex-col items-center bg-slate-800 rounded px-1 py-1">
+                    <div
+                      key={pip}
+                      className="flex flex-col items-center bg-slate-800 rounded px-1 py-1"
+                    >
                       <span className="text-slate-400 text-xs">{pip === 0 ? 'X' : pip}</span>
                       <span className="text-slate-100 font-mono text-xs font-bold">
                         {stats.perLabel[pip] ?? 0}
@@ -187,9 +201,7 @@ export function TrainingHistory({ diceSetId, onBack }: Props) {
             </div>
 
             {/* Example list */}
-            {isLoading && (
-              <p className="text-slate-400 text-sm text-center">Loading...</p>
-            )}
+            {isLoading && <p className="text-slate-400 text-sm text-center">Loading...</p>}
 
             {!isLoading && examples.length === 0 && (
               <p className="text-slate-400 text-sm text-center">No training examples found</p>
@@ -218,11 +230,15 @@ export function TrainingHistory({ diceSetId, onBack }: Props) {
                   {/* Info */}
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2">
-                      <span className={`text-sm font-bold ${ex.label === 0 ? 'text-red-400' : 'text-slate-100'}`}>
+                      <span
+                        className={`text-sm font-bold ${ex.label === 0 ? 'text-red-400' : 'text-slate-100'}`}
+                      >
                         {ex.label === 0 ? 'Not a die' : `Label: ${ex.label}`}
                       </span>
                       {ex.guess != null && ex.label > 0 && (
-                        <span className={`text-xs ${ex.isCorrect ? 'text-emerald-400' : 'text-red-400'}`}>
+                        <span
+                          className={`text-xs ${ex.isCorrect ? 'text-emerald-400' : 'text-red-400'}`}
+                        >
                           {ex.isCorrect ? '✓' : `guess: ${ex.guess}`}
                         </span>
                       )}
@@ -266,7 +282,8 @@ export function TrainingHistory({ diceSetId, onBack }: Props) {
 
             {!framesLoading && frames.length === 0 && (
               <p className="text-slate-400 text-sm text-center">
-                No training frames captured yet. Frames are saved automatically when you confirm dice during a session.
+                No training frames captured yet. Frames are saved automatically when you confirm
+                dice during a session.
               </p>
             )}
 
@@ -291,7 +308,8 @@ export function TrainingHistory({ diceSetId, onBack }: Props) {
                       </span>
                     </div>
                     <div className="text-xs text-slate-500">
-                      {frame.frameWidth}×{frame.frameHeight} · {new Date(frame.createdAt).toLocaleDateString()}
+                      {frame.frameWidth}×{frame.frameHeight} ·{' '}
+                      {new Date(frame.createdAt).toLocaleDateString()}
                     </div>
                   </div>
                   <button

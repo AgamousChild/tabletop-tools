@@ -1,5 +1,5 @@
-import { trpc } from '../lib/trpc'
 import { StatCard } from '../components/StatCard'
+import { trpc } from '../lib/trpc'
 
 export function PipelinePage() {
   const { data, isLoading, error } = trpc.stats.pipeline.useQuery()
@@ -22,9 +22,10 @@ export function PipelinePage() {
           <StatCard label="With Detachment" value={data.meta.withDetachment.toLocaleString()} />
           <StatCard
             label="Date Range"
-            value={data.meta.earliestEvent && data.meta.latestEvent
-              ? `${new Date(data.meta.earliestEvent).toLocaleDateString()} - ${new Date(data.meta.latestEvent).toLocaleDateString()}`
-              : '—'
+            value={
+              data.meta.earliestEvent && data.meta.latestEvent
+                ? `${new Date(data.meta.earliestEvent).toLocaleDateString()} - ${new Date(data.meta.latestEvent).toLocaleDateString()}`
+                : '—'
             }
           />
         </div>
@@ -39,11 +40,19 @@ export function PipelinePage() {
           <StatCard
             label="Cube Status"
             value={data.cube.status}
-            color={data.cube.status === 'complete' ? 'emerald' : data.cube.status === 'failed' ? 'red' : 'amber'}
+            color={
+              data.cube.status === 'complete'
+                ? 'emerald'
+                : data.cube.status === 'failed'
+                  ? 'red'
+                  : 'amber'
+            }
           />
           <StatCard
             label="Last Built"
-            value={data.cube.lastCompleted ? new Date(data.cube.lastCompleted).toLocaleString() : '—'}
+            value={
+              data.cube.lastCompleted ? new Date(data.cube.lastCompleted).toLocaleString() : '—'
+            }
           />
         </div>
       </section>
@@ -60,7 +69,11 @@ export function PipelinePage() {
         <h2 className="text-lg font-medium text-slate-200 mb-3">Coverage</h2>
         <div className="space-y-2">
           <CoverageBar label="Army Lists" value={data.meta.withLists} total={data.meta.players} />
-          <CoverageBar label="Detachments" value={data.meta.withDetachment} total={data.meta.players} />
+          <CoverageBar
+            label="Detachments"
+            value={data.meta.withDetachment}
+            total={data.meta.players}
+          />
         </div>
       </section>
     </div>
@@ -75,7 +88,9 @@ function CoverageBar({ label, value, total }: { label: string; value: number; to
     <div>
       <div className="flex justify-between text-sm mb-1">
         <span className="text-slate-300">{label}</span>
-        <span className="text-slate-400">{value.toLocaleString()} / {total.toLocaleString()} ({pct.toFixed(1)}%)</span>
+        <span className="text-slate-400">
+          {value.toLocaleString()} / {total.toLocaleString()} ({pct.toFixed(1)}%)
+        </span>
       </div>
       <div className="w-full bg-slate-800 rounded-full h-2">
         <div className={`${color} rounded-full h-2 transition-all`} style={{ width: `${pct}%` }} />

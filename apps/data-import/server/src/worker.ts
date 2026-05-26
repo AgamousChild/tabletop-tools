@@ -4,8 +4,9 @@
  */
 import { Hono } from 'hono'
 import { cors } from 'hono/cors'
-import type { Env } from './types'
+
 import { runSync } from './lib/sync'
+import type { Env } from './types'
 
 type HonoEnv = { Bindings: Env }
 
@@ -52,7 +53,9 @@ app.post('/sync', async (c) => {
   try {
     const body = await c.req.json<{ force?: boolean }>()
     force = body.force === true
-  } catch { /* no body or not JSON — that's fine */ }
+  } catch {
+    /* no body or not JSON — that's fine */
+  }
   const result = await runSync(c.env.GAME_DATA_BUCKET, c.env.GITHUB_TOKEN, force)
   return c.json(result)
 })
@@ -60,11 +63,7 @@ app.post('/sync', async (c) => {
 export default {
   fetch: app.fetch,
 
-  async scheduled(
-    _event: ScheduledEvent,
-    env: Env,
-    ctx: ExecutionContext,
-  ) {
+  async scheduled(_event: ScheduledEvent, env: Env, ctx: ExecutionContext) {
     ctx.waitUntil(runSync(env.GAME_DATA_BUCKET, env.GITHUB_TOKEN))
   },
 }

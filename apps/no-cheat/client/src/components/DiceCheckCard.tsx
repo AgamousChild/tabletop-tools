@@ -1,4 +1,4 @@
-import { useRef, useEffect } from 'react'
+import { useEffect, useRef } from 'react'
 
 type Props = {
   roiGray: Uint8Array
@@ -54,12 +54,7 @@ export function DiceCheckCard({
         dismissed ? 'border-red-500 opacity-40' : 'border-emerald-500'
       }`}
     >
-      <canvas
-        ref={canvasRef}
-        width={80}
-        height={80}
-        className="rounded bg-slate-950"
-      />
+      <canvas ref={canvasRef} width={80} height={80} className="rounded bg-slate-950" />
       <div data-testid="pip-guess" className="text-lg font-bold text-slate-100">
         {pipGuess !== null ? pipGuess : '?'}
       </div>

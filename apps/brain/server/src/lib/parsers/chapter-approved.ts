@@ -88,7 +88,19 @@ const NOISE_WORDS = new Set([
  * When we're already building a card name candidate, we allow these through.
  * But they can't START a card name (we don't let them be the first word accepted).
  */
-const CONNECTOR_WORDS = new Set(['THE', 'AND', 'OR', 'OF', 'A', 'IN', 'TO', 'IT', 'FOR', 'ON', 'ALL'])
+const CONNECTOR_WORDS = new Set([
+  'THE',
+  'AND',
+  'OR',
+  'OF',
+  'A',
+  'IN',
+  'TO',
+  'IT',
+  'FOR',
+  'ON',
+  'ALL',
+])
 
 /**
  * Extract the card name from the text preceding a separator.
@@ -144,8 +156,8 @@ function extractCardNameFromPrecedingText(text: string): string {
   // These can't be extracted by the backward walk because "BATTLE" etc. are noise
   const KNOWN_NAMES: Record<string, string> = {
     'ENEMY LINES': 'BEHIND ENEMY LINES',
-    'LINES': 'EXTEND BATTLE LINES',
-    'PRISONERS': 'NO PRISONERS',
+    LINES: 'EXTEND BATTLE LINES',
+    PRISONERS: 'NO PRISONERS',
   }
   if (KNOWN_NAMES[name]) name = KNOWN_NAMES[name]
 
@@ -248,7 +260,8 @@ export function parsePrimaryMissions(markdown: string, retrievedAt: string): Nod
  * "ANY BATTLE ROUND - TACTICAL VP", "ANY BATTLE ROUND - FIXED VP",
  * "SECOND BATTLE ROUND ONWARDS (DEF) VP", "ANY TIME (ATTACKER) VP"
  */
-const SCORING_BAR_RE = /(?:SECOND BATTLE ROUND ONWARDS|ANY BATTLE ROUND|ANY TIME)(?:\s*[-–]\s*(?:TACTICAL|FIXED))?(?:\s*\([^)]*\))?\s*VP/g
+const SCORING_BAR_RE =
+  /(?:SECOND BATTLE ROUND ONWARDS|ANY BATTLE ROUND|ANY TIME)(?:\s*[-–]\s*(?:TACTICAL|FIXED))?(?:\s*\([^)]*\))?\s*VP/g
 
 /**
  * Parse structured scoring data from raw mission body text.
@@ -259,13 +272,23 @@ const SCORING_BAR_RE = /(?:SECOND BATTLE ROUND ONWARDS|ANY BATTLE ROUND|ANY TIME
  */
 function parseMissionContent(body: string): {
   description: string
-  scoringBlocks: Array<{ timing: string; when: string; conditions: Array<{ condition: string; vp: string; connector?: string }> }>
+  scoringBlocks: Array<{
+    timing: string
+    when: string
+    conditions: Array<{ condition: string; vp: string; connector?: string }>
+  }>
   action?: { name: string; starts: string; units: string; completes: string; ifCompleted: string }
   maxVp?: string
   hasAction: boolean
 } {
-  const scoringBlocks: Array<{ timing: string; when: string; conditions: Array<{ condition: string; vp: string; connector?: string }> }> = []
-  let action: { name: string; starts: string; units: string; completes: string; ifCompleted: string } | undefined
+  const scoringBlocks: Array<{
+    timing: string
+    when: string
+    conditions: Array<{ condition: string; vp: string; connector?: string }>
+  }> = []
+  let action:
+    | { name: string; starts: string; units: string; completes: string; ifCompleted: string }
+    | undefined
   let maxVp: string | undefined
 
   // Extract max VP from anywhere in the body
@@ -283,7 +306,9 @@ function parseMissionContent(body: string): {
     const actionBlock = body.slice(actionStart, actionEnd)
 
     const extract = (label: string) => {
-      const m = actionBlock.match(new RegExp(`${label}:\\s*(.+?)(?=(?:STARTS|UNITS|COMPLETES|IF COMPLETED):|$)`, 'is'))
+      const m = actionBlock.match(
+        new RegExp(`${label}:\\s*(.+?)(?=(?:STARTS|UNITS|COMPLETES|IF COMPLETED):|$)`, 'is'),
+      )
       return m?.[1]?.trim().replace(/\s+/g, ' ') || ''
     }
 
@@ -317,7 +342,7 @@ function parseMissionContent(body: string): {
     const conditions: Array<{ condition: string; vp: string; connector?: string }> = []
 
     // Split section into segments on AND/OR connectors
-    const segments = section.split(/\b(AND|OR)\b/).map(s => s.trim())
+    const segments = section.split(/\b(AND|OR)\b/).map((s) => s.trim())
 
     for (let j = 0; j < segments.length; j++) {
       const seg = segments[j]!
@@ -330,12 +355,22 @@ function parseMissionContent(body: string): {
         let condition = seg.slice(0, seg.indexOf(vpMatch[0])).trim()
         condition = condition.replace(/^WHEN:[^.]+\.\s*/i, '').trim()
         // Clean up noise words at the start
-        condition = condition.replace(/^(?:The player whose turn it is\s*(?:scores)?:?\s*|Each player scores:?\s*)/i, '').trim()
-        if (!condition) condition = seg.replace(vpMatch[0], '').replace(/^WHEN:[^.]+\.\s*/i, '').trim()
+        condition = condition
+          .replace(
+            /^(?:The player whose turn it is\s*(?:scores)?:?\s*|Each player scores:?\s*)/i,
+            '',
+          )
+          .trim()
+        if (!condition)
+          condition = seg
+            .replace(vpMatch[0], '')
+            .replace(/^WHEN:[^.]+\.\s*/i, '')
+            .trim()
 
         // Determine connector with next condition
         const nextSeg = segments[j + 1]
-        const connector = (nextSeg === 'AND' || nextSeg === 'OR') ? nextSeg as 'AND' | 'OR' : undefined
+        const connector =
+          nextSeg === 'AND' || nextSeg === 'OR' ? (nextSeg as 'AND' | 'OR') : undefined
 
         // Extract full VP string including max
         const fullVpMatch = seg.match(/(\+?\d+\s*VP(?:\s*\([^)]*\))?)/)
@@ -456,7 +491,11 @@ export function parseSecondaryMissions(
     if (seenIds.has(id)) continue
     seenIds.add(id)
 
-    const extraKeywords = ['secondary mission', ...(isFixed ? ['fixed'] : []), ...(hasAction ? ['action'] : [])]
+    const extraKeywords = [
+      'secondary mission',
+      ...(isFixed ? ['fixed'] : []),
+      ...(hasAction ? ['action'] : []),
+    ]
 
     nodes.push({
       id,
@@ -485,21 +524,27 @@ function formatSecondaryContent(title: string, body: string, _isFixed: boolean):
   const lines: string[] = []
 
   // Extract WHEN DRAWN
-  const whenDrawnMatch = body.match(/^WHEN DRAWN:\s*(.+?)(?=(?:ANY BATTLE|SECOND BATTLE|WHEN:|STARTS:|\([A-Z]+\)))/is)
+  const whenDrawnMatch = body.match(
+    /^WHEN DRAWN:\s*(.+?)(?=(?:ANY BATTLE|SECOND BATTLE|WHEN:|STARTS:|\([A-Z]+\)))/is,
+  )
   if (whenDrawnMatch) {
     lines.push(`**WHEN DRAWN:** ${whenDrawnMatch[1]!.trim().replace(/\s+/g, ' ')}`)
     lines.push('')
   }
 
   // Extract action block
-  const actionMatch = body.match(/([A-Z][A-Z\s]+)\(ACTION\)\s*(.*?)(?=(?:ANY BATTLE|SECOND BATTLE|$))/is)
+  const actionMatch = body.match(
+    /([A-Z][A-Z\s]+)\(ACTION\)\s*(.*?)(?=(?:ANY BATTLE|SECOND BATTLE|$))/is,
+  )
   if (actionMatch) {
     const actionName = actionMatch[1]!.trim()
     const actionBody = actionMatch[2]!.trim()
     lines.push(`**ACTION: ${actionName}**`)
 
     const extract = (label: string) => {
-      const m = actionBody.match(new RegExp(`${label}:\\s*(.+?)(?=(?:STARTS|UNITS|COMPLETES|IF COMPLETED):|$)`, 'is'))
+      const m = actionBody.match(
+        new RegExp(`${label}:\\s*(.+?)(?=(?:STARTS|UNITS|COMPLETES|IF COMPLETED):|$)`, 'is'),
+      )
       return m?.[1]?.trim().replace(/\s+/g, ' ') || ''
     }
     const starts = extract('STARTS')
@@ -523,20 +568,24 @@ function formatSecondaryContent(title: string, body: string, _isFixed: boolean):
   // Then pair them positionally.
 
   // Remove scoring bar noise from text
-  let cleanText = scoringText
-    .replace(/(?:SECOND BATTLE ROUND ONWARDS|ANY BATTLE ROUND|ANY TIME)(?:\s*[-–]\s*(?:TACTICAL|FIXED))?(?:\s*\([^)]*\))?\s*VP/gi, '')
+  const cleanText = scoringText
+    .replace(
+      /(?:SECOND BATTLE ROUND ONWARDS|ANY BATTLE ROUND|ANY TIME)(?:\s*[-–]\s*(?:TACTICAL|FIXED))?(?:\s*\([^)]*\))?\s*VP/gi,
+      '',
+    )
     .replace(/[↑↓]+(?:OR|AND)?/g, ' ')
     .trim()
 
   // Extract all VP values in order
-  const vpValues = [...cleanText.matchAll(/\+?(\d+\s*VP)(?:\s*\(([^)]*)\))?/gi)]
-    .map(m => m[2] ? `${m[1]!.trim()} (${m[2].trim()})` : m[1]!.trim())
+  const vpValues = [...cleanText.matchAll(/\+?(\d+\s*VP)(?:\s*\(([^)]*)\))?/gi)].map((m) =>
+    m[2] ? `${m[1]!.trim()} (${m[2].trim()})` : m[1]!.trim(),
+  )
 
   // Remove VP values from text to get just conditions
-  let condText = cleanText.replace(/\+?\d+\s*VP(?:\s*\([^)]*\))?/gi, '').trim()
+  const condText = cleanText.replace(/\+?\d+\s*VP(?:\s*\([^)]*\))?/gi, '').trim()
 
   // Split on WHEN: to get scoring sections
-  const whenSections = condText.split(/(?=WHEN:)/i).filter(s => s.trim().length > 0)
+  const whenSections = condText.split(/(?=WHEN:)/i).filter((s) => s.trim().length > 0)
 
   // For each WHEN section, extract the timing and conditions
   let vpIndex = 0
@@ -549,8 +598,8 @@ function formatSecondaryContent(title: string, body: string, _isFixed: boolean):
       // Split into sentences (conditions)
       const sentences = afterWhen
         .split(/(?<=\.)\s+/)
-        .map(s => s.trim())
-        .filter(s => s.length > 5 && !/^(?:AND|OR)$/i.test(s))
+        .map((s) => s.trim())
+        .filter((s) => s.length > 5 && !/^(?:AND|OR)$/i.test(s))
 
       for (const sent of sentences) {
         if (vpIndex < vpValues.length) {

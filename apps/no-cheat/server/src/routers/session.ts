@@ -239,7 +239,11 @@ export const sessionRouter = router({
 
       const buf = Buffer.from(input.imageData, 'base64')
       const key = `evidence/${input.sessionId}-${Date.now()}.jpg`
-      const photoUrl = await ctx.storage.upload(key, buf.buffer.slice(buf.byteOffset, buf.byteOffset + buf.byteLength), 'image/jpeg')
+      const photoUrl = await ctx.storage.upload(
+        key,
+        buf.buffer.slice(buf.byteOffset, buf.byteOffset + buf.byteLength),
+        'image/jpeg',
+      )
 
       await ctx.db
         .update(diceRollingSessions)
