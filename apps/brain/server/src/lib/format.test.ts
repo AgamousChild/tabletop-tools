@@ -26,7 +26,7 @@ describe('formatConversationalAnswer', () => {
     const result = formatConversationalAnswer('re-rolls', nodes, new Map())
     // Should not have lines starting with "- **"
     const lines = result.split('\n')
-    const bulletLines = lines.filter(l => /^- \*\*/.test(l))
+    const bulletLines = lines.filter(l => l.startsWith('- **'))
     expect(bulletLines).toHaveLength(0)
   })
 

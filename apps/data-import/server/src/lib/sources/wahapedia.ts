@@ -1,7 +1,7 @@
 /**
  * @see docs/etl-data-pipelines.md — ETL diagram and function reference
  */
-import { parsePipeCsv, htmlToMarkdown, convertDescriptions } from '../parsers/wahapedia-csv'
+import { parsePipeCsv, convertDescriptions } from '../parsers/wahapedia-csv'
 
 const BASE_URL = 'https://wahapedia.ru/wh40k10ed'
 

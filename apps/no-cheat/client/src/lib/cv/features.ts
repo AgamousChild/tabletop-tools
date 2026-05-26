@@ -59,7 +59,7 @@ function manualBinarize(gray: Uint8Array, threshold: number): Uint8Array {
 export function extractFeatures(roiGray: Uint8Array, w: number, h: number): number[] {
   const roiArea = w * h
   if (roiArea === 0) {
-    return new Array(13).fill(0)
+    return Array.from<number>({ length: 13 }).fill(0)
   }
 
   // --- Threshold levels ---

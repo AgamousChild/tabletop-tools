@@ -1,7 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import { isLegalPlacement } from './legal-check'
 import { computeDeploymentZone } from '../zones/deployment-zones'
-import { computeEnemyZone } from '../zones/deployment-zones'
 import { DEFAULT_10E_RULES } from '../types'
 import type { TerrainPiece } from '../types'
 

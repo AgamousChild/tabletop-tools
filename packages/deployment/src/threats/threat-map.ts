@@ -87,10 +87,10 @@ export function generateThreatMap(
 
   // Initialise heat maps to zero
   const shootingHeatMap: number[][] = Array.from({ length: numRows }, () =>
-    new Array<number>(numCols).fill(0),
+    Array.from<number>({ length: numCols }).fill(0),
   )
   const meleeHeatMap: number[][] = Array.from({ length: numRows }, () =>
-    new Array<number>(numCols).fill(0),
+    Array.from<number>({ length: numCols }).fill(0),
   )
 
   if (enemyUnits.length === 0) {

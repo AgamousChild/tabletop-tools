@@ -246,7 +246,7 @@ describe('WE vs Sororitas smoke test', () => {
   })
 
   it('reflects intense melee threat from World Eaters near the enemy zone', () => {
-    const { meleeHeatMap, gridResolution } = plan.threats
+    const { meleeHeatMap } = plan.threats
     const rows = meleeHeatMap.length
     const cols = meleeHeatMap[0].length
 

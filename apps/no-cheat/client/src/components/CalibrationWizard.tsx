@@ -12,7 +12,7 @@ type Props = {
 type Step =
   | { name: 'test-roll'; results: RoiResult[]; pipValues: number[] }
 
-export function CalibrationWizard({ pipeline, diceSetId, onComplete }: Props) {
+export function CalibrationWizard({ pipeline, onComplete }: Props) {
   const videoRef = useRef<HTMLVideoElement>(null)
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const [step, setStep] = useState<Step>({ name: 'test-roll', results: [], pipValues: [] })

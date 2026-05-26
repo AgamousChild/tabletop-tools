@@ -1,6 +1,5 @@
 import { describe, it, expect } from 'vitest'
 import { baseSizeInches, isCoherent } from './coherency'
-import type { BaseSize } from '../types'
 import { DEFAULT_10E_RULES } from '../types'
 
 // ── baseSizeInches ────────────────────────────────────────────────────────────

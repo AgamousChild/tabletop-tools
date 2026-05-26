@@ -72,10 +72,6 @@ const CONFIRM_DURATION = 1000
 const CONFIRM_INTERVAL = 250
 const DICE_CHECK_AUTO_CONFIRM = 5000
 
-// Time-limit detection: after this many ms of seeing dice, lock in whatever's on screen.
-// Set to 0 or Infinity to disable (falls back to sliding-window stability).
-const DETECT_TIME_LIMIT = 0
-
 function extractSubImage(
   gray: Uint8Array,
   imgWidth: number,

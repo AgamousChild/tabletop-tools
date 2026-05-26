@@ -143,7 +143,6 @@ describe('UnitCard', () => {
     render(<UnitCard data={mockUnit} context={context} />)
     // Bolt pistol only has [PISTOL] — should NOT be highlighted
     const allRows = document.querySelectorAll('tr[data-weapon]')
-    const highlighted = Array.from(allRows).filter(r => r.getAttribute('data-highlight') === 'true')
     const nonHighlighted = Array.from(allRows).filter(r => r.getAttribute('data-highlight') !== 'true')
     expect(nonHighlighted.length).toBeGreaterThan(0)
   })

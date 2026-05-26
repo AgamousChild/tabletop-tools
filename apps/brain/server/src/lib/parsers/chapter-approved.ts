@@ -114,7 +114,7 @@ function extractCardNameFromPrecedingText(text: string): string {
     if (!clean || /[a-z]/.test(token)) break
 
     // Stop if it's a number or VP amount like "5" or "(MAX"
-    if (/^\d/.test(token) || /^\(/.test(token)) break
+    if (/^\d/.test(token) || token.startsWith('(')) break
 
     // Stop if it's an arrow or symbol
     if (/^[↑↓+→←]/.test(token)) break
@@ -481,7 +481,7 @@ export function parseSecondaryMissions(
  * then scoring sections separated by timing bars or WHEN labels.
  * VP values appear as "N VP" paired with preceding condition text.
  */
-function formatSecondaryContent(title: string, body: string, isFixed: boolean): string {
+function formatSecondaryContent(title: string, body: string, _isFixed: boolean): string {
   const lines: string[] = []
 
   // Extract WHEN DRAWN

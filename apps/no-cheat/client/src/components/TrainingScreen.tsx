@@ -106,7 +106,6 @@ export function TrainingScreen({ diceSet, onBack }: Props) {
   const [showHistory, setShowHistory] = useState(false)
   const [phase, setPhase] = useState<Phase>({ name: 'detecting' })
   const [error, setError] = useState<string | null>(null)
-  const [cameraReady, setCameraReady] = useState(false)
   const [detectedCount, setDetectedCount] = useState(0)
   const [confirmProgress, setConfirmProgress] = useState(0)
   const [showSettings, setShowSettings] = useState(false)
@@ -156,7 +155,6 @@ export function TrainingScreen({ diceSet, onBack }: Props) {
         stream = s
         if (videoRef.current) {
           videoRef.current.srcObject = s
-          setCameraReady(true)
           const video = videoRef.current
           const w = video.videoWidth || 320
           const h = video.videoHeight || 240

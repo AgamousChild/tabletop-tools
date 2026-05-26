@@ -91,7 +91,7 @@ vi.mock('../lib/trpc', () => ({
       },
       update: {
         useMutation: (opts?: { onSuccess?: () => void }) => ({
-          mutate: (args: unknown) => {
+          mutate: (_args: unknown) => {
             opts?.onSuccess?.()
           },
           isPending: false,

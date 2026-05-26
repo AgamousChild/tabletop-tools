@@ -65,7 +65,7 @@ function mockVectorize() {
 function mockAi() {
   return {
     run: vi.fn(async (_model: string, input: { text: string[] }) => ({
-      data: input.text.map(() => new Array(768).fill(0.1)),
+      data: input.text.map(() => Array.from({ length: 768 }).fill(0.1)),
     })),
   }
 }

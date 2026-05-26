@@ -408,53 +408,6 @@ function extractRestriction(content: string): string | undefined {
   return lines.find(l => /model only/i.test(l))
 }
 
-/**
- * Parse structured fields from mission content text.
- * Extracts: action, condition, when, scoring (VP value + cap).
- */
-function parseMissionFields(content: string): {
-  action?: string
-  condition?: string
-  when?: string
-  scoring?: string
-} {
-  const result: { action?: string; condition?: string; when?: string; scoring?: string } = {}
-
-  // Extract WHEN: timing
-  const whenMatch = content.match(/\bWHEN:\s*([^.]+(?:\.[^A-Z])?)/i) ||
-    content.match(/\*\*WHEN:\*\*\s*([^\n]+)/i)
-  if (whenMatch) result.when = whenMatch[1]!.trim().replace(/\*\*/g, '')
-
-  // Extract VP scoring — look for "X VP" patterns and caps like "max XVP" or "to a maximum of"
-  const vpPatterns = content.match(/(\d+)\s*VP/gi)
-  const maxMatch = content.match(/(?:max(?:imum)?(?:\s+of)?)\s*(\d+)\s*VP/i) ||
-    content.match(/(\d+)\s*VP.*?(?:max|cap|limit)/i)
-  if (vpPatterns && vpPatterns.length > 0) {
-    const scores = vpPatterns.map(p => p.trim()).join(', ')
-    const cap = maxMatch ? maxMatch[1] + 'VP' : ''
-    result.scoring = cap ? `${scores} (max ${cap})` : scores
-  }
-
-  // Detect action requirement
-  const hasAction = /\baction\b/i.test(content) &&
-    (/\bperform\b|\bstart\b|\bcomplete\b|\bselect.*action\b/i.test(content))
-  if (hasAction) {
-    const actionMatch = content.match(/(?:perform|start|complete)\s+(?:the\s+)?([^.]+action[^.]*)/i)
-    result.action = actionMatch ? actionMatch[0]!.trim() : 'Yes — see description'
-  }
-
-  // Extract condition — the "how" of scoring
-  // Look for text near VP values that describes conditions
-  const condMatch = content.match(/(?:you\s+(?:score|earn)|each\s+(?:time|objective)|for\s+each|if\s+you\s+control)[^.]+/i)
-  if (condMatch) {
-    result.condition = condMatch[0]!.trim()
-    // Clean up markdown
-    result.condition = result.condition.replace(/\*\*/g, '')
-  }
-
-  return result
-}
-
 /** Format a detachmentId slug into a display name */
 function formatDetachmentName(detId?: string): string {
   if (!detId) return ''

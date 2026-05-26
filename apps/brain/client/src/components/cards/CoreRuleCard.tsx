@@ -7,37 +7,7 @@ interface CoreRuleCardProps {
   context: CardContext
 }
 
-function highlightText(
-  text: string,
-  terms: string[],
-  onContentClick: (term: string) => void,
-): React.ReactNode {
-  if (!terms.length) return text
-
-  const escaped = terms.map((t) => t.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'))
-  const regex = new RegExp(`(${escaped.join('|')})`, 'gi')
-  const parts = text.split(regex)
-
-  return parts.map((part, i) => {
-    const matched = terms.find((t) => t.toLowerCase() === part.toLowerCase())
-    if (matched) {
-      return (
-        <mark
-          key={i}
-          className="bg-amber-400 text-slate-900 cursor-pointer rounded-sm px-0.5"
-          onClick={() => onContentClick(matched)}
-        >
-          {part}
-        </mark>
-      )
-    }
-    return part
-  })
-}
-
 export function CoreRuleCard({ data, context }: CoreRuleCardProps) {
-  const { highlightTerms, onContentClick } = context
-
   const pdfSources = data.sources?.filter(
     (s) => s.type === 'pdf' && s.page !== undefined,
   )

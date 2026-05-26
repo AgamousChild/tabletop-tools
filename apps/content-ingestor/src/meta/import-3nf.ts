@@ -303,12 +303,12 @@ async function main() {
       for (let i = 0; i < playerBatch.length; i += 50) {
         try {
           await client.batch(playerBatch.slice(i, i + 50))
-        } catch (err) {
+        } catch {
           // Find the offending row
           for (const stmt of playerBatch.slice(i, i + 50)) {
             try {
               await client.execute(stmt)
-            } catch (e2) {
+            } catch {
               console.error(
                 `    FK error: faction_id=${stmt.args[3]} subfaction=${stmt.args[4]} player=${stmt.args[2]}`,
               )

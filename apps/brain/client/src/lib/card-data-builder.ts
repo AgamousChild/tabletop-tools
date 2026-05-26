@@ -90,7 +90,7 @@ function parseRestriction(content: string): string | undefined {
 /** Parse ALL-CAPS heading sub-rules from content */
 function parseSubRules(content: string): { name: string; description: string }[] | undefined {
   // ALL-CAPS line (2+ words) treated as a sub-rule heading
-  const ALL_CAPS_LINE = /^([A-Z][A-Z\s''\-]{2,})$/
+  const ALL_CAPS_LINE = /^([A-Z][A-Z\s''-]{2,})$/
   const lines = content.split('\n')
   const subRules: { name: string; description: string }[] = []
   let current: { name: string; descLines: string[] } | null = null

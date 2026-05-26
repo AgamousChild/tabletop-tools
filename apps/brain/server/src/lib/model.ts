@@ -165,7 +165,7 @@ export type Node = z.infer<typeof NodeSchema>
  */
 export const RecordTypeSchema = z.enum([
   'faction', 'detachment', 'unit', 'stratagem', 'enhancement', 'army-rule',
-  'rule', 'army-rule', 'errata', 'balance',
+  'rule', 'errata', 'balance',
   'primary-mission', 'secondary-mission', 'deployment-zone',
   'twist', 'challenger', 'terrain-layout',
 ])

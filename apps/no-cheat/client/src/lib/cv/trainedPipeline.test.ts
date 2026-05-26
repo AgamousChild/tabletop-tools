@@ -1,6 +1,6 @@
 import { describe, expect, it, vi, beforeEach } from 'vitest'
 import type { Pipeline, RoiResult, PipelineState, PipelineConfig } from './pipeline'
-import type { TrainingExample, KnnResult } from './knnClassifier'
+import type { TrainingExample } from './knnClassifier'
 
 // Mock the dependencies
 vi.mock('./pipeline', () => ({

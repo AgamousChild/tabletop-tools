@@ -255,8 +255,6 @@ async function main() {
     console.log('\nBuilding meta_top...')
 
     // For each frame, aggregate faction stats
-    const factions = (await client.execute('SELECT id FROM dim_faction')).rows
-
     let topRows = 0
     for (const frame of frames) {
       // Determine which events fall in this frame

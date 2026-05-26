@@ -87,7 +87,7 @@ export function findBlobInfo(binary: Uint8Array, width: number, height: number, 
  */
 export function otsuBinarize(gray: Uint8Array): Uint8Array {
   const N = gray.length
-  const hist = new Array<number>(256).fill(0)
+  const hist = Array.from<number>({ length: 256 }).fill(0)
   for (let i = 0; i < N; i++) hist[gray[i]!]++
 
   let totalMean = 0

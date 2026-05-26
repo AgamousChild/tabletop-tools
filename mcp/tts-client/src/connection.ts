@@ -196,7 +196,7 @@ export class TTSConnection extends EventEmitter {
   /** Execute Lua code in TTS and wait for the return value. */
   async executeLua(script: string, guid: string = '-1', timeoutMs: number = 60000): Promise<unknown> {
     await this.ensureListening()
-    return new Promise(async (resolve, reject) => {
+    return new Promise((resolve, reject) => {
       const timer = setTimeout(() => {
         this.removeListener('return', onReturn)
         reject(new Error(`Lua execution timed out after ${timeoutMs}ms`))
@@ -210,18 +210,16 @@ export class TTSConnection extends EventEmitter {
       // Listen for the next return message
       this.once('return', onReturn)
 
-      try {
-        await this.send({
-          messageID: 3,
-          guid,
-          script,
-          returnID: this.returnIdCounter++,
-        })
-      } catch (err) {
+      this.send({
+        messageID: 3,
+        guid,
+        script,
+        returnID: this.returnIdCounter++,
+      }).catch((err) => {
         clearTimeout(timer)
         this.removeListener('return', onReturn)
         reject(err)
-      }
+      })
     })
   }
 

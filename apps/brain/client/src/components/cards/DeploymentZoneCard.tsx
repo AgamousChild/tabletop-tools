@@ -1,4 +1,3 @@
-import { renderMarkdown } from "../../lib/render-markdown"
 import { useState } from 'react'
 
 import type { CardContext, DeploymentZoneCardData } from './types'
@@ -7,8 +6,6 @@ interface DeploymentZoneCardProps {
   data: DeploymentZoneCardData
   context: CardContext
 }
-
-const SIZE_LABELS: Record<number, string> = {}
 
 function PageImage({ src, alt, onError }: { src: string; alt: string; onError: () => void }) {
   const [loaded, setLoaded] = useState(false)

@@ -54,7 +54,7 @@ const PASSTHROUGH_CATEGORIES = new Set<Node['category']>([
  * by stripping the last segment from the ID.
  */
 export function classifyNode(node: Node): Classification {
-  const { category, id, datasheetId, detachmentId } = node
+  const { category, id, datasheetId } = node
 
   // Unit child nodes → group under parent datasheet
   if (UNIT_CHILD_CATEGORIES.has(category) && datasheetId) {

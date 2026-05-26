@@ -382,14 +382,6 @@ export function ForceGraph() {
     setSelectedNode(null)
   }, [])
 
-  // Re-layout when filters change
-  const applyFilters = useCallback(() => {
-    if (!graphState.current) return
-    const { nodes, edges } = layoutFromState(graphState.current, categoryFilters, editionFilter)
-    setRfNodes(nodes)
-    setRfEdges(edges)
-  }, [categoryFilters, editionFilter])
-
   const toggleCategory = useCallback((cat: string) => {
     setCategoryFilters(prev => {
       const next = new Set(prev)

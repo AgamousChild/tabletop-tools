@@ -66,7 +66,7 @@ function isTrancated(text: string): boolean {
 
   // Ends mid-word: last char is a letter (not punctuation) and not at a sentence boundary
   const lastChar = trimmed[trimmed.length - 1]!
-  const endsClean = /[.!?)\]"':]$/.test(lastChar) || /\n$/.test(trimmed)
+  const endsClean = /[.!?)\]"':]$/.test(lastChar) || trimmed.endsWith('\n')
   if (!endsClean && /[a-zA-Z]$/.test(lastChar)) return true
 
   // Ends with incomplete bold/italic marker

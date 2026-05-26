@@ -4,7 +4,6 @@ import { and, desc, eq, sql } from 'drizzle-orm'
 import { z } from 'zod'
 
 import { analyze } from '../lib/stats/analyze'
-import type { R2Storage } from '../lib/storage/r2'
 import { protectedProcedure, router } from '../trpc'
 
 export const sessionRouter = router({

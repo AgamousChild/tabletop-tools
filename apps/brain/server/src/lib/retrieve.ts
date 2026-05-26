@@ -157,9 +157,7 @@ export async function retrieve(options: RetrieveOptions, env: RetrieveEnv): Prom
   }
 
   // Step 6: Query Vectorize — single unfiltered query to get all record types
-  const [primaryMatches] = await Promise.all([
-    env.vectorize.query(primaryVector, vectorizeOpts),
-  ])
+  const primaryMatches = await env.vectorize.query(primaryVector, vectorizeOpts)
 
   // Step 6b: If original query differs from stripped, also search with the unstripped text
   let originalMatches: { matches: VectorizeMatch[] } = { matches: [] }

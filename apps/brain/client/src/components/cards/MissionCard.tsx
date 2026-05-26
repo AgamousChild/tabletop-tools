@@ -6,25 +6,11 @@ interface MissionCardProps {
   context: CardContext
 }
 
-function FieldRow({ label, value, color }: { label: string; value: string; color: string }) {
-  return (
-    <div className="flex gap-2 py-1.5 border-b border-slate-800 last:border-b-0">
-      <span className={`text-[10px] font-bold uppercase tracking-wide ${color} shrink-0 w-20`}>
-        {label}
-      </span>
-      <span className="text-xs text-slate-300 leading-snug">{value}</span>
-    </div>
-  )
-}
-
 export function MissionCard({ data, context }: MissionCardProps) {
   const isPrimary = data.missionType === 'primary'
   const accentBorder = isPrimary ? 'border-amber-500' : 'border-blue-500'
   const accentColor = isPrimary ? 'text-amber-400' : 'text-blue-400'
   const badgeBg = isPrimary ? 'bg-amber-500/20 text-amber-400' : 'bg-blue-500/20 text-blue-400'
-
-  // Determine if we have structured fields
-  const hasStructured = data.when || data.condition || data.scoring || data.action
 
   return (
     <div

@@ -51,14 +51,14 @@ describe('mlPipeline', () => {
     const outputData = new Float32Array(numAttrs * numDetections)
 
     // Detection 0: cx=320, cy=240, w=100, h=100, class 3 (pip 4) with conf 0.85
-    outputData[0 * numDetections + 0] = 320  // cx
+    outputData[0] = 320  // cx
     outputData[1 * numDetections + 0] = 240  // cy
     outputData[2 * numDetections + 0] = 100  // w
     outputData[3 * numDetections + 0] = 100  // h
     outputData[(4 + 3) * numDetections + 0] = 0.85 // class 3
 
     // Detection 1: low confidence — should be filtered out
-    outputData[0 * numDetections + 1] = 100
+    outputData[1] = 100
     outputData[1 * numDetections + 1] = 100
     outputData[2 * numDetections + 1] = 50
     outputData[3 * numDetections + 1] = 50

@@ -105,9 +105,6 @@ describe('fetchConnectedNodes', () => {
     resetManifestCache()
   })
 
-  // The search result node — a core rule about sustained hits
-  const coreNode = makeNode({ id: 'core:sustained-hits', title: 'Sustained Hits', category: 'core-mechanic' })
-
   // Blood Angels ability that references the core rule
   const baAbility = makeNode({
     id: 'faction:blood-angels:red-thirst',

@@ -4,7 +4,6 @@ import type {
   Battlefield,
   DeploymentInput,
   DeploymentUnit,
-  EnemyArmy,
   EnemyUnit,
   Objective,
   TerrainPiece,

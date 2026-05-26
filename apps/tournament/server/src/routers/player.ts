@@ -1,8 +1,8 @@
 import { TRPCError } from '@trpc/server'
-import { eq, and, like, inArray } from 'drizzle-orm'
+import { eq, and, inArray } from 'drizzle-orm'
 import { z } from 'zod'
 
-import { tournaments, tournamentPlayers, pairings, rounds, tournamentCards, userBans, authUsers } from '@tabletop-tools/db'
+import { tournaments, tournamentPlayers, pairings, tournamentCards, userBans } from '@tabletop-tools/db'
 import { router, protectedProcedure } from '../trpc'
 
 export const playerRouter = router({

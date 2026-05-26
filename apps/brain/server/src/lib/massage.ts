@@ -244,7 +244,6 @@ export function massage(nodes: Node[]): MassageResult {
     'deathwatch': 'DEATHWATCH',
   }
 
-  const beforeArmyRuleClean = working.length
   const armyRuleDropped: string[] = []
   const armyRuleReattributed: string[] = []
   const renamedIds = new Map<string, string>()

@@ -8,7 +8,7 @@ import {
   saveUnitCosts, saveWargearOptions, saveUnitKeywords,
   saveUnitAbilities, saveMissions, setRulesImportMeta,
 } from './store'
-import type { LocalList, LocalListUnit } from './store'
+import type { LocalList } from './store'
 import {
   useUnit, useUnitSearch, useFactions, useGameDataAvailable, useLists, useList,
   useDetachments, useDetachment, useDetachmentAbilities,

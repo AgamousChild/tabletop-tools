@@ -23,16 +23,7 @@ import {
   searchUnits,
 } from '@tabletop-tools/game-data-store'
 import type {
-  Detachment,
-  DetachmentAbility,
-  Stratagem,
-  Enhancement,
   LeaderAttachment,
-  UnitComposition,
-  UnitCost,
-  WargearOption,
-  UnitKeyword,
-  UnitAbility,
   Datasheet,
   DatasheetWargear,
   DatasheetModel,

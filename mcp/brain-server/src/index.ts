@@ -305,7 +305,7 @@ server.tool(
     }
 
     const sorted = [...counts.entries()].sort((a, b) => b[1].units - a[1].units)
-    const lines = sorted.map(([slug, data]) =>
+    const lines = sorted.map(([, data]) =>
       `**${data.name}** — ${data.units} units, ${data.armyRules} army rules, ${data.detachments} detachments`
     )
 

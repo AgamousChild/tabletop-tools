@@ -2,7 +2,6 @@ import { execFile } from 'node:child_process'
 import { promisify } from 'node:util'
 import { writeFileSync, readFileSync, mkdirSync } from 'node:fs'
 import path from 'node:path'
-import * as cheerio from 'cheerio'
 
 const execFileAsync = promisify(execFile)
 

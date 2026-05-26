@@ -85,7 +85,7 @@ export function otsuThreshold(gray: Uint8Array, minThreshold = 15): Uint8Array {
   const N = gray.length
 
   // Build histogram
-  const hist = new Array<number>(256).fill(0)
+  const hist = Array.from<number>({ length: 256 }).fill(0)
   for (let i = 0; i < N; i++) hist[gray[i]!]++
 
   // Compute cumulative sums

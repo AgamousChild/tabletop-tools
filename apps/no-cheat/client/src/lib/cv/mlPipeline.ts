@@ -124,12 +124,11 @@ function parseYoloOutput(data: Float32Array, dims: number[]): Detection[] {
   const detections: Detection[] = []
 
   // dims: [1, 4+numClasses, numDetections]
-  const numAttributes = dims[1]! // 4 + NUM_CLASSES
   const numDetections = dims[2]!
 
   for (let i = 0; i < numDetections; i++) {
     // Extract box coordinates
-    const cx = data[0 * numDetections + i]!
+    const cx = data[i]!
     const cy = data[1 * numDetections + i]!
     const w = data[2 * numDetections + i]!
     const h = data[3 * numDetections + i]!

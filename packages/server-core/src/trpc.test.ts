@@ -1,4 +1,3 @@
-import { createClient } from '@libsql/client'
 import { createDb, type Db } from '@tabletop-tools/db'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import { TRPCError } from '@trpc/server'

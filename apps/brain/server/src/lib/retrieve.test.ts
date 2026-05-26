@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { retrieve, type RetrieveOptions, type RetrieveEnv } from './retrieve'
+import { retrieve, type RetrieveEnv } from './retrieve'
 import { resetManifestCache } from './fetch-nodes'
 import type { Node } from './model'
 

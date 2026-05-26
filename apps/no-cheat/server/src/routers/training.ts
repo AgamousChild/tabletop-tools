@@ -1,6 +1,6 @@
 import { diceSets, trainingExamples, trainingFrames } from '@tabletop-tools/db'
 import { TRPCError } from '@trpc/server'
-import { and, count, desc, eq, sql } from 'drizzle-orm'
+import { and, desc, eq } from 'drizzle-orm'
 import { z } from 'zod'
 
 import { protectedProcedure, router } from '../trpc'

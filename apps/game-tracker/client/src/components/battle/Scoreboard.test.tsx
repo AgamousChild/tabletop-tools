@@ -33,7 +33,7 @@ describe('Scoreboard', () => {
   })
 
   it('highlights your VP differently from opponent VP', () => {
-    const { container } = render(
+    render(
       <Scoreboard roundNumber={2} yourVp={30} theirVp={25} yourCp={2} theirCp={1} opponentName="Orks" />,
     )
     // Your VP should be amber (highlighted), theirs slate (neutral)

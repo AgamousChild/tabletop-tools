@@ -20,7 +20,7 @@ import { CommunityCard } from '../components/cards/CommunityCard'
 import { DetachmentCard } from '../components/cards/DetachmentCard'
 import { DeploymentZoneCard } from '../components/cards/DeploymentZoneCard'
 import { TerrainLayoutCard } from '../components/cards/TerrainLayoutCard'
-import type { CardData, CardContext, ErrataEntry, MissionCardData, TwistCardData, ChallengerCardData } from '../components/cards/types'
+import type { CardData, CardContext, ErrataEntry } from '../components/cards/types'
 import { resolveCardView } from '../lib/card-display'
 import { type EntityMap } from '../lib/entity-linker'
 import { PdfPageView } from '../components/cards/PdfPageView'
@@ -32,7 +32,7 @@ import { Pagination } from '../components/Pagination'
 const API_BASE = import.meta.env.VITE_BRAIN_API_URL || '/brain/api'
 
 /** Simple markdown to HTML — handles ##, **, -, `, and brain: entity links */
-function renderMarkdown(text: string, onBrainLink?: (nodeId: string) => void): string {
+function renderMarkdown(text: string): string {
   // Convert [text](brain:nodeId) to clickable entity links
   const linkBrain = (s: string) =>
     s.replace(/\[([^\]]+)\]\(brain:([^)]+)\)/g,
@@ -108,22 +108,6 @@ function parseStatLine(content: string) {
     if (m[7]) stats.invSv = m[7]
   }
   return stats
-}
-
-/** Parse weapon profiles from content sections */
-function parseWeapons(content: string, section: string) {
-  const lines: string[] = []
-  const sectionIdx = content.indexOf(section)
-  if (sectionIdx === -1) return lines
-
-  const after = content.slice(sectionIdx + section.length)
-  const nextSection = after.search(/Ranged weapons|Melee weapons|Abilities|Keywords/i)
-  const weaponBlock = nextSection === -1 ? after : after.slice(0, nextSection)
-
-  return weaponBlock
-    .split('\n')
-    .map(l => l.trim())
-    .filter(l => l.length > 0)
 }
 
 /** Parse WHEN/TARGET/EFFECT from stratagem content */
@@ -372,82 +356,6 @@ function buildEnhancementData(node: ResultNode) {
   }
 }
 
-function buildRuleData(node: ResultNode) {
-  return {
-    id: node.id,
-    name: node.title,
-    description: node.content || node.summary,
-    factionId: node.factionId || '',
-    subfaction: node.subfaction,
-    detachmentName: '',
-    sources: node.sources,
-  }
-}
-
-function buildCardFromNode(node: ResultNode): CardData {
-  switch (node.category) {
-    case 'datasheet':
-      return { type: 'unit', data: buildUnitData(node) }
-    case 'stratagem':
-      return { type: 'stratagem', data: buildStratagemData(node) }
-    case 'enhancement':
-      return { type: 'enhancement', data: buildEnhancementData(node) }
-    case 'faction-ability':
-      if (!node.detachmentId) {
-        return { type: 'rule', data: { ...buildRuleData(node), isArmyRule: true } }
-      }
-      return { type: 'rule', data: { ...buildRuleData(node), isArmyRule: false } }
-    case 'detachment-rule':
-      return { type: 'rule', data: { ...buildRuleData(node), isArmyRule: false } }
-    case 'primary-mission':
-      return {
-        type: 'mission',
-        data: {
-          id: node.id,
-          name: node.title,
-          missionType: 'primary',
-          content: node.content || node.summary,
-          sources: node.sources,
-        } as MissionCardData,
-      }
-    case 'secondary-mission':
-      return {
-        type: 'mission',
-        data: {
-          id: node.id,
-          name: node.title,
-          missionType: 'secondary',
-          side: node.id.includes(':atk:') ? 'attacker' : node.id.includes(':def:') ? 'defender' : undefined,
-          isFixed: node.keywords?.includes('fixed'),
-          content: node.content || node.summary,
-          sources: node.sources,
-        } as MissionCardData,
-      }
-    case 'twist':
-      return {
-        type: 'twist',
-        data: {
-          id: node.id,
-          name: node.title,
-          description: node.content || node.summary,
-          sources: node.sources,
-        } as TwistCardData,
-      }
-    case 'challenger':
-      return {
-        type: 'challenger',
-        data: {
-          id: node.id,
-          name: node.title,
-          content: node.content || node.summary,
-          sources: node.sources,
-        } as ChallengerCardData,
-      }
-    default:
-      return { type: 'rule', data: { ...buildRuleData(node), isArmyRule: false } }
-  }
-}
-
 // ── Entity map builder ───────────────────────────────────────────────────────
 
 function buildEntityMap(nodes: ResultNode[], keywords?: string[]): EntityMap {
@@ -597,7 +505,7 @@ function AskTab({ onOpenCard, activeFilters, onFilterChange }: AskTabProps) {
 
       {answer && (
         <div className="space-y-4">
-          {answer.detected?.factions?.length > 0 && (
+          {factionFilter && answer.detected?.factions?.length > 0 && (
             <FactionBanner
               factions={answer.detected.factions}
               subfaction={answer.detected.subfaction}
@@ -1128,64 +1036,6 @@ export function BrainScreen() {
   const [activeFilters, setActiveFilters] = useState<string[]>([])
   const [detachmentView, setDetachmentView] = useState<DetachmentPageProps | null>(null)
   const [pdfView, setPdfView] = useState<{ pdfName: string; page: number; title: string; topPct?: number; heightPct?: number; leftPct?: number; widthPct?: number } | null>(null)
-
-  async function openDetachmentPage(node: ResultNode) {
-    // Fetch stratagems and enhancements for this detachment via dedicated endpoint
-    const detachmentId = node.id
-    const factionId = node.factionId || ''
-
-    try {
-      const res = await fetch(`${API_BASE}/browse/detachment/${encodeURIComponent(detachmentId)}`)
-      const data = await res.json() as {
-        detachment: ResultNode
-        stratagems: ResultNode[]
-        enhancements: ResultNode[]
-        abilities: ResultNode[]
-      }
-
-      const stratagems = (data.stratagems || [])
-        .map(n => buildStratagemData(n))
-
-      const enhancements = (data.enhancements || [])
-        .map(n => buildEnhancementData(n))
-
-      const ability: DetachmentPageProps['ability'] = node.content
-        ? { ...buildRuleData(node), isArmyRule: false }
-        : undefined
-
-      setDetachmentView({
-        detachmentName: node.title,
-        factionId,
-        subfaction: node.subfaction,
-        ability,
-        stratagems,
-        enhancements,
-        onContentClick: (term: string) => {
-          setDetachmentView(null)
-          setActiveFilters(prev => prev.includes(term) ? prev : [...prev, term])
-        },
-        onBack: () => setDetachmentView(null),
-      })
-    } catch {
-      // Fallback: show page with just the ability node
-      const ability: DetachmentPageProps['ability'] = node.content
-        ? { ...buildRuleData(node), isArmyRule: false }
-        : undefined
-      setDetachmentView({
-        detachmentName: node.title,
-        factionId,
-        subfaction: node.subfaction,
-        ability,
-        stratagems: [],
-        enhancements: [],
-        onContentClick: (term: string) => {
-          setDetachmentView(null)
-          setActiveFilters(prev => prev.includes(term) ? prev : [...prev, term])
-        },
-        onBack: () => setDetachmentView(null),
-      })
-    }
-  }
 
   async function handleOpenRecord(record: SearchRecord) {
     const node = record.primaryNode

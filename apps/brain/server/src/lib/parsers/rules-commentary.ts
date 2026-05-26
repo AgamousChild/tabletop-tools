@@ -1,6 +1,6 @@
 import type { Node, NodeRef, Source } from '../model'
 import { truncate } from '../filters'
-import { errataId, coreId, slugify } from '../slugify'
+import { errataId, coreId } from '../slugify'
 import type { ParseResult } from './core-rules'
 
 function extractCommentaryKeywords(title: string, content: string): string[] {

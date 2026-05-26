@@ -32,7 +32,7 @@ async function main() {
     const eventName = data.event?.name || file
     const records = data.records as Record<string, PlayerRecord>
 
-    for (const [playerName, record] of Object.entries(records)) {
+    for (const [, record] of Object.entries(records)) {
       if (record.listUrl) {
         const key = record.listUrl // dedupe by URL
         if (!listsByPlayer.has(key)) {

@@ -16,7 +16,6 @@ export interface DetachmentPageProps {
 
 export function DetachmentPage({
   detachmentName,
-  factionId,
   subfaction,
   ability,
   stratagems,
