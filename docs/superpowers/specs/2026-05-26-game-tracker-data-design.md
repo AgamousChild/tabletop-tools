@@ -110,6 +110,32 @@ match_secondary             -- a side's secondary cards across the game
 
 Notes (from flow doc): secondaries are **2 drawn per turn, unbounded hand**, can be kept / scored / discarded-for-CP / swapped via New Orders. CP includes reactive spends during the opponent's turn — hence `stratagem_use.used_by_id` is independent of the turn's active player.
 
+### Mission scoring objects (each mission has its OWN specific interface)
+
+Mission scoring is **encoded, not free-entry VP.** Each mission — every **primary** and every **secondary** — is its own **scoring object** with a **mission-specific interface**: its own parameters, its own interface elements, its own scoring logic. There is **no single shared interface** — Purge the Foe, Assassinate, and Bring It Down each expose different parameters and score differently. The only thing they have in common is that each emits `score_event` rows into the scoring table.
+
+```
+<MissionScoringObject>            -- specific PER mission (not a single shared contract)
+  parameters                      -- THIS mission's own selectable mode/params -> THIS mission's interface elements
+  score(player-selected mode/params, window, side) -> score_event[]
+```
+
+- **One scoring object per individual mission.** Purge the Foe is one object; Assassinate is another; Bring It Down another — each defines the interface specific to itself.
+- **Concrete set = the 10th-edition Chapter Approved missions** (**not** Pariah Nexus). Build out each **Chapter Approved** primary and secondary mission as its own object now — documented and stable, already parsed at `C:\R\sync-data\tools\ChapterApproved\`. Many 11th-edition objectives are similar, so 11th missions reuse most of these objects (or extend them) — built once here.
+
+**Each object's specific interface = its own mission parameters → its own interface elements:**
+
+| Mission (Chapter Approved) | Its specific parameters / interface elements |
+|---|---|
+| Purge the Foe | enemy units **destroyed** (kill tally, per scoring window) |
+| Assassinate | enemy **CHARACTERS** destroyed |
+| Bring It Down | enemy **MONSTERS / VEHICLES** destroyed (by wounds bracket) |
+
+Each object owns its parameter set; the tracker renders that mission's specific interface elements, and **the player selects the mode/params** for that mission. That selection **sets the score value**, which the object records as a `score_event`. The selectable params differ per mission — Assassinate: how many enemy CHARACTERS were killed; Bring It Down: which MONSTERS/VEHICLES (by wounds bracket); Purge the Foe: the kill tally for the window. **The player enters/selects these; the tracker does not derive them from tracked board state.** (Auto-scoring from board state would be nice, but it's too far for now.) The object's only job is to turn the player's selected mode/params into VP.
+- At each scoring `window`, the tracker invokes the relevant object for a `side`; the object reads the captured board state (`objective_state`, `unit_casualty`, `unit_state` — §4/§5) and **emits the `score_event` rows** above. The tracker never hard-codes a mission's math.
+- Mission **definitions are content** (they live with the content model); `match_player.primary_mission_id` and `match_secondary.card_name` reference them. The interface is the seam between recorded board state and mission rules.
+- `score_event.source` records **which** scoring object produced the VP.
+
 ---
 
 ## 4. Casualties & board state
@@ -159,7 +185,7 @@ unit_state
 - `matches.mission` (single) → **per-side `primary_mission_id`** + a **per-side `available_primaries` pool** (each side has its own — no shared pool).
 - `your_*` / `their_*` columns crammed onto `matches`/`turns` → symmetric **`match_player`** + per-turn rows.
 - `your_units_lost` / `their_units_lost` JSON blobs → **`unit_casualty`** rows (LOST vs DESTROYED, by unit).
-- `match_secondaries.vp_per_round` JSON → kept, but reconciled with per-turn `secondary_vp` and per-card `match_secondary`.
+- `match_secondaries.vp_per_round` JSON → **`score_event`** (per-window scoring) + per-card `match_secondary` (card lifecycle). No per-turn VP column.
 - `stratagem_log` → `stratagem_use` with `used_by_id` (captures reactive spends).
 - Army = a `list` of `list_unit`s, not free-text — casualties/state reference the real configured units.
 
@@ -170,6 +196,6 @@ unit_state
 1. **Per-unit token state (§5): RESOLVED — persist it** (with `active` + round history; see §5).
 2. **Opponent granularity: RESOLVED — opponent's full `list` is always available** (both `match_player`s have a real `list_id`; casualties reference real `list_unit`s). How it's captured (import vs manual) is a separate UX concern.
 3. **Scoring windows: RESOLVED — track scoring at EACH window** via `score_event` (`end_of_command` / `end_of_turn` / `end_of_round` / `end_of_game`). Turn/match VP totals derive from these.
-4. **Objectives:** count of controlled markers vs explicit marker ids + OC — how much board state to capture?
-5. **Mission VP rules:** the published Chapter Approved primary/secondary values aren't pinned yet (batreps were custom) — do we encode mission scoring rules as data, or just record the VP the user enters?
+4. **Board state is recorded for the game log, NOT a scoring input: RESOLVED.** `unit_casualty` (LOST/DESTROYED), `objective_state`, `unit_state` capture what happened. Scoring comes only from the player-selected mode/params (§3) — auto-deriving VP from tracked board state is explicitly out of scope ("too far" for now). Keep board-state capture minimal.
+5. **Mission VP rules: RESOLVED — each mission is its own scoring object with a mission-specific interface; the player selects the mode/params that set the score** (§3). Build out the 10th-edition **Chapter Approved** primaries + secondaries as objects. Not auto-derived, not a single shared interface, not a free-entry number — the player picks that mission's mode/params and the object turns them into VP. (11th reuses most of these.)
 6. **Paint/soft scores + tournament tie-breaks:** confirm what feeds the tournament side.
