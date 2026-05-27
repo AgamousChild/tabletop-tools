@@ -109,9 +109,18 @@ round_player                -- per side, per round (the app's round screen for o
   cp_gained
   cp_spent
   -- net CP derives from gained/spent; scoring entries (§3) hang off this row
+
+stratagem_use               -- which stratagems were fired (game state + strong meta data)
+  id PK
+  round_id FK -> round
+  used_by_id FK -> match_player     -- who spent the CP (may be the NON-active player: Overwatch, reactive moves, …)
+  active_side_id FK -> match_player -- whose turn it was used during
+  stratagem_name
+  cp_cost
+  phase                             -- when in the turn
 ```
 
-(The app tracks only CP **gained/spent** per round — no per-stratagem log. Stratagem-level logging is a possible later meta addition, deferred — see §8.)
+`cp_gained` / `cp_spent` stay the authoritative per-side per-round totals (not every CP spend is a stratagem). `stratagem_use` is the itemized detail — which stratagems fired, by whom, including reactive use on the opponent's turn (`used_by_id` ≠ `active_side_id`).
 
 ---
 
@@ -219,7 +228,7 @@ unit_state
 ## 7. Integration points (the reason to build our own)
 
 - **IN:** `match_player.list_id` → `list` / `list_unit` (your configured units; the opponent's too).
-- **OUT (meta):** `score_event` + `score_selection` + `unit_casualty` → new-meta. The per-mission selections and destroyed-unit data are exactly what the standalone app discards.
+- **OUT (meta):** `score_event` + `score_selection` + `unit_casualty` + `stratagem_use` → new-meta. The per-mission selections, destroyed units, and stratagem usage are the granular game data that meta and gameplay-trend analysis run on.
 - **Tournament:** `match.tournament_id` / `pairing_id`; result set by the organizer; `paint_scoring` set by the tournament.
 
 ---
@@ -227,7 +236,7 @@ unit_state
 ## 8. Open questions (post-app)
 
 1. **11th per-side primaries:** the `match_player.primary_mission_id` seam is in place (10th writes the shared value to both). A per-side *pool* is not modeled until 11th is real. Confirm that's the right amount of 11th-readiness.
-2. **Stratagem-level logging:** the app tracks only CP gained/spent. Add per-stratagem rows for meta (which stratagems, when), or leave as CP totals?
+2. **Stratagem-level logging: RESOLVED — log which stratagems were used** (`stratagem_use`, §2). It helps meta and surfaces **gameplay trends** (which stratagems fire, when, by whom). CP gained/spent totals stay authoritative; the stratagem rows are the itemized detail, including reactive use on the opponent's turn.
 3. **Deployment/mission content depth:** objective positions + measurements are shown by the app — how much of that do we model now vs defer to the content model?
 4. **Token-state granularity:** per-round (`since_round`/`cleared_round`) — enough, or do some tokens need per-phase timing?
 ```
