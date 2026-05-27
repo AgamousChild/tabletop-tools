@@ -1,6 +1,6 @@
-# Tournament + BCP Data Model — Design Spec (PRELIMINARY)
+# Tournament + BCP Data Model — Design Spec
 
-> Status: **DRAFT — for Micah's review.** Not locked.
+> Status: **Built out — for Micah's review.** Covers the full data model, the source↔meta seam, the BCP passthrough + list-drop (with the captured write contract), lifecycle, and build phases.
 > Grounded in: the **real Turso data** (215 BCP-scraped `meta_events`, 30k players, 75k pairings; the `tournaments`/`tournament_players` app tables empty and free-string), the **BCP run-a-tournament flow** (screenshots), and the existing **bcp-scraper** (OAuth + Bearer against `newprod-api.bestcoastpairings.com`).
 > Consumes the List + Game Tracker models (configured-unit `list_unit`, the per-game `match`).
 
@@ -143,11 +143,19 @@ tournament_placing_metric   -- the ordered standings tiebreaker stack
 
 (`scorecard` can later carry default metric stacks that a tournament copies on creation; kept minimal for now.)
 
+**Discovered metric catalog (from BCP's scorecard) to seed `ranking_metric`:** Wins · Battle Points · Victory Points before Differential · Points Destroyed · Wins SoS · Battle Points SoS · Swiss Points · Path to Victory · Opp. Game Win % · Extended Opp. Game Win % · Swiss SoS · Margin of Victory · Wins Extended SoS · Battle Points Extended SoS · Random. The Pairing and Placing stacks each enable + order a subset; the BCP default leans on Wins → Battle Points → the SoS metrics → Random (the final deterministic coin-flip).
+
 ---
 
 ## 3. Standings (derived)
 
-Standings are **computed** from `pairing` results ordered by the `tournament_placing_metric` stack — not stored as a separate authoritative table. `tournament_player.placement` is the **saved snapshot at completion** (the value meta reads). Live standings are recomputed on view (same pattern as list points: derived live, snapshotted on finalize).
+Standings are **computed**, not stored as an authoritative table:
+
+1. For each `tournament_player`, compute every enabled `ranking_metric` value from their `pairing` results (wins, battle points, strength-of-schedule, points destroyed, …).
+2. Sort players by the `tournament_placing_metric` stack **in `sort_order`** — first metric, then the next as a tiebreaker, down to `random` as the final deterministic coin-flip.
+3. That rank is the live standing, recomputed on view (same pattern as list points: derived live).
+
+On `status='complete'` the standing is **frozen** into `tournament_player.placement` (the snapshot meta reads). Each round's pairings are generated from the live standings + `pairing_style` (Swiss: pair within score brackets, avoid rematches, honor `table_mode`, bye on odd counts).
 
 ---
 
@@ -249,10 +257,20 @@ Reverse-engineered by driving a browser agent in the user's own logged-in BCP se
 
 ## 6. The seam to meta (how source feeds analytics)
 
-- **Faction/detachment**: both native and BCP resolve to `dim_*`. BCP's faction picker is grouped exactly like `dim_faction(allegiance)` / `dim_subfaction`, so the registry already aligns.
-- **Native completion** → derive `meta_event` + `meta_event_players` (placement, W/L/D, structured list) + `meta_pairings` + `fact_game_results` from the native source. Internal derive, not a cross-app pipeline.
-- **BCP completion** → existing scrape (`source='bcp'`), joined to its `passthrough_event` by `source_id`.
-- Everything converges in `meta_*`, from both directions.
+- **Faction/detachment**: both native and BCP resolve to `dim_*`. BCP's faction picker is grouped exactly like `dim_faction(allegiance)` / `dim_subfaction`, so the registry already aligns — the seam is a straight id copy, no remapping.
+- Everything converges in `meta_*`, from both directions: **native completion derives in**, **BCP completion scrapes in** (`source='bcp'`, joined to its `passthrough_event` by `source_id`).
+
+### 6.1 Field-level derive (native completion → meta)
+
+On `status='complete'`, derive — **idempotent**, keyed by `source` + `source_id` so re-runs upsert rather than duplicate:
+
+| Source (tournament) | → Meta |
+|---|---|
+| `tournament` (name, date, location, format, total_rounds, player count) | `meta_events` (`source='tabletop-tools'`, `source_id = tournament.id`) |
+| `tournament_player` (faction_id, subfaction_id, detachment_id, placement, W/L/D, list) | `meta_event_players` (same `dim_*` FKs; `list_text` **+ structured `list` ref**) |
+| `pairing` (round, players, scores, result) | `meta_pairings` + one `fact_game_results` row per side (faction vs opponent_faction, result) |
+
+The derive runs **inside the one DB** (a function, not a cross-app export). The structured `list` ref is the bonus the scraper can't get for BCP-sourced players (§5.2).
 
 ---
 
@@ -279,7 +297,48 @@ Reverse-engineered by driving a browser agent in the user's own logged-in BCP se
 ## 9. Test plan
 
 - Faction/detachment resolve to `dim_*` for native registration; unknown faction is rejected, not free-typed.
+- Metric stack: each `ranking_metric` computes the right value from pairings; reordering the placing stack reorders standings; `random` only breaks otherwise-exact ties.
 - Standings: recompute from pairings against a placing-metric stack; reorder the stack → standings reorder; finalize → `placement` snapshot.
-- Passthrough: listing scrape yields `bcp_event_id`; the same id matches a later scraped `meta_event.source_id`.
-- BCP list-drop (both paths): a `bcp_registration` row is created with the right `method`; failure surfaces as `status='failed'` (never a silent success).
-- Native → meta derive: a completed native tournament produces `meta_event` + players (with structured list) + pairings + `fact_game_results` keyed to `dim_*`.
+- Lifecycle: status transitions gate the right actions (no scoring before `in_progress`; finalize freezes `placement` and triggers the derive).
+- Passthrough: listing sync yields `bcp_event_id`; the same id matches a later scraped `meta_event.source_id`.
+- BCP list-drop (both paths): a `bcp_registration` row is created with the right `method`; success is verified by reading the registration back (List Status → Submitted); failure surfaces as `status='failed'` (never a silent success).
+- Native → meta derive: a completed native tournament produces `meta_event` + players (with structured list) + pairings + `fact_game_results` keyed to `dim_*`; **running the derive twice upserts, never duplicates**.
+
+---
+
+## 10. Lifecycle & status flow
+
+`draft → registration → check_in → in_progress → complete` (TO-driven). Each state gates what's allowed:
+
+- **draft** — config only (event, scorecard, metric stacks). No players visible.
+- **registration** — players register (`tournament_player`), submit lists (per list rules), pick faction/detachment from `dim_*`.
+- **check_in** — players check in (self or in-person per `check_in_mode`); `list_required_at_checkin` enforced; no-shows `dropped`.
+- **in_progress** — rounds run: generate `pairing`s from live standings + `pairing_style`, score them (player self-report → `confirmed` / `to_override`), advance `round.status`.
+- **complete** — freeze `placement`, grant `tournament_award`s, run the meta derive (§6.1).
+
+---
+
+## 11. BCP API surface (discovered + to-capture)
+
+Base `https://newprod-api.bestcoastpairings.com`; headers `client-id: web-app`, `env: bcp`; auth `Authorization: Bearer <Cognito token>` (OAuth `/oauth/authorize` Basic email:password → code → `/oauth/token`; Cognito pool `us-east-1_ypv5m82ww`).
+
+**Reads (proven by the scraper + this session):**
+- `GET /v2/events?…&gameSystemId=WGMSzfKFYA` — event search/listing (broaden filters for the passthrough directory).
+- `GET /v2/events/{id}?role=true` · `GET /v1/events/{id}/currentPlayer` · `GET /v1/events/{id}/role?userId=` · `GET /v1/events/{id}/pairings?round=N`.
+- `GET /v1/gamesystems/WGMSzfKFYA/factions?limit=100&active=true` — faction → `armyId`.
+- `GET /v1/armylists/{id}` · `GET /v1/armies/{armyId}` · `GET /v1/users/{userId}/teams`.
+
+**Writes:**
+- `POST /v1/armylists` — submit a list (captured + verified, §5.3). ✅
+- *register-for-event* — **to capture** (POST to an events/registrations route).
+- *check-in*, *score-report* — to capture only if the agent ever runs a native-on-BCP flow; **not needed for the list-drop**.
+
+---
+
+## 12. Build phases
+
+1. **Schema** — `dim_*` FKs on `tournament_player`; add `scorecard` / `ranking_metric` / the two metric-stack tables, `passthrough_event`, `bcp_registration`; migrate `tournaments.mission_pool` JSON → structured rounds.
+2. **Native source** — registration (dim faction/detachment + list link), the §10 lifecycle, Swiss pairing, scoring, live standings (§3).
+3. **Meta derive** — the §6.1 function on completion (idempotent upsert).
+4. **Passthrough directory** — listing sync (keys + card) → `passthrough_event`; browse UI; join to `meta_events` by `source_id`.
+5. **BCP list-drop** — `submitList()` (§5.3) both paths; explicit consent (§5.0); `bcp_registration`; capture the register endpoint. Gated on the ToS call (§8).
