@@ -139,7 +139,7 @@ Caps: `primary_objective.cap` = 50; each secondary card has its own cap (Assassi
 
 ### Mission scoring objects (each mission has its OWN specific interface) — validated by the app
 
-Each mission — every **primary** and every **secondary** — is its own **scoring object** with a **mission-specific interface**: its own parameters, its own interface elements, its own scoring logic. The app confirms **four distinct interface shapes**:
+Each mission — every **primary** and every **secondary** — is its own **scoring object** with a **mission-specific interface**: its own parameters, its own interface elements, its own scoring logic. **Primaries and secondaries are displayed and scored identically** — each opens the same kind of scoring view: a current/cap indicator (0/50, 0/5, 0/4 …) plus that mission's own interface elements. Scoring a secondary works exactly like scoring a primary — tap the card, the same view opens, the player selects the mode/params, and the result is recorded the same way (`score_event` + `score_selection`). There are **four distinct interface shapes** in play:
 
 | Shape | Example | Interface | Persisted as |
 |---|---|---|---|
