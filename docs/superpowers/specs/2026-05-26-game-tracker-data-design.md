@@ -50,7 +50,7 @@ match_player                -- exactly two per match (you + opponent)
   goes_first
   final_primary_vp          -- snapshot at game end
   final_secondary_vp
-  paint_score?              -- OPTIONAL; captured only when paint_scoring is on (player toggle, or tournament-set)
+  paint_score               -- judged value when paint_scoring is on; defaults to 10 (free points) when off
 ```
 
 ---
@@ -201,4 +201,4 @@ unit_state
 3. **Scoring windows: RESOLVED — track scoring at EACH window** via `score_event` (`end_of_command` / `end_of_turn` / `end_of_round` / `end_of_game`). Turn/match VP totals derive from these.
 4. **Objective board state = the NUMBER of objectives controlled (per side, per window): RESOLVED.** That count is the player-entered param that drives objective-primary scoring (§3). `unit_casualty` + `unit_state` are the rest of the game log (record-only — no auto-derived VP). **11th will differ** (new maps, objective scoring less clearly defined) — model the count for now, revisit when 11th maps land.
 5. **Mission VP rules: RESOLVED — each mission is its own scoring object with a mission-specific interface; the player selects the mode/params that set the score** (§3). Build out the 10th-edition **Chapter Approved** primaries + secondaries as objects. Not auto-derived, not a single shared interface, not a free-entry number — the player picks that mission's mode/params and the object turns them into VP. (11th reuses most of these.)
-6. **Paint scoring: RESOLVED — optional, gated by a `paint_scoring` toggle on the match** ("paint scoring on?"). Individual players set it themselves; a tournament sets it when the match belongs to one. `paint_score` is captured only when the toggle is on. (Other tournament tie-break inputs still TBD.)
+6. **Paint scoring: RESOLVED — gated by a `paint_scoring` toggle on the match** ("paint scoring on?"). Individual players set it themselves; a tournament sets it when the match belongs to one. When **on**, `paint_score` is the judged value; when **off**, paint contributes a default **10 free points** (so it never disadvantages a player). (Other tournament tie-break inputs still TBD.)
