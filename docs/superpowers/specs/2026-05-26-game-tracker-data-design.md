@@ -57,7 +57,7 @@ match_player                -- exactly two per match (you + opponent)
   list_id FK -> list        -- NOT NULL: the army (configured units). The opponent's list is recorded too — always available.
   faction                   -- denormalized display cache (derived from the list)
   detachment                -- denormalized display cache
-  primary_objective_id FK -> primary_objective  -- this side's CHOSEN primary (11th: per side, from its own pool below; 10th: both sides pick the same one)
+  primary_objective_id FK -> scoring_mission  -- this side's CHOSEN primary (11th: per side, from its own pool below; 10th: both sides pick the same one)
   secondary_mode            -- 'tactical' (draw random as the game goes) | 'fixed' (pick 2 up front)
   is_attacker
   goes_first
@@ -69,7 +69,7 @@ match_player                -- exactly two per match (you + opponent)
 match_player_primary_option   -- this side's AVAILABLE primary pool (11th: force-disposition / matchup driven; 10th: the one shared primary)
   id PK
   match_player_id FK -> match_player
-  primary_objective_id FK -> primary_objective
+  primary_objective_id FK -> scoring_mission
 ```
 
 ### Mission content (referenced; lives with the content model)
@@ -79,10 +79,7 @@ The structural parts are a **deployment** + **terrain layout** (both **shared** 
 **Deployment zones and terrain layouts are static and set** — a fixed published catalog — so they're modeled as **reference overlays**, not per-game geometry. A `match` references the named deployment + terrain layout it used; the overlay (zones, objective markers, terrain pieces, measurements) is fixed content rendered over a standard board.
 
 ```
-primary_objective           -- a primary, with its scoring object (§3) and its cap
-  id PK
-  name                      -- 'Supply Drop' | 'Purge The Foe' | ...
-  cap                       -- e.g. 50  (data — flexes per edition, no schema change)
+-- primaries are `scoring_mission` rows (kind='primary'); the full catalog (primary + secondary) is in §3.
 
 deployment                  -- a static deployment overlay (e.g. 'Hammer And Anvil')
   id PK
@@ -104,7 +101,7 @@ terrain_layout              -- a static terrain overlay (e.g. 'GW Chapter Approv
 mission_card                -- optional 10th named pairing (label / convenience)
   id PK
   name                      -- 'Mission H'
-  primary_objective_id FK -> primary_objective
+  primary_objective_id FK -> scoring_mission
   deployment_id FK -> deployment
   mission_rule              -- e.g. 'Tipping Point'
 ```
@@ -143,58 +140,82 @@ stratagem_use               -- which stratagems were fired (game state + strong 
 
 ---
 
-## 3. Scoring — per round, per side, per mission (capped)
+## 3. Scoring — two separate things, deliberately
 
-Scoring is **player-selected via each mission's own interface**, recorded per `round_player`, and **capped** by the mission definition. The player's **selections are persisted** (not just the VP) — that's the meta data the standalone app discards.
+**(a) The score — simple.** Per round, per side, each mission has a VP number for that round. The player **enters it**; we keep a round-by-round running total. **No multiplicative computation in the model — score the round as is.** Caps: primary 50, secondary aggregate 40, paint 10 → 100.
 
 ```
-score_event                 -- one mission's scoring for one side in one round
+score_event                 -- one mission's score, for one side, in one round (player-entered)
   id PK
   round_player_id FK -> round_player
-  category                  -- 'primary' | 'secondary'
-  mission_ref               -- the primary_objective, or the match_secondary card, scored
-  vp                        -- resolved total for this mission this round (respects the mission cap)
-
-score_selection             -- WHAT the player selected (normalized — no JSON blob)
-  id PK
-  score_event_id FK -> score_event
-  element_key               -- 'objectives_controlled' | 'condition:more_objectives_than_opponent' | 'tier:4_quarters' | ...
-  element_value             -- the count entered, or 1 for a ticked condition
-  points                    -- the pts this element contributed
+  scoring_mission_id FK -> scoring_mission   -- the primary or secondary scored
+  vp                        -- the round's VP for this mission (entered as-is; capped by scoring_mission.cap)
 ```
 
-Caps: `primary_objective.cap` = 50; each secondary card has its own cap (Assassination 5, Bring It Down 4, …) and the per-side secondary total caps at 40; battle-ready/paint caps at 10. **Match totals derive from `score_event`, clamped to the caps** (`final_primary_vp`, `final_secondary_vp` are end-of-game snapshots).
+`scoring_mission` is **one catalog for both primaries and secondaries** — they score identically (a primary like Purge the Foe is a checklist; a secondary like Engage is tiers). Match totals derive from `score_event`, clamped to the caps.
 
-### Mission scoring objects (each mission has its OWN specific interface) — validated by the app
+```
+scoring_mission             -- catalog: a primary OR a secondary
+  id PK
+  name                      -- our own functional name
+  kind                      -- 'primary' | 'secondary'
+  side                      -- 'symmetric' | 'attacker' | 'defender'   (asymmetric missions exist)
+  cap                       -- this mission's VP cap (data — flexes per edition)
+  ui_pattern                -- render hint: 'count' | 'checklist' | 'tier' | 'action' | 'zoned_count' | …
+                            --   open-ended: there are MORE than a few patterns; a new one is a new hint, not a schema change
+```
 
-Each mission — every **primary** and every **secondary** — is its own **scoring object** with a **mission-specific interface**: its own parameters, its own interface elements, its own scoring logic. **Primaries and secondaries are displayed and scored identically** — each opens the same kind of scoring view: a current/cap indicator (0/50, 0/5, 0/4 …) plus that mission's own interface elements. Scoring a secondary works exactly like scoring a primary — tap the card, the same view opens, the player selects the mode/params, and the result is recorded the same way (`score_event` + `score_selection`). There are **four distinct interface shapes** in play:
+**(b) The game states — the useful info.** Every identifiable, recurring fact of play is a **canonical definition, written once** in our own functional words (mechanics/methods of play aren't copyrightable — only GW's card text is, so we don't copy it). The same fact is reused by many missions: *control an objective in No Man's Land* is shared by Supply Drop, Secure No Man's Land, The Ritual, …; *an enemy MONSTER/VEHICLE was destroyed* by Bring It Down and others.
 
-| Shape | Example | Interface | Persisted as |
-|---|---|---|---|
-| **Number stepper × per-round multiplier** | Supply Drop | enter "objectives in No Man's Land you control"; pts/obj scale by round (R2 5 · R3 5 · R4 8 · R5 15) | `score_selection(objectives_controlled, n, pts)` |
-| **Summed checkboxes** | Purge the Foe (4×4pts), Assassination (2×5pts) | tick each condition met | one `score_selection` per ticked condition |
-| **Graduated tiers** | Engage on All Fronts (2/3/4 quarters → 1/2/4pts) | pick the highest tier reached | `score_selection(tier:…, 1, pts)` |
-| **Single checkbox** | Bring It Down (1+ VEHICLE/MONSTER killed) | one tick | one `score_selection` |
+```
+game_state                  -- a canonical fact of play — define ONCE, reference everywhere
+  id PK
+  key                       -- stable slug, e.g. 'control_objective_no_mans_land'
+  label                     -- our functional wording (NOT GW card text)
+  category                  -- 'objective_control' | 'unit_destroyed' | 'position' | 'action_completed' | 'comparative' | …
 
-- **One scoring object per individual mission** — no single shared interface.
-- **Concrete set = the 10th-edition Chapter Approved missions** (already parsed at `C:\R\sync-data\tools\ChapterApproved\`). Built out now; many 11th objectives are similar and reuse these.
-- **The player selects the mode/params; the object turns the selection into VP.** The tracker does **not** derive VP from the board-state layer (§4) — that would be nice but is too far for now.
-- `score_event.mission_ref` + `score_selection` record *which* object scored and *what* was chosen.
+mission_game_state          -- which game_states a mission scores, and what each is declared worth
+  id PK
+  scoring_mission_id FK -> scoring_mission
+  game_state_id FK -> game_state
+  points                    -- declared VP for this state in this mission (reference; shown in the scorer)
+  count_mode                -- 'flag' | 'per_objective' | 'per_unit' | 'tier'
+  sort_order
+```
+
+When the player scores a mission, they assert which of its game states were true (tick / count). That both helps them reach the round VP **and** records the facts:
+
+```
+game_state_event            -- which canonical game-states were true for this side this round (the useful data)
+  id PK
+  round_player_id FK -> round_player
+  game_state_id FK -> game_state    -- a POINTER to the canonical definition (countable across all games)
+  score_event_id FK?                -- the mission score it fed, when it came from scoring
+  count                             -- how many (e.g. 3 objectives); 1 for a flag
+```
+
+**Why this is the whole point:** because every occurrence points at the *same* `game_state` row, "how often did anyone control more objectives than their opponent?" is a single join across all games — not a scan of loose text. It's the canonical-entity rule (your "one source per thing") applied to **facts of play**. The score stays player-entered and authoritative; the game-state events are the correlated, queryable record — **not** used to recompute the score.
+
+(Note: *unit destroyed* game states overlap with `unit_casualty` (§4), but at different grains — `game_state_event` is the scoring-relevant fact, `unit_casualty` is the specific unit. They corroborate; neither derives the other.)
+
+### The interface per mission
+
+A mission's scoring view is rendered from its `ui_pattern` + its `mission_game_state` rows — a small set of generic renderers (count → stepper, checklist → checkboxes, tier → exclusive options, action → completion toggle, zoned_count → per-zone counters, …), driven by data. **A new mission is data** (a `scoring_mission` + its `mission_game_state` links), not new code. Primaries and secondaries use the same view — that's why "they score identically" is literally true.
 
 ### Secondary card lifecycle
 
 ```
-match_secondary             -- a side's secondary cards across the game (the CARD; VP lives in score_event)
+match_secondary             -- a side's secondary CARDS across the game (the card instance; VP lives in score_event)
   id PK
   match_player_id FK -> match_player
-  card_name                 -- 'Assassination' | 'Bring It Down' | 'Engage On All Fronts' | ...
+  scoring_mission_id FK -> scoring_mission   -- which secondary
   mode                      -- 'tactical' | 'fixed'  (mirrors match_player.secondary_mode)
   drawn_round
   status                    -- 'active' | 'scored' | 'discarded'
-  discard_timing            -- 'command_phase' | 'end_of_turn'  (when discarded; the app distinguishes)
+  discard_timing            -- 'command_phase' | 'end_of_turn'
 ```
 
-Single source of truth: `match_secondary` owns the **card lifecycle**; `score_event` owns the **VP**. (Fixes the earlier double-bookkeeping.)
+Single source of truth: `match_secondary` owns the **card lifecycle**; `score_event` owns the **VP**; `game_state_event` owns the **facts**.
 
 ---
 
@@ -211,7 +232,7 @@ unit_casualty               -- destroyed / lost units (the "destroyed units" ide
   destroyed_by_unit_id FK? -> list_unit -- who killed it (optional)
 ```
 
-(Objective counts are **not** a separate table — they're captured as `score_selection(objectives_controlled, …)` on the primary's `score_event`, exactly where the player enters them in the mission modal.)
+(Objective counts are captured as a `game_state_event` — a pointer to the canonical *control objective in {zone}* state with a `count` — tied to the primary's `score_event`, exactly where the player enters them in the mission scorer.)
 
 ---
 
@@ -235,9 +256,9 @@ unit_state
 
 ## 6. What this replaces / fixes (vs current `matches`/`turns`)
 
-- `matches.mission` (single string) → **shared `deployment` + `terrain_layout` + rule** (static overlays) with **per-side `primary_objective`** (each side picks from its own `match_player_primary_option` pool). 10th = both pools/picks identical; optional `mission_card` names the 10th pairing.
+- `matches.mission` (single string) → **shared `deployment` + `terrain_layout` + rule** (static overlays) with a **per-side primary** (a `scoring_mission`; each side picks from its own `match_player_primary_option` pool). 10th = both pools/picks identical; optional `mission_card` names the 10th pairing.
 - `your_*` / `their_*` columns crammed on `matches`/`turns` → symmetric **`match_player`** + **`round_player`** rows.
-- per-turn VP / `match_secondaries.vp_per_round` JSON → **`score_event`** (per round, per side, per mission) + **`score_selection`** (the granular choice) + **`match_secondary`** (card lifecycle). Capped 50/40/10.
+- per-turn VP / `match_secondaries.vp_per_round` JSON → **`score_event`** (per round, per side, per mission, entered as-is) + **`game_state_event`** (the canonical facts) + **`match_secondary`** (card lifecycle). Capped 50/40/10.
 - `your_units_lost` / `their_units_lost` JSON blobs → **`unit_casualty`** rows (part of the game state).
 - `stratagem_log` → CP gained/spent on `round_player` + **`stratagem_use`** (which stratagems fired, incl. reactive).
 - Army = a `list` of `list_unit`s, not free-text — casualties/state reference the real configured units.
@@ -247,7 +268,7 @@ unit_state
 ## 7. Integration points (the reason to build our own)
 
 - **IN:** `match_player.list_id` → `list` / `list_unit` (your configured units; the opponent's too).
-- **OUT (meta):** `score_event` + `score_selection` + `unit_casualty` + `stratagem_use` → new-meta. The per-mission selections, destroyed units, and stratagem usage are the granular game data that meta and gameplay-trend analysis run on.
+- **OUT (meta):** `score_event` + `game_state_event` + `unit_casualty` + `stratagem_use` → new-meta. The canonical game-state facts, destroyed units, and stratagem usage are the granular data that meta and gameplay-trend analysis run on — and they line up across games because they point at shared definitions.
 - **Tournament:** `match.tournament_id` / `pairing_id`; result set by the organizer; `paint_scoring` set by the tournament.
 
 ---
