@@ -40,9 +40,9 @@ match_player                -- exactly two per match (you + opponent)
   match_id FK -> match
   seat                      -- 'P1' | 'P2'  (P1 = the tracking user by convention)
   is_you
-  list_id FK?  -> list      -- the army (configured units). nullable: opponent may be partial
-  faction                   -- denormalized (used when no full list, esp. opponent)
-  detachment                -- denormalized
+  list_id FK -> list        -- NOT NULL: the army (configured units). The opponent's list is recorded too — always available.
+  faction                   -- denormalized display cache (derived from the list)
+  detachment                -- denormalized display cache
   available_primaries       -- THIS side's OWN pool of available primaries (force-disposition / matchup driven; separate per side)
   primary_mission_id        -- the side's CHOSEN primary (from its own pool, above)
   is_attacker
@@ -68,19 +68,28 @@ turn                        -- one player's turn within a round (the "half-turn"
   id PK
   round_id FK -> round
   active_player_id FK -> match_player   -- whose turn
-  primary_vp                -- scored THIS turn (against the active player's own primary)
-  secondary_vp              -- scored THIS turn
   cp_start, cp_gained, cp_spent         -- active player's CP economy for the turn
   photo_url
   notes
   created_at
+  -- VP is NOT stored here: scoring is recorded per-window in score_event (§3)
 ```
 
 ---
 
-## 3. CP, stratagems, secondaries
+## 3. Scoring (per window), CP, stratagems, secondaries
 
 ```
+score_event                 -- VP scored AT a specific scoring window (track EACH window — per Micah)
+  id PK
+  round_id FK -> round
+  match_player_id FK -> match_player    -- who scored (each side scores its own)
+  window                    -- 'end_of_command' | 'end_of_turn' | 'end_of_round' | 'end_of_game'
+  category                  -- 'primary' | 'secondary'
+  source                    -- the primary mission, or the secondary card name, that scored
+  vp
+-- turn/match VP totals derive from score_event rows.
+
 stratagem_use               -- one stratagem firing (incl. REACTIVE on the opponent's turn)
   id PK
   turn_id FK -> turn        -- the turn during which it fired
@@ -110,8 +119,8 @@ unit_casualty               -- units LOST and units DESTROYED (many objectives c
   id PK
   turn_id FK -> turn
   owner_id FK -> match_player        -- whose unit
-  list_unit_id FK? -> list_unit      -- which configured unit (nullable if opponent untracked)
-  unit_name                          -- denormalized fallback
+  list_unit_id FK -> list_unit       -- NOT NULL: the configured unit (both sides have full lists)
+  unit_name                          -- denormalized display cache
   kind                               -- 'LOST' | 'DESTROYED'
   destroyed_by_unit_id FK? -> list_unit   -- who killed it (optional)
 
@@ -159,8 +168,8 @@ unit_state
 ## 7. Open questions (for review)
 
 1. **Per-unit token state (§5): RESOLVED — persist it** (with `active` + round history; see §5).
-2. **Opponent granularity:** require the opponent's full `list` (configured units), or allow faction/detachment + free unit names when you don't have their list?
-3. **Scoring windows:** model the exact window (end-of-command / end-of-turn / end-of-round) on `turn`, or just record VP deltas per turn?
+2. **Opponent granularity: RESOLVED — opponent's full `list` is always available** (both `match_player`s have a real `list_id`; casualties reference real `list_unit`s). How it's captured (import vs manual) is a separate UX concern.
+3. **Scoring windows: RESOLVED — track scoring at EACH window** via `score_event` (`end_of_command` / `end_of_turn` / `end_of_round` / `end_of_game`). Turn/match VP totals derive from these.
 4. **Objectives:** count of controlled markers vs explicit marker ids + OC — how much board state to capture?
 5. **Mission VP rules:** the published Chapter Approved primary/secondary values aren't pinned yet (batreps were custom) — do we encode mission scoring rules as data, or just record the VP the user enters?
 6. **Paint/soft scores + tournament tie-breaks:** confirm what feeds the tournament side.
