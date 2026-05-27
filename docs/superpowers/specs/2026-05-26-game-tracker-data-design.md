@@ -19,7 +19,7 @@ We're copying **how game-tracking works**, not cloning a specific app. The Table
 How the game works (10th — the concrete target):
 - One **shared** primary (a Mission card = primary + deployment + rule); per-side Tactical/Fixed secondaries.
 - Scoring is **per round, per side**, capped **50 primary / 40 secondary / 10 battle-ready = 100**.
-- 11th isn't fully known; where it diverges (per-side primaries) the seam exists, but 10th writes the shared value to both sides. No 11th-only speculation modeled yet.
+- **11th is the target by release.** Everyone tracks 10th today, but we won't ship before 11th is out — so we build the 11th structure now, as far as the transcripts let us: **per-side primaries chosen from per-side available pools** (force-disposition / matchup driven) and persistent token state (§5). The **scoring objects we build are the 10th Chapter Approved missions** (§3) — 11th reuses most. 10th's structure is the constrained case (both sides' pool = the one shared primary). Unknowns (official tools, exact scoring values) stay out; **caps and scoring values live in the mission data (§3), so they flex per edition with no schema change.**
 
 Carried-in: consumes the list model (`list` / `list_unit`); **no scratch rows** (a `match` is a real saved game); real names. **Integration is the point** — lists flow in, results + game state flow out to new-meta, tournament links are first-class.
 
@@ -32,7 +32,10 @@ match                       -- one tracked game
   id PK
   user_id FK -> user        -- the tracking user
   status                    -- 'setup' | 'in_progress' | 'complete'
-  mission_id FK -> mission   -- the chosen Mission CARD (primary + deployment + rule), or a 'custom' mission row
+  deployment_id FK -> deployment        -- SHARED: the deployment zones both sides play (static overlay)
+  terrain_layout_id FK -> terrain_layout -- SHARED: the terrain layout (static overlay)
+  mission_rule              -- SHARED: e.g. 'Tipping Point'
+  mission_card_id FK?       -- optional label when it's a named 10th card ('Mission H'); 11th picks primaries per side instead
   attacker_side             -- which match_player is Defender/Attacker (roll-off: Defender picks side, deploys first)
   first_turn_side           -- which match_player takes the first turn
   conclusion                -- 'played_to_end' | 'conceded' | 'time' | ...  (app: "Game conclusion")
@@ -54,7 +57,7 @@ match_player                -- exactly two per match (you + opponent)
   list_id FK -> list        -- NOT NULL: the army (configured units). The opponent's list is recorded too — always available.
   faction                   -- denormalized display cache (derived from the list)
   detachment                -- denormalized display cache
-  primary_mission_id FK -> primary_objective  -- 10th: SAME as the other side (shared, from match.mission). 11th seam: may diverge per side.
+  primary_objective_id FK -> primary_objective  -- this side's CHOSEN primary (11th: per side, from its own pool below; 10th: both sides pick the same one)
   secondary_mode            -- 'tactical' (draw random as the game goes) | 'fixed' (pick 2 up front)
   is_attacker
   goes_first
@@ -62,32 +65,48 @@ match_player                -- exactly two per match (you + opponent)
   paint_score               -- when paint_scoring is ON: the judged value; when OFF: 10 (free), via battle_ready
   final_primary_vp          -- snapshot at game end (≤ 50)
   final_secondary_vp        -- snapshot at game end (≤ 40)
-```
 
-### Mission card + its content (referenced; lives with the content model)
-
-A 10th **Mission** is a bundled card: a **primary objective** + a **deployment** + a **mission rule** (e.g. "Mission H: Supply Drop, Hammer And Anvil"). "Custom" lets you pick the parts separately.
-
-```
-mission                     -- a Chapter Approved mission CARD (or 'custom')
+match_player_primary_option   -- this side's AVAILABLE primary pool (11th: force-disposition / matchup driven; 10th: the one shared primary)
   id PK
-  name                      -- 'Mission H' | 'Custom'
+  match_player_id FK -> match_player
+  primary_objective_id FK -> primary_objective
+```
+
+### Mission content (referenced; lives with the content model)
+
+The structural parts are a **deployment** + **terrain layout** (both **shared** — the board both sides play) and **primary objectives** (chosen **per side** in 11th). A 10th named **Mission card** ("Mission H: Supply Drop, Hammer And Anvil") is just a convenient pairing of one primary + deployment + rule; 11th drops the bundle and each side picks its primary from its own pool.
+
+**Deployment zones and terrain layouts are static and set** — a fixed published catalog — so they're modeled as **reference overlays**, not per-game geometry. A `match` references the named deployment + terrain layout it used; the overlay (zones, objective markers, terrain pieces, measurements) is fixed content rendered over a standard board.
+
+```
+primary_objective           -- a primary, with its scoring object (§3) and its cap
+  id PK
+  name                      -- 'Supply Drop' | 'Purge The Foe' | ...
+  cap                       -- e.g. 50  (data — flexes per edition, no schema change)
+
+deployment                  -- a static deployment overlay (e.g. 'Hammer And Anvil')
+  id PK
+  name
+  zone_overlay              -- the fixed zone overlay (attacker / no-man's-land / defender) + its measurements
+
+deployment_objective        -- the fixed objective-marker positions for that deployment (queryable)
+  id PK
+  deployment_id FK -> deployment
+  label                     -- marker id / name
+  x, y                      -- position on the board
+
+terrain_layout              -- a static terrain overlay (e.g. 'GW Chapter Approved 2025-26 Layout 7')
+  id PK
+  name
+  source                    -- 'GW Chapter Approved 2025-26'
+  terrain_overlay           -- the fixed terrain overlay (positioned pieces)
+
+mission_card                -- optional 10th named pairing (label / convenience)
+  id PK
+  name                      -- 'Mission H'
   primary_objective_id FK -> primary_objective
   deployment_id FK -> deployment
   mission_rule              -- e.g. 'Tipping Point'
-
-primary_objective           -- the shared primary, with its scoring object (§3)
-  id PK
-  name                      -- 'Supply Drop' | 'Purge The Foe' | ...
-  cap                       -- 50
-  -- its per-mission scoring interface is the scoring object in §3
-
-deployment                  -- real content (the app shows the map)
-  id PK
-  name                      -- 'Hammer And Anvil'
-  layout                    -- 'GW Chapter Approved 2025-26 Layout 7'
-  objective_count           -- e.g. 5
-  -- objective positions + measurements: content detail, modeled with the content model
 ```
 
 ---
@@ -179,9 +198,9 @@ Single source of truth: `match_secondary` owns the **card lifecycle**; `score_ev
 
 ---
 
-## 4. Additive meta layer — board state & destroyed units (NOT in the app)
+## 4. Board state — destroyed & lost units
 
-**Optional. Recorded alongside the scoreboard, never a scoring input.** The standalone app tracks none of this; we keep it because it's interesting to persist and feed new-meta. The scoreboard (§1–§3) is fully usable without any of it.
+Part of the game state, recorded like everything else — not a separate feature waving its hand. Destroyed and lost units are the game as it is, and persisting them feeds new-meta. **One rule:** recorded alongside, never a scoring input (scoring stays player-entered — §0).
 
 ```
 unit_casualty               -- destroyed / lost units (the "destroyed units" idea Micah wants kept)
@@ -196,9 +215,9 @@ unit_casualty               -- destroyed / lost units (the "destroyed units" ide
 
 ---
 
-## 5. Additive meta layer — persistent per-unit token state (NOT in the app)
+## 5. Token state on units
 
-**Optional, additive.** 11th leans on persistent tokens (battle-shock, hidden, marked, in-progress actions, sticky objectives). Recorded for meta exploration; a `match` is a saved game, so its token state can be saved too (not the transient/ad-hoc case the no-rows rule covers).
+Also part of the game state. 11th leans on persistent tokens (battle-shock, hidden, marked, in-progress actions, sticky objectives); recording them is just tracking the game. A `match` is a saved game, so its token state is saved with it (not the transient/ad-hoc case the no-rows rule covers). Like §4: recorded, never a scoring input.
 
 ```
 unit_state
@@ -216,11 +235,11 @@ unit_state
 
 ## 6. What this replaces / fixes (vs current `matches`/`turns`)
 
-- `matches.mission` (single string) → a real **`mission` card** (primary + deployment + rule), shared by both sides.
+- `matches.mission` (single string) → **shared `deployment` + `terrain_layout` + rule** (static overlays) with **per-side `primary_objective`** (each side picks from its own `match_player_primary_option` pool). 10th = both pools/picks identical; optional `mission_card` names the 10th pairing.
 - `your_*` / `their_*` columns crammed on `matches`/`turns` → symmetric **`match_player`** + **`round_player`** rows.
 - per-turn VP / `match_secondaries.vp_per_round` JSON → **`score_event`** (per round, per side, per mission) + **`score_selection`** (the granular choice) + **`match_secondary`** (card lifecycle). Capped 50/40/10.
-- `your_units_lost` / `their_units_lost` JSON blobs → **`unit_casualty`** rows (additive meta layer).
-- `stratagem_log` → CP gained/spent on `round_player` (the app's grain); per-stratagem logging deferred.
+- `your_units_lost` / `their_units_lost` JSON blobs → **`unit_casualty`** rows (part of the game state).
+- `stratagem_log` → CP gained/spent on `round_player` + **`stratagem_use`** (which stratagems fired, incl. reactive).
 - Army = a `list` of `list_unit`s, not free-text — casualties/state reference the real configured units.
 
 ---
@@ -233,10 +252,9 @@ unit_state
 
 ---
 
-## 8. Open questions (post-app)
+## 8. Decisions (all resolved)
 
-1. **11th per-side primaries:** the `match_player.primary_mission_id` seam is in place (10th writes the shared value to both). A per-side *pool* is not modeled until 11th is real. Confirm that's the right amount of 11th-readiness.
-2. **Stratagem-level logging: RESOLVED — log which stratagems were used** (`stratagem_use`, §2). It helps meta and surfaces **gameplay trends** (which stratagems fire, when, by whom). CP gained/spent totals stay authoritative; the stratagem rows are the itemized detail, including reactive use on the opponent's turn.
-3. **Deployment/mission content depth:** objective positions + measurements are shown by the app — how much of that do we model now vs defer to the content model?
-4. **Token-state granularity:** per-round (`since_round`/`cleared_round`) — enough, or do some tokens need per-phase timing?
-```
+1. **11th readiness: built now** (we won't release before 11th). Per-side primaries with per-side available pools (`match_player.primary_objective_id` + `match_player_primary_option`); shared deployment + terrain; persistent token state (§5). 10th is the constrained case. Unknowns (official tools, exact scoring values) stay out — caps/values live in mission data, so they flex without schema change.
+2. **Stratagem-level logging: log which stratagems were used** (`stratagem_use`, §2). Helps meta and surfaces **gameplay trends** (which stratagems fire, when, by whom). CP gained/spent totals stay authoritative; the stratagem rows are the itemized detail, including reactive use on the opponent's turn.
+3. **Deployment + terrain content: model now as static overlays.** Static, published, fixed → a reference catalog: `deployment` (zone overlay + `deployment_objective` positions + measurements) and `terrain_layout` (terrain overlay). A match references the named ones; the overlay renders over a standard board.
+4. **Token-state granularity: round level is fine for now** (`since_round` / `cleared_round`). Per-phase timing not needed yet.
