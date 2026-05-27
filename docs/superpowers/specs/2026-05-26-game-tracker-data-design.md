@@ -32,6 +32,7 @@ match                       -- one tracked game
   tournament_id FK?         -- if part of a tournament (soft link / FK)
   pairing_id FK?            -- the tournament pairing this came from
   require_photos
+  paint_scoring             -- "paint scoring on?" toggle: player-set for individual games; set by the tournament when the match is part of one
   created_at
   closed_at
 
@@ -49,7 +50,7 @@ match_player                -- exactly two per match (you + opponent)
   goes_first
   final_primary_vp          -- snapshot at game end
   final_secondary_vp
-  paint_score
+  paint_score?              -- OPTIONAL; captured only when paint_scoring is on (player toggle, or tournament-set)
 ```
 
 ---
@@ -150,12 +151,14 @@ unit_casualty               -- units LOST and units DESTROYED (many objectives c
   kind                               -- 'LOST' | 'DESTROYED'
   destroyed_by_unit_id FK? -> list_unit   -- who killed it (optional)
 
-objective_state             -- per-round board control at a scoring window
+objective_state             -- per side, per scoring window: how many objectives controlled
   id PK
   round_id FK -> round
   match_player_id FK -> match_player
-  objectives_controlled              -- count (or JSON of marker ids controlled)
-  oc_on_contested                    -- optional, for tie-breaks
+  window                             -- which scoring window this count is for
+  objectives_controlled              -- the NUMBER of objectives controlled (a count)
+  -- this count is the player-entered param that drives objective-primary scoring (§3).
+  -- 11th will differ (new maps, objective scoring less clearly defined) — model the count for now.
 ```
 
 ---
@@ -196,6 +199,6 @@ unit_state
 1. **Per-unit token state (§5): RESOLVED — persist it** (with `active` + round history; see §5).
 2. **Opponent granularity: RESOLVED — opponent's full `list` is always available** (both `match_player`s have a real `list_id`; casualties reference real `list_unit`s). How it's captured (import vs manual) is a separate UX concern.
 3. **Scoring windows: RESOLVED — track scoring at EACH window** via `score_event` (`end_of_command` / `end_of_turn` / `end_of_round` / `end_of_game`). Turn/match VP totals derive from these.
-4. **Board state is recorded for the game log, NOT a scoring input: RESOLVED.** `unit_casualty` (LOST/DESTROYED), `objective_state`, `unit_state` capture what happened. Scoring comes only from the player-selected mode/params (§3) — auto-deriving VP from tracked board state is explicitly out of scope ("too far" for now). Keep board-state capture minimal.
+4. **Objective board state = the NUMBER of objectives controlled (per side, per window): RESOLVED.** That count is the player-entered param that drives objective-primary scoring (§3). `unit_casualty` + `unit_state` are the rest of the game log (record-only — no auto-derived VP). **11th will differ** (new maps, objective scoring less clearly defined) — model the count for now, revisit when 11th maps land.
 5. **Mission VP rules: RESOLVED — each mission is its own scoring object with a mission-specific interface; the player selects the mode/params that set the score** (§3). Build out the 10th-edition **Chapter Approved** primaries + secondaries as objects. Not auto-derived, not a single shared interface, not a free-entry number — the player picks that mission's mode/params and the object turns them into VP. (11th reuses most of these.)
-6. **Paint/soft scores + tournament tie-breaks:** confirm what feeds the tournament side.
+6. **Paint scoring: RESOLVED — optional, gated by a `paint_scoring` toggle on the match** ("paint scoring on?"). Individual players set it themselves; a tournament sets it when the match belongs to one. `paint_score` is captured only when the toggle is on. (Other tournament tie-break inputs still TBD.)
