@@ -1,38 +1,48 @@
 # Game Tracker Data Model — Design Spec (PRELIMINARY)
 
 > Status: **DRAFT — preliminary, for Micah's review.** Not locked.
-> Grounded in `2026-05-26-11th-edition-game-flow.md` (creator transcripts) and consistent with the List + Versus models (configured-unit reuse, per-side primaries, no scratch rows, real names).
+> Grounded in **two** sources, integrated:
+> 1. The **Tabletop Battles** app (10th-edition scoreboard — screenshots, the "very good" app we're copying). This is the proven, working **core**.
+> 2. The **11th-edition creator transcripts** (`2026-05-26-11th-edition-game-flow.md`) — board state, destroyed units, token state.
+> Consistent with the List + Versus models (configured-unit reuse, no scratch rows, real names).
 
 ---
 
-## 0. Principles carried in
+## 0. What we model — the game as it is
 
-- **Consumes the list model.** A side's army is a **`list`** of **`list_unit`** (configured units). Casualties/state reference `list_unit` — one unit definition everywhere.
-- **No single game primary, and no shared pool.** Each side has its **own pool** of available primaries (force-disposition/matchup driven) and picks its **own** chosen primary from that pool, scoring only its own. (per the flow-doc correction)
-- **Per-half-turn, per-side, separate primary + secondary VP** — never a single score field.
-- **Two sides per match** (`match_player`) so the model is symmetric and reusable by Tournament — even though Game Tracker is "you vs an opponent," the opponent is just the other `match_player`.
-- **No scratch rows.** A `match` is a real saved game; nothing transient persisted.
+We're copying **how game-tracking works**, not cloning a specific app. The Tabletop Battles app and the TTS on-screen tracker are two views of the same thing: **the state of a 40K game as it's played**. We model that game state; our own views read from it.
+
+**One unified model — no "scoreboard vs extras" split.** The mission, the sides, the rounds, CP, the scoring, **and what's happening on the board** (units destroyed, units lost, token states) are all just parts of the same game state — recorded the same way, presented the same way. The board-state and destroyed-unit data are **not a feature that announces itself**; they're the game, the way CP and VP are the game. They feed meta analysis the same way scores do. No visual or conceptual difference between "the score" and "the board."
+
+**One hard line stays:** scoring is **player-entered, not derived** from the board state. The player tells the tracker what they scored through each mission's own interface; we don't compute VP from tracked casualties/objectives (too far for now). Board state is recorded because it *is* the game and it's worth persisting — not to drive scoring.
+
+How the game works (10th — the concrete target):
+- One **shared** primary (a Mission card = primary + deployment + rule); per-side Tactical/Fixed secondaries.
+- Scoring is **per round, per side**, capped **50 primary / 40 secondary / 10 battle-ready = 100**.
+- 11th isn't fully known; where it diverges (per-side primaries) the seam exists, but 10th writes the shared value to both sides. No 11th-only speculation modeled yet.
+
+Carried-in: consumes the list model (`list` / `list_unit`); **no scratch rows** (a `match` is a real saved game); real names. **Integration is the point** — lists flow in, results + game state flow out to new-meta, tournament links are first-class.
 
 ---
 
-## 1. Match + sides
+## 1. Match + sides + the Mission card
 
 ```
 match                       -- one tracked game
   id PK
   user_id FK -> user        -- the tracking user
   status                    -- 'setup' | 'in_progress' | 'complete'
-  deployment_type           -- shared
-  terrain_layout            -- shared
-  attacker_side             -- which match_player is attacker
-  first_turn_side           -- which match_player goes first
-  result                    -- 'P1_WIN' | 'P2_WIN' | 'DRAW'; set out of process — individual games: the user picks the winner; tournament: the ORGANIZER selects the tie-break/winner; otherwise DRAW. No tie-break logic in the model.
+  mission_id FK -> mission   -- the chosen Mission CARD (primary + deployment + rule), or a 'custom' mission row
+  attacker_side             -- which match_player is Defender/Attacker (roll-off: Defender picks side, deploys first)
+  first_turn_side           -- which match_player takes the first turn
+  conclusion                -- 'played_to_end' | 'conceded' | 'time' | ...  (app: "Game conclusion")
+  result                    -- 'P1_WIN' | 'P2_WIN' | 'DRAW'; set out of process — individual: user picks; tournament: organizer picks; else DRAW. No tie-break logic.
   date
   location
-  tournament_id FK?         -- if part of a tournament (soft link / FK)
+  tournament_id FK?         -- if part of a tournament
   pairing_id FK?            -- the tournament pairing this came from
   require_photos
-  paint_scoring             -- "paint scoring on?" toggle: player-set for individual games; set by the tournament when the match is part of one
+  paint_scoring             -- "paint scoring on?" toggle: player-set for individual games; tournament-set when part of one
   created_at
   closed_at
 
@@ -44,20 +54,47 @@ match_player                -- exactly two per match (you + opponent)
   list_id FK -> list        -- NOT NULL: the army (configured units). The opponent's list is recorded too — always available.
   faction                   -- denormalized display cache (derived from the list)
   detachment                -- denormalized display cache
-  available_primaries       -- THIS side's OWN pool of available primaries (force-disposition / matchup driven; separate per side)
-  primary_mission_id        -- the side's CHOSEN primary (from its own pool, above)
+  primary_mission_id FK -> primary_objective  -- 10th: SAME as the other side (shared, from match.mission). 11th seam: may diverge per side.
+  secondary_mode            -- 'tactical' (draw random as the game goes) | 'fixed' (pick 2 up front)
   is_attacker
   goes_first
-  final_primary_vp          -- snapshot at game end
-  final_secondary_vp
-  paint_score               -- judged value when paint_scoring is on; defaults to 10 (free points) when off
+  battle_ready              -- "Army is Battle Ready" → +10 when paint_scoring is OFF (the app's default 10 free pts)
+  paint_score               -- when paint_scoring is ON: the judged value; when OFF: 10 (free), via battle_ready
+  final_primary_vp          -- snapshot at game end (≤ 50)
+  final_secondary_vp        -- snapshot at game end (≤ 40)
+```
+
+### Mission card + its content (referenced; lives with the content model)
+
+A 10th **Mission** is a bundled card: a **primary objective** + a **deployment** + a **mission rule** (e.g. "Mission H: Supply Drop, Hammer And Anvil"). "Custom" lets you pick the parts separately.
+
+```
+mission                     -- a Chapter Approved mission CARD (or 'custom')
+  id PK
+  name                      -- 'Mission H' | 'Custom'
+  primary_objective_id FK -> primary_objective
+  deployment_id FK -> deployment
+  mission_rule              -- e.g. 'Tipping Point'
+
+primary_objective           -- the shared primary, with its scoring object (§3)
+  id PK
+  name                      -- 'Supply Drop' | 'Purge The Foe' | ...
+  cap                       -- 50
+  -- its per-mission scoring interface is the scoring object in §3
+
+deployment                  -- real content (the app shows the map)
+  id PK
+  name                      -- 'Hammer And Anvil'
+  layout                    -- 'GW Chapter Approved 2025-26 Layout 7'
+  objective_count           -- e.g. 5
+  -- objective positions + measurements: content detail, modeled with the content model
 ```
 
 ---
 
-## 2. Rounds & turns
+## 2. Rounds (per side) + CP
 
-11th: game = up to **5 battle rounds**; each battle round = **two player turns**. Scoring happens per turn at the mission's windows (end of command phase / end of turn / end of round).
+The in-game screen is **per battle round, per side**: CP gained/spent, primary entry, secondary entries. The scoring grain is `round_player` (round × match_player) — which **is** the half-turn: one player's turn within a battle round (a battle round = two player turns). "Half-turn" and "per player per round" are the same thing.
 
 ```
 round                       -- a battle round
@@ -65,107 +102,94 @@ round                       -- a battle round
   match_id FK -> match
   round_number              -- 1..5
 
-turn                        -- one player's turn within a round (the "half-turn")
+round_player                -- per side, per round (the app's round screen for one player)
   id PK
   round_id FK -> round
-  active_player_id FK -> match_player   -- whose turn
-  cp_start, cp_gained, cp_spent         -- active player's CP economy for the turn
-  photo_url
-  notes
-  created_at
-  -- VP is NOT stored here: scoring is recorded per-window in score_event (§3)
+  match_player_id FK -> match_player
+  cp_gained
+  cp_spent
+  -- net CP derives from gained/spent; scoring entries (§3) hang off this row
 ```
+
+(The app tracks only CP **gained/spent** per round — no per-stratagem log. Stratagem-level logging is a possible later meta addition, deferred — see §8.)
 
 ---
 
-## 3. Scoring (per window), CP, stratagems, secondaries
+## 3. Scoring — per round, per side, per mission (capped)
+
+Scoring is **player-selected via each mission's own interface**, recorded per `round_player`, and **capped** by the mission definition. The player's **selections are persisted** (not just the VP) — that's the meta data the standalone app discards.
 
 ```
-score_event                 -- VP scored AT a specific scoring window (track EACH window — per Micah)
+score_event                 -- one mission's scoring for one side in one round
   id PK
-  round_id FK -> round
-  match_player_id FK -> match_player    -- who scored (each side scores its own)
-  window                    -- 'end_of_command' | 'end_of_turn' | 'end_of_round' | 'end_of_game'
+  round_player_id FK -> round_player
   category                  -- 'primary' | 'secondary'
-  source                    -- the primary mission, or the secondary card name, that scored
-  vp
--- turn/match VP totals derive from score_event rows.
+  mission_ref               -- the primary_objective, or the match_secondary card, scored
+  vp                        -- resolved total for this mission this round (respects the mission cap)
 
-stratagem_use               -- one stratagem firing (incl. REACTIVE on the opponent's turn)
+score_selection             -- WHAT the player selected (normalized — no JSON blob)
   id PK
-  turn_id FK -> turn        -- the turn during which it fired
-  used_by_id FK -> match_player   -- WHO used it (may be the non-active player — Overwatch, etc.)
-  stratagem_name
-  cp_cost
-  phase
+  score_event_id FK -> score_event
+  element_key               -- 'objectives_controlled' | 'condition:more_objectives_than_opponent' | 'tier:4_quarters' | ...
+  element_value             -- the count entered, or 1 for a ticked condition
+  points                    -- the pts this element contributed
+```
 
-match_secondary             -- a side's secondary cards across the game
+Caps: `primary_objective.cap` = 50; each secondary card has its own cap (Assassination 5, Bring It Down 4, …) and the per-side secondary total caps at 40; battle-ready/paint caps at 10. **Match totals derive from `score_event`, clamped to the caps** (`final_primary_vp`, `final_secondary_vp` are end-of-game snapshots).
+
+### Mission scoring objects (each mission has its OWN specific interface) — validated by the app
+
+Each mission — every **primary** and every **secondary** — is its own **scoring object** with a **mission-specific interface**: its own parameters, its own interface elements, its own scoring logic. The app confirms **four distinct interface shapes**:
+
+| Shape | Example | Interface | Persisted as |
+|---|---|---|---|
+| **Number stepper × per-round multiplier** | Supply Drop | enter "objectives in No Man's Land you control"; pts/obj scale by round (R2 5 · R3 5 · R4 8 · R5 15) | `score_selection(objectives_controlled, n, pts)` |
+| **Summed checkboxes** | Purge the Foe (4×4pts), Assassination (2×5pts) | tick each condition met | one `score_selection` per ticked condition |
+| **Graduated tiers** | Engage on All Fronts (2/3/4 quarters → 1/2/4pts) | pick the highest tier reached | `score_selection(tier:…, 1, pts)` |
+| **Single checkbox** | Bring It Down (1+ VEHICLE/MONSTER killed) | one tick | one `score_selection` |
+
+- **One scoring object per individual mission** — no single shared interface.
+- **Concrete set = the 10th-edition Chapter Approved missions** (already parsed at `C:\R\sync-data\tools\ChapterApproved\`). Built out now; many 11th objectives are similar and reuse these.
+- **The player selects the mode/params; the object turns the selection into VP.** The tracker does **not** derive VP from the board-state layer (§4) — that would be nice but is too far for now.
+- `score_event.mission_ref` + `score_selection` record *which* object scored and *what* was chosen.
+
+### Secondary card lifecycle
+
+```
+match_secondary             -- a side's secondary cards across the game (the CARD; VP lives in score_event)
   id PK
   match_player_id FK -> match_player
-  card_name                 -- e.g. 'Engage on All Fronts', 'Bring It Down', 'Cleanse'
+  card_name                 -- 'Assassination' | 'Bring It Down' | 'Engage On All Fronts' | ...
+  mode                      -- 'tactical' | 'fixed'  (mirrors match_player.secondary_mode)
   drawn_round
-  status                    -- 'active' | 'scored' | 'discarded'   (discarded = ditched for CP / New Orders swap)
-  vp_scored
-  scored_round
+  status                    -- 'active' | 'scored' | 'discarded'
+  discard_timing            -- 'command_phase' | 'end_of_turn'  (when discarded; the app distinguishes)
 ```
 
-Notes (from flow doc): secondaries are **2 drawn per turn, unbounded hand**, can be kept / scored / discarded-for-CP / swapped via New Orders. CP includes reactive spends during the opponent's turn — hence `stratagem_use.used_by_id` is independent of the turn's active player.
-
-### Mission scoring objects (each mission has its OWN specific interface)
-
-Mission scoring is **encoded, not free-entry VP.** Each mission — every **primary** and every **secondary** — is its own **scoring object** with a **mission-specific interface**: its own parameters, its own interface elements, its own scoring logic. There is **no single shared interface** — Purge the Foe, Assassinate, and Bring It Down each expose different parameters and score differently. The only thing they have in common is that each emits `score_event` rows into the scoring table.
-
-```
-<MissionScoringObject>            -- specific PER mission (not a single shared contract)
-  parameters                      -- THIS mission's own selectable mode/params -> THIS mission's interface elements
-  score(player-selected mode/params, window, side) -> score_event[]
-```
-
-- **One scoring object per individual mission.** Purge the Foe is one object; Assassinate is another; Bring It Down another — each defines the interface specific to itself.
-- **Concrete set = the 10th-edition Chapter Approved missions** (**not** Pariah Nexus). Build out each **Chapter Approved** primary and secondary mission as its own object now — documented and stable, already parsed at `C:\R\sync-data\tools\ChapterApproved\`. Many 11th-edition objectives are similar, so 11th missions reuse most of these objects (or extend them) — built once here.
-
-**Each object's specific interface = its own mission parameters → its own interface elements:**
-
-| Mission (Chapter Approved) | Its specific parameters / interface elements |
-|---|---|
-| Purge the Foe | enemy units **destroyed** (kill tally, per scoring window) |
-| Assassinate | enemy **CHARACTERS** destroyed |
-| Bring It Down | enemy **MONSTERS / VEHICLES** destroyed (by wounds bracket) |
-
-Each object owns its parameter set; the tracker renders that mission's specific interface elements, and **the player selects the mode/params** for that mission. That selection **sets the score value**, which the object records as a `score_event`. The selectable params differ per mission — Assassinate: how many enemy CHARACTERS were killed; Bring It Down: which MONSTERS/VEHICLES (by wounds bracket); Purge the Foe: the kill tally for the window. **The player enters/selects these; the tracker does not derive them from tracked board state.** (Auto-scoring from board state would be nice, but it's too far for now.) The object's only job is to turn the player's selected mode/params into VP.
-- At each scoring `window`, the tracker invokes the relevant object for a `side`; the object reads the captured board state (`objective_state`, `unit_casualty`, `unit_state` — §4/§5) and **emits the `score_event` rows** above. The tracker never hard-codes a mission's math.
-- Mission **definitions are content** (they live with the content model); `match_player.primary_mission_id` and `match_secondary.card_name` reference them. The interface is the seam between recorded board state and mission rules.
-- `score_event.source` records **which** scoring object produced the VP.
+Single source of truth: `match_secondary` owns the **card lifecycle**; `score_event` owns the **VP**. (Fixes the earlier double-bookkeeping.)
 
 ---
 
-## 4. Casualties & board state
+## 4. Additive meta layer — board state & destroyed units (NOT in the app)
+
+**Optional. Recorded alongside the scoreboard, never a scoring input.** The standalone app tracks none of this; we keep it because it's interesting to persist and feed new-meta. The scoreboard (§1–§3) is fully usable without any of it.
 
 ```
-unit_casualty               -- units LOST and units DESTROYED (many objectives compare the two)
+unit_casualty               -- destroyed / lost units (the "destroyed units" idea Micah wants kept)
   id PK
-  turn_id FK -> turn
-  owner_id FK -> match_player        -- whose unit
-  list_unit_id FK -> list_unit       -- NOT NULL: the configured unit (both sides have full lists)
-  unit_name                          -- denormalized display cache
-  kind                               -- 'LOST' | 'DESTROYED'
-  destroyed_by_unit_id FK? -> list_unit   -- who killed it (optional)
-
-objective_state             -- per side, per scoring window: how many objectives controlled
-  id PK
-  round_id FK -> round
-  match_player_id FK -> match_player
-  window                             -- which scoring window this count is for
-  objectives_controlled              -- the NUMBER of objectives controlled (a count)
-  -- this count is the player-entered param that drives objective-primary scoring (§3).
-  -- 11th will differ (new maps, objective scoring less clearly defined) — model the count for now.
+  round_player_id FK -> round_player   -- whose, which round
+  list_unit_id FK -> list_unit         -- the configured unit
+  kind                                 -- 'LOST' | 'DESTROYED'
+  destroyed_by_unit_id FK? -> list_unit -- who killed it (optional)
 ```
+
+(Objective counts are **not** a separate table — they're captured as `score_selection(objectives_controlled, …)` on the primary's `score_event`, exactly where the player enters them in the mission modal.)
 
 ---
 
-## 5. Persistent per-unit token state — PERSISTED
+## 5. Additive meta layer — persistent per-unit token state (NOT in the app)
 
-**Persisted (per Micah).** 11th leans hard on persistent tokens (battle-shock, hidden, marked/auspex, in-progress actions, sticky objectives). The tracker records them as part of the saved game — a `match` is a saved game, so its token state is saved too (this is not the transient/ad-hoc case the no-rows rule covers).
+**Optional, additive.** 11th leans on persistent tokens (battle-shock, hidden, marked, in-progress actions, sticky objectives). Recorded for meta exploration; a `match` is a saved game, so its token state can be saved too (not the transient/ad-hoc case the no-rows rule covers).
 
 ```
 unit_state
@@ -174,31 +198,36 @@ unit_state
   list_unit_id FK -> list_unit
   state_key                 -- 'battle_shock' | 'hidden' | 'marked' | 'action_in_progress' | 'sticky_objective'
   value                     -- e.g. action name, target marker/unit id
-  active                    -- on/off (battle-shock can be regrouped, an action completes)
+  active                    -- on/off (battle-shock regroups, an action completes)
   since_round               -- when it took effect
   cleared_round             -- when it ended (nullable) — keeps the history
 ```
-
-`active` + `since_round`/`cleared_round` let state toggle over the game and preserve when it started/ended, rather than just a current-snapshot flag.
 
 ---
 
 ## 6. What this replaces / fixes (vs current `matches`/`turns`)
 
-- `matches.mission` (single) → **per-side `primary_mission_id`** + a **per-side `available_primaries` pool** (each side has its own — no shared pool).
-- `your_*` / `their_*` columns crammed onto `matches`/`turns` → symmetric **`match_player`** + per-turn rows.
-- `your_units_lost` / `their_units_lost` JSON blobs → **`unit_casualty`** rows (LOST vs DESTROYED, by unit).
-- `match_secondaries.vp_per_round` JSON → **`score_event`** (per-window scoring) + per-card `match_secondary` (card lifecycle). No per-turn VP column.
-- `stratagem_log` → `stratagem_use` with `used_by_id` (captures reactive spends).
+- `matches.mission` (single string) → a real **`mission` card** (primary + deployment + rule), shared by both sides.
+- `your_*` / `their_*` columns crammed on `matches`/`turns` → symmetric **`match_player`** + **`round_player`** rows.
+- per-turn VP / `match_secondaries.vp_per_round` JSON → **`score_event`** (per round, per side, per mission) + **`score_selection`** (the granular choice) + **`match_secondary`** (card lifecycle). Capped 50/40/10.
+- `your_units_lost` / `their_units_lost` JSON blobs → **`unit_casualty`** rows (additive meta layer).
+- `stratagem_log` → CP gained/spent on `round_player` (the app's grain); per-stratagem logging deferred.
 - Army = a `list` of `list_unit`s, not free-text — casualties/state reference the real configured units.
 
 ---
 
-## 7. Open questions (for review)
+## 7. Integration points (the reason to build our own)
 
-1. **Per-unit token state (§5): RESOLVED — persist it** (with `active` + round history; see §5).
-2. **Opponent granularity: RESOLVED — opponent's full `list` is always available** (both `match_player`s have a real `list_id`; casualties reference real `list_unit`s). How it's captured (import vs manual) is a separate UX concern.
-3. **Scoring windows: RESOLVED — track scoring at EACH window** via `score_event` (`end_of_command` / `end_of_turn` / `end_of_round` / `end_of_game`). Turn/match VP totals derive from these.
-4. **Objective board state = the NUMBER of objectives controlled (per side, per window): RESOLVED.** That count is the player-entered param that drives objective-primary scoring (§3). `unit_casualty` + `unit_state` are the rest of the game log (record-only — no auto-derived VP). **11th will differ** (new maps, objective scoring less clearly defined) — model the count for now, revisit when 11th maps land.
-5. **Mission VP rules: RESOLVED — each mission is its own scoring object with a mission-specific interface; the player selects the mode/params that set the score** (§3). Build out the 10th-edition **Chapter Approved** primaries + secondaries as objects. Not auto-derived, not a single shared interface, not a free-entry number — the player picks that mission's mode/params and the object turns them into VP. (11th reuses most of these.)
-6. **Paint scoring: RESOLVED — gated by a `paint_scoring` toggle on the match** ("paint scoring on?"). Individual players set it themselves; a tournament sets it when the match belongs to one. When **on**, `paint_score` is the judged value; when **off**, paint contributes a default **10 free points** (so it never disadvantages a player). **Tie-breaks are handled out of process** — for individual games the user sets the winner; **in a tournament the organizer selects the tie-break/winner**; otherwise the result is a tie (`DRAW`). No tie-break logic in the model.
+- **IN:** `match_player.list_id` → `list` / `list_unit` (your configured units; the opponent's too).
+- **OUT (meta):** `score_event` + `score_selection` + `unit_casualty` → new-meta. The per-mission selections and destroyed-unit data are exactly what the standalone app discards.
+- **Tournament:** `match.tournament_id` / `pairing_id`; result set by the organizer; `paint_scoring` set by the tournament.
+
+---
+
+## 8. Open questions (post-app)
+
+1. **11th per-side primaries:** the `match_player.primary_mission_id` seam is in place (10th writes the shared value to both). A per-side *pool* is not modeled until 11th is real. Confirm that's the right amount of 11th-readiness.
+2. **Stratagem-level logging:** the app tracks only CP gained/spent. Add per-stratagem rows for meta (which stratagems, when), or leave as CP totals?
+3. **Deployment/mission content depth:** objective positions + measurements are shown by the app — how much of that do we model now vs defer to the content model?
+4. **Token-state granularity:** per-round (`since_round`/`cleared_round`) — enough, or do some tokens need per-phase timing?
+```
