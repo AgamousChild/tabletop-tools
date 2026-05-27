@@ -221,6 +221,30 @@ bcp_registration            -- our thin local pointer (the truth lives on BCP)
 - **Credential custody** — Path A briefly holds the user's ephemeral BCP token (never stored); Path B holds nothing. Never store the user's BCP password in either path.
 - **Drift** — Path A breaks if BCP's API shape changes (silent, high-consequence — a failed submit a user thinks succeeded); Path B breaks if BCP's DOM changes (an agent adapts better). Either way, **surface submit success/failure explicitly** (§5.0).
 
+### 5.3 Captured BCP write contract — submit-list (verified live 2026-05-27)
+
+Reverse-engineered by driving a browser agent in the user's own logged-in BCP session, adding a list, and capturing the call — verified by reading the registration back (List Status → **Submitted**). No credentials or tokens are stored in this repo; the below is endpoint **shape** only.
+
+**Auth:** `Authorization: Bearer <user token>` — a **Cognito** access token (pool `us-east-1_ypv5m82ww`) obtained behind BCP's `/oauth/authorize` → `/oauth/token` wrapper. Plus headers `client-id: web-app`, `env: bcp`, `content-type: application/json`.
+
+**Submit list:** `POST /v1/armylists`
+```
+{ "playerId": "<event registration id>",
+  "sendNotification": true,
+  "listInfo": { "listText": "<our list export text>" },
+  "armyId": "<faction's army id>" }
+```
+→ 200; returns the created armylist (`id`, `listStatus: "passed"`, echoes the text + rendered HTML, ties `userId`/`playerId`/`eventId`/`armyId`).
+
+**Supporting reads:**
+- `GET /v1/events/{eventId}/currentPlayer` → the user's `playerId` for that event.
+- `GET /v1/gamesystems/WGMSzfKFYA/factions?limit=100&active=true` → factions + their `armyId` (faction → armyId map; `WGMSzfKFYA` = Warhammer 40k).
+- `GET /v2/events/{eventId}?role=true` → event detail.
+
+**Full list-drop flow:** auth → `currentPlayer` (playerId) → faction → `armyId` → `POST /v1/armylists`. Our list-builder supplies `listText`; the faction maps to both `dim_faction` (our registry) and BCP's `armyId`.
+
+**Still uncaptured:** the *register-for-event* write (the user was already registered when captured) — grab from a fresh registration next.
+
 ---
 
 ## 6. The seam to meta (how source feeds analytics)
