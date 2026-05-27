@@ -19,8 +19,8 @@ export interface BcpEvent {
 export interface BcpPairing {
   round: number
   table: number
-  player1: { name: string; faction: string; listId?: string }
-  player2: { name: string; faction: string; listId?: string }
+  player1: { name: string; faction: string; listId?: string; userId?: string }
+  player2: { name: string; faction: string; listId?: string; userId?: string }
   player1Game: { result: number; points: number } | null
   player2Game: { result: number; points: number } | null
 }
@@ -44,12 +44,12 @@ interface BcpPairingRaw {
   round: number
   table: number
   player1: {
-    user: { firstName: string; lastName: string }
+    user: { id?: string; firstName: string; lastName: string }
     faction: string
     listId?: string | null
   }
   player2: {
-    user: { firstName: string; lastName: string }
+    user: { id?: string; firstName: string; lastName: string }
     faction: string
     listId?: string | null
   }
@@ -85,11 +85,13 @@ function mapPairing(raw: BcpPairingRaw): BcpPairing | null {
       name: `${raw.player1.user?.firstName || ''} ${raw.player1.user?.lastName || ''}`.trim(),
       faction: raw.player1.faction || '',
       listId: raw.player1.listId ?? undefined,
+      userId: raw.player1.user?.id ?? undefined,
     },
     player2: {
       name: `${raw.player2.user?.firstName || ''} ${raw.player2.user?.lastName || ''}`.trim(),
       faction: raw.player2.faction || '',
       listId: raw.player2.listId ?? undefined,
+      userId: raw.player2.user?.id ?? undefined,
     },
     player1Game: raw.player1Game
       ? { result: raw.player1Game.result, points: raw.player1Game.points }

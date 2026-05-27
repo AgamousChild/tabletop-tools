@@ -33,6 +33,7 @@ function mapResult(p1Result: number, p2Result: number): 'p1' | 'p2' | 'draw' {
 interface PlayerAccumulator {
   name: string
   faction: string
+  userId?: string
   wins: number
   losses: number
   draws: number
@@ -129,6 +130,7 @@ export async function runScrape(
             playerMap.set(pairing.player1.name, {
               name: pairing.player1.name,
               faction: pairing.player1.faction,
+              userId: pairing.player1.userId,
               wins: 0,
               losses: 0,
               draws: 0,
@@ -144,6 +146,7 @@ export async function runScrape(
             playerMap.set(pairing.player2.name, {
               name: pairing.player2.name,
               faction: pairing.player2.faction,
+              userId: pairing.player2.userId,
               wins: 0,
               losses: 0,
               draws: 0,
@@ -179,6 +182,7 @@ export async function runScrape(
             id: playerId,
             eventId,
             playerName: player.name,
+            sourcePlayerId: player.userId ?? null,
             factionId: factionSlug,
             subfactionId: null,
             detachmentId: null,
