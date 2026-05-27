@@ -26,7 +26,7 @@ match                       -- one tracked game
   terrain_layout            -- shared
   attacker_side             -- which match_player is attacker
   first_turn_side           -- which match_player goes first
-  result                    -- 'P1_WIN' | 'P2_WIN' | 'DRAW' (derived from final VP)
+  result                    -- 'P1_WIN' | 'P2_WIN' | 'DRAW'; set out of process — individual games: the user picks the winner; tournament: the ORGANIZER selects the tie-break/winner; otherwise DRAW. No tie-break logic in the model.
   date
   location
   tournament_id FK?         -- if part of a tournament (soft link / FK)
@@ -201,4 +201,4 @@ unit_state
 3. **Scoring windows: RESOLVED — track scoring at EACH window** via `score_event` (`end_of_command` / `end_of_turn` / `end_of_round` / `end_of_game`). Turn/match VP totals derive from these.
 4. **Objective board state = the NUMBER of objectives controlled (per side, per window): RESOLVED.** That count is the player-entered param that drives objective-primary scoring (§3). `unit_casualty` + `unit_state` are the rest of the game log (record-only — no auto-derived VP). **11th will differ** (new maps, objective scoring less clearly defined) — model the count for now, revisit when 11th maps land.
 5. **Mission VP rules: RESOLVED — each mission is its own scoring object with a mission-specific interface; the player selects the mode/params that set the score** (§3). Build out the 10th-edition **Chapter Approved** primaries + secondaries as objects. Not auto-derived, not a single shared interface, not a free-entry number — the player picks that mission's mode/params and the object turns them into VP. (11th reuses most of these.)
-6. **Paint scoring: RESOLVED — gated by a `paint_scoring` toggle on the match** ("paint scoring on?"). Individual players set it themselves; a tournament sets it when the match belongs to one. When **on**, `paint_score` is the judged value; when **off**, paint contributes a default **10 free points** (so it never disadvantages a player). (Other tournament tie-break inputs still TBD.)
+6. **Paint scoring: RESOLVED — gated by a `paint_scoring` toggle on the match** ("paint scoring on?"). Individual players set it themselves; a tournament sets it when the match belongs to one. When **on**, `paint_score` is the judged value; when **off**, paint contributes a default **10 free points** (so it never disadvantages a player). **Tie-breaks are handled out of process** — for individual games the user sets the winner; **in a tournament the organizer selects the tie-break/winner**; otherwise the result is a tie (`DRAW`). No tie-break logic in the model.
