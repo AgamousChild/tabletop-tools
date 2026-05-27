@@ -231,7 +231,7 @@ The changes are *within* the phases.
 ### 3.1 Primary objectives
 
 - **Per-side primary — force-disposition + matchup driven, NO single game primary:** there is no shared game primary. Each player **selects their own primary mission from the available primary missions**, driven by **their force disposition (detachment) and the matchup** (their force vs the opponent's). The two players' primaries are **asymmetric and paired** — one player's mission is set against the opponent's: e.g. *Unstoppable Force* vs *An Immovable Object*; take-and-hold vs disruption pairings ("EVERY Core Rules Update …"; "HUGE 11th Edition Reveals"). They are **independent and may differ**, and **each player scores against their own primary only**.
-  - **Data-model consequence:** a match has an **available-primary pool** + **a chosen primary per side** (carrying the force-disposition / pairing context) — not a single `match.mission`. Each side's primary VP scores against its own primary.
+  - **Data-model consequence:** **each side has its OWN available-primary pool** (separate per side, force-disposition/matchup driven) + its chosen primary from that pool — not a single `match.mission`, and not even a shared pool. Each side's primary VP scores against its own primary.
 - **Multiple scoring windows per mission:** 11th primaries commonly have **3–4 ways to score** and
   resolve at **end of command phase**, **end of turn**, and/or **end of battle round / end of
   game** ("EVERY Core Rules Update …"; "HUGE 11th Edition Reveals"). This is a deliberate increase

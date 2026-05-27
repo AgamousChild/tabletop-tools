@@ -8,7 +8,7 @@
 ## 0. Principles carried in
 
 - **Consumes the list model.** A side's army is a **`list`** of **`list_unit`** (configured units). Casualties/state reference `list_unit` — one unit definition everywhere.
-- **No single game primary.** Each side has its **own** chosen primary (from the available pool) and scores its own. (per the flow-doc correction)
+- **No single game primary, and no shared pool.** Each side has its **own pool** of available primaries (force-disposition/matchup driven) and picks its **own** chosen primary from that pool, scoring only its own. (per the flow-doc correction)
 - **Per-half-turn, per-side, separate primary + secondary VP** — never a single score field.
 - **Two sides per match** (`match_player`) so the model is symmetric and reusable by Tournament — even though Game Tracker is "you vs an opponent," the opponent is just the other `match_player`.
 - **No scratch rows.** A `match` is a real saved game; nothing transient persisted.
@@ -24,7 +24,6 @@ match                       -- one tracked game
   status                    -- 'setup' | 'in_progress' | 'complete'
   deployment_type           -- shared
   terrain_layout            -- shared
-  available_primaries       -- the primary pool / mission pack in play (each side picks from this)
   attacker_side             -- which match_player is attacker
   first_turn_side           -- which match_player goes first
   result                    -- 'P1_WIN' | 'P2_WIN' | 'DRAW' (derived from final VP)
@@ -44,7 +43,8 @@ match_player                -- exactly two per match (you + opponent)
   list_id FK?  -> list      -- the army (configured units). nullable: opponent may be partial
   faction                   -- denormalized (used when no full list, esp. opponent)
   detachment                -- denormalized
-  primary_mission_id        -- the side's CHOSEN primary (from match.available_primaries)
+  available_primaries       -- THIS side's OWN pool of available primaries (force-disposition / matchup driven; separate per side)
+  primary_mission_id        -- the side's CHOSEN primary (from its own pool, above)
   is_attacker
   goes_first
   final_primary_vp          -- snapshot at game end
@@ -125,9 +125,9 @@ objective_state             -- per-round board control at a scoring window
 
 ---
 
-## 5. Persistent per-unit token state (OPEN — see §7)
+## 5. Persistent per-unit token state — PERSISTED
 
-11th leans hard on persistent tokens (battle-shock, hidden, marked/auspex, in-progress actions, sticky objectives). Candidate:
+**Persisted (per Micah).** 11th leans hard on persistent tokens (battle-shock, hidden, marked/auspex, in-progress actions, sticky objectives). The tracker records them as part of the saved game — a `match` is a saved game, so its token state is saved too (this is not the transient/ad-hoc case the no-rows rule covers).
 
 ```
 unit_state
@@ -135,17 +135,19 @@ unit_state
   match_player_id FK -> match_player
   list_unit_id FK -> list_unit
   state_key                 -- 'battle_shock' | 'hidden' | 'marked' | 'action_in_progress' | 'sticky_objective'
-  value                     -- e.g. action name, target id
-  since_round
+  value                     -- e.g. action name, target marker/unit id
+  active                    -- on/off (battle-shock can be regrouped, an action completes)
+  since_round               -- when it took effect
+  cleared_round             -- when it ended (nullable) — keeps the history
 ```
 
-Flagged as open because it borders on transient state — decide how much of in-game token state the tracker should persist vs hold in UI memory.
+`active` + `since_round`/`cleared_round` let state toggle over the game and preserve when it started/ended, rather than just a current-snapshot flag.
 
 ---
 
 ## 6. What this replaces / fixes (vs current `matches`/`turns`)
 
-- `matches.mission` (single) → **per-side `primary_mission_id`** + a shared `available_primaries` pool.
+- `matches.mission` (single) → **per-side `primary_mission_id`** + a **per-side `available_primaries` pool** (each side has its own — no shared pool).
 - `your_*` / `their_*` columns crammed onto `matches`/`turns` → symmetric **`match_player`** + per-turn rows.
 - `your_units_lost` / `their_units_lost` JSON blobs → **`unit_casualty`** rows (LOST vs DESTROYED, by unit).
 - `match_secondaries.vp_per_round` JSON → kept, but reconciled with per-turn `secondary_vp` and per-card `match_secondary`.
@@ -156,7 +158,7 @@ Flagged as open because it borders on transient state — decide how much of in-
 
 ## 7. Open questions (for review)
 
-1. **Per-unit token state (§5):** persist it, or keep live token state in UI and only persist round-boundary snapshots? (transient-state rule tension)
+1. **Per-unit token state (§5): RESOLVED — persist it** (with `active` + round history; see §5).
 2. **Opponent granularity:** require the opponent's full `list` (configured units), or allow faction/detachment + free unit names when you don't have their list?
 3. **Scoring windows:** model the exact window (end-of-command / end-of-turn / end-of-round) on `turn`, or just record VP deltas per turn?
 4. **Objectives:** count of controlled markers vs explicit marker ids + OC — how much board state to capture?
