@@ -796,7 +796,10 @@ export const metaEventWinDistribution = sqliteTable(
     playerCount: integer('player_count').notNull(),
     playerPct: real('player_pct').notNull(),
   },
-  (table) => [index('idx_event_win_dist_event').on(table.eventId)],
+  (table) => [
+    index('idx_event_win_dist_event').on(table.eventId),
+    uniqueIndex('idx_event_win_dist_unique').on(table.eventId, table.wins),
+  ],
 )
 
 export const metaEventPlacements = sqliteTable(
@@ -923,6 +926,26 @@ export const metaCubeStatus = sqliteTable('meta_cube_status', {
   lastEventId: text('last_event_id'),
   status: text('status').notNull().default('pending'),
 })
+
+// ── Imported tournament results (raw CSV import artifact) ────────────────────
+
+export const importedTournamentResults = sqliteTable(
+  'imported_tournament_results',
+  {
+    id: text('id').primaryKey(),
+    importedBy: text('imported_by')
+      .notNull()
+      .references(() => authUsers.id, { onDelete: 'cascade' }),
+    eventName: text('event_name').notNull(),
+    eventDate: integer('event_date', { mode: 'timestamp' }).notNull(),
+    format: text('format').notNull(),
+    metaWindow: text('meta_window').notNull(),
+    rawData: text('raw_data').notNull(),
+    parsedData: text('parsed_data').notNull(),
+    importedAt: integer('imported_at', { mode: 'timestamp' }).notNull(),
+  },
+  (table) => [index('idx_imported_results_imported_by').on(table.importedBy)],
+)
 
 // ── BCP Scraper ──────────────────────────────────────────────────────────────
 
