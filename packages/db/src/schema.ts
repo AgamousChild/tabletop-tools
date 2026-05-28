@@ -4,6 +4,7 @@
  * @see docs/etl-app-workers.md — Which Workers read/write which tables
  */
 import {
+  type AnySQLiteColumn,
   index,
   integer,
   primaryKey,
@@ -1099,4 +1100,60 @@ export const pipelineRunItems = sqliteTable(
     primaryKey({ columns: [table.runId, table.itemId] }),
     index('idx_pipeline_run_item_item').on(table.itemId),
   ],
+)
+
+// ── Content foundation (unified-data seam) ───────────────────────────────────
+// One canonical index for every game-content entity. The full document lives in
+// R2 (r2_key); this is the thin, FK-able registry the apps reference instead of
+// opaque strings. dim_* folds in here over time (type='faction'/'subfaction'/…).
+// See docs/superpowers/specs/2026-05-28-content-silo-bridge-design.md
+
+export const contentEntity = sqliteTable(
+  'content_entity',
+  {
+    id: text('id').primaryKey(), // canonical content id (BSData GUID, weapon:{ds}:{slug}, dim_* id, …)
+    type: text('type', {
+      enum: [
+        'datasheet',
+        'weapon',
+        'faction',
+        'subfaction',
+        'detachment',
+        'ability',
+        'stratagem',
+        'enhancement',
+        'mission',
+      ],
+    }).notNull(),
+    name: text('name').notNull(),
+    factionId: text('faction_id').references((): AnySQLiteColumn => contentEntity.id), // faction → self
+    parentId: text('parent_id').references((): AnySQLiteColumn => contentEntity.id), // weapon → datasheet, detachment → faction
+    dataslateId: text('dataslate_id').references(() => dimDataslate.id), // version context
+    r2Key: text('r2_key'), // content/{type}/{id}.json
+    updatedAt: integer('updated_at', { mode: 'timestamp' }).notNull(),
+  },
+  (table) => [
+    index('idx_content_entity_type').on(table.type),
+    index('idx_content_entity_faction').on(table.factionId),
+    index('idx_content_entity_parent').on(table.parentId),
+    index('idx_content_entity_dataslate').on(table.dataslateId),
+    index('idx_content_entity_name').on(table.name),
+  ],
+)
+
+// Brain crosswalk — bridges a brain Node id to its canonical content_entity.
+// Additive and reversible: brain node ids never change. Built by matching.
+export const contentNodeLink = sqliteTable(
+  'content_node_link',
+  {
+    brainNodeId: text('brain_node_id').primaryKey(), // brain Node id, UNCHANGED
+    canonicalId: text('canonical_id')
+      .notNull()
+      .references(() => contentEntity.id, { onDelete: 'cascade' }),
+    matchMethod: text('match_method', {
+      enum: ['datasheet_id', 'name_faction', 'manual'],
+    }).notNull(),
+    confidence: real('confidence').notNull().default(1),
+  },
+  (table) => [index('idx_content_node_link_canonical').on(table.canonicalId)],
 )
