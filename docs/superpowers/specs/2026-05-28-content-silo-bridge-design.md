@@ -1,6 +1,6 @@
 # Content / Silo Bridge — Design Spec
 
-> Status: **DRAFT — for Micah's review.** This is the unified-data-source design — the seam every app redesign hangs off.
+> Status: **Decisions locked.** This is the unified-data-source design — the seam every app redesign hangs off. (one `content_entity` registry · reuse brain node/record granularity · `content_node_link` crosswalk)
 > Grounded in the real stores: `packages/game-data-store/src/store.ts`, `apps/data-import/server/src/lib/id-mapping.ts`, `apps/brain/server/src/lib/model.ts`, and `dim_*` in `packages/db/src/schema.ts`.
 
 ---
@@ -83,7 +83,23 @@ content_entity            -- thin canonical index (NOT the full content; that's 
   updated_at
 ```
 - App tables (`list_unit.datasheet_id`, `simulation.*_unit_id` via list_unit, `tournament_player.faction_id`, `game_state`, etc.) FK into `content_entity` — real integrity, real joins, instead of opaque strings.
-- `dim_faction/subfaction/detachment` either fold into `content_entity` (type='faction'/…) or stay as the meta projection of it. (Decision below.)
+- `dim_faction/subfaction/detachment` fold into `content_entity` (type='faction'/…); meta reads it as a projection (§8.1).
+
+### 5.1 Brain crosswalk — `content_node_link` (NOT a re-key)
+
+Brain keeps every node id as-is — mutating them in place would break refs (`sourceId`/`targetId`), the Vectorize index (keyed on node id), the cross-ref indexes, and the manifest. A thin, additive crosswalk bridges to the canonical id instead:
+
+```
+content_node_link
+  brain_node_id PK         -- the brain Node id, UNCHANGED (graph integrity preserved)
+  canonical_id FK -> content_entity
+  match_method             -- 'datasheet_id' | 'name_faction' | 'manual'
+  confidence               -- low-confidence rows flagged for review
+```
+- Covers brain's **content** nodes only (datasheet / weapon / ability / stratagem / …); rules / community / errata nodes have no canonical entity and get no link.
+- **Built by matching** (the proven `id-mapping` / BCP-backfill approach): prefer the node's existing `datasheetId`/`factionId`, else normalized name + faction; validate the match rate; park unmatched for review.
+- **Resolve at read time:** an app holds a `canonical_id` → `content_node_link` → the brain node → fetch (and the reverse).
+- **Idempotent + reversible:** re-run on each brain build; drop the table and nothing is lost. **Zero blast radius on the graph.**
 
 ---
 
@@ -100,13 +116,13 @@ Every deferred "content reference" in the locked specs resolves to **a FK into `
 
 1. **Canonical id scheme** — extend `id-mapping` to cover ability/stratagem/enhancement/mission (datasheet/weapon/faction already done). Document it.
 2. **`content_entity` index** — add to `schema.ts` (real, like the pipeline tables), populated by the unified pipeline.
-3. **Unify the content ETL** — one pipeline → R2 canonical docs + `content_entity`; `game-data-store` and `brain/build-graph` consume it.
+3. **Unify the content ETL** — one pipeline → R2 canonical docs + `content_entity`; build the `content_node_link` crosswalk (§5.1); `game-data-store` and `brain/build-graph` consume it.
 4. **Repoint apps** — app redesign tables FK `content_entity` instead of opaque strings; *then* apply the app redesigns (Versus/List/Game-Tracker/Tournament) on top of a real content seam.
 
 ---
 
-## 8. Open decisions (need Micah)
+## 8. Decisions (resolved)
 
-1. **`dim_*` vs `content_entity`** — fold the faction/subfaction/detachment dims into `content_entity` (one registry), or keep `dim_*` as meta's projection of it? (Lean: one registry; meta reads it.)
-2. **R2 doc granularity** — one doc per entity (`content/weapon/{id}.json`) vs one bundle per datasheet (unit + its weapons + abilities)? (Lean: per-datasheet bundle for fetch efficiency, with the index pointing at it.)
-3. **Brain alignment effort** — does brain re-key its existing content nodes to the canonical ids now, or only new builds? (Lean: re-key on next build.)
+1. **One registry — `content_entity`.** Faction/subfaction/detachment fold in (type='faction'/…); `dim_*` becomes a projection meta reads. *Why:* the content pipeline already lists every faction/detachment, so a pipeline-fed `content_entity` updates automatically on each import — whereas `dim_*` today is a **hand-run seed script with hardcoded faction/dataslate maps in `.ts`** (a rule #6 violation) sitting *separately* from the `game-data-store` the apps use. One registry = one update path, no drift between meta and apps, satisfies rule #6.
+2. **R2 granularity — already set; reuse brain's.** Brain R2 already stores per-entity `Node` docs aggregated into "records" (parent + children) at read time. The canonical content docs adopt that exact pattern — no new granularity invented.
+3. **Brain — crosswalk, NOT re-key.** Brain node ids never change (re-keying would break refs / Vectorize keys / cross-ref indexes / manifest). The additive `content_node_link` table (§5.1) bridges canonical id ↔ brain node id, built by matching, idempotent and reversible.
