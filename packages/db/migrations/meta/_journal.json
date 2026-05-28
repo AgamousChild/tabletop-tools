@@ -15,6 +15,13 @@
       "when": 1779945481955,
       "tag": "0001_content_foundation",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "6",
+      "when": 1780008769527,
+      "tag": "0002_game_tracker_missions",
+      "breakpoints": true
     }
   ]
 }

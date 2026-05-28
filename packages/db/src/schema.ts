@@ -1157,3 +1157,55 @@ export const contentNodeLink = sqliteTable(
   },
   (table) => [index('idx_content_node_link_canonical').on(table.canonicalId)],
 )
+
+// ── Game-tracker mission catalog (scoring_mission + canonical game states) ────
+// A mission (primary or secondary) is a content_entity; scoring_mission is its
+// game-tracker projection (1:1, id = the canonical content id). Each mission
+// scores via canonical game_state facts (defined once, reused) linked through
+// mission_game_state. See docs/superpowers/specs/2026-05-26-game-tracker-data-design.md
+
+export const scoringMission = sqliteTable(
+  'scoring_mission',
+  {
+    id: text('id')
+      .primaryKey()
+      .references(() => contentEntity.id, { onDelete: 'cascade' }), // = canonical mission content id
+    name: text('name').notNull(),
+    kind: text('kind', { enum: ['primary', 'secondary'] }).notNull(),
+    side: text('side', { enum: ['symmetric', 'attacker', 'defender'] })
+      .notNull()
+      .default('symmetric'),
+    cap: integer('cap'), // this mission's VP cap (data — flexes per edition)
+    uiPattern: text('ui_pattern').notNull(), // 'count' | 'checklist' | 'tier' | 'action' | 'zoned_count' | …
+  },
+  (table) => [index('idx_scoring_mission_kind').on(table.kind)],
+)
+
+export const gameState = sqliteTable('game_state', {
+  id: text('id').primaryKey(),
+  key: text('key').notNull().unique(), // stable slug, e.g. 'control_objective_no_mans_land'
+  label: text('label').notNull(), // our functional wording (NOT GW card text)
+  category: text('category').notNull(), // 'objective_control' | 'unit_destroyed' | 'position' | 'action_completed' | 'comparative' | …
+})
+
+export const missionGameState = sqliteTable(
+  'mission_game_state',
+  {
+    id: text('id').primaryKey(),
+    scoringMissionId: text('scoring_mission_id')
+      .notNull()
+      .references(() => scoringMission.id, { onDelete: 'cascade' }),
+    gameStateId: text('game_state_id')
+      .notNull()
+      .references(() => gameState.id),
+    points: integer('points'), // declared VP for this state in this mission
+    countMode: text('count_mode', { enum: ['flag', 'per_objective', 'per_unit', 'tier'] })
+      .notNull()
+      .default('flag'),
+    sortOrder: integer('sort_order').notNull().default(0),
+  },
+  (table) => [
+    index('idx_mgs_mission').on(table.scoringMissionId),
+    index('idx_mgs_state').on(table.gameStateId),
+  ],
+)
