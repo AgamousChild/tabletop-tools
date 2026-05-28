@@ -3,7 +3,15 @@
  * @see docs/schema-overview.md — Cross-database overview
  * @see docs/etl-app-workers.md — Which Workers read/write which tables
  */
-import { index, integer, real, sqliteTable, text, uniqueIndex } from 'drizzle-orm/sqlite-core'
+import {
+  index,
+  integer,
+  primaryKey,
+  real,
+  sqliteTable,
+  text,
+  uniqueIndex,
+} from 'drizzle-orm/sqlite-core'
 
 // === Auth tables — managed by Better Auth ===
 
@@ -978,5 +986,94 @@ export const ingestContent = sqliteTable(
   (table) => [
     index('idx_ingest_content_source').on(table.sourceId),
     index('idx_ingest_content_status').on(table.status),
+  ],
+)
+
+// === Pipeline observability — unified source / item / run model ===
+// One coherent model for the self-operating pipeline, replacing the scattered
+// ingest_jobs / ingest_content / bcp_scrape_jobs / meta_cube_status trackers.
+// See docs/superpowers/specs/2026-05-28-admin-pipeline-observability-data-design.md (rationale only).
+
+export const pipelineSources = sqliteTable(
+  'pipeline_source',
+  {
+    id: text('id').primaryKey(), // slug, e.g. 'auspex-tactics'
+    name: text('name').notNull(), // human-readable, e.g. 'Auspex Tactics'
+    kind: text('kind').notNull(), // 'youtube' | 'web' | 'bcp'
+    url: text('url').notNull(),
+    externalId: text('external_id'), // resolved source-side id (e.g. YouTube channel_id)
+    active: integer('active').notNull().default(1), // 1 = crawl on schedule
+    createdAt: integer('created_at').notNull(), // epoch ms
+    lastCheckedAt: integer('last_checked_at'), // last crawl attempt
+    lastSuccessAt: integer('last_success_at'), // last successful crawl
+    lastError: text('last_error'),
+  },
+  (table) => [uniqueIndex('uq_pipeline_source_url').on(table.url)],
+)
+
+export const pipelineItems = sqliteTable(
+  'pipeline_item',
+  {
+    id: text('id').primaryKey(),
+    sourceId: text('source_id')
+      .notNull()
+      .references(() => pipelineSources.id, { onDelete: 'cascade' }),
+    title: text('title'), // human-readable; null until discovery resolves it
+    kind: text('kind').notNull(), // 'video' | 'article'
+    externalUrl: text('external_url').notNull(),
+    externalId: text('external_id').notNull(), // source-side stable id (video id / slug)
+    // discovered | queued | processing | done | failed | skipped
+    status: text('status').notNull().default('discovered'),
+    discoveredAt: integer('discovered_at').notNull(), // when WE found it (epoch ms)
+    publishedAt: integer('published_at'), // when the SOURCE published it
+    processedAt: integer('processed_at'),
+    resultSummary: text('result_summary'), // e.g. '8 brain nodes'
+    error: text('error'),
+  },
+  (table) => [
+    // idempotent discovery: same source-side item never double-inserts
+    uniqueIndex('uq_pipeline_item_source_external').on(table.sourceId, table.externalId),
+    index('idx_pipeline_item_source').on(table.sourceId),
+    index('idx_pipeline_item_status').on(table.status),
+    index('idx_pipeline_item_discovered').on(table.discoveredAt),
+  ],
+)
+
+export const pipelineRuns = sqliteTable(
+  'pipeline_run',
+  {
+    id: text('id').primaryKey(),
+    // 'content-discovery' | 'content-process' | 'bcp-scrape' | 'meta-cube' | 'brain-rebuild' | 'glicko'
+    pipeline: text('pipeline').notNull(),
+    trigger: text('trigger').notNull(), // 'cron' | 'manual' | 'api'
+    status: text('status').notNull().default('running'), // running | ok | failed
+    startedAt: integer('started_at').notNull(),
+    finishedAt: integer('finished_at'),
+    found: integer('found').notNull().default(0),
+    processed: integer('processed').notNull().default(0),
+    failed: integer('failed').notNull().default(0),
+    triggeredBy: text('triggered_by'), // user id, or 'cron'
+    summary: text('summary'), // human one-liner of what happened
+    error: text('error'),
+  },
+  (table) => [
+    index('idx_pipeline_run_pipeline').on(table.pipeline),
+    index('idx_pipeline_run_started').on(table.startedAt),
+  ],
+)
+
+export const pipelineRunItems = sqliteTable(
+  'pipeline_run_item',
+  {
+    runId: text('run_id')
+      .notNull()
+      .references(() => pipelineRuns.id, { onDelete: 'cascade' }),
+    itemId: text('item_id')
+      .notNull()
+      .references(() => pipelineItems.id, { onDelete: 'cascade' }),
+  },
+  (table) => [
+    primaryKey({ columns: [table.runId, table.itemId] }),
+    index('idx_pipeline_run_item_item').on(table.itemId),
   ],
 )
