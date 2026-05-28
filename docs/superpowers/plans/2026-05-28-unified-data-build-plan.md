@@ -8,6 +8,7 @@
 
 ## Already done (this session)
 
+- ✅ **Phase 0 — migration history reconciled** (commit `4e9b847`). Squashed migrations 0000–0011 → single `0000_baseline`; `schema.ts` ↔ live DB reconciled; `__drizzle_migrations` stamped; `drizzle-kit generate` reports no changes. DB backed up first. See Phase 0 section.
 - ✅ **Admin pipeline tables** — `pipeline_source` / `pipeline_item` / `pipeline_run` / `pipeline_run_item` in `schema.ts` + live DB, 6 sources seeded. *(spec: 2026-05-28-admin-pipeline-observability)*
 - ✅ **BCP data work** — scraper now captures `user.id`; `source_player_id` backfilled to 96%; Glicko-2 computed + persisted (`gl2_*` across 30k players / 75k pairings); official BCP placings stored.
 - ✅ **Locked specs** — versus, list, game-tracker, tournament-bcp, ratings-derived, admin-pipeline, content-silo-bridge.
@@ -33,13 +34,19 @@ Nothing in Phase 2+ is real until Phase 1 exists — every app FKs the content s
 
 ---
 
-## Phase 0 — Migration-history reconciliation (debt)
+## Phase 0 — Migration-history reconciliation (debt) — ✅ DONE (`4e9b847`)
 
-**Problem:** `drizzle-kit generate` wants to recreate ~half the schema (the migration snapshot/journal is far behind `schema.ts`), so tonight's tables went in via **direct DDL**. Left alone, drift grows and proper migrations stay broken.
+**Was:** `drizzle-kit generate` wanted to recreate ~half the schema (snapshot/journal frozen at 0008; `__drizzle_migrations` recorded only 0000–0004; orphaned 0009–0011 SQL); tables had gone in via direct DDL.
 
-- **Task:** reconcile the migrations snapshot/journal with the live DB so `schema.ts` is the source of truth and changes flow through real migrations again.
-- **Gate:** `drizzle-kit generate` produces a clean diff (no spurious "create/rename" prompts); applying migrations to a fresh DB reproduces prod.
-- **Call:** do this **before** Phase 1 so `content_entity` + app tables land via real migrations — or accept continued direct-DDL and schedule it. *(Recommend: do it first.)*
+**What was done:**
+1. **Backed up** the live DB (full logical dump, `.local/db-backup-*`) and the migrations folder.
+2. **Reconciled `schema.ts` ↔ live DB** (verified table + column + index level via an in-memory apply of the baseline): created `dim_faction_alias` (+82 valid alias seed), recreated `ingest_sources`/`ingest_content` empty, re-added `imported_tournament_results` to `schema.ts` (kept — 21 real rows), dropped empty `player_elo`/`elo_history`, added `rounds.start_time` + intended unique indexes.
+3. **Squashed** migrations 0000–0011 → a single `0000_baseline`; **stamped** `__drizzle_migrations` with the baseline's exact `sha256`+`when` (per the migrator source — migrate compares only max `created_at`).
+
+- **Gate MET:** `drizzle-kit generate` → "No schema changes, nothing to migrate". 60 db tests pass, tsc clean.
+- **Accepted residue (deliberate):** 19 hand-DDL'd meta/dim/fact tables have a nullable PK (`id TEXT PRIMARY KEY` w/o explicit `NOT NULL`) vs the baseline's `NOT NULL`. Cosmetic — `generate` never flags it (compares schema↔snapshot), future migrations apply fine, a fresh rebuild is just safely stricter. Rebuilding 30k/75k-row tables for a no-op `NOT NULL` is not worth it.
+- **Workflow going forward:** edit `schema.ts` → `drizzle-kit generate` → migrate. `schema.ts` is the source of truth.
+- **Phase 1 finding surfaced:** `dim_faction` is missing 5 standalone factions (`blood-angels`, `black-templars`, `dark-angels`, `deathwatch`, `space-wolves`) — the hand-seeded `dim_*` rule-#6 violation; `content_entity` fixes it.
 
 ---
 
