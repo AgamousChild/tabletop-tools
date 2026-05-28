@@ -9,6 +9,7 @@
 ## Already done (this session)
 
 - ✅ **Phase 0 — migration history reconciled** (commit `4e9b847`). Squashed migrations 0000–0011 → single `0000_baseline`; `schema.ts` ↔ live DB reconciled; `__drizzle_migrations` stamped; `drizzle-kit generate` reports no changes. DB backed up first. See Phase 0 section.
+- ✅ **Phase 1.2 + 1.3 — content seam** (commit `6f0401d`). `content_entity` + `content_node_link` in `schema.ts`, applied to prod via `0001_content_foundation` (first end-to-end use of the reconciled workflow), 66 db tests pass. **Next: Phase 1.1 then 1.4.**
 - ✅ **Admin pipeline tables** — `pipeline_source` / `pipeline_item` / `pipeline_run` / `pipeline_run_item` in `schema.ts` + live DB, 6 sources seeded. *(spec: 2026-05-28-admin-pipeline-observability)*
 - ✅ **BCP data work** — scraper now captures `user.id`; `source_player_id` backfilled to 96%; Glicko-2 computed + persisted (`gl2_*` across 30k players / 75k pairings); official BCP placings stored.
 - ✅ **Locked specs** — versus, list, game-tracker, tournament-bcp, ratings-derived, admin-pipeline, content-silo-bridge.
@@ -54,10 +55,12 @@ Nothing in Phase 2+ is real until Phase 1 exists — every app FKs the content s
 
 The seam every app FKs into.
 
-- **1.1 Canonical id scheme** — extend `id-mapping` to ability / stratagem / enhancement / mission (datasheet / weapon / faction already canonical). **Gate:** every content entity from the import resolves to one stable id; match-rate validated.
-- **1.2 `content_entity` registry → `schema.ts`** (full fidelity). `dim_*` folds in as meta's projection. **Gate:** table tested + applied; meta queries still resolve.
-- **1.3 `content_node_link` crosswalk → `schema.ts`** (brain bridge, additive — never re-key brain). **Gate:** table tested + applied.
-- **1.4 Unify the content ETL** — one pipeline → R2 canonical docs + `content_entity`; build `content_node_link` by matching. `game-data-store` + `brain/build-graph` consume it. **Gate:** `content_entity` populated from a real import; crosswalk match-rate counted (matched/unmatched, BCP-style); brain graph untouched.
+- **1.1 Canonical id scheme** — ⏳ **NEXT.** Extend `id-mapping` (`apps/data-import/server/src/lib/id-mapping.ts`) to ability / stratagem / enhancement / mission (datasheet / weapon / faction already canonical). **Gate:** every content entity from the import resolves to one stable id; match-rate validated. *Bounded, one file.*
+- **1.2 `content_entity` registry → `schema.ts`** — ✅ DONE (`6f0401d`). Self-ref faction/parent FKs, `dim_dataslate` FK, type enum, `r2_key`. Applied via `0001_content_foundation`.
+- **1.3 `content_node_link` crosswalk → `schema.ts`** — ✅ DONE (`6f0401d`). Brain bridge, additive, cascade. 6 focused tests.
+- **1.4 Unify the content ETL** — ⏳ **the big one, to scope.** One pipeline → R2 canonical docs + `content_entity`; build `content_node_link` by matching against ~25k brain nodes. `game-data-store` + `brain/build-graph` consume it. Touches **two live pipelines** + real Wahapedia/BSData data. **Gate:** `content_entity` populated from a real import; crosswalk match-rate counted (matched/unmatched, BCP-style); brain graph untouched.
+
+> **Resume point:** Phase 1.1 (extend `id-mapping`), then scope 1.4. Tables already in prod. Migration workflow: edit `schema.ts` → `drizzle-kit generate` → `migrate` (env `TURSO_DB_URL`/`TURSO_AUTH_TOKEN` from root `.env`).
 
 ---
 
