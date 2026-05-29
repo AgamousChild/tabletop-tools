@@ -25,6 +25,13 @@ export interface IdMappingResult {
   factionCodeToName: Map<string, string>
   matched: number
   unmatched: number
+  /**
+   * Count of matches where multiple BSData units shared the name and faction
+   * disambiguation failed, so the first candidate was taken. These are the
+   * uncertain mappings that can silently bind the wrong unit — surfaced as a
+   * number so a bad key shows up instead of producing the wrong card downstream.
+   */
+  ambiguous: number
 }
 
 /**
@@ -54,6 +61,7 @@ export function buildIdMapping(
   const map = new Map<string, string>()
   let matched = 0
   let unmatched = 0
+  let ambiguous = 0
 
   for (const ds of datasheets) {
     const key = normalizeName(ds.name)
@@ -80,11 +88,40 @@ export function buildIdMapping(
       map.set(ds.id, factionMatch.id)
     } else {
       map.set(ds.id, candidates[0]!.id)
+      ambiguous++
     }
     matched++
   }
 
-  return { map, factionCodeToName, matched, unmatched }
+  return { map, factionCodeToName, matched, unmatched, ambiguous }
+}
+
+/**
+ * The canonical content-id namespace. One stable id space shared by every
+ * surface (R2 docs, relational FKs, browser store, brain crosswalk) — see
+ * docs/superpowers/specs/2026-05-28-content-silo-bridge-design.md §1.
+ */
+export type CanonicalContentType =
+  | 'datasheet'
+  | 'weapon'
+  | 'faction'
+  | 'subfaction'
+  | 'detachment'
+  | 'ability'
+  | 'stratagem'
+  | 'enhancement'
+  | 'detachment_ability'
+  | 'mission'
+
+/**
+ * Builds the canonical id for a content entity by anchoring it to its **given**
+ * source id (never a regenerated/arbitrary value), namespaced by type so the
+ * one id space can't collide across types. Deterministic: the same source id
+ * yields the same canonical id on every run — so indexes/keys stay stable and
+ * never need rebuilding.
+ */
+export function canonicalContentId(type: CanonicalContentType, sourceId: string): string {
+  return `${type}:${sourceId}`
 }
 
 /**
@@ -177,6 +214,16 @@ export function rekeyAllWahapediaFiles(
     'datasheet_detachment_abilities',
   ]
 
+  // Wahapedia-only content entities → a typed canonical id anchored to the
+  // given id. There is no BSData target for these, so the source id IS the
+  // stable key; we just namespace it for the one shared id space.
+  const canonicalIdFiles: Record<string, CanonicalContentType> = {
+    abilities: 'ability',
+    stratagems: 'stratagem',
+    enhancements: 'enhancement',
+    detachment_abilities: 'detachment_ability',
+  }
+
   for (const [name, records] of Object.entries(data)) {
     let rekeyed = records as Record<string, unknown>[]
 
@@ -190,13 +237,34 @@ export function rekeyAllWahapediaFiles(
       rekeyed = rekeyFactionIds(rekeyed, factionCodeToName)
     }
 
-    // Re-key datasheets: both the ID itself and factionId
+    // Re-key datasheets to the canonical (BSData) id, but KEEP the given ids
+    // as provenance — the original Wahapedia id is never discarded, so every
+    // mapping stays verifiable and a bad name-match can be traced after the fact.
     if (name === 'datasheets') {
       rekeyed = rekeyed.map((ds) => {
-        const bsdataId = idMap.get(ds['id'] as string)
+        const wahapediaId = ds['id'] as string
+        const bsdataId = idMap.get(wahapediaId)
+        const canonical = bsdataId ?? wahapediaId
         return {
           ...ds,
-          ...(bsdataId ? { id: bsdataId } : {}),
+          id: canonical,
+          canonicalId: canonical,
+          wahapediaId,
+          ...(bsdataId ? { bsdataId } : {}),
+        }
+      })
+    }
+
+    // Wahapedia-only content entities: attach a canonical id (id itself stays
+    // unchanged so current consumers don't break) plus the given id.
+    const contentType = canonicalIdFiles[name]
+    if (contentType) {
+      rekeyed = rekeyed.map((r) => {
+        const sourceId = r['id'] as string
+        return {
+          ...r,
+          canonicalId: canonicalContentId(contentType, sourceId),
+          wahapediaId: sourceId,
         }
       })
     }
@@ -205,4 +273,63 @@ export function rekeyAllWahapediaFiles(
   }
 
   return result
+}
+
+export interface ContentIdValidation {
+  matched: number
+  unmatched: number
+  /** Per content-type resolved/unresolved counts, for spotting which links broke. */
+  byType: Record<string, { matched: number; unmatched: number }>
+}
+
+/**
+ * Validates that every junction reference resolves to a real content entity by
+ * its id. This is the gate for the canonical id scheme: a non-zero `unmatched`
+ * means a reference points at an id that does not exist — exactly the silent
+ * mis-key that surfaces the wrong item in the Brain/UI. Empty references
+ * (inline abilities, etc.) are not links and are skipped.
+ */
+export function validateContentIds(data: Record<string, unknown[]>): ContentIdValidation {
+  const idSet = (file: string) =>
+    new Set(
+      (data[file] ?? []).map((r) => (r as Record<string, unknown>)['id'] as string).filter(Boolean),
+    )
+
+  const references: Array<{ type: string; file: string; field: string; target: string }> = [
+    { type: 'ability', file: 'unit_abilities', field: 'abilityId', target: 'abilities' },
+    { type: 'stratagem', file: 'datasheet_stratagems', field: 'stratagemId', target: 'stratagems' },
+    {
+      type: 'enhancement',
+      file: 'datasheet_enhancements',
+      field: 'enhancementId',
+      target: 'enhancements',
+    },
+    {
+      type: 'detachment_ability',
+      file: 'datasheet_detachment_abilities',
+      field: 'detachmentAbilityId',
+      target: 'detachment_abilities',
+    },
+  ]
+
+  const byType: Record<string, { matched: number; unmatched: number }> = {}
+  let matched = 0
+  let unmatched = 0
+
+  for (const ref of references) {
+    const ids = idSet(ref.target)
+    let m = 0
+    let u = 0
+    for (const rec of data[ref.file] ?? []) {
+      const value = (rec as Record<string, unknown>)[ref.field] as string | undefined
+      if (!value) continue // empty = inline/no link, not a broken reference
+      if (ids.has(value)) m++
+      else u++
+    }
+    byType[ref.type] = { matched: m, unmatched: u }
+    matched += m
+    unmatched += u
+  }
+
+  return { matched, unmatched, byType }
 }

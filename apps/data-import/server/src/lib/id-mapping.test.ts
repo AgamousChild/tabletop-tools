@@ -2,11 +2,13 @@ import { describe, expect, it } from 'vitest'
 
 import {
   buildIdMapping,
+  canonicalContentId,
   normalizeName,
   rekeyAllWahapediaFiles,
   rekeyFactionIds,
   rekeyLeaderAttachments,
   rekeyRecords,
+  validateContentIds,
 } from './id-mapping'
 
 describe('normalizeName', () => {
@@ -220,5 +222,123 @@ describe('rekeyAllWahapediaFiles', () => {
 
     const result = rekeyAllWahapediaFiles(data, new Map(), new Map())
     expect(result['custom_data']).toEqual([{ id: '1', value: 'test' }])
+  })
+})
+
+describe('canonicalContentId', () => {
+  it('anchors the canonical id to the given source id, namespaced by type', () => {
+    expect(canonicalContentId('ability', 'A1')).toBe('ability:A1')
+    expect(canonicalContentId('stratagem', 'S5')).toBe('stratagem:S5')
+    expect(canonicalContentId('enhancement', 'E9')).toBe('enhancement:E9')
+    expect(canonicalContentId('detachment_ability', 'DA2')).toBe('detachment_ability:DA2')
+  })
+
+  it('is deterministic — same source id yields the same canonical id every run', () => {
+    expect(canonicalContentId('ability', 'A1')).toBe(canonicalContentId('ability', 'A1'))
+  })
+})
+
+describe('buildIdMapping — ambiguity reporting', () => {
+  it('flags ambiguous matches where faction disambiguation fell back to the first candidate', () => {
+    const datasheets = [{ id: 'w1', name: 'Daemon Prince', factionId: 'XX' }]
+    const factions = [{ id: 'XX', name: 'Unknown Faction' }]
+    const bsdataUnits = [
+      { id: 'b1', name: 'Daemon Prince', faction: 'Chaos Space Marines' },
+      { id: 'b2', name: 'Daemon Prince', faction: 'Chaos Daemons' },
+    ]
+    const { matched, ambiguous } = buildIdMapping(datasheets, factions, bsdataUnits)
+    expect(matched).toBe(1)
+    expect(ambiguous).toBe(1)
+  })
+
+  it('does not flag a clean faction-disambiguated match as ambiguous', () => {
+    const datasheets = [{ id: 'w1', name: 'Daemon Prince', factionId: 'CSM' }]
+    const factions = [{ id: 'CSM', name: 'Chaos Space Marines' }]
+    const bsdataUnits = [
+      { id: 'b1', name: 'Daemon Prince', faction: 'Chaos Space Marines' },
+      { id: 'b2', name: 'Daemon Prince', faction: 'Chaos Daemons' },
+    ]
+    const { ambiguous } = buildIdMapping(datasheets, factions, bsdataUnits)
+    expect(ambiguous).toBe(0)
+  })
+})
+
+describe('provenance — given ids are kept, never discarded', () => {
+  it('keeps the original Wahapedia id on datasheets re-keyed to a BSData id', () => {
+    const data: Record<string, unknown[]> = {
+      datasheets: [{ id: 'w1', name: 'Unit', factionId: 'SM' }],
+    }
+    const result = rekeyAllWahapediaFiles(
+      data,
+      new Map([['w1', 'b1']]),
+      new Map([['SM', 'Space Marines']]),
+    )
+    const ds = result['datasheets']![0] as Record<string, unknown>
+    expect(ds.id).toBe('b1') // canonical key (BSData)
+    expect(ds.canonicalId).toBe('b1')
+    expect(ds.wahapediaId).toBe('w1') // given id preserved for verification
+    expect(ds.bsdataId).toBe('b1')
+  })
+
+  it('keeps the original id on an unmatched datasheet (no silent loss)', () => {
+    const data: Record<string, unknown[]> = {
+      datasheets: [{ id: 'w9', name: 'Unmatched', factionId: 'SM' }],
+    }
+    const result = rekeyAllWahapediaFiles(data, new Map(), new Map())
+    const ds = result['datasheets']![0] as Record<string, unknown>
+    expect(ds.id).toBe('w9')
+    expect(ds.wahapediaId).toBe('w9')
+    expect(ds.canonicalId).toBe('w9')
+    expect(ds.bsdataId).toBeUndefined()
+  })
+
+  it('adds canonicalId + wahapediaId to ability/stratagem/enhancement/detachment_ability without changing id', () => {
+    const data: Record<string, unknown[]> = {
+      abilities: [{ id: 'A1', name: 'Oath', factionId: 'SM' }],
+      stratagems: [{ id: 'S1', name: 'Strat', factionId: 'SM' }],
+      enhancements: [{ id: 'E1', name: 'Enh', factionId: 'SM' }],
+      detachment_abilities: [{ id: 'DA1', name: 'Det', factionId: 'SM' }],
+    }
+    const result = rekeyAllWahapediaFiles(data, new Map(), new Map([['SM', 'Space Marines']]))
+    const ab = result['abilities']![0] as Record<string, unknown>
+    expect(ab.id).toBe('A1') // existing key unchanged (no consumer break)
+    expect(ab.canonicalId).toBe('ability:A1')
+    expect(ab.wahapediaId).toBe('A1')
+    expect(ab.factionId).toBe('Space Marines') // existing rekey still applies
+    expect((result['stratagems']![0] as Record<string, unknown>).canonicalId).toBe('stratagem:S1')
+    expect((result['enhancements']![0] as Record<string, unknown>).canonicalId).toBe(
+      'enhancement:E1',
+    )
+    expect((result['detachment_abilities']![0] as Record<string, unknown>).canonicalId).toBe(
+      'detachment_ability:DA1',
+    )
+  })
+})
+
+describe('validateContentIds — surfaces broken references instead of silently dropping them', () => {
+  it('counts resolved vs unresolved references across the content set', () => {
+    const data: Record<string, unknown[]> = {
+      abilities: [{ id: 'A1' }],
+      stratagems: [{ id: 'S1' }],
+      enhancements: [{ id: 'E1' }],
+      detachment_abilities: [{ id: 'DA1' }],
+      unit_abilities: [
+        { id: 'x', datasheetId: 'd', abilityId: 'A1' }, // resolved
+        { id: 'y', datasheetId: 'd', abilityId: '' }, // inline ability — skipped
+      ],
+      datasheet_stratagems: [
+        { id: 'd-S1', datasheetId: 'd', stratagemId: 'S1' }, // resolved
+        { id: 'd-S9', datasheetId: 'd', stratagemId: 'S9' }, // unresolved
+      ],
+      datasheet_enhancements: [{ id: 'd-E1', datasheetId: 'd', enhancementId: 'E1' }], // resolved
+      datasheet_detachment_abilities: [
+        { id: 'd-DA1', datasheetId: 'd', detachmentAbilityId: 'DA1' }, // resolved
+      ],
+    }
+    const { matched, unmatched, byType } = validateContentIds(data)
+    expect(matched).toBe(4)
+    expect(unmatched).toBe(1)
+    expect(byType.stratagem).toEqual({ matched: 1, unmatched: 1 })
+    expect(byType.ability).toEqual({ matched: 1, unmatched: 0 })
   })
 })
