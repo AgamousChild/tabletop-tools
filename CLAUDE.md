@@ -111,3 +111,6 @@ type safety. **Pre-commit hooks** run all three — code that doesn't pass doesn
 - Keep the stack shallow. Don't add layers.
 - Stop when it works. Don't polish what doesn't need polishing.
 - Never duplicate functions. If a utility exists, import it.
+- Don't try to prove you're right. State your reasoning once, briefly; then defer or verify. Don't re-litigate, justify, or argue the point.
+- If you need to verify something, write a test. Don't run throwaway/ad-hoc checks to make a point, and don't ask permission to test — just write the test.
+- Follow the process all the way through. When you change data, rebuild the dependent indexes/derived artifacts in the same pass — never leave "data updated, indexes stale" or bad data comes through.
