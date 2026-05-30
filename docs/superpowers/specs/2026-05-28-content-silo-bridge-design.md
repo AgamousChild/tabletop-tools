@@ -85,21 +85,29 @@ content_entity            -- thin canonical index (NOT the full content; that's 
 - App tables (`list_unit.datasheet_id`, `simulation.*_unit_id` via list_unit, `tournament_player.faction_id`, `game_state`, etc.) FK into `content_entity` — real integrity, real joins, instead of opaque strings.
 - `dim_faction/subfaction/detachment` fold into `content_entity` (type='faction'/…); meta reads it as a projection (§8.1).
 
-### 5.1 Brain crosswalk — `content_node_link` (NOT a re-key)
+### 5.1 Brain crosswalk — append-only, validation-gated
 
-Brain keeps every node id as-is — mutating them in place would break refs (`sourceId`/`targetId`), the Vectorize index (keyed on node id), the cross-ref indexes, and the manifest. A thin, additive crosswalk bridges to the canonical id instead:
+Brain node ids are never mutated (that would break refs, the Vectorize index, cross-ref indexes, and the manifest). The crosswalk holds `(brain_node_id → canonical_id)` pairs in a separate table that is **append-only** — once a pair is inserted and validated, it is never overwritten. Re-keying happens by **appending a new row that references the prior one and goes through a validation process** before it becomes active.
 
 ```
 content_node_link
-  brain_node_id PK         -- the brain Node id, UNCHANGED (graph integrity preserved)
-  canonical_id FK -> content_entity
-  match_method             -- 'datasheet_id' | 'name_faction' | 'manual'
-  confidence               -- low-confidence rows flagged for review
+  link_id PK               -- synthetic; many rows can exist per brain_node_id (history chain)
+  brain_node_id            -- indexed; the brain Node id, never changes
+  canonical_id FK          -> content_entity
+  match_method             -- how the candidate was generated: 'datasheet_id' | 'name_faction' | 'manual' | 'llm'
+  confidence               -- 0–1
+  prior_link_id            -- FK -> content_node_link.link_id, nullable; the link this row supersedes
+  validation_method        -- how this row was validated: 'admin' | 'llm' | 'auto-initial'
+  validated_by             -- user id or 'llm:<model>'
+  validated_at             -- timestamp
+  superseded_at            -- nullable; null = currently active
 ```
+
 - Covers brain's **content** nodes only (datasheet / weapon / ability / stratagem / …); rules / community / errata nodes have no canonical entity and get no link.
-- **Built by matching** (the proven `id-mapping` / BCP-backfill approach): prefer the node's existing `datasheetId`/`factionId`, else normalized name + faction; validate the match rate; park unmatched for review.
-- **Resolve at read time:** an app holds a `canonical_id` → `content_node_link` → the brain node → fetch (and the reverse).
-- **Idempotent + reversible:** re-run on each brain build; drop the table and nothing is lost. **Zero blast radius on the graph.**
+- **First-time linking.** The matcher proposes a candidate (prefer the node's existing `datasheetId`/`factionId`, else normalized name + faction). The candidate is inserted with `prior_link_id = NULL` and the validation method that approved it. Unmatched nodes get no row.
+- **Re-keying (a better-fitting candidate appears).** The matcher proposes a new candidate. It does **not** auto-replace the existing link. It goes through a validation process — a human in an admin tool, or an LLM evaluator — that confirms the new link is genuinely a better fit. Only when validation passes is the new row inserted, with `prior_link_id` pointing at the row it supersedes; the prior row's `superseded_at` is set. The validation outcome is recorded on the new row.
+- **Resolve at read time.** The active link for a `brain_node_id` is the row with `superseded_at IS NULL`. Apps follow `canonical_id` → active link → brain node (and the reverse).
+- **Reversible.** Old rows are preserved (audit trail + lineage). Drop the table and the brain graph is untouched.
 
 ---
 
