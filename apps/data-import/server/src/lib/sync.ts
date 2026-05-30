@@ -2,7 +2,10 @@
  * @see docs/etl-data-pipelines.md — ETL diagram and function reference
  * @see docs/schema-indexeddb-game-data.md — IndexedDB game data schema
  */
+import type { Db } from '@tabletop-tools/db'
+
 import type { Manifest } from '../types'
+import { type DatasheetRecord, produceDatasheets } from './content-producer'
 import { buildIdMapping, rekeyAllWahapediaFiles } from './id-mapping'
 import { fetchAndProcessBSData } from './sources/bsdata'
 import { fetchAndProcessMissions } from './sources/missions'
@@ -13,6 +16,8 @@ export interface SyncResult {
   manifest: Manifest
   errors: string[]
   skipped: string[]
+  /** Canonical content production counts (per type). Empty when no producer ran. */
+  producer?: Record<string, { r2DocsWritten: number; contentEntityUpserts: number }>
 }
 
 async function readManifest(bucket: R2Bucket): Promise<Manifest | null> {
@@ -33,9 +38,11 @@ export async function runSync(
   bucket: R2Bucket,
   githubToken?: string,
   force = false,
+  db?: Db,
 ): Promise<SyncResult> {
   const errors: string[] = []
   const skipped: string[] = []
+  const producer: SyncResult['producer'] = {}
   const existing = await readManifest(bucket)
   const files = new Set<string>(existing?.files ?? [])
 
@@ -115,6 +122,22 @@ export async function runSync(
         await writeDataFile(bucket, `${name}.json`, records)
         files.add(`${name}.json`)
       }
+
+      // Canonical content-doc producer (Phase 1.4 step 7+).
+      // Always writes per-entity R2 docs; content_entity rows only when db is
+      // configured. Additive — existing data/*.json output above is untouched.
+      try {
+        const datasheetRecords = (rekeyed['datasheets'] as DatasheetRecord[] | undefined) ?? []
+        if (datasheetRecords.length > 0) {
+          const result = await produceDatasheets(bucket, db, datasheetRecords)
+          producer[result.type] = {
+            r2DocsWritten: result.r2DocsWritten,
+            contentEntityUpserts: result.contentEntityUpserts,
+          }
+        }
+      } catch (err) {
+        errors.push(`Content producer: ${err instanceof Error ? err.message : String(err)}`)
+      }
     } catch (err) {
       errors.push(`ID mapping: ${err instanceof Error ? err.message : String(err)}`)
     }
@@ -146,5 +169,11 @@ export async function runSync(
   }
   await writeManifest(bucket, manifest)
 
-  return { success: errors.length === 0, manifest, errors, skipped }
+  return {
+    success: errors.length === 0,
+    manifest,
+    errors,
+    skipped,
+    ...(Object.keys(producer).length > 0 ? { producer } : {}),
+  }
 }
