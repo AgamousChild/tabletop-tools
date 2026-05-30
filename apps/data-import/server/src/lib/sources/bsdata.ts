@@ -1,7 +1,10 @@
 /**
  * @see docs/etl-data-pipelines.md — ETL diagram and function reference
  */
-import { parseBSDataXml } from '@tabletop-tools/game-content/src/adapters/bsdata/parser'
+import {
+  parseBSDataXml,
+  type Subfaction,
+} from '@tabletop-tools/game-content/src/adapters/bsdata/parser'
 import type { UnitProfile } from '@tabletop-tools/game-content/src/types'
 
 const DEFAULT_REPO = 'BSData/wh40k-10e'
@@ -18,6 +21,7 @@ export interface BSDataResult {
   skipped: boolean
   commitSha: string
   units: UnitProfile[]
+  subfactions: Subfaction[]
 }
 
 /** Strip BSData catalog prefixes for consistency with Wahapedia faction names */
@@ -46,7 +50,7 @@ export async function fetchAndProcessBSData(
   const commitSha = commitData.sha
 
   if (previousCommitSha && commitSha === previousCommitSha) {
-    return { skipped: true, commitSha, units: [] }
+    return { skipped: true, commitSha, units: [], subfactions: [] }
   }
 
   // Get file tree
@@ -64,6 +68,7 @@ export async function fetchAndProcessBSData(
 
   // Fetch and parse each catalog
   const allUnits: BSDataResult['units'] = []
+  const allSubfactions: BSDataResult['subfactions'] = []
   const errors: string[] = []
 
   for (const file of catFiles) {
@@ -77,8 +82,9 @@ export async function fetchAndProcessBSData(
       if (!rawResp.ok) throw new Error(`HTTP ${rawResp.status}`)
       const xml = await rawResp.text()
 
-      const { units, errors: parseErrors } = parseBSDataXml(xml, faction)
+      const { units, subfactions, errors: parseErrors } = parseBSDataXml(xml, faction)
       allUnits.push(...units)
+      allSubfactions.push(...subfactions)
       errors.push(...parseErrors)
     } catch (err) {
       errors.push(`${faction}: ${err instanceof Error ? err.message : String(err)}`)
@@ -89,5 +95,5 @@ export async function fetchAndProcessBSData(
     console.log(`BSData parse warnings: ${errors.length}`)
   }
 
-  return { skipped: false, commitSha, units: allUnits }
+  return { skipped: false, commitSha, units: allUnits, subfactions: allSubfactions }
 }

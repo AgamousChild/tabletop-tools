@@ -6,16 +6,21 @@ import type { Db } from '@tabletop-tools/db'
 
 import type { Manifest } from '../types'
 import {
+  canonicalDetachmentId,
   type DatasheetRecord,
+  type DetachmentAbilityRecord,
   type DetachmentRecord,
   type FactionRecord,
   produceAbilities,
   produceDatasheets,
+  produceDetachmentAbilities,
   produceDetachments,
   produceEnhancements,
   produceFactions,
   produceStratagems,
+  produceSubfactions,
   produceWeapons,
+  type SubfactionRecord,
   type WeaponRecord,
 } from './content-producer'
 import { buildIdMapping, rekeyAllWahapediaFiles } from './id-mapping'
@@ -83,6 +88,7 @@ export async function runSync(
 
   // 2. BSData
   let bsdataUnits: Array<{ id: string; name: string; faction: string }> = []
+  let bsdataSubfactions: SubfactionRecord[] = []
   let bsdataMeta: Manifest['bsdata'] = existing?.bsdata
   try {
     const result = await fetchAndProcessBSData(
@@ -96,13 +102,20 @@ export async function runSync(
     } else {
       // Extract only the fields needed for ID mapping
       bsdataUnits = result.units.map((u) => ({ id: u.id, name: u.name, faction: u.faction }))
+      bsdataSubfactions = result.subfactions.map((s) => ({
+        id: s.id,
+        name: s.name,
+        faction: s.faction,
+      }))
       bsdataMeta = {
         commitSha: result.commitSha,
         unitCount: result.units.length,
         factionCount: new Set(result.units.map((u) => u.faction)).size,
       }
       await writeDataFile(bucket, 'bsdata-units.json', result.units)
+      await writeDataFile(bucket, 'bsdata-subfactions.json', result.subfactions)
       files.add('bsdata-units.json')
+      files.add('bsdata-subfactions.json')
     }
   } catch (err) {
     errors.push(`BSData: ${err instanceof Error ? err.message : String(err)}`)
@@ -117,6 +130,18 @@ export async function runSync(
         if (obj) {
           const stored = (await obj.json()) as Array<{ id: string; name: string; faction: string }>
           bsdataUnits = stored
+        }
+      }
+      if (bsdataSubfactions.length === 0) {
+        const obj = await bucket.get('data/bsdata-subfactions.json')
+        if (obj) {
+          const stored = (await obj.json()) as Array<{
+            id: string
+            name: string
+            faction: string
+            groupName: string
+          }>
+          bsdataSubfactions = stored.map((s) => ({ id: s.id, name: s.name, faction: s.faction }))
         }
       }
 
@@ -138,8 +163,12 @@ export async function runSync(
       // Canonical content-doc producer (Phase 1.4 steps 7–9).
       // Always writes per-entity R2 docs; content_entity rows only when db is
       // configured. Additive — existing data/*.json output above is untouched.
-      // Order matters for FK integrity: factions → detachments → datasheets →
-      // weapons → abilities/stratagems/enhancements.
+      // Order matters for FK integrity: factions → subfactions → detachments →
+      // datasheets → weapons → detachment_abilities → abilities/stratagems/enhancements.
+      //
+      // NOTE: this populates the content_entity registry only. It does NOT
+      // touch the brain build's faction-node graph (buildFactionNodes,
+      // `n.subfaction` from the faction-pack parser) — that system stays as-is.
       try {
         const factionRecords = (rekeyed['factions'] as FactionRecord[] | undefined) ?? []
         if (factionRecords.length > 0) {
@@ -149,7 +178,20 @@ export async function runSync(
             contentEntityUpserts: r.contentEntityUpserts,
           }
         }
+        if (bsdataSubfactions.length > 0) {
+          const r = await produceSubfactions(bucket, db, bsdataSubfactions)
+          producer[r.type] = {
+            r2DocsWritten: r.r2DocsWritten,
+            contentEntityUpserts: r.contentEntityUpserts,
+          }
+        }
         const detachmentRecords = (rekeyed['detachments'] as DetachmentRecord[] | undefined) ?? []
+        // Build a wahapedia detachment id → canonical detachment id map for
+        // detachment_abilities' parent_id FK resolution.
+        const detachmentIdMap = new Map<string, string>()
+        for (const d of detachmentRecords) {
+          detachmentIdMap.set(d.id, canonicalDetachmentId(d.factionId, d.name))
+        }
         if (detachmentRecords.length > 0) {
           const r = await produceDetachments(bucket, db, detachmentRecords)
           producer[r.type] = {
@@ -168,6 +210,20 @@ export async function runSync(
         const weaponRecords = (rekeyed['datasheet_wargear'] as WeaponRecord[] | undefined) ?? []
         if (weaponRecords.length > 0) {
           const r = await produceWeapons(bucket, db, weaponRecords)
+          producer[r.type] = {
+            r2DocsWritten: r.r2DocsWritten,
+            contentEntityUpserts: r.contentEntityUpserts,
+          }
+        }
+        const detachmentAbilityRecords =
+          (rekeyed['detachment_abilities'] as DetachmentAbilityRecord[] | undefined) ?? []
+        if (detachmentAbilityRecords.length > 0) {
+          const r = await produceDetachmentAbilities(
+            bucket,
+            db,
+            detachmentAbilityRecords,
+            detachmentIdMap,
+          )
           producer[r.type] = {
             r2DocsWritten: r.r2DocsWritten,
             contentEntityUpserts: r.contentEntityUpserts,

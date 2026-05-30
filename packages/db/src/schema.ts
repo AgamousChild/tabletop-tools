@@ -1119,6 +1119,7 @@ export const contentEntity = sqliteTable(
         'faction',
         'subfaction',
         'detachment',
+        'detachment_ability',
         'ability',
         'stratagem',
         'enhancement',

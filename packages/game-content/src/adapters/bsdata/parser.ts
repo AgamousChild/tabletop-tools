@@ -15,14 +15,52 @@ export const PARSER_VERSION = 8
 
 export interface ParseResult {
   units: UnitProfile[]
+  subfactions: Subfaction[]
   errors: string[]
 }
+
+export interface Subfaction {
+  /** BSData id of the upgrade selectionEntry. */
+  id: string
+  /** Subfaction display name (e.g. 'Ultramarines', 'Sautekh Dynasty'). */
+  name: string
+  /** Parent faction (from the catalog filename). */
+  faction: string
+  /** Catalog grouping name (e.g. 'Chapter', 'Dynasty', 'Craftworld'). */
+  groupName: string
+}
+
+/**
+ * BSData group names that contain subfaction upgrade entries as children.
+ * Each faction's catalog uses its own term — these are the established ones
+ * across the wh40k-10e catalog set.
+ */
+const SUBFACTION_GROUP_NAMES = [
+  'Chapter',
+  'Successor Chapter',
+  'Dynasty',
+  'Craftworld',
+  'Kabal',
+  'Wych Cult',
+  'Haemonculus Coven',
+  'Sept',
+  'Legion',
+  'Hive Fleet',
+  'Forge World',
+  'Order',
+  'Brotherhood',
+  'Allegiance',
+  'Plague Company',
+  'Cabal of Sorcerers',
+  'Cult',
+]
 
 /**
  * Parse a BSData XML string (from a .cat or .gst file) into UnitProfile[].
  */
 export function parseBSDataXml(xml: string, faction: string): ParseResult {
   const units: UnitProfile[] = []
+  const subfactions: Subfaction[] = extractSubfactions(xml, faction)
   const errors: string[] = []
 
   // Build reference maps for resolving <infoLink> and <entryLink> references.
@@ -69,7 +107,43 @@ export function parseBSDataXml(xml: string, faction: string): ParseResult {
     }
   }
 
-  return { units, errors }
+  return { units, subfactions, errors }
+}
+
+/**
+ * Extract subfaction upgrade entries (Chapters / Dynasties / Craftworlds / …)
+ * from a BSData catalog. Subfactions live inside `<selectionEntryGroup name="X">`
+ * where X is one of the established faction-grouping names (see
+ * SUBFACTION_GROUP_NAMES); each child `<selectionEntry type="upgrade">` is one
+ * subfaction with stable BSData id + display name.
+ */
+function extractSubfactions(xml: string, faction: string): Subfaction[] {
+  const subfactions: Subfaction[] = []
+  const seen = new Set<string>()
+  for (const groupName of SUBFACTION_GROUP_NAMES) {
+    const escaped = groupName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+    const groupPattern = new RegExp(
+      `<selectionEntryGroup\\b[^>]*\\bname="${escaped}"[^>]*>([\\s\\S]*?)</selectionEntryGroup>`,
+      'g',
+    )
+    let gm: RegExpExecArray | null
+    while ((gm = groupPattern.exec(xml)) !== null) {
+      const body = gm[1] ?? ''
+      const entryPattern = /<selectionEntry\b([^>]*?)\/?>/g
+      let em: RegExpExecArray | null
+      while ((em = entryPattern.exec(body)) !== null) {
+        const attrs = em[1] ?? ''
+        if (extractAttr(attrs, 'type') !== 'upgrade') continue
+        const id = extractAttr(attrs, 'id')
+        const name = extractAttr(attrs, 'name')
+        if (!id || !name) continue
+        if (seen.has(id)) continue
+        seen.add(id)
+        subfactions.push({ id, name, faction, groupName })
+      }
+    }
+  }
+  return subfactions
 }
 
 /**

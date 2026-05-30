@@ -6,13 +6,17 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 
 import {
   type DatasheetRecord,
+  type DetachmentAbilityRecord,
   type DetachmentRecord,
   type FactionRecord,
   produceAbilities,
   produceDatasheets,
+  produceDetachmentAbilities,
   produceDetachments,
   produceFactions,
+  produceSubfactions,
   produceWeapons,
+  type SubfactionRecord,
   type WeaponRecord,
 } from './content-producer'
 
@@ -261,5 +265,66 @@ describe('produceFactions / produceDetachments / produceAbilities', () => {
     row = (await db.select().from(contentEntity).where(eq(contentEntity.id, 'bf-ds-1')))[0]
     expect(row?.factionId).toBe('backfill-faction') // preserved
     expect(row?.name).toBe('Some Unit (v2)') // updated
+  })
+})
+
+describe('produceSubfactions', () => {
+  it('canonical id = slug(name); parent + faction → faction slug; bsdataId = provenance', async () => {
+    // parent faction must exist
+    await produceFactions(r2 as unknown as R2Bucket, db, [{ id: 'SM', name: 'Space Marines' }])
+    const subfactions: SubfactionRecord[] = [
+      { id: 'sf-bsdata-ultra', name: 'Ultramarines', faction: 'Space Marines' },
+      { id: 'sf-bsdata-bt', name: 'Black Templars', faction: 'Space Marines' },
+    ]
+    const result = await produceSubfactions(r2 as unknown as R2Bucket, db, subfactions)
+    expect(result.type).toBe('subfaction')
+    expect(result.r2DocsWritten).toBe(2)
+    expect(result.contentEntityUpserts).toBe(2)
+    const ultra = (
+      await db.select().from(contentEntity).where(eq(contentEntity.id, 'ultramarines'))
+    )[0]
+    expect(ultra?.type).toBe('subfaction')
+    expect(ultra?.factionId).toBe('space-marines')
+    expect(ultra?.parentId).toBe('space-marines')
+    expect(ultra?.bsdataId).toBe('sf-bsdata-ultra')
+  })
+
+  it('rejects a subfaction whose parent faction does not exist (FK)', async () => {
+    await expect(
+      produceSubfactions(r2 as unknown as R2Bucket, db, [
+        { id: 'orphan-sf', name: 'Nobody', faction: 'Nonexistent Faction' },
+      ]),
+    ).rejects.toThrow()
+  })
+})
+
+describe('produceDetachmentAbilities', () => {
+  it('parent_id resolves via detachmentIdMap; canonical id from Phase 1.1', async () => {
+    // Set up faction → detachment
+    await produceFactions(r2 as unknown as R2Bucket, db, [{ id: 'DA', name: 'Det Faction' }])
+    await produceDetachments(r2 as unknown as R2Bucket, db, [
+      { id: 'wahap-det-A', factionId: 'Det Faction', name: 'Strike Force' },
+    ])
+    const idMap = new Map<string, string>([['wahap-det-A', 'detachment:det-faction:strike-force']])
+    const records: DetachmentAbilityRecord[] = [
+      {
+        id: 'DA001',
+        canonicalId: 'detachment_ability:DA001',
+        detachmentId: 'wahap-det-A',
+        factionId: 'Det Faction',
+        name: 'Coordinated Push',
+        wahapediaId: 'DA001',
+      },
+    ]
+    const result = await produceDetachmentAbilities(r2 as unknown as R2Bucket, db, records, idMap)
+    expect(result.type).toBe('detachment_ability')
+    expect(result.contentEntityUpserts).toBe(1)
+    const row = (
+      await db.select().from(contentEntity).where(eq(contentEntity.id, 'detachment_ability:DA001'))
+    )[0]
+    expect(row?.type).toBe('detachment_ability')
+    expect(row?.parentId).toBe('detachment:det-faction:strike-force')
+    expect(row?.factionId).toBe('det-faction')
+    expect(row?.wahapediaId).toBe('DA001')
   })
 })

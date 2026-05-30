@@ -110,6 +110,33 @@ export interface FactionRecord {
   name: string // full faction name (e.g., 'Space Marines')
 }
 
+export interface SubfactionRecord {
+  id: string // BSData id of the upgrade selectionEntry (preserved as bsdataId)
+  name: string // subfaction display name (e.g., 'Ultramarines')
+  faction: string // parent faction name (rekeyed) — slugified for FK
+}
+
+/**
+ * Subfaction canonical id = slug(name) (e.g., 'ultramarines'), matching the
+ * `dim_subfaction` slug convention. parent_id and faction_id both point at
+ * the parent faction's canonical id.
+ */
+export async function produceSubfactions(
+  bucket: R2Bucket,
+  db: Db | undefined,
+  subfactions: SubfactionRecord[],
+): Promise<ProducerResult> {
+  return produceContentEntities(bucket, db, {
+    type: 'subfaction',
+    records: subfactions,
+    canonicalId: (s) => slug(s.name),
+    name: (s) => s.name,
+    factionId: (s) => slug(s.faction),
+    parentId: (s) => slug(s.faction),
+    bsdataId: (s) => s.id,
+  })
+}
+
 /** Faction canonical id = slug(name), e.g. 'space-marines' (matches dim_faction convention). */
 export async function produceFactions(
   bucket: R2Bucket,
@@ -237,8 +264,37 @@ export const produceStratagems = (bucket: R2Bucket, db: Db | undefined, rs: Name
 export const produceEnhancements = (bucket: R2Bucket, db: Db | undefined, rs: NamespacedRecord[]) =>
   produceNamespaced('enhancement', bucket, db, rs)
 
-// NOTE: detachment_abilities are NOT produced here. They exist in the Phase 1.1
-// canonical id scheme (`detachment_ability:{id}`), but the content_entity.type
-// enum does not currently include 'detachment_ability'. Either extend the enum
-// (schema migration) or fold them under 'ability' with parent_id → detachment
-// in a follow-up step.
+/** Helper used by sync.ts to build a wahapedia-detachment-id → canonical-detachment-id map. */
+export const canonicalDetachmentId = (factionName: string, name: string): string =>
+  `detachment:${slug(factionName)}:${slug(name)}`
+
+export interface DetachmentAbilityRecord {
+  id: string // Wahapedia id (provenance)
+  canonicalId: string // Phase 1.1 canonical id (e.g., 'detachment_ability:DA1')
+  detachmentId: string // Wahapedia detachment id (resolved via detachmentIdMap)
+  factionId?: string // rekeyed full faction name
+  name: string
+  wahapediaId?: string
+}
+
+/**
+ * Detachment abilities reference a parent detachment by its Wahapedia id; the
+ * caller passes a map from Wahapedia detachment id → canonical detachment id so
+ * the FK on content_entity.parent_id resolves correctly.
+ */
+export async function produceDetachmentAbilities(
+  bucket: R2Bucket,
+  db: Db | undefined,
+  records: DetachmentAbilityRecord[],
+  detachmentIdMap: Map<string, string>,
+): Promise<ProducerResult> {
+  return produceContentEntities(bucket, db, {
+    type: 'detachment_ability',
+    records,
+    canonicalId: (r) => r.canonicalId,
+    name: (r) => r.name,
+    factionId: (r) => (r.factionId ? slug(r.factionId) : undefined),
+    parentId: (r) => detachmentIdMap.get(r.detachmentId),
+    wahapediaId: (r) => r.wahapediaId ?? r.id,
+  })
+}

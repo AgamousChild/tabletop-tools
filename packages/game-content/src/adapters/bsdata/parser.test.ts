@@ -1569,3 +1569,69 @@ describe('parseBSDataXml — shared sub-model filtering', () => {
     expect(lasgun).toBeDefined()
   })
 })
+
+describe('subfaction extraction', () => {
+  const SUBFACTION_XML = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<catalogue id="test-cat" name="Test">
+  <sharedSelectionEntryGroups>
+    <selectionEntryGroup name="Chapter" id="grp-chapter" hidden="false">
+      <selectionEntries>
+        <selectionEntry type="upgrade" name="Iron Brothers" id="sf-iron-brothers" hidden="false"/>
+        <selectionEntry type="upgrade" name="Crimson Knights" id="sf-crimson-knights" hidden="false"/>
+      </selectionEntries>
+    </selectionEntryGroup>
+    <selectionEntryGroup name="Dynasty" id="grp-dynasty" hidden="false">
+      <selectionEntries>
+        <selectionEntry type="upgrade" name="Steel Dynasty" id="sf-steel" hidden="false"/>
+      </selectionEntries>
+    </selectionEntryGroup>
+  </sharedSelectionEntryGroups>
+</catalogue>`
+
+  it('extracts subfactions from known group names with id + name + parent faction', () => {
+    const { subfactions } = parseBSDataXml(SUBFACTION_XML, 'Test Faction')
+    expect(subfactions).toHaveLength(3)
+    const iron = subfactions.find((s) => s.id === 'sf-iron-brothers')
+    expect(iron).toEqual({
+      id: 'sf-iron-brothers',
+      name: 'Iron Brothers',
+      faction: 'Test Faction',
+      groupName: 'Chapter',
+    })
+    const dyn = subfactions.find((s) => s.groupName === 'Dynasty')
+    expect(dyn?.name).toBe('Steel Dynasty')
+  })
+
+  it('dedupes by id so a subfaction referenced from multiple groups counts once', () => {
+    const xml = `<catalogue>
+      <selectionEntryGroup name="Chapter" id="g1"><selectionEntries>
+        <selectionEntry type="upgrade" name="X" id="dup-id"/>
+      </selectionEntries></selectionEntryGroup>
+      <selectionEntryGroup name="Chapter" id="g2"><selectionEntries>
+        <selectionEntry type="upgrade" name="X" id="dup-id"/>
+      </selectionEntries></selectionEntryGroup>
+    </catalogue>`
+    const { subfactions } = parseBSDataXml(xml, 'Test')
+    expect(subfactions).toHaveLength(1)
+  })
+
+  it('ignores non-upgrade selectionEntries inside the group', () => {
+    const xml = `<catalogue>
+      <selectionEntryGroup name="Chapter" id="g1"><selectionEntries>
+        <selectionEntry type="model" name="A model unit" id="not-a-subfaction"/>
+        <selectionEntry type="upgrade" name="Real Subfaction" id="real"/>
+      </selectionEntries></selectionEntryGroup>
+    </catalogue>`
+    const { subfactions } = parseBSDataXml(xml, 'Test')
+    expect(subfactions).toHaveLength(1)
+    expect(subfactions[0]?.id).toBe('real')
+  })
+
+  it('returns an empty array when no recognized group is present', () => {
+    const xml = `<catalogue><selectionEntryGroup name="Random Group" id="g1"><selectionEntries>
+      <selectionEntry type="upgrade" name="Not A Subfaction" id="x"/>
+    </selectionEntries></selectionEntryGroup></catalogue>`
+    const { subfactions } = parseBSDataXml(xml, 'Test')
+    expect(subfactions).toEqual([])
+  })
+})
