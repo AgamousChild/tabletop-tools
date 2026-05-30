@@ -1130,6 +1130,8 @@ export const contentEntity = sqliteTable(
     parentId: text('parent_id').references((): AnySQLiteColumn => contentEntity.id), // weapon → datasheet, detachment → faction
     dataslateId: text('dataslate_id').references(() => dimDataslate.id), // version context
     r2Key: text('r2_key'), // content/{type}/{id}.json
+    wahapediaId: text('wahapedia_id'), // given source id from Wahapedia (provenance — never discarded)
+    bsdataId: text('bsdata_id'), // given source id from BSData (datasheets only; equals id by convention)
     updatedAt: integer('updated_at', { mode: 'timestamp' }).notNull(),
   },
   (table) => [
@@ -1138,24 +1140,44 @@ export const contentEntity = sqliteTable(
     index('idx_content_entity_parent').on(table.parentId),
     index('idx_content_entity_dataslate').on(table.dataslateId),
     index('idx_content_entity_name').on(table.name),
+    index('idx_content_entity_wahapedia').on(table.wahapediaId),
+    index('idx_content_entity_bsdata').on(table.bsdataId),
   ],
 )
 
 // Brain crosswalk — bridges a brain Node id to its canonical content_entity.
-// Additive and reversible: brain node ids never change. Built by matching.
+// Append-only, validation-gated, stable + incremental. Brain node ids never
+// change. A link is never silently overwritten — re-keys are new rows that
+// reference the prior link (`prior_link_id`) and only become active after a
+// validation step (admin in a UI or LLM evaluator). The "active" link for a
+// brain_node_id is the row with superseded_at IS NULL.
+// See docs/superpowers/specs/2026-05-28-content-silo-bridge-design.md §5.1
 export const contentNodeLink = sqliteTable(
   'content_node_link',
   {
-    brainNodeId: text('brain_node_id').primaryKey(), // brain Node id, UNCHANGED
+    linkId: text('link_id').primaryKey(), // synthetic; many rows per brain_node_id (history chain)
+    brainNodeId: text('brain_node_id').notNull(), // the brain Node id, UNCHANGED
     canonicalId: text('canonical_id')
       .notNull()
       .references(() => contentEntity.id, { onDelete: 'cascade' }),
     matchMethod: text('match_method', {
-      enum: ['datasheet_id', 'name_faction', 'manual'],
-    }).notNull(),
+      enum: ['datasheet_id', 'name_faction', 'manual', 'llm'],
+    }).notNull(), // how the candidate was generated
     confidence: real('confidence').notNull().default(1),
+    priorLinkId: text('prior_link_id').references((): AnySQLiteColumn => contentNodeLink.linkId), // self-ref; null = chain head
+    validationMethod: text('validation_method', {
+      enum: ['admin', 'llm', 'auto-initial'],
+    }).notNull(), // how this row was validated; 'auto-initial' = inherited from pre-validation history (migration or first-time match)
+    validatedBy: text('validated_by').notNull(), // user id, 'llm:<model>', or 'migration'
+    validatedAt: integer('validated_at', { mode: 'timestamp' }).notNull(),
+    supersededAt: integer('superseded_at', { mode: 'timestamp' }), // null = currently active
   },
-  (table) => [index('idx_content_node_link_canonical').on(table.canonicalId)],
+  (table) => [
+    index('idx_content_node_link_canonical').on(table.canonicalId),
+    index('idx_content_node_link_brain_node').on(table.brainNodeId),
+    index('idx_content_node_link_prior').on(table.priorLinkId),
+    index('idx_content_node_link_active').on(table.brainNodeId, table.supersededAt), // finding the active link per brain_node_id
+  ],
 )
 
 // ── Game-tracker mission catalog (scoring_mission + canonical game states) ────

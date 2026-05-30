@@ -13,8 +13,8 @@
 |---|------|--------|-------|
 | 1 | Update spec §5.1 to stable + incremental, validation-gated crosswalk | ✅ done | §8 Decision 3 wording tweak deferred to a follow-up (small, non-blocking) |
 | 2 | Rewrite Phase 1.4 plan to match the corrected crosswalk model | ✅ done | Now 12 ordered steps with gates; supersedes the prior crosswalk-overwrite version |
-| 3 | Schema migration on `content_node_link` — add `link_id` PK, `prior_link_id`, `validation_method`, `validated_by`, `validated_at`, `superseded_at`; migrate existing rows to chain heads | ⬜ todo | Real schema change; uses the established `schema.ts → drizzle-kit generate → migrate` workflow |
-| 4 | Add `wahapedia_id` / `bsdata_id` provenance columns to `content_entity` | ⬜ todo | Mirrors Phase 1.1 principle — given ids carried in the registry |
+| 3 | Schema migration on `content_node_link` — add `link_id` PK, `prior_link_id`, `validation_method`, `validated_by`, `validated_at`, `superseded_at`; migrate existing rows to chain heads | 🟡 local done | `schema.ts` + migration `0003_unique_franklin_richards.sql` + tests (68 pass). **Prod apply is the gate** — irreversible, awaiting go |
+| 4 | Add `wahapedia_id` / `bsdata_id` provenance columns to `content_entity` | 🟡 local done | Folded into the step-3 migration (`0003`); same prod-apply gate |
 | 5 | Wire `validateContentIds` counts into `runSync` (live import logs match / unmatched / ambiguous every run) | ⬜ todo | Small change in `apps/data-import/server/src/lib/sync.ts` |
 | 6 | Fix `scripts/11th-ingest/build-brain-nodes.mjs` — stop `ON CONFLICT DO UPDATE` overwrite; insert append-only under the new chain semantics | ⬜ todo | Addresses the immediate code-level bug (silent overwrite of crosswalk rows) |
 | 7 | Canonical content-doc producer for **datasheets** first (`content/datasheet/{id}.json` to R2, alongside existing output) | ⬜ todo | Gate: doc count == datasheet count |
