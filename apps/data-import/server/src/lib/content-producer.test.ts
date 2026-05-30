@@ -6,7 +6,12 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 
 import {
   type DatasheetRecord,
+  type DetachmentRecord,
+  type FactionRecord,
+  produceAbilities,
   produceDatasheets,
+  produceDetachments,
+  produceFactions,
   produceWeapons,
   type WeaponRecord,
 } from './content-producer'
@@ -182,5 +187,79 @@ describe('produceWeapons', () => {
         },
       ]),
     ).rejects.toThrow()
+  })
+})
+
+describe('produceFactions / produceDetachments / produceAbilities', () => {
+  it('factions use slug(name) as canonical id; provenance is the wahapedia code', async () => {
+    const factions: FactionRecord[] = [{ id: 'AM', name: 'Astra Militarum' }]
+    const result = await produceFactions(r2 as unknown as R2Bucket, db, factions)
+    expect(result.type).toBe('faction')
+    expect(result.r2DocsWritten).toBe(1)
+    expect(result.contentEntityUpserts).toBe(1)
+    const row = (
+      await db.select().from(contentEntity).where(eq(contentEntity.id, 'astra-militarum'))
+    )[0]
+    expect(row?.type).toBe('faction')
+    expect(row?.name).toBe('Astra Militarum')
+    expect(row?.wahapediaId).toBe('AM')
+  })
+
+  it('detachments have canonical id `detachment:{factionSlug}:{slug(name)}`, parent → faction', async () => {
+    // faction must exist first
+    await produceFactions(r2 as unknown as R2Bucket, db, [{ id: 'XX', name: 'Test Faction' }])
+    const detachments: DetachmentRecord[] = [
+      { id: 'wahap-det-1', factionId: 'Test Faction', name: 'Bold Strike' },
+    ]
+    const result = await produceDetachments(r2 as unknown as R2Bucket, db, detachments)
+    expect(result.type).toBe('detachment')
+    const row = (
+      await db
+        .select()
+        .from(contentEntity)
+        .where(eq(contentEntity.id, 'detachment:test-faction:bold-strike'))
+    )[0]
+    expect(row?.parentId).toBe('test-faction')
+    expect(row?.factionId).toBe('test-faction')
+    expect(row?.wahapediaId).toBe('wahap-det-1')
+  })
+
+  it('abilities use the Phase 1.1 canonical id; factionId slugified for FK', async () => {
+    await produceFactions(r2 as unknown as R2Bucket, db, [{ id: 'SW', name: 'Stone Walkers' }])
+    const abilities = [
+      { id: 'A123', canonicalId: 'ability:A123', name: 'Oath of Iron', factionId: 'Stone Walkers' },
+    ]
+    const result = await produceAbilities(r2 as unknown as R2Bucket, db, abilities)
+    expect(result.type).toBe('ability')
+    const row = (
+      await db.select().from(contentEntity).where(eq(contentEntity.id, 'ability:A123'))
+    )[0]
+    expect(row?.type).toBe('ability')
+    expect(row?.factionId).toBe('stone-walkers')
+    expect(row?.wahapediaId).toBe('A123')
+  })
+
+  it('backfill-only: a later run that omits factionId does NOT clear an existing one', async () => {
+    // Establish a faction
+    await produceFactions(r2 as unknown as R2Bucket, db, [{ id: 'BF', name: 'Backfill Faction' }])
+    // Insert a datasheet with factionId set
+    await produceDatasheets(r2 as unknown as R2Bucket, db, [
+      {
+        id: 'bf-ds-1',
+        name: 'Some Unit',
+        factionId: 'Backfill Faction',
+        wahapediaId: 'bf-w-1',
+        bsdataId: 'bf-ds-1',
+      },
+    ])
+    let row = (await db.select().from(contentEntity).where(eq(contentEntity.id, 'bf-ds-1')))[0]
+    expect(row?.factionId).toBe('backfill-faction')
+    // Re-run without factionId — should NOT clear the existing one
+    await produceDatasheets(r2 as unknown as R2Bucket, db, [
+      { id: 'bf-ds-1', name: 'Some Unit (v2)' },
+    ])
+    row = (await db.select().from(contentEntity).where(eq(contentEntity.id, 'bf-ds-1')))[0]
+    expect(row?.factionId).toBe('backfill-faction') // preserved
+    expect(row?.name).toBe('Some Unit (v2)') // updated
   })
 })

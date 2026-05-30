@@ -19,7 +19,7 @@
 | 6 | Fix `scripts/11th-ingest/build-brain-nodes.mjs` — stop `ON CONFLICT DO UPDATE` overwrite; insert append-only under the new chain semantics | 🟡 local done | Now: insert only if no active link exists; divergent canonical logs a warning and skips (re-key needs step 10 validation). Depends on migration 0003 being applied to prod before the script can run |
 | 7 | Canonical content-doc producer for **datasheets** first (`content/datasheet/{id}.json` to R2, alongside existing output) | ⬜ todo | Gate: doc count == datasheet count |
 | 8 | Producer + `content_entity` for **weapons** (`parent_id` → datasheet) | 🟡 local done | canonical id `weapon:{datasheetId}:{slug(name)}`; produced via shared generic. Same prod-apply gate as step 3 |
-| 9 | Producer + `content_entity` for **factions / subfactions / detachments** and **ability / stratagem / enhancement** | ⬜ todo | Same pattern, batched |
+| 9 | Producer + `content_entity` for **factions / subfactions / detachments** and **ability / stratagem / enhancement** | 🟡 local done | Factions (slug-of-name canonical id), detachments (canonical `detachment:{factionSlug}:{slug(name)}`, parent → faction), abilities/stratagems/enhancements (Phase 1.1 canonical ids, factionId slugified for FK). Backfill-only COALESCE so existing FKs are never silently overwritten. **Skipped**: subfactions (no Wahapedia source — fold from `dim_subfaction` later); detachment_abilities (needs `content_entity.type` enum extension). Same prod-apply gate as step 3 |
 | 10 | Build the **validation process** — admin UI + LLM evaluator path — that gates re-keys before they become active | ⬜ todo | The thing that makes the design real |
 
 ---

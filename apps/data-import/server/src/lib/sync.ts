@@ -7,7 +7,14 @@ import type { Db } from '@tabletop-tools/db'
 import type { Manifest } from '../types'
 import {
   type DatasheetRecord,
+  type DetachmentRecord,
+  type FactionRecord,
+  produceAbilities,
   produceDatasheets,
+  produceDetachments,
+  produceEnhancements,
+  produceFactions,
+  produceStratagems,
   produceWeapons,
   type WeaponRecord,
 } from './content-producer'
@@ -128,11 +135,28 @@ export async function runSync(
         files.add(`${name}.json`)
       }
 
-      // Canonical content-doc producer (Phase 1.4 step 7+).
+      // Canonical content-doc producer (Phase 1.4 steps 7–9).
       // Always writes per-entity R2 docs; content_entity rows only when db is
       // configured. Additive — existing data/*.json output above is untouched.
-      // Order matters for FK integrity: datasheets before weapons (weapon.parent_id → datasheet).
+      // Order matters for FK integrity: factions → detachments → datasheets →
+      // weapons → abilities/stratagems/enhancements.
       try {
+        const factionRecords = (rekeyed['factions'] as FactionRecord[] | undefined) ?? []
+        if (factionRecords.length > 0) {
+          const r = await produceFactions(bucket, db, factionRecords)
+          producer[r.type] = {
+            r2DocsWritten: r.r2DocsWritten,
+            contentEntityUpserts: r.contentEntityUpserts,
+          }
+        }
+        const detachmentRecords = (rekeyed['detachments'] as DetachmentRecord[] | undefined) ?? []
+        if (detachmentRecords.length > 0) {
+          const r = await produceDetachments(bucket, db, detachmentRecords)
+          producer[r.type] = {
+            r2DocsWritten: r.r2DocsWritten,
+            contentEntityUpserts: r.contentEntityUpserts,
+          }
+        }
         const datasheetRecords = (rekeyed['datasheets'] as DatasheetRecord[] | undefined) ?? []
         if (datasheetRecords.length > 0) {
           const r = await produceDatasheets(bucket, db, datasheetRecords)
@@ -144,6 +168,31 @@ export async function runSync(
         const weaponRecords = (rekeyed['datasheet_wargear'] as WeaponRecord[] | undefined) ?? []
         if (weaponRecords.length > 0) {
           const r = await produceWeapons(bucket, db, weaponRecords)
+          producer[r.type] = {
+            r2DocsWritten: r.r2DocsWritten,
+            contentEntityUpserts: r.contentEntityUpserts,
+          }
+        }
+        type Namespaced = { id: string; canonicalId: string; name: string; factionId?: string }
+        const abilityRecords = (rekeyed['abilities'] as Namespaced[] | undefined) ?? []
+        if (abilityRecords.length > 0) {
+          const r = await produceAbilities(bucket, db, abilityRecords)
+          producer[r.type] = {
+            r2DocsWritten: r.r2DocsWritten,
+            contentEntityUpserts: r.contentEntityUpserts,
+          }
+        }
+        const stratagemRecords = (rekeyed['stratagems'] as Namespaced[] | undefined) ?? []
+        if (stratagemRecords.length > 0) {
+          const r = await produceStratagems(bucket, db, stratagemRecords)
+          producer[r.type] = {
+            r2DocsWritten: r.r2DocsWritten,
+            contentEntityUpserts: r.contentEntityUpserts,
+          }
+        }
+        const enhancementRecords = (rekeyed['enhancements'] as Namespaced[] | undefined) ?? []
+        if (enhancementRecords.length > 0) {
+          const r = await produceEnhancements(bucket, db, enhancementRecords)
           producer[r.type] = {
             r2DocsWritten: r.r2DocsWritten,
             contentEntityUpserts: r.contentEntityUpserts,

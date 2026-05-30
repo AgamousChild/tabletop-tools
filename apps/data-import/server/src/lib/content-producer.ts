@@ -8,10 +8,10 @@
  *
  * Generic core: `produceContentEntities`. Per-type thin wrappers below.
  *
- * `factionId` / `parentId` / `dataslateId` are only set on initial insert (when
- * the extractor provides them); subsequent re-runs do NOT overwrite them. This
- * lets later steps populate them once the referenced entity type exists,
- * without later runs of an earlier step clobbering the FK.
+ * `factionId` / `parentId` use **backfill-only** semantics on conflict
+ * (COALESCE keeps an existing non-null value; fills if currently null). This
+ * lets later steps populate FKs once the referenced type exists, without later
+ * runs of an earlier step clobbering a deliberately-set value.
  *
  * @see docs/superpowers/specs/2026-05-28-content-silo-bridge-design.md
  * @see docs/superpowers/plans/2026-05-29-phase-1.4-unified-etl.md
@@ -41,7 +41,9 @@ interface ProducerConfig<T> {
 
 /**
  * Generic producer: for each record, write the canonical R2 doc and (if db
- * supplied) upsert the content_entity row. Idempotent.
+ * supplied) upsert the content_entity row. Idempotent. FK fields are
+ * backfill-only on conflict (COALESCE) so an existing set value is never
+ * silently overwritten by a later pass with no value.
  */
 async function produceContentEntities<T>(
   bucket: R2Bucket,
@@ -81,7 +83,9 @@ async function produceContentEntities<T>(
             wahapediaId: sql`excluded.wahapedia_id`,
             bsdataId: sql`excluded.bsdata_id`,
             updatedAt: sql`excluded.updated_at`,
-            // factionId / parentId / dataslateId NOT updated — owned by initial-insert path
+            // Backfill-only: keep an existing FK value, fill if currently null.
+            factionId: sql`COALESCE(${contentEntity.factionId}, excluded.faction_id)`,
+            parentId: sql`COALESCE(${contentEntity.parentId}, excluded.parent_id)`,
           },
         })
       contentEntityUpserts++
@@ -101,10 +105,55 @@ const slug = (s: string): string =>
 
 // ── Per-type producers ───────────────────────────────────────────────────────
 
+export interface FactionRecord {
+  id: string // Wahapedia faction code (e.g., 'SM') — preserved as wahapediaId
+  name: string // full faction name (e.g., 'Space Marines')
+}
+
+/** Faction canonical id = slug(name), e.g. 'space-marines' (matches dim_faction convention). */
+export async function produceFactions(
+  bucket: R2Bucket,
+  db: Db | undefined,
+  factions: FactionRecord[],
+): Promise<ProducerResult> {
+  return produceContentEntities(bucket, db, {
+    type: 'faction',
+    records: factions,
+    canonicalId: (f) => slug(f.name),
+    name: (f) => f.name,
+    wahapediaId: (f) => f.id,
+  })
+}
+
+export interface DetachmentRecord {
+  id: string // Wahapedia detachment id (provenance)
+  factionId: string // rekeyed: full faction name (e.g., 'Space Marines')
+  name: string
+  legend?: string
+  type?: string
+}
+
+/** Detachment canonical id = 'detachment:{factionSlug}:{slug(name)}'. Parent = faction. */
+export async function produceDetachments(
+  bucket: R2Bucket,
+  db: Db | undefined,
+  detachments: DetachmentRecord[],
+): Promise<ProducerResult> {
+  return produceContentEntities(bucket, db, {
+    type: 'detachment',
+    records: detachments,
+    canonicalId: (d) => `detachment:${slug(d.factionId)}:${slug(d.name)}`,
+    name: (d) => d.name,
+    factionId: (d) => slug(d.factionId),
+    parentId: (d) => slug(d.factionId),
+    wahapediaId: (d) => d.id,
+  })
+}
+
 export interface DatasheetRecord {
   id: string // canonical id (BSData GUID if mapped, else Wahapedia id)
   name: string
-  factionId?: string // rekeyed full faction name — not used as FK here yet
+  factionId?: string // rekeyed full faction name — slugified for FK
   wahapediaId?: string
   bsdataId?: string
 }
@@ -119,9 +168,9 @@ export async function produceDatasheets(
     records: datasheets,
     canonicalId: (d) => d.id,
     name: (d) => d.name,
+    factionId: (d) => (d.factionId ? slug(d.factionId) : undefined),
     wahapediaId: (d) => d.wahapediaId,
     bsdataId: (d) => d.bsdataId,
-    // factionId deferred — populated when factions exist (step 9 wires the FK)
   })
 }
 
@@ -139,12 +188,6 @@ export interface WeaponRecord {
   description?: string
 }
 
-/**
- * Weapons are scoped to their parent datasheet. Canonical id is
- * `weapon:{datasheetId}:{slug(name)}`. If two rows produce the same canonical
- * id (e.g., the same weapon appearing on multiple composition lines), the
- * upsert dedupes them — last write wins for the R2 doc and content_entity.
- */
 export async function produceWeapons(
   bucket: R2Bucket,
   db: Db | undefined,
@@ -159,3 +202,43 @@ export async function produceWeapons(
     wahapediaId: (w) => w.id,
   })
 }
+
+/** Common shape for ability/stratagem/enhancement/detachment_ability records (after Phase 1.1 rekey). */
+interface NamespacedRecord {
+  id: string // Wahapedia id (provenance)
+  canonicalId: string // namespaced canonical id from Phase 1.1 (e.g., 'ability:A1')
+  name: string
+  factionId?: string // rekeyed full faction name (may be empty for core abilities)
+  wahapediaId?: string
+}
+
+function produceNamespaced(
+  type: ContentEntityType,
+  bucket: R2Bucket,
+  db: Db | undefined,
+  records: NamespacedRecord[],
+): Promise<ProducerResult> {
+  return produceContentEntities(bucket, db, {
+    type,
+    records,
+    canonicalId: (r) => r.canonicalId,
+    name: (r) => r.name,
+    factionId: (r) => (r.factionId ? slug(r.factionId) : undefined),
+    wahapediaId: (r) => r.wahapediaId ?? r.id,
+  })
+}
+
+export const produceAbilities = (bucket: R2Bucket, db: Db | undefined, rs: NamespacedRecord[]) =>
+  produceNamespaced('ability', bucket, db, rs)
+
+export const produceStratagems = (bucket: R2Bucket, db: Db | undefined, rs: NamespacedRecord[]) =>
+  produceNamespaced('stratagem', bucket, db, rs)
+
+export const produceEnhancements = (bucket: R2Bucket, db: Db | undefined, rs: NamespacedRecord[]) =>
+  produceNamespaced('enhancement', bucket, db, rs)
+
+// NOTE: detachment_abilities are NOT produced here. They exist in the Phase 1.1
+// canonical id scheme (`detachment_ability:{id}`), but the content_entity.type
+// enum does not currently include 'detachment_ability'. Either extend the enum
+// (schema migration) or fold them under 'ability' with parent_id → detachment
+// in a follow-up step.
