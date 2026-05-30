@@ -5,7 +5,12 @@
 import type { Db } from '@tabletop-tools/db'
 
 import type { Manifest } from '../types'
-import { type DatasheetRecord, produceDatasheets } from './content-producer'
+import {
+  type DatasheetRecord,
+  produceDatasheets,
+  produceWeapons,
+  type WeaponRecord,
+} from './content-producer'
 import { buildIdMapping, rekeyAllWahapediaFiles } from './id-mapping'
 import { fetchAndProcessBSData } from './sources/bsdata'
 import { fetchAndProcessMissions } from './sources/missions'
@@ -126,13 +131,22 @@ export async function runSync(
       // Canonical content-doc producer (Phase 1.4 step 7+).
       // Always writes per-entity R2 docs; content_entity rows only when db is
       // configured. Additive — existing data/*.json output above is untouched.
+      // Order matters for FK integrity: datasheets before weapons (weapon.parent_id → datasheet).
       try {
         const datasheetRecords = (rekeyed['datasheets'] as DatasheetRecord[] | undefined) ?? []
         if (datasheetRecords.length > 0) {
-          const result = await produceDatasheets(bucket, db, datasheetRecords)
-          producer[result.type] = {
-            r2DocsWritten: result.r2DocsWritten,
-            contentEntityUpserts: result.contentEntityUpserts,
+          const r = await produceDatasheets(bucket, db, datasheetRecords)
+          producer[r.type] = {
+            r2DocsWritten: r.r2DocsWritten,
+            contentEntityUpserts: r.contentEntityUpserts,
+          }
+        }
+        const weaponRecords = (rekeyed['datasheet_wargear'] as WeaponRecord[] | undefined) ?? []
+        if (weaponRecords.length > 0) {
+          const r = await produceWeapons(bucket, db, weaponRecords)
+          producer[r.type] = {
+            r2DocsWritten: r.r2DocsWritten,
+            contentEntityUpserts: r.contentEntityUpserts,
           }
         }
       } catch (err) {

@@ -4,7 +4,12 @@ import { eq } from 'drizzle-orm'
 import { drizzle } from 'drizzle-orm/libsql'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 
-import { type DatasheetRecord, produceDatasheets } from './content-producer'
+import {
+  type DatasheetRecord,
+  produceDatasheets,
+  produceWeapons,
+  type WeaponRecord,
+} from './content-producer'
 
 const client = createClient({ url: ':memory:' })
 const db = drizzle(client)
@@ -101,5 +106,81 @@ describe('produceDatasheets', () => {
     expect(result.contentEntityUpserts).toBe(0)
     const store = (r2b as unknown as { store: Map<string, string> }).store
     expect(store.get('content/datasheet/x1.json')).toContain('No-DB Test')
+  })
+})
+
+describe('produceWeapons', () => {
+  it('writes a canonical R2 doc per weapon and upserts content_entity rows with parent → datasheet', async () => {
+    // Parent datasheet must exist first for the FK to satisfy
+    await produceDatasheets(r2 as unknown as R2Bucket, db, [
+      {
+        id: 'ds-weap-parent',
+        name: 'Captain',
+        wahapediaId: 'wahap-cap',
+        bsdataId: 'ds-weap-parent',
+      },
+    ])
+
+    const weapons: WeaponRecord[] = [
+      {
+        id: 'ds-weap-parent-1-0', // positional id from datasheet_wargear (provenance)
+        datasheetId: 'ds-weap-parent',
+        name: 'Bolt Pistol',
+        range: '12"',
+        type: 'Pistol 1',
+        attacks: '1',
+        skill: '3+',
+        strength: '4',
+        ap: '0',
+        damage: '1',
+      },
+      {
+        id: 'ds-weap-parent-1-1',
+        datasheetId: 'ds-weap-parent',
+        name: 'Power Sword',
+        range: 'Melee',
+        type: 'Melee',
+        attacks: '4',
+        skill: '3+',
+        strength: '5',
+        ap: '-2',
+        damage: '1',
+      },
+    ]
+    const result = await produceWeapons(r2 as unknown as R2Bucket, db, weapons)
+    expect(result.type).toBe('weapon')
+    expect(result.r2DocsWritten).toBe(2)
+    expect(result.contentEntityUpserts).toBe(2)
+
+    // canonical id: weapon:{datasheetId}:{slug(name)}
+    const store = (r2 as unknown as { store: Map<string, string> }).store
+    expect(store.get('content/weapon/weapon:ds-weap-parent:bolt-pistol.json')).toContain(
+      'Bolt Pistol',
+    )
+    expect(store.get('content/weapon/weapon:ds-weap-parent:power-sword.json')).toContain(
+      'Power Sword',
+    )
+
+    // content_entity row exists with parent → datasheet
+    const bolt = await db
+      .select()
+      .from(contentEntity)
+      .where(eq(contentEntity.id, 'weapon:ds-weap-parent:bolt-pistol'))
+    expect(bolt[0]?.type).toBe('weapon')
+    expect(bolt[0]?.parentId).toBe('ds-weap-parent')
+    expect(bolt[0]?.wahapediaId).toBe('ds-weap-parent-1-0') // provenance preserved
+    expect(bolt[0]?.name).toBe('Bolt Pistol')
+  })
+
+  it('rejects a weapon whose parent datasheet does not exist (FK)', async () => {
+    await expect(
+      produceWeapons(r2 as unknown as R2Bucket, db, [
+        {
+          id: 'orphan-weap',
+          datasheetId: 'no-such-datasheet',
+          name: 'Ghost Cannon',
+        },
+      ]),
+    ).rejects.toThrow()
   })
 })

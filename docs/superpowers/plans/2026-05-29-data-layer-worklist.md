@@ -18,7 +18,7 @@
 | 5 | Wire `validateContentIds` counts into `runSync` (live import logs match / unmatched / ambiguous every run) | ⬜ todo | Small change in `apps/data-import/server/src/lib/sync.ts` |
 | 6 | Fix `scripts/11th-ingest/build-brain-nodes.mjs` — stop `ON CONFLICT DO UPDATE` overwrite; insert append-only under the new chain semantics | 🟡 local done | Now: insert only if no active link exists; divergent canonical logs a warning and skips (re-key needs step 10 validation). Depends on migration 0003 being applied to prod before the script can run |
 | 7 | Canonical content-doc producer for **datasheets** first (`content/datasheet/{id}.json` to R2, alongside existing output) | ⬜ todo | Gate: doc count == datasheet count |
-| 8 | Producer + `content_entity` for **weapons** (`parent_id` → datasheet) | ⬜ todo | |
+| 8 | Producer + `content_entity` for **weapons** (`parent_id` → datasheet) | 🟡 local done | canonical id `weapon:{datasheetId}:{slug(name)}`; produced via shared generic. Same prod-apply gate as step 3 |
 | 9 | Producer + `content_entity` for **factions / subfactions / detachments** and **ability / stratagem / enhancement** | ⬜ todo | Same pattern, batched |
 | 10 | Build the **validation process** — admin UI + LLM evaluator path — that gates re-keys before they become active | ⬜ todo | The thing that makes the design real |
 
