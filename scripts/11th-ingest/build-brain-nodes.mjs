@@ -78,13 +78,36 @@ if (process.argv[1] && process.argv[1].replace(/\\/g, '/').endsWith('scripts/11t
   const { nodes, links } = buildNodes(JSON.parse(readFileSync(refPath, 'utf8')), JSON.parse(readFileSync(abilPath, 'utf8')))
   mkdirSync(outDir, { recursive: true })
   for (const n of nodes) writeFileSync(`${outDir}/${n.id}.json`, JSON.stringify(n, null, 2))
+  let stats = { inserted: 0, skippedSame: 0, skippedDifferent: 0 }
   if (!dry) {
     const env = Object.fromEntries(readFileSync(new URL('../../.env', import.meta.url), 'utf8').split('\n').filter((l) => l.includes('=')).map((l) => { const i = l.indexOf('='); return [l.slice(0, i).trim(), l.slice(i + 1).trim()] }))
     const db = createClient({ url: env.TURSO_DB_URL, authToken: env.TURSO_AUTH_TOKEN })
+    const now = Math.floor(Date.now() / 1000)
     for (const l of links) {
-      await db.execute({ sql: `INSERT INTO content_node_link (brain_node_id,canonical_id,match_method,confidence) VALUES (?,?,?,?) ON CONFLICT(brain_node_id) DO UPDATE SET canonical_id=excluded.canonical_id`, args: [l.brain_node_id, l.canonical_id, 'manual', 1] })
+      // Append-only crosswalk: only insert a chain head if no active link exists for this brain_node.
+      // A divergent canonical is a re-key — those go through the validation process (worklist step 10),
+      // not this script. We surface the drift instead of silently overwriting.
+      const existing = await db.execute({
+        sql: `SELECT canonical_id FROM content_node_link WHERE brain_node_id = ? AND superseded_at IS NULL LIMIT 1`,
+        args: [l.brain_node_id],
+      })
+      if (existing.rows.length > 0) {
+        if (existing.rows[0].canonical_id === l.canonical_id) {
+          stats.skippedSame++
+        } else {
+          stats.skippedDifferent++
+          console.warn(`[11th-ingest] active link exists for ${l.brain_node_id} → ${existing.rows[0].canonical_id}; new candidate is ${l.canonical_id}; skipping (re-key needs validation — worklist step 10)`)
+        }
+        continue
+      }
+      const linkId = `11th:${l.brain_node_id}`
+      await db.execute({
+        sql: `INSERT INTO content_node_link (link_id, brain_node_id, canonical_id, match_method, confidence, prior_link_id, validation_method, validated_by, validated_at, superseded_at) VALUES (?, ?, ?, ?, ?, NULL, 'auto-initial', '11th-ingest', ?, NULL) ON CONFLICT(link_id) DO NOTHING`,
+        args: [linkId, l.brain_node_id, l.canonical_id, 'manual', 1, now],
+      })
+      stats.inserted++
     }
   }
-  console.log(`nodes=${nodes.length} written to ${outDir}; content_node_link=${links.length}${dry ? ' [dry]' : ' (in DB)'}`)
+  console.log(`nodes=${nodes.length} written to ${outDir}; content_node_link candidates=${links.length}${dry ? ' [dry]' : ` (inserted=${stats.inserted} skipped-same=${stats.skippedSame} skipped-different=${stats.skippedDifferent})`}`)
   console.log('HELD: R2 node upload + Vectorize re-index — awaiting go.')
 }
