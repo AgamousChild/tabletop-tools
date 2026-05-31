@@ -9,10 +9,22 @@ import {
 import { TRPCError } from '@trpc/server'
 import { initTRPC } from '@trpc/server'
 
+/**
+ * Minimal Workers AI binding shape. Avoids pulling cloudflare worker types
+ * into a package that's consumed by Node tests; `run` is all we exercise.
+ */
+export interface AiBinding {
+  run(
+    model: string,
+    options: { messages: Array<{ role: string; content: string }>; max_tokens?: number },
+  ): Promise<{ response: string }>
+}
+
 export type Context = BaseContext & {
   adminEmails: string[]
   bcpScraper?: { fetch(request: Request): Promise<Response> }
   contentIngestor?: { fetch(request: Request): Promise<Response> }
+  ai?: AiBinding
 }
 
 const t = initTRPC.context<Context>().create()

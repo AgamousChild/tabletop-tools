@@ -19,6 +19,7 @@ import { TRPCError } from '@trpc/server'
 import { and, desc, eq, gt, inArray, sql } from 'drizzle-orm'
 import { z } from 'zod'
 
+import { evaluateCandidate, type LlmEvalInput } from '../lib/llm-evaluator.js'
 import { adminProcedure, router } from '../trpc.js'
 
 const statusEnum = z.enum(['pending', 'approved', 'rejected', 'llm_unsure', 'overridden'])
@@ -56,6 +57,13 @@ const bulkInput = z.object({
   confirm: z.literal(true), // explicit confirmation flag for bulk ops
   note: z.string().optional(),
 })
+
+const runLlmEvaluatorInput = z
+  .object({
+    batchSize: z.number().int().min(1).max(200).default(50),
+    model: z.string().optional(),
+  })
+  .optional()
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -420,6 +428,185 @@ export const crosswalkRouter = router({
       }
       return { rejected, errors }
     }),
+  }),
+
+  /**
+   * Run the LLM evaluator on a batch of pending candidates. APPROVE → applies
+   * the transactional approve path. REJECT → marks candidate rejected.
+   * UNSURE → marks candidate llm_unsure (removed from pending pool to prevent
+   * re-eval loops, per DEF-009). Only `status='pending'` rows are evaluated.
+   */
+  runLlmEvaluator: adminProcedure.input(runLlmEvaluatorInput).mutation(async ({ ctx, input }) => {
+    if (!ctx.ai) {
+      throw new TRPCError({
+        code: 'PRECONDITION_FAILED',
+        message: 'Workers AI binding not configured on this Worker',
+      })
+    }
+    const batchSize = input?.batchSize ?? 50
+    const model = input?.model
+
+    const pending = await ctx.db
+      .select()
+      .from(contentNodeLinkCandidate)
+      .where(eq(contentNodeLinkCandidate.status, 'pending'))
+      .orderBy(contentNodeLinkCandidate.proposedAt)
+      .limit(batchSize)
+
+    let approvedByLlm = 0
+    let rejectedByLlm = 0
+    let llmUnsureCount = 0
+    const errors: Array<{ candidateId: string; error: string }> = []
+    const modelLabel = model ?? 'llm'
+
+    for (const candidate of pending) {
+      try {
+        const proposedEntity = (
+          await ctx.db
+            .select()
+            .from(contentEntity)
+            .where(eq(contentEntity.id, candidate.proposedCanonicalId))
+            .limit(1)
+        )[0]
+        if (!proposedEntity) {
+          errors.push({ candidateId: candidate.candidateId, error: 'proposed entity missing' })
+          continue
+        }
+        const currentLink = (
+          await ctx.db
+            .select()
+            .from(contentNodeLink)
+            .where(eq(contentNodeLink.brainNodeId, candidate.brainNodeId))
+            .limit(1)
+        )[0]
+        const currentEntity = currentLink
+          ? (
+              await ctx.db
+                .select()
+                .from(contentEntity)
+                .where(eq(contentEntity.id, currentLink.canonicalId))
+                .limit(1)
+            )[0]
+          : null
+
+        const evalInput: LlmEvalInput = {
+          brainNode: { id: candidate.brainNodeId },
+          candidate: {
+            proposedCanonicalId: candidate.proposedCanonicalId,
+            matchMethod: candidate.matchMethod,
+            confidence: candidate.confidence,
+            source: candidate.source,
+          },
+          currentEntity: currentEntity
+            ? {
+                id: currentEntity.id,
+                type: currentEntity.type,
+                name: currentEntity.name,
+                factionId: currentEntity.factionId,
+              }
+            : null,
+          proposedEntity: {
+            id: proposedEntity.id,
+            type: proposedEntity.type,
+            name: proposedEntity.name,
+            factionId: proposedEntity.factionId,
+          },
+        }
+
+        const result = await evaluateCandidate(ctx.ai, evalInput, model)
+        const now = new Date()
+
+        if (result.decision === 'APPROVE') {
+          await ctx.db.transaction(async (tx) => {
+            const historyId = newUuid()
+            if (currentLink) {
+              await tx
+                .update(contentNodeLink)
+                .set({
+                  canonicalId: candidate.proposedCanonicalId,
+                  matchMethod: candidate.matchMethod,
+                  confidence: candidate.confidence,
+                  validationMethod: 'llm',
+                  validatedBy: `llm:${modelLabel}`,
+                  validatedAt: now,
+                })
+                .where(eq(contentNodeLink.brainNodeId, candidate.brainNodeId))
+            } else {
+              await tx.insert(contentNodeLink).values({
+                brainNodeId: candidate.brainNodeId,
+                canonicalId: candidate.proposedCanonicalId,
+                matchMethod: candidate.matchMethod,
+                confidence: candidate.confidence,
+                validationMethod: 'llm',
+                validatedBy: `llm:${modelLabel}`,
+                validatedAt: now,
+              })
+            }
+            await tx.insert(contentNodeLinkHistory).values({
+              historyId,
+              brainNodeId: candidate.brainNodeId,
+              priorCanonicalId: currentLink?.canonicalId ?? null,
+              newCanonicalId: candidate.proposedCanonicalId,
+              changedAt: now,
+              changedBy: `llm:${modelLabel}`,
+              changeMethod: 'llm',
+              changeReason: result.reason,
+              candidateId: candidate.candidateId,
+            })
+            await tx
+              .update(contentNodeLinkCandidate)
+              .set({
+                status: 'approved',
+                decisionMethod: 'llm',
+                decidedBy: `llm:${modelLabel}`,
+                decidedAt: now,
+                decisionReason: result.reason,
+                resultingHistoryId: historyId,
+                llmAttemptCount: candidate.llmAttemptCount + 1,
+                llmLastAttemptedAt: now,
+              })
+              .where(eq(contentNodeLinkCandidate.candidateId, candidate.candidateId))
+          })
+          approvedByLlm++
+        } else if (result.decision === 'REJECT') {
+          await ctx.db
+            .update(contentNodeLinkCandidate)
+            .set({
+              status: 'rejected',
+              decisionMethod: 'llm',
+              decidedBy: `llm:${modelLabel}`,
+              decidedAt: now,
+              decisionReason: result.reason,
+              llmAttemptCount: candidate.llmAttemptCount + 1,
+              llmLastAttemptedAt: now,
+            })
+            .where(eq(contentNodeLinkCandidate.candidateId, candidate.candidateId))
+          rejectedByLlm++
+        } else {
+          // UNSURE — remove from pending pool
+          await ctx.db
+            .update(contentNodeLinkCandidate)
+            .set({
+              status: 'llm_unsure',
+              decisionMethod: 'llm',
+              decidedBy: `llm:${modelLabel}`,
+              decidedAt: now,
+              decisionReason: result.reason,
+              llmAttemptCount: candidate.llmAttemptCount + 1,
+              llmLastAttemptedAt: now,
+            })
+            .where(eq(contentNodeLinkCandidate.candidateId, candidate.candidateId))
+          llmUnsureCount++
+        }
+      } catch (err) {
+        errors.push({
+          candidateId: candidate.candidateId,
+          error: err instanceof Error ? err.message : String(err),
+        })
+      }
+    }
+
+    return { approvedByLlm, rejectedByLlm, llmUnsureCount, errors }
   }),
 
   stats: adminProcedure.query(async ({ ctx }) => {

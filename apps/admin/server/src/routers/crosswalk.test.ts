@@ -502,6 +502,166 @@ describe('crosswalk router — bulk operations', () => {
   })
 })
 
+describe('crosswalk router — runLlmEvaluator', () => {
+  function ctxWithAi(response: string) {
+    return {
+      ...adminCtx,
+      ai: {
+        async run(_model: string, _opts: { messages: Array<{ role: string; content: string }> }) {
+          return { response }
+        },
+      },
+    }
+  }
+
+  it('PRECONDITION_FAILED when AI binding is not configured', async () => {
+    const caller = createCaller(adminCtx)
+    await expect(caller.crosswalk.runLlmEvaluator()).rejects.toThrow(/Workers AI/)
+  })
+
+  it('APPROVE applies the transactional approve path', async () => {
+    await seedEntities()
+    await db.insert(contentNodeLink).values({
+      brainNodeId: 'n-llm-app',
+      canonicalId: 'ds-a',
+      matchMethod: 'datasheet_id',
+      validationMethod: 'auto-initial',
+      validatedBy: '11th-ingest',
+      validatedAt: new Date(),
+    })
+    await db.insert(contentNodeLinkCandidate).values({
+      candidateId: 'cnd-llm-app',
+      brainNodeId: 'n-llm-app',
+      proposedCanonicalId: 'ds-b',
+      matchMethod: 'name_faction',
+      confidence: 0.95,
+      priorCanonicalId: 'ds-a',
+      source: 'sync:wahapedia',
+      runId: 'r1',
+      proposedAt: new Date(),
+    })
+
+    const caller = createCaller(ctxWithAi('APPROVE - high confidence match'))
+    const res = await caller.crosswalk.runLlmEvaluator({ batchSize: 10 })
+    expect(res.approvedByLlm).toBe(1)
+    expect(res.rejectedByLlm).toBe(0)
+    expect(res.llmUnsureCount).toBe(0)
+
+    const link = (
+      await db.select().from(contentNodeLink).where(eq(contentNodeLink.brainNodeId, 'n-llm-app'))
+    )[0]
+    expect(link?.canonicalId).toBe('ds-b')
+    expect(link?.validationMethod).toBe('llm')
+
+    const history = await db
+      .select()
+      .from(contentNodeLinkHistory)
+      .where(eq(contentNodeLinkHistory.brainNodeId, 'n-llm-app'))
+    expect(history).toHaveLength(1)
+    expect(history[0]?.changeMethod).toBe('llm')
+
+    const cand = (
+      await db
+        .select()
+        .from(contentNodeLinkCandidate)
+        .where(eq(contentNodeLinkCandidate.candidateId, 'cnd-llm-app'))
+    )[0]
+    expect(cand?.status).toBe('approved')
+    expect(cand?.llmAttemptCount).toBe(1)
+  })
+
+  it('REJECT marks candidate rejected with llm method', async () => {
+    await seedEntities()
+    await db.insert(contentNodeLinkCandidate).values({
+      candidateId: 'cnd-llm-rej',
+      brainNodeId: 'n-llm-rej',
+      proposedCanonicalId: 'ds-a',
+      matchMethod: 'name_faction',
+      source: 'sync:wahapedia',
+      runId: 'r1',
+      proposedAt: new Date(),
+    })
+
+    const caller = createCaller(ctxWithAi('REJECT - types differ'))
+    const res = await caller.crosswalk.runLlmEvaluator({ batchSize: 10 })
+    expect(res.rejectedByLlm).toBe(1)
+
+    const cand = (
+      await db
+        .select()
+        .from(contentNodeLinkCandidate)
+        .where(eq(contentNodeLinkCandidate.candidateId, 'cnd-llm-rej'))
+    )[0]
+    expect(cand?.status).toBe('rejected')
+    expect(cand?.decisionMethod).toBe('llm')
+  })
+
+  it('UNSURE removes candidate from pending pool (status=llm_unsure)', async () => {
+    await seedEntities()
+    await db.insert(contentNodeLinkCandidate).values({
+      candidateId: 'cnd-llm-unsure',
+      brainNodeId: 'n-llm-unsure',
+      proposedCanonicalId: 'ds-a',
+      matchMethod: 'name_faction',
+      source: 'sync:wahapedia',
+      runId: 'r1',
+      proposedAt: new Date(),
+    })
+
+    const caller = createCaller(ctxWithAi('UNSURE - ambiguous match'))
+    const res = await caller.crosswalk.runLlmEvaluator({ batchSize: 10 })
+    expect(res.llmUnsureCount).toBe(1)
+
+    const cand = (
+      await db
+        .select()
+        .from(contentNodeLinkCandidate)
+        .where(eq(contentNodeLinkCandidate.candidateId, 'cnd-llm-unsure'))
+    )[0]
+    expect(cand?.status).toBe('llm_unsure')
+    expect(cand?.llmAttemptCount).toBe(1)
+  })
+
+  it('only evaluates pending candidates (skips already-decided)', async () => {
+    await seedEntities()
+    const now = new Date()
+    await db.insert(contentNodeLinkCandidate).values([
+      {
+        candidateId: 'cnd-skip-a',
+        brainNodeId: 'n-skip-a',
+        proposedCanonicalId: 'ds-a',
+        matchMethod: 'manual',
+        source: 'sync:wahapedia',
+        runId: 'r1',
+        proposedAt: now,
+        status: 'approved',
+        decisionMethod: 'admin',
+        decidedBy: 'admin@test.com',
+        decidedAt: now,
+      },
+      {
+        candidateId: 'cnd-skip-b',
+        brainNodeId: 'n-skip-b',
+        proposedCanonicalId: 'ds-b',
+        matchMethod: 'manual',
+        source: 'sync:wahapedia',
+        runId: 'r1',
+        proposedAt: now,
+        status: 'llm_unsure',
+        decisionMethod: 'llm',
+        decidedBy: 'llm:test',
+        decidedAt: now,
+      },
+    ])
+
+    const caller = createCaller(ctxWithAi('APPROVE - ok'))
+    const res = await caller.crosswalk.runLlmEvaluator({ batchSize: 10 })
+    expect(res.approvedByLlm).toBe(0)
+    expect(res.rejectedByLlm).toBe(0)
+    expect(res.llmUnsureCount).toBe(0)
+  })
+})
+
 describe('crosswalk router — stats', () => {
   it('returns zero counts on empty DB', async () => {
     const caller = createCaller(adminCtx)
