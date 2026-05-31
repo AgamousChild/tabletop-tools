@@ -23,7 +23,7 @@ import {
   type SubfactionRecord,
   type WeaponRecord,
 } from './content-producer'
-import { buildIdMapping, rekeyAllWahapediaFiles } from './id-mapping'
+import { buildIdMapping, rekeyAllWahapediaFiles, validateContentIds } from './id-mapping'
 import { fetchAndProcessBSData } from './sources/bsdata'
 import { fetchAndProcessMissions } from './sources/missions'
 import { fetchAndProcessWahapedia } from './sources/wahapedia'
@@ -35,6 +35,16 @@ export interface SyncResult {
   skipped: string[]
   /** Canonical content production counts (per type). Empty when no producer ran. */
   producer?: Record<string, { r2DocsWritten: number; contentEntityUpserts: number }>
+  /**
+   * Phase 1.1 reference-resolution validation against the rekeyed import.
+   * matched / unmatched / ambiguous so a regression in key consistency
+   * surfaces as a flagged number on every live import. (Worklist step 5.)
+   */
+  contentIdValidation?: {
+    matched: number
+    unmatched: number
+    byType: Record<string, { matched: number; unmatched: number }>
+  }
 }
 
 async function readManifest(bucket: R2Bucket): Promise<Manifest | null> {
@@ -60,6 +70,7 @@ export async function runSync(
   const errors: string[] = []
   const skipped: string[] = []
   const producer: SyncResult['producer'] = {}
+  let contentIdValidation: SyncResult['contentIdValidation']
   const existing = await readManifest(bucket)
   const files = new Set<string>(existing?.files ?? [])
 
@@ -154,6 +165,21 @@ export async function runSync(
 
       const { map: idMap, factionCodeToName } = buildIdMapping(datasheets, factions, bsdataUnits)
       const rekeyed = rekeyAllWahapediaFiles(wahapediaData, idMap, factionCodeToName)
+
+      // Worklist step 5: validate that every junction reference in the rekeyed
+      // data resolves to a known content entity. Counts (matched / unmatched /
+      // by type) are surfaced in the SyncResult so a key-consistency regression
+      // shows up as a number on every live import instead of going silent.
+      contentIdValidation = validateContentIds(rekeyed)
+      console.log(
+        `[validate] content-id refs: matched=${contentIdValidation.matched} unmatched=${contentIdValidation.unmatched}`,
+      )
+      if (contentIdValidation.unmatched > 0) {
+        for (const [type, c] of Object.entries(contentIdValidation.byType)) {
+          if (c.unmatched > 0)
+            console.warn(`[validate]   ${type}: ${c.unmatched} unresolved references`)
+        }
+      }
 
       for (const [name, records] of Object.entries(rekeyed)) {
         await writeDataFile(bucket, `${name}.json`, records)
@@ -294,5 +320,6 @@ export async function runSync(
     errors,
     skipped,
     ...(Object.keys(producer).length > 0 ? { producer } : {}),
+    ...(contentIdValidation ? { contentIdValidation } : {}),
   }
 }
