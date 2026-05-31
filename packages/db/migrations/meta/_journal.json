@@ -29,6 +29,20 @@
       "when": 1780124185790,
       "tag": "0003_unique_franklin_richards",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "6",
+      "when": 1780189303887,
+      "tag": "0004_easy_talos",
+      "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "6",
+      "when": 1780232400000,
+      "tag": "0005_crosswalk_update_in_place",
+      "breakpoints": true
     }
   ]
 }

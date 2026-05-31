@@ -3,6 +3,7 @@
  * @see docs/schema-overview.md — Cross-database overview
  * @see docs/etl-app-workers.md — Which Workers read/write which tables
  */
+import { sql } from 'drizzle-orm'
 import {
   type AnySQLiteColumn,
   index,
@@ -1146,38 +1147,103 @@ export const contentEntity = sqliteTable(
   ],
 )
 
-// Brain crosswalk — bridges a brain Node id to its canonical content_entity.
-// Append-only, validation-gated, stable + incremental. Brain node ids never
-// change. A link is never silently overwritten — re-keys are new rows that
-// reference the prior link (`prior_link_id`) and only become active after a
-// validation step (admin in a UI or LLM evaluator). The "active" link for a
-// brain_node_id is the row with superseded_at IS NULL.
+// Brain crosswalk — current canonical link for each brain node.
+// One row per brain_node_id (PK). Re-keys are UPDATE-in-place + an INSERT into
+// content_node_link_history. Validation gates re-keys (admin or LLM via the
+// candidate queue); first-time links auto-insert. No chain rows, no transient
+// active-window — the audit trail lives in content_node_link_history.
 // See docs/superpowers/specs/2026-05-28-content-silo-bridge-design.md §5.1
-export const contentNodeLink = sqliteTable(
-  'content_node_link',
+export const contentNodeLink = sqliteTable('content_node_link', {
+  brainNodeId: text('brain_node_id').primaryKey(), // the brain Node id, UNCHANGED — one row per
+  canonicalId: text('canonical_id')
+    .notNull()
+    .references(() => contentEntity.id, { onDelete: 'cascade' }),
+  matchMethod: text('match_method', {
+    enum: ['datasheet_id', 'name_faction', 'manual', 'llm'],
+  }).notNull(),
+  confidence: real('confidence').notNull().default(1),
+  validationMethod: text('validation_method', {
+    enum: ['admin', 'llm', 'auto-initial'],
+  }).notNull(),
+  validatedBy: text('validated_by').notNull(),
+  validatedAt: integer('validated_at', { mode: 'timestamp' }).notNull(),
+})
+
+// Append-only audit log of every change to a content_node_link row.
+// Records prior_canonical_id + new_canonical_id (text, no FK — preserved even
+// if the referenced entity is later deleted, for audit retention). One row
+// per CHANGE; first-time inserts also get a history row with prior_canonical_id
+// IS NULL.
+export const contentNodeLinkHistory = sqliteTable(
+  'content_node_link_history',
   {
-    linkId: text('link_id').primaryKey(), // synthetic; many rows per brain_node_id (history chain)
-    brainNodeId: text('brain_node_id').notNull(), // the brain Node id, UNCHANGED
-    canonicalId: text('canonical_id')
+    historyId: text('history_id').primaryKey(), // synthetic UUID
+    brainNodeId: text('brain_node_id').notNull(),
+    priorCanonicalId: text('prior_canonical_id'), // null for first-time link; informational text (no FK)
+    newCanonicalId: text('new_canonical_id').notNull(), // informational text (no FK so it survives entity deletion)
+    changedAt: integer('changed_at', { mode: 'timestamp' }).notNull(),
+    changedBy: text('changed_by').notNull(), // user id, 'llm:<model>', source string, or 'migration'
+    changeMethod: text('change_method', {
+      enum: ['admin', 'llm', 'auto-initial', 'migration'],
+    }).notNull(),
+    changeReason: text('change_reason'), // nullable; LLM reasoning or admin note
+    candidateId: text('candidate_id'), // informational text — links back to a candidate when applicable
+  },
+  (table) => [
+    index('idx_content_node_link_history_brain_node').on(table.brainNodeId),
+    index('idx_content_node_link_history_changed_at').on(table.changedAt),
+  ],
+)
+
+// Crosswalk validation queue (Phase 1.4 step 10).
+// Pending re-key candidates live here until an admin (or LLM evaluator) decides
+// approve / reject / llm_unsure / overridden. First-time links bypass this and
+// auto-insert directly into content_node_link with validation_method='auto-initial'.
+// See docs/superpowers/plans/2026-05-30-step-10-validation-process.md
+export const contentNodeLinkCandidate = sqliteTable(
+  'content_node_link_candidate',
+  {
+    candidateId: text('candidate_id').primaryKey(),
+    brainNodeId: text('brain_node_id').notNull(),
+    proposedCanonicalId: text('proposed_canonical_id')
       .notNull()
       .references(() => contentEntity.id, { onDelete: 'cascade' }),
     matchMethod: text('match_method', {
       enum: ['datasheet_id', 'name_faction', 'manual', 'llm'],
-    }).notNull(), // how the candidate was generated
+    }).notNull(),
     confidence: real('confidence').notNull().default(1),
-    priorLinkId: text('prior_link_id').references((): AnySQLiteColumn => contentNodeLink.linkId), // self-ref; null = chain head
-    validationMethod: text('validation_method', {
-      enum: ['admin', 'llm', 'auto-initial'],
-    }).notNull(), // how this row was validated; 'auto-initial' = inherited from pre-validation history (migration or first-time match)
-    validatedBy: text('validated_by').notNull(), // user id, 'llm:<model>', or 'migration'
-    validatedAt: integer('validated_at', { mode: 'timestamp' }).notNull(),
-    supersededAt: integer('superseded_at', { mode: 'timestamp' }), // null = currently active
+    // Snapshot of the canonical_id the brain_node pointed at when the candidate
+    // was proposed. Informational (no FK) so audit retention survives entity deletion.
+    priorCanonicalId: text('prior_canonical_id'),
+    source: text('source').notNull(),
+    runId: text('run_id').notNull(),
+    proposedAt: integer('proposed_at', { mode: 'timestamp' }).notNull(),
+    status: text('status', {
+      enum: ['pending', 'approved', 'rejected', 'llm_unsure', 'overridden'],
+    })
+      .notNull()
+      .default('pending'),
+    decisionMethod: text('decision_method', { enum: ['admin', 'llm'] }),
+    decidedBy: text('decided_by'),
+    decidedAt: integer('decided_at', { mode: 'timestamp' }),
+    decisionReason: text('decision_reason'),
+    // When approved, the history row id written for this change. Informational
+    // (no FK — links via text id, audit retention).
+    resultingHistoryId: text('resulting_history_id'),
+    llmAttemptCount: integer('llm_attempt_count').notNull().default(0),
+    llmLastAttemptedAt: integer('llm_last_attempted_at', { mode: 'timestamp' }),
   },
   (table) => [
-    index('idx_content_node_link_canonical').on(table.canonicalId),
-    index('idx_content_node_link_brain_node').on(table.brainNodeId),
-    index('idx_content_node_link_prior').on(table.priorLinkId),
-    index('idx_content_node_link_active').on(table.brainNodeId, table.supersededAt), // finding the active link per brain_node_id
+    index('idx_candidate_brain_node').on(table.brainNodeId),
+    index('idx_candidate_status').on(table.status),
+    index('idx_candidate_proposed_at').on(table.proposedAt),
+    index('idx_candidate_source').on(table.source),
+    // Partial unique: at most one PENDING candidate per (brain_node, proposed) pair.
+    // Rejected / approved / llm_unsure / overridden rows do NOT participate, so
+    // history grows naturally. Prevents re-runs from duplicate-queueing.
+    uniqueIndex('uq_candidate_pending')
+      .on(table.brainNodeId, table.proposedCanonicalId)
+      .where(sql`${table.status} = 'pending'`),
   ],
 )
 

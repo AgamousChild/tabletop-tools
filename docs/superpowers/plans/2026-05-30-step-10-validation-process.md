@@ -1,8 +1,8 @@
 # Step 10 — Crosswalk Validation Process (UI + backend + LLM)
 
-> **Revision 2 (2026-05-30)** — addresses every issue raised by the antagonistic review of revision 1. Specific fixes are called out inline as `[v2]` notes. Revision log at the bottom.
+> **Revision 3 (2026-05-30)** — replaces the append-only **chain** model from v1/v2 with **UPDATE-in-place + append-only audit log**. Same audit semantics; eliminates the partial-unique transient-active-window and the write-order requirement. Drives a smaller schema and simpler approve mutation. `[v3]` markers below.
 >
-> Spec: `2026-05-28-content-silo-bridge-design.md` §5.1 (append-only, validation-gated crosswalk). Worklist: `2026-05-29-data-layer-worklist.md` step 10.
+> Spec: `2026-05-28-content-silo-bridge-design.md` §5.1 (append-only audit, validation-gated re-keys). Worklist: `2026-05-29-data-layer-worklist.md` step 10.
 
 ---
 
@@ -61,9 +61,46 @@ Status transitions: `pending → approved | rejected | llm_unsure | overridden`.
 
 ---
 
-## Data shape — the candidate queue
+## Data shape — three tables
 
-A new table `content_node_link_candidate`. Schema (TS definition lands in `packages/db/src/schema.ts`):
+**[v3]** The chain model from v2 (multiple `content_node_link` rows per `brain_node_id`, `prior_link_id` self-ref, `superseded_at`, partial-unique-on-active) is replaced by a clean split:
+
+1. **`content_node_link`** — **one row per `brain_node_id`** (PK on `brain_node_id`). Current canonical link only. UPDATE-in-place on re-key.
+2. **`content_node_link_history`** — append-only audit log of every change (first-time link + every re-key). `prior_canonical_id` / `new_canonical_id` are TEXT (no FK) so audit rows survive entity deletion.
+3. **`content_node_link_candidate`** — pending re-key queue (unchanged conceptually from v2, just adjusted FK shape).
+
+### content_node_link
+
+```
+content_node_link
+  brain_node_id  PK              -- one row per brain_node
+  canonical_id   FK content_entity.id  ON DELETE CASCADE
+  match_method                   -- 'datasheet_id' | 'name_faction' | 'manual' | 'llm'
+  confidence
+  validation_method              -- 'admin' | 'llm' | 'auto-initial' (the validation of the current state)
+  validated_by                   -- user id, 'llm:<model>', source string, or 'migration'
+  validated_at
+```
+
+No `link_id`, no `prior_link_id`, no `superseded_at`, no partial-unique-on-active. The PK on `brain_node_id` is the structural guarantee of "one canonical link per brain node."
+
+### content_node_link_history
+
+```
+content_node_link_history
+  history_id    PK                -- synthetic UUID
+  brain_node_id                   -- which brain_node was changed (indexed)
+  prior_canonical_id              -- nullable; NULL for first-time links. TEXT, no FK (audit retention).
+  new_canonical_id                -- TEXT, no FK (audit retention)
+  changed_at                      -- timestamp (indexed)
+  changed_by                      -- user id, 'llm:<model>', source string, or 'migration'
+  change_method                   -- 'admin' | 'llm' | 'auto-initial' | 'migration'
+  change_reason                   -- nullable; LLM reason or admin note
+  candidate_id                    -- nullable; informational text linking back to a candidate
+indexes: brain_node_id, changed_at
+```
+
+### content_node_link_candidate
 
 ```
 content_node_link_candidate
@@ -72,7 +109,7 @@ content_node_link_candidate
   proposed_canonical_id          -- FK to content_entity.id ON DELETE CASCADE     [v2: was unspecified]
   match_method                   -- 'datasheet_id' | 'name_faction' | 'manual' | 'llm'
   confidence                     -- 0–1
-  prior_link_id                  -- FK to content_node_link.link_id (the active link this would supersede)
+  prior_canonical_id             -- [v3] TEXT snapshot of what brain_node currently points at (no FK)
   source                         -- pipeline source, stable across runs           [v2: split from proposer]
                                  --   e.g. 'sync:wahapedia', '11th-ingest:abilities', 'manual'
   run_id                         -- per-run identifier (timestamp or sync id)     [v2: split from proposer]
@@ -83,7 +120,7 @@ content_node_link_candidate
   decided_by                     -- user id, 'llm:<model>', or null
   decided_at                     -- timestamp, or null
   decision_reason                -- LLM's reasoning OR admin's optional note
-  resulting_link_id              -- FK content_node_link.link_id when approved (the row that got inserted)
+  resulting_history_id           -- [v3] TEXT id of the content_node_link_history row produced on approve (no FK)
   llm_attempt_count              -- integer, default 0                            [v2: prevents UNSURE re-eval loops]
   llm_last_attempted_at          -- timestamp, or null                            [v2: same]
 
@@ -110,32 +147,31 @@ unique:
 
 ## Producer behavior (the candidate vs auto-insert decision)
 
-Update the shared producer (`content-producer.ts`):
+**[v3]** Update the shared producer (`content-producer.ts`):
 
 ```
 For each candidate (brain_node_id, canonical_id, source, run_id):
-  1. Look up the active link for brain_node_id in content_node_link
-     (superseded_at IS NULL).
-  2. No active link exists:
-        → first-time link. Insert directly into content_node_link with:
-            link_id = 'auto:' || brain_node_id            [v2: deterministic]
-            validation_method = 'auto-initial'
-            validated_by = source
-          using ON CONFLICT(link_id) DO NOTHING.
-          A partial unique index on content_node_link UNIQUE(brain_node_id)
-          WHERE superseded_at IS NULL is added as part of this step       [v2: DEF-004 fix]
-          so concurrent inserts can't produce two active rows.
-  3. Active link exists, canonical_id matches:
+  1. Look up the current link for brain_node_id in content_node_link
+     (single row — PK lookup).
+  2. No row exists:
+        → first-time link. Two writes in a transaction:
+          (a) INSERT INTO content_node_link (brain_node_id, canonical_id,
+              match_method, confidence, validation_method='auto-initial',
+              validated_by=source, validated_at=NOW)
+              ON CONFLICT(brain_node_id) DO NOTHING.
+          (b) INSERT INTO content_node_link_history with prior_canonical_id=NULL,
+              new_canonical_id=canonical_id, change_method='auto-initial'.
+  3. Row exists, canonical_id matches:
         → already-correct. Skip (idempotent).
-  4. Active link exists, canonical_id differs:
+  4. Row exists, canonical_id differs:
         → RE-KEY. Insert into content_node_link_candidate as pending with
-          source/run_id from the caller, prior_link_id = active link's id.
+          source/run_id and prior_canonical_id=<current row's canonical_id>.
           Catch the partial unique constraint violation silently (means a
           pending candidate already exists for this pair — idempotent).
           Do NOT touch content_node_link.
 ```
 
-**[v2 — DEF-004 fix]** The partial unique index on `content_node_link` (`WHERE superseded_at IS NULL`) is a structural guarantee that no two active rows can exist for the same brain_node_id, regardless of concurrent producer races. It is added in migration 10a alongside the candidate table.
+The PK on `brain_node_id` is the structural guarantee of one canonical link per brain node — no concurrent races can produce two rows (the second INSERT fails on the PK). No `link_id` to generate, no partial-unique-on-active.
 
 **[v2 — DEF-012 fix]** Deploy ordering for `build-brain-nodes.mjs`: the 10c script change MUST land after 10a's migration is applied to prod, OR the script must check for the candidate table's existence and skip the queue path with a warning if it's missing. The latter is preferred (script is forwards-and-backwards compatible).
 
@@ -143,13 +179,15 @@ For each candidate (brain_node_id, canonical_id, source, run_id):
 
 ## Approve atomicity (how the multi-step write stays safe)
 
-**[v2 — DEF-001 fix]** Approving a candidate is three writes: insert new active row, set prior row's `superseded_at`, update candidate's `status` + `resulting_link_id`. Atomicity strategy:
+**[v3]** Approving a candidate is three writes in a single transaction — and **order is irrelevant** because the PK on `brain_node_id` already enforces one-row-per-brain-node, and there's no partial-unique-on-active constraint to violate transiently:
 
-1. **Primary mechanism — Drizzle transaction.** Use `db.transaction(async (tx) => { ... })` to wrap the three writes. Drizzle's libSQL driver exposes `transaction()` and Turso supports interactive transactions over HTTP. The codebase has no existing example of multi-statement transactions, so 10d's gate explicitly includes a test that **injects a failure between writes 2 and 3 and asserts rollback** (the prior row's `superseded_at` should NOT be set if the transaction aborts).
-2. **Defensive mechanism — partial unique index.** Even if the transaction primitive misbehaves, the `UNIQUE(brain_node_id) WHERE superseded_at IS NULL` index physically prevents a state with two active rows. If write 1 succeeds and writes 2 fail, the next read sees two active rows — which is impossible under the index — meaning write 1 would have failed instead, surfacing the problem at the write boundary.
-3. **Recovery test** (in 10d): with a simulated mid-transaction failure, the system must remain in one of: (a) all three writes applied (success), or (b) zero writes applied (clean rollback). Any other state is a bug that gates the step.
+1. `UPDATE content_node_link SET canonical_id=…, match_method=…, validation_method=…, validated_by=…, validated_at=NOW WHERE brain_node_id=X` — in-place change of the current canonical link.
+2. `INSERT INTO content_node_link_history (...)` — append the audit row (`prior_canonical_id`=old, `new_canonical_id`=new, `change_method`='admin'|'llm', etc.).
+3. `UPDATE content_node_link_candidate SET status='approved', decided_*=…, resulting_history_id=<history row> WHERE candidate_id=X`.
 
-If the Drizzle transaction test fails (i.e., the primitive doesn't give us what we need), the fallback is to redesign the approve path to be safe under sequential writes — e.g., set `superseded_at` LAST, after inserting the new row; treat the brief window where the new row exists but prior's `superseded_at` is still null as an acceptable state under the partial unique index (which actually prevents this, so the window is zero-length). This fallback is explicit, not implicit.
+Atomicity: wrap all three in `db.transaction(async (tx) => { ... })`. The codebase has no prior multi-statement transaction example, so 10d's gate still includes a **mid-transaction failure injection test** that asserts rollback (any failure between writes leaves the prior canonical_id intact, no history row written, no candidate marked approved). If the Drizzle libSQL transaction primitive misbehaves, the fallback is even simpler now than in v2: do `INSERT history` then `UPDATE candidate` then `UPDATE content_node_link` — even if the link update fails, the history row + candidate update are unreachable harm because nothing in the system treats history as authoritative state.
+
+**No partial-unique-on-active, no transient window**: the v2 design forced an order (supersede before insert) because of the per-statement enforcement of the partial unique. With UPDATE-in-place the constraint is structural (PK = one row per brain_node) and isn't conditional on column values, so order is free.
 
 ---
 
@@ -342,6 +380,15 @@ Each gate is a count from real data PLUS the test specs above. The required-test
 ---
 
 ## Revision log
+
+**v3 (2026-05-30) — design change: chain → UPDATE-in-place + audit log.**
+
+- `content_node_link` collapses to one row per `brain_node_id` (PK on brain_node_id). Drops `link_id`, `prior_link_id`, `superseded_at`.
+- New table `content_node_link_history` — append-only audit log of every change. `prior_canonical_id` and `new_canonical_id` are TEXT (no FK) for audit retention.
+- `content_node_link_candidate`: drops `prior_link_id` + `resulting_link_id` FKs; adds `prior_canonical_id` (TEXT snapshot) + `resulting_history_id` (TEXT, informational).
+- Approve mutation: UPDATE + INSERT history + UPDATE candidate. Order is irrelevant (PK enforces single row; no per-statement constraint to dance around). Transaction makes the three writes atomic.
+- Eliminates: partial-unique-on-active index, write-order requirement, transient no-active-link window during approve.
+- Migration 0005 (`crosswalk_update_in_place`) collapses existing chain rows to active-only + creates history table + adjusts candidate columns + backfills history with `auto-initial` entries for migrated links.
 
 **v2 (2026-05-30) — addresses antagonistic review of v1:**
 

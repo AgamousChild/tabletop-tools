@@ -3,7 +3,12 @@ import { eq } from 'drizzle-orm'
 import { drizzle } from 'drizzle-orm/libsql'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 
-import { contentEntity, contentNodeLink } from './schema'
+import {
+  contentEntity,
+  contentNodeLink,
+  contentNodeLinkCandidate,
+  contentNodeLinkHistory,
+} from './schema'
 
 const client = createClient({ url: ':memory:' })
 const db = drizzle(client)
@@ -32,18 +37,50 @@ beforeAll(async () => {
     bsdata_id TEXT,
     updated_at INTEGER NOT NULL
   )`)
+  // content_node_link — single-row per brain_node_id (UPDATE-in-place model).
   await client.execute(`CREATE TABLE content_node_link (
-    link_id TEXT PRIMARY KEY NOT NULL,
-    brain_node_id TEXT NOT NULL,
+    brain_node_id TEXT PRIMARY KEY NOT NULL,
     canonical_id TEXT NOT NULL REFERENCES content_entity(id) ON DELETE CASCADE,
     match_method TEXT NOT NULL,
     confidence REAL NOT NULL DEFAULT 1,
-    prior_link_id TEXT REFERENCES content_node_link(link_id),
     validation_method TEXT NOT NULL,
     validated_by TEXT NOT NULL,
-    validated_at INTEGER NOT NULL,
-    superseded_at INTEGER
+    validated_at INTEGER NOT NULL
   )`)
+  // content_node_link_history — append-only audit log of every change.
+  await client.execute(`CREATE TABLE content_node_link_history (
+    history_id TEXT PRIMARY KEY NOT NULL,
+    brain_node_id TEXT NOT NULL,
+    prior_canonical_id TEXT,
+    new_canonical_id TEXT NOT NULL,
+    changed_at INTEGER NOT NULL,
+    changed_by TEXT NOT NULL,
+    change_method TEXT NOT NULL,
+    change_reason TEXT,
+    candidate_id TEXT
+  )`)
+  await client.execute(`CREATE TABLE content_node_link_candidate (
+    candidate_id TEXT PRIMARY KEY NOT NULL,
+    brain_node_id TEXT NOT NULL,
+    proposed_canonical_id TEXT NOT NULL REFERENCES content_entity(id) ON DELETE CASCADE,
+    match_method TEXT NOT NULL,
+    confidence REAL NOT NULL DEFAULT 1,
+    prior_canonical_id TEXT,
+    source TEXT NOT NULL,
+    run_id TEXT NOT NULL,
+    proposed_at INTEGER NOT NULL,
+    status TEXT NOT NULL DEFAULT 'pending',
+    decision_method TEXT,
+    decided_by TEXT,
+    decided_at INTEGER,
+    decision_reason TEXT,
+    resulting_history_id TEXT,
+    llm_attempt_count INTEGER NOT NULL DEFAULT 0,
+    llm_last_attempted_at INTEGER
+  )`)
+  await client.execute(`CREATE UNIQUE INDEX uq_candidate_pending
+    ON content_node_link_candidate (brain_node_id, proposed_canonical_id)
+    WHERE status = 'pending'`)
 })
 
 describe('contentEntity', () => {
@@ -110,10 +147,9 @@ describe('contentEntity', () => {
   })
 })
 
-describe('contentNodeLink', () => {
-  it('crosswalks a brain node to a canonical entity as a chain head (no prior, active)', async () => {
+describe('contentNodeLink (single-row per brain_node_id)', () => {
+  it('inserts one row per brain_node_id with the validation metadata', async () => {
     await db.insert(contentNodeLink).values({
-      linkId: 'link-1',
       brainNodeId: 'node-1',
       canonicalId: 'ds-1',
       matchMethod: 'datasheet_id',
@@ -121,18 +157,43 @@ describe('contentNodeLink', () => {
       validatedBy: 'test',
       validatedAt: new Date(),
     })
-    const rows = await db.select().from(contentNodeLink).where(eq(contentNodeLink.linkId, 'link-1'))
+    const rows = await db
+      .select()
+      .from(contentNodeLink)
+      .where(eq(contentNodeLink.brainNodeId, 'node-1'))
+    expect(rows).toHaveLength(1)
     expect(rows[0]?.canonicalId).toBe('ds-1')
     expect(rows[0]?.confidence).toBe(1)
-    expect(rows[0]?.priorLinkId).toBeNull()
-    expect(rows[0]?.supersededAt).toBeNull()
+  })
+
+  it('PK on brain_node_id rejects a second row for the same brain_node', async () => {
+    await db
+      .insert(contentEntity)
+      .values({ id: 'ds-uq', type: 'datasheet', name: 'UQ', updatedAt: new Date() })
+    await db.insert(contentNodeLink).values({
+      brainNodeId: 'node-uq',
+      canonicalId: 'ds-uq',
+      matchMethod: 'datasheet_id',
+      validationMethod: 'auto-initial',
+      validatedBy: 'test',
+      validatedAt: new Date(),
+    })
+    await expect(
+      db.insert(contentNodeLink).values({
+        brainNodeId: 'node-uq',
+        canonicalId: 'ds-uq',
+        matchMethod: 'datasheet_id',
+        validationMethod: 'auto-initial',
+        validatedBy: 'test',
+        validatedAt: new Date(),
+      }),
+    ).rejects.toThrow()
   })
 
   it('rejects a canonical_id that does not exist', async () => {
     await expect(
       db.insert(contentNodeLink).values({
-        linkId: 'link-bad',
-        brainNodeId: 'node-x',
+        brainNodeId: 'node-bad',
         canonicalId: 'missing',
         matchMethod: 'manual',
         validationMethod: 'admin',
@@ -147,7 +208,6 @@ describe('contentNodeLink', () => {
       .insert(contentEntity)
       .values({ id: 'ds-2', type: 'datasheet', name: 'Hellblasters', updatedAt: new Date() })
     await db.insert(contentNodeLink).values({
-      linkId: 'link-2',
       brainNodeId: 'node-2',
       canonicalId: 'ds-2',
       matchMethod: 'name_faction',
@@ -157,11 +217,14 @@ describe('contentNodeLink', () => {
       validatedAt: new Date(),
     })
     await db.delete(contentEntity).where(eq(contentEntity.id, 'ds-2'))
-    const rows = await db.select().from(contentNodeLink).where(eq(contentNodeLink.linkId, 'link-2'))
+    const rows = await db
+      .select()
+      .from(contentNodeLink)
+      .where(eq(contentNodeLink.brainNodeId, 'node-2'))
     expect(rows).toHaveLength(0)
   })
 
-  it('append-only re-key: new row references the prior link; original row preserved', async () => {
+  it('re-key via UPDATE-in-place: existing row updated, audit history captures change', async () => {
     await db
       .insert(contentEntity)
       .values({ id: 'ds-3a', type: 'datasheet', name: 'Bladeguard', updatedAt: new Date() })
@@ -171,9 +234,8 @@ describe('contentNodeLink', () => {
       name: 'Bladeguard (better)',
       updatedAt: new Date(),
     })
-    // original link
+    // first-time link (also writes an auto-initial history row in real flow)
     await db.insert(contentNodeLink).values({
-      linkId: 'link-3a',
       brainNodeId: 'node-3',
       canonicalId: 'ds-3a',
       matchMethod: 'name_faction',
@@ -181,39 +243,192 @@ describe('contentNodeLink', () => {
       validatedBy: 'test',
       validatedAt: new Date(),
     })
-    // a better match shows up; the new row references the prior and supersedes it
+
+    // approve mutation: UPDATE in place + INSERT history. Order is irrelevant —
+    // both can be in one transaction; the PK on brain_node_id and the absence
+    // of any "active" partial index means there's no transient bad state.
     const now = new Date()
-    await db.insert(contentNodeLink).values({
-      linkId: 'link-3b',
-      brainNodeId: 'node-3',
-      canonicalId: 'ds-3b',
-      matchMethod: 'manual',
-      priorLinkId: 'link-3a',
-      validationMethod: 'admin',
-      validatedBy: 'test',
-      validatedAt: now,
-    })
-    // mark the prior as superseded
     await db
       .update(contentNodeLink)
-      .set({ supersededAt: now })
-      .where(eq(contentNodeLink.linkId, 'link-3a'))
+      .set({
+        canonicalId: 'ds-3b',
+        matchMethod: 'manual',
+        validationMethod: 'admin',
+        validatedBy: 'test-admin',
+        validatedAt: now,
+      })
+      .where(eq(contentNodeLink.brainNodeId, 'node-3'))
+    await db.insert(contentNodeLinkHistory).values({
+      historyId: 'hist-3',
+      brainNodeId: 'node-3',
+      priorCanonicalId: 'ds-3a',
+      newCanonicalId: 'ds-3b',
+      changedAt: now,
+      changedBy: 'test-admin',
+      changeMethod: 'admin',
+    })
 
-    // both rows still exist
-    const all = await db
+    const current = await db
       .select()
       .from(contentNodeLink)
       .where(eq(contentNodeLink.brainNodeId, 'node-3'))
-    expect(all).toHaveLength(2)
+    expect(current).toHaveLength(1)
+    expect(current[0]?.canonicalId).toBe('ds-3b')
+    expect(current[0]?.validationMethod).toBe('admin')
 
-    // new row points at prior
-    const successor = all.find((r) => r.linkId === 'link-3b')
-    expect(successor?.priorLinkId).toBe('link-3a')
-    expect(successor?.supersededAt).toBeNull()
+    const history = await db
+      .select()
+      .from(contentNodeLinkHistory)
+      .where(eq(contentNodeLinkHistory.brainNodeId, 'node-3'))
+    expect(history).toHaveLength(1)
+    expect(history[0]?.priorCanonicalId).toBe('ds-3a')
+    expect(history[0]?.newCanonicalId).toBe('ds-3b')
+    expect(history[0]?.changeMethod).toBe('admin')
+  })
+})
 
-    // prior preserved but marked superseded
-    const prior = all.find((r) => r.linkId === 'link-3a')
-    expect(prior?.canonicalId).toBe('ds-3a')
-    expect(prior?.supersededAt).not.toBeNull()
+describe('contentNodeLinkHistory (audit log)', () => {
+  it('preserves text references even after the referenced entity is deleted (audit retention)', async () => {
+    await db
+      .insert(contentEntity)
+      .values({ id: 'ds-h-1', type: 'datasheet', name: 'H1', updatedAt: new Date() })
+    await db.insert(contentNodeLinkHistory).values({
+      historyId: 'hist-retention',
+      brainNodeId: 'node-retention',
+      priorCanonicalId: null,
+      newCanonicalId: 'ds-h-1',
+      changedAt: new Date(),
+      changedBy: 'test',
+      changeMethod: 'auto-initial',
+    })
+    // delete the entity the history row references — no FK, audit retained
+    await db.delete(contentEntity).where(eq(contentEntity.id, 'ds-h-1'))
+    const rows = await db
+      .select()
+      .from(contentNodeLinkHistory)
+      .where(eq(contentNodeLinkHistory.historyId, 'hist-retention'))
+    expect(rows).toHaveLength(1)
+    expect(rows[0]?.newCanonicalId).toBe('ds-h-1')
+  })
+})
+
+describe('contentNodeLinkCandidate', () => {
+  it('queues a pending candidate with source/run_id split + prior_canonical_id snapshot', async () => {
+    await db
+      .insert(contentEntity)
+      .values({ id: 'ds-cand-1', type: 'datasheet', name: 'C1', updatedAt: new Date() })
+    await db
+      .insert(contentEntity)
+      .values({ id: 'ds-cand-2', type: 'datasheet', name: 'C2', updatedAt: new Date() })
+    await db.insert(contentNodeLink).values({
+      brainNodeId: 'node-cand',
+      canonicalId: 'ds-cand-1',
+      matchMethod: 'datasheet_id',
+      validationMethod: 'auto-initial',
+      validatedBy: 'test',
+      validatedAt: new Date(),
+    })
+    await db.insert(contentNodeLinkCandidate).values({
+      candidateId: 'cnd-1',
+      brainNodeId: 'node-cand',
+      proposedCanonicalId: 'ds-cand-2',
+      matchMethod: 'name_faction',
+      confidence: 0.85,
+      priorCanonicalId: 'ds-cand-1',
+      source: 'sync:wahapedia',
+      runId: '2026-05-30T03:00:00Z',
+      proposedAt: new Date(),
+    })
+    const row = (
+      await db
+        .select()
+        .from(contentNodeLinkCandidate)
+        .where(eq(contentNodeLinkCandidate.candidateId, 'cnd-1'))
+    )[0]
+    expect(row?.status).toBe('pending')
+    expect(row?.priorCanonicalId).toBe('ds-cand-1')
+    expect(row?.source).toBe('sync:wahapedia')
+    expect(row?.runId).toBe('2026-05-30T03:00:00Z')
+    expect(row?.llmAttemptCount).toBe(0)
+  })
+
+  it('partial unique uq_candidate_pending blocks a second pending row for the same (brain_node, proposed) pair', async () => {
+    await db
+      .insert(contentEntity)
+      .values({ id: 'ds-cand-3', type: 'datasheet', name: 'C3', updatedAt: new Date() })
+    await db.insert(contentNodeLinkCandidate).values({
+      candidateId: 'cnd-dup-a',
+      brainNodeId: 'node-cand-dup',
+      proposedCanonicalId: 'ds-cand-3',
+      matchMethod: 'name_faction',
+      source: 'sync:wahapedia',
+      runId: 'run-a',
+      proposedAt: new Date(),
+    })
+    await expect(
+      db.insert(contentNodeLinkCandidate).values({
+        candidateId: 'cnd-dup-b',
+        brainNodeId: 'node-cand-dup',
+        proposedCanonicalId: 'ds-cand-3',
+        matchMethod: 'name_faction',
+        source: 'sync:wahapedia',
+        runId: 'run-b',
+        proposedAt: new Date(),
+      }),
+    ).rejects.toThrow()
+  })
+
+  it('partial unique does NOT block a rejected + new pending for the same pair (history grows)', async () => {
+    await db
+      .insert(contentEntity)
+      .values({ id: 'ds-cand-4', type: 'datasheet', name: 'C4', updatedAt: new Date() })
+    await db.insert(contentNodeLinkCandidate).values({
+      candidateId: 'cnd-rej-1',
+      brainNodeId: 'node-cand-rej',
+      proposedCanonicalId: 'ds-cand-4',
+      matchMethod: 'name_faction',
+      source: 'sync:wahapedia',
+      runId: 'run-1',
+      proposedAt: new Date(),
+      status: 'rejected',
+      decisionMethod: 'admin',
+      decidedBy: 'test',
+      decidedAt: new Date(),
+    })
+    await db.insert(contentNodeLinkCandidate).values({
+      candidateId: 'cnd-rej-2',
+      brainNodeId: 'node-cand-rej',
+      proposedCanonicalId: 'ds-cand-4',
+      matchMethod: 'name_faction',
+      source: 'sync:wahapedia',
+      runId: 'run-2',
+      proposedAt: new Date(),
+    })
+    const rows = await db
+      .select()
+      .from(contentNodeLinkCandidate)
+      .where(eq(contentNodeLinkCandidate.brainNodeId, 'node-cand-rej'))
+    expect(rows).toHaveLength(2)
+  })
+
+  it('cascades when the proposed_canonical_id entity is deleted', async () => {
+    await db
+      .insert(contentEntity)
+      .values({ id: 'ds-cand-5', type: 'datasheet', name: 'C5', updatedAt: new Date() })
+    await db.insert(contentNodeLinkCandidate).values({
+      candidateId: 'cnd-cascade',
+      brainNodeId: 'node-cascade',
+      proposedCanonicalId: 'ds-cand-5',
+      matchMethod: 'manual',
+      source: 'manual:test',
+      runId: 'r1',
+      proposedAt: new Date(),
+    })
+    await db.delete(contentEntity).where(eq(contentEntity.id, 'ds-cand-5'))
+    const rows = await db
+      .select()
+      .from(contentNodeLinkCandidate)
+      .where(eq(contentNodeLinkCandidate.candidateId, 'cnd-cascade'))
+    expect(rows).toHaveLength(0)
   })
 })
