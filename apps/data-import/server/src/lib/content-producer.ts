@@ -127,10 +127,17 @@ async function writeR2<T>(bucket: R2Bucket, config: ProducerConfig<T>): Promise<
   return 1
 }
 
-/** Deterministic slug for canonical id construction (mirrors brain build). */
+/**
+ * Deterministic slug for canonical id construction — matches the brain's
+ * build slug rule. Apostrophes / smart quotes are STRIPPED (not replaced
+ * with `-`) so that "Emperor's Children" → "emperors-children" and
+ * "T'au Empire" → "tau-empire", matching the brain's existing factionIds
+ * and detachment node ids.
+ */
 const slug = (s: string): string =>
   s
     .toLowerCase()
+    .replace(/[’ʼ'‘"”“]/g, '')
     .replace(/[^a-z0-9]+/g, '-')
     .replace(/^-|-$/g, '')
     .slice(0, 60)

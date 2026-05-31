@@ -29,14 +29,15 @@ import { fetchAndProcessMissions } from './sources/missions'
 import { fetchAndProcessWahapedia } from './sources/wahapedia'
 
 /**
- * Slug-of-name canonical id (must match `produceFactions` slug rule in
- * content-producer.ts: lowercase, non-alnum → '-', trim '-', max 60).
- * Kept here so the BSData→canonical resolver works without importing private
- * producer internals.
+ * Slug-of-name canonical id — must match the brain's build slug rule + the
+ * `produceFactions` slug rule in content-producer.ts. Strips apostrophes /
+ * smart quotes BEFORE replacing non-alnum so "Emperor's Children" yields
+ * "emperors-children" (matching brain) instead of "emperor-s-children".
  */
 function contentEntitySlug(s: string): string {
   return s
     .toLowerCase()
+    .replace(/[’ʼ'‘"”“]/g, '')
     .replace(/[^a-z0-9]+/g, '-')
     .replace(/^-|-$/g, '')
     .slice(0, 60)
@@ -401,6 +402,18 @@ export async function runSync(
           `[weapons] additional ${weaponsValid.length - weaponsValidStrict.length} dropped due to filtered-out datasheets`,
         )
       }
+      // detachment_abilities reference detachments via detachmentIdMap → parent_id.
+      // If the parent detachment was filtered (e.g. Boarding Actions), the
+      // detachment_ability FK will violate. Drop those abilities.
+      const validDetachmentWahapediaIds = new Set(detachmentsValid.map((d) => d.id))
+      const detachmentAbilityRecordsValid = detachmentAbilityRecords.filter((da) =>
+        validDetachmentWahapediaIds.has(da.detachmentId),
+      )
+      if (detachmentAbilityRecordsValid.length < detachmentAbilityRecords.length) {
+        console.warn(
+          `[detachment_abilities] dropped ${detachmentAbilityRecords.length - detachmentAbilityRecordsValid.length} referencing filtered-out detachments`,
+        )
+      }
 
       await runProducer('factions', () =>
         factionRecords.length > 0
@@ -428,8 +441,8 @@ export async function runSync(
           : Promise.resolve(null),
       )
       await runProducer('detachment_abilities', () =>
-        detachmentAbilityRecords.length > 0
-          ? produceDetachmentAbilities(bucket, db, detachmentAbilityRecords, detachmentIdMap)
+        detachmentAbilityRecordsValid.length > 0
+          ? produceDetachmentAbilities(bucket, db, detachmentAbilityRecordsValid, detachmentIdMap)
           : Promise.resolve(null),
       )
       await runProducer('abilities', () =>
