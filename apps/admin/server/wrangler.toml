@@ -7,6 +7,11 @@ compatibility_flags = ["nodejs_compat"]
 # wrangler secret put TURSO_AUTH_TOKEN
 # wrangler secret put ADMIN_EMAILS
 
+# Workers AI — used by the crosswalk LLM evaluator (Phase 1.4 step 10).
+# Access via env.AI.run(...) per Cloudflare Workers AI binding convention.
+[ai]
+binding = "AI"
+
 [[services]]
 binding = "BCP_SCRAPER"
 service = "tabletop-tools-bcp-scraper"
