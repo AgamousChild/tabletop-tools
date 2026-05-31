@@ -11,7 +11,7 @@ import {
   createDbFromClient,
 } from '@tabletop-tools/db'
 import { eq } from 'drizzle-orm'
-import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest'
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { createCallerFactory } from '../trpc'
 import { appRouter } from './index'
@@ -707,5 +707,85 @@ describe('crosswalk router — stats', () => {
     expect(stats.llmUnsure).toBe(1)
     expect(stats.bySource).toHaveLength(1)
     expect(stats.bySource[0]?.source).toBe('sync:wahapedia')
+  })
+})
+
+describe('crosswalk router — transactional rollback (DEF-001)', () => {
+  afterEach(() => {
+    vi.restoreAllMocks()
+  })
+
+  it('approve rolls back ALL three writes when the history INSERT fails mid-transaction', async () => {
+    await seedEntities()
+    const validatedAt = new Date('2026-05-01T00:00:00Z')
+    await db.insert(contentNodeLink).values({
+      brainNodeId: 'n-rollback',
+      canonicalId: 'ds-a',
+      matchMethod: 'datasheet_id',
+      validationMethod: 'auto-initial',
+      validatedBy: '11th-ingest',
+      validatedAt,
+    })
+    await db.insert(contentNodeLinkCandidate).values({
+      candidateId: 'c-rollback',
+      brainNodeId: 'n-rollback',
+      proposedCanonicalId: 'ds-b',
+      matchMethod: 'manual',
+      confidence: 0.95,
+      priorCanonicalId: 'ds-a',
+      source: 'sync:wahapedia',
+      runId: 'r1',
+      proposedAt: new Date(),
+    })
+
+    // Pre-insert a history row with a fixed UUID, then force the router's
+    // newUuid() to return the SAME id. The second INSERT will hit a PK
+    // collision mid-transaction — Drizzle's tx.transaction must roll back
+    // the link UPDATE and the candidate UPDATE alongside it.
+    const collidingId = '00000000-0000-0000-0000-deadbeef0001'
+    await db.insert(contentNodeLinkHistory).values({
+      historyId: collidingId,
+      brainNodeId: 'unrelated-node',
+      priorCanonicalId: null,
+      newCanonicalId: 'ds-a',
+      changedAt: new Date(),
+      changedBy: 'seed',
+      changeMethod: 'admin',
+    })
+    vi.spyOn(crypto, 'randomUUID').mockReturnValue(
+      collidingId as `${string}-${string}-${string}-${string}-${string}`,
+    )
+
+    const caller = createCaller(adminCtx)
+    await expect(
+      caller.crosswalk.candidate.approve({ candidateId: 'c-rollback' }),
+    ).rejects.toThrow()
+
+    // Link unchanged — still ds-a, still auto-initial, original validatedAt
+    const link = (
+      await db.select().from(contentNodeLink).where(eq(contentNodeLink.brainNodeId, 'n-rollback'))
+    )[0]
+    expect(link?.canonicalId).toBe('ds-a')
+    expect(link?.validationMethod).toBe('auto-initial')
+    expect(link?.validatedBy).toBe('11th-ingest')
+    expect(link?.validatedAt.getTime()).toBe(validatedAt.getTime())
+
+    // Candidate still pending
+    const cand = (
+      await db
+        .select()
+        .from(contentNodeLinkCandidate)
+        .where(eq(contentNodeLinkCandidate.candidateId, 'c-rollback'))
+    )[0]
+    expect(cand?.status).toBe('pending')
+    expect(cand?.decidedBy).toBeNull()
+    expect(cand?.resultingHistoryId).toBeNull()
+
+    // No new history row for n-rollback — only the seeded one for unrelated-node remains
+    const histories = await db
+      .select()
+      .from(contentNodeLinkHistory)
+      .where(eq(contentNodeLinkHistory.brainNodeId, 'n-rollback'))
+    expect(histories).toHaveLength(0)
   })
 })

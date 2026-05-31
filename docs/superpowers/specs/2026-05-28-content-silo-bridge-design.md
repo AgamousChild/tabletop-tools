@@ -85,29 +85,45 @@ content_entity            -- thin canonical index (NOT the full content; that's 
 - App tables (`list_unit.datasheet_id`, `simulation.*_unit_id` via list_unit, `tournament_player.faction_id`, `game_state`, etc.) FK into `content_entity` — real integrity, real joins, instead of opaque strings.
 - `dim_faction/subfaction/detachment` fold into `content_entity` (type='faction'/…); meta reads it as a projection (§8.1).
 
-### 5.1 Brain crosswalk — append-only, validation-gated
+### 5.1 Brain crosswalk — UPDATE-in-place + audit log, validation-gated
 
-Brain node ids are never mutated (that would break refs, the Vectorize index, cross-ref indexes, and the manifest). The crosswalk holds `(brain_node_id → canonical_id)` pairs in a separate table that is **append-only** — once a pair is inserted and validated, it is never overwritten. Re-keying happens by **appending a new row that references the prior one and goes through a validation process** before it becomes active.
+Brain node ids are never mutated (that would break refs, the Vectorize index, cross-ref indexes, and the manifest). The crosswalk holds `(brain_node_id → canonical_id)` as **one row per `brain_node_id`** in `content_node_link`, with **every change captured in an append-only audit log** (`content_node_link_history`). Re-keying happens by **proposing a new pair as a candidate, validating it, then updating the link in place** — the audit log preserves lineage.
 
 ```
 content_node_link
-  link_id PK               -- synthetic; many rows can exist per brain_node_id (history chain)
-  brain_node_id            -- indexed; the brain Node id, never changes
+  brain_node_id PK         -- one row per brain node; PK is the structural guarantee
   canonical_id FK          -> content_entity
   match_method             -- how the candidate was generated: 'datasheet_id' | 'name_faction' | 'manual' | 'llm'
   confidence               -- 0–1
-  prior_link_id            -- FK -> content_node_link.link_id, nullable; the link this row supersedes
-  validation_method        -- how this row was validated: 'admin' | 'llm' | 'auto-initial'
+  validation_method        -- how the current row was validated: 'admin' | 'llm' | 'auto-initial'
   validated_by             -- user id or 'llm:<model>'
   validated_at             -- timestamp
-  superseded_at            -- nullable; null = currently active
+
+content_node_link_history       -- append-only audit log
+  history_id PK
+  brain_node_id            -- indexed
+  prior_canonical_id       -- TEXT (no FK; survives entity deletion)
+  new_canonical_id         -- TEXT (no FK)
+  changed_at, changed_by, change_method, change_reason
+  candidate_id             -- which candidate caused this change (if any)
+
+content_node_link_candidate     -- proposed re-keys awaiting validation
+  candidate_id PK
+  brain_node_id, proposed_canonical_id FK, prior_canonical_id (snapshot)
+  match_method, confidence, source, run_id, proposed_at
+  status: 'pending' | 'approved' | 'rejected' | 'llm_unsure' | 'overridden'
+  decision_method, decided_by, decided_at, decision_reason, resulting_history_id
+  llm_attempt_count, llm_last_attempted_at
+  -- partial UNIQUE (brain_node_id, proposed_canonical_id) WHERE status='pending'
 ```
 
 - Covers brain's **content** nodes only (datasheet / weapon / ability / stratagem / …); rules / community / errata nodes have no canonical entity and get no link.
-- **First-time linking.** The matcher proposes a candidate (prefer the node's existing `datasheetId`/`factionId`, else normalized name + faction). The candidate is inserted with `prior_link_id = NULL` and the validation method that approved it. Unmatched nodes get no row.
-- **Re-keying (a better-fitting candidate appears).** The matcher proposes a new candidate. It does **not** auto-replace the existing link. It goes through a validation process — a human in an admin tool, or an LLM evaluator — that confirms the new link is genuinely a better fit. Only when validation passes is the new row inserted, with `prior_link_id` pointing at the row it supersedes; the prior row's `superseded_at` is set. The validation outcome is recorded on the new row.
-- **Resolve at read time.** The active link for a `brain_node_id` is the row with `superseded_at IS NULL`. Apps follow `canonical_id` → active link → brain node (and the reverse).
-- **Reversible.** Old rows are preserved (audit trail + lineage). Drop the table and the brain graph is untouched.
+- **First-time linking.** The matcher inserts directly into `content_node_link` with `validation_method='auto-initial'`. A matching `content_node_link_history` row is written. Unmatched nodes get no row.
+- **Re-keying (a better-fitting candidate appears).** The matcher does **not** auto-replace the existing link. It inserts into `content_node_link_candidate` (status='pending'). A validation process — admin UI or LLM evaluator — decides. **Approve** transactionally: UPDATE the link in place, INSERT a history row, UPDATE the candidate to status='approved'. **Reject** marks the candidate. The partial UNIQUE on pending pairs prevents duplicate proposals.
+- **Resolve at read time.** Apps follow `canonical_id` → `content_node_link.brain_node_id` directly — no superseded filter, no chain walk.
+- **Reversible.** History rows are immutable (audit trail + lineage). Drop the link+history+candidate tables and the brain graph is untouched.
+
+**Why this shape over a chain (link_id + prior_link_id + superseded_at):** the chain required a specific write order during approve (supersede prior FIRST, then INSERT new) because a partial unique on the active row is enforced per-statement by SQLite. That order requirement is fragile and creates a transient no-active-link window intra-transaction. PK-on-brain_node_id removes the order requirement, eliminates the transient window, and gives the same audit semantics through a separate history table — at the cost of one extra INSERT per change, which is negligible.
 
 ---
 
