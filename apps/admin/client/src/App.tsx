@@ -3,6 +3,7 @@ import { useState } from 'react'
 
 import { authClient } from './lib/auth'
 import { ActivityPage } from './pages/ActivityPage'
+import { CrosswalkPage } from './pages/CrosswalkPage'
 import { Dashboard } from './pages/Dashboard'
 import { ImportsPage } from './pages/ImportsPage'
 import { IngestPage } from './pages/IngestPage'
@@ -22,6 +23,7 @@ type Page =
   | 'tasks'
   | 'scraper'
   | 'ingest'
+  | 'crosswalk'
 
 const NAV: { id: Page; label: string }[] = [
   { id: 'dashboard', label: 'Overview' },
@@ -29,6 +31,7 @@ const NAV: { id: Page; label: string }[] = [
   { id: 'pipeline', label: 'Pipeline' },
   { id: 'scraper', label: 'Scraper' },
   { id: 'ingest', label: 'Ingest' },
+  { id: 'crosswalk', label: 'Crosswalk' },
   { id: 'users', label: 'Users' },
   { id: 'sessions', label: 'Sessions' },
   { id: 'activity', label: 'Activity' },
@@ -117,6 +120,7 @@ export default function App() {
         {page === 'scraper' && <ScraperPage />}
         {page === 'ingest' && <IngestPage />}
         {page === 'tasks' && <TasksPage />}
+        {page === 'crosswalk' && <CrosswalkPage />}
       </main>
     </div>
   )

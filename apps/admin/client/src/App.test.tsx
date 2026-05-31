@@ -44,6 +44,21 @@ vi.mock('./lib/trpc', () => {
       triggerYoutubeIngest: { useMutation: vi.fn(() => ({ mutate: vi.fn(), isPending: false })) },
       triggerWebIngest: { useMutation: vi.fn(() => ({ mutate: vi.fn(), isPending: false })) },
     },
+    crosswalk: {
+      stats: { useQuery: vi.fn(() => ({ data: null, isLoading: true, refetch: vi.fn() })) },
+      listPending: {
+        useQuery: vi.fn(() => ({ data: null, isLoading: true, refetch: vi.fn() })),
+      },
+      candidate: {
+        byId: { useQuery: vi.fn(() => ({ data: null, isLoading: true })) },
+        approve: { useMutation: () => ({ mutate: vi.fn(), isPending: false }) },
+        reject: { useMutation: () => ({ mutate: vi.fn(), isPending: false }) },
+        override: { useMutation: () => ({ mutate: vi.fn(), isPending: false }) },
+        approveBulk: { useMutation: () => ({ mutate: vi.fn(), isPending: false }) },
+        rejectBulk: { useMutation: () => ({ mutate: vi.fn(), isPending: false }) },
+      },
+      runLlmEvaluator: { useMutation: () => ({ mutate: vi.fn(), isPending: false }) },
+    },
   }
   return { trpc, createTRPCClient: vi.fn() }
 })
@@ -90,6 +105,7 @@ describe('App', () => {
     expect(screen.getByText('Events')).toBeInTheDocument()
     expect(screen.getByText('Scraper')).toBeInTheDocument()
     expect(screen.getByText('Ingest')).toBeInTheDocument()
+    expect(screen.getByText('Crosswalk')).toBeInTheDocument()
     expect(screen.getByText('Micah')).toBeInTheDocument()
     expect(screen.getByText('Sign out')).toBeInTheDocument()
   })
@@ -165,6 +181,18 @@ describe('App', () => {
     render(<App />)
     fireEvent.click(screen.getByText('Ingest'))
     expect(screen.getByText('Content Ingestor')).toBeInTheDocument()
+  })
+
+  it('clicking Crosswalk nav renders CrosswalkPage', () => {
+    vi.mocked(authClient.useSession).mockReturnValue({
+      data: { user: { id: '1', name: 'Micah', email: 'micah@test.com' }, session: {} },
+      isPending: false,
+      refetch: vi.fn(),
+    } as any)
+
+    render(<App />)
+    fireEvent.click(screen.getByText('Crosswalk'))
+    expect(screen.getByText('Crosswalk Review')).toBeInTheDocument()
   })
 
   it('defaults to Overview (Dashboard) page', () => {
