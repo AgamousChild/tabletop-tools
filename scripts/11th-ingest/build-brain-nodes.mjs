@@ -87,9 +87,9 @@ if (process.argv[1] && process.argv[1].replace(/\\/g, '/').endsWith('scripts/11t
     // Deploy-order safety: if migration 0005 hasn't been applied yet, the
     // content_node_link_candidate table doesn't exist. Skip the queue path
     // with a clear message rather than crashing mid-loop.
-    const candidateTable = await db.execute({
-      sql: `SELECT name FROM sqlite_master WHERE type='table' AND name='content_node_link_candidate'`,
-    })
+    const candidateTable = await db.execute(
+      `SELECT name FROM sqlite_master WHERE type='table' AND name='content_node_link_candidate'`,
+    )
     const haveCandidateTable = candidateTable.rows.length > 0
 
     const runId = new Date().toISOString()

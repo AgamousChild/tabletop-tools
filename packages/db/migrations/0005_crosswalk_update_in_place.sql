@@ -4,20 +4,60 @@
 --   docs/superpowers/plans/2026-05-30-step-10-validation-process.md
 PRAGMA foreign_keys=OFF;--> statement-breakpoint
 
--- Drop indexes that reference columns we're removing (so DROP COLUMN doesn't choke).
+-- Drop indexes that reference columns we're removing (so the table-recreate dance below
+-- has nothing dangling against the old shapes).
+DROP INDEX IF EXISTS `idx_candidate_brain_node`;--> statement-breakpoint
+DROP INDEX IF EXISTS `idx_candidate_status`;--> statement-breakpoint
+DROP INDEX IF EXISTS `idx_candidate_proposed_at`;--> statement-breakpoint
 DROP INDEX IF EXISTS `idx_candidate_prior_link`;--> statement-breakpoint
+DROP INDEX IF EXISTS `idx_candidate_source`;--> statement-breakpoint
+DROP INDEX IF EXISTS `uq_candidate_pending`;--> statement-breakpoint
 DROP INDEX IF EXISTS `idx_content_node_link_canonical`;--> statement-breakpoint
 DROP INDEX IF EXISTS `idx_content_node_link_brain_node`;--> statement-breakpoint
 DROP INDEX IF EXISTS `idx_content_node_link_prior`;--> statement-breakpoint
 DROP INDEX IF EXISTS `idx_content_node_link_active`;--> statement-breakpoint
 DROP INDEX IF EXISTS `uq_content_node_link_active`;--> statement-breakpoint
 
--- Adjust candidate table FIRST so we drop its FK references to content_node_link.link_id
--- before that column goes away in the recreate below.
-ALTER TABLE `content_node_link_candidate` DROP COLUMN `prior_link_id`;--> statement-breakpoint
-ALTER TABLE `content_node_link_candidate` DROP COLUMN `resulting_link_id`;--> statement-breakpoint
-ALTER TABLE `content_node_link_candidate` ADD COLUMN `prior_canonical_id` text;--> statement-breakpoint
-ALTER TABLE `content_node_link_candidate` ADD COLUMN `resulting_history_id` text;--> statement-breakpoint
+-- Recreate content_node_link_candidate WITHOUT the chain-era FKs (prior_link_id /
+-- resulting_link_id pointed at content_node_link.link_id, which is going away).
+-- SQLite cannot DROP COLUMN that participates in an FK definition, so we rebuild
+-- the table from scratch and copy preserved columns.
+CREATE TABLE `__new_content_node_link_candidate` (
+  `candidate_id` text PRIMARY KEY NOT NULL,
+  `brain_node_id` text NOT NULL,
+  `proposed_canonical_id` text NOT NULL,
+  `match_method` text NOT NULL,
+  `confidence` real DEFAULT 1 NOT NULL,
+  `prior_canonical_id` text,
+  `source` text NOT NULL,
+  `run_id` text NOT NULL,
+  `proposed_at` integer NOT NULL,
+  `status` text DEFAULT 'pending' NOT NULL,
+  `decision_method` text,
+  `decided_by` text,
+  `decided_at` integer,
+  `decision_reason` text,
+  `resulting_history_id` text,
+  `llm_attempt_count` integer DEFAULT 0 NOT NULL,
+  `llm_last_attempted_at` integer,
+  FOREIGN KEY (`proposed_canonical_id`) REFERENCES `content_entity`(`id`) ON UPDATE no action ON DELETE cascade
+);--> statement-breakpoint
+
+INSERT INTO `__new_content_node_link_candidate`(
+  "candidate_id", "brain_node_id", "proposed_canonical_id", "match_method",
+  "confidence", "prior_canonical_id", "source", "run_id", "proposed_at",
+  "status", "decision_method", "decided_by", "decided_at", "decision_reason",
+  "resulting_history_id", "llm_attempt_count", "llm_last_attempted_at"
+)
+SELECT
+  "candidate_id", "brain_node_id", "proposed_canonical_id", "match_method",
+  "confidence", NULL, "source", "run_id", "proposed_at",
+  "status", "decision_method", "decided_by", "decided_at", "decision_reason",
+  NULL, "llm_attempt_count", "llm_last_attempted_at"
+FROM `content_node_link_candidate`;--> statement-breakpoint
+
+DROP TABLE `content_node_link_candidate`;--> statement-breakpoint
+ALTER TABLE `__new_content_node_link_candidate` RENAME TO `content_node_link_candidate`;--> statement-breakpoint
 
 -- Recreate content_node_link as one-row-per-brain_node_id. Migrate only currently-active
 -- rows (superseded_at IS NULL); chain history rows are discarded — the equivalent record
@@ -66,6 +106,14 @@ CREATE TABLE `content_node_link_history` (
 
 CREATE INDEX `idx_content_node_link_history_brain_node` ON `content_node_link_history` (`brain_node_id`);--> statement-breakpoint
 CREATE INDEX `idx_content_node_link_history_changed_at` ON `content_node_link_history` (`changed_at`);--> statement-breakpoint
+
+-- Re-create the indexes for the rebuilt tables (matches the index set defined in schema.ts).
+CREATE INDEX `idx_candidate_brain_node` ON `content_node_link_candidate` (`brain_node_id`);--> statement-breakpoint
+CREATE INDEX `idx_candidate_status` ON `content_node_link_candidate` (`status`);--> statement-breakpoint
+CREATE INDEX `idx_candidate_proposed_at` ON `content_node_link_candidate` (`proposed_at`);--> statement-breakpoint
+CREATE INDEX `idx_candidate_source` ON `content_node_link_candidate` (`source`);--> statement-breakpoint
+CREATE UNIQUE INDEX `uq_candidate_pending` ON `content_node_link_candidate` (`brain_node_id`,`proposed_canonical_id`) WHERE "content_node_link_candidate"."status" = 'pending';--> statement-breakpoint
+CREATE INDEX `idx_content_node_link_canonical` ON `content_node_link` (`canonical_id`);--> statement-breakpoint
 
 -- Backfill: every migrated content_node_link row gets an 'auto-initial' history entry
 -- (prior_canonical_id NULL) so the audit log starts populated, not empty.
