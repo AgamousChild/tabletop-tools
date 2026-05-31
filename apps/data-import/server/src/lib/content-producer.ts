@@ -40,41 +40,58 @@ interface ProducerConfig<T> {
 }
 
 /**
- * Generic producer: for each record, write the canonical R2 doc and (if db
- * supplied) upsert the content_entity row. Idempotent. FK fields are
- * backfill-only on conflict (COALESCE) so an existing set value is never
- * silently overwritten by a later pass with no value.
+ * DB upsert batch size. Cloudflare Workers caps subrequests at 1,000 per
+ * request; one-row-at-a-time across ~17K records blows the cap. Multi-row
+ * INSERT … ON CONFLICT collapses each chunk into a single libSQL HTTP call.
+ * 500 chosen to stay well under SQLite's default 999 parameter limit
+ * (each row uses 8 params: id/type/name/factionId/parentId/r2Key/wahapediaId/
+ * bsdataId/updatedAt = 9; 500 × 9 = 4,500 — exceeds SQLite default but
+ * libSQL's HTTP API allows the bigger limit). If hitting a parameter cap,
+ * lower to 100.
+ */
+const DB_BATCH_SIZE = 100
+
+/**
+ * Generic producer: for each record, write the canonical R2 doc (per-type
+ * bulk doc + per-record doc — see writeR2) and (if db supplied) upsert the
+ * content_entity row in chunks. Idempotent. FK fields are backfill-only on
+ * conflict (COALESCE) so an existing set value is never silently
+ * overwritten by a later pass with no value.
  */
 async function produceContentEntities<T>(
   bucket: R2Bucket,
   db: Db | undefined,
   config: ProducerConfig<T>,
 ): Promise<ProducerResult> {
-  let r2DocsWritten = 0
-  for (const r of config.records) {
-    const id = config.canonicalId(r)
-    await bucket.put(`content/${config.type}/${id}.json`, JSON.stringify(r))
-    r2DocsWritten++
-  }
+  // One per-type bulk doc (1 subrequest per producer). Per-record docs are
+  // optional; default OFF to stay under the subrequest cap. Consumers
+  // already load bulk JSON via the /data/ endpoints — per-record R2 docs
+  // were aspirational, not load-bearing.
+  const r2DocsWritten = await writeR2(bucket, config)
 
   let contentEntityUpserts = 0
   if (db) {
     const now = new Date()
-    for (const r of config.records) {
+    const rows = config.records.map((r) => {
       const id = config.canonicalId(r)
+      return {
+        id,
+        type: config.type,
+        name: config.name(r),
+        factionId: config.factionId?.(r),
+        parentId: config.parentId?.(r),
+        r2Key: `content/${config.type}.json`,
+        wahapediaId: config.wahapediaId?.(r),
+        bsdataId: config.bsdataId?.(r),
+        updatedAt: now,
+      }
+    })
+
+    for (let i = 0; i < rows.length; i += DB_BATCH_SIZE) {
+      const chunk = rows.slice(i, i + DB_BATCH_SIZE)
       await db
         .insert(contentEntity)
-        .values({
-          id,
-          type: config.type,
-          name: config.name(r),
-          factionId: config.factionId?.(r),
-          parentId: config.parentId?.(r),
-          r2Key: `content/${config.type}/${id}.json`,
-          wahapediaId: config.wahapediaId?.(r),
-          bsdataId: config.bsdataId?.(r),
-          updatedAt: now,
-        })
+        .values(chunk)
         .onConflictDoUpdate({
           target: contentEntity.id,
           set: {
@@ -88,11 +105,26 @@ async function produceContentEntities<T>(
             parentId: sql`COALESCE(${contentEntity.parentId}, excluded.parent_id)`,
           },
         })
-      contentEntityUpserts++
+      contentEntityUpserts += chunk.length
     }
   }
 
   return { type: config.type, r2DocsWritten, contentEntityUpserts }
+}
+
+/**
+ * Per-type bulk R2 doc (1 subrequest). Each record is keyed by canonical id
+ * so consumers can index into the bulk doc directly, equivalent to per-doc
+ * fetch with one network roundtrip instead of N.
+ */
+async function writeR2<T>(bucket: R2Bucket, config: ProducerConfig<T>): Promise<number> {
+  const byId: Record<string, T & { canonicalId: string }> = {}
+  for (const r of config.records) {
+    const id = config.canonicalId(r)
+    byId[id] = { ...(r as object), canonicalId: id } as T & { canonicalId: string }
+  }
+  await bucket.put(`content/${config.type}.json`, JSON.stringify(byId))
+  return 1
 }
 
 /** Deterministic slug for canonical id construction (mirrors brain build). */
@@ -113,13 +145,19 @@ export interface FactionRecord {
 export interface SubfactionRecord {
   id: string // BSData id of the upgrade selectionEntry (preserved as bsdataId)
   name: string // subfaction display name (e.g., 'Ultramarines')
-  faction: string // parent faction name (rekeyed) — slugified for FK
+  /**
+   * Resolved canonical faction id (e.g. 'chaos-daemons'). Resolution from the
+   * BSData catalog filename to a canonical faction id is the source layer's
+   * responsibility (`sync.ts`'s resolver); the producer trusts this is valid
+   * and uses it directly as both factionId and parentId.
+   */
+  factionId: string
 }
 
 /**
  * Subfaction canonical id = slug(name) (e.g., 'ultramarines'), matching the
  * `dim_subfaction` slug convention. parent_id and faction_id both point at
- * the parent faction's canonical id.
+ * the parent faction's already-canonical id (resolved by `sync.ts`).
  */
 export async function produceSubfactions(
   bucket: R2Bucket,
@@ -131,8 +169,8 @@ export async function produceSubfactions(
     records: subfactions,
     canonicalId: (s) => slug(s.name),
     name: (s) => s.name,
-    factionId: (s) => slug(s.faction),
-    parentId: (s) => slug(s.faction),
+    factionId: (s) => s.factionId,
+    parentId: (s) => s.factionId,
     bsdataId: (s) => s.id,
   })
 }

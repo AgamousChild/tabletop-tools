@@ -16,7 +16,7 @@ const app = new Hono<HonoEnv>()
 /** Returns a db client when both secrets are present; undefined otherwise (R2-only mode). */
 function dbFromEnv(env: Env): Db | undefined {
   if (env.TURSO_DB_URL && env.TURSO_AUTH_TOKEN) {
-    return createDb(env.TURSO_DB_URL, env.TURSO_AUTH_TOKEN)
+    return createDb({ url: env.TURSO_DB_URL, authToken: env.TURSO_AUTH_TOKEN })
   }
   return undefined
 }

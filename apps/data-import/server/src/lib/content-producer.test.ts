@@ -1,7 +1,6 @@
 import { createClient } from '@libsql/client'
-import { contentEntity } from '@tabletop-tools/db'
+import { contentEntity, createDbFromClient } from '@tabletop-tools/db'
 import { eq } from 'drizzle-orm'
-import { drizzle } from 'drizzle-orm/libsql'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 
 import {
@@ -21,15 +20,16 @@ import {
 } from './content-producer'
 
 const client = createClient({ url: ':memory:' })
-const db = drizzle(client)
+const db = createDbFromClient(client)
 
 // Mock R2 bucket — only the .put() method is exercised by the producer.
+const r2Store = new Map<string, string>()
 const r2 = {
-  store: new Map<string, string>(),
+  store: r2Store,
   async put(key: string, value: string) {
-    this.store.set(key, value)
+    r2Store.set(key, value)
   },
-} as unknown as R2Bucket
+} as unknown as R2Bucket & { store: Map<string, string> }
 
 afterAll(() => {
   client.close()
@@ -65,13 +65,16 @@ describe('produceDatasheets', () => {
     const result = await produceDatasheets(r2 as unknown as R2Bucket, db, datasheets)
 
     expect(result.type).toBe('datasheet')
-    expect(result.r2DocsWritten).toBe(2)
+    // One bulk R2 doc per type (not per record) — the producer collapsed
+    // per-record R2 writes to stay under the Cloudflare Workers subrequest cap.
+    expect(result.r2DocsWritten).toBe(1)
     expect(result.contentEntityUpserts).toBe(2)
 
-    // R2 docs
+    // R2 bulk doc — both records keyed by canonical id inside one JSON map.
     const store = (r2 as unknown as { store: Map<string, string> }).store
-    expect(store.get('content/datasheet/bsdata-guid-1.json')).toContain('Intercessors')
-    expect(store.get('content/datasheet/wahap-2.json')).toContain('Unmatched Unit')
+    const bulk = JSON.parse(store.get('content/datasheet.json') ?? '{}')
+    expect(bulk['bsdata-guid-1'].name).toBe('Intercessors')
+    expect(bulk['wahap-2'].name).toBe('Unmatched Unit')
 
     // content_entity rows — provenance preserved
     const rows = await db.select().from(contentEntity)
@@ -80,7 +83,7 @@ describe('produceDatasheets', () => {
     expect(matched?.type).toBe('datasheet')
     expect(matched?.wahapediaId).toBe('wahap-1')
     expect(matched?.bsdataId).toBe('bsdata-guid-1')
-    expect(matched?.r2Key).toBe('content/datasheet/bsdata-guid-1.json')
+    expect(matched?.r2Key).toBe('content/datasheet.json')
 
     const unmatched = rows.find((r) => r.id === 'wahap-2')
     expect(unmatched?.wahapediaId).toBe('wahap-2')
@@ -103,18 +106,20 @@ describe('produceDatasheets', () => {
   })
 
   it('writes R2 docs even when no db client is supplied (R2-only mode)', async () => {
+    const localStore = new Map<string, string>()
     const r2b = {
-      store: new Map<string, string>(),
+      store: localStore,
       async put(key: string, value: string) {
-        this.store.set(key, value)
+        localStore.set(key, value)
       },
-    } as unknown as R2Bucket
+    } as unknown as R2Bucket & { store: Map<string, string> }
 
     const result = await produceDatasheets(r2b, undefined, [{ id: 'x1', name: 'No-DB Test' }])
     expect(result.r2DocsWritten).toBe(1)
     expect(result.contentEntityUpserts).toBe(0)
     const store = (r2b as unknown as { store: Map<string, string> }).store
-    expect(store.get('content/datasheet/x1.json')).toContain('No-DB Test')
+    const bulk = JSON.parse(store.get('content/datasheet.json') ?? '{}')
+    expect(bulk['x1'].name).toBe('No-DB Test')
   })
 })
 
@@ -158,17 +163,14 @@ describe('produceWeapons', () => {
     ]
     const result = await produceWeapons(r2 as unknown as R2Bucket, db, weapons)
     expect(result.type).toBe('weapon')
-    expect(result.r2DocsWritten).toBe(2)
+    // One bulk R2 doc per type; both weapons keyed inside it.
+    expect(result.r2DocsWritten).toBe(1)
     expect(result.contentEntityUpserts).toBe(2)
 
-    // canonical id: weapon:{datasheetId}:{slug(name)}
     const store = (r2 as unknown as { store: Map<string, string> }).store
-    expect(store.get('content/weapon/weapon:ds-weap-parent:bolt-pistol.json')).toContain(
-      'Bolt Pistol',
-    )
-    expect(store.get('content/weapon/weapon:ds-weap-parent:power-sword.json')).toContain(
-      'Power Sword',
-    )
+    const bulk = JSON.parse(store.get('content/weapon.json') ?? '{}')
+    expect(bulk['weapon:ds-weap-parent:bolt-pistol'].name).toBe('Bolt Pistol')
+    expect(bulk['weapon:ds-weap-parent:power-sword'].name).toBe('Power Sword')
 
     // content_entity row exists with parent → datasheet
     const bolt = await db
@@ -273,12 +275,13 @@ describe('produceSubfactions', () => {
     // parent faction must exist
     await produceFactions(r2 as unknown as R2Bucket, db, [{ id: 'SM', name: 'Space Marines' }])
     const subfactions: SubfactionRecord[] = [
-      { id: 'sf-bsdata-ultra', name: 'Ultramarines', faction: 'Space Marines' },
-      { id: 'sf-bsdata-bt', name: 'Black Templars', faction: 'Space Marines' },
+      { id: 'sf-bsdata-ultra', name: 'Ultramarines', factionId: 'space-marines' },
+      { id: 'sf-bsdata-bt', name: 'Black Templars', factionId: 'space-marines' },
     ]
     const result = await produceSubfactions(r2 as unknown as R2Bucket, db, subfactions)
     expect(result.type).toBe('subfaction')
-    expect(result.r2DocsWritten).toBe(2)
+    // One bulk R2 doc per type; both subfactions keyed inside it.
+    expect(result.r2DocsWritten).toBe(1)
     expect(result.contentEntityUpserts).toBe(2)
     const ultra = (
       await db.select().from(contentEntity).where(eq(contentEntity.id, 'ultramarines'))
@@ -292,7 +295,7 @@ describe('produceSubfactions', () => {
   it('rejects a subfaction whose parent faction does not exist (FK)', async () => {
     await expect(
       produceSubfactions(r2 as unknown as R2Bucket, db, [
-        { id: 'orphan-sf', name: 'Nobody', faction: 'Nonexistent Faction' },
+        { id: 'orphan-sf', name: 'Nobody', factionId: 'nonexistent-faction' },
       ]),
     ).rejects.toThrow()
   })
