@@ -380,7 +380,16 @@ export async function runSync(
       const enhancementsValid = filterByFaction(enhancementRecords, 'enhancements')
       const abilitiesValid = filterByFaction(abilityRecords, 'abilities')
       const datasheetsValid = filterByFaction(datasheetRecords, 'datasheets')
-      const detachmentsValid = filterByFaction(detachmentRecords, 'detachments')
+      // Wahapedia tags Boarding Actions detachments with type='Boarding Actions'.
+      // Those are a separate game mode (small-scale boarding combat), not main
+      // 10th-ed detachments. Filtering them yields ~202 main detachments,
+      // consistent with community tracking (~195 across 23 factions).
+      const detachmentsMainGame = detachmentRecords.filter((d) => d.type !== 'Boarding Actions')
+      const boardingActionsDropped = detachmentRecords.length - detachmentsMainGame.length
+      if (boardingActionsDropped > 0) {
+        console.warn(`[detachments] dropped ${boardingActionsDropped} Boarding Actions detachments`)
+      }
+      const detachmentsValid = filterByFaction(detachmentsMainGame, 'detachments')
       // Re-derive canonicalDatasheetIds from the filtered set so weapons can't
       // reference a datasheet that didn't make it through the FK filter.
       const canonicalDatasheetIdsFiltered = new Set(datasheetsValid.map((d) => d.id))
