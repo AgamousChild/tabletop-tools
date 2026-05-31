@@ -78,36 +78,87 @@ if (process.argv[1] && process.argv[1].replace(/\\/g, '/').endsWith('scripts/11t
   const { nodes, links } = buildNodes(JSON.parse(readFileSync(refPath, 'utf8')), JSON.parse(readFileSync(abilPath, 'utf8')))
   mkdirSync(outDir, { recursive: true })
   for (const n of nodes) writeFileSync(`${outDir}/${n.id}.json`, JSON.stringify(n, null, 2))
-  let stats = { inserted: 0, skippedSame: 0, skippedDifferent: 0 }
+  let stats = { inserted: 0, skippedSame: 0, queued: 0, skippedMissingSchema: 0 }
   if (!dry) {
     const env = Object.fromEntries(readFileSync(new URL('../../.env', import.meta.url), 'utf8').split('\n').filter((l) => l.includes('=')).map((l) => { const i = l.indexOf('='); return [l.slice(0, i).trim(), l.slice(i + 1).trim()] }))
     const db = createClient({ url: env.TURSO_DB_URL, authToken: env.TURSO_AUTH_TOKEN })
     const now = Math.floor(Date.now() / 1000)
+
+    // Deploy-order safety: if migration 0005 hasn't been applied yet, the
+    // content_node_link_candidate table doesn't exist. Skip the queue path
+    // with a clear message rather than crashing mid-loop.
+    const candidateTable = await db.execute({
+      sql: `SELECT name FROM sqlite_master WHERE type='table' AND name='content_node_link_candidate'`,
+    })
+    const haveCandidateTable = candidateTable.rows.length > 0
+
+    const runId = new Date().toISOString()
+    const source = '11th-ingest:cards-abilities'
+
     for (const l of links) {
-      // Append-only crosswalk: only insert a chain head if no active link exists for this brain_node.
-      // A divergent canonical is a re-key — those go through the validation process (worklist step 10),
-      // not this script. We surface the drift instead of silently overwriting.
+      // content_node_link is one row per brain_node_id (PK). Look up current state.
       const existing = await db.execute({
-        sql: `SELECT canonical_id FROM content_node_link WHERE brain_node_id = ? AND superseded_at IS NULL LIMIT 1`,
+        sql: `SELECT canonical_id FROM content_node_link WHERE brain_node_id = ? LIMIT 1`,
         args: [l.brain_node_id],
       })
       if (existing.rows.length > 0) {
         if (existing.rows[0].canonical_id === l.canonical_id) {
           stats.skippedSame++
-        } else {
-          stats.skippedDifferent++
-          console.warn(`[11th-ingest] active link exists for ${l.brain_node_id} → ${existing.rows[0].canonical_id}; new candidate is ${l.canonical_id}; skipping (re-key needs validation — worklist step 10)`)
+          continue
+        }
+        // Divergent canonical — queue a pending candidate (re-key needs validation).
+        if (!haveCandidateTable) {
+          stats.skippedMissingSchema++
+          console.warn(`[11th-ingest] divergent canonical for ${l.brain_node_id}: ${existing.rows[0].canonical_id} → ${l.canonical_id}; candidate table missing (migration 0005 not applied?); skipping`)
+          continue
+        }
+        try {
+          await db.execute({
+            sql: `INSERT INTO content_node_link_candidate (candidate_id, brain_node_id, proposed_canonical_id, match_method, confidence, prior_canonical_id, source, run_id, proposed_at, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending')`,
+            args: [
+              `cnd-11th:${l.brain_node_id}:${l.canonical_id}`,
+              l.brain_node_id,
+              l.canonical_id,
+              'manual',
+              1,
+              existing.rows[0].canonical_id,
+              source,
+              runId,
+              now,
+            ],
+          })
+          stats.queued++
+        } catch (err) {
+          // Partial unique on (brain_node, proposed) WHERE pending — silent dedupe.
+          if (String(err).includes('UNIQUE')) continue
+          throw err
         }
         continue
       }
-      const linkId = `11th:${l.brain_node_id}`
-      await db.execute({
-        sql: `INSERT INTO content_node_link (link_id, brain_node_id, canonical_id, match_method, confidence, prior_link_id, validation_method, validated_by, validated_at, superseded_at) VALUES (?, ?, ?, ?, ?, NULL, 'auto-initial', '11th-ingest', ?, NULL) ON CONFLICT(link_id) DO NOTHING`,
-        args: [linkId, l.brain_node_id, l.canonical_id, 'manual', 1, now],
-      })
-      stats.inserted++
+
+      // First-time link: INSERT content_node_link + INSERT history (audit row).
+      // Both writes — best-effort sequential. Failure of the second leaves the
+      // link without a history row, surfaced by audit queries; not corrupting.
+      try {
+        await db.execute({
+          sql: `INSERT INTO content_node_link (brain_node_id, canonical_id, match_method, confidence, validation_method, validated_by, validated_at) VALUES (?, ?, ?, ?, 'auto-initial', '11th-ingest', ?) ON CONFLICT(brain_node_id) DO NOTHING`,
+          args: [l.brain_node_id, l.canonical_id, 'manual', 1, now],
+        })
+        await db.execute({
+          sql: `INSERT INTO content_node_link_history (history_id, brain_node_id, prior_canonical_id, new_canonical_id, changed_at, changed_by, change_method) VALUES (?, ?, NULL, ?, ?, '11th-ingest', 'auto-initial')`,
+          args: [
+            `hist-11th:${l.brain_node_id}:${now}`,
+            l.brain_node_id,
+            l.canonical_id,
+            now,
+          ],
+        })
+        stats.inserted++
+      } catch (err) {
+        console.warn(`[11th-ingest] insert failed for ${l.brain_node_id}: ${String(err)}`)
+      }
     }
   }
-  console.log(`nodes=${nodes.length} written to ${outDir}; content_node_link candidates=${links.length}${dry ? ' [dry]' : ` (inserted=${stats.inserted} skipped-same=${stats.skippedSame} skipped-different=${stats.skippedDifferent})`}`)
+  console.log(`nodes=${nodes.length} written to ${outDir}; content_node_link candidates=${links.length}${dry ? ' [dry]' : ` (inserted=${stats.inserted} skipped-same=${stats.skippedSame} queued=${stats.queued} skipped-missing-schema=${stats.skippedMissingSchema})`}`)
   console.log('HELD: R2 node upload + Vectorize re-index — awaiting go.')
 }
