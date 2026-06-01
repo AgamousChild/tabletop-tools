@@ -1,4 +1,5 @@
 import {
+  contentEntity,
   pairings,
   tournamentCards,
   tournamentPlayers,
@@ -6,7 +7,7 @@ import {
   userBans,
 } from '@tabletop-tools/db'
 import { TRPCError } from '@trpc/server'
-import { and, eq, inArray } from 'drizzle-orm'
+import { and, asc, eq, inArray } from 'drizzle-orm'
 import { z } from 'zod'
 
 import { protectedProcedure, router } from '../trpc'
@@ -21,6 +22,10 @@ export const playerRouter = router({
         detachment: z.string().optional(),
         listText: z.string().optional(),
         listId: z.string().optional(),
+        /** Optional FK to content_entity.id where type='faction' */
+        factionEntityId: z.string().optional(),
+        /** Optional FK to content_entity.id where type='detachment' */
+        detachmentEntityId: z.string().optional(),
       }),
     )
     .mutation(async ({ ctx, input }) => {
@@ -48,6 +53,8 @@ export const playerRouter = router({
         checkedIn: 0,
         dropped: 0,
         registeredAt: now,
+        factionEntityId: input.factionEntityId ?? null,
+        detachmentEntityId: input.detachmentEntityId ?? null,
       })
       return ctx.db.select().from(tournamentPlayers).where(eq(tournamentPlayers.id, id)).get()
     }),
@@ -482,5 +489,47 @@ export const playerRouter = router({
       })
 
       return results
+    }),
+
+  /**
+   * List all factions available for tournament registration.
+   * Reads content_entity WHERE type='faction', ordered by name.
+   * Returns empty array if content_entity has no faction rows yet.
+   */
+  listFactions: protectedProcedure.query(async ({ ctx }) => {
+    return ctx.db
+      .select({
+        id: contentEntity.id,
+        name: contentEntity.name,
+      })
+      .from(contentEntity)
+      .where(eq(contentEntity.type, 'faction'))
+      .orderBy(asc(contentEntity.name))
+      .all()
+  }),
+
+  /**
+   * List detachments for a given faction entity.
+   * Reads content_entity WHERE type='detachment' AND factionId = input.factionEntityId.
+   * Returns empty array if none exist.
+   */
+  listDetachments: protectedProcedure
+    .input(z.object({ factionEntityId: z.string() }))
+    .query(async ({ ctx, input }) => {
+      return ctx.db
+        .select({
+          id: contentEntity.id,
+          name: contentEntity.name,
+          factionId: contentEntity.factionId,
+        })
+        .from(contentEntity)
+        .where(
+          and(
+            eq(contentEntity.type, 'detachment'),
+            eq(contentEntity.factionId, input.factionEntityId),
+          ),
+        )
+        .orderBy(asc(contentEntity.name))
+        .all()
     }),
 })

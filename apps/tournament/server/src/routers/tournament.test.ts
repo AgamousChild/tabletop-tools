@@ -198,6 +198,18 @@ beforeAll(async () => {
       banned_at INTEGER NOT NULL,
       lifted_at INTEGER
     );
+    CREATE TABLE IF NOT EXISTS content_entity (
+      id TEXT PRIMARY KEY,
+      type TEXT NOT NULL,
+      name TEXT NOT NULL,
+      faction_id TEXT REFERENCES content_entity(id),
+      parent_id TEXT REFERENCES content_entity(id),
+      dataslate_id TEXT,
+      r2_key TEXT,
+      wahapedia_id TEXT,
+      bsdata_id TEXT,
+      updated_at INTEGER NOT NULL
+    );
     CREATE TABLE IF NOT EXISTS ranking_metric (
       id TEXT PRIMARY KEY,
       key TEXT NOT NULL UNIQUE,
@@ -769,5 +781,69 @@ describe('round.create with startTime', () => {
 
     const fetched = await toCaller.round.get(round!.id)
     expect(fetched?.startTime).toBe('2:30 PM')
+  })
+})
+
+describe('player.listFactions', () => {
+  it('returns empty list when no faction entities exist', async () => {
+    const caller = createCaller(p1Ctx)
+    const factions = await caller.player.listFactions()
+    // content_entity is empty in this test setup
+    expect(Array.isArray(factions)).toBe(true)
+    expect(factions.filter((f) => f.id === 'faction-space-marines')).toHaveLength(0)
+  })
+
+  it('returns factions from content_entity', async () => {
+    // Seed a faction entity
+    await client.execute(`
+      INSERT INTO content_entity (id, type, name, updated_at)
+      VALUES ('faction-space-marines', 'faction', 'Space Marines', 0)
+    `)
+    await client.execute(`
+      INSERT INTO content_entity (id, type, name, updated_at)
+      VALUES ('faction-orks', 'faction', 'Orks', 0)
+    `)
+    await client.execute(`
+      INSERT INTO content_entity (id, type, name, updated_at)
+      VALUES ('detachment-gladius', 'detachment', 'Gladius Task Force', 0)
+    `)
+
+    const caller = createCaller(p1Ctx)
+    const factions = await caller.player.listFactions()
+    const names = factions.map((f) => f.name)
+    expect(names).toContain('Space Marines')
+    expect(names).toContain('Orks')
+    // detachments should not appear
+    expect(names).not.toContain('Gladius Task Force')
+  })
+})
+
+describe('player.listDetachments', () => {
+  it('returns detachments for a given faction entity', async () => {
+    // Link the detachment to space marines faction
+    await client.execute(`
+      UPDATE content_entity SET faction_id = 'faction-space-marines'
+      WHERE id = 'detachment-gladius'
+    `)
+    await client.execute(`
+      INSERT INTO content_entity (id, type, name, faction_id, updated_at)
+      VALUES ('detachment-ironstorm', 'detachment', 'Ironstorm Spearhead', 'faction-space-marines', 0)
+    `)
+
+    const caller = createCaller(p1Ctx)
+    const detachments = await caller.player.listDetachments({
+      factionEntityId: 'faction-space-marines',
+    })
+    const names = detachments.map((d) => d.name)
+    expect(names).toContain('Gladius Task Force')
+    expect(names).toContain('Ironstorm Spearhead')
+    // Other faction's detachments should not appear
+    expect(names).not.toContain('Space Marines')
+  })
+
+  it('returns empty list for faction with no detachments', async () => {
+    const caller = createCaller(p1Ctx)
+    const detachments = await caller.player.listDetachments({ factionEntityId: 'faction-orks' })
+    expect(detachments).toHaveLength(0)
   })
 })
