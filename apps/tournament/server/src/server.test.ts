@@ -51,7 +51,10 @@ beforeAll(async () => {
       list_locked INTEGER NOT NULL DEFAULT 0,
       checked_in INTEGER NOT NULL DEFAULT 0,
       dropped INTEGER NOT NULL DEFAULT 0,
-      registered_at INTEGER NOT NULL
+      registered_at INTEGER NOT NULL,
+      faction_entity_id TEXT,
+      detachment_entity_id TEXT,
+      placement INTEGER
     );
     CREATE TABLE IF NOT EXISTS rounds (
       id TEXT PRIMARY KEY,
