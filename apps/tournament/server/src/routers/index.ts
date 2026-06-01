@@ -1,5 +1,6 @@
 import { publicProcedure, router } from '../trpc'
 import { awardRouter } from './award'
+import { bcpRegistrationRouter } from './bcp-registration'
 import { cardRouter } from './card'
 import { metricRouter } from './metric'
 import { passthroughRouter } from './passthrough'
@@ -18,6 +19,7 @@ export const appRouter = router({
   award: awardRouter,
   metric: metricRouter,
   passthrough: passthroughRouter,
+  bcpRegistration: bcpRegistrationRouter,
 })
 
 export type AppRouter = typeof appRouter
