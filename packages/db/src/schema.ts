@@ -411,10 +411,16 @@ export const tournamentPlayers = sqliteTable(
       .notNull()
       .references(() => authUsers.id, { onDelete: 'cascade' }),
     displayName: text('display_name').notNull(),
-    // user-entered string — NOT a BSData FK
+    // user-entered string — kept for backward compat + meta export
     faction: text('faction').notNull(),
-    // user-entered detachment name — NOT validated against GW data
+    // user-entered detachment name — kept for backward compat
     detachment: text('detachment'),
+    // Phase 3: FK into content_entity (type='faction') — canonical registry
+    factionEntityId: text('faction_entity_id').references((): AnySQLiteColumn => contentEntity.id),
+    // Phase 3: FK into content_entity (type='detachment')
+    detachmentEntityId: text('detachment_entity_id').references(
+      (): AnySQLiteColumn => contentEntity.id,
+    ),
     // army list pasted as raw text — stored verbatim, never parsed for GW content
     listText: text('list_text'),
     // V3: FK to lists table (optional — from list-builder sync)
@@ -422,6 +428,8 @@ export const tournamentPlayers = sqliteTable(
     listLocked: integer('list_locked').notNull().default(0),
     checkedIn: integer('checked_in').notNull().default(0),
     dropped: integer('dropped').notNull().default(0),
+    // Phase 3: snapshot written on tournament COMPLETE
+    placement: integer('placement'),
     registeredAt: integer('registered_at').notNull(),
   },
   (table) => [
@@ -521,6 +529,92 @@ export const tournamentAwards = sqliteTable(
     createdAt: integer('created_at').notNull(),
   },
   (table) => [index('idx_tournament_awards_tournament_id').on(table.tournamentId)],
+)
+
+// === Tournament Phase 3 — metric stack + BCP tables ===
+
+export const rankingMetric = sqliteTable('ranking_metric', {
+  id: text('id').primaryKey(), // slug: 'wins' | 'battle_points' | 'sos_wins' | ...
+  key: text('key').notNull().unique(),
+  label: text('label').notNull(),
+  description: text('description'),
+})
+
+export const tournamentPairingMetric = sqliteTable(
+  'tournament_pairing_metric',
+  {
+    id: text('id').primaryKey(),
+    tournamentId: text('tournament_id')
+      .notNull()
+      .references(() => tournaments.id, { onDelete: 'cascade' }),
+    rankingMetricId: text('ranking_metric_id')
+      .notNull()
+      .references(() => rankingMetric.id),
+    sortOrder: integer('sort_order').notNull(),
+    enabled: integer('enabled', { mode: 'boolean' }).notNull().default(true),
+  },
+  (t) => [
+    index('idx_tourn_pairing_metric_tourn').on(t.tournamentId),
+    uniqueIndex('uq_tourn_pairing_metric').on(t.tournamentId, t.rankingMetricId),
+  ],
+)
+
+export const tournamentPlacingMetric = sqliteTable(
+  'tournament_placing_metric',
+  {
+    id: text('id').primaryKey(),
+    tournamentId: text('tournament_id')
+      .notNull()
+      .references(() => tournaments.id, { onDelete: 'cascade' }),
+    rankingMetricId: text('ranking_metric_id')
+      .notNull()
+      .references(() => rankingMetric.id),
+    sortOrder: integer('sort_order').notNull(),
+    enabled: integer('enabled', { mode: 'boolean' }).notNull().default(true),
+  },
+  (t) => [
+    index('idx_tourn_placing_metric_tourn').on(t.tournamentId),
+    uniqueIndex('uq_tourn_placing_metric').on(t.tournamentId, t.rankingMetricId),
+  ],
+)
+
+export const passthroughEvent = sqliteTable(
+  'passthrough_event',
+  {
+    id: text('id').primaryKey(),
+    bcpEventId: text('bcp_event_id').notNull().unique(),
+    name: text('name').notNull(),
+    eventDate: integer('event_date'),
+    location: text('location'),
+    gameSystem: text('game_system'),
+    playerCount: integer('player_count'),
+    registrationUrl: text('registration_url'),
+    lastSyncedAt: integer('last_synced_at').notNull(),
+  },
+  (t) => [
+    index('idx_passthrough_event_date').on(t.eventDate),
+    index('idx_passthrough_bcp_event_id').on(t.bcpEventId),
+  ],
+)
+
+export const bcpRegistration = sqliteTable(
+  'bcp_registration',
+  {
+    id: text('id').primaryKey(),
+    userId: text('user_id')
+      .notNull()
+      .references(() => authUsers.id, { onDelete: 'cascade' }),
+    bcpEventId: text('bcp_event_id').notNull(),
+    listId: text('list_id'),
+    method: text('method', { enum: ['server', 'agent'] }).notNull(),
+    status: text('status', { enum: ['submitted', 'failed'] }).notNull(),
+    consentAt: integer('consent_at').notNull(),
+    submittedAt: integer('submitted_at').notNull(),
+  },
+  (t) => [
+    index('idx_bcp_registration_user').on(t.userId),
+    index('idx_bcp_registration_event').on(t.bcpEventId),
+  ],
 )
 
 // === Match detail tables (V3 — game-tracker) ===
@@ -1330,3 +1424,7 @@ export { list, listUnit, listUnitLoadout, listUnitLoadoutWeapon } from './list-s
 // === Phase 3 versus tables ===
 // The old `simulations` table above is DEPRECATED — use simulation/simulation_weapon/simulation_modifier.
 export { simulation, simulationModifier, simulationWeapon } from './versus-schema'
+
+// === Game Tracker v2 tables ===
+// New relational match model. Legacy matches/turns tables above remain for v1 backward compat.
+export * from './match-schema'

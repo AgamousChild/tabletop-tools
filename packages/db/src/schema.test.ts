@@ -5,6 +5,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 
 import {
   authUsers,
+  bcpRegistration,
   diceRollingSessions,
   diceSets,
   glickoHistory,
@@ -17,7 +18,9 @@ import {
   matches,
   matchSecondaries,
   pairings,
+  passthroughEvent,
   playerGlicko,
+  rankingMetric,
   rolls,
   rounds,
   simulation,
@@ -27,6 +30,8 @@ import {
   stratagemLog,
   tournamentAwards,
   tournamentCards,
+  tournamentPairingMetric,
+  tournamentPlacingMetric,
   tournamentPlayers,
   tournaments,
   trainingExamples,
@@ -294,7 +299,10 @@ beforeAll(async () => {
     list_locked INTEGER NOT NULL DEFAULT 0,
     checked_in INTEGER NOT NULL DEFAULT 0,
     dropped INTEGER NOT NULL DEFAULT 0,
-    registered_at INTEGER NOT NULL
+    registered_at INTEGER NOT NULL,
+    faction_entity_id TEXT,
+    detachment_entity_id TEXT,
+    placement INTEGER
   )`)
 
   await client.execute(`CREATE TABLE rounds (
@@ -414,6 +422,55 @@ beforeAll(async () => {
     created_at INTEGER NOT NULL
   )`)
 
+  // Phase 3: ranking metrics + passthrough events + BCP registration
+  await client.execute(`CREATE TABLE ranking_metric (
+    id TEXT PRIMARY KEY,
+    key TEXT NOT NULL UNIQUE,
+    label TEXT NOT NULL,
+    description TEXT
+  )`)
+
+  await client.execute(`CREATE TABLE tournament_pairing_metric (
+    id TEXT PRIMARY KEY,
+    tournament_id TEXT NOT NULL REFERENCES tournaments(id) ON DELETE CASCADE,
+    ranking_metric_id TEXT NOT NULL REFERENCES ranking_metric(id),
+    sort_order INTEGER NOT NULL,
+    enabled INTEGER NOT NULL DEFAULT 1,
+    CONSTRAINT uq_tourn_pairing_metric UNIQUE(tournament_id, ranking_metric_id)
+  )`)
+
+  await client.execute(`CREATE TABLE tournament_placing_metric (
+    id TEXT PRIMARY KEY,
+    tournament_id TEXT NOT NULL REFERENCES tournaments(id) ON DELETE CASCADE,
+    ranking_metric_id TEXT NOT NULL REFERENCES ranking_metric(id),
+    sort_order INTEGER NOT NULL,
+    enabled INTEGER NOT NULL DEFAULT 1,
+    CONSTRAINT uq_tourn_placing_metric UNIQUE(tournament_id, ranking_metric_id)
+  )`)
+
+  await client.execute(`CREATE TABLE passthrough_event (
+    id TEXT PRIMARY KEY,
+    bcp_event_id TEXT NOT NULL UNIQUE,
+    name TEXT NOT NULL,
+    event_date INTEGER,
+    location TEXT,
+    game_system TEXT,
+    player_count INTEGER,
+    registration_url TEXT,
+    last_synced_at INTEGER NOT NULL
+  )`)
+
+  await client.execute(`CREATE TABLE bcp_registration (
+    id TEXT PRIMARY KEY,
+    user_id TEXT NOT NULL REFERENCES "user"(id) ON DELETE CASCADE,
+    bcp_event_id TEXT NOT NULL,
+    list_id TEXT,
+    method TEXT NOT NULL,
+    status TEXT NOT NULL,
+    consent_at INTEGER NOT NULL,
+    submitted_at INTEGER NOT NULL
+  )`)
+
   // Match secondaries (game-tracker)
   await client.execute(`CREATE TABLE match_secondaries (
     id TEXT PRIMARY KEY,
@@ -453,6 +510,18 @@ beforeAll(async () => {
   await client.execute('CREATE INDEX idx_match_secondaries_match_id ON match_secondaries(match_id)')
   await client.execute('CREATE INDEX idx_stratagem_log_turn_id ON stratagem_log(turn_id)')
   await client.execute('CREATE INDEX idx_user_bans_user_id ON user_bans(user_id)')
+  await client.execute(
+    'CREATE INDEX idx_tourn_pairing_metric_tourn ON tournament_pairing_metric(tournament_id)',
+  )
+  await client.execute(
+    'CREATE INDEX idx_tourn_placing_metric_tourn ON tournament_placing_metric(tournament_id)',
+  )
+  await client.execute('CREATE INDEX idx_passthrough_event_date ON passthrough_event(event_date)')
+  await client.execute(
+    'CREATE INDEX idx_passthrough_bcp_event_id ON passthrough_event(bcp_event_id)',
+  )
+  await client.execute('CREATE INDEX idx_bcp_registration_user ON bcp_registration(user_id)')
+  await client.execute('CREATE INDEX idx_bcp_registration_event ON bcp_registration(bcp_event_id)')
 
   // --- V2: Composite unique constraints ---
   await client.execute(
@@ -1248,6 +1317,10 @@ describe('V2: Index existence', () => {
       match_secondaries: ['idx_match_secondaries_match_id'],
       stratagem_log: ['idx_stratagem_log_turn_id'],
       user_bans: ['idx_user_bans_user_id'],
+      tournament_pairing_metric: ['idx_tourn_pairing_metric_tourn'],
+      tournament_placing_metric: ['idx_tourn_placing_metric_tourn'],
+      passthrough_event: ['idx_passthrough_event_date', 'idx_passthrough_bcp_event_id'],
+      bcp_registration: ['idx_bcp_registration_user', 'idx_bcp_registration_event'],
     }
 
     for (const [table, indexes] of Object.entries(expectedIndexes)) {
@@ -1647,6 +1720,149 @@ describe('V3: tournamentPlayers listId', () => {
       .from(tournamentPlayers)
       .where(eq(tournamentPlayers.id, 'tp-v3'))
     expect(result[0]?.listId).toBe('list-v3')
+  })
+})
+
+// ============================================================
+// Phase 3: ranking metrics, passthrough events, BCP registration
+// ============================================================
+
+describe('rankingMetric', () => {
+  it('inserts and retrieves a ranking metric', async () => {
+    await db.insert(rankingMetric).values({
+      id: 'wins',
+      key: 'wins',
+      label: 'Wins',
+      description: 'Number of wins',
+    })
+
+    const result = await db.select().from(rankingMetric).where(eq(rankingMetric.id, 'wins'))
+    expect(result).toHaveLength(1)
+    expect(result[0]?.label).toBe('Wins')
+    expect(result[0]?.key).toBe('wins')
+  })
+
+  it('enforces unique key constraint', async () => {
+    await expect(
+      db.insert(rankingMetric).values({ id: 'wins-dupe', key: 'wins', label: 'Wins Dupe' }),
+    ).rejects.toThrow()
+  })
+})
+
+describe('tournamentPairingMetric', () => {
+  it('inserts and retrieves a pairing metric stack entry', async () => {
+    await db.insert(tournamentPairingMetric).values({
+      id: 'tpm-1',
+      tournamentId: 'tourn-1',
+      rankingMetricId: 'wins',
+      sortOrder: 1,
+      enabled: true,
+    })
+
+    const result = await db
+      .select()
+      .from(tournamentPairingMetric)
+      .where(eq(tournamentPairingMetric.id, 'tpm-1'))
+    expect(result).toHaveLength(1)
+    expect(result[0]?.sortOrder).toBe(1)
+    expect(result[0]?.enabled).toBe(true)
+  })
+
+  it('enforces unique (tournament_id, ranking_metric_id) constraint', async () => {
+    await expect(
+      db.insert(tournamentPairingMetric).values({
+        id: 'tpm-dupe',
+        tournamentId: 'tourn-1',
+        rankingMetricId: 'wins',
+        sortOrder: 2,
+        enabled: true,
+      }),
+    ).rejects.toThrow()
+  })
+})
+
+describe('tournamentPlacingMetric', () => {
+  it('inserts and retrieves a placing metric stack entry', async () => {
+    await db.insert(tournamentPlacingMetric).values({
+      id: 'tplm-1',
+      tournamentId: 'tourn-1',
+      rankingMetricId: 'wins',
+      sortOrder: 1,
+      enabled: true,
+    })
+
+    const result = await db
+      .select()
+      .from(tournamentPlacingMetric)
+      .where(eq(tournamentPlacingMetric.id, 'tplm-1'))
+    expect(result).toHaveLength(1)
+    expect(result[0]?.sortOrder).toBe(1)
+  })
+})
+
+describe('passthroughEvent', () => {
+  it('inserts and retrieves a BCP passthrough event', async () => {
+    await db.insert(passthroughEvent).values({
+      id: 'pe-1',
+      bcpEventId: 'bcp-evt-123',
+      name: 'Regional GT 2026',
+      eventDate: 1780000000,
+      location: 'Chicago, IL',
+      gameSystem: 'Warhammer 40,000',
+      playerCount: 64,
+      registrationUrl: 'https://bcp.io/register/123',
+      lastSyncedAt: Date.now(),
+    })
+
+    const result = await db.select().from(passthroughEvent).where(eq(passthroughEvent.id, 'pe-1'))
+    expect(result).toHaveLength(1)
+    expect(result[0]?.name).toBe('Regional GT 2026')
+    expect(result[0]?.playerCount).toBe(64)
+    expect(result[0]?.bcpEventId).toBe('bcp-evt-123')
+  })
+
+  it('enforces unique bcp_event_id constraint', async () => {
+    await expect(
+      db.insert(passthroughEvent).values({
+        id: 'pe-dupe',
+        bcpEventId: 'bcp-evt-123',
+        name: 'Duplicate',
+        lastSyncedAt: Date.now(),
+      }),
+    ).rejects.toThrow()
+  })
+})
+
+describe('bcpRegistration', () => {
+  it('inserts and retrieves a BCP registration with consent', async () => {
+    const now = Date.now()
+    await db.insert(bcpRegistration).values({
+      id: 'bcpreg-1',
+      userId: 'user-1',
+      bcpEventId: 'bcp-evt-123',
+      listId: 'list-v3',
+      method: 'server',
+      status: 'submitted',
+      consentAt: now,
+      submittedAt: now,
+    })
+
+    const result = await db.select().from(bcpRegistration).where(eq(bcpRegistration.id, 'bcpreg-1'))
+    expect(result).toHaveLength(1)
+    expect(result[0]?.method).toBe('server')
+    expect(result[0]?.status).toBe('submitted')
+    expect(result[0]?.consentAt).toBe(now)
+  })
+})
+
+describe('tournamentPlayers Phase 3 columns', () => {
+  it('stores placement on an existing player', async () => {
+    // tp-1 was inserted in an earlier describe block (tourn-1 / user-1)
+    await db.update(tournamentPlayers).set({ placement: 1 }).where(eq(tournamentPlayers.id, 'tp-1'))
+
+    const result = await db.select().from(tournamentPlayers).where(eq(tournamentPlayers.id, 'tp-1'))
+    expect(result).toHaveLength(1)
+    expect(result[0]?.placement).toBe(1)
   })
 })
 
