@@ -34,6 +34,7 @@ export default defineConfig({
         'no-cheat.spec.ts',
         'versus.spec.ts',
         'list-builder.spec.ts',
+        'list-builder-v2.spec.ts',
         'game-tracker.spec.ts',
         'tournament.spec.ts',
         'admin.spec.ts',
