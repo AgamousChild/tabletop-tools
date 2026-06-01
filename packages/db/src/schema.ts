@@ -1298,3 +1298,6 @@ export const missionGameState = sqliteTable(
     index('idx_mgs_state').on(table.gameStateId),
   ],
 )
+
+// === Phase 2 list tables ===
+export { list, listUnit, listUnitLoadout, listUnitLoadoutWeapon } from './list-schema'
