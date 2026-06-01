@@ -427,6 +427,14 @@ async function exportToMeta(
     return sb.vp - sa.vp
   })
 
+  // Freeze placement on each tournament_player row (idempotent — overwrite on re-export)
+  for (let i = 0; i < sorted.length; i++) {
+    await db
+      .update(tournamentPlayers)
+      .set({ placement: i + 1 })
+      .where(eq(tournamentPlayers.id, sorted[i].id))
+  }
+
   // INSERT metaEvent
   const eventId = generateId()
   const now = Date.now()
