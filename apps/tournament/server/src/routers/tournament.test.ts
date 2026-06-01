@@ -198,6 +198,28 @@ beforeAll(async () => {
       banned_at INTEGER NOT NULL,
       lifted_at INTEGER
     );
+    CREATE TABLE IF NOT EXISTS ranking_metric (
+      id TEXT PRIMARY KEY,
+      key TEXT NOT NULL UNIQUE,
+      label TEXT NOT NULL,
+      description TEXT
+    );
+    CREATE TABLE IF NOT EXISTS tournament_pairing_metric (
+      id TEXT PRIMARY KEY,
+      tournament_id TEXT NOT NULL REFERENCES tournaments(id) ON DELETE CASCADE,
+      ranking_metric_id TEXT NOT NULL REFERENCES ranking_metric(id),
+      sort_order INTEGER NOT NULL,
+      enabled INTEGER NOT NULL DEFAULT 1,
+      CONSTRAINT uq_tourn_pairing_metric UNIQUE(tournament_id, ranking_metric_id)
+    );
+    CREATE TABLE IF NOT EXISTS tournament_placing_metric (
+      id TEXT PRIMARY KEY,
+      tournament_id TEXT NOT NULL REFERENCES tournaments(id) ON DELETE CASCADE,
+      ranking_metric_id TEXT NOT NULL REFERENCES ranking_metric(id),
+      sort_order INTEGER NOT NULL,
+      enabled INTEGER NOT NULL DEFAULT 1,
+      CONSTRAINT uq_tourn_placing_metric UNIQUE(tournament_id, ranking_metric_id)
+    );
     INSERT INTO "user" (id, name, email, email_verified, created_at, updated_at)
     VALUES ('to-1', 'Alice', 'alice@example.com', 0, 0, 0);
     INSERT INTO "user" (id, name, email, email_verified, created_at, updated_at)
@@ -505,9 +527,13 @@ describe('tournament.standings', () => {
       faction: 'Orks',
     })
 
-    const standings = await toCaller.tournament.standings(t!.id)
+    const standings = await toCaller.tournament.standings({
+      tournamentId: t!.id,
+      stackType: 'pairing',
+    })
     expect(standings.players).toHaveLength(1)
-    expect(standings.players[0].wins).toBe(0)
+    // Legacy fallback (no metric stack configured) returns computeStandings shape
+    expect((standings.players[0] as any).wins).toBe(0)
   })
 })
 

@@ -6,17 +6,21 @@ import {
   metaPairings,
   pairings,
   playerGlicko,
+  rankingMetric,
   rounds,
+  tournamentPairingMetric,
+  tournamentPlacingMetric,
   tournamentPlayers,
   tournaments,
 } from '@tabletop-tools/db'
 import { resolveFaction } from '@tabletop-tools/db'
 import { generateId, updateGlicko2 } from '@tabletop-tools/server-core'
 import { TRPCError } from '@trpc/server'
-import { and, eq, inArray } from 'drizzle-orm'
+import { and, asc, eq, inArray } from 'drizzle-orm'
 import { z } from 'zod'
 
 import { computeStandings } from '../lib/standings/compute'
+import { computeMetricStandings } from '../lib/standings/metric-compute'
 import { protectedProcedure, router } from '../trpc'
 
 const LIFECYCLE: Record<string, string> = {
@@ -216,61 +220,105 @@ export const tournamentRouter = router({
     return { deleted: true }
   }),
 
-  standings: protectedProcedure.input(z.string()).query(async ({ ctx, input }) => {
-    const players = await ctx.db
-      .select()
-      .from(tournamentPlayers)
-      .where(eq(tournamentPlayers.tournamentId, input))
-      .all()
+  standings: protectedProcedure
+    .input(
+      z.object({
+        tournamentId: z.string(),
+        stackType: z.enum(['pairing', 'placing']).default('pairing'),
+      }),
+    )
+    .query(async ({ ctx, input }) => {
+      const players = await ctx.db
+        .select()
+        .from(tournamentPlayers)
+        .where(eq(tournamentPlayers.tournamentId, input.tournamentId))
+        .all()
 
-    // Get all confirmed results for this tournament
-    const allRounds = await ctx.db.select().from(rounds).where(eq(rounds.tournamentId, input)).all()
+      // Load the metric stack for this tournament from the DB
+      const stackTable =
+        input.stackType === 'pairing' ? tournamentPairingMetric : tournamentPlacingMetric
+      const stackRows = await ctx.db
+        .select({
+          key: rankingMetric.key,
+          enabled: stackTable.enabled,
+          sortOrder: stackTable.sortOrder,
+        })
+        .from(stackTable)
+        .innerJoin(rankingMetric, eq(stackTable.rankingMetricId, rankingMetric.id))
+        .where(eq(stackTable.tournamentId, input.tournamentId))
+        .orderBy(asc(stackTable.sortOrder))
+        .all()
 
-    const roundIds = allRounds.map((r) => r.id)
-    if (roundIds.length === 0) {
-      return {
-        round: 0,
-        players: computeStandings(
-          players.map((p) => ({
-            id: p.id,
-            displayName: p.displayName,
-            faction: p.faction,
-            registeredAt: p.registeredAt,
-          })),
-          [],
-        ),
+      // Get all confirmed results for this tournament
+      const allRounds = await ctx.db
+        .select()
+        .from(rounds)
+        .where(eq(rounds.tournamentId, input.tournamentId))
+        .all()
+
+      const roundIds = allRounds.map((r) => r.id)
+      const playerInputs = players.map((p) => ({
+        id: p.id,
+        displayName: p.displayName,
+        faction: p.faction,
+        factionEntityId: p.factionEntityId,
+        detachmentEntityId: p.detachmentEntityId,
+        registeredAt: p.registeredAt,
+        placement: p.placement,
+      }))
+
+      if (roundIds.length === 0) {
+        if (stackRows.length > 0) {
+          return {
+            round: 0,
+            stackType: input.stackType,
+            metricKeys: stackRows.map((r) => r.key),
+            players: computeMetricStandings(playerInputs, [], stackRows),
+          }
+        }
+        return {
+          round: 0,
+          stackType: 'legacy' as const,
+          metricKeys: ['wins', 'vp_margin', 'sos_wins', 'battle_points', 'registered_at'],
+          players: computeStandings(playerInputs, []),
+        }
       }
-    }
 
-    // Get pairings for this tournament's rounds only (not all pairings in DB)
-    const tournamentPairings = await ctx.db
-      .select()
-      .from(pairings)
-      .where(inArray(pairings.roundId, roundIds))
-      .all()
-    const confirmedPairings = tournamentPairings.filter((p) => p.result !== null)
+      // Get pairings for this tournament's rounds only (not all pairings in DB)
+      const tournamentPairings = await ctx.db
+        .select()
+        .from(pairings)
+        .where(inArray(pairings.roundId, roundIds))
+        .all()
+      const confirmedPairings = tournamentPairings.filter((p) => p.result !== null)
 
-    const results = confirmedPairings.map((p) => ({
-      player1Id: p.player1Id,
-      player2Id: p.player2Id,
-      player1Vp: p.player1Vp ?? 0,
-      player2Vp: p.player2Vp ?? 0,
-      result: p.result as 'P1_WIN' | 'P2_WIN' | 'DRAW' | 'BYE',
-    }))
+      const results = confirmedPairings.map((p) => ({
+        player1Id: p.player1Id,
+        player2Id: p.player2Id,
+        player1Vp: p.player1Vp ?? 0,
+        player2Vp: p.player2Vp ?? 0,
+        result: p.result as 'P1_WIN' | 'P2_WIN' | 'DRAW' | 'BYE',
+      }))
 
-    const currentRound = allRounds.length
-    const playerInputs = players.map((p) => ({
-      id: p.id,
-      displayName: p.displayName,
-      faction: p.faction,
-      registeredAt: p.registeredAt,
-    }))
+      const currentRound = allRounds.length
 
-    return {
-      round: currentRound,
-      players: computeStandings(playerInputs, results),
-    }
-  }),
+      if (stackRows.length > 0) {
+        return {
+          round: currentRound,
+          stackType: input.stackType,
+          metricKeys: stackRows.map((r) => r.key),
+          players: computeMetricStandings(playerInputs, results, stackRows),
+        }
+      }
+
+      // Fallback: legacy hardcoded compute for tournaments without a configured metric stack
+      return {
+        round: currentRound,
+        stackType: 'legacy' as const,
+        metricKeys: ['wins', 'vp_margin', 'sos_wins', 'battle_points', 'registered_at'],
+        players: computeStandings(playerInputs, results),
+      }
+    }),
 })
 
 // ---- Internal helpers ----
