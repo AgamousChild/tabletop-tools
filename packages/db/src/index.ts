@@ -1,3 +1,5 @@
 export * from './client'
 export * from './factions'
+export * from './list-attachment'
+export * from './list-points'
 export * from './schema'
