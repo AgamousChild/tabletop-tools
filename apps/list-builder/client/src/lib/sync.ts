@@ -79,6 +79,28 @@ export function syncAllToServer(): void {
   })()
 }
 
+/**
+ * Sync a list + all its units to the new v2 relational router. Fire-and-forget.
+ *
+ * Phase 2: establishes the module boundary. Full two-way sync with loadout-level
+ * granularity (diff units, set loadouts per unit) is a Phase 3 concern once the
+ * list-builder UI is redesigned around server-first CRUD.
+ */
+export function syncListV2ToServer(listId: string): void {
+  void (async () => {
+    try {
+      const list = await getList(listId)
+      if (!list) return
+      // eslint-disable-next-line @typescript-eslint/no-unused-vars
+      const _units = await getListUnits(listId)
+      // TODO(Phase 3): full two-way sync with loadout-level granularity
+      // (check if v2 list row exists, diff units, call listV2.addUnit / setLoadout per unit)
+    } catch {
+      // Fire-and-forget
+    }
+  })()
+}
+
 /** Delete a list from the server. Fire-and-forget. */
 export function deleteListFromServer(listId: string): void {
   void (async () => {

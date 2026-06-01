@@ -117,8 +117,6 @@ export const listV2Router = router({
       ...rows[0]!,
       units: units.map((u) => ({
         ...u,
-        // isWarlord is declared with mode:'boolean' in Drizzle, so it already comes back as boolean
-        isWarlord: Boolean(u.isWarlord),
         loadouts: loadouts
           .filter((lo) => lo.listUnitId === u.id)
           .map((lo) => ({
@@ -166,7 +164,7 @@ export const listV2Router = router({
         listId: input.listId,
         datasheetId: input.datasheetId ?? null,
         enhancementId: input.enhancementId ?? null,
-        isWarlord: input.isWarlord ? 1 : 0,
+        isWarlord: input.isWarlord,
         points: input.points,
         attachedToUnitId: input.attachedToUnitId ?? null,
         attachRole: input.attachRole ?? null,
@@ -220,7 +218,7 @@ export const listV2Router = router({
         .update(listUnit)
         .set({
           ...rest,
-          ...(isWarlord !== undefined ? { isWarlord: isWarlord ? 1 : 0 } : {}),
+          ...(isWarlord !== undefined ? { isWarlord } : {}),
         })
         .where(eq(listUnit.id, id))
       return { success: true }
