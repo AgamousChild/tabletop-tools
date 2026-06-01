@@ -8,7 +8,11 @@ import {
   diceRollingSessions,
   diceSets,
   glickoHistory,
+  list,
   lists,
+  listUnit,
+  listUnitLoadout,
+  listUnitLoadoutWeapon,
   listUnits,
   matches,
   matchSecondaries,
@@ -484,6 +488,69 @@ beforeAll(async () => {
     createdAt: new Date(),
     updatedAt: new Date(),
   })
+
+  // Phase 2: Stub tables needed as FK targets by the new list tables
+  await client.execute(`CREATE TABLE IF NOT EXISTS dim_dataslate (
+    id TEXT PRIMARY KEY,
+    name TEXT NOT NULL,
+    effective_date INTEGER NOT NULL,
+    end_date INTEGER
+  )`)
+
+  await client.execute(`CREATE TABLE IF NOT EXISTS content_entity (
+    id TEXT PRIMARY KEY,
+    type TEXT NOT NULL,
+    name TEXT NOT NULL,
+    faction_id TEXT,
+    parent_id TEXT,
+    dataslate_id TEXT,
+    r2_key TEXT,
+    wahapedia_id TEXT,
+    bsdata_id TEXT,
+    updated_at INTEGER NOT NULL
+  )`)
+
+  // Phase 2: List data model tables
+  await client.execute(`CREATE TABLE list (
+    id TEXT PRIMARY KEY,
+    user_id TEXT NOT NULL REFERENCES "user"(id) ON DELETE CASCADE,
+    name TEXT NOT NULL,
+    author TEXT,
+    edition TEXT NOT NULL DEFAULT '11th',
+    faction_id TEXT REFERENCES content_entity(id),
+    subfaction_id TEXT REFERENCES content_entity(id),
+    detachment_id TEXT REFERENCES content_entity(id),
+    battle_size TEXT NOT NULL DEFAULT 'unknown',
+    total_points INTEGER NOT NULL DEFAULT 0,
+    dataslate_id TEXT REFERENCES dim_dataslate(id),
+    source TEXT NOT NULL DEFAULT 'list-builder',
+    created_at INTEGER NOT NULL,
+    updated_at INTEGER NOT NULL
+  )`)
+
+  await client.execute(`CREATE TABLE list_unit (
+    id TEXT PRIMARY KEY,
+    list_id TEXT NOT NULL REFERENCES list(id) ON DELETE CASCADE,
+    datasheet_id TEXT REFERENCES content_entity(id),
+    enhancement_id TEXT REFERENCES content_entity(id),
+    is_warlord INTEGER NOT NULL DEFAULT 0,
+    points INTEGER NOT NULL DEFAULT 0,
+    attached_to_unit_id TEXT REFERENCES list_unit(id),
+    attach_role TEXT
+  )`)
+
+  await client.execute(`CREATE TABLE list_unit_loadout (
+    id TEXT PRIMARY KEY,
+    list_unit_id TEXT NOT NULL REFERENCES list_unit(id) ON DELETE CASCADE,
+    model_count INTEGER NOT NULL
+  )`)
+
+  await client.execute(`CREATE TABLE list_unit_loadout_weapon (
+    id TEXT PRIMARY KEY,
+    loadout_id TEXT NOT NULL REFERENCES list_unit_loadout(id) ON DELETE CASCADE,
+    weapon_id TEXT REFERENCES content_entity(id),
+    count INTEGER NOT NULL DEFAULT 1
+  )`)
 })
 
 // ============================================================
@@ -1814,5 +1881,134 @@ describe('V2: Cascading deletes', () => {
     const userResult = await db.select().from(authUsers).where(eq(authUsers.id, 'user-2'))
     expect(userResult).toHaveLength(1)
     expect(userResult[0]?.name).toBe('Opponent User')
+  })
+
+  describe('list (v2)', () => {
+    it('inserts and reads a list row', async () => {
+      await db.insert(list).values({
+        id: 'v2-list-1',
+        userId: 'user-1',
+        name: 'My Test List',
+        edition: '11th',
+        battleSize: 'Strike Force',
+        totalPoints: 0,
+        source: 'list-builder',
+        createdAt: Date.now(),
+        updatedAt: Date.now(),
+      })
+      const rows = await db.select().from(list).where(eq(list.id, 'v2-list-1'))
+      expect(rows).toHaveLength(1)
+      expect(rows[0]?.name).toBe('My Test List')
+      expect(rows[0]?.edition).toBe('11th')
+    })
+
+    it('cascades delete from list to list_unit', async () => {
+      await db.insert(list).values({
+        id: 'v2-list-cascade',
+        userId: 'user-1',
+        name: 'Cascade Test',
+        edition: '11th',
+        battleSize: 'unknown',
+        totalPoints: 0,
+        source: 'list-builder',
+        createdAt: Date.now(),
+        updatedAt: Date.now(),
+      })
+      await db.insert(listUnit).values({
+        id: 'v2-unit-cascade',
+        listId: 'v2-list-cascade',
+        isWarlord: false,
+        points: 100,
+      })
+      await db.delete(list).where(eq(list.id, 'v2-list-cascade'))
+      const units = await db.select().from(listUnit).where(eq(listUnit.id, 'v2-unit-cascade'))
+      expect(units).toHaveLength(0)
+    })
+  })
+
+  describe('listUnit (v2)', () => {
+    it('inserts a unit and reads it back', async () => {
+      await db.insert(list).values({
+        id: 'v2-list-for-unit',
+        userId: 'user-1',
+        name: 'Unit Test List',
+        edition: '11th',
+        battleSize: 'unknown',
+        totalPoints: 0,
+        source: 'list-builder',
+        createdAt: Date.now(),
+        updatedAt: Date.now(),
+      })
+      await db.insert(listUnit).values({
+        id: 'v2-unit-1',
+        listId: 'v2-list-for-unit',
+        isWarlord: true,
+        points: 200,
+      })
+      const rows = await db.select().from(listUnit).where(eq(listUnit.id, 'v2-unit-1'))
+      expect(rows).toHaveLength(1)
+      expect(rows[0]?.isWarlord).toBe(true)
+      expect(rows[0]?.points).toBe(200)
+    })
+
+    it('supports self-referential attachment (attachedToUnitId)', async () => {
+      await db.insert(listUnit).values({
+        id: 'v2-bodyguard-1',
+        listId: 'v2-list-for-unit',
+        isWarlord: false,
+        points: 150,
+      })
+      await db.insert(listUnit).values({
+        id: 'v2-character-1',
+        listId: 'v2-list-for-unit',
+        isWarlord: false,
+        points: 80,
+        attachedToUnitId: 'v2-bodyguard-1',
+        attachRole: 'leader',
+      })
+      const rows = await db.select().from(listUnit).where(eq(listUnit.id, 'v2-character-1'))
+      expect(rows[0]?.attachedToUnitId).toBe('v2-bodyguard-1')
+      expect(rows[0]?.attachRole).toBe('leader')
+    })
+
+    it('rejects insert with invalid list_id FK', async () => {
+      await expect(
+        db.insert(listUnit).values({
+          id: 'v2-unit-bad-fk',
+          listId: 'nonexistent-list',
+          isWarlord: false,
+          points: 0,
+        }),
+      ).rejects.toThrow()
+    })
+  })
+
+  describe('listUnitLoadout (v2)', () => {
+    it('inserts a loadout and cascades delete to weapons', async () => {
+      await db.insert(listUnitLoadout).values({
+        id: 'v2-loadout-1',
+        listUnitId: 'v2-unit-1',
+        modelCount: 5,
+      })
+      await db.insert(listUnitLoadoutWeapon).values({
+        id: 'v2-weapon-1',
+        loadoutId: 'v2-loadout-1',
+        count: 1,
+      })
+      const loadouts = await db
+        .select()
+        .from(listUnitLoadout)
+        .where(eq(listUnitLoadout.id, 'v2-loadout-1'))
+      expect(loadouts).toHaveLength(1)
+      expect(loadouts[0]?.modelCount).toBe(5)
+
+      // Cascade: deleting loadout removes weapon
+      await db.delete(listUnitLoadout).where(eq(listUnitLoadout.id, 'v2-loadout-1'))
+      const weapons = await db
+        .select()
+        .from(listUnitLoadoutWeapon)
+        .where(eq(listUnitLoadoutWeapon.id, 'v2-weapon-1'))
+      expect(weapons).toHaveLength(0)
+    })
   })
 })
