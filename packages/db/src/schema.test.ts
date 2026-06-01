@@ -515,6 +515,7 @@ beforeAll(async () => {
     id TEXT PRIMARY KEY,
     user_id TEXT NOT NULL REFERENCES "user"(id) ON DELETE CASCADE,
     name TEXT NOT NULL,
+    description TEXT,
     author TEXT,
     edition TEXT NOT NULL DEFAULT '11th',
     faction_id TEXT REFERENCES content_entity(id),

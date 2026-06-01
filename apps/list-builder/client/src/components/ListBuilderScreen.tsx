@@ -14,6 +14,21 @@ import { FactionDetachmentScreen } from './FactionDetachmentScreen'
 import { MyListsScreen } from './MyListsScreen'
 import { UnitSelectionScreen } from './UnitSelectionScreen'
 
+/**
+ * Convert a faction display name to its canonical content_entity id.
+ * Mirrors the data-import slug rule: strip apostrophes / smart quotes,
+ * lowercase, non-alnum → '-', trim '-', max 60 chars. The match must be
+ * exact for the FK constraint on `list.faction_id`.
+ */
+function canonicalFactionId(name: string): string {
+  return name
+    .toLowerCase()
+    .replace(/[’ʼ'‘"”“]/g, '')
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-|-$/g, '')
+    .slice(0, 60)
+}
+
 type Screen =
   | { type: 'my-lists' }
   | { type: 'battle-size' }
@@ -89,19 +104,22 @@ export function ListBuilderScreen({ onSignOut }: Props) {
   }, [])
 
   const handleFactionDetachmentSelect = useCallback(
-    async (factionId: string, detachmentId: string) => {
+    async (factionDisplayName: string, detachmentId: string) => {
       const bs =
         screen.type === 'faction-detachment'
           ? screen.battleSize
           : { name: 'Strike Force', points: 2000, maxDuplicates: 3, description: '' }
 
       const bsEnum = pointsToBattleSizeEnum(bs.points)
-      const name = `${factionId || 'New List'} ${bs.points}pts`
+      const name = `${factionDisplayName || 'New List'} ${bs.points}pts`
+      // Convert display name → canonical content_entity faction id, matching
+      // the data-import slug rule (drop apostrophes, lowercase, non-alnum → '-').
+      const factionId = factionDisplayName ? canonicalFactionId(factionDisplayName) : undefined
 
       const listId = await createListV2Imperative({
         name,
         battleSize: bsEnum,
-        factionId: factionId || undefined,
+        factionId,
         detachmentId: detachmentId || undefined,
       })
 
@@ -110,7 +128,7 @@ export function ListBuilderScreen({ onSignOut }: Props) {
       setScreen({
         type: 'unit-selection',
         listId,
-        factionId,
+        factionId: factionId ?? '',
         detachmentId,
         battleSize: bs,
       })

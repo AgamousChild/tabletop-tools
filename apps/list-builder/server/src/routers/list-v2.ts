@@ -33,6 +33,7 @@ export const listV2Router = router({
     .input(
       z.object({
         name: z.string().min(1),
+        description: z.string().optional(),
         edition: z.enum(['10th', '11th']).default('11th'),
         battleSize: battleSizeEnum.default('unknown'),
         author: z.string().optional(),
@@ -50,6 +51,7 @@ export const listV2Router = router({
         id,
         userId: ctx.user.id,
         name: input.name,
+        description: input.description ?? null,
         edition: input.edition,
         battleSize: input.battleSize,
         totalPoints: 0,
@@ -70,6 +72,7 @@ export const listV2Router = router({
       z.object({
         id: z.string(),
         name: z.string().min(1).optional(),
+        description: z.string().nullable().optional(),
         edition: z.enum(['10th', '11th']).optional(),
         battleSize: battleSizeEnum.optional(),
         author: z.string().optional(),

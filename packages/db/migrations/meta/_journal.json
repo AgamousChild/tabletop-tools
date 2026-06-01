@@ -57,6 +57,13 @@
       "when": 1780633600000,
       "tag": "0007_content_can_lead",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "6",
+      "when": 1780638000000,
+      "tag": "0008_list_description",
+      "breakpoints": true
     }
   ]
 }

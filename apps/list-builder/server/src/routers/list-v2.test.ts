@@ -14,7 +14,7 @@ beforeAll(async () => {
     CREATE TABLE "user" (id TEXT PRIMARY KEY, name TEXT NOT NULL, email TEXT UNIQUE NOT NULL, email_verified INTEGER NOT NULL DEFAULT 0, created_at INTEGER NOT NULL, updated_at INTEGER NOT NULL);
     CREATE TABLE dim_dataslate (id TEXT PRIMARY KEY, name TEXT NOT NULL, effective_date INTEGER NOT NULL, end_date INTEGER);
     CREATE TABLE content_entity (id TEXT PRIMARY KEY, type TEXT NOT NULL, name TEXT NOT NULL, faction_id TEXT, parent_id TEXT, dataslate_id TEXT, r2_key TEXT, wahapedia_id TEXT, bsdata_id TEXT, updated_at INTEGER NOT NULL);
-    CREATE TABLE list (id TEXT PRIMARY KEY, user_id TEXT NOT NULL REFERENCES "user"(id) ON DELETE CASCADE, name TEXT NOT NULL, author TEXT, edition TEXT NOT NULL DEFAULT '11th', faction_id TEXT REFERENCES content_entity(id), subfaction_id TEXT REFERENCES content_entity(id), detachment_id TEXT REFERENCES content_entity(id), battle_size TEXT NOT NULL DEFAULT 'unknown', total_points INTEGER NOT NULL DEFAULT 0, dataslate_id TEXT REFERENCES dim_dataslate(id), source TEXT NOT NULL DEFAULT 'list-builder', created_at INTEGER NOT NULL, updated_at INTEGER NOT NULL);
+    CREATE TABLE list (id TEXT PRIMARY KEY, user_id TEXT NOT NULL REFERENCES "user"(id) ON DELETE CASCADE, name TEXT NOT NULL, description TEXT, author TEXT, edition TEXT NOT NULL DEFAULT '11th', faction_id TEXT REFERENCES content_entity(id), subfaction_id TEXT REFERENCES content_entity(id), detachment_id TEXT REFERENCES content_entity(id), battle_size TEXT NOT NULL DEFAULT 'unknown', total_points INTEGER NOT NULL DEFAULT 0, dataslate_id TEXT REFERENCES dim_dataslate(id), source TEXT NOT NULL DEFAULT 'list-builder', created_at INTEGER NOT NULL, updated_at INTEGER NOT NULL);
     CREATE TABLE list_unit (id TEXT PRIMARY KEY, list_id TEXT NOT NULL REFERENCES list(id) ON DELETE CASCADE, datasheet_id TEXT REFERENCES content_entity(id), enhancement_id TEXT REFERENCES content_entity(id), is_warlord INTEGER NOT NULL DEFAULT 0, points INTEGER NOT NULL DEFAULT 0, attached_to_unit_id TEXT REFERENCES list_unit(id), attach_role TEXT);
     CREATE TABLE list_unit_loadout (id TEXT PRIMARY KEY, list_unit_id TEXT NOT NULL REFERENCES list_unit(id) ON DELETE CASCADE, model_count INTEGER NOT NULL);
     CREATE TABLE list_unit_loadout_weapon (id TEXT PRIMARY KEY, loadout_id TEXT NOT NULL REFERENCES list_unit_loadout(id) ON DELETE CASCADE, weapon_id TEXT REFERENCES content_entity(id), count INTEGER NOT NULL DEFAULT 1);
@@ -56,6 +56,33 @@ describe('listV2.create', () => {
     ).rejects.toMatchObject({
       code: 'UNAUTHORIZED',
     })
+  })
+
+  it('persists description on create and surfaces it on get', async () => {
+    const caller = createCaller(ctx)
+    const { id } = await caller.listV2.create({
+      name: 'Described list',
+      description: 'My narrative campaign army',
+      edition: '11th',
+      battleSize: 'Strike Force',
+    })
+    const fetched = await caller.listV2.get({ id })
+    expect(fetched.description).toBe('My narrative campaign army')
+  })
+
+  it('updates description; nullable round-trips', async () => {
+    const caller = createCaller(ctx)
+    const { id } = await caller.listV2.create({
+      name: 'Updatable',
+      edition: '11th',
+      battleSize: 'unknown',
+    })
+    await caller.listV2.update({ id, description: 'first draft' })
+    let fetched = await caller.listV2.get({ id })
+    expect(fetched.description).toBe('first draft')
+    await caller.listV2.update({ id, description: null })
+    fetched = await caller.listV2.get({ id })
+    expect(fetched.description).toBeNull()
   })
 })
 

@@ -791,7 +791,7 @@ export function UnitSelectionScreen({
   useEffect(() => {
     if (activeList && !nameInitialized.current) {
       setNameValue(activeList.name)
-      setDescValue('')
+      setDescValue(activeList.description ?? '')
       nameInitialized.current = true
     }
   }, [activeList])
@@ -913,8 +913,22 @@ export function UnitSelectionScreen({
 
   async function handleSaveDescription() {
     setEditingDesc(false)
-    // Description is not a field in the V2 list schema — skip server write for now
-    // (schema does not have a description column in the Phase 2 list table)
+    if (!activeList || descValue === (activeList.description ?? '')) return
+    await updateListV2Imperative({ id: listId, description: descValue || null })
+    invalidateLists()
+  }
+
+  // Build datasheet id → display name from the loaded catalog so export shows
+  // human-readable unit names instead of opaque content_entity ids.
+  const unitNameById = useMemo(() => {
+    const m = new Map<string, string>()
+    for (const u of allUnits) m.set(u.id, u.name)
+    return m
+  }, [allUnits])
+
+  function unitDisplayName(u: { datasheetId: string | null }): string {
+    if (!u.datasheetId) return 'Unknown unit'
+    return unitNameById.get(u.datasheetId) ?? u.datasheetId
   }
 
   function exportList(): string {
@@ -922,15 +936,16 @@ export function UnitSelectionScreen({
     const lines: string[] = [
       `++ ${factionId} — ${detachmentName} [${totalPts}/${battleSize.points}pts] ++`,
       `[List] ${activeList.name}`,
-      '',
     ]
+    if (activeList.description) lines.push(activeList.description)
+    lines.push('')
     const warlord = listUnits.find((u) => u.isWarlord)
     if (warlord) {
-      lines.push(`Warlord: ${warlord.datasheetId ?? 'unknown'}`)
+      lines.push(`Warlord: ${unitDisplayName(warlord)}`)
       lines.push('')
     }
     for (const unit of listUnits) {
-      lines.push(`${unit.datasheetId ?? 'unknown'} [${unit.points}pts]`)
+      lines.push(`${unitDisplayName(unit)} [${unit.points}pts]`)
     }
     lines.push('')
     lines.push(`++ Total: [${totalPts}/${battleSize.points}pts] ++`)

@@ -39,6 +39,7 @@ export type ListV2 = {
   id: string
   userId: string
   name: string
+  description: string | null
   edition: '10th' | '11th'
   battleSize: string
   totalPoints: number

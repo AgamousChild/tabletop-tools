@@ -17,6 +17,7 @@ export const list = sqliteTable(
       .notNull()
       .references(() => authUsers.id, { onDelete: 'cascade' }),
     name: text('name').notNull(),
+    description: text('description'),
     author: text('author'),
     edition: text('edition', { enum: ['10th', '11th'] })
       .notNull()
