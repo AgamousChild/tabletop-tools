@@ -1,11 +1,14 @@
-import type { LocalList } from '@tabletop-tools/game-data-store'
-import { createList as createListInDb, useLists } from '@tabletop-tools/game-data-store'
-import { HelpTip } from '@tabletop-tools/ui'
-import { useCallback, useState } from 'react'
+import React, { useCallback, useEffect, useRef, useState } from 'react'
 
 import type { BattleSize } from '../lib/armyRules'
 import { authClient } from '../lib/auth'
-import { restoreFromServer, syncAllToServer, syncListToServer } from '../lib/sync'
+import { migrateIndexedDbLists } from '../lib/migrateIndexedDbLists'
+import {
+  createListV2Imperative,
+  type ListSummaryV2,
+  pointsToBattleSizeEnum,
+  useInvalidateListsV2,
+} from '../lib/useListsV2'
 import { BattleSizeScreen } from './BattleSizeScreen'
 import { FactionDetachmentScreen } from './FactionDetachmentScreen'
 import { MyListsScreen } from './MyListsScreen'
@@ -18,8 +21,8 @@ type Screen =
   | {
       type: 'unit-selection'
       listId: string
-      faction: string
-      detachment: string
+      factionId: string
+      detachmentId: string
       battleSize: BattleSize
     }
 
@@ -27,44 +30,57 @@ type Props = {
   onSignOut: () => void
 }
 
-function generateId(): string {
-  return `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`
+/**
+ * Map a listV2 battleSize string back to a BattleSize object.
+ * Uses totalPoints to disambiguate "Strike Force" at 1000 vs 2000 pts.
+ */
+function battleSizeFromServer(bsName: string, totalPoints: number): BattleSize {
+  if (bsName === 'Strike Force' && totalPoints === 1000) {
+    return { name: 'Strike Force', points: 1000, maxDuplicates: 2, description: '' }
+  }
+  const byName: Record<string, BattleSize> = {
+    Incursion: { name: 'Incursion', points: 500, maxDuplicates: 1, description: '' },
+    'Combat Patrol': { name: 'Combat Patrol', points: 500, maxDuplicates: 1, description: '' },
+    'Strike Force': { name: 'Strike Force', points: 2000, maxDuplicates: 3, description: '' },
+    Onslaught: { name: 'Onslaught', points: 3000, maxDuplicates: 3, description: '' },
+    unknown: { name: 'Strike Force', points: 2000, maxDuplicates: 3, description: '' },
+  }
+  return byName[bsName] ?? { name: 'Strike Force', points: 2000, maxDuplicates: 3, description: '' }
 }
 
 export function ListBuilderScreen({ onSignOut }: Props) {
   const [screen, setScreen] = useState<Screen>({ type: 'my-lists' })
-  const { refetch: refetchLists } = useLists()
-  const [syncStatus, setSyncStatus] = useState<string | null>(null)
+  const invalidateLists = useInvalidateListsV2()
+  const migrationRan = useRef(false)
 
-  async function handleSignOut() {
+  // One-time migration: push any existing IndexedDB lists to the server.
+  useEffect(() => {
+    if (migrationRan.current) return
+    migrationRan.current = true
+    void migrateIndexedDbLists().then((result) => {
+      if (!result.skipped && result.migrated > 0) {
+        invalidateLists()
+      }
+    })
+  }, [invalidateLists])
+
+  const handleSignOut = useCallback(async () => {
     await authClient.signOut()
     onSignOut()
-  }
+  }, [onSignOut])
 
   const handleCreateNew = useCallback(() => {
     setScreen({ type: 'battle-size' })
   }, [])
 
-  const handleSelectList = useCallback((list: LocalList) => {
-    // Reconstruct battleSize from stored points or default
-    const pts = list.battleSize ?? 2000
-    const sizeMap: Record<number, BattleSize> = {
-      500: { name: 'Incursion', points: 500, maxDuplicates: 1, description: '' },
-      1000: { name: 'Strike Force', points: 1000, maxDuplicates: 2, description: '' },
-      2000: { name: 'Strike Force', points: 2000, maxDuplicates: 3, description: '' },
-      3000: { name: 'Onslaught', points: 3000, maxDuplicates: 3, description: '' },
-    }
+  const handleSelectList = useCallback((list: ListSummaryV2) => {
+    const bs = battleSizeFromServer(list.battleSize, list.totalPoints)
     setScreen({
       type: 'unit-selection',
       listId: list.id,
-      faction: list.faction,
-      detachment: list.detachment ?? '',
-      battleSize: sizeMap[pts] ?? {
-        name: 'Strike Force',
-        points: pts,
-        maxDuplicates: 3,
-        description: '',
-      },
+      factionId: list.factionId ?? '',
+      detachmentId: list.detachmentId ?? '',
+      battleSize: bs,
     })
   }, [])
 
@@ -73,47 +89,42 @@ export function ListBuilderScreen({ onSignOut }: Props) {
   }, [])
 
   const handleFactionDetachmentSelect = useCallback(
-    async (faction: string, detachment: string) => {
+    async (factionId: string, detachmentId: string) => {
       const bs =
         screen.type === 'faction-detachment'
           ? screen.battleSize
           : { name: 'Strike Force', points: 2000, maxDuplicates: 3, description: '' }
 
-      // Create the list in IndexedDB
-      const id = generateId()
-      const now = Date.now()
-      await createListInDb({
-        id,
-        faction,
-        name: `${faction} ${bs.points}pts`,
-        detachment,
-        battleSize: bs.points,
-        totalPts: 0,
-        createdAt: now,
-        updatedAt: now,
+      const bsEnum = pointsToBattleSizeEnum(bs.points)
+      const name = `${factionId || 'New List'} ${bs.points}pts`
+
+      const listId = await createListV2Imperative({
+        name,
+        battleSize: bsEnum,
+        factionId: factionId || undefined,
+        detachmentId: detachmentId || undefined,
       })
-      refetchLists()
-      syncListToServer(id)
+
+      invalidateLists()
 
       setScreen({
         type: 'unit-selection',
-        listId: id,
-        faction,
-        detachment,
+        listId,
+        factionId,
+        detachmentId,
         battleSize: bs,
       })
     },
-    [screen, refetchLists],
+    [screen, invalidateLists],
   )
 
   const handleDone = useCallback(() => {
-    refetchLists()
+    invalidateLists()
     setScreen({ type: 'my-lists' })
-  }, [refetchLists])
+  }, [invalidateLists])
 
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100">
-      {/* Header */}
       <header className="border-b border-slate-800 px-6 py-4 flex items-center justify-between">
         <div className="flex items-center gap-3">
           <a
@@ -129,7 +140,7 @@ export function ListBuilderScreen({ onSignOut }: Props) {
             >
               <path
                 fillRule="evenodd"
-                d="M9.293 2.293a1 1 0 0 1 1.414 0l7 7A1 1 0 0 1 17 11h-1v6a1 1 0 0 1-1 1h-2a1 1 0 0 1-1-1v-3a1 1 0 0 0-1-1H9a1 1 0 0 0-1 1v3a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1v-6H3a1 1 0 0 1-.707-1.707l7-7Z"
+                d="M9.293 2.293a1 1 0 0 1 1.414 0l7 7A1 1 0 0 1 17 11h-1v6a1 1 0 0 1-1 1h-2a1 1 0 0 1-1-1v-3a1 1 0 0 0-1-1H9a1 1 0 0 0-1 1v3a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1v-6H3a1 1 0 1-.707-1.707l7-7Z"
                 clipRule="evenodd"
               />
             </svg>
@@ -145,37 +156,6 @@ export function ListBuilderScreen({ onSignOut }: Props) {
           </h1>
         </div>
         <div className="flex items-center gap-3">
-          {syncStatus && <span className="text-xs text-green-400">{syncStatus}</span>}
-          <button
-            onClick={() => {
-              syncAllToServer()
-              setSyncStatus('Synced!')
-              setTimeout(() => setSyncStatus(null), 2000)
-            }}
-            className="text-slate-400 hover:text-amber-400 text-sm"
-          >
-            Sync
-          </button>
-          <HelpTip text="Upload lists to server backup" />
-          <button
-            onClick={() => {
-              void (async () => {
-                try {
-                  const count = await restoreFromServer()
-                  refetchLists()
-                  setSyncStatus(`Restored ${count} list${count !== 1 ? 's' : ''}`)
-                  setTimeout(() => setSyncStatus(null), 3000)
-                } catch {
-                  setSyncStatus('Restore failed')
-                  setTimeout(() => setSyncStatus(null), 3000)
-                }
-              })()
-            }}
-            className="text-slate-400 hover:text-amber-400 text-sm"
-          >
-            Restore
-          </button>
-          <HelpTip text="Download lists from server to this device" />
           <button
             onClick={() => void handleSignOut()}
             className="text-slate-400 hover:text-slate-100 text-sm"
@@ -184,11 +164,6 @@ export function ListBuilderScreen({ onSignOut }: Props) {
           </button>
         </div>
       </header>
-
-      <p className="text-xs text-slate-500 px-6 pt-2 mb-4">
-        Create a new list or select an existing one to edit. Use Sync to back up lists to your
-        account, or Restore to download them to this device.
-      </p>
 
       <div className="max-w-4xl mx-auto p-6">
         {screen.type === 'my-lists' && (
@@ -213,8 +188,8 @@ export function ListBuilderScreen({ onSignOut }: Props) {
         {screen.type === 'unit-selection' && (
           <UnitSelectionScreen
             listId={screen.listId}
-            faction={screen.faction}
-            detachment={screen.detachment}
+            factionId={screen.factionId}
+            detachmentId={screen.detachmentId}
             battleSize={screen.battleSize}
             onDone={handleDone}
             onBack={() => setScreen({ type: 'my-lists' })}

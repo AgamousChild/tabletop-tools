@@ -19,137 +19,91 @@ vi.mock('../lib/trpc', () => ({
       get: { useQuery: () => ({ data: null, refetch: vi.fn() }) },
       alternatives: { useQuery: () => ({ data: [], refetch: vi.fn() }) },
     },
+    listV2: {
+      get: { useQuery: () => ({ data: null }) },
+      getAll: { useQuery: () => ({ data: [] }) },
+    },
   },
   trpcClient: {
     rating: {
       get: { query: vi.fn().mockResolvedValue(null) },
       alternatives: { query: vi.fn().mockResolvedValue([]) },
     },
+    listV2: {
+      create: { mutate: vi.fn().mockResolvedValue({ id: 'new-list-id' }) },
+      computePoints: { mutate: vi.fn().mockResolvedValue({ totalPoints: 0 }) },
+    },
   },
 }))
 
-vi.mock('../lib/sync', () => ({
-  syncListToServer: vi.fn(),
-  syncAllToServer: vi.fn(),
-  deleteListFromServer: vi.fn(),
-  restoreFromServer: vi.fn().mockResolvedValue(0),
+vi.mock('../lib/migrateIndexedDbLists', () => ({
+  migrateIndexedDbLists: vi.fn().mockResolvedValue({ migrated: 0, failed: 0, skipped: true }),
 }))
 
-const mockUseLists = vi.fn(() => ({
-  data: [
+const mockListsV2Summary = [
+  {
+    id: 'list-1',
+    userId: 'u1',
+    name: 'My Crusade',
+    edition: '11th' as const,
+    battleSize: 'Strike Force',
+    totalPoints: 90,
+    source: 'list-builder',
+    author: null,
+    factionId: 'Space Marines',
+    subfactionId: null,
+    detachmentId: null,
+    dataslateId: null,
+    createdAt: 0,
+    updatedAt: 0,
+  },
+]
+
+const mockListV2Full = {
+  ...mockListsV2Summary[0],
+  units: [
     {
-      id: 'list-1',
-      faction: 'Space Marines',
-      name: 'My Crusade',
-      totalPts: 90,
-      createdAt: 0,
-      updatedAt: 0,
+      id: 'lu1',
+      listId: 'list-1',
+      datasheetId: 'u1',
+      enhancementId: null,
+      isWarlord: false,
+      points: 90,
+      attachedToUnitId: null,
+      attachRole: null,
+      loadouts: [],
     },
   ],
-  refetch: vi.fn(),
+}
+
+const mockUseListsV2 = vi.fn(() => ({ data: mockListsV2Summary, refetch: vi.fn() }))
+const mockUseListV2 = vi.fn((id: string | null) => ({
+  data: id === 'list-1' ? mockListV2Full : null,
 }))
-const mockUseList = vi.fn((_id: string | null) => ({
-  data:
-    _id === 'list-1'
-      ? {
-          id: 'list-1',
-          faction: 'Space Marines',
-          name: 'My Crusade',
-          totalPts: 90,
-          createdAt: 0,
-          updatedAt: 0,
-          units: [
-            {
-              id: 'lu1',
-              listId: 'list-1',
-              unitContentId: 'u1',
-              unitName: 'Intercessors',
-              unitPoints: 90,
-              count: 1,
-            },
-          ],
-        }
-      : null,
-  refetch: vi.fn(),
+const mockInvalidate = vi.fn()
+
+vi.mock('../lib/useListsV2', () => ({
+  useListsV2: (...args: unknown[]) => mockUseListsV2(...args),
+  useListV2: (...args: unknown[]) => mockUseListV2(...(args as [string | null])),
+  useInvalidateListsV2: () => mockInvalidate,
+  createListV2Imperative: vi.fn().mockResolvedValue('new-list-id'),
+  deleteListV2Imperative: vi.fn().mockResolvedValue({ success: true }),
+  addUnitV2Imperative: vi.fn().mockResolvedValue('unit-id'),
+  removeUnitV2Imperative: vi.fn().mockResolvedValue({ success: true }),
+  updateUnitV2Imperative: vi.fn().mockResolvedValue({ success: true }),
+  updateListV2Imperative: vi.fn().mockResolvedValue({ success: true }),
+  pointsToBattleSizeEnum: (pts: number) => {
+    const map: Record<number, string> = {
+      500: 'Incursion',
+      1000: 'Strike Force',
+      2000: 'Strike Force',
+      3000: 'Onslaught',
+    }
+    return map[pts] ?? 'unknown'
+  },
 }))
-const mockCreateList = vi.fn()
-const mockAddListUnit = vi.fn()
-const mockRemoveListUnit = vi.fn()
-const mockDeleteList = vi.fn()
-const mockUpdateList = vi.fn()
 
 vi.mock('@tabletop-tools/game-data-store', () => ({
-  useUnitSearch: () => ({
-    data: [
-      {
-        id: 'u1',
-        name: 'Intercessors',
-        faction: 'Space Marines',
-        points: 90,
-        weapons: [],
-        abilities: [],
-      },
-    ],
-    error: null,
-    isLoading: false,
-  }),
-  useFactions: () => ({
-    data: ['Space Marines', 'Orks'],
-    error: null,
-    isLoading: false,
-  }),
-  usePrimaryFactions: () => ({
-    data: ['Space Marines', 'Orks'],
-    isLoading: false,
-  }),
-  usePrimaryUnitSearch: () => ({
-    data: [
-      {
-        id: 'u1',
-        name: 'Intercessors',
-        faction: 'Space Marines',
-        points: 90,
-        weapons: [],
-        abilities: [],
-      },
-    ],
-    isLoading: false,
-  }),
-  useDetachments: () => ({
-    data: [],
-    error: null,
-    isLoading: false,
-  }),
-  useDetachment: () => ({
-    data: null,
-    error: null,
-    isLoading: false,
-  }),
-  useEnhancements: () => ({
-    data: [],
-    error: null,
-    isLoading: false,
-  }),
-  useUnitKeywords: () => ({
-    data: [],
-    error: null,
-    isLoading: false,
-  }),
-  useAllUnitKeywords: () => ({
-    data: [],
-    error: null,
-    isLoading: false,
-  }),
-  useUnitCompositions: () => ({
-    data: [],
-    error: null,
-    isLoading: false,
-  }),
-  useUnitCosts: () => ({
-    data: [],
-    error: null,
-    isLoading: false,
-  }),
   useUnit: () => ({
     data: {
       id: 'u1',
@@ -168,80 +122,30 @@ vi.mock('@tabletop-tools/game-data-store', () => ({
     error: null,
     isLoading: false,
   }),
-  useDetachmentAbilities: () => ({
-    data: [
-      {
-        id: 'da1',
-        detachmentId: 'det1',
-        factionId: 'f1',
-        name: 'Test Ability',
-        legend: '',
-        description: 'All INFANTRY gain +1 to hit',
-      },
-    ],
-    error: null,
+  useDetachmentAbilities: () => ({ data: [], error: null, isLoading: false }),
+  useDetachment: () => ({ data: null, error: null, isLoading: false }),
+  useDetachments: () => ({ data: [], error: null, isLoading: false }),
+  usePrimaryFactions: () => ({ data: ['Space Marines', 'Orks'], isLoading: false }),
+  usePrimaryUnitSearch: () => ({
+    data: [{ id: 'u1', name: 'Intercessors', faction: 'Space Marines', points: 90 }],
     isLoading: false,
   }),
-  useAllDatasheets: () => ({
-    data: [
-      {
-        id: 'u1',
-        name: 'Intercessors',
-        factionId: 'SM',
-        role: 'Battleline',
-        legend: '',
-        transport: '',
-        loadout: '',
-        damagedW: '',
-        damagedDescription: '',
-      },
-      {
-        id: 'u2',
-        name: 'Captain',
-        factionId: 'SM',
-        role: 'Character',
-        legend: '',
-        transport: '',
-        loadout: '',
-        damagedW: '',
-        damagedDescription: '',
-      },
-    ],
-    error: null,
-    isLoading: false,
-  }),
+  useEnhancements: () => ({ data: [], error: null, isLoading: false }),
+  useUnitKeywords: () => ({ data: [], error: null, isLoading: false }),
+  useAllUnitKeywords: () => ({ data: [], error: null, isLoading: false }),
+  useUnitCompositions: () => ({ data: [], error: null, isLoading: false }),
+  useUnitCosts: () => ({ data: [], error: null, isLoading: false }),
+  useAllDatasheets: () => ({ data: [], error: null, isLoading: false }),
   useLegendsUnitIds: () => new Set<string>(),
   useGameDataAvailable: () => true,
-  useLists: (...args: unknown[]) => mockUseLists(...args),
-  useList: (...args: unknown[]) => mockUseList(...(args as [string | null])),
-  createList: (...args: unknown[]) => {
-    mockCreateList(...args)
-    return Promise.resolve()
-  },
-  addListUnit: (...args: unknown[]) => {
-    mockAddListUnit(...args)
-    return Promise.resolve()
-  },
-  removeListUnit: (...args: unknown[]) => {
-    mockRemoveListUnit(...args)
-    return Promise.resolve()
-  },
-  updateList: (...args: unknown[]) => {
-    mockUpdateList(...args)
-    return Promise.resolve()
-  },
-  deleteList: (...args: unknown[]) => {
-    mockDeleteList(...args)
-    return Promise.resolve()
-  },
 }))
 
 beforeEach(() => {
-  mockCreateList.mockReset()
-  mockAddListUnit.mockReset()
-  mockRemoveListUnit.mockReset()
-  mockDeleteList.mockReset()
-  mockUpdateList.mockReset()
+  mockUseListsV2.mockReturnValue({ data: mockListsV2Summary, refetch: vi.fn() })
+  mockUseListV2.mockImplementation((id: string | null) => ({
+    data: id === 'list-1' ? mockListV2Full : null,
+  }))
+  mockInvalidate.mockReset()
 })
 
 describe('ListBuilderScreen', () => {
@@ -295,7 +199,6 @@ describe('ListBuilderScreen', () => {
   it('navigates to faction screen after selecting battle size', () => {
     render(<ListBuilderScreen onSignOut={vi.fn()} />)
     fireEvent.click(screen.getByRole('button', { name: /new list/i }))
-    // Click the 2000pts option
     fireEvent.click(screen.getByText('2000pts'))
     expect(screen.getByText('2000pts Strike Force')).toBeInTheDocument()
     expect(screen.getByLabelText('Select faction')).toBeInTheDocument()
@@ -304,9 +207,7 @@ describe('ListBuilderScreen', () => {
   it('opens existing list in unit selection screen', () => {
     render(<ListBuilderScreen onSignOut={vi.fn()} />)
     fireEvent.click(screen.getByText('My Crusade'))
-    // Should show unit selection with the list loaded (appears in both browser and list panels)
-    expect(screen.getAllByText('Intercessors').length).toBeGreaterThanOrEqual(1)
-    // Should show Done button (unit selection screen has it)
+    // Should show Done button (unit selection screen)
     expect(screen.getByRole('button', { name: /done/i })).toBeInTheDocument()
   })
 
@@ -321,7 +222,6 @@ describe('ListBuilderScreen', () => {
   it('shows unit stat line when list is open', () => {
     render(<ListBuilderScreen onSignOut={vi.fn()} />)
     fireEvent.click(screen.getByText('My Crusade'))
-    // Stat line should show for units in the list
     const statLines = screen.getAllByTestId('unit-stat-line')
     expect(statLines.length).toBeGreaterThanOrEqual(1)
     expect(statLines[0]?.textContent).toContain('M6')

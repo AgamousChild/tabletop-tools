@@ -1,13 +1,5 @@
-import type { Enhancement, LocalListUnit } from '@tabletop-tools/game-data-store'
-import {
-  addListUnit as addListUnitInDb,
-  deleteList as deleteListInDb,
-  removeListUnit as removeListUnitInDb,
-  updateList as updateListInDb,
-  updateListUnit as updateListUnitInDb,
-  useList,
-  useUnit as useUnitProfile,
-} from '@tabletop-tools/game-data-store'
+import type { Enhancement } from '@tabletop-tools/game-data-store'
+import { useUnit as useUnitProfile } from '@tabletop-tools/game-data-store'
 import { CollapsibleSection, htmlToText } from '@tabletop-tools/ui'
 import { useEffect, useMemo, useRef, useState } from 'react'
 
@@ -15,7 +7,6 @@ import type { BattleSize, ValidationError } from '../lib/armyRules'
 import { validateArmy } from '../lib/armyRules'
 import type { DetachmentRestriction } from '../lib/detachmentRestrictions'
 import { formatRestrictionText, parseDetachmentRestrictions } from '../lib/detachmentRestrictions'
-import { deleteListFromServer, syncListToServer } from '../lib/sync'
 import { trpc, trpcClient } from '../lib/trpc'
 import {
   useGameDetachment,
@@ -27,20 +18,52 @@ import {
   useUnitRoles,
   useUnits,
 } from '../lib/useGameData'
+import {
+  addUnitV2Imperative,
+  deleteListV2Imperative,
+  type ListUnitV2,
+  removeUnitV2Imperative,
+  updateListV2Imperative,
+  updateUnitV2Imperative,
+  useInvalidateListsV2,
+  useListV2,
+} from '../lib/useListsV2'
 import { RatingBadge } from './RatingBadge'
 
 type Props = {
   listId: string
-  faction: string
-  detachment: string
+  factionId: string
+  detachmentId: string
   battleSize: BattleSize
   onDone: () => void
   onBack: () => void
 }
 
-function generateId(): string {
-  return `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`
+// ---------------------------------------------------------------------------
+// Helpers
+// ---------------------------------------------------------------------------
+
+/** Resolve the display name for a unit from the catalog. Falls back to datasheetId. */
+function useUnitDisplayName(datasheetId: string | null): string {
+  const { data: profile } = useUnitProfile(datasheetId ?? '')
+  if (!datasheetId) return 'Unknown unit'
+  return profile?.name ?? datasheetId
 }
+
+/** Resolve an enhancement's display name + cost from the catalog. */
+function useEnhancementDisplay(
+  enhancementId: string | null,
+  detachmentId: string,
+): { name: string | null; cost: number } {
+  const { data: enhancements } = useGameEnhancements(detachmentId)
+  const enh = enhancements.find((e: Enhancement) => e.id === enhancementId)
+  if (!enh) return { name: null, cost: 0 }
+  return { name: enh.name, cost: parseInt(enh.cost, 10) || 0 }
+}
+
+// ---------------------------------------------------------------------------
+// Sub-components
+// ---------------------------------------------------------------------------
 
 function ModelCountPicker({
   unitId,
@@ -88,14 +111,12 @@ function ModelCountPicker({
   )
 }
 
-/** Shows keywords for a unit inline + reports if LEGEND/CHARACTER */
 function UnitKeywordBadges({ unitId }: { unitId: string }) {
   const { data: keywords } = useGameUnitKeywords(unitId)
   const charKeyword = keywords.find((k) => k.keyword.toUpperCase() === 'CHARACTER')
   const legendKeyword = keywords.find(
     (k) => k.keyword.toUpperCase() === 'LEGENDS' || k.keyword.toUpperCase() === 'LEGEND',
   )
-
   return (
     <>
       {charKeyword && (
@@ -112,19 +133,22 @@ function UnitKeywordBadges({ unitId }: { unitId: string }) {
   )
 }
 
-/** Returns true if this unit has a CHARACTER keyword */
 function useIsCharacter(unitId: string): boolean {
   const { data: keywords } = useGameUnitKeywords(unitId)
   return keywords.some((k) => k.keyword.toUpperCase() === 'CHARACTER')
 }
 
-/** Warlord toggle — only enabled for CHARACTER units */
-function WarlordButton({ unit, onToggle }: { unit: LocalListUnit; onToggle: () => void }) {
-  const isCharacter = useIsCharacter(unit.unitContentId)
-
-  // Non-characters can't be warlord (unless already set — allow un-toggle)
+function WarlordButton({
+  unit,
+  datasheetId,
+  onToggle,
+}: {
+  unit: ListUnitV2
+  datasheetId: string
+  onToggle: () => void
+}) {
+  const isCharacter = useIsCharacter(datasheetId)
   if (!isCharacter && !unit.isWarlord) return null
-
   return (
     <button
       onClick={onToggle}
@@ -140,35 +164,22 @@ function WarlordButton({ unit, onToggle }: { unit: LocalListUnit; onToggle: () =
   )
 }
 
-/** Enhancement picker dropdown for a character unit */
 function EnhancementPicker({
   unit,
-  detachment,
+  detachmentId,
   onSelect,
 }: {
-  unit: LocalListUnit
-  detachment: string
-  onSelect: (
-    enhId: string | undefined,
-    enhName: string | undefined,
-    enhCost: number | undefined,
-  ) => void
+  unit: ListUnitV2
+  detachmentId: string
+  onSelect: (enhId: string | undefined) => void
 }) {
-  const { data: enhancements } = useGameEnhancements(detachment)
-
+  const { data: enhancements } = useGameEnhancements(detachmentId)
   if (enhancements.length === 0) return null
-
   return (
     <select
       value={unit.enhancementId ?? ''}
       onChange={(e) => {
-        const enh = enhancements.find((en: Enhancement) => en.id === e.target.value)
-        if (enh) {
-          const cost = parseInt(enh.cost) || 0
-          onSelect(enh.id, enh.name, cost)
-        } else {
-          onSelect(undefined, undefined, undefined)
-        }
+        onSelect(e.target.value || undefined)
       }}
       className="text-xs px-1.5 py-0.5 rounded bg-slate-800 border border-slate-700 text-slate-300 focus:outline-none focus:border-amber-400"
       title="Select enhancement"
@@ -183,9 +194,8 @@ function EnhancementPicker({
   )
 }
 
-/** Compact stat line for a unit (M/T/Sv/W/Ld/OC) */
-function UnitStatLine({ unitContentId }: { unitContentId: string }) {
-  const { data: profile } = useUnitProfile(unitContentId)
+function UnitStatLine({ datasheetId }: { datasheetId: string }) {
+  const { data: profile } = useUnitProfile(datasheetId)
   if (!profile) return null
   return (
     <span className="text-[11px] text-slate-500 font-mono" data-testid="unit-stat-line">
@@ -193,6 +203,70 @@ function UnitStatLine({ unitContentId }: { unitContentId: string }) {
       {profile.invulnSave ? `/${profile.invulnSave}++` : ''} W{profile.wounds} Ld
       {profile.leadership}+ OC{profile.oc}
     </span>
+  )
+}
+
+// ---------------------------------------------------------------------------
+// Unit row — reads catalog data per-unit
+// ---------------------------------------------------------------------------
+
+function UnitRow({
+  unit,
+  detachmentId,
+  ratingMap,
+  onRemove,
+  onToggleWarlord,
+  onSetEnhancement,
+}: {
+  unit: ListUnitV2
+  detachmentId: string
+  ratingMap: Map<string, string>
+  onRemove: () => void
+  onToggleWarlord: () => void
+  onSetEnhancement: (enhId: string | undefined) => void
+}) {
+  const datasheetId = unit.datasheetId ?? ''
+  const unitName = useUnitDisplayName(unit.datasheetId)
+  const { name: enhName, cost: enhCost } = useEnhancementDisplay(unit.enhancementId, detachmentId)
+
+  return (
+    <div
+      className={`p-3 rounded-lg bg-slate-900 border ${unit.isWarlord ? 'border-amber-400' : 'border-slate-800'}`}
+    >
+      <div className="flex items-center justify-between">
+        <div className="flex-1">
+          <div className="flex items-center gap-2">
+            <span className="font-medium text-slate-100">{unitName}</span>
+            <RatingBadge rating={ratingMap.get(datasheetId) ?? null} />
+            {unit.isWarlord && (
+              <span className="text-[10px] px-1.5 py-0.5 rounded bg-amber-400 text-slate-950 font-bold">
+                WARLORD
+              </span>
+            )}
+          </div>
+          <p className="text-sm text-slate-400 mt-0.5">
+            {unit.points}pts
+            {enhName && (
+              <span className="text-amber-400">
+                {' '}
+                · {enhName} +{enhCost}pts
+              </span>
+            )}
+          </p>
+          {datasheetId && <UnitStatLine datasheetId={datasheetId} />}
+        </div>
+        <div className="flex items-center gap-1 ml-2">
+          <WarlordButton unit={unit} datasheetId={datasheetId} onToggle={onToggleWarlord} />
+          <EnhancementPicker unit={unit} detachmentId={detachmentId} onSelect={onSetEnhancement} />
+          <button
+            onClick={onRemove}
+            className="px-2 py-1 rounded bg-slate-700 text-slate-400 hover:bg-red-900 hover:text-red-400 text-xs"
+          >
+            X
+          </button>
+        </div>
+      </div>
+    </div>
   )
 }
 
@@ -206,14 +280,16 @@ const ROLE_FILTERS = [
 ] as const
 type RoleFilter = (typeof ROLE_FILTERS)[number]
 
-// ── Screen 1: My List (chosen units) ────────────────────────────────────────
+// ---------------------------------------------------------------------------
+// MyArmyView — shows the list of chosen units
+// ---------------------------------------------------------------------------
 
 function MyArmyView({
   listUnits,
-  activeList,
-  faction,
+  listName,
+  factionId,
+  detachmentId,
   detachmentName,
-  detachment,
   totalPts,
   remaining,
   battleSize,
@@ -242,11 +318,12 @@ function MyArmyView({
   detachmentAbilities,
   restrictions,
 }: {
-  listUnits: LocalListUnit[]
-  activeList: { name: string; description?: string } | null
-  faction: string
+  listUnits: ListUnitV2[]
+  listName: string
+  _listDescription: string
+  factionId: string
+  detachmentId: string
   detachmentName: string
-  detachment: string
   totalPts: number
   remaining: number
   battleSize: BattleSize
@@ -254,18 +331,13 @@ function MyArmyView({
   suggestion: {
     addedName: string
     addedRating: string | null
-    alternatives: Array<{ unitContentId: string; unitName: string; rating: string; points: number }>
+    alternatives: Array<{ datasheetId: string; unitName: string; rating: string; points: number }>
   } | null
   ratingMap: Map<string, string>
   onAddUnit: () => void
-  onRemoveUnit: (id: string, pts: number, count: number) => void
-  onToggleWarlord: (unit: LocalListUnit) => void
-  onSetEnhancement: (
-    unit: LocalListUnit,
-    enhId: string | undefined,
-    enhName: string | undefined,
-    enhCost: number | undefined,
-  ) => void
+  onRemoveUnit: (id: string) => void
+  onToggleWarlord: (unit: ListUnitV2) => void
+  onSetEnhancement: (unit: ListUnitV2, enhId: string | undefined) => void
   onExport: () => void
   onDone: () => void
   onDeleteList: () => void
@@ -310,11 +382,11 @@ function MyArmyView({
                 onClick={onStartEditName}
                 title="Click to rename"
               >
-                {activeList?.name ?? 'List'}
+                {listName || 'List'}
               </h2>
             )}
             <p className="text-xs text-slate-400">
-              {faction} — {detachmentName}
+              {factionId} — {detachmentName}
             </p>
           </div>
         </div>
@@ -364,7 +436,7 @@ function MyArmyView({
         </CollapsibleSection>
       )}
 
-      {/* Detachment restrictions banner — always visible */}
+      {/* Detachment restrictions banner */}
       {restrictions.length > 0 && (
         <div className="space-y-2">
           {restrictions.map((r, i) => (
@@ -433,53 +505,16 @@ function MyArmyView({
             No units yet. Tap "Add Unit" to get started.
           </p>
         )}
-        {listUnits.map((unit: LocalListUnit) => (
-          <div
+        {listUnits.map((unit) => (
+          <UnitRow
             key={unit.id}
-            className={`p-3 rounded-lg bg-slate-900 border ${unit.isWarlord ? 'border-amber-400' : 'border-slate-800'}`}
-          >
-            <div className="flex items-center justify-between">
-              <div className="flex-1">
-                <div className="flex items-center gap-2">
-                  <span className="font-medium text-slate-100">{unit.unitName}</span>
-                  <RatingBadge rating={ratingMap.get(unit.unitContentId) ?? null} />
-                  {unit.isWarlord && (
-                    <span className="text-[10px] px-1.5 py-0.5 rounded bg-amber-400 text-slate-950 font-bold">
-                      WARLORD
-                    </span>
-                  )}
-                </div>
-                <p className="text-sm text-slate-400 mt-0.5">
-                  {unit.unitPoints * unit.count + (unit.enhancementCost ?? 0)}pts
-                  {unit.count > 1 && ` (${unit.count}x${unit.unitPoints})`}
-                  {unit.modelCount && ` · ${unit.modelCount} models`}
-                  {unit.enhancementName && (
-                    <span className="text-amber-400">
-                      {' '}
-                      · {unit.enhancementName} +{unit.enhancementCost}pts
-                    </span>
-                  )}
-                </p>
-                <UnitStatLine unitContentId={unit.unitContentId} />
-              </div>
-              <div className="flex items-center gap-1 ml-2">
-                <WarlordButton unit={unit} onToggle={() => onToggleWarlord(unit)} />
-                <EnhancementPicker
-                  unit={unit}
-                  detachment={detachment}
-                  onSelect={(enhId, enhName, enhCost) =>
-                    onSetEnhancement(unit, enhId, enhName, enhCost)
-                  }
-                />
-                <button
-                  onClick={() => onRemoveUnit(unit.id, unit.unitPoints, unit.count)}
-                  className="px-2 py-1 rounded bg-slate-700 text-slate-400 hover:bg-red-900 hover:text-red-400 text-xs"
-                >
-                  X
-                </button>
-              </div>
-            </div>
-          </div>
+            unit={unit}
+            detachmentId={detachmentId}
+            ratingMap={ratingMap}
+            onRemove={() => onRemoveUnit(unit.id)}
+            onToggleWarlord={() => onToggleWarlord(unit)}
+            onSetEnhancement={(enhId) => onSetEnhancement(unit, enhId)}
+          />
         ))}
       </div>
 
@@ -508,7 +543,9 @@ function MyArmyView({
   )
 }
 
-// ── Screen 2: Add Unit (unit browser) ───────────────────────────────────────
+// ---------------------------------------------------------------------------
+// AddUnitView — unit browser
+// ---------------------------------------------------------------------------
 
 function AddUnitView({
   units,
@@ -547,7 +584,6 @@ function AddUnitView({
 }) {
   return (
     <div className="space-y-4">
-      {/* Header */}
       <div className="flex items-center justify-between">
         <button
           onClick={onBack}
@@ -578,7 +614,6 @@ function AddUnitView({
 
       <h2 className="text-lg font-semibold text-slate-100">Add Unit</h2>
 
-      {/* Detachment restrictions reminder */}
       {restrictions.length > 0 && (
         <div className="space-y-1">
           {restrictions.map((r, i) => (
@@ -604,7 +639,6 @@ function AddUnitView({
         </div>
       )}
 
-      {/* Search + Legends toggle */}
       <div className="flex gap-2">
         <input
           type="text"
@@ -625,7 +659,6 @@ function AddUnitView({
         </label>
       </div>
 
-      {/* Role filter pills */}
       <div className="flex gap-1 flex-wrap">
         {ROLE_FILTERS.map((role) => (
           <button
@@ -642,7 +675,6 @@ function AddUnitView({
         ))}
       </div>
 
-      {/* Unit list */}
       <div className="space-y-2">
         {unitsLoading && <p className="text-slate-500 text-sm">Loading units...</p>}
         {!unitsLoading && units.length === 0 && (
@@ -665,7 +697,7 @@ function AddUnitView({
                 <UnitKeywordBadges unitId={unit.id} />
               </div>
               <p className="text-sm text-slate-400 mt-0.5">{unit.points}pts</p>
-              <UnitStatLine unitContentId={unit.id} />
+              <UnitStatLine datasheetId={unit.id} />
             </div>
             <ModelCountPicker
               unitId={unit.id}
@@ -681,12 +713,14 @@ function AddUnitView({
   )
 }
 
-// ── Main component ──────────────────────────────────────────────────────────
+// ---------------------------------------------------------------------------
+// Main component
+// ---------------------------------------------------------------------------
 
 export function UnitSelectionScreen({
   listId,
-  faction,
-  detachment,
+  factionId,
+  detachmentId,
   battleSize,
   onDone,
   onBack,
@@ -695,15 +729,14 @@ export function UnitSelectionScreen({
   const [searchQuery, setSearchQuery] = useState('')
   const [showLegends, setShowLegends] = useState(false)
   const [roleFilter, setRoleFilter] = useState<RoleFilter>('All')
-  const { data: detachmentData } = useGameDetachment(detachment)
-  const detachmentName = detachmentData?.name ?? detachment
+  const { data: detachmentData } = useGameDetachment(detachmentId)
+  const detachmentName = detachmentData?.name ?? detachmentId
   const [suggestion, setSuggestion] = useState<{
     addedName: string
     addedRating: string | null
-    alternatives: Array<{ unitContentId: string; unitName: string; rating: string; points: number }>
+    alternatives: Array<{ datasheetId: string; unitName: string; rating: string; points: number }>
   } | null>(null)
 
-  // Name/description editing
   const [editingName, setEditingName] = useState(false)
   const [editingDesc, setEditingDesc] = useState(false)
   const [nameValue, setNameValue] = useState('')
@@ -711,8 +744,11 @@ export function UnitSelectionScreen({
   const [exportCopied, setExportCopied] = useState(false)
   const nameInitialized = useRef(false)
 
+  const invalidateLists = useInvalidateListsV2()
+  const { data: activeList } = useListV2(listId)
+
   const { data: allUnits = [], isLoading: unitsLoading } = useUnits(
-    { faction, name: searchQuery || undefined },
+    { faction: factionId, name: searchQuery || undefined },
     true,
   )
   const legendsIds = useLegendsUnitIds()
@@ -727,14 +763,13 @@ export function UnitSelectionScreen({
     }
     return filtered
   }, [allUnits, legendsIds, showLegends, roleFilter, unitRoles])
-  const { data: detachmentAbilities = [] } = useGameDetachmentAbilities(detachment)
+
+  const { data: detachmentAbilities = [] } = useGameDetachmentAbilities(detachmentId)
   const restrictions = useMemo(
     () => parseDetachmentRestrictions(detachmentAbilities),
     [detachmentAbilities],
   )
-  const { data: activeList, refetch: refetchList } = useList(listId)
 
-  // Fetch all ratings for rating badges in the unit browser
   const { data: allRatings = [] } = trpc.rating.alternatives.useQuery({})
   const ratingMap = useMemo(() => {
     const map = new Map<string, string>()
@@ -744,7 +779,6 @@ export function UnitSelectionScreen({
     return map
   }, [allRatings])
 
-  // Build a points lookup from available units
   const unitPointsMap = useMemo(() => {
     const map = new Map<string, number>()
     for (const u of units) {
@@ -753,30 +787,28 @@ export function UnitSelectionScreen({
     return map
   }, [units])
 
-  // Initialize name/desc from loaded list data
+  // Initialize name/desc from server list data
   useEffect(() => {
     if (activeList && !nameInitialized.current) {
       setNameValue(activeList.name)
-      setDescValue(activeList.description ?? '')
+      setDescValue('')
       nameInitialized.current = true
     }
   }, [activeList])
 
   const listUnits = activeList?.units ?? []
-  const enhancementPtsCost = listUnits.reduce((sum, u) => sum + (u.enhancementCost ?? 0), 0)
-  const totalPts =
-    listUnits.reduce((sum, u) => sum + u.unitPoints * u.count, 0) + enhancementPtsCost
+  const totalPts = listUnits.reduce((sum, u) => sum + u.points, 0)
   const remaining = battleSize.points - totalPts
 
   const errors: ValidationError[] = activeList
     ? validateArmy(
         listUnits.map((u) => ({
-          unitContentId: u.unitContentId,
-          unitName: u.unitName,
-          unitPoints: u.unitPoints,
-          count: u.count,
+          unitContentId: u.datasheetId ?? '',
+          unitName: u.datasheetId ?? '',
+          unitPoints: u.points,
+          count: 1,
           isWarlord: u.isWarlord,
-          role: unitRoles.get(u.unitContentId),
+          role: unitRoles.get(u.datasheetId ?? ''),
         })),
         battleSize,
       )
@@ -786,34 +818,27 @@ export function UnitSelectionScreen({
     unitId: string,
     unitName: string,
     unitPoints: number,
-    modelCount?: number,
+    _modelCount?: number,
   ) {
     if (!activeList) return
-    const luId = generateId()
-    await addListUnitInDb({
-      id: luId,
-      listId,
-      unitContentId: unitId,
-      unitName,
-      unitPoints,
-      modelCount,
-      count: 1,
-    })
-    await updateListInDb(listId, {
-      totalPts: totalPts + unitPoints,
-      updatedAt: Date.now(),
-    })
-    refetchList()
-    syncListToServer(listId)
 
-    // Switch back to list view and show the unit
+    await addUnitV2Imperative({
+      listId,
+      datasheetId: unitId,
+      isWarlord: false,
+      points: unitPoints,
+    })
+
+    // Recompute totalPoints on the list
+    await trpcClient.listV2.computePoints.mutate({ listId })
+
+    invalidateLists()
     setSubScreen('list')
 
-    // Fetch alternatives filtered by similar points cost and show suggestions
+    // Fetch alternatives and show suggestions
     try {
       const alternatives = await trpcClient.rating.alternatives.query({})
       const addedRating = ratingMap.get(unitId) ?? null
-      // Filter: different unit, similar or lower points, better rating
       const ratingOrder = ['S', 'A', 'B', 'C', 'D']
       const addedRank = addedRating ? ratingOrder.indexOf(addedRating) : 999
       const filtered = alternatives
@@ -826,23 +851,14 @@ export function UnitSelectionScreen({
         })
         .slice(0, 3)
         .map((alt: { unitContentId: string; rating: string }) => ({
-          unitContentId: alt.unitContentId,
-          unitName: alt.unitContentId, // Will be resolved from units data
+          datasheetId: alt.unitContentId,
+          unitName: units.find((u) => u.id === alt.unitContentId)?.name ?? alt.unitContentId,
           rating: alt.rating,
           points: unitPointsMap.get(alt.unitContentId) ?? 0,
         }))
 
       if (filtered.length > 0) {
-        // Try to resolve unit names from loaded units
-        for (const f of filtered) {
-          const found = units.find((u) => u.id === f.unitContentId)
-          if (found) f.unitName = found.name
-        }
-        setSuggestion({
-          addedName: unitName,
-          addedRating: addedRating,
-          alternatives: filtered,
-        })
+        setSuggestion({ addedName: unitName, addedRating, alternatives: filtered })
       } else {
         setSuggestion(null)
       }
@@ -851,96 +867,70 @@ export function UnitSelectionScreen({
     }
   }
 
-  async function handleToggleWarlord(unit: LocalListUnit) {
+  async function handleToggleWarlord(unit: ListUnitV2) {
     if (!activeList) return
     const newValue = !unit.isWarlord
+    // Clear all other warlord flags first
     for (const u of listUnits) {
-      if (u.isWarlord) {
-        await updateListUnitInDb(u.id, { isWarlord: false })
+      if (u.isWarlord && u.id !== unit.id) {
+        await updateUnitV2Imperative({ id: u.id, isWarlord: false })
       }
     }
-    if (newValue) {
-      await updateListUnitInDb(unit.id, { isWarlord: true })
-    }
-    refetchList()
-    syncListToServer(listId)
+    await updateUnitV2Imperative({ id: unit.id, isWarlord: newValue })
+    invalidateLists()
   }
 
-  async function handleSetEnhancement(
-    unit: LocalListUnit,
-    enhId: string | undefined,
-    enhName: string | undefined,
-    enhCost: number | undefined,
-  ) {
+  async function handleSetEnhancement(unit: ListUnitV2, enhId: string | undefined) {
     if (!activeList) return
-    await updateListUnitInDb(unit.id, {
-      enhancementId: enhId,
-      enhancementName: enhName,
-      enhancementCost: enhCost,
+    await updateUnitV2Imperative({
+      id: unit.id,
+      enhancementId: enhId ?? null,
     })
-    refetchList()
-    syncListToServer(listId)
+    invalidateLists()
   }
 
-  async function handleRemoveUnit(listUnitId: string, unitPoints: number, count: number) {
+  async function handleRemoveUnit(listUnitId: string) {
     if (!activeList) return
-    await removeListUnitInDb(listUnitId)
-    await updateListInDb(listId, {
-      totalPts: Math.max(0, totalPts - unitPoints * count),
-      updatedAt: Date.now(),
-    })
-    refetchList()
-    syncListToServer(listId)
+    await removeUnitV2Imperative(listUnitId)
+    await trpcClient.listV2.computePoints.mutate({ listId })
+    invalidateLists()
   }
 
   async function handleDeleteList() {
     if (!activeList) return
     if (!confirm(`Delete "${activeList.name}"?`)) return
-    await deleteListInDb(listId)
-    deleteListFromServer(listId)
+    await deleteListV2Imperative(listId)
+    invalidateLists()
     onBack()
   }
 
   async function handleSaveName() {
     setEditingName(false)
     if (!activeList || nameValue === activeList.name) return
-    await updateListInDb(listId, { name: nameValue, updatedAt: Date.now() })
-    refetchList()
-    syncListToServer(listId)
+    await updateListV2Imperative({ id: listId, name: nameValue })
+    invalidateLists()
   }
 
   async function handleSaveDescription() {
     setEditingDesc(false)
-    if (!activeList) return
-    await updateListInDb(listId, { description: descValue || undefined, updatedAt: Date.now() })
-    refetchList()
-    syncListToServer(listId)
+    // Description is not a field in the V2 list schema — skip server write for now
+    // (schema does not have a description column in the Phase 2 list table)
   }
 
   function exportList(): string {
     if (!activeList) return ''
     const lines: string[] = [
-      `++ ${faction} — ${detachmentName} [${totalPts}/${battleSize.points}pts] ++`,
+      `++ ${factionId} — ${detachmentName} [${totalPts}/${battleSize.points}pts] ++`,
       `[List] ${activeList.name}`,
       '',
     ]
     const warlord = listUnits.find((u) => u.isWarlord)
     if (warlord) {
-      lines.push(`Warlord: ${warlord.unitName}`)
-      if (warlord.enhancementName) {
-        lines.push(
-          `  Enhancement: ${warlord.enhancementName} (+${warlord.enhancementCost ?? 0}pts)`,
-        )
-      }
+      lines.push(`Warlord: ${warlord.datasheetId ?? 'unknown'}`)
       lines.push('')
     }
     for (const unit of listUnits) {
-      const count = unit.count > 1 ? `${unit.count}x ` : ''
-      const enhStr =
-        unit.enhancementName && !unit.isWarlord
-          ? ` [${unit.enhancementName} +${unit.enhancementCost ?? 0}pts]`
-          : ''
-      lines.push(`${count}${unit.unitName} [${unit.unitPoints * unit.count}pts]${enhStr}`)
+      lines.push(`${unit.datasheetId ?? 'unknown'} [${unit.points}pts]`)
     }
     lines.push('')
     lines.push(`++ Total: [${totalPts}/${battleSize.points}pts] ++`)
@@ -987,10 +977,11 @@ export function UnitSelectionScreen({
   return (
     <MyArmyView
       listUnits={listUnits}
-      activeList={activeList}
-      faction={faction}
+      listName={nameValue || activeList?.name || 'List'}
+      _listDescription={descValue}
+      factionId={factionId}
+      detachmentId={detachmentId}
       detachmentName={detachmentName}
-      detachment={detachment}
       totalPts={totalPts}
       remaining={remaining}
       battleSize={battleSize}
@@ -1001,11 +992,9 @@ export function UnitSelectionScreen({
         setSuggestion(null)
         setSubScreen('add')
       }}
-      onRemoveUnit={(id, pts, count) => void handleRemoveUnit(id, pts, count)}
+      onRemoveUnit={(id) => void handleRemoveUnit(id)}
       onToggleWarlord={(u) => void handleToggleWarlord(u)}
-      onSetEnhancement={(u, enhId, enhName, enhCost) =>
-        void handleSetEnhancement(u, enhId, enhName, enhCost)
-      }
+      onSetEnhancement={(u, enhId) => void handleSetEnhancement(u, enhId)}
       onExport={handleExport}
       onDone={onDone}
       onDeleteList={() => void handleDeleteList()}

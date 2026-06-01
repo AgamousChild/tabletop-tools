@@ -3,28 +3,47 @@ import { describe, expect, it, vi } from 'vitest'
 
 import { MyListsScreen } from './MyListsScreen'
 
-vi.mock('@tabletop-tools/game-data-store', () => ({
-  useLists: () => ({
-    data: [
-      {
-        id: 'list-1',
-        faction: 'Space Marines',
-        name: 'My Crusade',
-        totalPts: 1850,
-        createdAt: 0,
-        updatedAt: 0,
-      },
-      {
-        id: 'list-2',
-        faction: 'Orks',
-        name: 'Speed Freeks',
-        totalPts: 1000,
-        createdAt: 0,
-        updatedAt: 0,
-      },
-    ],
-    refetch: vi.fn(),
-  }),
+const mockLists = [
+  {
+    id: 'list-1',
+    userId: 'u1',
+    name: 'My Crusade',
+    edition: '11th' as const,
+    battleSize: 'Strike Force',
+    totalPoints: 1850,
+    source: 'list-builder',
+    author: null,
+    factionId: 'Space Marines',
+    subfactionId: null,
+    detachmentId: null,
+    dataslateId: null,
+    createdAt: 0,
+    updatedAt: 0,
+  },
+  {
+    id: 'list-2',
+    userId: 'u1',
+    name: 'Speed Freeks',
+    edition: '11th' as const,
+    battleSize: 'Incursion',
+    totalPoints: 1000,
+    source: 'list-builder',
+    author: null,
+    factionId: 'Orks',
+    subfactionId: null,
+    detachmentId: null,
+    dataslateId: null,
+    createdAt: 0,
+    updatedAt: 0,
+  },
+]
+
+const mockUseListsV2 = vi.fn(() => ({ data: mockLists, refetch: vi.fn() }))
+
+// Stub the V2 hooks — MyListsScreen now reads from trpc.listV2 via useListsV2
+vi.mock('../lib/useListsV2', () => ({
+  useListsV2: (...args: unknown[]) => mockUseListsV2(...args),
+  deleteListV2Imperative: vi.fn().mockResolvedValue({ success: true }),
 }))
 
 describe('MyListsScreen', () => {
@@ -39,7 +58,7 @@ describe('MyListsScreen', () => {
     expect(screen.getByText('Speed Freeks')).toBeInTheDocument()
   })
 
-  it('shows list details', () => {
+  it('shows list faction and points', () => {
     render(<MyListsScreen onCreateNew={vi.fn()} onSelectList={vi.fn()} />)
     expect(screen.getByText('Space Marines')).toBeInTheDocument()
     expect(screen.getByText('1850pts')).toBeInTheDocument()
@@ -81,5 +100,11 @@ describe('MyListsScreen', () => {
     const buttons = screen.getAllByText('Use in Tournament')
     fireEvent.click(buttons[0])
     expect(screen.getByText('Active for Tournament')).toBeInTheDocument()
+  })
+
+  it('shows empty state when no lists', () => {
+    mockUseListsV2.mockReturnValueOnce({ data: [], refetch: vi.fn() })
+    render(<MyListsScreen onCreateNew={vi.fn()} onSelectList={vi.fn()} />)
+    expect(screen.getByText(/no lists yet/i)).toBeInTheDocument()
   })
 })
