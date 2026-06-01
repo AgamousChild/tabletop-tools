@@ -20,7 +20,10 @@ import {
   playerGlicko,
   rolls,
   rounds,
+  simulation,
+  simulationModifier,
   simulations,
+  simulationWeapon,
   stratagemLog,
   tournamentAwards,
   tournamentCards,
@@ -552,6 +555,57 @@ beforeAll(async () => {
     weapon_id TEXT REFERENCES content_entity(id),
     count INTEGER NOT NULL DEFAULT 1
   )`)
+
+  // Phase 3: Versus normalized simulation tables
+  await client.execute(`CREATE TABLE simulation (
+    id TEXT PRIMARY KEY,
+    user_id TEXT NOT NULL REFERENCES "user"(id) ON DELETE CASCADE,
+    label TEXT,
+    attacker_unit_id TEXT REFERENCES list_unit(id) ON DELETE SET NULL,
+    defender_unit_id TEXT REFERENCES list_unit(id) ON DELETE SET NULL,
+    attacker_name TEXT NOT NULL,
+    defender_name TEXT NOT NULL,
+    dataslate_id TEXT,
+    expected_wounds REAL NOT NULL,
+    expected_models_removed REAL NOT NULL,
+    survivors REAL NOT NULL,
+    worst_wounds REAL NOT NULL,
+    worst_models REAL NOT NULL,
+    best_wounds REAL NOT NULL,
+    best_models REAL NOT NULL,
+    created_at INTEGER NOT NULL
+  )`)
+
+  await client.execute(`CREATE TABLE simulation_weapon (
+    id TEXT PRIMARY KEY,
+    simulation_id TEXT NOT NULL REFERENCES simulation(id) ON DELETE CASCADE,
+    profile_kind TEXT NOT NULL,
+    profile_id TEXT,
+    weapon_name TEXT NOT NULL,
+    model_count INTEGER NOT NULL,
+    weapons_per_model INTEGER NOT NULL,
+    attacks_per_weapon REAL NOT NULL,
+    total_attacks REAL NOT NULL,
+    expected_wounds REAL NOT NULL,
+    expected_models_removed REAL NOT NULL
+  )`)
+
+  await client.execute(`CREATE TABLE simulation_modifier (
+    id TEXT PRIMARY KEY,
+    simulation_id TEXT NOT NULL REFERENCES simulation(id) ON DELETE CASCADE,
+    side TEXT NOT NULL,
+    source TEXT NOT NULL,
+    key TEXT NOT NULL,
+    value TEXT
+  )`)
+
+  // Phase 3 indexes
+  await client.execute('CREATE INDEX idx_simulation_user_id ON simulation(user_id)')
+  await client.execute('CREATE INDEX idx_simulation_attacker ON simulation(attacker_unit_id)')
+  await client.execute('CREATE INDEX idx_simulation_defender ON simulation(defender_unit_id)')
+  await client.execute('CREATE INDEX idx_simulation_created ON simulation(created_at)')
+  await client.execute('CREATE INDEX idx_sim_weapon_sim_id ON simulation_weapon(simulation_id)')
+  await client.execute('CREATE INDEX idx_sim_modifier_sim_id ON simulation_modifier(simulation_id)')
 })
 
 // ============================================================
@@ -1162,6 +1216,14 @@ describe('V2: Index existence', () => {
         'idx_training_examples_label',
       ],
       simulations: ['idx_simulations_user_id'],
+      simulation: [
+        'idx_simulation_user_id',
+        'idx_simulation_attacker',
+        'idx_simulation_defender',
+        'idx_simulation_created',
+      ],
+      simulation_weapon: ['idx_sim_weapon_sim_id'],
+      simulation_modifier: ['idx_sim_modifier_sim_id'],
       lists: ['idx_lists_user_id'],
       list_units: ['idx_list_units_list_id'],
       unit_ratings: [
@@ -2010,6 +2072,108 @@ describe('V2: Cascading deletes', () => {
         .from(listUnitLoadoutWeapon)
         .where(eq(listUnitLoadoutWeapon.id, 'v2-weapon-1'))
       expect(weapons).toHaveLength(0)
+    })
+  })
+
+  // Phase 3: simulation cascade chain
+  describe('simulation (Phase 3)', () => {
+    it('inserts a simulation with weapon + modifier rows', async () => {
+      await db.insert(simulation).values({
+        id: 'p3-sim-1',
+        userId: 'user-1',
+        attackerName: 'Intercessors',
+        defenderName: 'Ork Boyz',
+        expectedWounds: 2.5,
+        expectedModelsRemoved: 1.2,
+        survivors: 8.8,
+        worstWounds: 0,
+        worstModels: 0,
+        bestWounds: 8,
+        bestModels: 4,
+        createdAt: Date.now(),
+      })
+      await db.insert(simulationWeapon).values({
+        id: 'p3-weapon-1',
+        simulationId: 'p3-sim-1',
+        profileKind: 'ranged',
+        weaponName: 'Bolt Rifle',
+        modelCount: 10,
+        weaponsPerModel: 1,
+        attacksPerWeapon: 2,
+        totalAttacks: 20,
+        expectedWounds: 2.5,
+        expectedModelsRemoved: 1.2,
+      })
+      await db.insert(simulationModifier).values({
+        id: 'p3-mod-1',
+        simulationId: 'p3-sim-1',
+        side: 'ATTACK',
+        source: 'weapon_ability',
+        key: 'LETHAL_HITS',
+        value: null,
+      })
+
+      const sims = await db.select().from(simulation).where(eq(simulation.id, 'p3-sim-1'))
+      expect(sims).toHaveLength(1)
+      expect(sims[0]?.attackerName).toBe('Intercessors')
+      expect(sims[0]?.expectedWounds).toBeCloseTo(2.5)
+    })
+
+    it('cascade: simulation -> simulation_weapon + simulation_modifier', async () => {
+      await db.delete(simulation).where(eq(simulation.id, 'p3-sim-1'))
+
+      const weapons = await db
+        .select()
+        .from(simulationWeapon)
+        .where(eq(simulationWeapon.id, 'p3-weapon-1'))
+      expect(weapons).toHaveLength(0)
+
+      const mods = await db
+        .select()
+        .from(simulationModifier)
+        .where(eq(simulationModifier.id, 'p3-mod-1'))
+      expect(mods).toHaveLength(0)
+    })
+
+    it('attacker_unit_id set to NULL on list_unit delete (SET NULL)', async () => {
+      await db.insert(list).values({
+        id: 'p3-list-1',
+        userId: 'user-1',
+        name: 'P3 List',
+        edition: '11th',
+        battleSize: 'unknown',
+        totalPoints: 0,
+        source: 'list-builder',
+        createdAt: Date.now(),
+        updatedAt: Date.now(),
+      })
+      await db.insert(listUnit).values({
+        id: 'p3-lu-1',
+        listId: 'p3-list-1',
+        isWarlord: false,
+        points: 90,
+      })
+      await db.insert(simulation).values({
+        id: 'p3-sim-2',
+        userId: 'user-1',
+        attackerUnitId: 'p3-lu-1',
+        attackerName: 'Intercessors',
+        defenderName: 'Boyz',
+        expectedWounds: 1,
+        expectedModelsRemoved: 0.5,
+        survivors: 9.5,
+        worstWounds: 0,
+        worstModels: 0,
+        bestWounds: 4,
+        bestModels: 2,
+        createdAt: Date.now(),
+      })
+
+      await db.delete(listUnit).where(eq(listUnit.id, 'p3-lu-1'))
+
+      const sims = await db.select().from(simulation).where(eq(simulation.id, 'p3-sim-2'))
+      expect(sims).toHaveLength(1)
+      expect(sims[0]?.attackerUnitId).toBeNull()
     })
   })
 })
