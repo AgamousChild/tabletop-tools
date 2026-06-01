@@ -1326,3 +1326,7 @@ export const missionGameState = sqliteTable(
 
 // === Phase 2 list tables ===
 export { list, listUnit, listUnitLoadout, listUnitLoadoutWeapon } from './list-schema'
+
+// === Phase 3 versus tables ===
+// The old `simulations` table above is DEPRECATED — use simulation/simulation_weapon/simulation_modifier.
+export { simulation, simulationModifier, simulationWeapon } from './versus-schema'
