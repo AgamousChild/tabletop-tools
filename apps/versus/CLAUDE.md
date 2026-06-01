@@ -69,25 +69,64 @@ all unit lookups happen client-side via `useGameUnit()` from `@tabletop-tools/ga
 No `units` table. Unit data lives client-side in IndexedDB.
 
 ```typescript
-// simulations  (optional -- saved results)
+// simulation  (Phase 3 — normalized saved results)
+id                      TEXT PRIMARY KEY
+user_id                 TEXT NOT NULL  FK → user(id) ON DELETE CASCADE
+attacker_unit_id        TEXT           FK → list_unit(id) ON DELETE SET NULL (nullable)
+defender_unit_id        TEXT           FK → list_unit(id) ON DELETE SET NULL (nullable)
+attacker_name           TEXT NOT NULL  -- denormalized for display
+defender_name           TEXT NOT NULL  -- denormalized for display
+expected_wounds         REAL NOT NULL
+expected_models_removed REAL NOT NULL
+survivors               REAL NOT NULL
+worst_wounds            REAL NOT NULL
+worst_models            REAL NOT NULL
+best_wounds             REAL NOT NULL
+best_models             REAL NOT NULL
+created_at              INTEGER NOT NULL
+
+// simulation_weapon  (one row per weapon profile fired)
 id                    TEXT PRIMARY KEY
-user_id               TEXT NOT NULL
-attacker_content_id   TEXT NOT NULL    -- content adapter ID
-attacker_name         TEXT NOT NULL    -- denormalized for display
-defender_content_id   TEXT NOT NULL
-defender_name         TEXT NOT NULL
-result                TEXT NOT NULL    -- JSON: full simulation output
-created_at            INTEGER NOT NULL
+simulation_id         TEXT NOT NULL  FK → simulation(id) ON DELETE CASCADE
+profile_kind          TEXT NOT NULL  -- 'ranged' | 'melee'
+weapon_name           TEXT NOT NULL
+model_count           INTEGER NOT NULL
+weapons_per_model     INTEGER NOT NULL
+attacks_per_weapon    REAL NOT NULL  -- expected value (D6 → 3.5)
+total_attacks         REAL NOT NULL  -- = model_count × weapons_per_model × attacks_per_weapon
+expected_wounds       REAL NOT NULL
+expected_models_removed REAL NOT NULL
+
+// simulation_modifier  (one row per active modifier)
+id              TEXT PRIMARY KEY
+simulation_id   TEXT NOT NULL  FK → simulation(id) ON DELETE CASCADE
+side            TEXT NOT NULL  -- 'ATTACK' | 'DEFENSE'
+source          TEXT NOT NULL  -- 'weapon_ability' | 'special_rule' | 'leader'
+key             TEXT NOT NULL  -- 'LETHAL_HITS', 'SUSTAINED_HITS', etc.
+value           TEXT           -- JSON-stringified numeric or null for boolean flags
+
+// simulations  (DEPRECATED — legacy JSON-blob table, kept for backward compat)
+// Use simulation/simulation_weapon/simulation_modifier instead.
 ```
+
+**Attack-count invariant:** `total_attacks = model_count × weapons_per_model × attacks_per_weapon`
+enforced server-side in `apps/versus/server/src/lib/attackCount.ts` before every DB write.
 
 ---
 
 ## tRPC Routers
 
 ```typescript
-// Simulate (save/history only — simulation runs client-side)
-simulate.save({ attackerId, defenderId, result })      -> simulationId
-simulate.history()                                      -> simulation[]
+// simulateV2 (Phase 3 — normalized, save writes all 3 tables in one batch)
+simulateV2.save({ attackerName, defenderName, weapons, modifiers, ... }) -> { id }
+simulateV2.history()     -> simulation[] with weapons[]
+simulateV2.get({ id })   -> simulation with weapons[] + modifiers[]
+simulateV2.delete({ id }) -> { success: true }
+
+// simulate (DEPRECATED — legacy JSON-blob router, kept for backward compat)
+simulate.save({ attackerId, defenderId, result })  -> simulationId
+simulate.history()                                 -> simulation[]
+simulate.lookup({ configHash })                    -> cached result or null
 ```
 
 Unit selection and simulation computation happen entirely client-side using IndexedDB data
