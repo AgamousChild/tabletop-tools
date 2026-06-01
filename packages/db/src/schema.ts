@@ -1247,6 +1247,31 @@ export const contentNodeLinkCandidate = sqliteTable(
   ],
 )
 
+// ── content_can_lead ─────────────────────────────────────────────────────────
+// Junction table: which Character datasheets may lead which bodyguard datasheets.
+// Populated by the data-import producer from Wahapedia's leader_attachments CSV.
+// PK is composite (leader_datasheet_id, bodyguard_datasheet_id) — same pair
+// shouldn't appear twice. Both columns FK content_entity for referential
+// integrity + cascade on entity deletion. The list-builder attachment engine
+// queries this to gate list_unit.attached_to_unit_id.
+
+export const contentCanLead = sqliteTable(
+  'content_can_lead',
+  {
+    leaderDatasheetId: text('leader_datasheet_id')
+      .notNull()
+      .references(() => contentEntity.id, { onDelete: 'cascade' }),
+    bodyguardDatasheetId: text('bodyguard_datasheet_id')
+      .notNull()
+      .references(() => contentEntity.id, { onDelete: 'cascade' }),
+  },
+  (table) => [
+    primaryKey({ columns: [table.leaderDatasheetId, table.bodyguardDatasheetId] }),
+    index('idx_can_lead_leader').on(table.leaderDatasheetId),
+    index('idx_can_lead_bodyguard').on(table.bodyguardDatasheetId),
+  ],
+)
+
 // ── Game-tracker mission catalog (scoring_mission + canonical game states) ────
 // A mission (primary or secondary) is a content_entity; scoring_mission is its
 // game-tracker projection (1:1, id = the canonical content id). Each mission

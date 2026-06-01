@@ -1,4 +1,10 @@
-import { list, listUnit, listUnitLoadout, listUnitLoadoutWeapon } from '@tabletop-tools/db'
+import {
+  contentCanLead,
+  list,
+  listUnit,
+  listUnitLoadout,
+  listUnitLoadoutWeapon,
+} from '@tabletop-tools/db'
 import { generateId, protectedProcedure, router } from '@tabletop-tools/server-core'
 import { TRPCError } from '@trpc/server'
 import { and, eq, inArray } from 'drizzle-orm'
@@ -194,9 +200,11 @@ export const listV2Router = router({
         .where(and(eq(list.id, unit[0]!.listId), eq(list.userId, ctx.user.id)))
       if (!parentList.length) throw new TRPCError({ code: 'FORBIDDEN' })
 
-      // Attachment constraint: enforce ≤1 leader and ≤1 support per bodyguard.
-      // NOTE: can_lead content ref validation (which character CAN lead which unit) requires
-      // the cost layer from Phase 1.4. For Phase 2 we enforce the slot constraint only.
+      // Attachment constraints:
+      // 1. ≤1 leader and ≤1 support per bodyguard (slot constraint)
+      // 2. can_lead content ref — the attaching unit's datasheet must be a
+      //    declared Leader for the bodyguard's datasheet (content_can_lead
+      //    row exists).
       if (input.attachedToUnitId && input.attachRole) {
         const siblings = await ctx.db
           .select()
@@ -210,6 +218,41 @@ export const listV2Router = router({
             code: 'BAD_REQUEST',
             message: `${input.attachRole} slot already filled for this unit`,
           })
+        }
+
+        // Look up the leader and bodyguard datasheet ids
+        const leaderDsId = input.datasheetId ?? unit[0]!.datasheetId
+        const bodyguardUnit = (
+          await ctx.db
+            .select()
+            .from(listUnit)
+            .where(eq(listUnit.id, input.attachedToUnitId))
+            .limit(1)
+        )[0]
+        if (!bodyguardUnit) {
+          throw new TRPCError({ code: 'BAD_REQUEST', message: 'bodyguard unit not found' })
+        }
+        const bodyguardDsId = bodyguardUnit.datasheetId
+        // Both endpoints must have datasheet ids to check the content ref. If
+        // either is null (a stub unit pre-datasheet), skip the can_lead check
+        // — the slot constraint still applies.
+        if (leaderDsId && bodyguardDsId) {
+          const can = await ctx.db
+            .select()
+            .from(contentCanLead)
+            .where(
+              and(
+                eq(contentCanLead.leaderDatasheetId, leaderDsId),
+                eq(contentCanLead.bodyguardDatasheetId, bodyguardDsId),
+              ),
+            )
+            .limit(1)
+          if (can.length === 0) {
+            throw new TRPCError({
+              code: 'BAD_REQUEST',
+              message: `datasheet ${leaderDsId} cannot lead ${bodyguardDsId} (no can_lead entry)`,
+            })
+          }
         }
       }
 

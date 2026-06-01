@@ -18,9 +18,14 @@ beforeAll(async () => {
     CREATE TABLE list_unit (id TEXT PRIMARY KEY, list_id TEXT NOT NULL REFERENCES list(id) ON DELETE CASCADE, datasheet_id TEXT REFERENCES content_entity(id), enhancement_id TEXT REFERENCES content_entity(id), is_warlord INTEGER NOT NULL DEFAULT 0, points INTEGER NOT NULL DEFAULT 0, attached_to_unit_id TEXT REFERENCES list_unit(id), attach_role TEXT);
     CREATE TABLE list_unit_loadout (id TEXT PRIMARY KEY, list_unit_id TEXT NOT NULL REFERENCES list_unit(id) ON DELETE CASCADE, model_count INTEGER NOT NULL);
     CREATE TABLE list_unit_loadout_weapon (id TEXT PRIMARY KEY, loadout_id TEXT NOT NULL REFERENCES list_unit_loadout(id) ON DELETE CASCADE, weapon_id TEXT REFERENCES content_entity(id), count INTEGER NOT NULL DEFAULT 1);
+    CREATE TABLE content_can_lead (leader_datasheet_id TEXT NOT NULL REFERENCES content_entity(id) ON DELETE CASCADE, bodyguard_datasheet_id TEXT NOT NULL REFERENCES content_entity(id) ON DELETE CASCADE, PRIMARY KEY (leader_datasheet_id, bodyguard_datasheet_id));
     INSERT INTO "user" VALUES ('u-1', 'Alice', 'a@test.com', 0, 0, 0);
     INSERT INTO "user" VALUES ('u-2', 'Bob', 'b@test.com', 0, 0, 0);
     INSERT INTO content_entity VALUES ('w-sword', 'weapon', 'Power Sword', NULL, NULL, NULL, NULL, NULL, NULL, 0);
+    INSERT INTO content_entity VALUES ('ds-captain', 'datasheet', 'Captain', NULL, NULL, NULL, NULL, NULL, NULL, 0);
+    INSERT INTO content_entity VALUES ('ds-intercessors', 'datasheet', 'Intercessors', NULL, NULL, NULL, NULL, NULL, NULL, 0);
+    INSERT INTO content_entity VALUES ('ds-terminators', 'datasheet', 'Terminators', NULL, NULL, NULL, NULL, NULL, NULL, 0);
+    INSERT INTO content_can_lead VALUES ('ds-captain', 'ds-intercessors');
   `)
 })
 
@@ -231,6 +236,86 @@ describe('listV2.updateUnit (attachment)', () => {
         attachRole: 'leader',
       }),
     ).rejects.toMatchObject({ code: 'BAD_REQUEST' })
+  })
+
+  it('can_lead: allows attachment when (leader_ds, bodyguard_ds) is in content_can_lead', async () => {
+    const caller = createCaller(ctx)
+    const { id: listId } = await caller.listV2.create({
+      name: 'CanLead positive',
+      edition: '11th',
+      battleSize: 'unknown',
+    })
+    const { id: bgId } = await caller.listV2.addUnit({
+      listId,
+      datasheetId: 'ds-intercessors',
+      points: 90,
+      isWarlord: false,
+    })
+    const { id: leaderId } = await caller.listV2.addUnit({
+      listId,
+      datasheetId: 'ds-captain',
+      points: 90,
+      isWarlord: false,
+    })
+    await caller.listV2.updateUnit({
+      id: leaderId,
+      attachedToUnitId: bgId,
+      attachRole: 'leader',
+    })
+    const fetched = await caller.listV2.get({ id: listId })
+    const ldr = fetched.units.find((u) => u.id === leaderId)
+    expect(ldr!.attachedToUnitId).toBe(bgId)
+  })
+
+  it('can_lead: rejects attachment when (leader_ds, bodyguard_ds) is NOT in content_can_lead', async () => {
+    const caller = createCaller(ctx)
+    const { id: listId } = await caller.listV2.create({
+      name: 'CanLead negative',
+      edition: '11th',
+      battleSize: 'unknown',
+    })
+    const { id: bgId } = await caller.listV2.addUnit({
+      listId,
+      datasheetId: 'ds-terminators', // Captain has NO can_lead → Terminators entry
+      points: 200,
+      isWarlord: false,
+    })
+    const { id: leaderId } = await caller.listV2.addUnit({
+      listId,
+      datasheetId: 'ds-captain',
+      points: 90,
+      isWarlord: false,
+    })
+    await expect(
+      caller.listV2.updateUnit({
+        id: leaderId,
+        attachedToUnitId: bgId,
+        attachRole: 'leader',
+      }),
+    ).rejects.toMatchObject({ code: 'BAD_REQUEST' })
+  })
+
+  it('can_lead: skips check when either endpoint has no datasheet_id (stub unit)', async () => {
+    const caller = createCaller(ctx)
+    const { id: listId } = await caller.listV2.create({
+      name: 'CanLead stub',
+      edition: '11th',
+      battleSize: 'unknown',
+    })
+    const { id: bgId } = await caller.listV2.addUnit({ listId, points: 90, isWarlord: false })
+    const { id: leaderId } = await caller.listV2.addUnit({
+      listId,
+      points: 90,
+      isWarlord: false,
+    })
+    // No datasheet_id on either → can_lead is skipped, slot constraint still applies
+    await expect(
+      caller.listV2.updateUnit({
+        id: leaderId,
+        attachedToUnitId: bgId,
+        attachRole: 'leader',
+      }),
+    ).resolves.toMatchObject({ success: true })
   })
 })
 

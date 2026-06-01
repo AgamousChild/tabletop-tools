@@ -16,7 +16,7 @@
  * @see docs/superpowers/specs/2026-05-28-content-silo-bridge-design.md
  * @see docs/superpowers/plans/2026-05-29-phase-1.4-unified-etl.md
  */
-import { contentEntity, type Db } from '@tabletop-tools/db'
+import { contentCanLead, contentEntity, type Db } from '@tabletop-tools/db'
 import { sql } from 'drizzle-orm'
 
 type ContentEntityType = (typeof contentEntity.$inferInsert)['type']
@@ -342,4 +342,48 @@ export async function produceDetachmentAbilities(
     parentId: (r) => detachmentIdMap.get(r.detachmentId),
     wahapediaId: (r) => r.wahapediaId ?? r.id,
   })
+}
+
+// ── content_can_lead — leader datasheet → bodyguard datasheet relationships ─
+
+export interface LeaderAttachmentRecord {
+  id?: string
+  /** Canonical content_entity id of the Leader character datasheet. */
+  leaderId: string
+  /** Canonical content_entity id of the bodyguard datasheet. */
+  attachedId: string
+}
+
+/**
+ * Populates content_can_lead from Wahapedia's leader_attachments table
+ * (already re-keyed to canonical content ids by the rekey step). Pre-filters
+ * pairs whose endpoints don't exist in content_entity to avoid FK violations
+ * mid-batch (same resolve-at-boundary pattern as the other producers).
+ *
+ * Idempotent: composite PK (leader, bodyguard) + ON CONFLICT DO NOTHING.
+ * Skips bulk-R2 write — this is a graph relationship, not a per-entity doc.
+ */
+export async function produceCanLead(
+  db: Db | undefined,
+  attachments: LeaderAttachmentRecord[],
+  validDatasheetIds: Set<string>,
+): Promise<{ type: 'can_lead'; rowsWritten: number; dropped: number }> {
+  if (!db) return { type: 'can_lead', rowsWritten: 0, dropped: 0 }
+  const valid: Array<{ leaderDatasheetId: string; bodyguardDatasheetId: string }> = []
+  let dropped = 0
+  for (const a of attachments) {
+    if (validDatasheetIds.has(a.leaderId) && validDatasheetIds.has(a.attachedId)) {
+      valid.push({ leaderDatasheetId: a.leaderId, bodyguardDatasheetId: a.attachedId })
+    } else {
+      dropped++
+    }
+  }
+  const CHUNK = 100
+  let rowsWritten = 0
+  for (let i = 0; i < valid.length; i += CHUNK) {
+    const chunk = valid.slice(i, i + CHUNK)
+    await db.insert(contentCanLead).values(chunk).onConflictDoNothing()
+    rowsWritten += chunk.length
+  }
+  return { type: 'can_lead', rowsWritten, dropped }
 }

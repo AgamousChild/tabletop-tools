@@ -11,7 +11,9 @@ import {
   type DetachmentAbilityRecord,
   type DetachmentRecord,
   type FactionRecord,
+  type LeaderAttachmentRecord,
   produceAbilities,
+  produceCanLead,
   produceDatasheets,
   produceDetachmentAbilities,
   produceDetachments,
@@ -460,6 +462,28 @@ export async function runSync(
           ? produceEnhancements(bucket, db, enhancementsValid)
           : Promise.resolve(null),
       )
+
+      // content_can_lead — leader → bodyguard datasheet relationships from
+      // Wahapedia's leader_attachments. Already rekeyed by the rekey step, so
+      // leaderId and attachedId resolve to canonical content_entity ids. Skip
+      // when DB isn't available.
+      try {
+        const leaderAttachments =
+          (rekeyed['leader_attachments'] as LeaderAttachmentRecord[] | undefined) ?? []
+        if (leaderAttachments.length > 0 && db) {
+          const r = await produceCanLead(db, leaderAttachments, canonicalDatasheetIdsFiltered)
+          producer[r.type] = { r2DocsWritten: 0, contentEntityUpserts: r.rowsWritten }
+          if (r.dropped > 0) {
+            console.warn(
+              `[can_lead] dropped ${r.dropped} attachments referencing unknown datasheets`,
+            )
+          }
+        }
+      } catch (err) {
+        errors.push(
+          `Content producer (can_lead): ${err instanceof Error ? err.message : String(err)}`,
+        )
+      }
     } catch (err) {
       errors.push(`ID mapping: ${err instanceof Error ? err.message : String(err)}`)
     }
