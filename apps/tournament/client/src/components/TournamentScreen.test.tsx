@@ -63,9 +63,11 @@ vi.mock('../lib/trpc', () => ({
         }),
       },
       standings: {
-        useQuery: (_id: unknown, _opts: unknown) => ({
+        useQuery: (_input: unknown, _opts: unknown) => ({
           data: {
             round: 2,
+            stackType: 'legacy',
+            metricKeys: ['wins', 'losses', 'draws', 'vp_margin', 'battle_points', 'sos_wins'],
             players: [
               {
                 rank: 1,
@@ -144,6 +146,18 @@ vi.mock('../lib/trpc', () => ({
             opts?.onSuccess?.()
           },
           isPending: false,
+        }),
+      },
+      listFactions: {
+        useQuery: () => ({
+          data: [] as { id: string; name: string }[],
+          isLoading: false,
+        }),
+      },
+      listDetachments: {
+        useQuery: (_input: unknown, _opts: unknown) => ({
+          data: [] as { id: string; name: string; factionId: string | null }[],
+          isLoading: false,
         }),
       },
       checkIn: {

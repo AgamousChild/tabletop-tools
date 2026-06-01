@@ -4,7 +4,9 @@ import { useEffect, useState } from 'react'
 import { authClient } from '../lib/auth'
 import { navigate, useHashRoute } from '../lib/router'
 import { trpc } from '../lib/trpc'
+import { FactionDetachmentPicker } from './FactionDetachmentPicker'
 import { ManageTournament } from './ManageTournament'
+import { MetricStackStandings } from './MetricStackStandings'
 
 /** Formats elapsed time since a given timestamp as HH:MM:SS */
 function useElapsedTime(startTimestamp: number | null): string | null {
@@ -60,19 +62,6 @@ type Tournament = {
   includeChallenger?: number
 }
 
-type PlayerStanding = {
-  rank: number
-  id: string
-  displayName: string
-  faction: string
-  wins: number
-  losses: number
-  draws: number
-  margin: number
-  totalVP: number
-  strengthOfSchedule: number
-}
-
 function StatusBadge({ status }: { status: string }) {
   const colors: Record<string, string> = {
     DRAFT: 'text-slate-400 bg-slate-800',
@@ -87,48 +76,6 @@ function StatusBadge({ status }: { status: string }) {
     >
       {status.replace('_', ' ')}
     </span>
-  )
-}
-
-function StandingsTable({ players }: { players: PlayerStanding[] }) {
-  return (
-    <div className="overflow-x-auto">
-      <table className="w-full text-sm text-left text-slate-300">
-        <thead className="text-xs text-slate-500 uppercase">
-          <tr>
-            <th className="px-3 py-2">#</th>
-            <th className="px-3 py-2">Player</th>
-            <th className="px-3 py-2">Faction</th>
-            <th className="px-3 py-2 text-center">W</th>
-            <th className="px-3 py-2 text-center">L</th>
-            <th className="px-3 py-2 text-center">D</th>
-            <th className="px-3 py-2 text-center">+/-</th>
-            <th className="px-3 py-2 text-center">VP</th>
-            <th className="px-3 py-2 text-center">SOS</th>
-          </tr>
-        </thead>
-        <tbody>
-          {players.map((p) => (
-            <tr key={p.id} className="border-t border-slate-800">
-              <td className="px-3 py-2 text-slate-500">{p.rank}</td>
-              <td className="px-3 py-2 font-medium text-slate-100">{p.displayName}</td>
-              <td className="px-3 py-2 text-slate-400">{p.faction}</td>
-              <td className="px-3 py-2 text-center text-emerald-400">{p.wins}</td>
-              <td className="px-3 py-2 text-center text-red-400">{p.losses}</td>
-              <td className="px-3 py-2 text-center">{p.draws}</td>
-              <td
-                className={`px-3 py-2 text-center ${p.margin >= 0 ? 'text-emerald-400' : 'text-red-400'}`}
-              >
-                {p.margin >= 0 ? '+' : ''}
-                {p.margin}
-              </td>
-              <td className="px-3 py-2 text-center">{p.totalVP}</td>
-              <td className="px-3 py-2 text-center">{(p.strengthOfSchedule * 100).toFixed(1)}%</td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-    </div>
   )
 }
 
@@ -174,6 +121,8 @@ export function TournamentScreen({ onSignOut }: Props) {
     }
     return ''
   })
+  const [regFactionEntityId, setRegFactionEntityId] = useState<string | null>(null)
+  const [regDetachmentEntityId, setRegDetachmentEntityId] = useState<string | null>(null)
   const [regList, setRegList] = useState('')
 
   // Round start time
@@ -193,9 +142,10 @@ export function TournamentScreen({ onSignOut }: Props) {
   const tournamentDetailQuery = trpc.tournament.get.useQuery(selectedTournamentId!, {
     enabled: !!selectedTournamentId,
   })
-  const standingsQuery = trpc.tournament.standings.useQuery(selectedTournamentId!, {
-    enabled: !!selectedTournamentId,
-  })
+  const standingsQuery = trpc.tournament.standings.useQuery(
+    { tournamentId: selectedTournamentId!, stackType: 'pairing' },
+    { enabled: !!selectedTournamentId },
+  )
   const roundDetailQuery = trpc.round.get.useQuery(selectedRoundId!, {
     enabled: !!selectedRoundId,
   })
@@ -341,9 +291,13 @@ export function TournamentScreen({ onSignOut }: Props) {
       displayName: regName,
       faction: regFaction,
       listText: regList || undefined,
+      factionEntityId: regFactionEntityId ?? undefined,
+      detachmentEntityId: regDetachmentEntityId ?? undefined,
     })
     setRegName('')
     setRegFaction('')
+    setRegFactionEntityId(null)
+    setRegDetachmentEntityId(null)
     setRegList('')
   }
 
@@ -540,12 +494,18 @@ export function TournamentScreen({ onSignOut }: Props) {
             onChange={(e) => setRegName(e.target.value)}
             required
           />
-          <input
-            className="w-full px-3 py-2 rounded bg-slate-800 border border-slate-700 text-slate-100"
-            placeholder="Faction (e.g. Space Marines)"
-            value={regFaction}
-            onChange={(e) => setRegFaction(e.target.value)}
-            required
+          <FactionDetachmentPicker
+            factionEntityId={regFactionEntityId}
+            detachmentEntityId={regDetachmentEntityId}
+            onFactionChange={(id) => {
+              setRegFactionEntityId(id)
+              // Keep free-text faction in sync with entity selection for legacy field
+              setRegFaction(id ? id : regFaction)
+            }}
+            onDetachmentChange={setRegDetachmentEntityId}
+            factionText={regFaction}
+            onFactionTextChange={setRegFaction}
+            disabled={registerPlayer.isPending}
           />
           <textarea
             className="w-full px-3 py-2 rounded bg-slate-800 border border-slate-700 text-slate-100 h-40 font-mono text-sm"
@@ -954,10 +914,13 @@ export function TournamentScreen({ onSignOut }: Props) {
         {/* Standings */}
         {standings && standings.players.length > 0 && (
           <div className="mb-6">
-            <h3 className="text-sm font-semibold text-slate-500 uppercase mb-2">
-              Standings · Round {standings.round}
-            </h3>
-            <StandingsTable players={standings.players} />
+            <h3 className="text-sm font-semibold text-slate-500 uppercase mb-2">Standings</h3>
+            <MetricStackStandings
+              round={standings.round}
+              stackType={standings.stackType}
+              metricKeys={standings.metricKeys}
+              players={standings.players as any}
+            />
           </div>
         )}
 
@@ -975,7 +938,7 @@ export function TournamentScreen({ onSignOut }: Props) {
                 }) => {
                   const recipient =
                     award.recipientId && standings
-                      ? standings.players.find((p: PlayerStanding) => p.id === award.recipientId)
+                      ? standings.players.find((p: { id: string }) => p.id === award.recipientId)
                       : null
                   return (
                     <div
