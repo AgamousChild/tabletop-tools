@@ -159,10 +159,22 @@ export function parseFactionPack(
         break
     }
 
-    const baseId = currentDetachmentId
-      ? `${currentDetachmentId}:${slugify(title)}`
-      : `faction:${factionSlug}:${slugify(title)}`
-    const id = makeId(baseId)
+    // For a detachment's own node, the id IS currentDetachmentId (already
+    // run through makeId when the ## heading was parsed). Appending
+    // slugify(title) here doubles the slug (`det:fac:slug:slug`) because
+    // sectionTitle == the detachment heading; re-passing it to makeId
+    // adds a `-1` suffix because the id was already seen on the heading.
+    // Children of a detachment (rules, abilities, stratagems) DO get a
+    // new slug nested under the parent's id and need makeId for dedupe.
+    let id: string
+    if (sectionType === 'detachment' && currentDetachmentId) {
+      id = currentDetachmentId
+    } else {
+      const baseId = currentDetachmentId
+        ? `${currentDetachmentId}:${slugify(title)}`
+        : `faction:${factionSlug}:${slugify(title)}`
+      id = makeId(baseId)
+    }
 
     const summary = body ? truncate(body.split(/[.!?]\s/)[0] ?? title, 150) : title
 

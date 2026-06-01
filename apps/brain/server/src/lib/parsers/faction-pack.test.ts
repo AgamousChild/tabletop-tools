@@ -108,4 +108,19 @@ describe('parseFactionPack', () => {
       expect(node.version).toBe(1)
     }
   })
+
+  it('detachment-rule node id has no doubled slug (regression: det:fac:slug:slug)', () => {
+    // The detachment heading "## CERAMITE SENTINELS" should produce id
+    // `det:space-marines:ceramite-sentinels`, NOT
+    // `det:space-marines:ceramite-sentinels:ceramite-sentinels`.
+    const det = result.nodes.find((n) => n.category === 'detachment-rule')
+    expect(det).toBeDefined()
+    expect(det!.id).toBe('det:space-marines:ceramite-sentinels')
+    // Generic regression check: no doubled trailing slug on any detachment-rule.
+    for (const n of result.nodes) {
+      if (n.category !== 'detachment-rule') continue
+      const m = n.id.match(/^det:[^:]+:([^:]+):(.+)$/)
+      if (m) expect(m[1]).not.toBe(m[2])
+    }
+  })
 })
