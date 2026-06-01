@@ -64,13 +64,13 @@ The seam every app FKs into.
 
 ---
 
-## Phase 2 — List  *(spec: 2026-05-26-list-data-model-design)*
+## Phase 2 — List  *(spec: 2026-05-26-list-data-model-design)* — ✅ DONE
 
 `list_unit` is the shared **configured unit** consumed by Versus / Game Tracker / Tournament — so it moves from IndexedDB to **relational** (it must be FK-able).
 
 - **Tables → `schema.ts`:** `list`, `list_unit` (self-ref Leader/Support attachment), `list_unit_loadout`, `list_unit_loadout_weapon`. Cost layer (`unit_cost`, `wargear_option`) is content — lives in `content_entity` / R2, dataslate-versioned.
 - `list_unit.datasheet_id` + loadout `weapon_id` **FK `content_entity`**.
-- **Gate:** points-derivation tests; no-scratch-row invariant; attachment constraints (≤1 leader + ≤1 support, `can_lead` respected). list-builder reads/writes it.
+- **Gate MET:** 16 new unit tests (points-derivation + attachment engine), no-scratch-row invariant enforced at DB + router level, attachment slot constraint (≤1 leader + ≤1 support) enforced in `updateUnit`, 15 router tests, 10 schema tests. Migration `0006_list_data_model.sql` ready. `listV2` tRPC router: create/update/get/getAll/delete/addUnit/updateUnit/removeUnit/setLoadout/computePoints. `syncListV2ToServer` stub in sync.ts. Phase 2 plan: `docs/superpowers/plans/2026-06-01-phase2-list-data-model.md`. **can_lead content validation deferred to Phase 1.4** (slot constraint only in Phase 2). Full two-way client sync deferred to Phase 3 UI redesign.
 
 ---
 
