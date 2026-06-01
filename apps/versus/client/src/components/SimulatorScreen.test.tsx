@@ -4,6 +4,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { SimulatorScreen } from './SimulatorScreen'
 
 const mockSave = vi.fn()
+const mockSaveV2 = vi.fn()
 
 vi.mock('../lib/auth', () => ({
   authClient: {
@@ -12,11 +13,24 @@ vi.mock('../lib/auth', () => ({
   },
 }))
 
+vi.mock('../lib/useSimulateV2', () => ({
+  useSimulateV2: () => ({
+    save: mockSaveV2,
+    isSaving: false,
+    lastSavedId: null,
+    isError: false,
+    error: null,
+  }),
+  weaponAbilityToModifier: vi.fn().mockReturnValue({
+    side: 'ATTACK',
+    source: 'weapon_ability',
+    key: 'TEST',
+    value: null,
+  }),
+}))
+
 vi.mock('../lib/trpc', () => ({
   trpc: {
-    useUtils: () => ({
-      simulate: { history: { invalidate: vi.fn() } },
-    }),
     simulate: {
       save: {
         useMutation: () => ({ mutate: mockSave }),
@@ -31,6 +45,18 @@ vi.mock('../lib/trpc', () => ({
         useMutation: () => ({ mutate: vi.fn() }),
       },
     },
+    simulateV2: {
+      history: {
+        useQuery: () => ({ data: [] }),
+      },
+      delete: {
+        useMutation: () => ({ mutate: vi.fn() }),
+      },
+    },
+    useUtils: () => ({
+      simulate: { history: { invalidate: vi.fn() } },
+      simulateV2: { history: { invalidate: vi.fn() } },
+    }),
   },
 }))
 
@@ -119,6 +145,7 @@ vi.mock('../lib/useGameData', () => ({
 
 beforeEach(() => {
   mockSave.mockReset()
+  mockSaveV2.mockReset()
 })
 
 describe('SimulatorScreen', () => {
