@@ -28,6 +28,7 @@
 
 - Phase 1.1 — canonical content ids anchored to given source ids (`apps/data-import/server/src/lib/id-mapping.ts` + tests + live validation tool). 99.99% reference resolution against the real Wahapedia import (122,727 / 10 unmatched). Three commits: docs(claude) rules, feat(data-import) canonical ids, test(data-import) live validation tool.
 - Phase 1.4 scope (original) — `2026-05-29-phase-1.4-unified-etl.md`. **Note:** built on the original crosswalk-as-overwrite model; step 2 of this worklist rewrites it.
+- **Phase 2 client complete (2026-06-01)** — list-builder client wired to `listV2` tRPC router. Server is source of truth for army lists. `useListsV2.ts` + `migrateIndexedDbLists.ts` + updated screens (`ListBuilderScreen`, `MyListsScreen`, `UnitSelectionScreen`). One-time IndexedDB→server migration on first load. 76 client tests + 53 server tests + Playwright UI e2e. Commits: `cb0ba49` (client wiring) + `49f0c3f` (e2e). See unified data build plan Phase 2 entry.
 
 ---
 
