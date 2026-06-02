@@ -78,6 +78,13 @@
       "when": 1748736000000,
       "tag": "0010_tournament_phase3",
       "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "6",
+      "when": 1748822400000,
+      "tag": "0011_game_tracker_v2",
+      "breakpoints": true
     }
   ]
 }
