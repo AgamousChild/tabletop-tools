@@ -54,10 +54,17 @@ const matchWithTurns = {
 
 let currentMatch: typeof inProgressMatch | typeof matchWithTurns = inProgressMatch
 
+vi.mock('../lib/useMissionCatalog', () => ({
+  useMissionCatalog: () => ({
+    primaries: [],
+    secondaries: [{ id: 's1', name: 'Engage on All Fronts', kind: 'secondary' }],
+    isLoading: false,
+  }),
+}))
+
 vi.mock('@tabletop-tools/game-data-store', () => ({
   useStratagems: () => ({ data: [], error: null, isLoading: false }),
   useList: () => ({ data: null, refetch: vi.fn() }),
-  useMissions: () => ({ data: [], error: null, isLoading: false }),
 }))
 
 vi.mock('../lib/trpc', () => ({

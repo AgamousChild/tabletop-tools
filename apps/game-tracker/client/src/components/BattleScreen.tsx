@@ -1,7 +1,8 @@
-import { useList, useMissions, useStratagems } from '@tabletop-tools/game-data-store'
+import { useList, useStratagems } from '@tabletop-tools/game-data-store'
 import { useMemo, useState } from 'react'
 
 import { trpc } from '../lib/trpc'
+import { useMissionCatalog } from '../lib/useMissionCatalog'
 import { RoundEditor } from './battle/RoundEditor'
 import { RoundWizard } from './battle/RoundWizard'
 import { Scoreboard } from './battle/Scoreboard'
@@ -82,13 +83,11 @@ export function BattleScreen({ matchId, onBack, onClose }: Props) {
     }))
   }, [armyList])
 
-  // Load secondary missions from IndexedDB (type=secondary)
-  const { data: indexedMissions = [] } = useMissions()
-  const availableSecondaries = useMemo(() => {
-    return indexedMissions
-      .filter((m) => m.type === 'secondary')
-      .map((m) => ({ id: m.id, name: m.name }))
-  }, [indexedMissions])
+  const { secondaries: catalogSecondaries } = useMissionCatalog()
+  const availableSecondaries = useMemo(
+    () => catalogSecondaries.map((m) => ({ id: m.id, name: m.name })),
+    [catalogSecondaries],
+  )
 
   if (!match) return <div className="p-6 text-slate-400">Loading...</div>
 

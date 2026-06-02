@@ -15,6 +15,14 @@ vi.mock('../lib/auth', () => ({
   },
 }))
 
+vi.mock('../lib/useMissionCatalog', () => ({
+  useMissionCatalog: () => ({
+    primaries: [{ id: 'c1', name: 'Take and Hold', kind: 'primary' }],
+    secondaries: [],
+    isLoading: false,
+  }),
+}))
+
 vi.mock('@tabletop-tools/game-data-store', () => ({
   usePrimaryFactions: () => ({
     data: ['Space Marines', 'Orks'],

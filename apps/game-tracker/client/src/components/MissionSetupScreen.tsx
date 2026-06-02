@@ -1,35 +1,11 @@
 import { useMissions } from '@tabletop-tools/game-data-store'
 import { useState } from 'react'
 
-const FALLBACK_MISSIONS = [
-  'Take and Hold',
-  'Supply Drop',
-  'Scorched Earth',
-  'The Ritual',
-  'Priority Targets',
-  'Linchpin',
-  'Purge the Foe',
-]
+import { useMissionCatalog } from '../lib/useMissionCatalog'
 
-const FALLBACK_DEPLOYMENT_ZONES = [
-  'Tipping Point',
-  'Hammer and Anvil',
-  'Search and Destroy',
-  'Crucible of Battle',
-  'Sweeping Engagement',
-  'Dawn of War',
-]
-
-const FALLBACK_TERRAIN_LAYOUTS = [
-  'Layout 1',
-  'Layout 2',
-  'Layout 3',
-  'Layout 4',
-  'Layout 5',
-  'Layout 6',
-  'Layout 7',
-  'Layout 8',
-]
+// Empty fallbacks — used ONLY when both server catalog AND IndexedDB return nothing.
+// Adding a mission row to the DB makes it appear in UI automatically.
+const EMPTY_FALLBACK_TERRAIN = ['Layout 1', 'Layout 2', 'Layout 3']
 
 type MissionSetupData = {
   mission: string
@@ -61,17 +37,21 @@ export function MissionSetupScreen({ onNext, onBack }: Props) {
   const [challengerInput, setChallengerInput] = useState('')
   const [requirePhotos, setRequirePhotos] = useState(false)
 
+  const { primaries: catalogPrimaries } = useMissionCatalog()
   const { data: indexedMissions = [] } = useMissions()
-  const primaryMissions = indexedMissions.filter((m) => m.type === 'primary')
+
   const deploymentZoneMissions = indexedMissions.filter((m) => m.type === 'deployment_zone')
-  // Use data-driven values when available, fall back to hardcoded lists
+
+  // Primary missions: server catalog is source of truth
   const missionNames =
-    primaryMissions.length > 0 ? primaryMissions.map((m) => m.name) : FALLBACK_MISSIONS
+    catalogPrimaries.length > 0
+      ? catalogPrimaries.map((m) => m.name)
+      : indexedMissions.filter((m) => m.type === 'primary').map((m) => m.name)
+
   const deploymentZoneNames =
-    deploymentZoneMissions.length > 0
-      ? deploymentZoneMissions.map((m) => m.name)
-      : FALLBACK_DEPLOYMENT_ZONES
-  const terrainLayoutNames = FALLBACK_TERRAIN_LAYOUTS
+    deploymentZoneMissions.length > 0 ? deploymentZoneMissions.map((m) => m.name) : []
+
+  const terrainLayoutNames = EMPTY_FALLBACK_TERRAIN
 
   const addTwistCard = () => {
     const name = twistInput.trim()
