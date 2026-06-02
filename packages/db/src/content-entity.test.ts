@@ -35,6 +35,7 @@ beforeAll(async () => {
     r2_key TEXT,
     wahapedia_id TEXT,
     bsdata_id TEXT,
+    can_deploy_solo INTEGER NOT NULL DEFAULT 1,
     updated_at INTEGER NOT NULL
   )`)
   // content_node_link — single-row per brain_node_id (UPDATE-in-place model).

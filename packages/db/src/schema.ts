@@ -1228,6 +1228,11 @@ export const contentEntity = sqliteTable(
     r2Key: text('r2_key'), // content/{type}/{id}.json
     wahapediaId: text('wahapedia_id'), // given source id from Wahapedia (provenance — never discarded)
     bsdataId: text('bsdata_id'), // given source id from BSData (datasheets only; equals id by convention)
+    /** 11th-ed Support rule: false means the character must always be attached to a bodyguard unit
+     *  (cannot deploy solo). Defaults to true so all existing data is unaffected until a per-codex
+     *  11th-ed source explicitly flags individual characters.
+     */
+    canDeploySolo: integer('can_deploy_solo', { mode: 'boolean' }).notNull().default(true),
     updatedAt: integer('updated_at', { mode: 'timestamp' }).notNull(),
   },
   (table) => [
@@ -1342,12 +1347,17 @@ export const contentNodeLinkCandidate = sqliteTable(
 )
 
 // ── content_can_lead ─────────────────────────────────────────────────────────
-// Junction table: which Character datasheets may lead which bodyguard datasheets.
-// Populated by the data-import producer from Wahapedia's leader_attachments CSV.
-// PK is composite (leader_datasheet_id, bodyguard_datasheet_id) — same pair
-// shouldn't appear twice. Both columns FK content_entity for referential
-// integrity + cascade on entity deletion. The list-builder attachment engine
-// queries this to gate list_unit.attached_to_unit_id.
+// Junction table: which Character datasheets may attach to which bodyguard
+// datasheets, and in which role (leader | support). PK is composite
+// (leader_datasheet_id, bodyguard_datasheet_id, role) — a character can appear
+// in both roles for the same bodyguard (one row each). Both datasheet columns FK
+// content_entity for referential integrity + cascade on entity deletion. The
+// list-builder updateUnit and eligibleBodyguards procedures query this filtered
+// by role, enforcing the 11th-edition "distinct Leader and Support slots" rule.
+//
+// Data gap (2026-06-01): Wahapedia leader_attachments is 10th-ed Leader data
+// only. All existing rows default to role='leader'. Support rows (role='support')
+// will be written by produceCanSupport when a per-codex 11th-ed source lands.
 
 export const contentCanLead = sqliteTable(
   'content_can_lead',
@@ -1358,11 +1368,15 @@ export const contentCanLead = sqliteTable(
     bodyguardDatasheetId: text('bodyguard_datasheet_id')
       .notNull()
       .references(() => contentEntity.id, { onDelete: 'cascade' }),
+    role: text('role', { enum: ['leader', 'support'] })
+      .notNull()
+      .default('leader'),
   },
   (table) => [
-    primaryKey({ columns: [table.leaderDatasheetId, table.bodyguardDatasheetId] }),
+    primaryKey({ columns: [table.leaderDatasheetId, table.bodyguardDatasheetId, table.role] }),
     index('idx_can_lead_leader').on(table.leaderDatasheetId),
     index('idx_can_lead_bodyguard').on(table.bodyguardDatasheetId),
+    index('idx_can_lead_role').on(table.role),
   ],
 )
 
