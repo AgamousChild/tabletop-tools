@@ -30,7 +30,9 @@ Match data feeds back into list-builder ratings.
                  | tRPC over HTTP
 +----------------v----------------+
 |  Tier 2: tRPC Server            |
-|  - Match router                 |
+|  - Match router (v1 legacy)     |
+|  - MatchV2 router               |
+|  - Mission router               |
 |  - Turn router                  |
 |  - Photo storage (R2)           |
 |  - SQLite via Turso             |
@@ -191,6 +193,64 @@ turn_id         TEXT NOT NULL      -- references turns.id
 player          TEXT NOT NULL      -- YOUR | THEIRS
 stratagem_name  TEXT NOT NULL
 cp_cost         INTEGER DEFAULT 1
+
+// --- Phase 3 v2 relational tables (migration 0011) ---
+
+// match_v2 — one row per game
+id                  TEXT PRIMARY KEY
+user_id             TEXT NOT NULL     -- references auth_user.id
+list_id             TEXT              -- references lists.id
+primary_mission_id  TEXT              -- references scoring_mission.id
+deployment_id       TEXT              -- references deployment.id
+opponent_name       TEXT NOT NULL
+opponent_faction    TEXT NOT NULL
+status              TEXT NOT NULL DEFAULT 'active'  -- active | complete
+result              TEXT              -- WIN | LOSS | DRAW
+conclusion          TEXT              -- normal | concede | timeout
+is_tournament       INTEGER NOT NULL DEFAULT 0
+tournament_id       TEXT
+date                INTEGER
+location            TEXT
+created_at          INTEGER NOT NULL
+closed_at           INTEGER
+
+// match_player — one row per participant (2 per match)
+id          TEXT PRIMARY KEY
+match_id    TEXT NOT NULL   -- references match_v2.id
+user_id     TEXT            -- null for opponent
+is_you      INTEGER NOT NULL DEFAULT 0
+display_name TEXT NOT NULL
+
+// battle_round — one row per round played
+id            TEXT PRIMARY KEY
+match_id      TEXT NOT NULL   -- references match_v2.id
+round_number  INTEGER NOT NULL
+created_at    INTEGER NOT NULL
+
+// round_player — per-player per-round scoring
+id            TEXT PRIMARY KEY
+round_id      TEXT NOT NULL   -- references battle_round.id
+player_id     TEXT NOT NULL   -- references match_player.id
+primary_vp    INTEGER NOT NULL DEFAULT 0
+secondary_vp  INTEGER NOT NULL DEFAULT 0
+cp_gained     INTEGER NOT NULL DEFAULT 1
+cp_spent      INTEGER NOT NULL DEFAULT 0
+notes         TEXT
+
+// score_event — immutable scoring audit trail
+id            TEXT PRIMARY KEY
+match_id      TEXT NOT NULL
+round_number  INTEGER NOT NULL
+player_id     TEXT NOT NULL
+primary_vp    INTEGER NOT NULL DEFAULT 0
+secondary_vp  INTEGER NOT NULL DEFAULT 0
+cp_gained     INTEGER NOT NULL DEFAULT 0
+cp_spent      INTEGER NOT NULL DEFAULT 0
+notes         TEXT
+created_at    INTEGER NOT NULL
+
+// Also: game_state_event, match_secondary_v2, unit_casualty, unit_state, stratagem_use
+// See packages/db/src/match-schema.ts for full definitions
 ```
 
 ---
@@ -198,7 +258,26 @@ cp_cost         INTEGER DEFAULT 1
 ## tRPC Routers
 
 ```typescript
-// Matches
+// Mission catalog (data-driven, server of truth)
+mission.listPrimaries()                           -> scoringMission[] (kind='primary')
+mission.listSecondaries()                         -> scoringMission[] (kind='secondary')
+mission.getGameStates({ missionId })              -> missionGameState[]
+
+// Matches v2 (relational, replaces flat v1 for new games)
+matchV2.start({
+  opponentName, opponentFaction, primaryMissionId?,
+  deploymentId?, listId?, isTournament?,
+  tournamentId?, date?, location?
+})                                                -> matchV2
+matchV2.get({ matchId })                          -> { match, players, rounds, roundPlayers, scoreEvents }
+matchV2.addRound({ matchId })                     -> { round, roundPlayers }
+matchV2.scoreRound({
+  matchId, roundNumber, playerId,
+  primaryVp, secondaryVp, cpGained, cpSpent, notes?
+})                                                -> scoreEvent
+matchV2.close({ matchId, result, conclusion? })   -> matchV2
+
+// Matches (v1 — legacy, retained for historical data)
 match.start({
   opponentFaction, mission, listId?,
   isTournament?, opponentName?, opponentDetachment?,
@@ -238,7 +317,9 @@ secondary.remove({ secondaryId })                    -> void
 
 ## Testing
 
-**214 tests** (58 server + 156 client), all passing.
+**251 tests** (73 server + 178 client). 3 pre-existing failures in match.test.ts (`startFromPairing`)
+caused by `faction_entity_id` column added by a background agent's migration not being reflected in
+the test's in-memory CREATE TABLE — not a regression from Phase 3 work.
 
 ```
 server/src/
@@ -246,22 +327,24 @@ server/src/
     scoring/result.ts / result.test.ts              <- 3 tests
     storage/r2.ts / r2.test.ts                       <- 6 tests
   routers/
-    match.test.ts                                    <- 20 tests: start, list, get, close, startFromPairing
+    match.test.ts                                    <- 23 tests (3 pre-existing failures: startFromPairing)
+    matchV2.test.ts                                  <- 8 tests: start, get, addRound, scoreRound, close
+    mission.test.ts                                  <- 4 tests: listPrimaries, listSecondaries, getGameStates
     turn.test.ts                                     <- 9 tests: add (with V3 fields + stratagems), update
     secondary.test.ts                                <- 14 tests: set, score, list, remove
   server.test.ts                                     <- 6 tests: HTTP session integration
 
 client/src/components/
   GameTrackerScreen.test.tsx               <- 13 tests: screen router, wizard flow, navigation
-  MatchSetupScreen.test.tsx                <- 10 tests: fields, validation, tournament toggle
-  MissionSetupScreen.test.tsx              <- 19 tests: mission/deployment/terrain, twist/challenger cards, photos, data-driven missions
+  MatchSetupScreen.test.tsx                <- 14 tests: fields, validation, tournament toggle
+  MissionSetupScreen.test.tsx              <- 20 tests: mission/deployment/terrain, twist/challenger cards, photos, data-driven + fallback
   PregameScreen.test.tsx                   <- 7 tests: attacker/defender, who goes first
   BattleScreen.test.tsx                    <- 9 tests: scoreboard, round wizard, end game
   EndGameScreen.test.tsx                   <- 13 tests: result, per-player stats, secondaries, rounds
   battle/
     VpStepper.test.tsx                     <- 6 tests: increment/decrement, min/max
     Scoreboard.test.tsx                    <- 7 tests: round number, VP, CP, opponent, player labels, VP highlighting
-    StratagemPicker.test.tsx               <- 7 tests: add/remove, input validation
+    StratagemPicker.test.tsx               <- 6 tests: add/remove, input validation
     UnitPicker.test.tsx                    <- 7 tests: add/remove, custom label
     SecondaryPicker.test.tsx               <- 8 tests: add/remove/score, VP display
     PhotoCaptureScreen.test.tsx            <- 6 tests: capture, skip, required
@@ -270,9 +353,16 @@ client/src/components/
     TurnFlow.test.tsx                      <- 5 tests: phase transitions, photo flow
     RoundSummary.test.tsx                  <- 8 tests: per-player data, confirm/back
     RoundWizard.test.tsx                   <- 7 tests: turn order, save, back
+  mission/
+    CountScorer.test.tsx                   <- 5 tests: render, increment, decrement, min, max
+    ChecklistScorer.test.tsx               <- 3 tests: render, checked state, onChange
+    TierScorer.test.tsx                    <- 3 tests: render tiers, selection, onChange
+    ActionScorer.test.tsx                  <- 3 tests: label, completed state, onChange
+    ZonedCountScorer.test.tsx              <- 2 tests: render zones, onChange
+    MissionScorer.test.tsx                 <- 3 tests: count dispatch, checklist dispatch, unknown pattern
 ```
 
 ```bash
-cd apps/game-tracker/server && pnpm test   # 58 server tests
-cd apps/game-tracker/client && pnpm test   # 156 client tests
+cd apps/game-tracker/server && pnpm test   # 73 server tests (70 passing, 3 pre-existing failures)
+cd apps/game-tracker/client && pnpm test   # 178 client tests
 ```
