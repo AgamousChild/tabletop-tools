@@ -224,6 +224,47 @@ export function updateUnitV2Imperative(
 }
 
 // ---------------------------------------------------------------------------
+// Attachment hooks — data-driven from server queries
+// ---------------------------------------------------------------------------
+
+/**
+ * Returns list units eligible as bodyguards for the given character datasheet
+ * and role. Disabled when either listId or datasheetId is absent.
+ * All eligible-bodyguard data comes from the server (content_can_lead) — no
+ * client-side hardcoding of which units can attach to which.
+ */
+export function useEligibleBodyguards(
+  listId: string | null,
+  datasheetId: string | null,
+  role: 'leader' | 'support',
+) {
+  return trpc.listV2.eligibleBodyguards.useQuery(
+    { listId: listId!, datasheetId: datasheetId!, role },
+    { enabled: !!listId && !!datasheetId, staleTime: 5_000 },
+  )
+}
+
+/**
+ * Returns whether the given datasheet can deploy solo (not attached to a bodyguard).
+ * Defaults to true (solo allowed) when the datasheet has no content_entity row.
+ */
+export function useCanDeploySolo(datasheetId: string | null) {
+  return trpc.listV2.canDeploySolo.useQuery(
+    { datasheetId: datasheetId! },
+    { enabled: !!datasheetId, staleTime: 60_000 },
+  )
+}
+
+/** Fetch eligible bodyguards for a character + role imperatively (outside React). */
+export async function eligibleBodyguardsImperative(input: {
+  listId: string
+  datasheetId: string
+  role: 'leader' | 'support'
+}) {
+  return trpcClient.listV2.eligibleBodyguards.query(input)
+}
+
+// ---------------------------------------------------------------------------
 // battleSize label → enum mapping
 // ---------------------------------------------------------------------------
 

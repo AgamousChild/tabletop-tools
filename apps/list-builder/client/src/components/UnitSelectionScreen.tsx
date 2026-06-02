@@ -194,6 +194,84 @@ function EnhancementPicker({
   )
 }
 
+/**
+ * AttachmentPicker — shown on CHARACTER units.
+ *
+ * Displays a Leader/Support role selector and a bodyguard dropdown populated
+ * from listV2.eligibleBodyguards (server-side, data-driven from content_can_lead).
+ * Shows a "Deploy solo" option unless can_deploy_solo=false for this datasheet.
+ *
+ * All attachment data comes from server queries — no hardcoded character or
+ * bodyguard lists anywhere in this component.
+ */
+export function AttachmentPicker({
+  listId,
+  unit,
+  getBodyguardName,
+  onAttach,
+}: {
+  listId: string
+  unit: ListUnitV2
+  /** Resolves a datasheetId to a display name (from the unit catalog). */
+  getBodyguardName: (datasheetId: string | null) => string
+  onAttach: (attachedToUnitId: string | null, attachRole: 'leader' | 'support' | null) => void
+}) {
+  const [role, setRole] = useState<'leader' | 'support'>(
+    (unit.attachRole as 'leader' | 'support' | null) ?? 'leader',
+  )
+
+  const { data: eligibleUnits = [] } = trpc.listV2.eligibleBodyguards.useQuery(
+    { listId, datasheetId: unit.datasheetId!, role },
+    { enabled: !!unit.datasheetId },
+  )
+  const { data: soloData } = trpc.listV2.canDeploySolo.useQuery(
+    { datasheetId: unit.datasheetId! },
+    { enabled: !!unit.datasheetId },
+  )
+  const canDeploySolo = soloData?.canDeploySolo ?? true
+
+  // Current selection: the attached unit's id if the role matches, else empty.
+  const currentAttachId = unit.attachRole === role ? (unit.attachedToUnitId ?? '') : ''
+
+  function handleSelect(e: React.ChangeEvent<HTMLSelectElement>) {
+    const val = e.target.value
+    if (val === '' || val === '__solo__') {
+      onAttach(null, null)
+    } else {
+      onAttach(val, role)
+    }
+  }
+
+  return (
+    <div className="flex items-center gap-1 flex-wrap mt-1">
+      {/* Role selector */}
+      <select
+        aria-label="role"
+        value={role}
+        onChange={(e) => setRole(e.target.value as 'leader' | 'support')}
+        className="text-xs px-1.5 py-0.5 rounded bg-slate-800 border border-slate-700 text-slate-300 focus:outline-none focus:border-amber-400"
+      >
+        <option value="leader">Leader</option>
+        <option value="support">Support</option>
+      </select>
+      {/* Bodyguard picker — populated from server query (data-driven) */}
+      <select
+        aria-label="Attach to"
+        value={currentAttachId}
+        onChange={handleSelect}
+        className="text-xs px-1.5 py-0.5 rounded bg-slate-800 border border-slate-700 text-slate-300 focus:outline-none focus:border-amber-400"
+      >
+        {canDeploySolo && <option value="">Deploy solo</option>}
+        {eligibleUnits.map((bg) => (
+          <option key={bg.id} value={bg.id}>
+            {getBodyguardName(bg.datasheetId)}
+          </option>
+        ))}
+      </select>
+    </div>
+  )
+}
+
 function UnitStatLine({ datasheetId }: { datasheetId: string }) {
   const { data: profile } = useUnitProfile(datasheetId)
   if (!profile) return null
@@ -212,22 +290,32 @@ function UnitStatLine({ datasheetId }: { datasheetId: string }) {
 
 function UnitRow({
   unit,
+  listId,
   detachmentId,
   ratingMap,
   onRemove,
   onToggleWarlord,
   onSetEnhancement,
+  onSetAttachment,
+  getBodyguardName,
 }: {
   unit: ListUnitV2
+  listId: string
   detachmentId: string
   ratingMap: Map<string, string>
   onRemove: () => void
   onToggleWarlord: () => void
   onSetEnhancement: (enhId: string | undefined) => void
+  onSetAttachment: (
+    attachedToUnitId: string | null,
+    attachRole: 'leader' | 'support' | null,
+  ) => void
+  getBodyguardName: (datasheetId: string | null) => string
 }) {
   const datasheetId = unit.datasheetId ?? ''
   const unitName = useUnitDisplayName(unit.datasheetId)
   const { name: enhName, cost: enhCost } = useEnhancementDisplay(unit.enhancementId, detachmentId)
+  const isCharacter = useIsCharacter(datasheetId)
 
   return (
     <div
@@ -254,6 +342,14 @@ function UnitRow({
             )}
           </p>
           {datasheetId && <UnitStatLine datasheetId={datasheetId} />}
+          {isCharacter && datasheetId && (
+            <AttachmentPicker
+              listId={listId}
+              unit={unit}
+              getBodyguardName={getBodyguardName}
+              onAttach={onSetAttachment}
+            />
+          )}
         </div>
         <div className="flex items-center gap-1 ml-2">
           <WarlordButton unit={unit} datasheetId={datasheetId} onToggle={onToggleWarlord} />
@@ -286,6 +382,7 @@ type RoleFilter = (typeof ROLE_FILTERS)[number]
 
 function MyArmyView({
   listUnits,
+  listId,
   listName,
   factionId,
   detachmentId,
@@ -300,6 +397,8 @@ function MyArmyView({
   onRemoveUnit,
   onToggleWarlord,
   onSetEnhancement,
+  onSetAttachment,
+  getBodyguardName,
   onExport,
   onDone,
   onDeleteList,
@@ -319,6 +418,7 @@ function MyArmyView({
   restrictions,
 }: {
   listUnits: ListUnitV2[]
+  listId: string
   listName: string
   _listDescription: string
   factionId: string
@@ -338,6 +438,12 @@ function MyArmyView({
   onRemoveUnit: (id: string) => void
   onToggleWarlord: (unit: ListUnitV2) => void
   onSetEnhancement: (unit: ListUnitV2, enhId: string | undefined) => void
+  onSetAttachment: (
+    unit: ListUnitV2,
+    attachedToUnitId: string | null,
+    attachRole: 'leader' | 'support' | null,
+  ) => void
+  getBodyguardName: (datasheetId: string | null) => string
   onExport: () => void
   onDone: () => void
   onDeleteList: () => void
@@ -509,11 +615,16 @@ function MyArmyView({
           <UnitRow
             key={unit.id}
             unit={unit}
+            listId={listId}
             detachmentId={detachmentId}
             ratingMap={ratingMap}
             onRemove={() => onRemoveUnit(unit.id)}
             onToggleWarlord={() => onToggleWarlord(unit)}
             onSetEnhancement={(enhId) => onSetEnhancement(unit, enhId)}
+            onSetAttachment={(attachedToUnitId, attachRole) =>
+              onSetAttachment(unit, attachedToUnitId, attachRole)
+            }
+            getBodyguardName={getBodyguardName}
           />
         ))}
       </div>
@@ -889,6 +1000,16 @@ export function UnitSelectionScreen({
     invalidateLists()
   }
 
+  async function handleSetAttachment(
+    unit: ListUnitV2,
+    attachedToUnitId: string | null,
+    attachRole: 'leader' | 'support' | null,
+  ) {
+    if (!activeList) return
+    await updateUnitV2Imperative({ id: unit.id, attachedToUnitId, attachRole })
+    invalidateLists()
+  }
+
   async function handleRemoveUnit(listUnitId: string) {
     if (!activeList) return
     await removeUnitV2Imperative(listUnitId)
@@ -989,9 +1110,15 @@ export function UnitSelectionScreen({
     )
   }
 
+  function getBodyguardName(datasheetId: string | null): string {
+    if (!datasheetId) return 'unknown'
+    return unitNameById.get(datasheetId) ?? datasheetId
+  }
+
   return (
     <MyArmyView
       listUnits={listUnits}
+      listId={listId}
       listName={nameValue || activeList?.name || 'List'}
       _listDescription={descValue}
       factionId={factionId}
@@ -1010,6 +1137,10 @@ export function UnitSelectionScreen({
       onRemoveUnit={(id) => void handleRemoveUnit(id)}
       onToggleWarlord={(u) => void handleToggleWarlord(u)}
       onSetEnhancement={(u, enhId) => void handleSetEnhancement(u, enhId)}
+      onSetAttachment={(u, attachedToUnitId, attachRole) =>
+        void handleSetAttachment(u, attachedToUnitId, attachRole)
+      }
+      getBodyguardName={getBodyguardName}
       onExport={handleExport}
       onDone={onDone}
       onDeleteList={() => void handleDeleteList()}
