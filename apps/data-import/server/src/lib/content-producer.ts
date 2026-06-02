@@ -352,6 +352,8 @@ export interface LeaderAttachmentRecord {
   leaderId: string
   /** Canonical content_entity id of the bodyguard datasheet. */
   attachedId: string
+  /** Defaults to 'leader' when absent — backward compat with Wahapedia source. */
+  role?: 'leader' | 'support'
 }
 
 /**
@@ -360,8 +362,11 @@ export interface LeaderAttachmentRecord {
  * pairs whose endpoints don't exist in content_entity to avoid FK violations
  * mid-batch (same resolve-at-boundary pattern as the other producers).
  *
- * Idempotent: composite PK (leader, bodyguard) + ON CONFLICT DO NOTHING.
+ * Idempotent: composite PK (leader, bodyguard, role) + ON CONFLICT DO NOTHING.
  * Skips bulk-R2 write — this is a graph relationship, not a per-entity doc.
+ *
+ * The `role` field defaults to 'leader' when absent for backward compatibility
+ * with the Wahapedia source which pre-dates the 11th-edition Support mechanic.
  */
 export async function produceCanLead(
   db: Db | undefined,
@@ -369,11 +374,19 @@ export async function produceCanLead(
   validDatasheetIds: Set<string>,
 ): Promise<{ type: 'can_lead'; rowsWritten: number; dropped: number }> {
   if (!db) return { type: 'can_lead', rowsWritten: 0, dropped: 0 }
-  const valid: Array<{ leaderDatasheetId: string; bodyguardDatasheetId: string }> = []
+  const valid: Array<{
+    leaderDatasheetId: string
+    bodyguardDatasheetId: string
+    role: 'leader' | 'support'
+  }> = []
   let dropped = 0
   for (const a of attachments) {
     if (validDatasheetIds.has(a.leaderId) && validDatasheetIds.has(a.attachedId)) {
-      valid.push({ leaderDatasheetId: a.leaderId, bodyguardDatasheetId: a.attachedId })
+      valid.push({
+        leaderDatasheetId: a.leaderId,
+        bodyguardDatasheetId: a.attachedId,
+        role: a.role ?? 'leader',
+      })
     } else {
       dropped++
     }
@@ -386,4 +399,33 @@ export async function produceCanLead(
     rowsWritten += chunk.length
   }
   return { type: 'can_lead', rowsWritten, dropped }
+}
+
+/**
+ * Scaffold producer for 11th-edition Support attachments.
+ *
+ * Support characters list which Bodyguard units they can join (§24.34, rule
+ * SUPPORT / Appui). This is distinct from the Leader ability. Per-character
+ * support lists will come from a future 11th-ed per-codex source.
+ *
+ * DATA GAP (2026-06-01): No ingested source provides per-character Support
+ * attachment data. The 11th-leak reference.md confirms the rule exists but
+ * contains no character-level lists. This function is wired into runSync so
+ * the path exists — it will produce 0 rows until a source is added.
+ *
+ * When support data becomes available, pass it here. Rows are written with
+ * role='support', so they are immediately queryable by the role-aware
+ * updateUnit + eligibleBodyguards endpoints without any code change.
+ */
+export async function produceCanSupport(
+  db: Db | undefined,
+  attachments: LeaderAttachmentRecord[],
+  validDatasheetIds: Set<string>,
+): Promise<{ type: 'can_support'; rowsWritten: number; dropped: number }> {
+  const r = await produceCanLead(
+    db,
+    attachments.map((a) => ({ ...a, role: 'support' as const })),
+    validDatasheetIds,
+  )
+  return { type: 'can_support', rowsWritten: r.rowsWritten, dropped: r.dropped }
 }

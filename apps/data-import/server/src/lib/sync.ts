@@ -14,6 +14,7 @@ import {
   type LeaderAttachmentRecord,
   produceAbilities,
   produceCanLead,
+  produceCanSupport,
   produceDatasheets,
   produceDetachmentAbilities,
   produceDetachments,
@@ -482,6 +483,23 @@ export async function runSync(
       } catch (err) {
         errors.push(
           `Content producer (can_lead): ${err instanceof Error ? err.message : String(err)}`,
+        )
+      }
+
+      // content_can_support — 11th-ed Support ability attachment relationships.
+      // DATA GAP (2026-06-01): no per-codex 11th-ed source yet provides Support
+      // attachment lists. This scaffold runs and produces 0 rows. When a source
+      // lands, pass supportAttachments here — rows write with role='support' and
+      // are immediately queryable by role-aware endpoints (no code change needed).
+      try {
+        const supportAttachments: LeaderAttachmentRecord[] = []
+        const r = await produceCanSupport(db, supportAttachments, canonicalDatasheetIdsFiltered)
+        if (r.rowsWritten > 0) {
+          producer['can_support'] = { r2DocsWritten: 0, contentEntityUpserts: r.rowsWritten }
+        }
+      } catch (err) {
+        errors.push(
+          `Content producer (can_support): ${err instanceof Error ? err.message : String(err)}`,
         )
       }
     } catch (err) {

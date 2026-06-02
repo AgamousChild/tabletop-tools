@@ -9,6 +9,8 @@ import {
   type DetachmentRecord,
   type FactionRecord,
   produceAbilities,
+  produceCanLead,
+  produceCanSupport,
   produceDatasheets,
   produceDetachmentAbilities,
   produceDetachments,
@@ -36,7 +38,7 @@ afterAll(() => {
 })
 
 beforeAll(async () => {
-  // Match packages/db/src/schema.ts content_entity definition (post-migration 0003).
+  // Match packages/db/src/schema.ts content_entity definition (post-migration 0012).
   await client.execute(`CREATE TABLE content_entity (
     id TEXT PRIMARY KEY NOT NULL,
     type TEXT NOT NULL,
@@ -47,7 +49,14 @@ beforeAll(async () => {
     r2_key TEXT,
     wahapedia_id TEXT,
     bsdata_id TEXT,
+    can_deploy_solo INTEGER NOT NULL DEFAULT 1,
     updated_at INTEGER NOT NULL
+  )`)
+  await client.execute(`CREATE TABLE content_can_lead (
+    leader_datasheet_id TEXT NOT NULL REFERENCES content_entity(id) ON DELETE CASCADE,
+    bodyguard_datasheet_id TEXT NOT NULL REFERENCES content_entity(id) ON DELETE CASCADE,
+    role TEXT NOT NULL DEFAULT 'leader',
+    PRIMARY KEY (leader_datasheet_id, bodyguard_datasheet_id, role)
   )`)
 })
 
@@ -298,6 +307,77 @@ describe('produceSubfactions', () => {
         { id: 'orphan-sf', name: 'Nobody', factionId: 'nonexistent-faction' },
       ]),
     ).rejects.toThrow()
+  })
+})
+
+describe('produceCanLead', () => {
+  // Seed two datasheets needed by the FK references in content_can_lead.
+  beforeAll(async () => {
+    await client.execute(
+      `INSERT OR IGNORE INTO content_entity VALUES ('ds-a', 'datasheet', 'UnitA', NULL, NULL, NULL, NULL, NULL, NULL, 1, 0)`,
+    )
+    await client.execute(
+      `INSERT OR IGNORE INTO content_entity VALUES ('ds-b', 'datasheet', 'UnitB', NULL, NULL, NULL, NULL, NULL, NULL, 1, 0)`,
+    )
+  })
+
+  it('writes role=leader rows from leader_attachments', async () => {
+    await client.execute('DELETE FROM content_can_lead')
+    const r = await produceCanLead(
+      db,
+      [{ leaderId: 'ds-a', attachedId: 'ds-b', role: 'leader' }],
+      new Set(['ds-a', 'ds-b']),
+    )
+    expect(r.rowsWritten).toBe(1)
+    const rows = await client.execute('SELECT * FROM content_can_lead WHERE role = ?', ['leader'])
+    expect(rows.rows).toHaveLength(1)
+  })
+
+  it('defaults to role=leader when role field is absent (backward compat)', async () => {
+    await client.execute('DELETE FROM content_can_lead')
+    const r = await produceCanLead(
+      db,
+      [{ leaderId: 'ds-a', attachedId: 'ds-b' }],
+      new Set(['ds-a', 'ds-b']),
+    )
+    expect(r.rowsWritten).toBe(1)
+    const rows = await client.execute('SELECT role FROM content_can_lead')
+    expect(rows.rows[0]?.role).toBe('leader')
+  })
+
+  it('drops pairs where an endpoint is not in validDatasheetIds', async () => {
+    await client.execute('DELETE FROM content_can_lead')
+    const r = await produceCanLead(
+      db,
+      [{ leaderId: 'ds-x', attachedId: 'ds-b', role: 'leader' }],
+      new Set(['ds-a', 'ds-b']),
+    )
+    expect(r.rowsWritten).toBe(0)
+    expect(r.dropped).toBe(1)
+  })
+})
+
+describe('produceCanSupport', () => {
+  it('is a no-op scaffold — writes 0 rows when given empty input', async () => {
+    await client.execute('DELETE FROM content_can_lead')
+    const r = await produceCanSupport(db, [], new Set(['ds-a', 'ds-b']))
+    // No 11th-ed per-codex support data ingested yet — scaffold produces 0 rows.
+    expect(r.rowsWritten).toBe(0)
+  })
+
+  it('writes role=support rows when support_attachments data is provided', async () => {
+    await client.execute('DELETE FROM content_can_lead')
+    const r = await produceCanSupport(
+      db,
+      [{ leaderId: 'ds-a', attachedId: 'ds-b' }],
+      new Set(['ds-a', 'ds-b']),
+    )
+    expect(r.rowsWritten).toBe(1)
+    const rows = await client.execute('SELECT role FROM content_can_lead WHERE role = ?', [
+      'support',
+    ])
+    expect(rows.rows).toHaveLength(1)
+    expect(rows.rows[0]?.role).toBe('support')
   })
 })
 
