@@ -1,5 +1,6 @@
 import {
   contentCanLead,
+  contentEntity,
   list,
   listUnit,
   listUnitLoadout,
@@ -203,11 +204,28 @@ export const listV2Router = router({
         .where(and(eq(list.id, unit[0]!.listId), eq(list.userId, ctx.user.id)))
       if (!parentList.length) throw new TRPCError({ code: 'FORBIDDEN' })
 
+      // can_deploy_solo enforcement: a unit marked can_deploy_solo=false must remain
+      // attached. Fires only when the caller is explicitly clearing the attachment
+      // (not on addUnit which starts unattached with no can_deploy_solo check).
+      if (input.attachedToUnitId === null && unit[0]!.datasheetId) {
+        const dsRow = await ctx.db
+          .select({ canDeploySolo: contentEntity.canDeploySolo })
+          .from(contentEntity)
+          .where(eq(contentEntity.id, unit[0]!.datasheetId))
+          .limit(1)
+        if (dsRow.length > 0 && dsRow[0]!.canDeploySolo === false) {
+          throw new TRPCError({
+            code: 'BAD_REQUEST',
+            message: `${unit[0]!.datasheetId} cannot deploy solo (can_deploy_solo=false)`,
+          })
+        }
+      }
+
       // Attachment constraints:
       // 1. ≤1 leader and ≤1 support per bodyguard (slot constraint)
-      // 2. can_lead content ref — the attaching unit's datasheet must be a
-      //    declared Leader for the bodyguard's datasheet (content_can_lead
-      //    row exists).
+      // 2. can_lead content ref — the attaching unit's datasheet must have a
+      //    content_can_lead row for (leader_ds, bodyguard_ds, role). Role must
+      //    match — a support-only character cannot attach as leader and vice-versa.
       if (input.attachedToUnitId && input.attachRole) {
         const siblings = await ctx.db
           .select()
@@ -247,13 +265,14 @@ export const listV2Router = router({
               and(
                 eq(contentCanLead.leaderDatasheetId, leaderDsId),
                 eq(contentCanLead.bodyguardDatasheetId, bodyguardDsId),
+                eq(contentCanLead.role, input.attachRole),
               ),
             )
             .limit(1)
           if (can.length === 0) {
             throw new TRPCError({
               code: 'BAD_REQUEST',
-              message: `datasheet ${leaderDsId} cannot lead ${bodyguardDsId} (no can_lead entry)`,
+              message: `datasheet ${leaderDsId} cannot ${input.attachRole} ${bodyguardDsId} (no can_lead entry for role=${input.attachRole})`,
             })
           }
         }
@@ -341,5 +360,63 @@ export const listV2Router = router({
         .set({ totalPoints, updatedAt: Date.now() })
         .where(eq(list.id, input.listId))
       return { totalPoints }
+    }),
+
+  /**
+   * Returns list units eligible as bodyguards for a given character datasheet + role.
+   * Queries content_can_lead filtered by role — data-driven, no hardcoded character lists.
+   * Returns only units actually present in the list whose datasheet appears in content_can_lead.
+   */
+  eligibleBodyguards: protectedProcedure
+    .input(
+      z.object({
+        listId: z.string(),
+        datasheetId: z.string(),
+        role: z.enum(['leader', 'support']),
+      }),
+    )
+    .query(async ({ ctx, input }) => {
+      // Verify list ownership
+      const parentList = await ctx.db
+        .select()
+        .from(list)
+        .where(and(eq(list.id, input.listId), eq(list.userId, ctx.user.id)))
+      if (!parentList.length) throw new TRPCError({ code: 'NOT_FOUND' })
+
+      // Get all bodyguard datasheet IDs this character can attach to (for this role)
+      const allowedBodyguardRows = await ctx.db
+        .select({ bodyguardDatasheetId: contentCanLead.bodyguardDatasheetId })
+        .from(contentCanLead)
+        .where(
+          and(
+            eq(contentCanLead.leaderDatasheetId, input.datasheetId),
+            eq(contentCanLead.role, input.role),
+          ),
+        )
+      const allowedDsIds = new Set(allowedBodyguardRows.map((r) => r.bodyguardDatasheetId))
+      if (allowedDsIds.size === 0) return []
+
+      // Return list units whose datasheet is in the allowed set
+      const units = await ctx.db.select().from(listUnit).where(eq(listUnit.listId, input.listId))
+
+      return units.filter((u) => u.datasheetId !== null && allowedDsIds.has(u.datasheetId))
+    }),
+
+  /**
+   * Returns whether the given datasheet can deploy solo (not attached).
+   * Defaults to true (solo allowed) when the datasheet has no content_entity row.
+   * Used by AttachmentPicker to conditionally show the "Deploy solo" option.
+   */
+  canDeploySolo: protectedProcedure
+    .input(z.object({ datasheetId: z.string() }))
+    .query(async ({ ctx, input }) => {
+      const rows = await ctx.db
+        .select({ canDeploySolo: contentEntity.canDeploySolo })
+        .from(contentEntity)
+        .where(eq(contentEntity.id, input.datasheetId))
+        .limit(1)
+      // If no content_entity row exists for this datasheet, default to true
+      // (unknown units are not flagged as must-attach).
+      return { canDeploySolo: rows[0]?.canDeploySolo ?? true }
     }),
 })

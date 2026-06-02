@@ -13,19 +13,23 @@ beforeAll(async () => {
     PRAGMA foreign_keys = ON;
     CREATE TABLE "user" (id TEXT PRIMARY KEY, name TEXT NOT NULL, email TEXT UNIQUE NOT NULL, email_verified INTEGER NOT NULL DEFAULT 0, created_at INTEGER NOT NULL, updated_at INTEGER NOT NULL);
     CREATE TABLE dim_dataslate (id TEXT PRIMARY KEY, name TEXT NOT NULL, effective_date INTEGER NOT NULL, end_date INTEGER);
-    CREATE TABLE content_entity (id TEXT PRIMARY KEY, type TEXT NOT NULL, name TEXT NOT NULL, faction_id TEXT, parent_id TEXT, dataslate_id TEXT, r2_key TEXT, wahapedia_id TEXT, bsdata_id TEXT, updated_at INTEGER NOT NULL);
+    CREATE TABLE content_entity (id TEXT PRIMARY KEY, type TEXT NOT NULL, name TEXT NOT NULL, faction_id TEXT, parent_id TEXT, dataslate_id TEXT, r2_key TEXT, wahapedia_id TEXT, bsdata_id TEXT, can_deploy_solo INTEGER NOT NULL DEFAULT 1, updated_at INTEGER NOT NULL);
     CREATE TABLE list (id TEXT PRIMARY KEY, user_id TEXT NOT NULL REFERENCES "user"(id) ON DELETE CASCADE, name TEXT NOT NULL, description TEXT, author TEXT, edition TEXT NOT NULL DEFAULT '11th', faction_id TEXT REFERENCES content_entity(id), subfaction_id TEXT REFERENCES content_entity(id), detachment_id TEXT REFERENCES content_entity(id), battle_size TEXT NOT NULL DEFAULT 'unknown', total_points INTEGER NOT NULL DEFAULT 0, dataslate_id TEXT REFERENCES dim_dataslate(id), source TEXT NOT NULL DEFAULT 'list-builder', created_at INTEGER NOT NULL, updated_at INTEGER NOT NULL);
     CREATE TABLE list_unit (id TEXT PRIMARY KEY, list_id TEXT NOT NULL REFERENCES list(id) ON DELETE CASCADE, datasheet_id TEXT REFERENCES content_entity(id), enhancement_id TEXT REFERENCES content_entity(id), is_warlord INTEGER NOT NULL DEFAULT 0, points INTEGER NOT NULL DEFAULT 0, attached_to_unit_id TEXT REFERENCES list_unit(id), attach_role TEXT);
     CREATE TABLE list_unit_loadout (id TEXT PRIMARY KEY, list_unit_id TEXT NOT NULL REFERENCES list_unit(id) ON DELETE CASCADE, model_count INTEGER NOT NULL);
     CREATE TABLE list_unit_loadout_weapon (id TEXT PRIMARY KEY, loadout_id TEXT NOT NULL REFERENCES list_unit_loadout(id) ON DELETE CASCADE, weapon_id TEXT REFERENCES content_entity(id), count INTEGER NOT NULL DEFAULT 1);
-    CREATE TABLE content_can_lead (leader_datasheet_id TEXT NOT NULL REFERENCES content_entity(id) ON DELETE CASCADE, bodyguard_datasheet_id TEXT NOT NULL REFERENCES content_entity(id) ON DELETE CASCADE, PRIMARY KEY (leader_datasheet_id, bodyguard_datasheet_id));
+    CREATE TABLE content_can_lead (leader_datasheet_id TEXT NOT NULL REFERENCES content_entity(id) ON DELETE CASCADE, bodyguard_datasheet_id TEXT NOT NULL REFERENCES content_entity(id) ON DELETE CASCADE, role TEXT NOT NULL DEFAULT 'leader', PRIMARY KEY (leader_datasheet_id, bodyguard_datasheet_id, role));
     INSERT INTO "user" VALUES ('u-1', 'Alice', 'a@test.com', 0, 0, 0);
     INSERT INTO "user" VALUES ('u-2', 'Bob', 'b@test.com', 0, 0, 0);
-    INSERT INTO content_entity VALUES ('w-sword', 'weapon', 'Power Sword', NULL, NULL, NULL, NULL, NULL, NULL, 0);
-    INSERT INTO content_entity VALUES ('ds-captain', 'datasheet', 'Captain', NULL, NULL, NULL, NULL, NULL, NULL, 0);
-    INSERT INTO content_entity VALUES ('ds-intercessors', 'datasheet', 'Intercessors', NULL, NULL, NULL, NULL, NULL, NULL, 0);
-    INSERT INTO content_entity VALUES ('ds-terminators', 'datasheet', 'Terminators', NULL, NULL, NULL, NULL, NULL, NULL, 0);
-    INSERT INTO content_can_lead VALUES ('ds-captain', 'ds-intercessors');
+    INSERT INTO content_entity VALUES ('w-sword', 'weapon', 'Power Sword', NULL, NULL, NULL, NULL, NULL, NULL, 1, 0);
+    INSERT INTO content_entity VALUES ('ds-captain', 'datasheet', 'Captain', NULL, NULL, NULL, NULL, NULL, NULL, 1, 0);
+    INSERT INTO content_entity VALUES ('ds-intercessors', 'datasheet', 'Intercessors', NULL, NULL, NULL, NULL, NULL, NULL, 1, 0);
+    INSERT INTO content_entity VALUES ('ds-terminators', 'datasheet', 'Terminators', NULL, NULL, NULL, NULL, NULL, NULL, 1, 0);
+    INSERT INTO content_entity VALUES ('ds-librarian', 'datasheet', 'Librarian', NULL, NULL, NULL, NULL, NULL, NULL, 1, 0);
+    INSERT INTO content_entity VALUES ('ds-support-only', 'datasheet', 'Support-Only Char', NULL, NULL, NULL, NULL, NULL, NULL, 0, 0);
+    INSERT INTO content_can_lead VALUES ('ds-captain', 'ds-intercessors', 'leader');
+    INSERT INTO content_can_lead VALUES ('ds-librarian', 'ds-intercessors', 'support');
+    INSERT INTO content_can_lead VALUES ('ds-support-only', 'ds-intercessors', 'support');
   `)
 })
 
@@ -343,6 +347,193 @@ describe('listV2.updateUnit (attachment)', () => {
         attachRole: 'leader',
       }),
     ).resolves.toMatchObject({ success: true })
+  })
+})
+
+describe('listV2.updateUnit (role-aware attachment)', () => {
+  it('allows leader attach when (leader, bodyguard, leader) row exists', async () => {
+    const caller = createCaller(ctx)
+    const { id: listId } = await caller.listV2.create({
+      name: 'RoleTest',
+      edition: '11th',
+      battleSize: 'unknown',
+    })
+    const { id: bgId } = await caller.listV2.addUnit({
+      listId,
+      datasheetId: 'ds-intercessors',
+      points: 90,
+      isWarlord: false,
+    })
+    const { id: captainId } = await caller.listV2.addUnit({
+      listId,
+      datasheetId: 'ds-captain',
+      points: 90,
+      isWarlord: false,
+    })
+    await expect(
+      caller.listV2.updateUnit({ id: captainId, attachedToUnitId: bgId, attachRole: 'leader' }),
+    ).resolves.toMatchObject({ success: true })
+  })
+
+  it('rejects leader attach when only a support row exists for that pair', async () => {
+    const caller = createCaller(ctx)
+    const { id: listId } = await caller.listV2.create({
+      name: 'RoleRejectTest',
+      edition: '11th',
+      battleSize: 'unknown',
+    })
+    const { id: bgId } = await caller.listV2.addUnit({
+      listId,
+      datasheetId: 'ds-intercessors',
+      points: 90,
+      isWarlord: false,
+    })
+    const { id: libId } = await caller.listV2.addUnit({
+      listId,
+      datasheetId: 'ds-librarian',
+      points: 90,
+      isWarlord: false,
+    })
+    // Librarian only has a 'support' row — cannot attach as Leader
+    await expect(
+      caller.listV2.updateUnit({ id: libId, attachedToUnitId: bgId, attachRole: 'leader' }),
+    ).rejects.toMatchObject({ code: 'BAD_REQUEST' })
+  })
+
+  it('allows support attach when (leader, bodyguard, support) row exists', async () => {
+    const caller = createCaller(ctx)
+    const { id: listId } = await caller.listV2.create({
+      name: 'SupportTest',
+      edition: '11th',
+      battleSize: 'unknown',
+    })
+    const { id: bgId } = await caller.listV2.addUnit({
+      listId,
+      datasheetId: 'ds-intercessors',
+      points: 90,
+      isWarlord: false,
+    })
+    const { id: libId } = await caller.listV2.addUnit({
+      listId,
+      datasheetId: 'ds-librarian',
+      points: 90,
+      isWarlord: false,
+    })
+    await expect(
+      caller.listV2.updateUnit({ id: libId, attachedToUnitId: bgId, attachRole: 'support' }),
+    ).resolves.toMatchObject({ success: true })
+  })
+
+  it('rejects second support on the same bodyguard (slot constraint)', async () => {
+    const caller = createCaller(ctx)
+    const { id: listId } = await caller.listV2.create({
+      name: 'SupportSlot',
+      edition: '11th',
+      battleSize: 'unknown',
+    })
+    const { id: bgId } = await caller.listV2.addUnit({
+      listId,
+      datasheetId: 'ds-intercessors',
+      points: 90,
+      isWarlord: false,
+    })
+    const { id: lib1Id } = await caller.listV2.addUnit({
+      listId,
+      datasheetId: 'ds-librarian',
+      points: 90,
+      isWarlord: false,
+    })
+    const { id: lib2Id } = await caller.listV2.addUnit({
+      listId,
+      datasheetId: 'ds-support-only',
+      points: 90,
+      isWarlord: false,
+    })
+    await caller.listV2.updateUnit({ id: lib1Id, attachedToUnitId: bgId, attachRole: 'support' })
+    await expect(
+      caller.listV2.updateUnit({ id: lib2Id, attachedToUnitId: bgId, attachRole: 'support' }),
+    ).rejects.toMatchObject({ code: 'BAD_REQUEST' })
+  })
+
+  it('rejects solo deployment for a can_deploy_solo=false unit', async () => {
+    const caller = createCaller(ctx)
+    const { id: listId } = await caller.listV2.create({
+      name: 'MustAttach',
+      edition: '11th',
+      battleSize: 'unknown',
+    })
+    const { id: bgId } = await caller.listV2.addUnit({
+      listId,
+      datasheetId: 'ds-intercessors',
+      points: 90,
+      isWarlord: false,
+    })
+    // Add the support-only unit already attached (addUnit doesn't enforce can_deploy_solo)
+    const { id: soId } = await caller.listV2.addUnit({
+      listId,
+      datasheetId: 'ds-support-only',
+      points: 90,
+      isWarlord: false,
+      attachedToUnitId: bgId,
+      attachRole: 'support',
+    })
+    // Trying to clear the attachment on a can_deploy_solo=false unit → rejected
+    await expect(
+      caller.listV2.updateUnit({ id: soId, attachedToUnitId: null, attachRole: null }),
+    ).rejects.toMatchObject({ code: 'BAD_REQUEST' })
+  })
+})
+
+describe('listV2.eligibleBodyguards', () => {
+  it('returns list units whose datasheet is in content_can_lead for the given leader + role', async () => {
+    const caller = createCaller(ctx)
+    const { id: listId } = await caller.listV2.create({
+      name: 'EligibleTest',
+      edition: '11th',
+      battleSize: 'unknown',
+    })
+    const { id: bgId } = await caller.listV2.addUnit({
+      listId,
+      datasheetId: 'ds-intercessors',
+      points: 90,
+      isWarlord: false,
+    })
+    // Terminators: no can_lead row for Captain → not returned
+    const { id: termId } = await caller.listV2.addUnit({
+      listId,
+      datasheetId: 'ds-terminators',
+      points: 200,
+      isWarlord: false,
+    })
+    const result = await caller.listV2.eligibleBodyguards({
+      listId,
+      datasheetId: 'ds-captain',
+      role: 'leader',
+    })
+    expect(result.map((u) => u.id)).toContain(bgId)
+    expect(result.map((u) => u.id)).not.toContain(termId)
+  })
+
+  it('returns empty array when no eligible bodyguards exist for the given role', async () => {
+    const caller = createCaller(ctx)
+    const { id: listId } = await caller.listV2.create({
+      name: 'NoEligible',
+      edition: '11th',
+      battleSize: 'unknown',
+    })
+    // Only Terminators in the list — Captain has no leader row for Terminators
+    await caller.listV2.addUnit({
+      listId,
+      datasheetId: 'ds-terminators',
+      points: 200,
+      isWarlord: false,
+    })
+    const result = await caller.listV2.eligibleBodyguards({
+      listId,
+      datasheetId: 'ds-captain',
+      role: 'leader',
+    })
+    expect(result).toHaveLength(0)
   })
 })
 
