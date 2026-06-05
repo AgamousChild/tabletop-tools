@@ -231,6 +231,7 @@ describe('canonicalContentId', () => {
     expect(canonicalContentId('stratagem', 'S5')).toBe('stratagem:S5')
     expect(canonicalContentId('enhancement', 'E9')).toBe('enhancement:E9')
     expect(canonicalContentId('detachment_ability', 'DA2')).toBe('detachment_ability:DA2')
+    expect(canonicalContentId('mission', 'M3')).toBe('mission:M3')
   })
 
   it('is deterministic — same source id yields the same canonical id every run', () => {
@@ -292,12 +293,13 @@ describe('provenance — given ids are kept, never discarded', () => {
     expect(ds.bsdataId).toBeUndefined()
   })
 
-  it('adds canonicalId + wahapediaId to ability/stratagem/enhancement/detachment_ability without changing id', () => {
+  it('adds canonicalId + wahapediaId to ability/stratagem/enhancement/detachment_ability/mission without changing id', () => {
     const data: Record<string, unknown[]> = {
       abilities: [{ id: 'A1', name: 'Oath', factionId: 'SM' }],
       stratagems: [{ id: 'S1', name: 'Strat', factionId: 'SM' }],
       enhancements: [{ id: 'E1', name: 'Enh', factionId: 'SM' }],
       detachment_abilities: [{ id: 'DA1', name: 'Det', factionId: 'SM' }],
+      missions: [{ id: 'M1', name: 'Take and Hold', type: 'primary' }],
     }
     const result = rekeyAllWahapediaFiles(data, new Map(), new Map([['SM', 'Space Marines']]))
     const ab = result['abilities']![0] as Record<string, unknown>
@@ -312,6 +314,10 @@ describe('provenance — given ids are kept, never discarded', () => {
     expect((result['detachment_abilities']![0] as Record<string, unknown>).canonicalId).toBe(
       'detachment_ability:DA1',
     )
+    const ms = result['missions']![0] as Record<string, unknown>
+    expect(ms.id).toBe('M1') // unchanged — 11th-leak ids stay stable
+    expect(ms.canonicalId).toBe('mission:M1')
+    expect(ms.wahapediaId).toBe('M1')
   })
 })
 

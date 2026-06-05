@@ -55,12 +55,12 @@ Nothing in Phase 2+ is real until Phase 1 exists — every app FKs the content s
 
 The seam every app FKs into.
 
-- **1.1 Canonical id scheme** — ⏳ **NEXT.** Extend `id-mapping` (`apps/data-import/server/src/lib/id-mapping.ts`) to ability / stratagem / enhancement / mission (datasheet / weapon / faction already canonical). **Gate:** every content entity from the import resolves to one stable id; match-rate validated. *Bounded, one file.*
+- **1.1 Canonical id scheme** — ✅ DONE. `id-mapping.ts` `canonicalIdFiles` now covers ability / stratagem / enhancement / detachment_ability / mission. `canonicalContentId('mission', sourceId)` returns `'mission:{id}'`. 28 id-mapping tests pass (vitest), including the mission-stamping case. Mission Wahapedia source currently flows empty (the 11th-leak path writes content_entity rows directly via `scripts/11th-ingest/ingest-game-tracker.mjs`) — the scheme is ready when a Wahapedia mission source lights up.
 - **1.2 `content_entity` registry → `schema.ts`** — ✅ DONE (`6f0401d`). Self-ref faction/parent FKs, `dim_dataslate` FK, type enum, `r2_key`. Applied via `0001_content_foundation`.
 - **1.3 `content_node_link` crosswalk → `schema.ts`** — ✅ DONE (`6f0401d`). Brain bridge, additive, cascade. 6 focused tests.
 - **1.4 Unify the content ETL** — ⏳ **the big one, to scope.** One pipeline → R2 canonical docs + `content_entity`; build `content_node_link` by matching against ~25k brain nodes. `game-data-store` + `brain/build-graph` consume it. Touches **two live pipelines** + real Wahapedia/BSData data. **Gate:** `content_entity` populated from a real import; crosswalk match-rate counted (matched/unmatched, BCP-style); brain graph untouched.
 
-> **Resume point:** Phase 1.1 (extend `id-mapping`), then scope 1.4. Tables already in prod. Migration workflow: edit `schema.ts` → `drizzle-kit generate` → `migrate` (env `TURSO_DB_URL`/`TURSO_AUTH_TOKEN` from root `.env`).
+> **Resume point:** Phase 1.4 has already landed (✅). Phase 1.1 ✅ as well. All of Phase 1 complete. Next: Phase 4 (admin rewire + drop the legacy scatter), or pick up open Phase 3 polish (list-builder Task 5 e2e). Migration workflow: edit `schema.ts` → `drizzle-kit generate` → `migrate` (env `TURSO_DB_URL`/`TURSO_AUTH_TOKEN` from root `.env`).
 
 ---
 

@@ -217,11 +217,16 @@ export function rekeyAllWahapediaFiles(
   // Wahapedia-only content entities → a typed canonical id anchored to the
   // given id. There is no BSData target for these, so the source id IS the
   // stable key; we just namespace it for the one shared id space.
+  // Missions: Wahapedia mission data currently flows in empty (the 11th-leak
+  // path writes content_entity rows directly from reference.json); listed
+  // here so the canonical id scheme is already in place when a Wahapedia
+  // mission source lights up.
   const canonicalIdFiles: Record<string, CanonicalContentType> = {
     abilities: 'ability',
     stratagems: 'stratagem',
     enhancements: 'enhancement',
     detachment_abilities: 'detachment_ability',
+    missions: 'mission',
   }
 
   for (const [name, records] of Object.entries(data)) {
