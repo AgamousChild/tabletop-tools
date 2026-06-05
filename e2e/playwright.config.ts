@@ -35,6 +35,7 @@ export default defineConfig({
         'versus.spec.ts',
         'list-builder.spec.ts',
         'list-builder-v2.spec.ts',
+        'list-builder-support.spec.ts',
         'game-tracker.spec.ts',
         'tournament.spec.ts',
         'admin.spec.ts',

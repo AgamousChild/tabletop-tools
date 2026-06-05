@@ -34,6 +34,31 @@
 
 ---
 
+## Phase 2 follow-up — 11th-ed Support mechanics
+
+| # | Step | Status | Notes |
+|---|------|--------|-------|
+| S1 | Schema: add `role` column to `content_can_lead` (PK includes role), add `can_deploy_solo` to `content_entity` | ✅ done | Migration `0012`. 1811 existing rows backfilled as role='leader'. `can_deploy_solo` defaults true (no data change). Commit `624f682`. |
+| S2 | Producer: `produceCanLead` role-aware; `produceCanSupport` scaffold wired into `runSync` | ✅ done | Scaffold produces 0 rows — data gap (see below). Commit `057da50`. |
+| S3 | Server: `updateUnit` role-aware query; `can_deploy_solo` solo-check; `eligibleBodyguards` + `canDeploySolo` procedures | ✅ done | 6 new server tests. Commit `37c1c4b`. |
+| S4 | Client: `AttachmentPicker` in `UnitRow` for CHARACTER units | ✅ done | Data-driven from server — no hardcoded character lists. 3 client tests. Commit `9afd7d1`. |
+| S5 | Playwright e2e spec (`list-builder-support.spec.ts`) + playwright config registration | ✅ done | 2 tests: leader-attach flow + wrong-role rejection. Gated behind `TEST_ATTACHMENT_DATA=1` until prod migration + per-codex data sync. |
+
+### Data-gap acknowledgement
+
+- **`can_support` rows: 0.** The 11th-leak `reference.md` (§19.01, §24.34) confirms the Support ability exists but contains no per-character Support attachment lists. `produceCanSupport` is wired and correct but produces 0 rows until a per-codex 11th-ed source is provided. The Wahapedia `leader_attachments` CSV is 10th-ed Leader data only.
+- **"Support-only cannot deploy solo"** (`can_deploy_solo=false`): plausible from rules context but no specific characters have been identified in the ingested data. `can_deploy_solo` defaults to `true` on all existing rows. When per-codex 11th-ed data lands, specific characters will be flagged.
+
+### TODO
+
+| # | Step | Status | Notes |
+|---|------|--------|-------|
+| T1 | Per-codex 11th-ed character Support attachment lists | ⬜ todo | Needed to populate `can_support` rows. Source: per-faction 11th-ed codex data or a Wahapedia 11th-ed update. |
+| T2 | Identify support-only characters and set `can_deploy_solo=false` | ⬜ todo | Blocked on T1 + ruling confirmation per character. |
+| T3 | Apply migration `0012` to prod + re-run data-import sync | ⬜ todo | Unblocks Playwright e2e (`TEST_ATTACHMENT_DATA=1`). |
+
+---
+
 ## Status legend
 
 - ⬜ todo
