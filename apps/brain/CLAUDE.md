@@ -48,7 +48,8 @@ apps/brain/
         entity-linker.ts ← Client-side entity link rendering
         faction-names.ts ← Faction ID → display name mapping
   shared/
-    derive-unit-type.ts  ← Shared between server build + client display
+    derive-unit-type.ts     ← Shared between server build + client display
+    card-layout-types.ts    ← Layout descriptor types (safe for Worker + Vite)
 ```
 
 ---
@@ -122,6 +123,30 @@ Source files (local)
 4. Fetch matched nodes from R2
 5. Optionally: dual embedding (semantic + keyword), connected node expansion, record aggregation
 6. Return enriched results with scores, parent maps, cross-refs
+
+---
+
+## Server-Driven Cards (prototype)
+
+The `/browse/unit/:id` endpoint now returns a `layout` field alongside the node data:
+
+```json
+{ "datasheet": {...}, "weapons": [...], "abilities": [...], "layout": { "version": 1, "nodes": [...] } }
+```
+
+The `layout` is a `CardLayout` descriptor built server-side by `server/src/lib/card-layout.ts`
+(`buildDatasheetLayout`).  The client renders it via `client/src/lib/server-cards/Renderer.tsx`
+(`LayoutRenderer`) — a generic recursive renderer with no category knowledge.
+
+**Opt-in migration**: only `category === 'datasheet'` nodes receive a `layout`.  All other card
+types (stratagem, enhancement, rule, etc.) continue using their existing TSX components.
+
+**Layout primitive types** (defined in `shared/card-layout-types.ts`, safe for both Worker and Vite):
+`header`, `stat-bar`, `table`, `heading`, `key-value`, `pill-list`, `ability`, `divider`, `box`, `text`
+
+**Adding a new card category**: implement `buildXLayout()` in `card-layout.ts`, call it in
+`worker.ts` for that category, and update `BrainScreen.tsx` to pass `layout` to `LayoutRenderer`.
+No new client components needed.
 
 ---
 

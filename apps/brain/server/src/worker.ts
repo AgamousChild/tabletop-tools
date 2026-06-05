@@ -2,6 +2,7 @@ import { Hono } from 'hono'
 import { cors } from 'hono/cors'
 
 import { filterBrowseNodes } from './lib/browse'
+import { buildDatasheetLayout } from './lib/card-layout'
 import { buildCrossRefs, loadIndexes } from './lib/cross-refs'
 import { type EntityMap, getEntityIndex, linkEntitiesInContent } from './lib/entity-linker'
 import { findErrataForNode } from './lib/errata-linker'
@@ -271,7 +272,11 @@ app.get('/browse/unit/:id', async (c) => {
 
   if (!datasheet) return c.json({ error: 'Unit not found' }, 404)
 
-  return c.json({ datasheet, weapons, abilities })
+  // Build a server-driven layout descriptor for datasheet cards.
+  // The client uses this to render via LayoutRenderer without category-specific code.
+  const layout = buildDatasheetLayout({ datasheet, weapons, abilities })
+
+  return c.json({ datasheet, weapons, abilities, layout })
 })
 
 app.get('/browse/detachment/:id', async (c) => {

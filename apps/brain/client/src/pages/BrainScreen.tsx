@@ -27,6 +27,8 @@ import { Pagination } from '../components/Pagination'
 import { ResultCard } from '../components/ResultCard'
 import { resolveCardView } from '../lib/card-display'
 import { type EntityMap } from '../lib/entity-linker'
+import { LayoutRenderer } from '../lib/server-cards/Renderer'
+import type { CardLayout } from '../lib/server-cards/types'
 import type { DetachmentPageProps } from './DetachmentPage'
 import { DetachmentPage } from './DetachmentPage'
 
@@ -307,25 +309,33 @@ function buildUnitData(node: ResultNode) {
   }
 }
 
+/** Response type for the /browse/unit/:id endpoint */
+interface UnitEndpointResponse {
+  datasheet: any
+  weapons: Array<{ title: string; content: string; summary: string; category: string }>
+  abilities: Array<{
+    title: string
+    content: string
+    summary: string
+    category: string
+    keywords: string[]
+  }>
+  /** Server-driven layout descriptor — present when the server has a registered builder. */
+  layout?: CardLayout
+}
+
 /** Fetch full unit data (datasheet + weapons + abilities) from API */
-async function fetchFullUnitData(nodeId: string, node: ResultNode): Promise<UnitCardData> {
+async function fetchFullUnitData(
+  nodeId: string,
+  node: ResultNode,
+): Promise<{ unitData: UnitCardData; layout: CardLayout | null }> {
   const base = buildUnitData(node)
 
   try {
     const res = await fetch(`${API_BASE}/browse/unit/${encodeURIComponent(nodeId)}`)
-    if (!res.ok) return base
+    if (!res.ok) return { unitData: base, layout: null }
 
-    const data = (await res.json()) as {
-      datasheet: any
-      weapons: Array<{ title: string; content: string; summary: string; category: string }>
-      abilities: Array<{
-        title: string
-        content: string
-        summary: string
-        category: string
-        keywords: string[]
-      }>
-    }
+    const data = (await res.json()) as UnitEndpointResponse
 
     // Parse weapons from weapon nodes
     const ranged: any[] = []
@@ -372,17 +382,17 @@ async function fetchFullUnitData(nodeId: string, node: ResultNode): Promise<Unit
       type: a.keywords?.includes('faction') ? 'Faction' : 'Datasheet',
     }))
 
-    // Extract leaders from forward refs if available
-    // For now, leaders come from leader_attachments — the browse/unit endpoint could be extended
-
     return {
-      ...base,
-      rangedWeapons: ranged,
-      meleeWeapons: melee,
-      abilities: unitAbilities,
+      unitData: {
+        ...base,
+        rangedWeapons: ranged,
+        meleeWeapons: melee,
+        abilities: unitAbilities,
+      },
+      layout: data.layout ?? null,
     }
   } catch {
-    return base
+    return { unitData: base, layout: null }
   }
 }
 
@@ -1148,6 +1158,8 @@ function BrowseTab({ onOpenCard }: BrowseTabProps) {
 export function BrainScreen() {
   const [tab, setTab] = useState<'ask' | 'search' | 'browse' | 'graph'>('ask')
   const [activeCard, setActiveCard] = useState<CardData | null>(null)
+  /** Server-driven layout descriptor — set alongside activeCard for datasheets. */
+  const [activeLayout, setActiveLayout] = useState<CardLayout | null>(null)
   const [activeFilters, setActiveFilters] = useState<string[]>([])
   const [detachmentView, setDetachmentView] = useState<DetachmentPageProps | null>(null)
   const [pdfView, setPdfView] = useState<{
@@ -1163,60 +1175,14 @@ export function BrainScreen() {
   async function handleOpenRecord(record: SearchRecord) {
     const node = record.primaryNode
 
-    // For unit cards — build data directly from record.childNodes, avoiding a second API fetch
+    // For unit cards — delegate to fetchFullUnitData to get the layout descriptor too
     if (record.type === 'unit' || node.category === 'datasheet') {
-      const base = buildUnitData(node)
-      const ranged: any[] = []
-      const melee: any[] = []
-      const unitAbilities: any[] = []
-
-      for (const child of record.childNodes) {
-        if (child.category === 'weapon') {
-          const rangeMatch = child.content.match(/\*\*Range:\*\*\s*(\S+)/)
-          const aMatch = child.content.match(/\*\*A:\*\*\s*(\S+)/)
-          const skillMatch = child.content.match(/\*\*BS\/WS:\*\*\s*(\S+)/)
-          const sMatch = child.content.match(/\*\*S:\*\*\s*(\S+)/)
-          const apMatch = child.content.match(/\*\*AP:\*\*\s*(\S+)/)
-          const dMatch = child.content.match(/\*\*D:\*\*\s*(\S+)/)
-          const abMatch = child.summary?.match(/\[([^\]]+)\]/g)
-          const abilities = abMatch ? abMatch.join(' ') : ''
-
-          const profile = {
-            name: child.title,
-            range: rangeMatch?.[1] ?? '',
-            attacks: aMatch?.[1] ?? '',
-            skill: skillMatch?.[1] ?? '',
-            strength: sMatch?.[1] ?? '',
-            ap: apMatch?.[1] ?? '',
-            damage: dMatch?.[1] ?? '',
-            abilities,
-          }
-          const isRanged =
-            child.content.includes('**Type:** Ranged') || child.summary?.includes('(Ranged)')
-          if (isRanged) {
-            ranged.push(profile)
-          } else {
-            melee.push(profile)
-          }
-        } else if (child.category === 'unit-ability') {
-          unitAbilities.push({
-            name: child.title,
-            description: child.content || child.summary,
-            type: child.keywords?.includes('faction') ? 'Faction' : 'Datasheet',
-          })
-        }
-      }
-
+      const { unitData, layout } = await fetchFullUnitData(node.id, node)
       setActiveCard({
         type: 'unit',
-        data: {
-          ...base,
-          rangedWeapons: ranged,
-          meleeWeapons: melee,
-          abilities: unitAbilities,
-          errata: record.errata,
-        },
+        data: { ...unitData, errata: record.errata },
       })
+      setActiveLayout(layout)
       return
     }
 
@@ -1259,8 +1225,9 @@ export function BrainScreen() {
   async function handleOpenCard(node: ResultNode) {
     // For unit cards, fetch full data (weapons + abilities) from API
     if (node.category === 'datasheet') {
-      const unitData = await fetchFullUnitData(node.id, node)
+      const { unitData, layout } = await fetchFullUnitData(node.id, node)
       setActiveCard({ type: 'unit', data: unitData })
+      setActiveLayout(layout)
       return
     }
 
@@ -1366,7 +1333,10 @@ export function BrainScreen() {
       setActiveCard(null)
       setActiveFilters((prev) => (prev.includes(term) ? prev : [...prev, term]))
     },
-    onDismiss: () => setActiveCard(null),
+    onDismiss: () => {
+      setActiveCard(null)
+      setActiveLayout(null)
+    },
     onViewSource: (pdfName, page, title, topPct, heightPct, leftPct, widthPct) => {
       setActiveCard(null)
       setPdfView({ pdfName, page, title, topPct, heightPct, leftPct, widthPct })
@@ -1442,8 +1412,19 @@ export function BrainScreen() {
         </main>
       )}
 
-      <Overlay open={!!activeCard} onDismiss={() => setActiveCard(null)}>
-        {activeCard?.type === 'unit' && <UnitCard data={activeCard.data} context={cardContext} />}
+      <Overlay
+        open={!!activeCard}
+        onDismiss={() => {
+          setActiveCard(null)
+          setActiveLayout(null)
+        }}
+      >
+        {activeCard?.type === 'unit' &&
+          (activeLayout ? (
+            <LayoutRenderer layout={activeLayout} />
+          ) : (
+            <UnitCard data={activeCard.data} context={cardContext} />
+          ))}
         {activeCard?.type === 'stratagem' && (
           <StratagemCard data={activeCard.data} context={cardContext} />
         )}
