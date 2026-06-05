@@ -21,7 +21,10 @@ import { TRPCError } from '@trpc/server'
 import { desc, eq, gt, sql } from 'drizzle-orm'
 import { z } from 'zod'
 
+import { addIngestSourceSchema } from '../schemas/ingest.js'
 import { adminProcedure, publicProcedure, router } from '../trpc.js'
+
+export { addIngestSourceSchema }
 
 async function count(db: any, table: any): Promise<number> {
   const [row] = await db.select({ count: sql<number>`count(*)` }).from(table)
@@ -432,23 +435,21 @@ export const statsRouter = router({
     return ctx.db.select().from(ingestSources)
   }),
 
-  addIngestSource: adminProcedure
-    .input(z.object({ name: z.string(), url: z.string(), type: z.enum(['youtube', 'web']) }))
-    .mutation(async ({ ctx, input }) => {
-      if (!ctx.contentIngestor) {
-        return { status: 'error', message: 'Content Ingestor service binding not configured' }
-      }
-      const resp = await ctx.contentIngestor.fetch(
-        new Request('https://content-ingestor/sources', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(input),
-        }),
-      )
-      if (!resp.ok) return { status: 'error', message: `Ingestor returned ${resp.status}` }
-      const result = (await resp.json()) as { id: string; status: string }
-      return { status: 'created', id: result.id }
-    }),
+  addIngestSource: adminProcedure.input(addIngestSourceSchema).mutation(async ({ ctx, input }) => {
+    if (!ctx.contentIngestor) {
+      return { status: 'error', message: 'Content Ingestor service binding not configured' }
+    }
+    const resp = await ctx.contentIngestor.fetch(
+      new Request('https://content-ingestor/sources', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(input),
+      }),
+    )
+    if (!resp.ok) return { status: 'error', message: `Ingestor returned ${resp.status}` }
+    const result = (await resp.json()) as { id: string; status: string }
+    return { status: 'created', id: result.id }
+  }),
 
   toggleIngestSource: adminProcedure
     .input(z.object({ id: z.string(), active: z.boolean() }))

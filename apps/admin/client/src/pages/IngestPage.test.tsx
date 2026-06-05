@@ -83,8 +83,9 @@ describe('IngestPage', () => {
     // Sources appear in both the list and filter tabs — check for the toggle buttons
     expect(screen.getByText('Active')).toBeInTheDocument()
     expect(screen.getByText('Paused')).toBeInTheDocument()
-    expect(screen.getByText('youtube')).toBeInTheDocument()
-    expect(screen.getByText('web')).toBeInTheDocument()
+    // "youtube" and "web" appear in both the source-type badge AND the ZodForm type select options
+    expect(screen.getAllByText('youtube').length).toBeGreaterThan(0)
+    expect(screen.getAllByText('web').length).toBeGreaterThan(0)
   })
 
   it('renders content table with titles', () => {

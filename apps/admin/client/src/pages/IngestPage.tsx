@@ -1,5 +1,7 @@
 import { useState } from 'react'
 
+import { addIngestSourceSchema } from '../../../server/src/schemas/ingest.js'
+import { ZodForm } from '../lib/form/ZodForm'
 import { trpc } from '../lib/trpc'
 
 export function IngestPage() {
@@ -13,29 +15,12 @@ export function IngestPage() {
   const webIngest = trpc.stats.triggerWebIngest.useMutation()
 
   const [sourceFilter, setSourceFilter] = useState<string | undefined>()
-  const [newSource, setNewSource] = useState({
-    name: '',
-    url: '',
-    type: 'youtube' as 'youtube' | 'web',
-  })
   const [manualUrl, setManualUrl] = useState('')
   const [manualType, setManualType] = useState<'youtube' | 'web'>('youtube')
   const [actionResult, setActionResult] = useState<string | null>(null)
 
   const sourceList = sources.data ?? []
   const content = ingestJobs.data ?? []
-
-  // ── Add Source ──────────────────────────────────────────────────────────
-
-  const handleAddSource = () => {
-    if (!newSource.name.trim() || !newSource.url.trim()) return
-    addSource.mutate(newSource, {
-      onSuccess: () => {
-        setNewSource({ name: '', url: '', type: 'youtube' })
-        sources.refetch()
-      },
-    })
-  }
 
   // ── Manual Ingest ──────────────────────────────────────────────────────
 
@@ -105,48 +90,24 @@ export function IngestPage() {
             </div>
           )}
 
-          {/* Add source form */}
-          <div className="flex gap-2 items-end pt-2 border-t border-slate-800">
-            <div className="flex-1">
-              <label className="block text-xs text-slate-500 mb-1">Name</label>
-              <input
-                type="text"
-                value={newSource.name}
-                onChange={(e) => setNewSource({ ...newSource, name: e.target.value })}
-                placeholder="Channel or site name"
-                className="w-full bg-slate-800 border border-slate-700 rounded px-3 py-1.5 text-sm text-slate-100 placeholder-slate-500 focus:outline-none focus:border-amber-400"
-              />
-            </div>
-            <div className="flex-1">
-              <label className="block text-xs text-slate-500 mb-1">URL</label>
-              <input
-                type="text"
-                value={newSource.url}
-                onChange={(e) => setNewSource({ ...newSource, url: e.target.value })}
-                placeholder="https://youtube.com/@... or https://..."
-                className="w-full bg-slate-800 border border-slate-700 rounded px-3 py-1.5 text-sm text-slate-100 placeholder-slate-500 focus:outline-none focus:border-amber-400"
-              />
-            </div>
-            <div>
-              <label className="block text-xs text-slate-500 mb-1">Type</label>
-              <select
-                value={newSource.type}
-                onChange={(e) =>
-                  setNewSource({ ...newSource, type: e.target.value as 'youtube' | 'web' })
-                }
-                className="bg-slate-800 border border-slate-700 rounded px-3 py-1.5 text-sm text-slate-100"
-              >
-                <option value="youtube">YouTube</option>
-                <option value="web">Web</option>
-              </select>
-            </div>
-            <button
-              onClick={handleAddSource}
-              disabled={addSource.isPending || !newSource.name.trim() || !newSource.url.trim()}
-              className="px-4 py-1.5 bg-amber-400 text-slate-950 rounded font-medium text-sm hover:bg-amber-300 disabled:opacity-50"
-            >
-              Add
-            </button>
+          {/* Add source form — driven by the server Zod schema */}
+          <div className="pt-2 border-t border-slate-800">
+            <ZodForm
+              schema={addIngestSourceSchema}
+              defaultValues={{ name: '', url: '', type: 'youtube' }}
+              onSubmit={(values) => {
+                addSource.mutate(values, {
+                  onSuccess: () => sources.refetch(),
+                })
+              }}
+              isPending={addSource.isPending}
+              submitLabel="Add"
+              fieldConfig={{
+                name: { label: 'Name', placeholder: 'Channel or site name' },
+                url: { label: 'URL', placeholder: 'https://youtube.com/@... or https://...' },
+                type: { label: 'Type' },
+              }}
+            />
           </div>
         </div>
       </section>

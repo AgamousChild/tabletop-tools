@@ -99,9 +99,23 @@ wrangler deploy
 
 ---
 
+## Form Pattern
+
+Admin forms use `ZodForm` from `client/src/lib/form/`. To add a new form:
+
+1. Define the schema in `server/src/schemas/<name>.ts` — imports only `zod`, no DB deps.
+2. Import and re-export it from the relevant router file.
+3. On the client, import the schema and render `<ZodForm schema={...} defaultValues={...} onSubmit={...} />`.
+
+`ZodForm` derives labels from camelCase keys, picks input types from Zod types (string→text, number→number, boolean→checkbox, enum→select, optional→unwraps), and shows field errors inline. Override display with `fieldConfig={{ fieldName: { label, placeholder, description } }}`.
+
+`useZodForm` is the lower-level hook if you need custom layout around individual `<form.Field>` instances.
+
+---
+
 ## Testing
 
-**85 tests** (38 server + 47 client), all passing.
+**74 client tests** passing (12 new ZodForm tests added). Server tests: 80 passing, 16 failing in crosswalk router (pre-existing, unrelated to form work).
 
 ```
 server/src/routers/stats.test.ts    32 tests -- access control, empty DB, data counts, users, sessions, etc.
