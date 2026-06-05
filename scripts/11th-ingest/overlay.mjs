@@ -1,22 +1,17 @@
 /**
  * Drop translated (English) text over the French on a copy of a card/page image.
  *
- * Takes the source image and a list of regions; for each region it paints a
- * semi-opaque panel (covering the French) and lays the English text inside it,
- * word-wrapped to the panel width. Coordinates may be absolute pixels or
- * fractions of the image dimensions (0-1), so the same region set scales across
- * resolutions.
+ * Each region paints a panel **sized to its text** (not the whole image — so the
+ * original card/page stays visible around it) and lays the English inside it,
+ * word-wrapped. An optional bold `title` renders as the first line. Coordinates
+ * may be absolute pixels or fractions of the image dimensions (0-1).
  *
- * Region: { x, y, w, h, text|lines, size?, weight?, color?, bg? }
- *   - x,y,w,h : panel rect (px, or 0-1 fraction of width/height)
- *   - text    : string (\n-separated paragraphs, auto-wrapped) OR
- *   - lines   : pre-split string[] (no auto-wrap)
- *   - bg      : panel fill (default translucent white); `false` = no panel (text only)
+ * Region: { x, y, w, title?, titleColor?, text|lines, size?, color?, bg? }
+ *   - x,y,w  : panel left/top/width (px, or 0-1 fraction). Height auto-fits the text.
+ *   - title  : optional bold heading line
+ *   - text   : string (\n-separated, auto-wrapped) OR lines: pre-split string[]
+ *   - bg     : panel fill (default near-opaque white); `false` = text only, no panel
  *
- * @param {object} o
- * @param {string} o.input    source image path
- * @param {Array}  o.regions  region list (see above)
- * @param {string} o.output   destination PNG path
  * @returns {Promise<{ width:number, height:number, output:string }>}
  */
 import sharp from 'sharp'
@@ -31,21 +26,32 @@ export async function overlayTranslation({ input, regions, output }) {
     const x = toPx(r.x, W)
     const y = toPx(r.y, H)
     const w = toPx(r.w, W)
-    const h = toPx(r.h, H)
-    const size = r.size || 17
-    const lineHeight = size * 1.28
-    const color = r.color || '#111'
+    const size = r.size || 16
+    const titleSize = Math.round(size * 1.25)
+    const lineH = Math.round(size * 1.32)
+    const pad = 10
+    const maxChars = Math.max(10, Math.floor((w - 2 * pad) / (size * 0.52)))
+    const titleMaxChars = Math.max(10, Math.floor((w - 2 * pad) / (titleSize * 0.55)))
+
+    const titleLines = r.title ? wrap(r.title, titleMaxChars) : []
+    const bodyLines = r.lines || (r.text ? wrap(r.text, maxChars) : [])
+
+    // height fits the content
+    const contentH = titleLines.length * Math.round(titleSize * 1.3) + bodyLines.length * lineH
+    const h = contentH + 2 * pad
+
     if (r.bg !== false) {
-      svg.push(`<rect x="${x}" y="${y}" width="${w}" height="${h}" rx="8" fill="${r.bg || 'rgba(255,255,255,0.94)'}" stroke="#888" stroke-width="1"/>`)
+      svg.push(`<rect x="${x}" y="${y}" width="${w}" height="${h}" rx="6" fill="${r.bg || 'rgba(255,255,255,0.93)'}" stroke="#888" stroke-width="1"/>`)
     }
-    const maxChars = Math.max(8, Math.floor((w - 12) / (size * 0.52)))
-    const lines = r.lines || wrap(r.text, maxChars)
-    let ty = y + size + 6
-    for (const line of lines) {
-      if (line) {
-        svg.push(`<text x="${x + 8}" y="${ty}" font-family="Arial, Helvetica, sans-serif" font-size="${size}" font-weight="${r.weight || 'normal'}" fill="${color}">${escapeXml(line)}</text>`)
-      }
-      ty += lineHeight
+    let ty = y + pad
+    for (const line of titleLines) {
+      ty += Math.round(titleSize * 1.3)
+      svg.push(`<text x="${x + pad}" y="${ty}" font-family="Arial, Helvetica, sans-serif" font-size="${titleSize}" font-weight="bold" fill="${r.titleColor || '#7a0000'}">${escapeXml(line)}</text>`)
+    }
+    if (titleLines.length) ty += 4
+    for (const line of bodyLines) {
+      ty += lineH
+      if (line) svg.push(`<text x="${x + pad}" y="${ty}" font-family="Arial, Helvetica, sans-serif" font-size="${size}" fill="${r.color || '#111'}">${escapeXml(line)}</text>`)
     }
   }
   svg.push('</svg>')
@@ -60,19 +66,11 @@ function escapeXml(s) {
 
 function wrap(text, maxChars) {
   const out = []
-  for (const para of text.split('\n')) {
-    if (!para.trim()) {
-      out.push('')
-      continue
-    }
+  for (const para of String(text).split('\n')) {
+    if (!para.trim()) { out.push(''); continue }
     let cur = ''
     for (const word of para.split(/\s+/)) {
-      if ((cur + ' ' + word).trim().length > maxChars) {
-        out.push(cur)
-        cur = word
-      } else {
-        cur = (cur + ' ' + word).trim()
-      }
+      if ((cur + ' ' + word).trim().length > maxChars) { out.push(cur); cur = word } else cur = (cur + ' ' + word).trim()
     }
     if (cur) out.push(cur)
   }
