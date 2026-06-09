@@ -1,7 +1,8 @@
 import { readdirSync, readFileSync, writeFileSync } from 'node:fs'
 import path from 'node:path'
+
+import { draftToMarkdown, markdownToDraft } from '../drafts/store'
 import type { DraftNode, LLMConfig } from '../types'
-import { markdownToDraft, draftToMarkdown } from '../drafts/store'
 
 /**
  * LLM config for the reviewer — intentionally a DIFFERENT model than the extractor.
@@ -12,7 +13,7 @@ export const REVIEWER_CONFIG: LLMConfig = {
   endpoint: 'http://localhost:11434',
 }
 
-const REVIEW_PROMPT = `You are a Warhammer 40,000 10th Edition rules expert reviewing extracted tactical content for accuracy.
+const REVIEW_PROMPT = `You are a Warhammer 40,000 11th Edition rules expert reviewing extracted tactical content for accuracy. 11th Edition launched 2026-01-01; 10th Edition is the immediate predecessor and still relevant for competitive history / "tick tock" coverage.
 
 You will be given:
 1. SOURCE CONTEXT — the original transcript/article text
@@ -20,7 +21,7 @@ You will be given:
 
 Your job is to verify:
 1. ACCURACY: Does the extracted content match what the source actually says? Flag any invented mechanics, wrong rules, or hallucinated details.
-2. EDITION: Is this about 10th Edition (current)? Reject if it references 9th edition mechanics (command protocols, doctrines that don't exist in 10th, etc).
+2. EDITION: APPROVE 11th Edition content (current) and APPROVE 10th Edition content where the source explicitly discusses 10th (retrospective, "innovations in 10th", comparison articles). REJECT 9th Edition mechanics (command protocols, doctrines that don't exist in 10th/11th).
 3. TERMINOLOGY: Are unit names, detachment names, and rule terms correct?
 4. VALUE: Is this actually useful tactical advice, or is it generic filler?
 
@@ -65,7 +66,7 @@ ${draft.keywords.join(', ')}`
     stream: false,
     options: {
       num_ctx: 8192,
-      num_predict: 256,  // short response needed
+      num_predict: 256, // short response needed
     },
   }
 
@@ -89,7 +90,7 @@ ${draft.keywords.join(', ')}`
     const issuesMatch = text.match(/ISSUES:\s*(.+)/is)
 
     const verdict = verdictMatch
-      ? verdictMatch[1]!.toLowerCase() as 'approve' | 'reject' | 'fix'
+      ? (verdictMatch[1]!.toLowerCase() as 'approve' | 'reject' | 'fix')
       : 'fix'
     const reason = reasonMatch ? reasonMatch[1]!.trim() : 'No reason provided'
     const issues = issuesMatch ? issuesMatch[1]!.trim() : undefined
@@ -108,8 +109,8 @@ export async function autoReviewDrafts(
   draftDir: string,
   config: LLMConfig = REVIEWER_CONFIG,
 ): Promise<{ approved: number; rejected: number; needsFix: number; errors: number }> {
-  const files = readdirSync(draftDir).filter(f => f.endsWith('.md'))
-  const drafts = files.filter(f => {
+  const files = readdirSync(draftDir).filter((f) => f.endsWith('.md'))
+  const drafts = files.filter((f) => {
     try {
       const content = readFileSync(path.join(draftDir, f), 'utf-8')
       return content.includes('status: draft')
@@ -120,7 +121,10 @@ export async function autoReviewDrafts(
 
   console.log(`Reviewing ${drafts.length} drafts in ${path.basename(draftDir)}/`)
 
-  let approved = 0, rejected = 0, needsFix = 0, errors = 0
+  let approved = 0,
+    rejected = 0,
+    needsFix = 0,
+    errors = 0
 
   for (let i = 0; i < drafts.length; i++) {
     const file = drafts[i]!
@@ -158,6 +162,8 @@ export async function autoReviewDrafts(
     }
   }
 
-  console.log(`\nReview complete: ${approved} approved, ${rejected} rejected, ${needsFix} need fixes, ${errors} errors`)
+  console.log(
+    `\nReview complete: ${approved} approved, ${rejected} rejected, ${needsFix} need fixes, ${errors} errors`,
+  )
   return { approved, rejected, needsFix, errors }
 }
