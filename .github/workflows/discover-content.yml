@@ -1,0 +1,78 @@
+name: Daily Content Discovery
+
+# Daily crawl of every active pipeline_source. Inserts new pipeline_item rows
+# (2026+ only) for any URL that wasn't already in the DB.
+#
+# Process step (transcript fetch + LLM extraction) is NOT in this workflow —
+# it depends on Ollama which doesn't fit in GH Actions. Micah runs
+# `npx tsx src/process-queue.ts <N>` locally to process the queue.
+#
+# Prerequisites (repo secrets):
+#   TURSO_DB_URL, TURSO_AUTH_TOKEN — same as runtime
+#
+# Manual trigger via workflow_dispatch is also supported.
+
+on:
+  schedule:
+    # 06:00 UTC daily — early-morning US time, after most US/EU channels post overnight
+    - cron: '0 6 * * *'
+  workflow_dispatch:
+
+jobs:
+  discover:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Install yt-dlp
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y python3-pip
+          pipx install yt-dlp || pip install --user yt-dlp
+          # Expose yt-dlp on PATH; tests look at C:/R/tools/yt-dlp.exe locally but
+          # in CI we override via env var to whatever `which yt-dlp` returns.
+          echo "YT_DLP_PATH=$(which yt-dlp)" >> $GITHUB_ENV
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 9
+
+      - name: Install root deps
+        run: pnpm install --frozen-lockfile --filter "@tabletop-tools/content-ingestor..."
+
+      - name: Install Playwright Chromium
+        run: pnpm --filter "@tabletop-tools/content-ingestor" exec playwright install chromium --with-deps
+
+      - name: Run discovery
+        env:
+          TURSO_DB_URL: ${{ secrets.TURSO_DB_URL }}
+          TURSO_AUTH_TOKEN: ${{ secrets.TURSO_AUTH_TOKEN }}
+          YT_DLP_PATH: ${{ env.YT_DLP_PATH }}
+        working-directory: apps/content-ingestor
+        run: |
+          # discover.ts loadEnv() reads ../../.env in dev; in CI write the same vars there.
+          # DEFAULT_CONFIG.ytdlpPath honors $YT_DLP_PATH (set in the prior step).
+          echo "TURSO_DB_URL=$TURSO_DB_URL" >> ../../.env
+          echo "TURSO_AUTH_TOKEN=$TURSO_AUTH_TOKEN" >> ../../.env
+          npx tsx src/discover.ts
+
+      - name: Summary
+        if: always()
+        run: |
+          echo "## Daily Content Discovery Summary" >> $GITHUB_STEP_SUMMARY
+          echo "Ran $(date -u +'%Y-%m-%d %H:%M UTC'). New items now in pipeline_item." >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "Process the queue locally with:" >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY
+          echo 'cd apps/content-ingestor' >> $GITHUB_STEP_SUMMARY
+          echo 'npx tsx src/process-queue.ts <N>' >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY
