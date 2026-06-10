@@ -1107,8 +1107,12 @@ app.post('/index-vectors', async (c) => {
     }
   }
 
-  // Accept optional ?file= param to index one file at a time
+  // Accept optional ?file= param to index one file at a time, plus
+  // ?offset= and ?limit= to chunk huge files (faction-space-marines.json
+  // has 1835 nodes — too many for one Worker invocation's CPU budget).
   const targetFile = c.req.query('file')
+  const offset = parseInt(c.req.query('offset') ?? '0', 10) || 0
+  const limit = parseInt(c.req.query('limit') ?? '0', 10) || 0
 
   const manifestObj = await c.env.BRAIN_BUCKET.get('manifest.json')
   if (!manifestObj) {
@@ -1127,7 +1131,13 @@ app.post('/index-vectors', async (c) => {
   for (const file of nodeFiles) {
     const obj = await c.env.BRAIN_BUCKET.get(file)
     if (!obj) continue
-    const nodes = (await obj.json()) as Node[]
+    const allNodes = (await obj.json()) as Node[]
+    // Apply offset/limit ONLY when a single file is targeted — chunking
+    // across files would skip whole files unintentionally.
+    const nodes =
+      targetFile && (offset > 0 || limit > 0)
+        ? allNodes.slice(offset, limit > 0 ? offset + limit : undefined)
+        : allNodes
 
     for (let i = 0; i < nodes.length; i += BATCH_SIZE) {
       const batch = nodes.slice(i, i + BATCH_SIZE)
@@ -1168,6 +1178,8 @@ app.post('/index-vectors', async (c) => {
     errorMessages: errorMessages.slice(0, 5),
     totalFiles: nodeFiles.length,
     allFiles: allNodeFiles,
+    offset: targetFile ? offset : undefined,
+    limit: targetFile ? limit : undefined,
   })
 })
 
