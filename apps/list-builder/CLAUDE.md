@@ -126,6 +126,12 @@ id, list_unit_id, model_count
 id, loadout_id, weapon_id, count
 ```
 
+**No scratch / ad-hoc list rows.** `list_unit.list_id` is NOT NULL by design. There is
+no "unsaved" list row, no nullable-FK orphan, no hidden scratch container. Ad-hoc work
+(e.g. configuring a unit in versus for a one-off sim) lives in memory and is discarded
+unless the user explicitly saves it into a real list. Don't reintroduce scratch rows —
+they create orphans and schema complexity for state that should never have hit disk.
+
 ### Client (IndexedDB) — catalog only
 
 IndexedDB stores unit profiles, factions, detachments, weapons, abilities etc. via

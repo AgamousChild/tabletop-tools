@@ -513,6 +513,10 @@ export function runMonteCarlo(
     for (let wi = 0; wi < weapons.length; wi++) {
       const weapon = weapons[wi]!
       const modelCount = weaponModelCounts?.[wi] ?? attackerModelCount
+      // Attack-count invariant: total attacks = modelCount × weapons-per-model × A.
+      // This loop rolls A (weapon.attacks) once per firing model. weapons-per-model
+      // is captured upstream in weaponModelCounts. Do not collapse the loop or drop
+      // the modelCount factor — that exact regression has shipped twice.
       let attackCount = 0
       for (let m = 0; m < modelCount; m++) {
         attackCount += rollDice(weapon.attacks)
