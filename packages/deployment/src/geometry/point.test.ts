@@ -1,5 +1,6 @@
-import { describe, it, expect } from 'vitest'
-import { distance, offset, midpoint } from './point'
+import { describe, expect, it } from 'vitest'
+
+import { distance, midpoint, offset } from './point'
 
 describe('distance', () => {
   it('returns 0 for the same point', () => {

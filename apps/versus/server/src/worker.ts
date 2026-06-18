@@ -1,6 +1,6 @@
-import { createWorkerHandler } from '@tabletop-tools/server-core'
 import { createClient } from '@libsql/client/web'
 import { createDbFromClient } from '@tabletop-tools/db'
+import { createWorkerHandler } from '@tabletop-tools/server-core'
 
 import { createServer } from './server'
 

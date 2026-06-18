@@ -1,4 +1,5 @@
 import { AuthScreen } from '@tabletop-tools/ui'
+
 import { SimulatorScreen } from './components/SimulatorScreen'
 import { authClient } from './lib/auth'
 
@@ -14,7 +15,14 @@ export default function App() {
   }
 
   if (!session) {
-    return <AuthScreen title="Versus" subtitle="40K combat simulator" authClient={authClient} onAuthenticated={() => refetch()} />
+    return (
+      <AuthScreen
+        title="Versus"
+        subtitle="40K combat simulator"
+        authClient={authClient}
+        onAuthenticated={() => refetch()}
+      />
+    )
   }
 
   return <SimulatorScreen onSignOut={() => refetch()} />

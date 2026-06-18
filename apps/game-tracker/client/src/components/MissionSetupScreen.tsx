@@ -1,35 +1,11 @@
-import { useState } from 'react'
 import { useMissions } from '@tabletop-tools/game-data-store'
+import { useState } from 'react'
 
-const FALLBACK_MISSIONS = [
-  'Take and Hold',
-  'Supply Drop',
-  'Scorched Earth',
-  'The Ritual',
-  'Priority Targets',
-  'Linchpin',
-  'Purge the Foe',
-]
+import { useMissionCatalog } from '../lib/useMissionCatalog'
 
-const FALLBACK_DEPLOYMENT_ZONES = [
-  'Tipping Point',
-  'Hammer and Anvil',
-  'Search and Destroy',
-  'Crucible of Battle',
-  'Sweeping Engagement',
-  'Dawn of War',
-]
-
-const FALLBACK_TERRAIN_LAYOUTS = [
-  'Layout 1',
-  'Layout 2',
-  'Layout 3',
-  'Layout 4',
-  'Layout 5',
-  'Layout 6',
-  'Layout 7',
-  'Layout 8',
-]
+// Empty fallbacks — used ONLY when both server catalog AND IndexedDB return nothing.
+// Adding a mission row to the DB makes it appear in UI automatically.
+const EMPTY_FALLBACK_TERRAIN = ['Layout 1', 'Layout 2', 'Layout 3']
 
 type MissionSetupData = {
   mission: string
@@ -61,17 +37,21 @@ export function MissionSetupScreen({ onNext, onBack }: Props) {
   const [challengerInput, setChallengerInput] = useState('')
   const [requirePhotos, setRequirePhotos] = useState(false)
 
+  const { primaries: catalogPrimaries } = useMissionCatalog()
   const { data: indexedMissions = [] } = useMissions()
-  const primaryMissions = indexedMissions.filter((m) => m.type === 'primary')
+
   const deploymentZoneMissions = indexedMissions.filter((m) => m.type === 'deployment_zone')
-  // Use data-driven values when available, fall back to hardcoded lists
-  const missionNames = primaryMissions.length > 0
-    ? primaryMissions.map((m) => m.name)
-    : FALLBACK_MISSIONS
-  const deploymentZoneNames = deploymentZoneMissions.length > 0
-    ? deploymentZoneMissions.map((m) => m.name)
-    : FALLBACK_DEPLOYMENT_ZONES
-  const terrainLayoutNames = FALLBACK_TERRAIN_LAYOUTS
+
+  // Primary missions: server catalog is source of truth
+  const missionNames =
+    catalogPrimaries.length > 0
+      ? catalogPrimaries.map((m) => m.name)
+      : indexedMissions.filter((m) => m.type === 'primary').map((m) => m.name)
+
+  const deploymentZoneNames =
+    deploymentZoneMissions.length > 0 ? deploymentZoneMissions.map((m) => m.name) : []
+
+  const terrainLayoutNames = EMPTY_FALLBACK_TERRAIN
 
   const addTwistCard = () => {
     const name = twistInput.trim()
@@ -105,9 +85,22 @@ export function MissionSetupScreen({ onNext, onBack }: Props) {
         <button onClick={onBack} className="text-slate-400 hover:text-slate-100">
           Back
         </button>
-        <a href="/" className="flex items-center gap-1 text-xs text-slate-400 hover:text-slate-200 transition-colors" title="Back to Home">
-          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-3.5 h-3.5">
-            <path fillRule="evenodd" d="M9.293 2.293a1 1 0 0 1 1.414 0l7 7A1 1 0 0 1 17 11h-1v6a1 1 0 0 1-1 1h-2a1 1 0 0 1-1-1v-3a1 1 0 0 0-1-1H9a1 1 0 0 0-1 1v3a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1v-6H3a1 1 0 0 1-.707-1.707l7-7Z" clipRule="evenodd" />
+        <a
+          href="/"
+          className="flex items-center gap-1 text-xs text-slate-400 hover:text-slate-200 transition-colors"
+          title="Back to Home"
+        >
+          <svg
+            xmlns="http://www.w3.org/2000/svg"
+            viewBox="0 0 20 20"
+            fill="currentColor"
+            className="w-3.5 h-3.5"
+          >
+            <path
+              fillRule="evenodd"
+              d="M9.293 2.293a1 1 0 0 1 1.414 0l7 7A1 1 0 0 1 17 11h-1v6a1 1 0 0 1-1 1h-2a1 1 0 0 1-1-1v-3a1 1 0 0 0-1-1H9a1 1 0 0 0-1 1v3a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1v-6H3a1 1 0 0 1-.707-1.707l7-7Z"
+              clipRule="evenodd"
+            />
           </svg>
           Home
         </a>
@@ -115,7 +108,10 @@ export function MissionSetupScreen({ onNext, onBack }: Props) {
       </header>
 
       <div className="p-6 space-y-5 max-w-md mx-auto">
-        <p className="text-xs text-slate-500 mb-4">Choose a primary mission, deployment zone, and terrain layout. Tap Next when ready, or Back to change match details.</p>
+        <p className="text-xs text-slate-500 mb-4">
+          Choose a primary mission, deployment zone, and terrain layout. Tap Next when ready, or
+          Back to change match details.
+        </p>
         <div>
           <label className="block text-sm text-slate-400 mb-1">Primary Mission</label>
           <select
@@ -126,7 +122,9 @@ export function MissionSetupScreen({ onNext, onBack }: Props) {
           >
             <option value="">Select mission...</option>
             {missionNames.map((m) => (
-              <option key={m} value={m}>{m}</option>
+              <option key={m} value={m}>
+                {m}
+              </option>
             ))}
           </select>
         </div>
@@ -141,7 +139,9 @@ export function MissionSetupScreen({ onNext, onBack }: Props) {
           >
             <option value="">Select deployment zone...</option>
             {deploymentZoneNames.map((d) => (
-              <option key={d} value={d}>{d}</option>
+              <option key={d} value={d}>
+                {d}
+              </option>
             ))}
           </select>
         </div>
@@ -156,7 +156,9 @@ export function MissionSetupScreen({ onNext, onBack }: Props) {
           >
             <option value="">Select terrain layout...</option>
             {terrainLayoutNames.map((t) => (
-              <option key={t} value={t}>{t}</option>
+              <option key={t} value={t}>
+                {t}
+              </option>
             ))}
           </select>
         </div>
@@ -180,7 +182,12 @@ export function MissionSetupScreen({ onNext, onBack }: Props) {
                     type="text"
                     value={twistInput}
                     onChange={(e) => setTwistInput(e.target.value)}
-                    onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); addTwistCard() } }}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') {
+                        e.preventDefault()
+                        addTwistCard()
+                      }
+                    }}
                     placeholder="Enter twist card name..."
                     aria-label="Twist card name"
                     className="flex-1 px-3 py-1.5 rounded-lg bg-slate-900 border border-slate-800 text-slate-100 text-sm focus:outline-none focus:border-amber-400"
@@ -196,7 +203,10 @@ export function MissionSetupScreen({ onNext, onBack }: Props) {
                 {twistCards.length > 0 && (
                   <div className="flex flex-wrap gap-1.5">
                     {twistCards.map((card) => (
-                      <span key={card} className="inline-flex items-center gap-1 px-2 py-1 rounded bg-slate-800 text-xs text-slate-200">
+                      <span
+                        key={card}
+                        className="inline-flex items-center gap-1 px-2 py-1 rounded bg-slate-800 text-xs text-slate-200"
+                      >
                         {card}
                         <button
                           onClick={() => removeTwistCard(card)}
@@ -231,7 +241,12 @@ export function MissionSetupScreen({ onNext, onBack }: Props) {
                     type="text"
                     value={challengerInput}
                     onChange={(e) => setChallengerInput(e.target.value)}
-                    onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); addChallengerCard() } }}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') {
+                        e.preventDefault()
+                        addChallengerCard()
+                      }
+                    }}
                     placeholder="Enter challenger card name..."
                     aria-label="Challenger card name"
                     className="flex-1 px-3 py-1.5 rounded-lg bg-slate-900 border border-slate-800 text-slate-100 text-sm focus:outline-none focus:border-amber-400"
@@ -247,7 +262,10 @@ export function MissionSetupScreen({ onNext, onBack }: Props) {
                 {challengerCards.length > 0 && (
                   <div className="flex flex-wrap gap-1.5">
                     {challengerCards.map((card) => (
-                      <span key={card} className="inline-flex items-center gap-1 px-2 py-1 rounded bg-slate-800 text-xs text-slate-200">
+                      <span
+                        key={card}
+                        className="inline-flex items-center gap-1 px-2 py-1 rounded bg-slate-800 text-xs text-slate-200"
+                      >
                         {card}
                         <button
                           onClick={() => removeChallengerCard(card)}

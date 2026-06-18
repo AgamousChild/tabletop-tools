@@ -20,10 +20,7 @@ export { THREAT_WEIGHT }
  * Returns the largest range across all ranged weapons.
  * Melee-only units return 0.
  */
-export function maxShootingThreat(
-  unit: EnemyUnit,
-  rules: GameRulesConfig = DEFAULT_RULES,
-): number {
+export function maxShootingThreat(unit: EnemyUnit, rules: GameRulesConfig = DEFAULT_RULES): number {
   let max = 0
   for (const weapon of unit.weapons) {
     if (weapon.range === 'melee') continue

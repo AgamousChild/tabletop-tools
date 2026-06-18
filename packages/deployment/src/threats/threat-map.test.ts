@@ -1,8 +1,9 @@
-import { describe, it, expect } from 'vitest'
-import { generateThreatMap } from './threat-map'
-import { DEFAULT_10E_RULES } from '../types'
+import { describe, expect, it } from 'vitest'
+
 import type { EnemyUnit, TerrainPiece } from '../types'
+import { DEFAULT_10E_RULES } from '../types'
 import type { DeploymentZone } from '../zones/deployment-zones'
+import { generateThreatMap } from './threat-map'
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -90,7 +91,10 @@ describe('generateThreatMap melee unit', () => {
     // "Near zone" rows are at the top of the grid
     const topRowSum = result.meleeHeatMap[0]!.reduce((a, b) => a + b, 0)
     // Bottom row = far from enemy zone
-    const bottomRowSum = result.meleeHeatMap[result.meleeHeatMap.length - 1]!.reduce((a, b) => a + b, 0)
+    const bottomRowSum = result.meleeHeatMap[result.meleeHeatMap.length - 1]!.reduce(
+      (a, b) => a + b,
+      0,
+    )
 
     // Top row should have some threat, bottom should have less (or zero)
     expect(topRowSum).toBeGreaterThan(0)
@@ -156,7 +160,12 @@ describe('generateThreatMap LOS blocking', () => {
 
     const unit = makeUnit({ move: 6, weapons: [{ name: 'Gun', range: 24 }] })
 
-    const withTerrain = generateThreatMap(boardWithTerrain, makeTopEnemyZone(), [unit], DEFAULT_10E_RULES)
+    const withTerrain = generateThreatMap(
+      boardWithTerrain,
+      makeTopEnemyZone(),
+      [unit],
+      DEFAULT_10E_RULES,
+    )
     const withoutTerrain = generateThreatMap(BOARD, makeTopEnemyZone(), [unit], DEFAULT_10E_RULES)
 
     const totalWithTerrain = withTerrain.shootingHeatMap.flat().reduce((a, b) => a + b, 0)

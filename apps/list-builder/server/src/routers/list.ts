@@ -1,7 +1,7 @@
-import { eq, and } from 'drizzle-orm'
-import { z } from 'zod'
 import { lists, listUnits } from '@tabletop-tools/db'
-import { protectedProcedure, router, generateId } from '@tabletop-tools/server-core'
+import { generateId, protectedProcedure, router } from '@tabletop-tools/server-core'
+import { and, eq } from 'drizzle-orm'
+import { z } from 'zod'
 
 const unitSchema = z.object({
   id: z.string(),
@@ -28,17 +28,28 @@ const listSyncSchema = z.object({
 })
 
 export const listRouter = router({
-  sync: protectedProcedure
-    .input(listSyncSchema)
-    .mutation(async ({ ctx, input }) => {
-      const now = Date.now()
+  sync: protectedProcedure.input(listSyncSchema).mutation(async ({ ctx, input }) => {
+    const now = Date.now()
 
-      // Upsert the list
-      await ctx.db
-        .insert(lists)
-        .values({
-          id: input.id,
-          userId: ctx.user.id,
+    // Upsert the list
+    await ctx.db
+      .insert(lists)
+      .values({
+        id: input.id,
+        userId: ctx.user.id,
+        faction: input.faction,
+        name: input.name,
+        description: input.description ?? null,
+        detachment: input.detachment ?? null,
+        battleSize: input.battleSize ?? null,
+        totalPts: input.totalPts,
+        syncedAt: now,
+        createdAt: now,
+        updatedAt: now,
+      })
+      .onConflictDoUpdate({
+        target: lists.id,
+        set: {
           faction: input.faction,
           name: input.name,
           description: input.description ?? null,
@@ -46,46 +57,33 @@ export const listRouter = router({
           battleSize: input.battleSize ?? null,
           totalPts: input.totalPts,
           syncedAt: now,
-          createdAt: now,
           updatedAt: now,
-        })
-        .onConflictDoUpdate({
-          target: lists.id,
-          set: {
-            faction: input.faction,
-            name: input.name,
-            description: input.description ?? null,
-            detachment: input.detachment ?? null,
-            battleSize: input.battleSize ?? null,
-            totalPts: input.totalPts,
-            syncedAt: now,
-            updatedAt: now,
-          },
-        })
+        },
+      })
 
-      // Delete existing units for this list, then insert fresh
-      await ctx.db.delete(listUnits).where(eq(listUnits.listId, input.id))
+    // Delete existing units for this list, then insert fresh
+    await ctx.db.delete(listUnits).where(eq(listUnits.listId, input.id))
 
-      if (input.units.length > 0) {
-        await ctx.db.insert(listUnits).values(
-          input.units.map((u) => ({
-            id: u.id || generateId(),
-            listId: input.id,
-            unitContentId: u.unitContentId,
-            unitName: u.unitName,
-            unitPoints: u.unitPoints,
-            modelCount: u.modelCount ?? null,
-            count: u.count,
-            isWarlord: u.isWarlord ? 1 : 0,
-            enhancementId: u.enhancementId ?? null,
-            enhancementName: u.enhancementName ?? null,
-            enhancementCost: u.enhancementCost ?? null,
-          })),
-        )
-      }
+    if (input.units.length > 0) {
+      await ctx.db.insert(listUnits).values(
+        input.units.map((u) => ({
+          id: u.id || generateId(),
+          listId: input.id,
+          unitContentId: u.unitContentId,
+          unitName: u.unitName,
+          unitPoints: u.unitPoints,
+          modelCount: u.modelCount ?? null,
+          count: u.count,
+          isWarlord: u.isWarlord ? 1 : 0,
+          enhancementId: u.enhancementId ?? null,
+          enhancementName: u.enhancementName ?? null,
+          enhancementCost: u.enhancementCost ?? null,
+        })),
+      )
+    }
 
-      return { success: true }
-    }),
+    return { success: true }
+  }),
 
   syncAll: protectedProcedure
     .input(z.object({ lists: z.array(listSyncSchema) }))
@@ -146,47 +144,38 @@ export const listRouter = router({
       return { success: true }
     }),
 
-  getAll: protectedProcedure
-    .query(async ({ ctx }) => {
-      const userLists = await ctx.db
-        .select()
-        .from(lists)
-        .where(eq(lists.userId, ctx.user.id))
+  getAll: protectedProcedure.query(async ({ ctx }) => {
+    const userLists = await ctx.db.select().from(lists).where(eq(lists.userId, ctx.user.id))
 
-      const result = []
-      for (const list of userLists) {
-        const units = await ctx.db
-          .select()
-          .from(listUnits)
-          .where(eq(listUnits.listId, list.id))
+    const result = []
+    for (const list of userLists) {
+      const units = await ctx.db.select().from(listUnits).where(eq(listUnits.listId, list.id))
 
-        result.push({
-          ...list,
-          units: units.map((u) => ({
-            id: u.id,
-            unitContentId: u.unitContentId,
-            unitName: u.unitName,
-            unitPoints: u.unitPoints,
-            modelCount: u.modelCount,
-            count: u.count,
-            isWarlord: u.isWarlord === 1,
-            enhancementId: u.enhancementId,
-            enhancementName: u.enhancementName,
-            enhancementCost: u.enhancementCost,
-          })),
-        })
-      }
+      result.push({
+        ...list,
+        units: units.map((u) => ({
+          id: u.id,
+          unitContentId: u.unitContentId,
+          unitName: u.unitName,
+          unitPoints: u.unitPoints,
+          modelCount: u.modelCount,
+          count: u.count,
+          isWarlord: u.isWarlord === 1,
+          enhancementId: u.enhancementId,
+          enhancementName: u.enhancementName,
+          enhancementCost: u.enhancementCost,
+        })),
+      })
+    }
 
-      return result
-    }),
+    return result
+  }),
 
   delete: protectedProcedure
     .input(z.object({ id: z.string() }))
     .mutation(async ({ ctx, input }) => {
       // Only delete if owned by the authenticated user
-      await ctx.db
-        .delete(lists)
-        .where(and(eq(lists.id, input.id), eq(lists.userId, ctx.user.id)))
+      await ctx.db.delete(lists).where(and(eq(lists.id, input.id), eq(lists.userId, ctx.user.id)))
 
       return { success: true }
     }),

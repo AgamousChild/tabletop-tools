@@ -1,6 +1,6 @@
-import type { Node, NodeRef, Source, GamePhase } from '../model'
-import { slugify } from '../slugify'
 import { detectChapterFromText, truncate } from '../filters'
+import type { GamePhase, Node, NodeRef, Source } from '../model'
+import { slugify } from '../slugify'
 import type { ParseResult } from './core-rules'
 
 /** Detect phase from stratagem WHEN clause. */
@@ -16,22 +16,43 @@ function detectPhaseFromWhen(whenText: string): GamePhase | undefined {
 }
 
 function factionDisplayName(factionSlug: string): string {
-  return factionSlug.split('-').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ')
+  return factionSlug
+    .split('-')
+    .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
+    .join(' ')
 }
 
 function extractKeywords(title: string, content: string): string[] {
   const combined = `${title} ${content}`.toLowerCase()
   const terms = [
-    'stratagem', 'enhancement', 'detachment', 'ability', 'aura',
-    'shoot', 'fight', 'charge', 'movement', 'command',
-    'wound', 'hit', 'save', 'damage', 'mortal',
-    'feel no pain', 'invulnerable', 'leader', 'attached',
-    'sustained hits', 'lethal hits', 'devastating wounds',
-    'battle-shock', 'deep strike', 'overwatch',
+    'stratagem',
+    'enhancement',
+    'detachment',
+    'ability',
+    'aura',
+    'shoot',
+    'fight',
+    'charge',
+    'movement',
+    'command',
+    'wound',
+    'hit',
+    'save',
+    'damage',
+    'mortal',
+    'feel no pain',
+    'invulnerable',
+    'leader',
+    'attached',
+    'sustained hits',
+    'lethal hits',
+    'devastating wounds',
+    'battle-shock',
+    'deep strike',
+    'overwatch',
   ]
-  return terms.filter(t => combined.includes(t))
+  return terms.filter((t) => combined.includes(t))
 }
-
 
 /**
  * Parse a normalized faction pack into nodes and refs.
@@ -72,7 +93,8 @@ export function parseFactionPack(
   // State machine: collect sections between headings
   let sectionTitle = ''
   let sectionBody: string[] = []
-  let sectionType: 'detachment' | 'rule' | 'stratagem' | 'enhancement' | 'faq' | 'errata' | 'skip' = 'skip'
+  let sectionType: 'detachment' | 'rule' | 'stratagem' | 'enhancement' | 'faq' | 'errata' | 'skip' =
+    'skip'
   let inEnhancementZone = false
   let inFaqZone = false
   let inErrataZone = false
@@ -117,17 +139,18 @@ export function parseFactionPack(
 
     let category: Node['category']
     let phase: GamePhase | undefined
-    let layer: Node['layer'] = 'faction'
+    const layer: Node['layer'] = 'faction'
 
     switch (sectionType) {
       case 'detachment':
         category = 'detachment-rule'
         break
-      case 'stratagem':
+      case 'stratagem': {
         category = 'stratagem'
         const whenMatch = body.match(/\*\*WHEN:\*\*\s*([^\n]+)/i)
         if (whenMatch) phase = detectPhaseFromWhen(whenMatch[1]!)
         break
+      }
       case 'enhancement':
         category = 'enhancement'
         break
@@ -136,14 +159,24 @@ export function parseFactionPack(
         break
     }
 
-    const baseId = currentDetachmentId
-      ? `${currentDetachmentId}:${slugify(title)}`
-      : `faction:${factionSlug}:${slugify(title)}`
-    const id = makeId(baseId)
+    // For a detachment's own node, the id IS currentDetachmentId (already
+    // run through makeId when the ## heading was parsed). Appending
+    // slugify(title) here doubles the slug (`det:fac:slug:slug`) because
+    // sectionTitle == the detachment heading; re-passing it to makeId
+    // adds a `-1` suffix because the id was already seen on the heading.
+    // Children of a detachment (rules, abilities, stratagems) DO get a
+    // new slug nested under the parent's id and need makeId for dedupe.
+    let id: string
+    if (sectionType === 'detachment' && currentDetachmentId) {
+      id = currentDetachmentId
+    } else {
+      const baseId = currentDetachmentId
+        ? `${currentDetachmentId}:${slugify(title)}`
+        : `faction:${factionSlug}:${slugify(title)}`
+      id = makeId(baseId)
+    }
 
-    const summary = body
-      ? truncate(body.split(/[.!?]\s/)[0] ?? title, 150)
-      : title
+    const summary = body ? truncate(body.split(/[.!?]\s/)[0] ?? title, 150) : title
 
     // Update detachment chapter detection from body text
     if (sectionType === 'detachment' && !currentDetachmentChapter) {
@@ -188,7 +221,7 @@ export function parseFactionPack(
   function splitErrataBlock(body: string, fSlug: string): void {
     // Split on "Page NNN" at the start of a line/sentence (followed by dash or comma for section name).
     // Avoid splitting on cross-references like "(see Assigned Agents, page 75)".
-    const entries = body.split(/(?=(?:^|\n)\s*Pages?\s+\d+\s*[—–,\-])/i).filter(s => s.trim())
+    const entries = body.split(/(?=(?:^|\n)\s*Pages?\s+\d+\s*[—–,-])/i).filter((s) => s.trim())
     for (const entry of entries) {
       const pageMatch = entry.match(/Pages?\s+(\d+)/i)
       const page = pageMatch ? parseInt(pageMatch[1]!, 10) : undefined
@@ -229,7 +262,7 @@ export function parseFactionPack(
   }
 
   function splitFaqBlock(body: string, fSlug: string): void {
-    const entries = body.split(/(?=Q:\s)/i).filter(s => s.trim())
+    const entries = body.split(/(?=Q:\s)/i).filter((s) => s.trim())
     for (const entry of entries) {
       const qMatch = entry.match(/Q:\s*(.+?)(?:\s*A:|$)/is)
       const question = qMatch ? qMatch[1]!.trim() : entry.substring(0, 60)
@@ -302,7 +335,11 @@ export function parseFactionPack(
       const upper = heading.toUpperCase()
 
       // Skip meta headings
-      if (upper.includes('FACTION PACK') || upper.includes('VERSION') || upper.includes("WHAT'S NEW")) {
+      if (
+        upper.includes('FACTION PACK') ||
+        upper.includes('VERSION') ||
+        upper.includes("WHAT'S NEW")
+      ) {
         sectionType = 'skip'
         continue
       }
@@ -374,7 +411,12 @@ export function parseFactionPack(
         for (let k = i - 1; k >= Math.max(0, i - 5); k--) {
           const prev = lines[k]!.trim()
           if (!prev) continue
-          if (prev === prev.toUpperCase() && /^[A-Z][A-Z\s\-'\u2019\u2011.,!?:]+$/.test(prev) && prev.length >= 2 && prev.length <= 60) {
+          if (
+            prev === prev.toUpperCase() &&
+            /^[A-Z][A-Z\s\-'\u2019\u2011.,!?:]+$/.test(prev) &&
+            prev.length >= 2 &&
+            prev.length <= 60
+          ) {
             stratName = prev
           }
           break

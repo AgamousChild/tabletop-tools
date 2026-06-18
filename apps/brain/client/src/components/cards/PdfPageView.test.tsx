@@ -1,5 +1,6 @@
-import { describe, it, expect, vi } from 'vitest'
-import { render, screen, fireEvent } from '@testing-library/react'
+import { fireEvent, render, screen } from '@testing-library/react'
+import { describe, expect, it, vi } from 'vitest'
+
 import { PdfPageView } from './PdfPageView'
 
 const defaultProps = {
@@ -87,7 +88,12 @@ describe('PdfPageView', () => {
 
   it('shows errata section when errata entries are provided', () => {
     const errata = [
-      { nodeId: 'e1', title: 'FAQ Q1', content: 'Yes, it works.', source: { type: 'pdf', title: 'Chapter Approved', page: 12 } },
+      {
+        nodeId: 'e1',
+        title: 'FAQ Q1',
+        content: 'Yes, it works.',
+        source: { type: 'pdf', title: 'Chapter Approved', page: 12 },
+      },
     ]
     render(<PdfPageView {...defaultProps} errata={errata} />)
     expect(screen.getByText('Errata & FAQ')).toBeInTheDocument()
@@ -95,7 +101,12 @@ describe('PdfPageView', () => {
 
   it('reveals errata entry content when section is expanded', () => {
     const errata = [
-      { nodeId: 'e1', title: 'FAQ Q1', content: 'Yes, it works.', source: { type: 'pdf', title: 'Chapter Approved', page: 12 } },
+      {
+        nodeId: 'e1',
+        title: 'FAQ Q1',
+        content: 'Yes, it works.',
+        source: { type: 'pdf', title: 'Chapter Approved', page: 12 },
+      },
     ]
     render(<PdfPageView {...defaultProps} errata={errata} />)
     fireEvent.click(screen.getByText('Errata & FAQ'))

@@ -18,16 +18,41 @@ function addBlob(img: Uint8Array, cx: number, cy: number, r: number): void {
 /** Standard pip layouts for a d6 on a 64×64 image */
 function pipLayout(pips: number): Uint8Array {
   const img = new Uint8Array(SIZE * SIZE).fill(0)
-  const R = 5  // pip radius
+  const R = 5 // pip radius
 
   // Positions for each pip value (column, row pairs in a 3×2 grid)
   const layouts: Record<number, [number, number][]> = {
     1: [[32, 32]],
-    2: [[20, 20], [44, 44]],
-    3: [[20, 20], [32, 32], [44, 44]],
-    4: [[20, 20], [44, 20], [20, 44], [44, 44]],
-    5: [[20, 20], [44, 20], [32, 32], [20, 44], [44, 44]],
-    6: [[20, 16], [20, 32], [20, 48], [44, 16], [44, 32], [44, 48]],
+    2: [
+      [20, 20],
+      [44, 44],
+    ],
+    3: [
+      [20, 20],
+      [32, 32],
+      [44, 44],
+    ],
+    4: [
+      [20, 20],
+      [44, 20],
+      [20, 44],
+      [44, 44],
+    ],
+    5: [
+      [20, 20],
+      [44, 20],
+      [32, 32],
+      [20, 44],
+      [44, 44],
+    ],
+    6: [
+      [20, 16],
+      [20, 32],
+      [20, 48],
+      [44, 16],
+      [44, 32],
+      [44, 48],
+    ],
   }
 
   for (const [cx, cy] of layouts[pips]!) {
@@ -70,8 +95,14 @@ describe('detectBlobs', () => {
     // 8 small blobs — exceeds the d6 pip maximum
     const img = new Uint8Array(SIZE * SIZE).fill(0)
     const positions = [
-      [8, 8], [24, 8], [40, 8], [56, 8],
-      [8, 56], [24, 56], [40, 56], [56, 56],
+      [8, 8],
+      [24, 8],
+      [40, 8],
+      [56, 8],
+      [8, 56],
+      [24, 56],
+      [40, 56],
+      [56, 56],
     ] as [number, number][]
     for (const [cx, cy] of positions) addBlob(img, cx, cy, 4)
     expect(detectBlobs(img)).toBeNull()

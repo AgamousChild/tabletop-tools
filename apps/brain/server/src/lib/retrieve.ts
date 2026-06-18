@@ -1,43 +1,57 @@
-import { detectFactions, stripFactionFromQuery, extractMechanicKeywords, FACTION_PATTERNS, SUBFACTION_TO_PARENT } from './faction-detect'
-import { fetchNodesFromR2, fetchConnectedNodes } from './fetch-nodes'
+import {
+  detectFactions,
+  extractMechanicKeywords,
+  FACTION_PATTERNS,
+  stripFactionFromQuery,
+  SUBFACTION_TO_PARENT,
+} from './faction-detect'
+import { fetchConnectedNodes, fetchNodesFromR2 } from './fetch-nodes'
 import type { Node } from './model'
-import { aggregateToRecords, fetchAllChildren, classifyNode } from './records'
 import type { AggregatedRecord } from './records'
+import { aggregateToRecords, classifyNode, fetchAllChildren } from './records'
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
 export interface RetrieveOptions {
   query: string
-  limit?: number               // default 10, max 50
+  limit?: number // default 10, max 50
   filter?: {
     layer?: string
     category?: string
     factionId?: string
     phase?: string
   }
-  includeConnected?: boolean   // Ask wants connected nodes; Search/Graph don't
-  connectedDepth?: number      // default 1
-  dualEmbedding?: boolean      // true for Ask — generates keyword embedding too
-  returnRecords?: boolean      // Search wants aggregated AggregatedRecord[]; Ask/Graph don't
-  page?: number                // 1-based page number (used by callers, not by retrieve itself)
-  pageSize?: number            // page size (used by callers, not by retrieve itself)
+  includeConnected?: boolean // Ask wants connected nodes; Search/Graph don't
+  connectedDepth?: number // default 1
+  dualEmbedding?: boolean // true for Ask — generates keyword embedding too
+  returnRecords?: boolean // Search wants aggregated AggregatedRecord[]; Ask/Graph don't
+  page?: number // 1-based page number (used by callers, not by retrieve itself)
+  pageSize?: number // page size (used by callers, not by retrieve itself)
 }
 
 export interface EnrichedNode {
   id: string
-  score: number                // Vectorize relevance score (0-1)
+  score: number // Vectorize relevance score (0-1)
   title: string
   summary: string
   content: string
   layer: string
   category: string
   factionId?: string
-  factionName?: string         // Preferred display name (e.g., "SPACE MARINES")
+  factionName?: string // Preferred display name (e.g., "SPACE MARINES")
   subfaction?: string
   phase?: string
   datasheetId?: string
-  parentUnit?: string          // resolved from parentMap
-  sources: Array<{ type: string; title: string; url?: string; page?: number; section?: string; timestamp?: string; retrievedAt: string }>
+  parentUnit?: string // resolved from parentMap
+  sources: Array<{
+    type: string
+    title: string
+    url?: string
+    page?: number
+    section?: string
+    timestamp?: string
+    retrievedAt: string
+  }>
   keywords: string[]
 }
 
@@ -59,9 +73,9 @@ export interface RetrieveResult {
 // Uses `any` for ai/vectorize to avoid coupling to Cloudflare Workers types
 // which have complex union return types that don't match our simplified interface.
 export interface RetrieveEnv {
-  ai: any       // Cloudflare AI binding — we call .run('@cf/baai/bge-base-en-v1.5', { text })
+  ai: any // Cloudflare AI binding — we call .run('@cf/baai/bge-base-en-v1.5', { text })
   vectorize: any // Cloudflare Vectorize binding — we call .query(vector, opts)
-  bucket: any    // R2Bucket
+  bucket: any // R2Bucket
 }
 
 // ── VectorizeMatch type ───────────────────────────────────────────────────────
@@ -74,8 +88,17 @@ interface VectorizeMatch {
 
 // ── Pipeline ─────────────────────────────────────────────────────────────────
 
-export async function retrieve(options: RetrieveOptions, env: RetrieveEnv): Promise<RetrieveResult> {
-  const { query, filter, includeConnected = false, connectedDepth = 2, dualEmbedding = false } = options
+export async function retrieve(
+  options: RetrieveOptions,
+  env: RetrieveEnv,
+): Promise<RetrieveResult> {
+  const {
+    query,
+    filter,
+    includeConnected = false,
+    connectedDepth = 2,
+    dualEmbedding = false,
+  } = options
   const limit = Math.min(options.limit ?? 10, 50)
 
   // Step 1: Detect factions
@@ -98,17 +121,20 @@ export async function retrieve(options: RetrieveOptions, env: RetrieveEnv): Prom
   // that contains a faction word (e.g., "Genestealers" contains "genestealer").
   const strippedIsEmpty = strippedQuery.trim().length <= 3
   const escRe = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
-  const queryMatchesFactionExactly = FACTION_PATTERNS.some(({ pattern }) => {
-    const re = new RegExp(`^\\s*${escRe(pattern)}s?\\s*$`, 'i')
-    return re.test(query)
-  }) || Object.keys(SUBFACTION_TO_PARENT).some(sf => {
-    const re = new RegExp(`^\\s*${escRe(sf)}s?\\s*$`, 'i')
-    return re.test(query)
-  })
-  const isFactionBrowse = detected.factions.length > 0
-    && strippedIsEmpty
-    && keywords.length === 0
-    && queryMatchesFactionExactly
+  const queryMatchesFactionExactly =
+    FACTION_PATTERNS.some(({ pattern }) => {
+      const re = new RegExp(`^\\s*${escRe(pattern)}s?\\s*$`, 'i')
+      return re.test(query)
+    }) ||
+    Object.keys(SUBFACTION_TO_PARENT).some((sf) => {
+      const re = new RegExp(`^\\s*${escRe(sf)}s?\\s*$`, 'i')
+      return re.test(query)
+    })
+  const isFactionBrowse =
+    detected.factions.length > 0 &&
+    strippedIsEmpty &&
+    keywords.length === 0 &&
+    queryMatchesFactionExactly
 
   if (isFactionBrowse) {
     // Try to find the faction root node first — if it exists, return it as the
@@ -117,7 +143,17 @@ export async function retrieve(options: RetrieveOptions, env: RetrieveEnv): Prom
     if (factionRootResult) return factionRootResult
 
     // Fallback: old-style faction browse (for factions without a root node)
-    return await factionBrowse(detected, strippedQuery, keywords, limit, includeConnected, connectedDepth, env, query, options.returnRecords)
+    return await factionBrowse(
+      detected,
+      strippedQuery,
+      keywords,
+      limit,
+      includeConnected,
+      connectedDepth,
+      env,
+      query,
+      options.returnRecords,
+    )
   }
 
   // ── Semantic search mode (normal path) ───────────────────────────────────
@@ -138,7 +174,9 @@ export async function retrieve(options: RetrieveOptions, env: RetrieveEnv): Prom
   // Step 5: If dualEmbedding and keywords exist, generate keyword embedding
   let keywordVector: number[] | null = null
   if (dualEmbedding && keywords.length > 0) {
-    const keywordResult = await env.ai.run('@cf/baai/bge-base-en-v1.5', { text: [keywords.join(' ')] })
+    const keywordResult = await env.ai.run('@cf/baai/bge-base-en-v1.5', {
+      text: [keywords.join(' ')],
+    })
     keywordVector = keywordResult.data[0]!
   }
 
@@ -157,9 +195,7 @@ export async function retrieve(options: RetrieveOptions, env: RetrieveEnv): Prom
   }
 
   // Step 6: Query Vectorize — single unfiltered query to get all record types
-  const [primaryMatches] = await Promise.all([
-    env.vectorize.query(primaryVector, vectorizeOpts),
-  ])
+  const primaryMatches = await env.vectorize.query(primaryVector, vectorizeOpts)
 
   // Step 6b: If original query differs from stripped, also search with the unstripped text
   let originalMatches: { matches: VectorizeMatch[] } = { matches: [] }
@@ -187,7 +223,7 @@ export async function retrieve(options: RetrieveOptions, env: RetrieveEnv): Prom
     }
   }
 
-  let allMatches = [...mergedMap.values()]
+  const allMatches = [...mergedMap.values()]
 
   // Step 8: Post-filter by faction (keep faction-match + generic), then subfaction
   // BUT always keep datasheets whose title matches the original query (unit might be cross-faction)
@@ -196,15 +232,18 @@ export async function retrieve(options: RetrieveOptions, env: RetrieveEnv): Prom
 
   let filtered = allMatches
   if (detectedFactionSet.size > 0) {
-    filtered = allMatches.filter(m => {
+    filtered = allMatches.filter((m) => {
       const mFaction = m.metadata?.factionId
       // Keep nodes with no faction (generic)
       if (!mFaction) return true
       // Keep nodes matching detected faction
       if (detectedFactionSet.has(mFaction)) return true
       // Keep datasheets whose title matches the original query (cross-faction units)
-      if (m.metadata?.category === 'datasheet' &&
-          (m.metadata?.title as string)?.toLowerCase() === queryLowerForFilter) return true
+      if (
+        m.metadata?.category === 'datasheet' &&
+        (m.metadata?.title as string)?.toLowerCase() === queryLowerForFilter
+      )
+        return true
       return false
     })
   }
@@ -212,7 +251,7 @@ export async function retrieve(options: RetrieveOptions, env: RetrieveEnv): Prom
   // Subfaction post-filter: keep subfaction-match + generic (no subfaction)
   if (detected.subfaction) {
     const sub = detected.subfaction
-    filtered = filtered.filter(m => {
+    filtered = filtered.filter((m) => {
       const mSub = m.metadata?.subfaction
       if (!mSub) return true
       return mSub === sub
@@ -242,13 +281,13 @@ export async function retrieve(options: RetrieveOptions, env: RetrieveEnv): Prom
 
   // Step 11: Fetch full node content from R2
   // Use originalId from metadata (Vectorize IDs may be hashed for long node IDs)
-  const nodeIds = limitedMatches.map(m => (m.metadata?.originalId as string) || m.id)
+  const nodeIds = limitedMatches.map((m) => (m.metadata?.originalId as string) || m.id)
   const nodes = await fetchNodesFromR2(env.bucket, nodeIds)
-  const nodesById = new Map<string, Node>(nodes.map(n => [n.id, n]))
+  const nodesById = new Map<string, Node>(nodes.map((n) => [n.id, n]))
 
   // Step 12: Enrich results — merge Vectorize metadata (score) with full node content
   const results: EnrichedNode[] = limitedMatches
-    .map(m => {
+    .map((m) => {
       const originalId = (m.metadata?.originalId as string) || m.id
       const node = nodesById.get(originalId)
       if (!node) return null
@@ -260,24 +299,32 @@ export async function retrieve(options: RetrieveOptions, env: RetrieveEnv): Prom
   // and inject them at position 0 if not already present. Covers cross-faction units,
   // army rules, CA cards, tournament companion rules, etc.
   // Skip child categories (weapons, abilities) — they'll be aggregated into parent records.
-  const CHILD_CATEGORIES = new Set(['weapon', 'unit-ability', 'wargear-option', 'leader-attachment', 'unit-composition'])
-  const resultIdSet = new Set(results.map(r => r.id))
+  const CHILD_CATEGORIES = new Set([
+    'weapon',
+    'unit-ability',
+    'wargear-option',
+    'leader-attachment',
+    'unit-composition',
+  ])
+  const resultIdSet = new Set(results.map((r) => r.id))
   const queryTitleLower = query.toLowerCase().trim()
 
   const manifestObj = await env.bucket.get('manifest.json')
   if (manifestObj) {
-    const manifest = await manifestObj.json() as { files: Record<string, string> }
+    const manifest = (await manifestObj.json()) as { files: Record<string, string> }
     const titleMatches: EnrichedNode[] = []
 
     for (const file of Object.keys(manifest.files)) {
       if (!file.startsWith('nodes/')) continue
       const obj = await env.bucket.get(file)
       if (!obj) continue
-      const fileNodes = await obj.json() as Node[]
+      const fileNodes = (await obj.json()) as Node[]
       for (const n of fileNodes) {
-        if (!CHILD_CATEGORIES.has(n.category) &&
-            n.title.toLowerCase() === queryTitleLower &&
-            !resultIdSet.has(n.id)) {
+        if (
+          !CHILD_CATEGORIES.has(n.category) &&
+          n.title.toLowerCase() === queryTitleLower &&
+          !resultIdSet.has(n.id)
+        ) {
           titleMatches.push(enrichNode(n, 1.0, new Map()))
           resultIdSet.add(n.id)
         }
@@ -294,15 +341,21 @@ export async function retrieve(options: RetrieveOptions, env: RetrieveEnv): Prom
   let parentMap = new Map<string, string>()
 
   if (includeConnected && nodeIds.length > 0) {
-    const factionFilter = detected.factions.length > 0
-      ? { factionId: detected.factions[0], subfaction: detected.subfaction }
-      : undefined
+    const factionFilter =
+      detected.factions.length > 0
+        ? { factionId: detected.factions[0], subfaction: detected.subfaction }
+        : undefined
 
-    const connectedResult = await fetchConnectedNodes(env.bucket, nodeIds, connectedDepth, factionFilter)
+    const connectedResult = await fetchConnectedNodes(
+      env.bucket,
+      nodeIds,
+      connectedDepth,
+      factionFilter,
+    )
     parentMap = connectedResult.parentMap
 
     // Step 14: Enrich connected nodes
-    connected = connectedResult.nodes.map(node => enrichNode(node, 0, parentMap))
+    connected = connectedResult.nodes.map((node) => enrichNode(node, 0, parentMap))
   }
 
   // Step 15: Aggregate into records (only when requested)
@@ -315,7 +368,7 @@ export async function retrieve(options: RetrieveOptions, env: RetrieveEnv): Prom
     for (const r of results) {
       if (seenIds.has(r.id)) continue
       // Try to find in already-fetched nodes first
-      const existing = nodes.find(n => n.id === r.id)
+      const existing = nodes.find((n) => n.id === r.id)
       if (existing) {
         allResultNodes.push(existing)
         seenIds.add(r.id)
@@ -323,7 +376,10 @@ export async function retrieve(options: RetrieveOptions, env: RetrieveEnv): Prom
         // Fetch from R2 (title-match injection)
         const fetched = await fetchNodesFromR2(env.bucket, [r.id])
         for (const n of fetched) {
-          if (!seenIds.has(n.id)) { allResultNodes.push(n); seenIds.add(n.id) }
+          if (!seenIds.has(n.id)) {
+            allResultNodes.push(n)
+            seenIds.add(n.id)
+          }
         }
       }
     }
@@ -356,7 +412,10 @@ export async function retrieve(options: RetrieveOptions, env: RetrieveEnv): Prom
  * 4. Aggregate nodes into records.
  * 5. Fetch ALL children for unit records (complete weapon/ability lists).
  */
-async function buildRecords(nodes: Node[], bucket: RetrieveEnv['bucket']): Promise<AggregatedRecord[]> {
+async function buildRecords(
+  nodes: Node[],
+  bucket: RetrieveEnv['bucket'],
+): Promise<AggregatedRecord[]> {
   // Step 1: Build allNodes map from already-fetched nodes
   const allNodesMap = new Map<string, Node>()
   for (const node of nodes) allNodesMap.set(node.id, node)
@@ -380,12 +439,10 @@ async function buildRecords(nodes: Node[], bucket: RetrieveEnv['bucket']): Promi
   }
 
   // Step 4: Aggregate
-  let records = aggregateToRecords(nodes, allNodesMap)
+  const records = aggregateToRecords(nodes, allNodesMap)
 
   // Step 5: Fetch ALL children for unit records (weapons, abilities, etc.)
-  const datasheetIds = records
-    .filter(r => r.type === 'unit')
-    .map(r => r.primaryNode.id)
+  const datasheetIds = records.filter((r) => r.type === 'unit').map((r) => r.primaryNode.id)
 
   if (datasheetIds.length > 0) {
     const allChildren = await fetchAllChildren(bucket, datasheetIds)
@@ -412,11 +469,7 @@ async function buildRecords(nodes: Node[], bucket: RetrieveEnv['bucket']): Promi
  * Returns a sort rank for a Vectorize match:
  * 0 = subfaction-matched, 1 = faction-matched, 2 = generic
  */
-function matchRank(
-  match: VectorizeMatch,
-  detectedFactions: string[],
-  subfaction?: string,
-): number {
+function matchRank(match: VectorizeMatch, detectedFactions: string[], subfaction?: string): number {
   const mFaction = match.metadata?.factionId
   const mSub = match.metadata?.subfaction
 
@@ -452,7 +505,7 @@ async function factionRootBrowse(
   // Load all nodes to find the root and its connections
   const manifestObj = await env.bucket.get('manifest.json')
   if (!manifestObj) return null
-  const manifest = await manifestObj.json() as { files: Record<string, string> }
+  const manifest = (await manifestObj.json()) as { files: Record<string, string> }
 
   let rootNode: Node | null = null
   const allNodes = new Map<string, Node>()
@@ -461,7 +514,7 @@ async function factionRootBrowse(
     if (!file.startsWith('nodes/')) continue
     const obj = await env.bucket.get(file)
     if (!obj) continue
-    const nodes = await obj.json() as Node[]
+    const nodes = (await obj.json()) as Node[]
     for (const n of nodes) {
       allNodes.set(n.id, n)
       if (n.id === rootId) rootNode = n
@@ -473,7 +526,7 @@ async function factionRootBrowse(
   // Load reverse index to find what points TO this faction node
   const revObj = await env.bucket.get('refs/reverse-index.json')
   if (!revObj) return null
-  const revIndex = await revObj.json() as Record<string, Array<{ sourceId: string; rel: string }>>
+  const revIndex = (await revObj.json()) as Record<string, Array<{ sourceId: string; rel: string }>>
 
   const connectedIds = new Set<string>()
   const revRefs = revIndex[rootId] || []
@@ -484,7 +537,10 @@ async function factionRootBrowse(
   // Also check forward index for outgoing refs
   const fwdObj = await env.bucket.get('refs/forward-index.json')
   if (fwdObj) {
-    const fwdIndex = await fwdObj.json() as Record<string, Array<{ targetId: string; rel: string }>>
+    const fwdIndex = (await fwdObj.json()) as Record<
+      string,
+      Array<{ targetId: string; rel: string }>
+    >
     const fwdRefs = fwdIndex[rootId] || []
     for (const ref of fwdRefs) {
       connectedIds.add(ref.targetId)
@@ -504,7 +560,7 @@ async function factionRootBrowse(
 
   // Build records: root + connected as individual records for search display
   const allResultNodes = [rootNode, ...connectedNodesList]
-  const nodeMap = new Map<string, Node>(allResultNodes.map(n => [n.id, n]))
+  const nodeMap = new Map<string, Node>(allResultNodes.map((n) => [n.id, n]))
   const records = aggregateToRecords(allResultNodes, nodeMap)
 
   return {
@@ -546,9 +602,14 @@ async function factionBrowse(
   // Faction nodes are stored as nodes/faction-{slug}.json
   const manifestObj = await env.bucket.get('manifest.json')
   if (!manifestObj) {
-    return { detected: { factions: detected.factions, subfaction, strippedQuery, keywords }, results: [], connected: [], parentMap: new Map() }
+    return {
+      detected: { factions: detected.factions, subfaction, strippedQuery, keywords },
+      results: [],
+      connected: [],
+      parentMap: new Map(),
+    }
   }
-  const manifest = await manifestObj.json() as { files: Record<string, string> }
+  const manifest = (await manifestObj.json()) as { files: Record<string, string> }
 
   // Collect all nodes for this faction from both faction and unit layer files
   const factionFile = `nodes/faction-${factionId}.json`
@@ -561,18 +622,18 @@ async function factionBrowse(
     if (file === factionFile || file === 'nodes/core.json') {
       const obj = await env.bucket.get(file)
       if (obj) {
-        const nodes = await obj.json() as Node[]
+        const nodes = (await obj.json()) as Node[]
         allNodes.push(...nodes)
       }
     }
   }
 
   // Filter: keep nodes matching factionId or generic (no factionId)
-  let filtered = allNodes.filter(n => n.factionId === factionId || !n.factionId)
+  let filtered = allNodes.filter((n) => n.factionId === factionId || !n.factionId)
 
   // Subfaction filter: remove other chapters' content
   if (subfaction) {
-    filtered = filtered.filter(n => {
+    filtered = filtered.filter((n) => {
       if (!n.subfaction) return true // generic — keep
       return n.subfaction === subfaction // same subfaction — keep; other subfactions — drop
     })
@@ -582,17 +643,17 @@ async function factionBrowse(
   const CATEGORY_ORDER: Record<string, number> = {
     'detachment-rule': 0,
     'faction-ability': 1,
-    'stratagem': 2,
-    'enhancement': 3,
-    'datasheet': 4,
+    stratagem: 2,
+    enhancement: 3,
+    datasheet: 4,
     'unit-ability': 5,
-    'weapon': 6,
+    weapon: 6,
   }
 
   filtered.sort((a, b) => {
     // Subfaction first
-    const aSubRank = (subfaction && a.subfaction === subfaction) ? 0 : (!a.subfaction ? 1 : 2)
-    const bSubRank = (subfaction && b.subfaction === subfaction) ? 0 : (!b.subfaction ? 1 : 2)
+    const aSubRank = subfaction && a.subfaction === subfaction ? 0 : !a.subfaction ? 1 : 2
+    const bSubRank = subfaction && b.subfaction === subfaction ? 0 : !b.subfaction ? 1 : 2
     if (aSubRank !== bSubRank) return aSubRank - bSubRank
     // Then by category
     const aCat = CATEGORY_ORDER[a.category] ?? 7
@@ -604,23 +665,25 @@ async function factionBrowse(
 
   // No hard limit for faction browse — return all faction content
   // (limit only applies to Vectorize searches)
-  const results: EnrichedNode[] = filtered.map(n => enrichNode(n, 1.0, new Map()))
+  const results: EnrichedNode[] = filtered.map((n) => enrichNode(n, 1.0, new Map()))
 
   // Inject cross-faction datasheets whose title matches the original query
   // (e.g., "Genestealers" exists in both tyranids and genestealer-cults)
   if (originalQuery) {
     const titleLower = originalQuery.toLowerCase().trim()
-    const resultIdSet = new Set(results.map(r => r.id))
+    const resultIdSet = new Set(results.map((r) => r.id))
 
     for (const file of Object.keys(manifest.files)) {
       if (!file.startsWith('nodes/') || file === factionFile) continue
       const obj = await env.bucket.get(file)
       if (!obj) continue
-      const fileNodes = await obj.json() as Node[]
+      const fileNodes = (await obj.json()) as Node[]
       for (const n of fileNodes) {
-        if (n.category === 'datasheet' &&
-            n.title.toLowerCase() === titleLower &&
-            !resultIdSet.has(n.id)) {
+        if (
+          n.category === 'datasheet' &&
+          n.title.toLowerCase() === titleLower &&
+          !resultIdSet.has(n.id)
+        ) {
           results.unshift(enrichNode(n, 1.0, new Map()))
           resultIdSet.add(n.id)
         }
@@ -631,7 +694,7 @@ async function factionBrowse(
   // Build records if requested
   let records: AggregatedRecord[] | undefined
   if (returnRecords) {
-    const nodeMap = new Map<string, Node>(filtered.map(n => [n.id, n]))
+    const nodeMap = new Map<string, Node>(filtered.map((n) => [n.id, n]))
     records = aggregateToRecords(filtered, nodeMap)
   }
 

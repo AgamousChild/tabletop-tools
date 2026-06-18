@@ -1,11 +1,12 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { fireEvent, render, screen } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
 
 vi.mock('../lib/useGameData', () => ({
-  useUnitRoles: () => new Map([
-    ['u1', 'Battleline'],
-    ['u2', 'Characters'],
-  ]),
+  useUnitRoles: () =>
+    new Map([
+      ['u1', 'Battleline'],
+      ['u2', 'Characters'],
+    ]),
 }))
 
 import { UnitSelector } from './UnitSelector'

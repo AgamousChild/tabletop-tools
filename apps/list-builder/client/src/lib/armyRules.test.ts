@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 
-import { BATTLE_SIZES, validateArmy } from './armyRules'
 import type { BattleSize, ListUnit } from './armyRules'
+import { BATTLE_SIZES, validateArmy } from './armyRules'
 
 const strikeForce2000: BattleSize = BATTLE_SIZES[2] // 2000pts, max 3
 
@@ -74,7 +74,13 @@ describe('validateArmy', () => {
     const incursion = BATTLE_SIZES[0] // max 1 duplicate
     const units: ListUnit[] = [
       { unitContentId: 'u1', unitName: 'Captain', unitPoints: 100, count: 1, isWarlord: true },
-      { unitContentId: 'u2', unitName: 'Intercessors', unitPoints: 80, count: 3, role: 'Battleline' },
+      {
+        unitContentId: 'u2',
+        unitName: 'Intercessors',
+        unitPoints: 80,
+        count: 3,
+        role: 'Battleline',
+      },
     ]
     const errors = validateArmy(units, incursion)
     expect(errors.some((e) => e.type === 'DUPLICATE_LIMIT')).toBe(false)
@@ -84,7 +90,13 @@ describe('validateArmy', () => {
     const incursion = BATTLE_SIZES[0] // max 1 duplicate
     const units: ListUnit[] = [
       { unitContentId: 'u1', unitName: 'Captain', unitPoints: 100, count: 1, isWarlord: true },
-      { unitContentId: 'u2', unitName: 'Intercessors', unitPoints: 80, count: 3, role: 'Battleline' },
+      {
+        unitContentId: 'u2',
+        unitName: 'Intercessors',
+        unitPoints: 80,
+        count: 3,
+        role: 'Battleline',
+      },
       { unitContentId: 'u3', unitName: 'Aggressors', unitPoints: 120, count: 2, role: 'Infantry' },
     ]
     const errors = validateArmy(units, incursion)

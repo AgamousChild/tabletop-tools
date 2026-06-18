@@ -1,7 +1,8 @@
-import { describe, it, expect } from 'vitest'
-import { generateFormations } from './formations'
-import { isCoherent } from './coherency'
+import { describe, expect, it } from 'vitest'
+
 import { DEFAULT_10E_RULES } from '../types'
+import { isCoherent } from './coherency'
+import { generateFormations } from './formations'
 
 const rules = DEFAULT_10E_RULES
 

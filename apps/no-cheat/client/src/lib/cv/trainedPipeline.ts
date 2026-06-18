@@ -12,13 +12,13 @@
  * ML results override pip counts when available.
  */
 
-import { createPipeline } from './pipeline'
-import type { Pipeline, PipelineConfig, RoiResult } from './pipeline'
-import { extractFeatures } from './features'
-import { classifyKnn } from './knnClassifier'
-import type { TrainingExample } from './knnClassifier'
 import { rgbaToGray } from './background'
+import { extractFeatures } from './features'
+import type { TrainingExample } from './knnClassifier'
+import { classifyKnn } from './knnClassifier'
 import type { MlPipeline } from './mlPipeline'
+import type { Pipeline, PipelineConfig, RoiResult } from './pipeline'
+import { createPipeline } from './pipeline'
 
 export interface TrainedPipeline extends Pipeline {
   setExamples(examples: TrainingExample[]): void
@@ -72,22 +72,21 @@ export function createTrainedPipeline(
   let lastMlResults: RoiResult[] | null = null
   let mlRunning = false
 
-  function processFrame(
-    rgba: Uint8ClampedArray,
-    width: number,
-    height: number,
-  ): RoiResult[] {
+  function processFrame(rgba: Uint8ClampedArray, width: number, height: number): RoiResult[] {
     const baseResults = base.processFrame(rgba, width, height)
 
     // If ML pipeline is available, run it async (non-blocking)
     if (mlPipeline?.ready && !mlRunning) {
       mlRunning = true
-      mlPipeline.detect(rgba, width, height).then((results) => {
-        lastMlResults = results
-        mlRunning = false
-      }).catch(() => {
-        mlRunning = false
-      })
+      mlPipeline
+        .detect(rgba, width, height)
+        .then((results) => {
+          lastMlResults = results
+          mlRunning = false
+        })
+        .catch(() => {
+          mlRunning = false
+        })
     }
 
     // If we have fresh ML results, use them instead of base pipeline

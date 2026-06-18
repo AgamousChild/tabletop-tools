@@ -1,9 +1,19 @@
-import { describe, it, expect, beforeEach } from 'vitest'
+import { beforeEach, describe, expect, it } from 'vitest'
+
 import {
-  saveNodes, getNode, searchNodes, getNodesByLayer, getNodesByFaction,
-  saveRefs, getRefsFrom, getRefsTo,
-  getBrainMeta, setBrainMeta, clearBrainData,
-  type BrainNode, type StoredRef,
+  type BrainNode,
+  clearBrainData,
+  getBrainMeta,
+  getNode,
+  getNodesByFaction,
+  getNodesByLayer,
+  getRefsFrom,
+  getRefsTo,
+  saveNodes,
+  saveRefs,
+  searchNodes,
+  setBrainMeta,
+  type StoredRef,
 } from './store'
 
 const makeNode = (overrides: Partial<BrainNode> = {}): BrainNode => ({
@@ -62,9 +72,7 @@ describe('brain store', () => {
     })
 
     it('searches by title substring', async () => {
-      await saveNodes([
-        makeNode({ id: 'core:wound-roll', title: 'Wound Roll', keywords: [] }),
-      ])
+      await saveNodes([makeNode({ id: 'core:wound-roll', title: 'Wound Roll', keywords: [] })])
       const results = await searchNodes('Wound')
       expect(results).toHaveLength(1)
     })
@@ -81,8 +89,18 @@ describe('brain store', () => {
 
     it('filters nodes by factionId', async () => {
       await saveNodes([
-        makeNode({ id: 'faction:sm:oath', layer: 'faction', category: 'faction-ability', factionId: 'space-marines' }),
-        makeNode({ id: 'faction:necrons:rean', layer: 'faction', category: 'faction-ability', factionId: 'necrons' }),
+        makeNode({
+          id: 'faction:sm:oath',
+          layer: 'faction',
+          category: 'faction-ability',
+          factionId: 'space-marines',
+        }),
+        makeNode({
+          id: 'faction:necrons:rean',
+          layer: 'faction',
+          category: 'faction-ability',
+          factionId: 'necrons',
+        }),
       ])
       const smNodes = await getNodesByFaction('space-marines')
       expect(smNodes).toHaveLength(1)
@@ -147,12 +165,14 @@ describe('brain store', () => {
   describe('clearBrainData', () => {
     it('removes all data', async () => {
       await saveNodes([makeNode()])
-      await saveRefs([{
-        sourceId: 'core:a',
-        targetId: 'core:b',
-        rel: 'part_of',
-        context: 'test',
-      }])
+      await saveRefs([
+        {
+          sourceId: 'core:a',
+          targetId: 'core:b',
+          rel: 'part_of',
+          context: 'test',
+        },
+      ])
       await setBrainMeta({ lastSync: 123, fileHashes: {} })
 
       await clearBrainData()

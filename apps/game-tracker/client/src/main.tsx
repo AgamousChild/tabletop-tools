@@ -1,8 +1,8 @@
 import './index.css'
 
+import { renderApp } from '@tabletop-tools/ui'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { useState } from 'react'
-import { renderApp } from '@tabletop-tools/ui'
 
 import App from './App'
 import { createTRPCClient, trpc } from './lib/trpc'

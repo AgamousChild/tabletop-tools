@@ -1,0 +1,52 @@
+{
+  "_comment": "Per-entry content overrides for outline entries the pdftotext extraction can't reconstruct cleanly. Sourced from direct visual reads of the rendered PDF pages. Merged into the parser output: any entry whose ref appears here uses the override content + page instead of the auto-extracted body.",
+  "overrides": {
+    "00.02": {
+      "page": 6,
+      "content": "Top-level banner covering CORE CONCEPTS, DATASHEETS, MOVING, MAKING ATTACKS, ATTACK SEQUENCE, and OTHER CONCEPTS — the essential rules concepts of Warhammer 40,000, including how to use datasheets and how to move and attack with your models. Pages 6–25."
+    },
+    "01.03": {
+      "page": 8,
+      "content": "At any given time, one player is the 'active player' and their opponent is the 'opposing player'. Which player is which changes throughout the battle, but both players are always one or the other; whenever a player becomes the active player, their opponent becomes the opposing player, and vice versa.\n\nWhile it is neither player's turn (e.g. at the start or end of the battle round), the player who takes the first turn in each battle round is the active player.\n\nWhile it is a player's turn, that player is the active player, with the following exceptions:\n• Each time a unit is selected to move, that unit's controlling player is the active player until that move ends.\n• Each time a unit is selected to shoot or selected to fight, that unit's controlling player is the active player until those attacks are resolved."
+    },
+    "02.06": {
+      "page": 11,
+      "content": "This section details the number and types of models in the unit. Each of those models will have one set of default wargear, which will be listed here. It may also list other rules such as which units a leader unit can join or which units belong to a TRANSPORT."
+    },
+    "03.01.01": {
+      "page": 12,
+      "content": "Maximum distance is the upper bound a unit can move during a given move type. Each move type defines its own maximum distance — for example, a Normal Move has a maximum distance equal to the unit's M characteristic; an Advance Move adds the advance roll. The distance a model moves cannot exceed the unit's maximum distance for that move type. See the individual move types (Normal Move 09.05, Advance Move 09.06, Fall-back Move 09.07, etc.)."
+    },
+    "03.01.02": {
+      "page": 12,
+      "content": "Set-up distance is the distance from the battlefield edge or other reference point at which a unit being placed (deployment, ingress, etc.) is set up. Each move/setup type that places a unit defines its own set-up distance. See e.g. Disembark Move (09.02.02.05), Ingress Move (09.02.02.06), and the deployment rules."
+    },
+    "09.01": {
+      "page": 32,
+      "content": "Trigger any 'start of your Movement phase' abilities, then begin the MOVE UNITS step."
+    },
+    "07.04": {
+      "page": 27,
+      "isImage": true,
+      "content": "[Image — Battle Round diagram. See PDF page 27 for the visual sequence of phases.]"
+    },
+    "05.06": {
+      "page": 19,
+      "isImage": true,
+      "content": "[Image — Resolving Attack Dice example diagram. See PDF page 19.]"
+    },
+    "05.07": {
+      "page": 20,
+      "isImage": true,
+      "content": "[Image — Resolving Other Attacks example diagram. See PDF page 20.]"
+    },
+    "06.03.01": {
+      "page": 24,
+      "content": "Non-monster/non-vehicle units take 1 mortal wound when a hazard roll fails (a roll of 1–2 on D6)."
+    },
+    "06.03.02": {
+      "page": 24,
+      "content": "If every model in the unit is a MONSTER or VEHICLE, the unit takes 3 mortal wounds instead of 1 when a hazard roll fails."
+    }
+  }
+}

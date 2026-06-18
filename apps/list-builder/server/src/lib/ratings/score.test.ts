@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
-import { computeRatings, assignGrade } from './score'
+import { assignGrade, computeRatings } from './score'
 
 // A MatchRecord represents one tournament game result
 // with the unit IDs that were in the list and their points costs
@@ -137,7 +137,7 @@ describe('assignGrade', () => {
   })
 
   it('assigns A for winContrib >= 0.60', () => {
-    expect(assignGrade(0.60)).toBe('A')
+    expect(assignGrade(0.6)).toBe('A')
     expect(assignGrade(0.74)).toBe('A')
   })
 
@@ -147,7 +147,7 @@ describe('assignGrade', () => {
   })
 
   it('assigns C for winContrib >= 0.30', () => {
-    expect(assignGrade(0.30)).toBe('C')
+    expect(assignGrade(0.3)).toBe('C')
     expect(assignGrade(0.44)).toBe('C')
   })
 

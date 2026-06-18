@@ -2,10 +2,10 @@
 export function slugify(text: string): string {
   return text
     .toLowerCase()
-    .replace(/['\u2018\u2019\u2032]/g, '')  // remove apostrophes/smart quotes
-    .replace(/[^a-z0-9]+/g, '-')            // non-alphanumeric -> hyphen
-    .replace(/-+/g, '-')                     // collapse multiple hyphens
-    .replace(/^-|-$/g, '')                   // trim leading/trailing hyphens
+    .replace(/['\u2018\u2019\u2032]/g, '') // remove apostrophes/smart quotes
+    .replace(/[^a-z0-9]+/g, '-') // non-alphanumeric -> hyphen
+    .replace(/-+/g, '-') // collapse multiple hyphens
+    .replace(/^-|-$/g, '') // trim leading/trailing hyphens
 }
 
 // ── Node ID builders ────────────────────────────────────────────────────────

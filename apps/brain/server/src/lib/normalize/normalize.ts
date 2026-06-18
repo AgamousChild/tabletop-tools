@@ -11,10 +11,7 @@ function normalizeUnicode(text: string): string {
 
 /** Format stratagem keyword lines (WHEN:, TARGET:, EFFECT:, COST:). */
 function formatStratagemLines(text: string): string {
-  return text.replace(
-    /\b(WHEN|TARGET|EFFECT|COST):\s*/g,
-    '\n**$1:** ',
-  )
+  return text.replace(/\b(WHEN|TARGET|EFFECT|COST):\s*/g, '\n**$1:** ')
 }
 
 /** Insert line breaks at sentence boundaries within a block of text. */
@@ -80,5 +77,8 @@ export function normalizeMarkdown(input: string): string {
     parts.push(body)
   }
 
-  return parts.join('\n').replace(/\n{4,}/g, '\n\n\n').trim()
+  return parts
+    .join('\n')
+    .replace(/\n{4,}/g, '\n\n\n')
+    .trim()
 }

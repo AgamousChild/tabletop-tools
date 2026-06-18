@@ -1,46 +1,37 @@
 /// <reference types="vite/client" />
 
+import type {
+  Ability,
+  Datasheet,
+  DatasheetDetachmentAbility,
+  DatasheetEnhancement,
+  DatasheetModel,
+  DatasheetStratagem,
+  DatasheetWargear,
+  LeaderAttachment,
+  Mission,
+} from '@tabletop-tools/game-data-store'
 import {
-  saveDetachments,
+  saveAbilities,
+  saveDatasheetDetachmentAbilities,
+  saveDatasheetEnhancements,
+  saveDatasheetModels,
+  saveDatasheets,
+  saveDatasheetStratagems,
+  saveDatasheetWargear,
   saveDetachmentAbilities,
-  saveStratagems,
+  saveDetachments,
   saveEnhancements,
   saveLeaderAttachments,
+  saveMissions,
+  saveStratagems,
+  saveUnitAbilities,
   saveUnitCompositions,
   saveUnitCosts,
-  saveWargearOptions,
   saveUnitKeywords,
-  saveUnitAbilities,
-  saveDatasheets,
-  saveDatasheetWargear,
-  saveDatasheetModels,
-  saveMissions,
-  saveAbilities,
-  saveDatasheetStratagems,
-  saveDatasheetEnhancements,
-  saveDatasheetDetachmentAbilities,
-  setRulesImportMeta,
+  saveWargearOptions,
   searchUnits,
-} from '@tabletop-tools/game-data-store'
-import type {
-  Detachment,
-  DetachmentAbility,
-  Stratagem,
-  Enhancement,
-  LeaderAttachment,
-  UnitComposition,
-  UnitCost,
-  WargearOption,
-  UnitKeyword,
-  UnitAbility,
-  Datasheet,
-  DatasheetWargear,
-  DatasheetModel,
-  Mission,
-  Ability,
-  DatasheetStratagem,
-  DatasheetEnhancement,
-  DatasheetDetachmentAbility,
+  setRulesImportMeta,
 } from '@tabletop-tools/game-data-store'
 
 export interface RulesImportProgress {
@@ -117,8 +108,7 @@ async function buildIdMapping(
     // Multiple matches — try faction-based disambiguation
     const wahapediaFactionName = factionIdToName.get(ds.factionId)
     const factionMatch = wahapediaFactionName
-      ? candidates.find(c =>
-          normalizeName(c.faction) === normalizeName(wahapediaFactionName))
+      ? candidates.find((c) => normalizeName(c.faction) === normalizeName(wahapediaFactionName))
       : null
 
     if (factionMatch) {
@@ -141,7 +131,7 @@ function rekeyRecords<T extends { datasheetId: string }>(
   records: T[],
   idMap: Map<string, string>,
 ): T[] {
-  return records.map(r => {
+  return records.map((r) => {
     const bsdataId = idMap.get(r.datasheetId)
     if (bsdataId) {
       return { ...r, datasheetId: bsdataId }
@@ -159,7 +149,7 @@ function rekeyFactionIds<T extends { factionId: string }>(
   records: T[],
   factionCodeToName: Map<string, string>,
 ): T[] {
-  return records.map(r => {
+  return records.map((r) => {
     const fullName = factionCodeToName.get(r.factionId)
     if (fullName) {
       return { ...r, factionId: fullName }
@@ -175,7 +165,7 @@ function rekeyLeaderAttachments(
   records: LeaderAttachment[],
   idMap: Map<string, string>,
 ): LeaderAttachment[] {
-  return records.map(r => ({
+  return records.map((r) => ({
     ...r,
     leaderId: idMap.get(r.leaderId) ?? r.leaderId,
     attachedId: idMap.get(r.attachedId) ?? r.attachedId,
@@ -243,7 +233,7 @@ export async function importWahapediaRules(
   }
 
   // Re-key datasheets themselves (store with BSData IDs for consistency)
-  const rekeyedDatasheets = datasheets.map(ds => {
+  const rekeyedDatasheets = datasheets.map((ds) => {
     const bsdataId = idMap.get(ds.id)
     const fullFactionName = factionCodeToName.get(ds.factionId)
     return {
@@ -271,52 +261,72 @@ export async function importWahapediaRules(
 
   const steps: StepConfig[] = [
     {
-      file: 'detachments.json', label: 'Detachments', key: 'detachments',
+      file: 'detachments.json',
+      label: 'Detachments',
+      key: 'detachments',
       save: saveDetachments as (items: unknown[]) => Promise<void>,
       rekey: (items) => rekeyFactionIds(items as Array<{ factionId: string }>, factionCodeToName),
     },
     {
-      file: 'detachment_abilities.json', label: 'Detachment Abilities', key: 'detachmentAbilities',
+      file: 'detachment_abilities.json',
+      label: 'Detachment Abilities',
+      key: 'detachmentAbilities',
       save: saveDetachmentAbilities as (items: unknown[]) => Promise<void>,
       rekey: (items) => rekeyFactionIds(items as Array<{ factionId: string }>, factionCodeToName),
     },
     {
-      file: 'stratagems.json', label: 'Stratagems', key: 'stratagems',
+      file: 'stratagems.json',
+      label: 'Stratagems',
+      key: 'stratagems',
       save: saveStratagems as (items: unknown[]) => Promise<void>,
       rekey: (items) => rekeyFactionIds(items as Array<{ factionId: string }>, factionCodeToName),
     },
     {
-      file: 'enhancements.json', label: 'Enhancements', key: 'enhancements',
+      file: 'enhancements.json',
+      label: 'Enhancements',
+      key: 'enhancements',
       save: saveEnhancements as (items: unknown[]) => Promise<void>,
       rekey: (items) => rekeyFactionIds(items as Array<{ factionId: string }>, factionCodeToName),
     },
     {
-      file: 'leader_attachments.json', label: 'Leader Attachments', key: 'leaderAttachments',
+      file: 'leader_attachments.json',
+      label: 'Leader Attachments',
+      key: 'leaderAttachments',
       save: saveLeaderAttachments as (items: unknown[]) => Promise<void>,
       rekey: (items, map) => rekeyLeaderAttachments(items as LeaderAttachment[], map),
     },
     {
-      file: 'unit_compositions.json', label: 'Unit Compositions', key: 'unitCompositions',
+      file: 'unit_compositions.json',
+      label: 'Unit Compositions',
+      key: 'unitCompositions',
       save: saveUnitCompositions as (items: unknown[]) => Promise<void>,
       rekey: (items, map) => rekeyRecords(items as Array<{ datasheetId: string }>, map),
     },
     {
-      file: 'unit_costs.json', label: 'Unit Costs', key: 'unitCosts',
+      file: 'unit_costs.json',
+      label: 'Unit Costs',
+      key: 'unitCosts',
       save: saveUnitCosts as (items: unknown[]) => Promise<void>,
       rekey: (items, map) => rekeyRecords(items as Array<{ datasheetId: string }>, map),
     },
     {
-      file: 'wargear_options.json', label: 'Wargear Options', key: 'wargearOptions',
+      file: 'wargear_options.json',
+      label: 'Wargear Options',
+      key: 'wargearOptions',
       save: saveWargearOptions as (items: unknown[]) => Promise<void>,
       rekey: (items, map) => rekeyRecords(items as Array<{ datasheetId: string }>, map),
     },
     {
-      file: 'unit_keywords.json', label: 'Unit Keywords', key: 'unitKeywords',
+      file: 'unit_keywords.json',
+      label: 'Unit Keywords',
+      key: 'unitKeywords',
       save: saveUnitKeywords as (items: unknown[]) => Promise<void>,
       rekey: (items, map) => rekeyRecords(items as Array<{ datasheetId: string }>, map),
     },
     {
-      file: 'unit_abilities.json', label: 'Unit Abilities', key: 'unitAbilities',
+      file: 'unit_abilities.json',
+      label: 'Unit Abilities',
+      key: 'unitAbilities',
       save: saveUnitAbilities as (items: unknown[]) => Promise<void>,
       rekey: (items, map) => rekeyRecords(items as Array<{ datasheetId: string }>, map),
     },
@@ -477,6 +487,6 @@ export function isWahapediaAvailable(): Promise<boolean> {
   // Check if the first JSON file is accessible
   const baseUrl = `${import.meta.env.BASE_URL}wahapedia`
   return fetch(`${baseUrl}/factions.json`, { method: 'HEAD' })
-    .then(r => r.ok)
+    .then((r) => r.ok)
     .catch(() => false)
 }

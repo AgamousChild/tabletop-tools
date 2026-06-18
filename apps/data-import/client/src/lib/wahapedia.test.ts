@@ -1,6 +1,7 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { importWahapediaRules, isWahapediaAvailable } from './wahapedia'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
+
 import type { RulesImportProgress } from './wahapedia'
+import { importWahapediaRules, isWahapediaAvailable } from './wahapedia'
 
 // Mock game-data-store save functions
 const mockSaveDetachments = vi.fn().mockResolvedValue(undefined)
@@ -42,7 +43,8 @@ vi.mock('@tabletop-tools/game-data-store', () => ({
   saveAbilities: (...args: unknown[]) => mockSaveAbilities(...args),
   saveDatasheetStratagems: (...args: unknown[]) => mockSaveDatasheetStratagems(...args),
   saveDatasheetEnhancements: (...args: unknown[]) => mockSaveDatasheetEnhancements(...args),
-  saveDatasheetDetachmentAbilities: (...args: unknown[]) => mockSaveDatasheetDetachmentAbilities(...args),
+  saveDatasheetDetachmentAbilities: (...args: unknown[]) =>
+    mockSaveDatasheetDetachmentAbilities(...args),
   setRulesImportMeta: (...args: unknown[]) => mockSetRulesImportMeta(...args),
   searchUnits: (...args: unknown[]) => mockSearchUnits(...args),
 }))
@@ -56,9 +58,39 @@ const FACTIONS = [
 ]
 
 const DATASHEETS = [
-  { id: '000001453', name: 'Allarus Custodians', factionId: 'AC', role: 'Other', legend: '', transport: '', loadout: 'balistus grenade launcher; guardian spear.', damagedW: '', damagedDescription: '' },
-  { id: '000000100', name: 'Intercessor Squad', factionId: 'SM', role: 'Battleline', legend: '', transport: '', loadout: 'bolt pistol; bolt rifle.', damagedW: '', damagedDescription: '' },
-  { id: '000000001', name: 'Warboss', factionId: 'ORK', role: 'Characters', legend: '', transport: '', loadout: 'big choppa; kombi-weapon.', damagedW: '', damagedDescription: '' },
+  {
+    id: '000001453',
+    name: 'Allarus Custodians',
+    factionId: 'AC',
+    role: 'Other',
+    legend: '',
+    transport: '',
+    loadout: 'balistus grenade launcher; guardian spear.',
+    damagedW: '',
+    damagedDescription: '',
+  },
+  {
+    id: '000000100',
+    name: 'Intercessor Squad',
+    factionId: 'SM',
+    role: 'Battleline',
+    legend: '',
+    transport: '',
+    loadout: 'bolt pistol; bolt rifle.',
+    damagedW: '',
+    damagedDescription: '',
+  },
+  {
+    id: '000000001',
+    name: 'Warboss',
+    factionId: 'ORK',
+    role: 'Characters',
+    legend: '',
+    transport: '',
+    loadout: 'big choppa; kombi-weapon.',
+    damagedW: '',
+    damagedDescription: '',
+  },
 ]
 
 const BSDATA_UNITS = [
@@ -74,20 +106,44 @@ const DETACHMENTS = [
 ]
 
 const DETACHMENT_ABILITIES = [
-  { id: 'da-001', detachmentId: '000000863', factionId: 'AC', name: 'Martial Ka\'tah', legend: '', description: 'Re-roll one Hit roll...' },
+  {
+    id: 'da-001',
+    detachmentId: '000000863',
+    factionId: 'AC',
+    name: "Martial Ka'tah",
+    legend: '',
+    description: 'Re-roll one Hit roll...',
+  },
 ]
 
 const STRATAGEMS = [
-  { id: 'str-001', factionId: 'AC', detachmentId: '000000863', name: 'Arcane Genetic Alchemy', type: 'Battle Tactic', cpCost: '1', turn: 'Either', phase: 'Fight Phase', legend: '', description: 'Improve AP by 1' },
+  {
+    id: 'str-001',
+    factionId: 'AC',
+    detachmentId: '000000863',
+    name: 'Arcane Genetic Alchemy',
+    type: 'Battle Tactic',
+    cpCost: '1',
+    turn: 'Either',
+    phase: 'Fight Phase',
+    legend: '',
+    description: 'Improve AP by 1',
+  },
 ]
 
 const ENHANCEMENTS = [
-  { id: 'enh-001', factionId: 'AC', detachmentId: '000000863', name: 'Veiled Blade', legend: '', description: 'This model gains Stealth.', cost: '25' },
+  {
+    id: 'enh-001',
+    factionId: 'AC',
+    detachmentId: '000000863',
+    name: 'Veiled Blade',
+    legend: '',
+    description: 'This model gains Stealth.',
+    cost: '25',
+  },
 ]
 
-const LEADER_ATTACHMENTS = [
-  { id: 'la-001', leaderId: '000001453', attachedId: '000000100' },
-]
+const LEADER_ATTACHMENTS = [{ id: 'la-001', leaderId: '000001453', attachedId: '000000100' }]
 
 const UNIT_COMPOSITIONS = [
   { id: 'uc-001', datasheetId: '000001453', line: '3 models', description: '3 Allarus Custodians' },
@@ -95,12 +151,29 @@ const UNIT_COMPOSITIONS = [
 ]
 
 const UNIT_COSTS = [
-  { id: 'cost-001', datasheetId: '000001453', line: '3 models', description: '3 Allarus Custodians', cost: '195' },
-  { id: 'cost-002', datasheetId: '000000100', line: '5 models', description: '5 Intercessors', cost: '90' },
+  {
+    id: 'cost-001',
+    datasheetId: '000001453',
+    line: '3 models',
+    description: '3 Allarus Custodians',
+    cost: '195',
+  },
+  {
+    id: 'cost-002',
+    datasheetId: '000000100',
+    line: '5 models',
+    description: '5 Intercessors',
+    cost: '90',
+  },
 ]
 
 const WARGEAR_OPTIONS = [
-  { id: 'wo-001', datasheetId: '000001453', line: 'Any number', description: 'Replace guardian spear with castellan axe' },
+  {
+    id: 'wo-001',
+    datasheetId: '000001453',
+    line: 'Any number',
+    description: 'Replace guardian spear with castellan axe',
+  },
 ]
 
 const UNIT_KEYWORDS = [
@@ -109,18 +182,88 @@ const UNIT_KEYWORDS = [
 ]
 
 const UNIT_ABILITIES = [
-  { id: 'ua-001', datasheetId: '000001453', name: 'Slayers of Tyrants', description: '+1 to wound vs Characters', type: 'Other', abilityId: '', parameter: '' },
+  {
+    id: 'ua-001',
+    datasheetId: '000001453',
+    name: 'Slayers of Tyrants',
+    description: '+1 to wound vs Characters',
+    type: 'Other',
+    abilityId: '',
+    parameter: '',
+  },
 ]
 
 const DATASHEET_WARGEAR = [
-  { id: 9001, datasheetId: '000001453', name: 'Balistus grenade launcher', description: 'blast', range: '18', type: 'Ranged', attacks: 'D6', skill: '2', strength: '4', ap: '-1', damage: '1' },
-  { id: 9002, datasheetId: '000001453', name: 'Guardian spear', description: '', range: 'Melee', type: 'Melee', attacks: '5', skill: '2', strength: '7', ap: '-2', damage: '2' },
-  { id: 9003, datasheetId: '000000001', name: 'Big choppa', description: '', range: 'Melee', type: 'Melee', attacks: '5', skill: '2', strength: '8', ap: '-1', damage: '2' },
+  {
+    id: 9001,
+    datasheetId: '000001453',
+    name: 'Balistus grenade launcher',
+    description: 'blast',
+    range: '18',
+    type: 'Ranged',
+    attacks: 'D6',
+    skill: '2',
+    strength: '4',
+    ap: '-1',
+    damage: '1',
+  },
+  {
+    id: 9002,
+    datasheetId: '000001453',
+    name: 'Guardian spear',
+    description: '',
+    range: 'Melee',
+    type: 'Melee',
+    attacks: '5',
+    skill: '2',
+    strength: '7',
+    ap: '-2',
+    damage: '2',
+  },
+  {
+    id: 9003,
+    datasheetId: '000000001',
+    name: 'Big choppa',
+    description: '',
+    range: 'Melee',
+    type: 'Melee',
+    attacks: '5',
+    skill: '2',
+    strength: '8',
+    ap: '-1',
+    damage: '2',
+  },
 ]
 
 const DATASHEET_MODELS = [
-  { id: 1001, datasheetId: '000001453', name: 'Allarus Custodian', move: '5', toughness: '7', save: '2+', wounds: '4', leadership: '6+', oc: '2', invSv: '4+', invSvDescription: '', baseSize: '40mm' },
-  { id: 1002, datasheetId: '000000100', name: 'Intercessor', move: '6', toughness: '4', save: '3+', wounds: '2', leadership: '6+', oc: '2', invSv: '', invSvDescription: '', baseSize: '32mm' },
+  {
+    id: 1001,
+    datasheetId: '000001453',
+    name: 'Allarus Custodian',
+    move: '5',
+    toughness: '7',
+    save: '2+',
+    wounds: '4',
+    leadership: '6+',
+    oc: '2',
+    invSv: '4+',
+    invSvDescription: '',
+    baseSize: '40mm',
+  },
+  {
+    id: 1002,
+    datasheetId: '000000100',
+    name: 'Intercessor',
+    move: '6',
+    toughness: '4',
+    save: '3+',
+    wounds: '2',
+    leadership: '6+',
+    oc: '2',
+    invSv: '',
+    invSvDescription: '',
+    baseSize: '32mm',
+  },
 ]
 
 const MISSIONS = [
@@ -128,17 +271,25 @@ const MISSIONS = [
 ]
 
 const ABILITIES = [
-  { id: 'ability-001', name: 'Leader', legend: '', factionId: '', description: 'While this model is leading a unit...' },
-  { id: 'ability-002', name: 'Deadly Demise D3', legend: '', factionId: '', description: 'Roll D3 when destroyed...' },
+  {
+    id: 'ability-001',
+    name: 'Leader',
+    legend: '',
+    factionId: '',
+    description: 'While this model is leading a unit...',
+  },
+  {
+    id: 'ability-002',
+    name: 'Deadly Demise D3',
+    legend: '',
+    factionId: '',
+    description: 'Roll D3 when destroyed...',
+  },
 ]
 
-const DATASHEET_STRATAGEMS = [
-  { id: 1, datasheetId: '000001453', stratagemId: 'str-001' },
-]
+const DATASHEET_STRATAGEMS = [{ id: 1, datasheetId: '000001453', stratagemId: 'str-001' }]
 
-const DATASHEET_ENHANCEMENTS = [
-  { id: 1, datasheetId: '000001453', enhancementId: 'enh-001' },
-]
+const DATASHEET_ENHANCEMENTS = [{ id: 1, datasheetId: '000001453', enhancementId: 'enh-001' }]
 
 const DATASHEET_DETACHMENT_ABILITIES = [
   { id: 1, datasheetId: '000001453', detachmentAbilityId: 'da-001' },
@@ -174,24 +325,24 @@ function setupFetchMocks() {
   // 20: datasheet_detachment_abilities.json
 
   mockFetch
-    .mockResolvedValueOnce(jsonResponse(FACTIONS))                       // 1: factions
-    .mockResolvedValueOnce(jsonResponse(DATASHEETS))                     // 2: datasheets
-    .mockResolvedValueOnce(jsonResponse(DETACHMENTS))                    // 4: detachments
-    .mockResolvedValueOnce(jsonResponse(DETACHMENT_ABILITIES))           // 5: detachment_abilities
-    .mockResolvedValueOnce(jsonResponse(STRATAGEMS))                     // 6: stratagems
-    .mockResolvedValueOnce(jsonResponse(ENHANCEMENTS))                   // 7: enhancements
-    .mockResolvedValueOnce(jsonResponse(LEADER_ATTACHMENTS))             // 8: leader_attachments
-    .mockResolvedValueOnce(jsonResponse(UNIT_COMPOSITIONS))              // 9: unit_compositions
-    .mockResolvedValueOnce(jsonResponse(UNIT_COSTS))                     // 10: unit_costs
-    .mockResolvedValueOnce(jsonResponse(WARGEAR_OPTIONS))                // 11: wargear_options
-    .mockResolvedValueOnce(jsonResponse(UNIT_KEYWORDS))                  // 12: unit_keywords
-    .mockResolvedValueOnce(jsonResponse(UNIT_ABILITIES))                 // 13: unit_abilities
-    .mockResolvedValueOnce(jsonResponse(DATASHEET_WARGEAR))              // 14: datasheet_wargear
-    .mockResolvedValueOnce(jsonResponse(DATASHEET_MODELS))               // 15: datasheet_models
-    .mockResolvedValueOnce(jsonResponse(MISSIONS))                       // 16: missions
-    .mockResolvedValueOnce(jsonResponse(ABILITIES))                      // 17: abilities
-    .mockResolvedValueOnce(jsonResponse(DATASHEET_STRATAGEMS))           // 18: datasheet_stratagems
-    .mockResolvedValueOnce(jsonResponse(DATASHEET_ENHANCEMENTS))         // 19: datasheet_enhancements
+    .mockResolvedValueOnce(jsonResponse(FACTIONS)) // 1: factions
+    .mockResolvedValueOnce(jsonResponse(DATASHEETS)) // 2: datasheets
+    .mockResolvedValueOnce(jsonResponse(DETACHMENTS)) // 4: detachments
+    .mockResolvedValueOnce(jsonResponse(DETACHMENT_ABILITIES)) // 5: detachment_abilities
+    .mockResolvedValueOnce(jsonResponse(STRATAGEMS)) // 6: stratagems
+    .mockResolvedValueOnce(jsonResponse(ENHANCEMENTS)) // 7: enhancements
+    .mockResolvedValueOnce(jsonResponse(LEADER_ATTACHMENTS)) // 8: leader_attachments
+    .mockResolvedValueOnce(jsonResponse(UNIT_COMPOSITIONS)) // 9: unit_compositions
+    .mockResolvedValueOnce(jsonResponse(UNIT_COSTS)) // 10: unit_costs
+    .mockResolvedValueOnce(jsonResponse(WARGEAR_OPTIONS)) // 11: wargear_options
+    .mockResolvedValueOnce(jsonResponse(UNIT_KEYWORDS)) // 12: unit_keywords
+    .mockResolvedValueOnce(jsonResponse(UNIT_ABILITIES)) // 13: unit_abilities
+    .mockResolvedValueOnce(jsonResponse(DATASHEET_WARGEAR)) // 14: datasheet_wargear
+    .mockResolvedValueOnce(jsonResponse(DATASHEET_MODELS)) // 15: datasheet_models
+    .mockResolvedValueOnce(jsonResponse(MISSIONS)) // 16: missions
+    .mockResolvedValueOnce(jsonResponse(ABILITIES)) // 17: abilities
+    .mockResolvedValueOnce(jsonResponse(DATASHEET_STRATAGEMS)) // 18: datasheet_stratagems
+    .mockResolvedValueOnce(jsonResponse(DATASHEET_ENHANCEMENTS)) // 19: datasheet_enhancements
     .mockResolvedValueOnce(jsonResponse(DATASHEET_DETACHMENT_ABILITIES)) // 20: datasheet_det_abilities
 }
 
@@ -225,7 +376,7 @@ describe('importWahapediaRules', () => {
     setupFetchMocks()
     const progress: RulesImportProgress[] = []
 
-    const result = await importWahapediaRules(p => progress.push({ ...p }))
+    const result = await importWahapediaRules((p) => progress.push({ ...p }))
 
     expect(result.errors).toEqual([])
     expect(result.counts.datasheets).toBe(3)
@@ -251,13 +402,17 @@ describe('importWahapediaRules', () => {
     setupFetchMocks()
     const progress: RulesImportProgress[] = []
 
-    await importWahapediaRules(p => progress.push({ ...p }))
+    await importWahapediaRules((p) => progress.push({ ...p }))
 
     expect(progress).toHaveLength(20)
     expect(progress[0]).toEqual({ current: 1, total: 20, currentStep: 'Factions' })
     expect(progress[1]).toEqual({ current: 2, total: 20, currentStep: 'Datasheets' })
     expect(progress[2]).toEqual({ current: 3, total: 20, currentStep: 'Building ID mapping' })
-    expect(progress[19]).toEqual({ current: 20, total: 20, currentStep: 'Datasheet Detachment Abilities' })
+    expect(progress[19]).toEqual({
+      current: 20,
+      total: 20,
+      currentStep: 'Datasheet Detachment Abilities',
+    })
   })
 
   it('re-keys datasheet IDs from Wahapedia to BSData', async () => {
@@ -270,7 +425,9 @@ describe('importWahapediaRules', () => {
     const allarus = savedDatasheets.find((d: { name: string }) => d.name === 'Allarus Custodians')
     expect(allarus.id).toBe('bs-allarus-001')
 
-    const intercessors = savedDatasheets.find((d: { name: string }) => d.name === 'Intercessor Squad')
+    const intercessors = savedDatasheets.find(
+      (d: { name: string }) => d.name === 'Intercessor Squad',
+    )
     expect(intercessors.id).toBe('bs-intercessor-001')
 
     const warboss = savedDatasheets.find((d: { name: string }) => d.name === 'Warboss')
@@ -336,7 +493,9 @@ describe('importWahapediaRules', () => {
     await importWahapediaRules(() => {})
 
     const saved = mockSaveDatasheetWargear.mock.calls[0]![0]
-    const allarusWeapons = saved.filter((w: { datasheetId: string }) => w.datasheetId === 'bs-allarus-001')
+    const allarusWeapons = saved.filter(
+      (w: { datasheetId: string }) => w.datasheetId === 'bs-allarus-001',
+    )
     expect(allarusWeapons).toHaveLength(2)
     const orkWeapon = saved.find((w: { datasheetId: string }) => w.datasheetId === 'bs-warboss-001')
     expect(orkWeapon.name).toBe('Big choppa')
@@ -438,9 +597,7 @@ describe('importWahapediaRules', () => {
 
   it('handles unmatched datasheets gracefully (keeps Wahapedia ID)', async () => {
     // Only provide one BSData unit — others will be unmatched
-    mockSearchUnits.mockResolvedValue([
-      { id: 'bs-warboss-001', name: 'Warboss', faction: 'Orks' },
-    ])
+    mockSearchUnits.mockResolvedValue([{ id: 'bs-warboss-001', name: 'Warboss', faction: 'Orks' }])
     setupFetchMocks()
 
     const result = await importWahapediaRules(() => {})
@@ -523,7 +680,9 @@ describe('importWahapediaRules', () => {
     await importWahapediaRules(() => {})
 
     const saved = mockSaveDatasheetWargear.mock.calls[0]![0]
-    const grenadeLauncher = saved.find((w: { name: string }) => w.name === 'Balistus grenade launcher')
+    const grenadeLauncher = saved.find(
+      (w: { name: string }) => w.name === 'Balistus grenade launcher',
+    )
     expect(grenadeLauncher.range).toBe('18')
     expect(grenadeLauncher.attacks).toBe('D6')
     expect(grenadeLauncher.skill).toBe('2')

@@ -1,9 +1,8 @@
-import { TRPCError } from '@trpc/server'
 import { simulations } from '@tabletop-tools/db'
+import { protectedProcedure, router } from '@tabletop-tools/server-core'
+import { TRPCError } from '@trpc/server'
 import { and, desc, eq } from 'drizzle-orm'
 import { z } from 'zod'
-
-import { protectedProcedure, router } from '@tabletop-tools/server-core'
 
 const simResultSchema = z.object({
   expectedWounds: z.number(),

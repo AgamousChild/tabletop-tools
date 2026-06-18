@@ -27,7 +27,11 @@ export function PhotoCaptureScreen({ onCapture, required, label = 'Board Photo' 
 
       {preview ? (
         <div className="space-y-3">
-          <img src={preview} alt="Board photo preview" className="w-full rounded-lg border border-slate-700" />
+          <img
+            src={preview}
+            alt="Board photo preview"
+            className="w-full rounded-lg border border-slate-700"
+          />
           <div className="flex gap-2">
             <button
               onClick={() => onCapture(preview)}

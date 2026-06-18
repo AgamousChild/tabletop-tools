@@ -40,7 +40,10 @@ function extractTargetKeywords(node: Node): string[] {
     while ((match = pattern.exec(text)) !== null) {
       const raw = match[1]!.trim()
       // Split on / for multi-keyword targets
-      const parts = raw.split('/').map(p => p.trim()).filter(p => p.length > 1)
+      const parts = raw
+        .split('/')
+        .map((p) => p.trim())
+        .filter((p) => p.length > 1)
       for (const part of parts) {
         // Only keep if it looks like a game keyword (mostly uppercase)
         const upper = part.replace(/[^A-Z]/g, '').length
@@ -80,7 +83,7 @@ function isUpgrade(node: Node): boolean {
  * Looks for EPIC HERO in keywords.
  */
 function isEpicHero(node: Node): boolean {
-  return node.keywords.some(k => k.toLowerCase() === 'epic hero')
+  return node.keywords.some((k) => k.toLowerCase() === 'epic hero')
 }
 
 /**

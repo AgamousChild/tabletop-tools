@@ -1,4 +1,5 @@
 import { useState } from 'react'
+
 import { trpc } from '../lib/trpc'
 import { SessionHistory } from './SessionHistory'
 
@@ -12,8 +13,18 @@ type Props = {
   onTrainDetection: () => void
 }
 
-export function DiceSetDetailScreen({ diceSet, onBack, onStartSession, onSelectSession, onTrainDetection }: Props) {
-  const { data: sessions = [], isLoading, refetch } = trpc.session.list.useQuery({ diceSetId: diceSet.id })
+export function DiceSetDetailScreen({
+  diceSet,
+  onBack,
+  onStartSession,
+  onSelectSession,
+  onTrainDetection,
+}: Props) {
+  const {
+    data: sessions = [],
+    isLoading,
+    refetch,
+  } = trpc.session.list.useQuery({ diceSetId: diceSet.id })
   const deleteMutation = trpc.session.delete.useMutation({ onSuccess: () => refetch() })
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null)
 
@@ -44,16 +55,23 @@ export function DiceSetDetailScreen({ diceSet, onBack, onStartSession, onSelectS
           Sessions
         </h3>
         <p className="text-xs text-slate-500 mb-4">
-          Past recording sessions for this dice set. Tap "New Session" to start calibrating and recording rolls.
+          Past recording sessions for this dice set. Tap "New Session" to start calibrating and
+          recording rolls.
         </p>
 
         {isLoading ? (
           <p className="text-slate-400 text-center py-8">Loading…</p>
         ) : (
           <>
-            <SessionHistory sessions={sessions} onSelect={onSelectSession} onDelete={handleDelete} />
+            <SessionHistory
+              sessions={sessions}
+              onSelect={onSelectSession}
+              onDelete={handleDelete}
+            />
             {confirmDelete && (
-              <p className="text-xs text-red-400 text-center mt-1">Tap × again to confirm deletion</p>
+              <p className="text-xs text-red-400 text-center mt-1">
+                Tap × again to confirm deletion
+              </p>
             )}
           </>
         )}

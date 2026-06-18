@@ -1,9 +1,9 @@
 import type {
   CardData,
-  UnitCardData,
-  StratagemCardData,
   EnhancementCardData,
   RuleCardData,
+  StratagemCardData,
+  UnitCardData,
 } from '../components/cards/types'
 
 // ── BrainNode type ────────────────────────────────────────────────────────────
@@ -30,7 +30,9 @@ export interface BrainNode {
 /** Parse "M6" T4 Sv3+ W2 Ld6+ OC1" style stat line */
 function parseStatLine(content: string): UnitCardData['stats'] {
   const stats = { move: '-', toughness: '-', save: '-', wounds: '-', leadership: '-', oc: '-' }
-  const m = content.match(/M(\d+["\u201d\u2033]?)\s+T(\d+)\s+Sv(\d+\+)\s+W(\d+)\s+Ld(\d+\+)\s+OC(\d+)/)
+  const m = content.match(
+    /M(\d+["\u201d\u2033]?)\s+T(\d+)\s+Sv(\d+\+)\s+W(\d+)\s+Ld(\d+\+)\s+OC(\d+)/,
+  )
   if (m) {
     stats.move = m[1]!
     stats.toughness = m[2]!
@@ -49,7 +51,10 @@ function parseWeaponSection(content: string, section: string): string[] {
   const after = content.slice(sectionIdx + section.length)
   const nextSection = after.search(/Ranged weapons|Melee weapons|Abilities|Keywords/i)
   const block = nextSection === -1 ? after : after.slice(0, nextSection)
-  return block.split('\n').map(l => l.trim()).filter(l => l.length > 0)
+  return block
+    .split('\n')
+    .map((l) => l.trim())
+    .filter((l) => l.length > 0)
 }
 
 /** Parse WHEN/TARGET/EFFECT/CP/Phase fields from stratagem content */
@@ -82,7 +87,7 @@ function parseCost(content: string): string {
 function parseRestriction(content: string): string | undefined {
   // Look for a line containing "model only" or "models only" or "UNIT TYPE only"
   const lines = content.split('\n')
-  const restrictLine = lines.find(l => /model[s]? only/i.test(l))
+  const restrictLine = lines.find((l) => /model[s]? only/i.test(l))
   if (restrictLine) return restrictLine.trim()
   return undefined
 }
@@ -90,7 +95,7 @@ function parseRestriction(content: string): string | undefined {
 /** Parse ALL-CAPS heading sub-rules from content */
 function parseSubRules(content: string): { name: string; description: string }[] | undefined {
   // ALL-CAPS line (2+ words) treated as a sub-rule heading
-  const ALL_CAPS_LINE = /^([A-Z][A-Z\s''\-]{2,})$/
+  const ALL_CAPS_LINE = /^([A-Z][A-Z\s''-]{2,})$/
   const lines = content.split('\n')
   const subRules: { name: string; description: string }[] = []
   let current: { name: string; descLines: string[] } | null = null
@@ -132,15 +137,39 @@ function buildUnitData(node: BrainNode): UnitCardData {
     derivedType: content.match(/\*\*Derived Type:\*\*\s*(.+)/)?.[1]?.trim() || node.layer,
     points: '',
     stats: (() => {
-      const fnpKw = (node.keywords || []).find(k => /^fnp-\d$/.test(k))
+      const fnpKw = (node.keywords || []).find((k) => /^fnp-\d$/.test(k))
       return fnpKw ? { ...stats, fnp: `${fnpKw.replace('fnp-', '')}++` } : stats
     })(),
-    rangedWeapons: rangedLines.length > 0
-      ? [{ name: rangedLines[0] || '', range: '', attacks: '', skill: '', strength: '', ap: '', damage: '', abilities: rangedLines.slice(1).join(', ') }]
-      : [],
-    meleeWeapons: meleeLines.length > 0
-      ? [{ name: meleeLines[0] || '', range: 'Melee', attacks: '', skill: '', strength: '', ap: '', damage: '', abilities: meleeLines.slice(1).join(', ') }]
-      : [],
+    rangedWeapons:
+      rangedLines.length > 0
+        ? [
+            {
+              name: rangedLines[0] || '',
+              range: '',
+              attacks: '',
+              skill: '',
+              strength: '',
+              ap: '',
+              damage: '',
+              abilities: rangedLines.slice(1).join(', '),
+            },
+          ]
+        : [],
+    meleeWeapons:
+      meleeLines.length > 0
+        ? [
+            {
+              name: meleeLines[0] || '',
+              range: 'Melee',
+              attacks: '',
+              skill: '',
+              strength: '',
+              ap: '',
+              damage: '',
+              abilities: meleeLines.slice(1).join(', '),
+            },
+          ]
+        : [],
     abilities: [],
     coreAbilities: [],
     keywords: node.keywords || [],

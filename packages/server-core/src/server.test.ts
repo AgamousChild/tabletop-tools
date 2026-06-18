@@ -1,14 +1,15 @@
 import { createClient } from '@libsql/client'
-import { createDbFromClient, type Db } from '@tabletop-tools/db'
 import {
-  setupAuthTables,
   authCookie,
+  setupAuthTables,
   TEST_SECRET,
+  TEST_USER,
 } from '@tabletop-tools/auth/src/test-helpers'
+import { createDbFromClient, type Db } from '@tabletop-tools/db'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 
-import { router, publicProcedure, protectedProcedure, type BaseContext } from './trpc'
 import { createBaseServer } from './server'
+import { type BaseContext, protectedProcedure, publicProcedure, router } from './trpc'
 
 const client = createClient({ url: ':memory:' })
 let db: Db
@@ -37,9 +38,7 @@ function makeApp() {
 describe('createBaseServer', () => {
   it('serves tRPC endpoints at /trpc/*', async () => {
     const app = makeApp()
-    const res = await app.fetch(
-      new Request('http://localhost/trpc/health', { method: 'GET' }),
-    )
+    const res = await app.fetch(new Request('http://localhost/trpc/health', { method: 'GET' }))
     expect(res.status).toBe(200)
     const body = await res.json()
     expect(body.result.data).toEqual({ status: 'ok' })
@@ -83,22 +82,18 @@ describe('createBaseServer', () => {
     )
     expect(res.status).toBe(200)
     const body = await res.json()
-    expect(body.result.data).toEqual({ name: 'Alice' })
+    expect(body.result.data).toEqual({ name: TEST_USER.name })
   })
 
   it('returns 401 for protected procedures without auth', async () => {
     const app = makeApp()
-    const res = await app.fetch(
-      new Request('http://localhost/trpc/whoami', { method: 'GET' }),
-    )
+    const res = await app.fetch(new Request('http://localhost/trpc/whoami', { method: 'GET' }))
     expect(res.status).toBe(401)
   })
 
   it('returns 404 for non-tRPC paths', async () => {
     const app = makeApp()
-    const res = await app.fetch(
-      new Request('http://localhost/not-trpc', { method: 'GET' }),
-    )
+    const res = await app.fetch(new Request('http://localhost/not-trpc', { method: 'GET' }))
     expect(res.status).toBe(404)
   })
 

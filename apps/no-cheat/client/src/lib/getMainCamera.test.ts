@@ -1,4 +1,4 @@
-import { describe, expect, it, vi, beforeEach } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { getMainCamera } from './getMainCamera'
 
@@ -18,10 +18,9 @@ describe('getMainCamera', () => {
   it('returns the initial stream when there is only one back camera', async () => {
     const stream = mockStream()
     const getUserMedia = vi.fn().mockResolvedValue(stream)
-    const enumerateDevices = vi.fn().mockResolvedValue([
-      mockDevice('Back Camera', 'cam-1'),
-      mockDevice('Front Camera', 'cam-2'),
-    ])
+    const enumerateDevices = vi
+      .fn()
+      .mockResolvedValue([mockDevice('Back Camera', 'cam-1'), mockDevice('Front Camera', 'cam-2')])
     Object.defineProperty(navigator, 'mediaDevices', {
       value: { getUserMedia, enumerateDevices },
       configurable: true,
@@ -35,14 +34,17 @@ describe('getMainCamera', () => {
   it('re-opens with the main camera when multiple rear cameras exist', async () => {
     const initialStream = mockStream()
     const mainStream = mockStream()
-    const getUserMedia = vi.fn()
+    const getUserMedia = vi
+      .fn()
       .mockResolvedValueOnce(initialStream)
       .mockResolvedValueOnce(mainStream)
-    const enumerateDevices = vi.fn().mockResolvedValue([
-      mockDevice('Back Camera', 'cam-main'),
-      mockDevice('Back Ultra Wide Camera', 'cam-ultra'),
-      mockDevice('Front Camera', 'cam-front'),
-    ])
+    const enumerateDevices = vi
+      .fn()
+      .mockResolvedValue([
+        mockDevice('Back Camera', 'cam-main'),
+        mockDevice('Back Ultra Wide Camera', 'cam-ultra'),
+        mockDevice('Front Camera', 'cam-front'),
+      ])
     Object.defineProperty(navigator, 'mediaDevices', {
       value: { getUserMedia, enumerateDevices },
       configurable: true,
@@ -60,10 +62,12 @@ describe('getMainCamera', () => {
   it('skips re-selection when all rear cameras are ultra-wide or telephoto', async () => {
     const stream = mockStream()
     const getUserMedia = vi.fn().mockResolvedValue(stream)
-    const enumerateDevices = vi.fn().mockResolvedValue([
-      mockDevice('Back Ultra Wide Camera', 'cam-ultra'),
-      mockDevice('Back Telephoto Camera', 'cam-tele'),
-    ])
+    const enumerateDevices = vi
+      .fn()
+      .mockResolvedValue([
+        mockDevice('Back Ultra Wide Camera', 'cam-ultra'),
+        mockDevice('Back Telephoto Camera', 'cam-tele'),
+      ])
     Object.defineProperty(navigator, 'mediaDevices', {
       value: { getUserMedia, enumerateDevices },
       configurable: true,
@@ -90,10 +94,9 @@ describe('getMainCamera', () => {
   it('falls back when labels are empty (pre-permission)', async () => {
     const stream = mockStream()
     const getUserMedia = vi.fn().mockResolvedValue(stream)
-    const enumerateDevices = vi.fn().mockResolvedValue([
-      mockDevice('', 'cam-1'),
-      mockDevice('', 'cam-2'),
-    ])
+    const enumerateDevices = vi
+      .fn()
+      .mockResolvedValue([mockDevice('', 'cam-1'), mockDevice('', 'cam-2')])
     Object.defineProperty(navigator, 'mediaDevices', {
       value: { getUserMedia, enumerateDevices },
       configurable: true,
@@ -107,13 +110,16 @@ describe('getMainCamera', () => {
   it('excludes telephoto with "tele " prefix in label', async () => {
     const initialStream = mockStream()
     const mainStream = mockStream()
-    const getUserMedia = vi.fn()
+    const getUserMedia = vi
+      .fn()
       .mockResolvedValueOnce(initialStream)
       .mockResolvedValueOnce(mainStream)
-    const enumerateDevices = vi.fn().mockResolvedValue([
-      mockDevice('Back Camera', 'cam-main'),
-      mockDevice('Back Tele Camera', 'cam-tele'),
-    ])
+    const enumerateDevices = vi
+      .fn()
+      .mockResolvedValue([
+        mockDevice('Back Camera', 'cam-main'),
+        mockDevice('Back Tele Camera', 'cam-tele'),
+      ])
     Object.defineProperty(navigator, 'mediaDevices', {
       value: { getUserMedia, enumerateDevices },
       configurable: true,

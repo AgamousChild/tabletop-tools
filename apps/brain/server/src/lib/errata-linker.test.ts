@@ -1,5 +1,6 @@
-import { describe, it, expect } from 'vitest'
-import { matchErrataToTargets, findErrataForNode } from './errata-linker'
+import { describe, expect, it } from 'vitest'
+
+import { findErrataForNode, matchErrataToTargets } from './errata-linker'
 import type { Node } from './model'
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
@@ -99,17 +100,18 @@ describe('matchErrataToTargets', () => {
     const errata = makeErrataNode({
       id: 'errata-1',
       title: 'General Clarification',
-      content: 'The Overwatch rule is clarified as follows: you may only fire Overwatch once per phase.',
+      content:
+        'The Overwatch rule is clarified as follows: you may only fire Overwatch once per phase.',
     })
     const targets = [
       makeNode({ id: 'rule-1', title: 'Overwatch' }),
       makeNode({ id: 'rule-2', title: 'Rapid Fire' }),
     ]
     const matches = matchErrataToTargets(errata, targets)
-    const overwatchMatch = matches.find(m => m.targetId === 'rule-1')
+    const overwatchMatch = matches.find((m) => m.targetId === 'rule-1')
     expect(overwatchMatch).toBeDefined()
     expect(overwatchMatch!.score).toBe(0.5)
-    expect(matches.find(m => m.targetId === 'rule-2')).toBeUndefined()
+    expect(matches.find((m) => m.targetId === 'rule-2')).toBeUndefined()
   })
 
   it('keyword overlap match scores 0.3', () => {
@@ -124,10 +126,10 @@ describe('matchErrataToTargets', () => {
       makeNode({ id: 'rule-2', title: 'Other Rule', keywords: ['melee'] }),
     ]
     const matches = matchErrataToTargets(errata, targets)
-    const kwMatch = matches.find(m => m.targetId === 'rule-1')
+    const kwMatch = matches.find((m) => m.targetId === 'rule-1')
     expect(kwMatch).toBeDefined()
     expect(kwMatch!.score).toBe(0.3)
-    expect(matches.find(m => m.targetId === 'rule-2')).toBeUndefined()
+    expect(matches.find((m) => m.targetId === 'rule-2')).toBeUndefined()
   })
 
   it('requires at least 2 keywords for keyword overlap match', () => {
@@ -181,9 +183,7 @@ describe('matchErrataToTargets', () => {
       title: 'AP',
       content: 'Short title, should not match via substring.',
     })
-    const targets = [
-      makeNode({ id: 'rule-1', title: 'AP Weapon Profiles' }),
-    ]
+    const targets = [makeNode({ id: 'rule-1', title: 'AP Weapon Profiles' })]
     const matches = matchErrataToTargets(errata, targets)
     // "AP" is only 2 chars (after normalize), below 4-char minimum for substring
     expect(matches).toHaveLength(0)
@@ -198,7 +198,7 @@ describe('matchErrataToTargets', () => {
     // If errata is included in targetNodes, it should still match targets with same title
     const targets = [makeNode({ id: 'rule-1', title: 'Fight First' })]
     const matches = matchErrataToTargets(errata, targets)
-    expect(matches.every(m => m.targetId !== errata.id)).toBe(true)
+    expect(matches.every((m) => m.targetId !== errata.id)).toBe(true)
   })
 })
 
@@ -237,7 +237,9 @@ describe('findErrataForNode', () => {
         id: 'errata-1',
         title: 'Completely Different Title',
         content: 'Unrelated content.',
-        refs: [{ sourceId: 'errata-1', targetId: 'rule-42', rel: 'clarifies', context: 'direct ref' }],
+        refs: [
+          { sourceId: 'errata-1', targetId: 'rule-42', rel: 'clarifies', context: 'direct ref' },
+        ],
       }),
     ]
     const result = findErrataForNode(node, allErrata)

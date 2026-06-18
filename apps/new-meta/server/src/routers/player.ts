@@ -1,16 +1,19 @@
+import { glickoHistory, metaEvents, playerGlicko } from '@tabletop-tools/db'
+import { desc, eq, gte, like } from 'drizzle-orm'
 import { z } from 'zod'
-import { eq, desc, gte, like } from 'drizzle-orm'
-import { router, publicProcedure } from '../trpc.js'
-import { playerGlicko, glickoHistory, importedTournamentResults } from '@tabletop-tools/db'
+
+import { publicProcedure, router } from '../trpc.js'
 
 export const playerRouter = router({
   /** Glicko-2 leaderboard sorted by rating descending. */
   leaderboard: publicProcedure
     .input(
-      z.object({
-        limit: z.number().int().min(1).max(200).default(50),
-        minGames: z.number().int().min(0).default(10),
-      }).optional(),
+      z
+        .object({
+          limit: z.number().int().min(1).max(200).default(50),
+          minGames: z.number().int().min(0).default(10),
+        })
+        .optional(),
     )
     .query(async ({ ctx, input }) => {
       const limit = input?.limit ?? 50
@@ -24,16 +27,16 @@ export const playerRouter = router({
         .limit(limit)
 
       return rows.map((r) => ({
-          id: r.id,
-          userId: r.userId,
-          playerName: r.playerName,
-          rating: r.rating,
-          ratingDeviation: r.ratingDeviation,
-          volatility: r.volatility,
-          gamesPlayed: r.gamesPlayed,
-          displayRating: Math.round(r.rating),
-          displayBand: Math.round(2 * r.ratingDeviation),
-        }))
+        id: r.id,
+        userId: r.userId,
+        playerName: r.playerName,
+        rating: r.rating,
+        ratingDeviation: r.ratingDeviation,
+        volatility: r.volatility,
+        gamesPlayed: r.gamesPlayed,
+        displayRating: Math.round(r.rating),
+        displayBand: Math.round(2 * r.ratingDeviation),
+      }))
     }),
 
   /** Full profile for one player including rating history and recent results. */
@@ -61,10 +64,10 @@ export const playerRouter = router({
           delta: glickoHistory.delta,
           gamesInPeriod: glickoHistory.gamesInPeriod,
           recordedAt: glickoHistory.recordedAt,
-          eventName: importedTournamentResults.eventName,
+          eventName: metaEvents.name,
         })
         .from(glickoHistory)
-        .leftJoin(importedTournamentResults, eq(glickoHistory.ratingPeriod, importedTournamentResults.id))
+        .leftJoin(metaEvents, eq(glickoHistory.ratingPeriod, metaEvents.id))
         .where(eq(glickoHistory.playerId, input.playerId))
         .orderBy(desc(glickoHistory.recordedAt))
 
@@ -88,14 +91,14 @@ export const playerRouter = router({
         .where(like(playerGlicko.playerName, `%${input.name}%`))
 
       return rows.map((r) => ({
-          id: r.id,
-          userId: r.userId,
-          playerName: r.playerName,
-          rating: r.rating,
-          ratingDeviation: r.ratingDeviation,
-          gamesPlayed: r.gamesPlayed,
-          displayRating: Math.round(r.rating),
-          displayBand: Math.round(2 * r.ratingDeviation),
-        }))
+        id: r.id,
+        userId: r.userId,
+        playerName: r.playerName,
+        rating: r.rating,
+        ratingDeviation: r.ratingDeviation,
+        gamesPlayed: r.gamesPlayed,
+        displayRating: Math.round(r.rating),
+        displayBand: Math.round(2 * r.ratingDeviation),
+      }))
     }),
 })

@@ -1,5 +1,5 @@
-import type { Node } from './model'
 import { CHAPTER_KEYWORDS } from './filters'
+import type { Node } from './model'
 
 // ── Module-scope manifest cache ──────────────────────────────────────────────
 
@@ -31,7 +31,7 @@ export async function fetchNodesFromR2(bucket: R2Bucket, nodeIds: string[]): Pro
     cachedManifest = await manifestObj.json<{ files: Record<string, string> }>()
   }
 
-  const nodeFiles = Object.keys(cachedManifest.files).filter(f => f.startsWith('nodes/'))
+  const nodeFiles = Object.keys(cachedManifest.files).filter((f) => f.startsWith('nodes/'))
 
   const nodes: Node[] = []
   const idSet = new Set(nodeIds)
@@ -88,7 +88,7 @@ export async function fetchConnectedNodes(
   const reverseIndex = await revObj.json<Record<string, RevEntry[]>>()
   const forwardIndex = fwdObj
     ? await fwdObj.json<Record<string, FwdEntry[]>>()
-    : {} as Record<string, FwdEntry[]>
+    : ({} as Record<string, FwdEntry[]>)
 
   // Step 1: Reverse lookup — find all nodes that reference our search results
   const inboundRefs: RevEntry[] = []
@@ -113,24 +113,23 @@ export async function fetchConnectedNodes(
 
   // Priority by ID prefix: abilities/stratagems first, weapons last
   function refPriority(id: string): number {
-    if (id.startsWith('faction:')) return 0  // army-wide abilities — highest impact
-    if (id.startsWith('det:')) return 1      // detachment rules, stratagems, enhancements
-    if (id.startsWith('ability:')) return 2  // unit abilities (leader grants)
-    if (id.startsWith('weapon:')) return 4   // weapons — lowest priority (high volume)
+    if (id.startsWith('faction:')) return 0 // army-wide abilities — highest impact
+    if (id.startsWith('det:')) return 1 // detachment rules, stratagems, enhancements
+    if (id.startsWith('ability:')) return 2 // unit abilities (leader grants)
+    if (id.startsWith('weapon:')) return 4 // weapons — lowest priority (high volume)
     return 3
   }
 
   const factionHint = factionFilter?.factionId
 
-  const sortedRefs = [...uniqueRefs.entries()]
-    .sort((a, b) => {
-      const pa = refPriority(a[0])
-      const pb = refPriority(b[0])
-      if (pa !== pb) return pa - pb
-      const fa = a[1].factionId === factionHint ? 0 : 1
-      const fb = b[1].factionId === factionHint ? 0 : 1
-      return fa - fb
-    })
+  const sortedRefs = [...uniqueRefs.entries()].sort((a, b) => {
+    const pa = refPriority(a[0])
+    const pb = refPriority(b[0])
+    if (pa !== pb) return pa - pb
+    const fa = a[1].factionId === factionHint ? 0 : 1
+    const fb = b[1].factionId === factionHint ? 0 : 1
+    return fa - fb
+  })
 
   // Cap all categories — prevent flooding R2 fetches with hundreds of nodes.
   // The real relevance filter is downstream in the /ask handler (keyword scoring).
@@ -138,10 +137,7 @@ export async function fetchConnectedNodes(
   const MAX_WEAPONS = 30
   const highPriority = sortedRefs.filter(([id]) => refPriority(id) <= 3).slice(0, MAX_HIGH_PRIORITY)
   const weapons = sortedRefs.filter(([id]) => refPriority(id) === 4).slice(0, MAX_WEAPONS)
-  const selectedIds = [
-    ...highPriority.map(([id]) => id),
-    ...weapons.map(([id]) => id),
-  ]
+  const selectedIds = [...highPriority.map(([id]) => id), ...weapons.map(([id]) => id)]
 
   if (selectedIds.length === 0) return { nodes: [], parentMap: new Map() }
 
@@ -164,8 +160,9 @@ export async function fetchConnectedNodes(
   }
 
   // Step 4: Fetch connected nodes + their parents in one batch
-  const allToFetch = [...new Set([...selectedIds, ...parentIdsToFetch])]
-    .filter(id => !known.has(id))
+  const allToFetch = [...new Set([...selectedIds, ...parentIdsToFetch])].filter(
+    (id) => !known.has(id),
+  )
 
   let nodes = await fetchNodesFromR2(bucket, allToFetch)
 
@@ -177,7 +174,7 @@ export async function fetchConnectedNodes(
     // Determine which IDs are parents (needed for parentMap resolution) — keep them always
     const parentNodeIds = new Set<string>(parentIdsToFetch)
 
-    nodes = nodes.filter(node => {
+    nodes = nodes.filter((node) => {
       // Always keep parent nodes (they're needed for title resolution, not returned as content)
       if (parentNodeIds.has(node.id)) return true
       // Keep nodes with matching subfaction
@@ -199,7 +196,11 @@ export async function fetchConnectedNodes(
     const fwdRefs = forwardIndex[node.id]
     if (!fwdRefs) continue
     for (const ref of fwdRefs) {
-      if (ref.rel === 'stacks_with' && !known.has(ref.targetId) && !selectedIdSet.has(ref.targetId)) {
+      if (
+        ref.rel === 'stacks_with' &&
+        !known.has(ref.targetId) &&
+        !selectedIdSet.has(ref.targetId)
+      ) {
         // Apply faction filter to combo partners too
         if (factionFilter?.factionId) {
           // We don't have factionId on forward refs — fetch the node and check
@@ -213,8 +214,16 @@ export async function fetchConnectedNodes(
     const revRefs = reverseIndex[node.id]
     if (revRefs) {
       for (const ref of revRefs) {
-        if (ref.rel === 'stacks_with' && !known.has(ref.sourceId) && !selectedIdSet.has(ref.sourceId)) {
-          if (!factionFilter?.factionId || !ref.factionId || ref.factionId === factionFilter.factionId) {
+        if (
+          ref.rel === 'stacks_with' &&
+          !known.has(ref.sourceId) &&
+          !selectedIdSet.has(ref.sourceId)
+        ) {
+          if (
+            !factionFilter?.factionId ||
+            !ref.factionId ||
+            ref.factionId === factionFilter.factionId
+          ) {
             comboIds.add(ref.sourceId)
           }
         }
@@ -225,8 +234,9 @@ export async function fetchConnectedNodes(
   if (comboIds.size > 0) {
     const comboNodes = await fetchNodesFromR2(bucket, [...comboIds])
     // Filter combos by faction/subfaction
-    const filteredCombos = comboNodes.filter(n => {
-      if (factionFilter?.factionId && n.factionId && n.factionId !== factionFilter.factionId) return false
+    const filteredCombos = comboNodes.filter((n) => {
+      if (factionFilter?.factionId && n.factionId && n.factionId !== factionFilter.factionId)
+        return false
       if (subfactionFilter && n.subfaction && n.subfaction !== subfactionFilter) return false
       return true
     })
@@ -243,10 +253,13 @@ export async function fetchConnectedNodes(
   for (const [childId, parentId] of parentMap) {
     const parent = nodeById.get(parentId)
     if (parent) {
-      const chapter = parent.keywords?.find(k => CHAPTER_KEYWORDS.includes(k))
+      const chapter = parent.keywords?.find((k) => CHAPTER_KEYWORDS.includes(k))
       let chapterSuffix = ''
       if (chapter && chapter !== 'any chapter') {
-        chapterSuffix = ` [${chapter.split(' ').map(w => w[0]!.toUpperCase() + w.slice(1)).join(' ')} only]`
+        chapterSuffix = ` [${chapter
+          .split(' ')
+          .map((w) => w[0]!.toUpperCase() + w.slice(1))
+          .join(' ')} only]`
       } else if (chapter === 'any chapter') {
         chapterSuffix = ' [any chapter]'
       }
@@ -256,7 +269,7 @@ export async function fetchConnectedNodes(
 
   // Remove parent-only nodes from the returned list (they're only for title resolution)
   // Only return nodes that were in selectedIds (not parent-only fetches)
-  const contentNodes = nodes.filter(n => selectedIdSet.has(n.id))
+  const contentNodes = nodes.filter((n) => selectedIdSet.has(n.id))
 
   return { nodes: contentNodes, parentMap: resolvedParentMap }
 }

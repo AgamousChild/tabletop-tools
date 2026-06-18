@@ -1,5 +1,5 @@
-import { ErrataSection } from './ErrataSection'
 import { factionDisplayName } from '../../lib/faction-names'
+import { ErrataSection } from './ErrataSection'
 import type { CardContext, StratagemCardData } from './types'
 
 interface StratagemCardProps {
@@ -95,7 +95,8 @@ export function StratagemCard({ data, context }: StratagemCardProps) {
 
         {/* Type line — Type — Phase */}
         <p className="text-[11px] md:text-[13px] text-blue-400 mb-1">
-          {data.type}{data.phase ? ` — ${data.phase}` : ''}
+          {data.type}
+          {data.phase ? ` — ${data.phase}` : ''}
         </p>
 
         {/* Sections */}
@@ -125,7 +126,8 @@ export function StratagemCard({ data, context }: StratagemCardProps) {
 
         {/* Faction — Detachment footer */}
         <p className="text-[9px] text-slate-500 uppercase tracking-widest mt-1 pt-1 border-t border-slate-800">
-          {factionDisplayName(data.subfaction || data.factionId)}{data.detachmentName ? ` — ${data.detachmentName} Detachment` : ''}
+          {factionDisplayName(data.subfaction || data.factionId)}
+          {data.detachmentName ? ` — ${data.detachmentName} Detachment` : ''}
         </p>
       </div>
     </div>

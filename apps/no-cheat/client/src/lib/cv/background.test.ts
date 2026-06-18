@@ -1,6 +1,16 @@
 import { describe, expect, it } from 'vitest'
 
-import { absDiffGray, adaptiveThreshold, buildIntegralImage, dilate, erode, gaussianBlur, morphClose, otsuThreshold, rgbaToGray } from './background'
+import {
+  absDiffGray,
+  adaptiveThreshold,
+  buildIntegralImage,
+  dilate,
+  erode,
+  gaussianBlur,
+  morphClose,
+  otsuThreshold,
+  rgbaToGray,
+} from './background'
 
 function solidGray(value: number, count: number): Uint8Array {
   return new Uint8Array(count).fill(value)
@@ -184,12 +194,12 @@ describe('buildIntegralImage', () => {
     const sat = buildIntegralImage(gray, 3, 3)
     const iw = 4 // width+1
     // sat[y+1][x+1] = sum of rectangle (0,0)→(x,y)
-    expect(sat[1 * iw + 1]).toBe(1)       // sum(0,0→0,0) = 1
-    expect(sat[1 * iw + 2]).toBe(3)       // sum(0,0→1,0) = 1+2
-    expect(sat[1 * iw + 3]).toBe(6)       // sum(0,0→2,0) = 1+2+3
-    expect(sat[2 * iw + 1]).toBe(5)       // sum(0,0→0,1) = 1+4
-    expect(sat[2 * iw + 2]).toBe(12)      // sum(0,0→1,1) = 1+2+4+5
-    expect(sat[3 * iw + 3]).toBe(45)      // sum(0,0→2,2) = all values
+    expect(sat[1 * iw + 1]).toBe(1) // sum(0,0→0,0) = 1
+    expect(sat[1 * iw + 2]).toBe(3) // sum(0,0→1,0) = 1+2
+    expect(sat[1 * iw + 3]).toBe(6) // sum(0,0→2,0) = 1+2+3
+    expect(sat[2 * iw + 1]).toBe(5) // sum(0,0→0,1) = 1+4
+    expect(sat[2 * iw + 2]).toBe(12) // sum(0,0→1,1) = 1+2+4+5
+    expect(sat[3 * iw + 3]).toBe(45) // sum(0,0→2,2) = all values
   })
 
   it('uses Float64Array to avoid overflow', () => {

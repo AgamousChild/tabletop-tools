@@ -48,8 +48,12 @@ function makeZeroThreatMap(): ThreatOverlay {
   const numRows = Math.ceil(30 / 2) // 15
   const numCols = Math.ceil(44 / 2) // 22
   return {
-    shootingHeatMap: Array.from({ length: numRows }, () => new Array<number>(numCols).fill(0)),
-    meleeHeatMap: Array.from({ length: numRows }, () => new Array<number>(numCols).fill(0)),
+    shootingHeatMap: Array.from({ length: numRows }, () =>
+      Array.from<number>({ length: numCols }).fill(0),
+    ),
+    meleeHeatMap: Array.from({ length: numRows }, () =>
+      Array.from<number>({ length: numCols }).fill(0),
+    ),
     gridResolution: 2,
   }
 }
@@ -62,9 +66,11 @@ function makeUniformThreatMap(shootingVal: number, meleeVal: number): ThreatOver
   const numCols = Math.ceil(44 / 2)
   return {
     shootingHeatMap: Array.from({ length: numRows }, () =>
-      new Array<number>(numCols).fill(shootingVal),
+      Array.from<number>({ length: numCols }).fill(shootingVal),
     ),
-    meleeHeatMap: Array.from({ length: numRows }, () => new Array<number>(numCols).fill(meleeVal)),
+    meleeHeatMap: Array.from({ length: numRows }, () =>
+      Array.from<number>({ length: numCols }).fill(meleeVal),
+    ),
     gridResolution: 2,
   }
 }

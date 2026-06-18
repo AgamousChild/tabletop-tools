@@ -1,4 +1,5 @@
-import { describe, it, expect } from 'vitest'
+import { describe, expect, it } from 'vitest'
+
 import { parseRulesCommentary } from './rules-commentary'
 
 // Matches the structure from the new gw-sync structured PDF parser:
@@ -47,29 +48,29 @@ describe('parseRulesCommentary', () => {
   const result = parseRulesCommentary(SAMPLE_COMMENTARY, '2026-04-08')
 
   it('creates commentary nodes from errata entries', () => {
-    const commentary = result.nodes.filter(n => n.category === 'commentary')
+    const commentary = result.nodes.filter((n) => n.category === 'commentary')
     expect(commentary.length).toBeGreaterThanOrEqual(2)
   })
 
   it('creates FAQ nodes from FAQ section', () => {
-    const faqs = result.nodes.filter(n => n.category === 'faq')
+    const faqs = result.nodes.filter((n) => n.category === 'faq')
     expect(faqs.length).toBeGreaterThanOrEqual(2)
   })
 
   it('creates commentary nodes from Rules Commentary section', () => {
-    const charging = result.nodes.find(n => n.title === 'CHARGING')
+    const charging = result.nodes.find((n) => n.title === 'CHARGING')
     expect(charging).toBeDefined()
     expect(charging!.category).toBe('commentary')
     expect(charging!.content).toContain('wholly within')
   })
 
   it('generates clarifies refs', () => {
-    const clarifies = result.refs.filter(r => r.rel === 'clarifies')
+    const clarifies = result.refs.filter((r) => r.rel === 'clarifies')
     expect(clarifies.length).toBeGreaterThan(0)
   })
 
   it('extracts page numbers for source attribution', () => {
-    const withPage = result.nodes.find(n => n.sources[0]?.page !== undefined)
+    const withPage = result.nodes.find((n) => n.sources[0]?.page !== undefined)
     expect(withPage).toBeDefined()
   })
 
@@ -80,12 +81,12 @@ describe('parseRulesCommentary', () => {
   })
 
   it('skips meta headings like VERSION', () => {
-    const version = result.nodes.find(n => n.title.includes('VERSION'))
+    const version = result.nodes.find((n) => n.title.includes('VERSION'))
     expect(version).toBeUndefined()
   })
 
   it('is idempotent', () => {
     const result2 = parseRulesCommentary(SAMPLE_COMMENTARY, '2026-04-08')
-    expect(result2.nodes.map(n => n.id)).toEqual(result.nodes.map(n => n.id))
+    expect(result2.nodes.map((n) => n.id)).toEqual(result.nodes.map((n) => n.id))
   })
 })

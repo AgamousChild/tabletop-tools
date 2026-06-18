@@ -1,5 +1,5 @@
-import type { Point, Rect, DeploymentType, PlayerZone } from '../types'
 import { pointInQuarterCircle } from '../geometry/circle'
+import type { DeploymentType, PlayerZone, Point, Rect } from '../types'
 
 // ── Public API ────────────────────────────────────────────────────────────────
 
@@ -64,10 +64,10 @@ function oppositeZone(zone: PlayerZone): PlayerZone {
     'top-right': 'bottom-left',
     'bottom-left': 'top-right',
     'bottom-right': 'top-left',
-    'top': 'bottom',
-    'bottom': 'top',
-    'left': 'right',
-    'right': 'left',
+    top: 'bottom',
+    bottom: 'top',
+    left: 'right',
+    right: 'left',
   }
   return opposites[zone]
 }
@@ -85,7 +85,11 @@ function oppositeZone(zone: PlayerZone): PlayerZone {
 
 const SEARCH_AND_DESTROY_ARC_RADIUS = 9
 
-function searchAndDestroyZone(playerZone: PlayerZone, tableWidth: number, tableDepth: number): DeploymentZone {
+function searchAndDestroyZone(
+  playerZone: PlayerZone,
+  tableWidth: number,
+  tableDepth: number,
+): DeploymentZone {
   const hw = tableWidth / 2
   const hd = tableDepth / 2
   const origin: Point = { x: 0, y: 0 }
@@ -113,7 +117,10 @@ function searchAndDestroyZone(playerZone: PlayerZone, tableWidth: number, tableD
 }
 
 /** Returns true if p is strictly inside the named quadrant (excludes axes). */
-function inQuadrant(p: Point, quadrant: 'top-left' | 'top-right' | 'bottom-left' | 'bottom-right'): boolean {
+function inQuadrant(
+  p: Point,
+  quadrant: 'top-left' | 'top-right' | 'bottom-left' | 'bottom-right',
+): boolean {
   switch (quadrant) {
     case 'top-left':
       return p.x < 0 && p.y < 0
@@ -126,8 +133,12 @@ function inQuadrant(p: Point, quadrant: 'top-left' | 'top-right' | 'bottom-left'
   }
 }
 
-function isCornerZone(zone: PlayerZone): zone is 'top-left' | 'top-right' | 'bottom-left' | 'bottom-right' {
-  return zone === 'top-left' || zone === 'top-right' || zone === 'bottom-left' || zone === 'bottom-right'
+function isCornerZone(
+  zone: PlayerZone,
+): zone is 'top-left' | 'top-right' | 'bottom-left' | 'bottom-right' {
+  return (
+    zone === 'top-left' || zone === 'top-right' || zone === 'bottom-left' || zone === 'bottom-right'
+  )
 }
 
 /** Bounding rect for a quadrant, centered within the quadrant. */
@@ -163,7 +174,11 @@ function quadrantBounds(
 
 const DAWN_OF_WAR_GAP_HALF = 2 // 2" from center each side = 4" total gap
 
-function dawnOfWarZone(playerZone: PlayerZone, tableWidth: number, tableDepth: number): DeploymentZone {
+function dawnOfWarZone(
+  playerZone: PlayerZone,
+  tableWidth: number,
+  tableDepth: number,
+): DeploymentZone {
   if (!isEdgeZone(playerZone, 'top-bottom')) {
     throw new Error(`Dawn of War requires 'top' or 'bottom' playerZone, got '${playerZone}'`)
   }

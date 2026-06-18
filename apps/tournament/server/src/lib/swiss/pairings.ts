@@ -29,16 +29,15 @@ function sortPlayers(players: SwissPlayer[]): SwissPlayer[] {
   return [...players].sort((a, b) => {
     if (b.wins !== a.wins) return b.wins - a.wins
     if (b.margin !== a.margin) return b.margin - a.margin
-    if (b.strengthOfSchedule !== a.strengthOfSchedule) return b.strengthOfSchedule - a.strengthOfSchedule
+    if (b.strengthOfSchedule !== a.strengthOfSchedule)
+      return b.strengthOfSchedule - a.strengthOfSchedule
     return a.registeredAt - b.registeredAt
   })
 }
 
 function havePlayed(a: string, b: string, prev: PreviousPairing[]): boolean {
   return prev.some(
-    (p) =>
-      (p.player1Id === a && p.player2Id === b) ||
-      (p.player1Id === b && p.player2Id === a),
+    (p) => (p.player1Id === a && p.player2Id === b) || (p.player1Id === b && p.player2Id === a),
   )
 }
 
@@ -73,7 +72,11 @@ function pairGroup(
 
     // Try the natural swiss opponent first (top-half vs bottom-half)
     const naturalOpponent = remaining[half + i]
-    if (naturalOpponent && !used.has(naturalOpponent.id) && !havePlayed(top.id, naturalOpponent.id, prev)) {
+    if (
+      naturalOpponent &&
+      !used.has(naturalOpponent.id) &&
+      !havePlayed(top.id, naturalOpponent.id, prev)
+    ) {
       paired_with = naturalOpponent
     }
 

@@ -11,14 +11,26 @@ const mockSecondaries = [
 describe('SecondaryPicker', () => {
   it('shows label', () => {
     render(
-      <SecondaryPicker secondaries={[]} onAdd={vi.fn()} onRemove={vi.fn()} onScore={vi.fn()} currentRound={1} />,
+      <SecondaryPicker
+        secondaries={[]}
+        onAdd={vi.fn()}
+        onRemove={vi.fn()}
+        onScore={vi.fn()}
+        currentRound={1}
+      />,
     )
     expect(screen.getByText('Secondaries')).toBeInTheDocument()
   })
 
   it('shows empty dropdown when no available data', () => {
     render(
-      <SecondaryPicker secondaries={[]} onAdd={vi.fn()} onRemove={vi.fn()} onScore={vi.fn()} currentRound={1} />,
+      <SecondaryPicker
+        secondaries={[]}
+        onAdd={vi.fn()}
+        onRemove={vi.fn()}
+        onScore={vi.fn()}
+        currentRound={1}
+      />,
     )
     expect(screen.getByLabelText('Select secondary')).toBeInTheDocument()
     const options = screen.getByLabelText('Select secondary').querySelectorAll('option')
@@ -53,7 +65,9 @@ describe('SecondaryPicker', () => {
         availableSecondaries={mockSecondaries}
       />,
     )
-    fireEvent.change(screen.getByLabelText('Select secondary'), { target: { value: 'Assassination' } })
+    fireEvent.change(screen.getByLabelText('Select secondary'), {
+      target: { value: 'Assassination' },
+    })
     expect(onAdd).toHaveBeenCalledWith('Assassination')
   })
 

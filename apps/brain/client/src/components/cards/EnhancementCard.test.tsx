@@ -1,7 +1,8 @@
-import { describe, it, expect, vi } from 'vitest'
-import { render, screen, fireEvent } from '@testing-library/react'
+import { fireEvent, render, screen } from '@testing-library/react'
+import { describe, expect, it, vi } from 'vitest'
+
 import { EnhancementCard } from './EnhancementCard'
-import type { EnhancementCardData, CardContext } from './types'
+import type { CardContext, EnhancementCardData } from './types'
 
 const mockEnhancement: EnhancementCardData = {
   id: 'det:space-marines:wrathful-procession:benediction-of-fury',
@@ -60,7 +61,11 @@ describe('EnhancementCard', () => {
 
   it('calls onContentClick when a highlighted term is clicked', () => {
     const onContentClick = vi.fn()
-    const context: CardContext = { ...mockContext, highlightTerms: ['DEVASTATING WOUNDS'], onContentClick }
+    const context: CardContext = {
+      ...mockContext,
+      highlightTerms: ['DEVASTATING WOUNDS'],
+      onContentClick,
+    }
     render(<EnhancementCard data={mockEnhancement} context={context} />)
     fireEvent.click(screen.getByText('DEVASTATING WOUNDS'))
     expect(onContentClick).toHaveBeenCalledWith('DEVASTATING WOUNDS')
@@ -75,7 +80,12 @@ describe('EnhancementCard', () => {
     const data = {
       ...mockEnhancement,
       errata: [
-        { nodeId: 'e1', title: 'Enhancement FAQ', content: 'Only applies to the bearer.', source: { type: 'pdf', title: 'Chapter Approved', page: 20 } },
+        {
+          nodeId: 'e1',
+          title: 'Enhancement FAQ',
+          content: 'Only applies to the bearer.',
+          source: { type: 'pdf', title: 'Chapter Approved', page: 20 },
+        },
       ],
     }
     render(<EnhancementCard data={data} context={mockContext} />)
@@ -86,7 +96,12 @@ describe('EnhancementCard', () => {
     const data = {
       ...mockEnhancement,
       errata: [
-        { nodeId: 'e1', title: 'Enhancement FAQ', content: 'Only applies to the bearer.', source: { type: 'pdf', title: 'Chapter Approved', page: 20 } },
+        {
+          nodeId: 'e1',
+          title: 'Enhancement FAQ',
+          content: 'Only applies to the bearer.',
+          source: { type: 'pdf', title: 'Chapter Approved', page: 20 },
+        },
       ],
     }
     render(<EnhancementCard data={data} context={mockContext} />)

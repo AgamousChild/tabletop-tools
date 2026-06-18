@@ -1,5 +1,5 @@
 import { chromium } from 'playwright'
-import { readFileSync, writeFileSync, existsSync, readdirSync } from 'node:fs'
+import { writeFileSync } from 'node:fs'
 import path from 'node:path'
 
 const BROWSER_STATE = '.local/cults3d/browser-state'
@@ -45,7 +45,6 @@ async function main() {
 
   // Scrape all download entries
   const downloads = await page.evaluate(() => {
-    const rows = document.querySelectorAll('table tbody tr, .order-item')
     const results: Array<{
       orderNo: string
       date: string

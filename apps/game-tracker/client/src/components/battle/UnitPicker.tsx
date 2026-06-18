@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react'
+import { useMemo, useState } from 'react'
 
 export type DestroyedUnit = {
   contentId: string
@@ -18,7 +18,13 @@ type Props = {
   availableUnits?: AvailableUnit[]
 }
 
-export function UnitPicker({ units, onAdd, onRemove, label = 'Units Destroyed', availableUnits = [] }: Props) {
+export function UnitPicker({
+  units,
+  onAdd,
+  onRemove,
+  label = 'Units Destroyed',
+  availableUnits = [],
+}: Props) {
   const [name, setName] = useState('')
   const [showInput, setShowInput] = useState(false)
 
@@ -114,7 +120,10 @@ export function UnitPicker({ units, onAdd, onRemove, label = 'Units Destroyed', 
       {units.length > 0 && (
         <div className="space-y-1">
           {units.map((u, i) => (
-            <div key={i} className="flex items-center justify-between px-2 py-1.5 rounded bg-slate-800/50 border border-slate-800">
+            <div
+              key={i}
+              className="flex items-center justify-between px-2 py-1.5 rounded bg-slate-800/50 border border-slate-800"
+            >
               <span className="text-sm text-slate-200">{u.name}</span>
               <button
                 onClick={() => onRemove(i)}

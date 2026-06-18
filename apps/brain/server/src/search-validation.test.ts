@@ -7,11 +7,17 @@
  * Run against live API:
  *   API_BASE=https://tabletop-tools-brain.micah-ec2.workers.dev npx vitest run src/search-validation.test.ts --reporter=verbose
  */
-import { describe, it, expect, beforeAll } from 'vitest'
-import { readFileSync, existsSync } from 'fs'
+import { existsSync, readFileSync } from 'fs'
 import { join } from 'path'
+import { beforeAll, describe, expect, it } from 'vitest'
 
 const API_BASE = process.env.API_BASE || 'https://tabletop-tools-brain.micah-ec2.workers.dev'
+
+// This is an INTEGRATION test: it makes real HTTP calls against the deployed
+// brain API and takes ~tens of minutes. It must NOT run in the default
+// `vitest run` unit-test sweep. Set API_BASE to opt in (e.g.
+// `API_BASE=https://tabletop-tools.net/brain/api pnpm --filter brain-server test`).
+const RUN_INTEGRATION = !!process.env.API_BASE
 
 interface UnitEntry {
   id: string
@@ -33,6 +39,7 @@ interface Inventory {
 let inventory: Inventory
 
 beforeAll(() => {
+  if (!RUN_INTEGRATION) return
   const invPath = join(__dirname, '../.local/brain/test-inventory.json')
   if (!existsSync(invPath)) {
     throw new Error('Run build-graph.ts first to generate test-inventory.json')
@@ -75,7 +82,7 @@ async function apiGet(endpoint: string, retries = 2): Promise<any> {
 
 // ── 1. Search: every unit name returns itself as #1 and result is a datasheet
 
-describe('search: unit name → #1 result is the unit datasheet', () => {
+describe.skipIf(!RUN_INTEGRATION)('search: unit name → #1 result is the unit datasheet', () => {
   const allFactions = [
     // Full names (game-data parser)
     'adepta-sororitas',
@@ -221,7 +228,7 @@ describe('search: unit name → #1 result is the unit datasheet', () => {
 
 // ── 2. Ask: "[faction] all units" mentions every unit ──────────────────────
 
-describe('ask: "[faction] all units" returns complete roster', () => {
+describe.skipIf(!RUN_INTEGRATION)('ask: "[faction] all units" returns complete roster', () => {
   // Use human-readable faction names for the query
   const factionLabels: Record<string, string> = {
     'adepta-sororitas': 'Adepta Sororitas',
@@ -280,7 +287,7 @@ describe('ask: "[faction] all units" returns complete roster', () => {
 
 // ── 3. Browse: layers exist, unit layer has all datasheets ─────────────────
 
-describe('browse: layers and unit counts', () => {
+describe.skipIf(!RUN_INTEGRATION)('browse: layers and unit counts', () => {
   it('browse/layers returns all 6 layers', async () => {
     const data = await apiGet('/browse/layers')
     const layerIds = (data.layers ?? []).map((l: any) => l.id)
@@ -326,7 +333,7 @@ describe('browse: layers and unit counts', () => {
 
 // ── 4. Graph-data: returns nodes + edges for unit queries ──────────────────
 
-describe('graph-data: unit queries return connected graph', () => {
+describe.skipIf(!RUN_INTEGRATION)('graph-data: unit queries return connected graph', () => {
   // Test one unit per major faction
   const testUnits = [
     { query: 'Intercessors', faction: 'space-marines' },
@@ -356,7 +363,7 @@ describe('graph-data: unit queries return connected graph', () => {
 
 // ── 5. Record-based search ─────────────────────────────────────────────────
 
-describe('record-based search', () => {
+describe.skipIf(!RUN_INTEGRATION)('record-based search', () => {
   it('weapon name returns unit record (not raw weapon node)', async () => {
     const data = await apiPost('/search', { query: 'lascannon', pageSize: 5 })
     // Response should have records array
@@ -429,10 +436,16 @@ describe('record-based search', () => {
 
 // ── 6. Browse pagination ───────────────────────────────────────────────────
 
-describe('browse pagination', () => {
+describe.skipIf(!RUN_INTEGRATION)('browse pagination', () => {
   it('browse returns paginated results', async () => {
     const res = await fetch(`${API_BASE}/browse/nodes?layer=core&page=1&pageSize=10`)
-    const data = await res.json()
+    const data = (await res.json()) as {
+      page: number
+      pageSize: number
+      total: number
+      totalPages: number
+      nodes: Array<{ id: string; category: string }>
+    }
     expect(data.page).toBe(1)
     expect(data.pageSize).toBe(10)
     expect(data.total).toBeGreaterThan(0)
@@ -442,7 +455,7 @@ describe('browse pagination', () => {
 
   it('browse excludes child nodes', async () => {
     const res = await fetch(`${API_BASE}/browse/nodes?layer=faction&page=1&pageSize=50`)
-    const data = await res.json()
+    const data = (await res.json()) as { nodes: Array<{ id: string; category: string }> }
     for (const node of data.nodes) {
       expect(node.category).not.toBe('weapon')
       expect(node.category).not.toBe('unit-ability')
@@ -455,8 +468,8 @@ describe('browse pagination', () => {
   it('browse page 2 returns different nodes than page 1', async () => {
     const p1 = await fetch(`${API_BASE}/browse/nodes?layer=core&page=1&pageSize=5`)
     const p2 = await fetch(`${API_BASE}/browse/nodes?layer=core&page=2&pageSize=5`)
-    const d1 = await p1.json()
-    const d2 = await p2.json()
+    const d1 = (await p1.json()) as { nodes: Array<{ id: string }> }
+    const d2 = (await p2.json()) as { nodes: Array<{ id: string }> }
     if (d2.nodes.length > 0) {
       expect(d1.nodes[0].id).not.toBe(d2.nodes[0].id)
     }
@@ -465,7 +478,7 @@ describe('browse pagination', () => {
 
 // ── 7. Chapter Approved cards ──────────────────────────────────────────────
 
-describe('chapter approved cards', () => {
+describe.skipIf(!RUN_INTEGRATION)('chapter approved cards', () => {
   it('primary mission search returns mission records', async () => {
     const data = await apiPost('/search', { query: 'Take and Hold', pageSize: 5 })
     if (!data.records) return // CA data may not be indexed yet

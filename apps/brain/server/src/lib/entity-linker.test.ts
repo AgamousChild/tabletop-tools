@@ -1,5 +1,11 @@
-import { describe, it, expect, beforeEach } from 'vitest'
-import { linkEntitiesInContent, getEntityIndex, resetEntityCache, type EntityMap } from './entity-linker'
+import { beforeEach, describe, expect, it } from 'vitest'
+
+import {
+  type EntityMap,
+  getEntityIndex,
+  linkEntitiesInContent,
+  resetEntityCache,
+} from './entity-linker'
 
 describe('linkEntitiesInContent', () => {
   it('links known entity names in text', () => {
@@ -64,14 +70,14 @@ describe('getEntityIndex', () => {
         }
         if (key === 'nodes/core.json') {
           return {
-            json: async () => ([
+            json: async () => [
               { id: 'ds:intercessors', category: 'datasheet', title: 'Intercessors' },
               { id: 'weapon:bolt', category: 'weapon', title: 'Bolt Rifle' },
-            ])
+            ],
           }
         }
         return null
-      }
+      },
     }
     const index = await getEntityIndex(mockBucket)
     expect(index.has('intercessors')).toBe(true)
@@ -80,7 +86,7 @@ describe('getEntityIndex', () => {
 
   it('returns empty map when manifest is missing', async () => {
     const mockBucket = {
-      get: async (_key: string) => null
+      get: async (_key: string) => null,
     }
     const index = await getEntityIndex(mockBucket)
     expect(index.size).toBe(0)
@@ -95,7 +101,7 @@ describe('getEntityIndex', () => {
           return { json: async () => ({ files: {} }) }
         }
         return null
-      }
+      },
     }
     await getEntityIndex(mockBucket)
     await getEntityIndex(mockBucket)
@@ -111,17 +117,17 @@ describe('getEntityIndex', () => {
         }
         if (key === 'nodes/test.json') {
           return {
-            json: async () => ([
+            json: async () => [
               { id: 'strat:1', category: 'stratagem', title: 'Rapid Ingress' },
               { id: 'det:1', category: 'detachment-rule', title: 'Storm of Fire' },
               { id: 'enh:1', category: 'enhancement', title: 'Sanctic Halo' },
               { id: 'fa:1', category: 'faction-ability', title: 'Angels of Death' },
               { id: 'core:1', category: 'core-rule', title: 'Core Rule' }, // not indexed
-            ])
+            ],
           }
         }
         return null
-      }
+      },
     }
     const index = await getEntityIndex(mockBucket)
     expect(index.has('rapid ingress')).toBe(true)

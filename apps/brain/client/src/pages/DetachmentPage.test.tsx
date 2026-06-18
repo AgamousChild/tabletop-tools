@@ -1,7 +1,8 @@
-import { describe, it, expect, vi } from 'vitest'
-import { render, screen, fireEvent } from '@testing-library/react'
-import { DetachmentPage } from './DetachmentPage'
+import { fireEvent, render, screen } from '@testing-library/react'
+import { describe, expect, it, vi } from 'vitest'
+
 import type { DetachmentPageProps } from './DetachmentPage'
+import { DetachmentPage } from './DetachmentPage'
 
 const baseProps: DetachmentPageProps = {
   detachmentName: 'Anvil Siege Force',
@@ -133,11 +134,7 @@ describe('DetachmentPage', () => {
   it('calls onContentClick when a stratagem card content is clicked', () => {
     const onContentClick = vi.fn()
     render(
-      <DetachmentPage
-        {...baseProps}
-        stratagems={[stratagem1]}
-        onContentClick={onContentClick}
-      />,
+      <DetachmentPage {...baseProps} stratagems={[stratagem1]} onContentClick={onContentClick} />,
     )
     // The effect field contains "INFANTRY" — a keyword token does not exist here,
     // but we can click the effect text area. Use a direct content interaction.

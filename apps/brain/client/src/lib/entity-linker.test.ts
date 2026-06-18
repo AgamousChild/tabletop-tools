@@ -1,11 +1,15 @@
-import { describe, it, expect } from 'vitest'
-import { linkEntities } from './entity-linker'
+import { describe, expect, it } from 'vitest'
+
 import type { EntityMap } from './entity-linker'
+import { linkEntities } from './entity-linker'
 
 function makeMap(entries: [string, string, string][]): EntityMap {
   const m: EntityMap = new Map()
   for (const [name, type, nodeId] of entries) {
-    m.set(name.toLowerCase(), { type: type as 'unit' | 'stratagem' | 'enhancement' | 'rule' | 'mechanic', nodeId })
+    m.set(name.toLowerCase(), {
+      type: type as 'unit' | 'stratagem' | 'enhancement' | 'rule' | 'mechanic',
+      nodeId,
+    })
   }
   return m
 }
@@ -71,7 +75,7 @@ describe('linkEntities', () => {
       ['Overwatch', 'stratagem', 'node-2'],
     ])
     const result = linkEntities('Use Overwatch against the Infernus Squad.', entities)
-    const linked = result.filter(s => s.entity)
+    const linked = result.filter((s) => s.entity)
     expect(linked).toHaveLength(2)
     expect(linked[0].entity?.nodeId).toBe('node-2')
     expect(linked[1].entity?.nodeId).toBe('node-1')
@@ -83,7 +87,7 @@ describe('linkEntities', () => {
       ['Chaos Space Marines', 'unit', 'node-csm'],
     ])
     const result = linkEntities('The Chaos Space Marines attack.', entities)
-    const linked = result.filter(s => s.entity)
+    const linked = result.filter((s) => s.entity)
     expect(linked).toHaveLength(1)
     expect(linked[0].text).toBe('Chaos Space Marines')
     expect(linked[0].entity?.nodeId).toBe('node-csm')
@@ -95,7 +99,7 @@ describe('linkEntities', () => {
       ['Chaos Space Marines', 'unit', 'node-csm'],
     ])
     const result = linkEntities('Chaos Space Marines', entities)
-    const linked = result.filter(s => s.entity)
+    const linked = result.filter((s) => s.entity)
     expect(linked).toHaveLength(1)
     expect(linked[0].entity?.nodeId).toBe('node-csm')
   })
@@ -103,7 +107,7 @@ describe('linkEntities', () => {
   it('handles weapon ability tags [DEVASTATING WOUNDS] — strips brackets for lookup', () => {
     const entities = makeMap([['DEVASTATING WOUNDS', 'mechanic', 'node-dw']])
     const result = linkEntities('This weapon has [DEVASTATING WOUNDS] on a 6.', entities)
-    const linked = result.filter(s => s.entity)
+    const linked = result.filter((s) => s.entity)
     expect(linked).toHaveLength(1)
     expect(linked[0].text).toBe('[DEVASTATING WOUNDS]')
     expect(linked[0].entity?.nodeId).toBe('node-dw')
@@ -112,7 +116,7 @@ describe('linkEntities', () => {
   it('handles weapon ability tag at start of text', () => {
     const entities = makeMap([['LETHAL HITS', 'mechanic', 'node-lh']])
     const result = linkEntities('[LETHAL HITS]: each hit auto-wounds.', entities)
-    const linked = result.filter(s => s.entity)
+    const linked = result.filter((s) => s.entity)
     expect(linked).toHaveLength(1)
     expect(linked[0].text).toBe('[LETHAL HITS]')
   })
@@ -131,7 +135,7 @@ describe('linkEntities', () => {
       ['bar', 'rule', 'node-bar'],
     ])
     const result = linkEntities('foobar', entities)
-    const linked = result.filter(s => s.entity)
+    const linked = result.filter((s) => s.entity)
     // "foo" and "bar" are adjacent — both should match
     expect(linked).toHaveLength(2)
     expect(linked[0].text).toBe('foo')
@@ -141,7 +145,7 @@ describe('linkEntities', () => {
   it('filters out empty text segments', () => {
     const entities = makeMap([['Overwatch', 'stratagem', 'node-ow']])
     const result = linkEntities('Overwatch', entities)
-    const emptyText = result.filter(s => !s.entity && s.text === '')
+    const emptyText = result.filter((s) => !s.entity && s.text === '')
     expect(emptyText).toHaveLength(0)
   })
 })

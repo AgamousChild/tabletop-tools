@@ -1,9 +1,10 @@
-import { describe, it, expect } from 'vitest'
+import { describe, expect, it } from 'vitest'
+
 import {
-  isSectionHeading,
-  isPageReference,
-  isStratagemBlock,
   findSentenceBoundaries,
+  isPageReference,
+  isSectionHeading,
+  isStratagemBlock,
   splitAtHeadings,
 } from './patterns'
 
@@ -116,14 +117,15 @@ describe('splitAtHeadings', () => {
     const text = 'intro text SHOOTING PHASE Rules about shooting CHARGE PHASE Rules about charging'
     const sections = splitAtHeadings(text)
     expect(sections.length).toBeGreaterThanOrEqual(2)
-    expect(sections.some(s => s.heading.includes('SHOOTING PHASE'))).toBe(true)
-    expect(sections.some(s => s.heading.includes('CHARGE PHASE'))).toBe(true)
+    expect(sections.some((s) => s.heading.includes('SHOOTING PHASE'))).toBe(true)
+    expect(sections.some((s) => s.heading.includes('CHARGE PHASE'))).toBe(true)
   })
 
   it('preserves body text between headings', () => {
-    const text = 'WOUND ROLL When making a wound roll, compare the attacking weapon\u2019s Strength. SAVING THROW The target unit takes saves.'
+    const text =
+      'WOUND ROLL When making a wound roll, compare the attacking weapon\u2019s Strength. SAVING THROW The target unit takes saves.'
     const sections = splitAtHeadings(text)
-    const woundRoll = sections.find(s => s.heading.includes('WOUND ROLL'))
+    const woundRoll = sections.find((s) => s.heading.includes('WOUND ROLL'))
     expect(woundRoll).toBeTruthy()
     expect(woundRoll!.body).toContain('When making a wound roll')
   })

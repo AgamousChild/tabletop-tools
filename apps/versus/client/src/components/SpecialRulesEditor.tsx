@@ -1,5 +1,5 @@
-import { useState } from 'react'
 import type { WeaponAbility } from '@tabletop-tools/game-content'
+import { useState } from 'react'
 
 export interface LeaderRule {
   rule: WeaponAbility
@@ -40,31 +40,50 @@ const RULE_OPTIONS: { label: string; create: () => WeaponAbility }[] = [
 
 function ruleLabel(rule: WeaponAbility): string {
   switch (rule.type) {
-    case 'SUSTAINED_HITS': return `Sustained Hits ${rule.value}`
-    case 'LETHAL_HITS': return 'Lethal Hits'
-    case 'DEVASTATING_WOUNDS': return 'Devastating Wounds'
-    case 'TORRENT': return 'Torrent'
-    case 'TWIN_LINKED': return 'Twin-linked'
-    case 'BLAST': return 'Blast'
-    case 'REROLL_HITS_OF_1': return 'Re-roll hits of 1'
-    case 'REROLL_HITS': return 'Re-roll all hits'
-    case 'REROLL_WOUNDS': return 'Re-roll wounds'
-    case 'HIT_MOD': return `${rule.value > 0 ? '+' : ''}${rule.value} to hit`
-    case 'WOUND_MOD': return `${rule.value > 0 ? '+' : ''}${rule.value} to wound`
-    case 'STRENGTH_MOD': return `${rule.value > 0 ? '+' : ''}${rule.value} strength`
-    case 'TOUGHNESS_MOD': return `${rule.value > 0 ? '+' : ''}${rule.value} toughness`
-    case 'ATTACKS_MOD': return `${rule.value > 0 ? '+' : ''}${rule.value} attacks`
-    default: return 'Unknown'
+    case 'SUSTAINED_HITS':
+      return `Sustained Hits ${rule.value}`
+    case 'LETHAL_HITS':
+      return 'Lethal Hits'
+    case 'DEVASTATING_WOUNDS':
+      return 'Devastating Wounds'
+    case 'TORRENT':
+      return 'Torrent'
+    case 'TWIN_LINKED':
+      return 'Twin-linked'
+    case 'BLAST':
+      return 'Blast'
+    case 'REROLL_HITS_OF_1':
+      return 'Re-roll hits of 1'
+    case 'REROLL_HITS':
+      return 'Re-roll all hits'
+    case 'REROLL_WOUNDS':
+      return 'Re-roll wounds'
+    case 'HIT_MOD':
+      return `${rule.value > 0 ? '+' : ''}${rule.value} to hit`
+    case 'WOUND_MOD':
+      return `${rule.value > 0 ? '+' : ''}${rule.value} to wound`
+    case 'STRENGTH_MOD':
+      return `${rule.value > 0 ? '+' : ''}${rule.value} strength`
+    case 'TOUGHNESS_MOD':
+      return `${rule.value > 0 ? '+' : ''}${rule.value} toughness`
+    case 'ATTACKS_MOD':
+      return `${rule.value > 0 ? '+' : ''}${rule.value} attacks`
+    default:
+      return 'Unknown'
   }
 }
 
-export function SpecialRulesEditor({ rules, weaponAbilities, leaderRules, onAdd, onRemove }: Props) {
+export function SpecialRulesEditor({
+  rules,
+  weaponAbilities,
+  leaderRules,
+  onAdd,
+  onRemove,
+}: Props) {
   const [showDropdown, setShowDropdown] = useState(false)
 
   // Deduplicate weapon abilities for display
-  const uniqueWeaponAbilities = weaponAbilities
-    ? [...new Set(weaponAbilities)].filter(Boolean)
-    : []
+  const uniqueWeaponAbilities = weaponAbilities ? [...new Set(weaponAbilities)].filter(Boolean) : []
 
   return (
     <div className="space-y-2">

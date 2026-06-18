@@ -1,12 +1,13 @@
-import { describe, it, expect } from 'vitest'
-import { matchPlayerName, batchMatchPlayerNames } from './playerMatch.js'
+import { describe, expect, it } from 'vitest'
+
 import type { UserRow } from './playerMatch.js'
+import { batchMatchPlayerNames, matchPlayerName } from './playerMatch.js'
 
 const USERS: UserRow[] = [
-  { id: 'user-1', username: 'alice',      displayUsername: 'Alice' },
-  { id: 'user-2', username: 'bob_smith',  displayUsername: 'Bob Smith' },
-  { id: 'user-3', username: null,         displayUsername: 'Carol Jones' },
-  { id: 'user-4', username: 'dave',       displayUsername: null },
+  { id: 'user-1', username: 'alice', displayUsername: 'Alice' },
+  { id: 'user-2', username: 'bob_smith', displayUsername: 'Bob Smith' },
+  { id: 'user-3', username: null, displayUsername: 'Carol Jones' },
+  { id: 'user-4', username: 'dave', displayUsername: null },
 ]
 
 describe('matchPlayerName', () => {

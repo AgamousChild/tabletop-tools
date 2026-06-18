@@ -1,9 +1,9 @@
-import { describe, it, expect } from 'vitest'
-import { isLegalPlacement } from './legal-check'
-import { computeDeploymentZone } from '../zones/deployment-zones'
-import { computeEnemyZone } from '../zones/deployment-zones'
-import { DEFAULT_10E_RULES } from '../types'
+import { describe, expect, it } from 'vitest'
+
 import type { TerrainPiece } from '../types'
+import { DEFAULT_10E_RULES } from '../types'
+import { computeDeploymentZone } from '../zones/deployment-zones'
+import { isLegalPlacement } from './legal-check'
 
 const rules = DEFAULT_10E_RULES
 
@@ -151,12 +151,16 @@ describe('isLegalPlacement', () => {
     })
 
     it('returns true for a single model placed legally', () => {
-      expect(isLegalPlacement([{ x: 0, y: 10 }], bottomZone, noTerrain, noOccupied, 32, rules)).toBe(true)
+      expect(
+        isLegalPlacement([{ x: 0, y: 10 }], bottomZone, noTerrain, noOccupied, 32, rules),
+      ).toBe(true)
     })
 
     it('hull base size is handled for a single vehicle', () => {
       // A single hull-based model (vehicle) is always coherent and legal when inside zone
-      expect(isLegalPlacement([{ x: 0, y: 10 }], bottomZone, noTerrain, noOccupied, 'hull', rules)).toBe(true)
+      expect(
+        isLegalPlacement([{ x: 0, y: 10 }], bottomZone, noTerrain, noOccupied, 'hull', rules),
+      ).toBe(true)
     })
   })
 })

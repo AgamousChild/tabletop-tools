@@ -202,33 +202,10 @@ beforeAll(async () => {
       to_override INTEGER NOT NULL DEFAULT 0,
       created_at INTEGER NOT NULL
     );
-    CREATE TABLE IF NOT EXISTS player_elo (
+    CREATE TABLE IF NOT EXISTS dim_faction (
       id TEXT PRIMARY KEY,
-      user_id TEXT NOT NULL UNIQUE REFERENCES "user"(id),
-      rating INTEGER NOT NULL DEFAULT 1200,
-      games_played INTEGER NOT NULL DEFAULT 0,
-      updated_at INTEGER NOT NULL
-    );
-    CREATE TABLE IF NOT EXISTS elo_history (
-      id TEXT PRIMARY KEY,
-      user_id TEXT NOT NULL REFERENCES "user"(id),
-      pairing_id TEXT NOT NULL REFERENCES pairings(id),
-      rating_before INTEGER NOT NULL,
-      rating_after INTEGER NOT NULL,
-      delta INTEGER NOT NULL,
-      opponent_id TEXT NOT NULL REFERENCES "user"(id),
-      recorded_at INTEGER NOT NULL
-    );
-    CREATE TABLE IF NOT EXISTS imported_tournament_results (
-      id TEXT PRIMARY KEY,
-      imported_by TEXT NOT NULL REFERENCES "user"(id),
-      event_name TEXT NOT NULL,
-      event_date INTEGER NOT NULL,
-      format TEXT NOT NULL,
-      meta_window TEXT NOT NULL,
-      raw_data TEXT NOT NULL,
-      parsed_data TEXT NOT NULL,
-      imported_at INTEGER NOT NULL
+      name TEXT NOT NULL,
+      allegiance TEXT NOT NULL
     );
     CREATE TABLE IF NOT EXISTS player_glicko (
       id TEXT PRIMARY KEY,
@@ -255,14 +232,20 @@ beforeAll(async () => {
     );
     CREATE TABLE IF NOT EXISTS meta_events (
       id TEXT PRIMARY KEY,
-      bcp_id TEXT UNIQUE,
       name TEXT NOT NULL,
-      date TEXT NOT NULL,
-      round_count INTEGER NOT NULL DEFAULT 0,
-      player_count INTEGER NOT NULL DEFAULT 0,
-      country TEXT,
-      state TEXT,
-      scraped_at INTEGER NOT NULL
+      date INTEGER NOT NULL,
+      location TEXT,
+      gps_coords TEXT,
+      region_id INTEGER,
+      format TEXT NOT NULL,
+      rounds INTEGER,
+      player_count INTEGER NOT NULL,
+      source TEXT NOT NULL,
+      source_id TEXT,
+      imported_at INTEGER NOT NULL,
+      win_faction_id TEXT,
+      win_subfaction_id TEXT,
+      win_detachment_id TEXT
     );
     CREATE TABLE IF NOT EXISTS ingest_jobs (
       id TEXT PRIMARY KEY,
@@ -277,6 +260,27 @@ beforeAll(async () => {
       error TEXT,
       created_at INTEGER NOT NULL,
       completed_at INTEGER
+    );
+    CREATE TABLE IF NOT EXISTS ingest_sources (
+      id TEXT PRIMARY KEY,
+      name TEXT NOT NULL,
+      url TEXT NOT NULL UNIQUE,
+      type TEXT NOT NULL,
+      active INTEGER NOT NULL DEFAULT 1,
+      created_at INTEGER NOT NULL
+    );
+    CREATE TABLE IF NOT EXISTS ingest_content (
+      id TEXT PRIMARY KEY,
+      url TEXT NOT NULL UNIQUE,
+      title TEXT,
+      source_id TEXT NOT NULL REFERENCES ingest_sources(id),
+      status TEXT NOT NULL DEFAULT 'discovered',
+      gladia_job_id TEXT,
+      transcript TEXT,
+      nodes_extracted INTEGER DEFAULT 0,
+      error TEXT,
+      discovered_at INTEGER NOT NULL,
+      processed_at INTEGER
     );
     CREATE TABLE IF NOT EXISTS glicko_history (
       id TEXT PRIMARY KEY,
@@ -299,14 +303,14 @@ afterAll(() => client.close())
 // Helper to clear all data between tests in the "with data" suite
 async function clearAllData() {
   await client.executeMultiple(`
+    DELETE FROM ingest_content;
+    DELETE FROM ingest_sources;
     DELETE FROM ingest_jobs;
     DELETE FROM meta_events;
     DELETE FROM bcp_scrape_jobs;
     DELETE FROM glicko_history;
     DELETE FROM player_glicko;
-    DELETE FROM imported_tournament_results;
-    DELETE FROM elo_history;
-    DELETE FROM player_elo;
+    DELETE FROM dim_faction;
     DELETE FROM pairings;
     DELETE FROM rounds;
     DELETE FROM tournament_players;
@@ -361,8 +365,7 @@ describe('stats router', () => {
         listBuilder: { lists: 0, units: 0 },
         gameTracker: { matches: 0, turns: 0 },
         tournament: { tournaments: 0, players: 0 },
-        newMeta: { imports: 0, glickoPlayers: 0 },
-        elo: { players: 0 },
+        newMeta: { events: 0, glickoPlayers: 0 },
       })
     })
   })
@@ -429,15 +432,10 @@ describe('stats router', () => {
         INSERT INTO tournament_players (id, tournament_id, user_id, display_name, faction, registered_at) VALUES ('tp2', 'tour1', 'u2', 'Bob', 'Orks', ${now});
       `)
 
-      // ELO data
-      await client.execute(
-        `INSERT INTO player_elo (id, user_id, rating, games_played, updated_at) VALUES ('elo1', 'u1', 1250, 5, ${now})`,
-      )
-
       // New Meta data
       await client.executeMultiple(`
-        INSERT INTO imported_tournament_results (id, imported_by, event_name, event_date, format, meta_window, raw_data, parsed_data, imported_at) VALUES ('imp1', 'u1', 'LVO 2025', ${now}, 'bcp-csv', '2025-Q1', 'csv', '[]', ${now});
-        INSERT INTO imported_tournament_results (id, imported_by, event_name, event_date, format, meta_window, raw_data, parsed_data, imported_at) VALUES ('imp2', 'u1', 'Adepticon 2025', ${now}, 'bcp-csv', '2025-Q1', 'csv', '[]', ${now});
+        INSERT INTO meta_events (id, name, date, format, player_count, source, source_id, imported_at) VALUES ('evt-nm1', 'LVO 2025', ${now}, 'GT', 100, 'bcp', 'bcp-lvo', ${now});
+        INSERT INTO meta_events (id, name, date, format, player_count, source, source_id, imported_at) VALUES ('evt-nm2', 'Adepticon 2025', ${now}, 'GT', 200, 'bcp', 'bcp-adept', ${now});
         INSERT INTO player_glicko (id, player_name, rating, rating_deviation, volatility, games_played, updated_at) VALUES ('pg1', 'Alice', 1600, 150, 0.06, 10, ${now});
         INSERT INTO player_glicko (id, player_name, rating, rating_deviation, volatility, games_played, updated_at) VALUES ('pg2', 'Bob', 1500, 200, 0.06, 5, ${now});
         INSERT INTO player_glicko (id, player_name, rating, rating_deviation, volatility, games_played, updated_at) VALUES ('pg3', 'Carol', 1400, 300, 0.06, 2, ${now});
@@ -494,16 +492,10 @@ describe('stats router', () => {
       expect(result.tournament.players).toBe(2)
     })
 
-    it('returns correct elo stats', async () => {
-      const caller = createCaller(adminCtx)
-      const result = await caller.stats.overview()
-      expect(result.elo.players).toBe(1)
-    })
-
     it('returns correct new-meta stats', async () => {
       const caller = createCaller(adminCtx)
       const result = await caller.stats.overview()
-      expect(result.newMeta.imports).toBe(2)
+      expect(result.newMeta.events).toBe(2)
       expect(result.newMeta.glickoPlayers).toBe(3)
     })
   })
@@ -618,60 +610,33 @@ describe('stats router', () => {
     })
   })
 
-  describe('stats.importHistory', () => {
+  describe('stats.recentEvents', () => {
     beforeEach(() => clearAllData())
 
     it('rejects non-admin users', async () => {
       const caller = createCaller(nonAdminCtx)
-      await expect(caller.stats.importHistory()).rejects.toMatchObject({ code: 'FORBIDDEN' })
+      await expect(caller.stats.recentEvents()).rejects.toMatchObject({ code: 'FORBIDDEN' })
     })
 
     it('returns empty list for empty db', async () => {
       const caller = createCaller(adminCtx)
-      const result = await caller.stats.importHistory()
+      const result = await caller.stats.recentEvents()
       expect(result).toEqual([])
     })
 
-    it('returns imports with parsed player counts', async () => {
-      const now = Math.floor(Date.now() / 1000)
-      const parsedData = JSON.stringify([{
-        eventName: 'LVO 2025',
-        eventDate: '2025-01-25',
-        format: 'GT',
-        players: [
-          { placement: 1, playerName: 'Alice', faction: 'Marines', wins: 5, losses: 0, draws: 0, points: 100 },
-          { placement: 2, playerName: 'Bob', faction: 'Orks', wins: 4, losses: 1, draws: 0, points: 80 },
-          { placement: 3, playerName: 'Carol', faction: 'Eldar', wins: 3, losses: 2, draws: 0, points: 60 },
-        ],
-      }])
-
+    it('returns events sorted by date desc', async () => {
+      const now = Date.now()
       await client.executeMultiple(`
-        INSERT INTO "user" (id, name, email, email_verified, created_at, updated_at) VALUES ('u1', 'Admin', 'admin@test.com', 0, ${now}, ${now});
-        INSERT INTO imported_tournament_results (id, imported_by, event_name, event_date, format, meta_window, raw_data, parsed_data, imported_at) VALUES ('imp1', 'u1', 'LVO 2025', ${now}, 'bcp-csv', '2025-Q1', 'csv', '${parsedData.replace(/'/g, "''")}', ${now});
+        INSERT INTO meta_events (id, name, date, location, format, rounds, player_count, source, source_id, imported_at) VALUES ('evt1', 'LVO 2026', ${now - 86400000}, 'Las Vegas, NV', 'GT', 8, 200, 'bcp', 'bcp1', ${now});
+        INSERT INTO meta_events (id, name, date, location, format, rounds, player_count, source, source_id, imported_at) VALUES ('evt2', 'Adepticon 2026', ${now}, 'Milwaukee, WI', 'GT', 9, 400, 'bcp', 'bcp2', ${now});
       `)
 
       const caller = createCaller(adminCtx)
-      const result = await caller.stats.importHistory()
-      expect(result.length).toBe(1)
-      expect(result[0].eventName).toBe('LVO 2025')
-      expect(result[0].format).toBe('bcp-csv')
-      expect(result[0].metaWindow).toBe('2025-Q1')
-      expect(result[0].playerCount).toBe(3)
-    })
-
-    it('returns multiple imports sorted by imported_at desc', async () => {
-      const now = Math.floor(Date.now() / 1000)
-      await client.executeMultiple(`
-        INSERT INTO "user" (id, name, email, email_verified, created_at, updated_at) VALUES ('u1', 'Admin', 'admin@test.com', 0, ${now}, ${now});
-        INSERT INTO imported_tournament_results (id, imported_by, event_name, event_date, format, meta_window, raw_data, parsed_data, imported_at) VALUES ('imp1', 'u1', 'LVO 2025', ${now - 86400}, 'bcp-csv', '2025-Q1', 'csv', '[]', ${now - 86400});
-        INSERT INTO imported_tournament_results (id, imported_by, event_name, event_date, format, meta_window, raw_data, parsed_data, imported_at) VALUES ('imp2', 'u1', 'Adepticon 2025', ${now}, 'bcp-csv', '2025-Q1', 'csv', '[]', ${now});
-      `)
-
-      const caller = createCaller(adminCtx)
-      const result = await caller.stats.importHistory()
+      const result = await caller.stats.recentEvents()
       expect(result.length).toBe(2)
-      expect(result[0].eventName).toBe('Adepticon 2025')
-      expect(result[1].eventName).toBe('LVO 2025')
+      expect(result[0].name).toBe('Adepticon 2026')
+      expect(result[0].playerCount).toBe(400)
+      expect(result[1].name).toBe('LVO 2026')
     })
   })
 
@@ -757,12 +722,16 @@ describe('stats router', () => {
 
     it('throws NOT_FOUND for unknown session', async () => {
       const caller = createCaller(adminCtx)
-      await expect(caller.stats.revokeSession({ sessionId: 'no-such' })).rejects.toMatchObject({ code: 'NOT_FOUND' })
+      await expect(caller.stats.revokeSession({ sessionId: 'no-such' })).rejects.toMatchObject({
+        code: 'NOT_FOUND',
+      })
     })
 
     it('rejects non-admin', async () => {
       const caller = createCaller(nonAdminCtx)
-      await expect(caller.stats.revokeSession({ sessionId: 's1' })).rejects.toMatchObject({ code: 'FORBIDDEN' })
+      await expect(caller.stats.revokeSession({ sessionId: 's1' })).rejects.toMatchObject({
+        code: 'FORBIDDEN',
+      })
     })
   })
 
@@ -786,7 +755,9 @@ describe('stats router', () => {
 
     it('throws NOT_FOUND for unknown user', async () => {
       const caller = createCaller(adminCtx)
-      await expect(caller.stats.revokeAllSessions({ userId: 'no-such' })).rejects.toMatchObject({ code: 'NOT_FOUND' })
+      await expect(caller.stats.revokeAllSessions({ userId: 'no-such' })).rejects.toMatchObject({
+        code: 'NOT_FOUND',
+      })
     })
   })
 
@@ -807,12 +778,16 @@ describe('stats router', () => {
 
     it('throws NOT_FOUND for unknown user', async () => {
       const caller = createCaller(adminCtx)
-      await expect(caller.stats.deleteUser({ userId: 'no-such' })).rejects.toMatchObject({ code: 'NOT_FOUND' })
+      await expect(caller.stats.deleteUser({ userId: 'no-such' })).rejects.toMatchObject({
+        code: 'NOT_FOUND',
+      })
     })
 
     it('rejects non-admin', async () => {
       const caller = createCaller(nonAdminCtx)
-      await expect(caller.stats.deleteUser({ userId: 'u1' })).rejects.toMatchObject({ code: 'FORBIDDEN' })
+      await expect(caller.stats.deleteUser({ userId: 'u1' })).rejects.toMatchObject({
+        code: 'FORBIDDEN',
+      })
     })
   })
 
@@ -836,8 +811,8 @@ describe('stats router', () => {
       await client.executeMultiple(`
         INSERT INTO bcp_scrape_jobs (id, started_at, completed_at, status, events_found, events_scraped, pairings_scraped, triggered_by) VALUES ('j1', ${now - 3600}, ${now - 3500}, 'completed', 10, 8, 50, 'cron');
         INSERT INTO bcp_scrape_jobs (id, started_at, status, events_found, triggered_by) VALUES ('j2', ${now}, 'running', 5, 'manual');
-        INSERT INTO meta_events (id, name, date, round_count, player_count, scraped_at) VALUES ('e1', 'GT Alpha', '2026-01-15', 5, 32, ${now});
-        INSERT INTO meta_events (id, name, date, round_count, player_count, scraped_at) VALUES ('e2', 'GT Beta', '2026-02-01', 5, 48, ${now});
+        INSERT INTO meta_events (id, name, date, format, rounds, player_count, source, source_id, imported_at) VALUES ('e1', 'GT Alpha', ${new Date('2026-01-15').getTime()}, 'GT', 5, 32, 'bcp', 'bcp-e1', ${now});
+        INSERT INTO meta_events (id, name, date, format, rounds, player_count, source, source_id, imported_at) VALUES ('e2', 'GT Beta', ${new Date('2026-02-01').getTime()}, 'GT', 5, 48, 'bcp', 'bcp-e2', ${now});
       `)
 
       const caller = createCaller(adminCtx)
@@ -854,7 +829,9 @@ describe('stats router', () => {
 
     it('rejects non-admin users', async () => {
       const caller = createCaller(nonAdminCtx)
-      await expect(caller.stats.bcpScraperHistory({ limit: 20 })).rejects.toMatchObject({ code: 'FORBIDDEN' })
+      await expect(caller.stats.bcpScraperHistory({ limit: 20 })).rejects.toMatchObject({
+        code: 'FORBIDDEN',
+      })
     })
 
     it('returns jobs ordered by started_at desc', async () => {
@@ -920,43 +897,53 @@ describe('stats router', () => {
   describe('stats.ingestJobs', () => {
     beforeEach(() => clearAllData())
 
-    it('returns empty array when no jobs', async () => {
+    it('returns empty array when no content', async () => {
       const caller = createCaller(adminCtx)
-      const result = await caller.stats.ingestJobs({ limit: 20 })
+      const result = await caller.stats.ingestJobs({ limit: 50 })
       expect(result).toEqual([])
     })
 
-    it('returns jobs ordered by created_at desc', async () => {
-      const now = Math.floor(Date.now() / 1000)
+    it('returns content ordered by discovered_at desc', async () => {
+      const now = Date.now()
       await client.executeMultiple(`
-        INSERT INTO ingest_jobs (id, url, source_type, source_name, status, nodes_extracted, created_at) VALUES ('ij1', 'https://youtube.com/watch?v=abc', 'youtube', 'Auspex Tactics', 'completed', 5, ${now - 3600});
-        INSERT INTO ingest_jobs (id, url, source_type, source_name, status, nodes_extracted, created_at) VALUES ('ij2', 'https://example.com/article', 'web', 'WHC', 'pending', 0, ${now});
+        INSERT INTO ingest_sources (id, name, url, type, active, created_at) VALUES ('auspex', 'Auspex Tactics', 'https://youtube.com/@AuspexTactics', 'youtube', 1, ${now});
+        INSERT INTO ingest_sources (id, name, url, type, active, created_at) VALUES ('whc', 'WHC', 'https://warhammer-community.com', 'web', 1, ${now});
+        INSERT INTO ingest_content (id, url, title, source_id, status, nodes_extracted, discovered_at) VALUES ('ic1', 'https://youtube.com/watch?v=abc', 'Video Title', 'auspex', 'completed', 5, ${now - 3600000});
+        INSERT INTO ingest_content (id, url, title, source_id, status, nodes_extracted, discovered_at) VALUES ('ic2', 'https://example.com/article', 'Article Title', 'whc', 'discovered', 0, ${now});
       `)
 
       const caller = createCaller(adminCtx)
-      const result = await caller.stats.ingestJobs({ limit: 20 })
+      const result = await caller.stats.ingestJobs({ limit: 50 })
       expect(result.length).toBe(2)
-      expect(result[0].id).toBe('ij2')
-      expect(result[1].id).toBe('ij1')
+      expect(result[0].id).toBe('ic2')
+      expect(result[0].title).toBe('Article Title')
+      expect(result[0].sourceName).toBe('WHC')
+      expect(result[1].id).toBe('ic1')
     })
 
     it('rejects non-admin users', async () => {
       const caller = createCaller(nonAdminCtx)
-      await expect(caller.stats.ingestJobs({ limit: 20 })).rejects.toMatchObject({ code: 'FORBIDDEN' })
+      await expect(caller.stats.ingestJobs({ limit: 50 })).rejects.toMatchObject({
+        code: 'FORBIDDEN',
+      })
     })
   })
 
   describe('stats.triggerYoutubeIngest', () => {
     it('returns error when service binding not configured', async () => {
       const caller = createCaller(adminCtx)
-      const result = await caller.stats.triggerYoutubeIngest({ url: 'https://youtube.com/watch?v=abc' })
+      const result = await caller.stats.triggerYoutubeIngest({
+        url: 'https://youtube.com/watch?v=abc',
+      })
       expect(result.status).toBe('error')
       expect(result.message).toContain('not configured')
     })
 
     it('rejects non-admin users', async () => {
       const caller = createCaller(nonAdminCtx)
-      await expect(caller.stats.triggerYoutubeIngest({ url: 'https://youtube.com/watch?v=abc' })).rejects.toMatchObject({ code: 'FORBIDDEN' })
+      await expect(
+        caller.stats.triggerYoutubeIngest({ url: 'https://youtube.com/watch?v=abc' }),
+      ).rejects.toMatchObject({ code: 'FORBIDDEN' })
     })
   })
 
@@ -970,7 +957,9 @@ describe('stats router', () => {
 
     it('rejects non-admin users', async () => {
       const caller = createCaller(nonAdminCtx)
-      await expect(caller.stats.triggerWebIngest({ url: 'https://example.com/article' })).rejects.toMatchObject({ code: 'FORBIDDEN' })
+      await expect(
+        caller.stats.triggerWebIngest({ url: 'https://example.com/article' }),
+      ).rejects.toMatchObject({ code: 'FORBIDDEN' })
     })
   })
 })

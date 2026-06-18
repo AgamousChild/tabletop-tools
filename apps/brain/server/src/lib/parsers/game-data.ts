@@ -15,15 +15,17 @@
  * - Abilities (core) → faction/faction-ability nodes (army rules like Oath of Moment)
  * - DatasheetStratagems/Enhancements/DetachmentAbilities → modifies refs
  */
-import type { Node, NodeRef, Source } from '../model'
-import { slugify } from '../slugify'
 import { deriveUnitType } from '../derive-unit-type'
 import { normalizeFactionId } from '../faction-codes'
 import {
-  isBoardingAction, isLegends, buildDetachmentChapterMap,
-  detectScope, detectWeaponTypes, classifyGrants,
-  truncate, stripHtml,
+  buildDetachmentChapterMap,
+  isBoardingAction,
+  isLegends,
+  stripHtml,
+  truncate,
 } from '../filters'
+import type { Node, NodeRef, Source } from '../model'
+import { slugify } from '../slugify'
 
 // ── Input types (matching game-data-store) ──────────────────────────────────
 
@@ -59,6 +61,13 @@ export interface DatasheetRecord {
   damagedW: string
   damagedDescription: string
   isLegends?: boolean
+  move?: string
+  toughness?: string
+  save?: string
+  wounds?: string
+  leadership?: string
+  oc?: string
+  invSv?: string
 }
 
 export interface DatasheetWargearRecord {
@@ -188,20 +197,38 @@ export interface JunctionRecord {
   detachmentAbilityId?: string
 }
 
-import { getToughnessTier, getStrengthTier, getSaveTier, usefulApCap } from '../combat-tiers'
+import { getSaveTier, getStrengthTier, getToughnessTier, usefulApCap } from '../combat-tiers'
 
 // ── HTML Stripping ──────────────────────────────────────────────────────────
 
 /** Extract targeting keywords from rules text (CAPS words that are unit type keywords). */
 function extractTargetingKeywords(text: string): string[] {
   const TARGETING_KEYWORDS = [
-    'infantry', 'vehicle', 'monster', 'character', 'mounted', 'beast',
-    'fly', 'walker', 'dreadnought', 'terminator', 'battleline', 'psyker',
-    'titanic', 'transport', 'aircraft', 'jump pack', 'grenades', 'smoke',
-    'epic hero', 'daemon', 'swarm', 'cavalry',
+    'infantry',
+    'vehicle',
+    'monster',
+    'character',
+    'mounted',
+    'beast',
+    'fly',
+    'walker',
+    'dreadnought',
+    'terminator',
+    'battleline',
+    'psyker',
+    'titanic',
+    'transport',
+    'aircraft',
+    'jump pack',
+    'grenades',
+    'smoke',
+    'epic hero',
+    'daemon',
+    'swarm',
+    'cavalry',
   ]
   const lower = text.toLowerCase()
-  return TARGETING_KEYWORDS.filter(k => lower.includes(k))
+  return TARGETING_KEYWORDS.filter((k) => lower.includes(k))
 }
 
 /** Strip HTML tags and convert basic HTML to markdown. */
@@ -233,45 +260,52 @@ function mapPhase(phase: string): Node['phase'] {
 export function convertGameData(input: GameDataInput, retrievedAt?: string): GameDataParseResult {
   const nodes: Node[] = []
   const refs: NodeRef[] = []
-  const source: Source = { ...wahapediaSource, retrievedAt: retrievedAt ?? new Date().toISOString() }
+  const source: Source = {
+    ...wahapediaSource,
+    retrievedAt: retrievedAt ?? new Date().toISOString(),
+  }
 
   // Filter out Boarding Actions — different game mode
-  const boardingDetIds = new Set(
-    input.detachments.filter(isBoardingAction).map(d => d.id)
+  const boardingDetIds = new Set(input.detachments.filter(isBoardingAction).map((d) => d.id))
+  const filteredDetachments = input.detachments.filter((d) => !boardingDetIds.has(d.id))
+  const filteredStratagems = input.stratagems.filter((s) => !boardingDetIds.has(s.detachmentId))
+  const filteredEnhancements = input.enhancements.filter((e) => !boardingDetIds.has(e.detachmentId))
+  const filteredDetAbilities = input.detachmentAbilities.filter(
+    (da) => !boardingDetIds.has(da.detachmentId),
   )
-  const filteredDetachments = input.detachments.filter(d => !boardingDetIds.has(d.id))
-  const filteredStratagems = input.stratagems.filter(s => !boardingDetIds.has(s.detachmentId))
-  const filteredEnhancements = input.enhancements.filter(e => !boardingDetIds.has(e.detachmentId))
-  const filteredDetAbilities = input.detachmentAbilities.filter(da => !boardingDetIds.has(da.detachmentId))
 
   // Filter out Legends — discontinued units not legal in matched play
-  const legendsIds = new Set(
-    input.datasheets.filter(isLegends).map(d => d.id)
+  const legendsIds = new Set(input.datasheets.filter(isLegends).map((d) => d.id))
+  const filteredDatasheets = input.datasheets.filter((d) => !isLegends(d))
+  const filteredWargear = input.datasheetWargear.filter((w) => !legendsIds.has(w.datasheetId))
+  const filteredModels = input.datasheetModels.filter((m) => !legendsIds.has(m.datasheetId))
+  const filteredUnitAbilities = input.unitAbilities.filter((a) => !legendsIds.has(a.datasheetId))
+  const filteredUnitKeywords = input.unitKeywords.filter((k) => !legendsIds.has(k.datasheetId))
+  const filteredCompositions = input.unitCompositions.filter((c) => !legendsIds.has(c.datasheetId))
+  const filteredCosts = input.unitCosts.filter((c) => !legendsIds.has(c.datasheetId))
+  const filteredWargearOptions = input.wargearOptions.filter((w) => !legendsIds.has(w.datasheetId))
+  const filteredLeaderAttachments = input.leaderAttachments.filter(
+    (l) => !legendsIds.has(l.leaderId) && !legendsIds.has(l.attachedId),
   )
-  const filteredDatasheets = input.datasheets.filter(d => !isLegends(d))
-  const filteredWargear = input.datasheetWargear.filter(w => !legendsIds.has(w.datasheetId))
-  const filteredModels = input.datasheetModels.filter(m => !legendsIds.has(m.datasheetId))
-  const filteredUnitAbilities = input.unitAbilities.filter(a => !legendsIds.has(a.datasheetId))
-  const filteredUnitKeywords = input.unitKeywords.filter(k => !legendsIds.has(k.datasheetId))
-  const filteredCompositions = input.unitCompositions.filter(c => !legendsIds.has(c.datasheetId))
-  const filteredCosts = input.unitCosts.filter(c => !legendsIds.has(c.datasheetId))
-  const filteredWargearOptions = input.wargearOptions.filter(w => !legendsIds.has(w.datasheetId))
-  const filteredLeaderAttachments = input.leaderAttachments.filter(l => !legendsIds.has(l.leaderId) && !legendsIds.has(l.attachedId))
-  const filteredDsStratagems = input.datasheetStratagems.filter(j => !legendsIds.has(j.datasheetId))
-  const filteredDsEnhancements = input.datasheetEnhancements.filter(j => !legendsIds.has(j.datasheetId))
-  const filteredDsDetAbilities = input.datasheetDetachmentAbilities.filter(j => !legendsIds.has(j.datasheetId))
+  const filteredDsStratagems = input.datasheetStratagems.filter(
+    (j) => !legendsIds.has(j.datasheetId),
+  )
+  const filteredDsEnhancements = input.datasheetEnhancements.filter(
+    (j) => !legendsIds.has(j.datasheetId),
+  )
+  // datasheetDetachmentAbilities filtered but not yet consumed — reserved for future detachment↔unit linking
 
   // Build lookup maps (using filtered data — no legends, no boarding)
-  const modelsByDatasheet = groupBy(filteredModels, r => r.datasheetId)
-  const keywordsByDatasheet = groupBy(filteredUnitKeywords, r => r.datasheetId)
-  const compositionsByDatasheet = groupBy(filteredCompositions, r => r.datasheetId)
-  const costsByDatasheet = groupBy(filteredCosts, r => r.datasheetId)
-  const wargearByDatasheet = groupBy(filteredWargear, r => r.datasheetId)
-  const wargearOptionsByDatasheet = groupBy(filteredWargearOptions, r => r.datasheetId)
-  const abilitiesByDatasheet = groupBy(filteredUnitAbilities, r => r.datasheetId)
-  const stratagemsByDetachment = groupBy(filteredStratagems, r => r.detachmentId)
-  const enhancementsByDetachment = groupBy(filteredEnhancements, r => r.detachmentId)
-  const abilitiesByDetachment = groupBy(filteredDetAbilities, r => r.detachmentId)
+  const modelsByDatasheet = groupBy(filteredModels, (r) => r.datasheetId)
+  const keywordsByDatasheet = groupBy(filteredUnitKeywords, (r) => r.datasheetId)
+  const compositionsByDatasheet = groupBy(filteredCompositions, (r) => r.datasheetId)
+  const costsByDatasheet = groupBy(filteredCosts, (r) => r.datasheetId)
+  const wargearByDatasheet = groupBy(filteredWargear, (r) => r.datasheetId)
+  const wargearOptionsByDatasheet = groupBy(filteredWargearOptions, (r) => r.datasheetId)
+  const abilitiesByDatasheet = groupBy(filteredUnitAbilities, (r) => r.datasheetId)
+  const stratagemsByDetachment = groupBy(filteredStratagems, (r) => r.detachmentId)
+  const enhancementsByDetachment = groupBy(filteredEnhancements, (r) => r.detachmentId)
+  const abilitiesByDetachment = groupBy(filteredDetAbilities, (r) => r.detachmentId)
 
   // Build datasheet → factionId and subfaction lookups
   const dsFactionMap = new Map<string, string>()
@@ -280,18 +314,36 @@ export function convertGameData(input: GameDataInput, retrievedAt?: string): Gam
   }
 
   const SUBFACTION_KEYWORDS = [
-    'Blood Angels', 'Dark Angels', 'Space Wolves', 'Black Templars', 'Ultramarines',
-    'Deathwatch', 'Imperial Fists', 'Iron Hands', 'Salamanders', 'Raven Guard',
-    'White Scars', 'Crimson Fists', 'Blood Ravens',
-    'Ynnari', 'Harlequins', 'Asuryani',
-    'Plague Legions', 'Scintillating Legions', 'Legions of Excess', 'Blood Legions',
+    'Blood Angels',
+    'Dark Angels',
+    'Space Wolves',
+    'Black Templars',
+    'Ultramarines',
+    'Deathwatch',
+    'Imperial Fists',
+    'Iron Hands',
+    'Salamanders',
+    'Raven Guard',
+    'White Scars',
+    'Crimson Fists',
+    'Blood Ravens',
+    'Ynnari',
+    'Harlequins',
+    'Asuryani',
+    'Plague Legions',
+    'Scintillating Legions',
+    'Legions of Excess',
+    'Blood Legions',
     'Damned',
   ]
   const dsSubfactionMap = new Map<string, string>()
-  const keywordsByDs = groupBy(filteredUnitKeywords.filter(k => k.isFactionKeyword), k => k.datasheetId)
+  const keywordsByDs = groupBy(
+    filteredUnitKeywords.filter((k) => k.isFactionKeyword),
+    (k) => k.datasheetId,
+  )
   for (const [dsId, kws] of keywordsByDs) {
     for (const kw of kws) {
-      const match = SUBFACTION_KEYWORDS.find(sf => sf === kw.keyword)
+      const match = SUBFACTION_KEYWORDS.find((sf) => sf === kw.keyword)
       if (match) {
         dsSubfactionMap.set(dsId, match.toLowerCase())
         break
@@ -306,22 +358,8 @@ export function convertGameData(input: GameDataInput, retrievedAt?: string): Gam
   for (const ds of filteredDatasheets) factionSlugs.add(normalizeFactionId(ds.factionId))
   for (const det of filteredDetachments) factionSlugs.add(normalizeFactionId(det.factionId))
 
-  for (const fSlug of factionSlugs) {
-    const factionNodeId = `faction:${fSlug}`
-    nodes.push({
-      id: factionNodeId,
-      layer: 'faction',
-      category: 'faction-ability', // closest category
-      title: fSlug.split('-').map(w => w[0]!.toUpperCase() + w.slice(1)).join(' '),
-      content: `Top-level faction entry for ${fSlug}.`,
-      summary: `${fSlug} faction.`,
-      factionId: fSlug,
-      sources: [source],
-      refs: [],
-      version: 1,
-      keywords: [fSlug],
-    })
-  }
+  // Faction nodes are created by buildFactionNodes in combo-detection.ts
+  // Do NOT create placeholder faction nodes here — it causes duplicates
 
   // ── 1. Datasheets → unit/datasheet nodes ──────────────────────────────────
 
@@ -331,17 +369,26 @@ export function convertGameData(input: GameDataInput, retrievedAt?: string): Gam
     const compositions = compositionsByDatasheet.get(ds.id) ?? []
     const costs = costsByDatasheet.get(ds.id) ?? []
 
-    const statBlock = models.length > 0
-      ? models.map(m => `${m.name}: M${m.move} T${m.toughness} Sv${m.save} W${m.wounds} Ld${m.leadership} OC${m.oc}${m.invSv ? ` ${m.invSv}++` : ''}`).join('\n')
-      : ''
+    const statBlock =
+      models.length > 0
+        ? models
+            .map(
+              (m) =>
+                `${m.name}: M${m.move} T${m.toughness} Sv${m.save} W${m.wounds} Ld${m.leadership} OC${m.oc}${m.invSv ? ` ${m.invSv}++` : ''}`,
+            )
+            .join('\n')
+        : ''
 
-    const keywordList = keywords.map(k => k.keyword).join(', ')
-    const factionKeywords = keywords.filter(k => k.isFactionKeyword).map(k => k.keyword).join(', ')
-    const compositionText = compositions.map(c => stripHtml(c.description)).join('\n')
-    const costText = costs.map(c => `${stripHtml(c.description)}: ${c.cost}pts`).join(', ')
+    const keywordList = keywords.map((k) => k.keyword).join(', ')
+    const factionKeywords = keywords
+      .filter((k) => k.isFactionKeyword)
+      .map((k) => k.keyword)
+      .join(', ')
+    const compositionText = compositions.map((c) => stripHtml(c.description)).join('\n')
+    const costText = costs.map((c) => `${stripHtml(c.description)}: ${c.cost}pts`).join(', ')
 
     const wargearOpts = wargearOptionsByDatasheet.get(ds.id) ?? []
-    const wargearOptsText = wargearOpts.map(w => `• ${stripHtml(w.description)}`).join('\n')
+    const wargearOptsText = wargearOpts.map((w) => `• ${stripHtml(w.description)}`).join('\n')
 
     const content = [
       statBlock,
@@ -354,26 +401,32 @@ export function convertGameData(input: GameDataInput, retrievedAt?: string): Gam
       ds.loadout ? `**Loadout:** ${stripHtml(ds.loadout)}` : '',
       wargearOptsText ? `**Wargear Options:**\n${wargearOptsText}` : '',
       ds.damagedW ? `**Damaged (${ds.damagedW}W):** ${stripHtml(ds.damagedDescription)}` : '',
-    ].filter(Boolean).join('\n\n')
+    ]
+      .filter(Boolean)
+      .join('\n\n')
 
     // Build structured points costs
-    const unitPoints = costs.length > 0
-      ? costs.map(c => ({ models: c.description || '1 model', cost: parseInt(c.cost) || 0 }))
-      : undefined
+    const unitPoints =
+      costs.length > 0
+        ? costs.map((c) => ({ models: c.description || '1 model', cost: parseInt(c.cost) || 0 }))
+        : undefined
 
     // Build structured stat line from Wahapedia data
-    const unitStats = ds.move || ds.toughness || ds.save || ds.wounds ? {
-      M: ds.move || '-',
-      T: parseInt(ds.toughness) || 0,
-      SV: ds.save ? `${ds.save}+` : '-',
-      W: parseInt(ds.wounds) || 0,
-      LD: ds.leadership ? `${ds.leadership}+` : '-',
-      OC: parseInt(ds.oc as any) || 0,
-      ...(ds.invSv ? { invSv: `${ds.invSv}+` } : {}),
-    } : undefined
+    const unitStats =
+      ds.move || ds.toughness || ds.save || ds.wounds
+        ? {
+            M: ds.move || '-',
+            T: parseInt(ds.toughness ?? '0') || 0,
+            SV: ds.save ? `${ds.save}+` : '-',
+            W: parseInt(ds.wounds ?? '0') || 0,
+            LD: ds.leadership ? `${ds.leadership}+` : '-',
+            OC: parseInt(ds.oc ?? '0') || 0,
+            ...(ds.invSv ? { invSv: `${ds.invSv}+` } : {}),
+          }
+        : undefined
 
     const node: Node = {
-      id: ds.id,  // BSData GUID
+      id: ds.id, // BSData GUID
       layer: 'unit',
       category: 'datasheet',
       title: ds.name,
@@ -387,7 +440,14 @@ export function convertGameData(input: GameDataInput, retrievedAt?: string): Gam
       sources: [source],
       refs: [],
       version: 1,
-      keywords: [...new Set([...keywords.map(k => k.keyword.toLowerCase()), ...(ds.role.toLowerCase() !== 'other' ? [ds.role.toLowerCase()] : [])].filter(Boolean))],
+      keywords: [
+        ...new Set(
+          [
+            ...keywords.map((k) => k.keyword.toLowerCase()),
+            ...(ds.role.toLowerCase() !== 'other' ? [ds.role.toLowerCase()] : []),
+          ].filter(Boolean),
+        ),
+      ],
     }
 
     // Add combat profile to keywords for combat-relevant queries
@@ -433,10 +493,9 @@ export function convertGameData(input: GameDataInput, retrievedAt?: string): Gam
     const unitCosts = costsByDatasheet.get(ds.id) ?? []
     if (unitCosts.length > 0) {
       // Parse the lowest cost option (minimum squad size)
-      const costValues = unitCosts.map(c => parseInt(c.cost)).filter(c => !isNaN(c))
+      const costValues = unitCosts.map((c) => parseInt(c.cost)).filter((c) => !isNaN(c))
       if (costValues.length > 0) {
         const minCost = Math.min(...costValues)
-        const maxCost = Math.max(...costValues)
         node.keywords.push(`pts-${minCost}`)
 
         // Points tier for budget queries
@@ -458,7 +517,7 @@ export function convertGameData(input: GameDataInput, retrievedAt?: string): Gam
 
     // Elevate key weapon capabilities to datasheet level
     const unitWeapons = wargearByDatasheet.get(ds.id) ?? []
-    const allWeaponDescs = unitWeapons.map(w => (w.description ?? '').toLowerCase()).join(' ')
+    const allWeaponDescs = unitWeapons.map((w) => (w.description ?? '').toLowerCase()).join(' ')
     if (allWeaponDescs.includes('indirect fire')) node.keywords.push('indirect fire')
     if (allWeaponDescs.includes('torrent')) node.keywords.push('torrent')
     if (allWeaponDescs.includes('blast')) node.keywords.push('blast')
@@ -474,7 +533,7 @@ export function convertGameData(input: GameDataInput, retrievedAt?: string): Gam
 
     // Unit-level ability capabilities
     const unitAbs = abilitiesByDatasheet.get(ds.id) ?? []
-    const allAbilityText = unitAbs.map(a => `${a.name} ${a.description}`.toLowerCase()).join(' ')
+    const allAbilityText = unitAbs.map((a) => `${a.name} ${a.description}`.toLowerCase()).join(' ')
     if (allAbilityText.includes('deep strike')) node.keywords.push('deep strike')
     if (allAbilityText.includes('lone operative')) node.keywords.push('lone operative')
     if (allAbilityText.includes('stealth')) node.keywords.push('stealth')
@@ -540,7 +599,7 @@ export function convertGameData(input: GameDataInput, retrievedAt?: string): Gam
     // Datasheet → faction parent ref
     refs.push({
       sourceId: ds.id,
-      targetId: `faction:${normalizeFactionId(ds.factionId)}`,
+      targetId: `faction-root:${normalizeFactionId(ds.factionId)}`,
       rel: 'part_of',
       context: `${ds.name} belongs to ${normalizeFactionId(ds.factionId)}.`,
     })
@@ -565,7 +624,9 @@ export function convertGameData(input: GameDataInput, retrievedAt?: string): Gam
       `**Range:** ${wg.range} | **Type:** ${wg.type}`,
       `**A:** ${wg.attacks} | **BS/WS:** ${wg.skill} | **S:** ${wg.strength} | **AP:** ${wg.ap} | **D:** ${wg.damage}`,
       cleanDesc ? `\n${cleanDesc}` : '',
-    ].filter(Boolean).join('\n')
+    ]
+      .filter(Boolean)
+      .join('\n')
 
     nodes.push({
       id: weaponNodeId,
@@ -630,9 +691,13 @@ export function convertGameData(input: GameDataInput, retrievedAt?: string): Gam
 
     for (const line of lines) {
       const trimmed = line.trim()
-      if (/^[A-Z][A-Z\s'\-]{4,}$/.test(trimmed) &&
-          !trimmed.includes('ADEPTUS') && !trimmed.includes('ASTARTES') &&
-          !trimmed.includes('HERETIC') && !trimmed.includes('INFANTRY')) {
+      if (
+        /^[A-Z][A-Z\s'-]{4,}$/.test(trimmed) &&
+        !trimmed.includes('ADEPTUS') &&
+        !trimmed.includes('ASTARTES') &&
+        !trimmed.includes('HERETIC') &&
+        !trimmed.includes('INFANTRY')
+      ) {
         if (currentName && currentLines.length > 0) {
           subRules.push({ name: currentName, text: currentLines.join('\n').trim() })
         }
@@ -654,13 +719,13 @@ export function convertGameData(input: GameDataInput, retrievedAt?: string): Gam
   // Only include abilities that are actual army rules (non-empty factionId, not Designer's Note).
   const factionAbilityNames = new Set(
     input.abilities
-      .filter(a => {
+      .filter((a) => {
         const fSlug = normalizeFactionId(a.factionId)
         if (!fSlug) return false
         if (/^designer'?s?\s*note$/i.test(a.name)) return false
         return true
       })
-      .map(a => a.name.toLowerCase())
+      .map((a) => a.name.toLowerCase()),
   )
 
   // For army rules that appear as unit abilities: instead of creating duplicate nodes,
@@ -673,14 +738,36 @@ export function convertGameData(input: GameDataInput, retrievedAt?: string): Gam
       armyRuleRefs.set(ab.name.toLowerCase(), dsIds)
     }
   }
+  // Primary faction for shared army rules. When multiple factions list the same rule,
+  // only the primary faction's version gets created. Others are skipped.
+  const PRIMARY_FACTION: Record<string, string> = {
+    'oath-of-moment': 'space-marines',
+    'dark-pacts': 'chaos-space-marines',
+    'blessings-of-khorne': 'world-eaters',
+    'cabal-of-sorcerers': 'thousand-sons',
+    'nurgles-gift-aura': 'death-guard',
+    synapse: 'tyranids',
+    'shadow-in-the-warp': 'tyranids',
+    'battle-focus': 'aeldari',
+    'disparate-paths': 'aeldari',
+    'assigned-agents': 'imperial-agents',
+    'kill-team': 'imperial-agents',
+    'kill-teams': 'imperial-agents',
+    'doctrina-imperatives': 'adeptus-mechanicus',
+    'super-heavy-walker': 'imperial-knights',
+    'thrill-seekers': 'emperors-children',
+  }
+
   // Create modifies refs from faction ability → datasheets
   for (const [abilityName, dsIds] of armyRuleRefs) {
-    // Find the faction ability node ID
-    const factionAb = input.abilities.find(a => a.name.toLowerCase() === abilityName)
+    // Find the faction ability node ID — use primary faction if shared
+    const factionAb = input.abilities.find((a) => a.name.toLowerCase() === abilityName)
     if (!factionAb) continue
-    const factionAbNodeId = `faction:${normalizeFactionId(factionAb.factionId)}:${slugify(factionAb.name)}`
+    const ruleSlug = slugify(factionAb.name)
+    const primaryFaction = PRIMARY_FACTION[ruleSlug] || normalizeFactionId(factionAb.factionId)
+    const factionAbNodeId = `faction:${primaryFaction}:${ruleSlug}`
     for (const dsId of dsIds) {
-      const dsName = filteredDatasheets.find(d => d.id === dsId)?.name ?? dsId
+      const dsName = filteredDatasheets.find((d) => d.id === dsId)?.name ?? dsId
       refs.push({
         sourceId: factionAbNodeId,
         targetId: dsId,
@@ -700,7 +787,7 @@ export function convertGameData(input: GameDataInput, retrievedAt?: string): Gam
     const abilityNodeId = count === 0 ? baseId : `${baseId}-${count}`
 
     const cleanAbDesc = stripHtml(ab.description)
-    const dsName = filteredDatasheets.find(d => d.id === ab.datasheetId)?.name ?? ''
+    const dsName = filteredDatasheets.find((d) => d.id === ab.datasheetId)?.name ?? ''
 
     // Split multi-option abilities
     const subRules = splitSubRules(cleanAbDesc)
@@ -724,7 +811,11 @@ export function convertGameData(input: GameDataInput, retrievedAt?: string): Gam
       sources: [source],
       refs: [],
       version: 1,
-      keywords: [ab.type.toLowerCase(), ...extractTerms(ab.description), ...extractTargetingKeywords(ab.description)],
+      keywords: [
+        ab.type.toLowerCase(),
+        ...extractTerms(ab.description),
+        ...extractTargetingKeywords(ab.description),
+      ],
     })
 
     refs.push({
@@ -748,12 +839,17 @@ export function convertGameData(input: GameDataInput, retrievedAt?: string): Gam
           content: sub.text,
           summary: `${sub.name}, option of ${ab.name} on ${dsName} — ${truncate(sub.text, 120)}`,
           factionId: dsFactionMap.get(ab.datasheetId),
-      subfaction: dsSubfactionMap.get(ab.datasheetId),
+          subfaction: dsSubfactionMap.get(ab.datasheetId),
           datasheetId: ab.datasheetId,
           sources: [source],
           refs: [],
           version: 1,
-          keywords: [ab.type.toLowerCase(), slugify(sub.name), ...extractTerms(sub.text), ...extractTargetingKeywords(sub.text)],
+          keywords: [
+            ab.type.toLowerCase(),
+            slugify(sub.name),
+            ...extractTerms(sub.text),
+            ...extractTargetingKeywords(sub.text),
+          ],
         })
 
         refs.push({
@@ -770,7 +866,11 @@ export function convertGameData(input: GameDataInput, retrievedAt?: string): Gam
         const SUB_RULE_CORE_LINKS: Array<{ pattern: string; coreSlug: string; label: string }> = [
           { pattern: 'sustained hits', coreSlug: 'sustained-hits', label: 'Sustained Hits' },
           { pattern: 'lethal hits', coreSlug: 'lethal-hits', label: 'Lethal Hits' },
-          { pattern: 'devastating wounds', coreSlug: 'devastating-wounds', label: 'Devastating Wounds' },
+          {
+            pattern: 'devastating wounds',
+            coreSlug: 'devastating-wounds',
+            label: 'Devastating Wounds',
+          },
           { pattern: 'feel no pain', coreSlug: 'feel-no-pain', label: 'Feel No Pain' },
           { pattern: 'hazardous', coreSlug: 'hazardous', label: 'Hazardous' },
           { pattern: 'deep strike', coreSlug: 'deep-strike', label: 'Deep Strike' },
@@ -795,22 +895,70 @@ export function convertGameData(input: GameDataInput, retrievedAt?: string): Gam
   // Skip abilities with empty factionId — these are core/basic rules (Deep Strike,
   // Deadly Demise, Feel No Pain, etc.) already handled by the core rules parser.
   // Also skip "Designer's Note" entries which are clarifications, not army rules.
-  const factionAbilities = input.abilities.filter(ab => {
+  const factionAbilities = input.abilities.filter((ab) => {
     const fSlug = normalizeFactionId(ab.factionId)
     if (!fSlug) return false
     if (/^designer['\u2019]?s?\s*note$/i.test(ab.name)) return false
     return true
   })
 
+  // Chapter-specific rules that belong to a subfaction, not generic SM
+  const RULE_SUBFACTION: Record<string, string> = {
+    'templar-vows': 'black templars',
+    'heirs-of-sigismund': 'black templars',
+    'the-unforgiven': 'dark angels',
+    'the-ravenwing': 'dark angels',
+    'the-deathwing': 'dark angels',
+    'the-sons-of-sanguinius': 'blood angels',
+    'curse-of-the-wulfen': 'space wolves',
+    'sons-of-russ': 'space wolves',
+    sagas: 'space wolves',
+    'mission-tactics': 'deathwatch',
+    deathwatch: 'deathwatch',
+    'kill-teams': 'deathwatch',
+    'kill-team': 'deathwatch',
+  }
+
+  const seenArmyRuleNames = new Set<string>()
   const seenFactionAbIds = new Set<string>()
   for (const ab of factionAbilities) {
+    const ruleNameKey = slugify(ab.name)
+    const fSlugCheck = normalizeFactionId(ab.factionId)
+    const primaryFaction = PRIMARY_FACTION[ruleNameKey]
+    // If this rule has a designated primary faction and this isn't it, skip
+    if (primaryFaction && fSlugCheck !== primaryFaction) continue
+    // If we've already seen this rule name (non-primary shared rule), skip
+    if (seenArmyRuleNames.has(ruleNameKey)) continue
+    seenArmyRuleNames.add(ruleNameKey)
+
     let factionAbId = `faction:${normalizeFactionId(ab.factionId)}:${slugify(ab.name)}`
     if (seenFactionAbIds.has(factionAbId)) {
       factionAbId = `faction:${normalizeFactionId(ab.factionId)}:${slugify(ab.name)}-${ab.id}`
     }
     seenFactionAbIds.add(factionAbId)
-    const cleanFaDesc = stripHtml(ab.description)
+    // Wahapedia ability descriptions are already markdown — preserve formatting
+    const cleanFaDesc = ab.description
     const fSlug = normalizeFactionId(ab.factionId)
+
+    // Classify: construction/mustering restrictions vs actual gameplay army rules
+    const lower = cleanFaDesc.toLowerCase()
+    // Chapter-specific rules override construction detection
+    const hasSubfaction = !!RULE_SUBFACTION[ruleNameKey]
+    const isConstruction =
+      !hasSubfaction &&
+      (lower.startsWith('when mustering') ||
+        lower.startsWith('- your army') ||
+        lower.startsWith('- if an') ||
+        lower.startsWith('- if a ') ||
+        lower.startsWith('the following') ||
+        lower.startsWith('you can') ||
+        lower.includes('you cannot select') ||
+        lower.startsWith('- you can') ||
+        lower.startsWith('if every model in your army') ||
+        lower.startsWith('each detachment rule') ||
+        lower.startsWith('some imperial') ||
+        lower.startsWith('while this unit'))
+    const categoryForRule = isConstruction ? ('army-ability' as const) : ('army-rule' as const)
 
     // Split multi-option faction abilities
     const subRules = splitSubRules(cleanFaDesc)
@@ -819,14 +967,16 @@ export function convertGameData(input: GameDataInput, retrievedAt?: string): Gam
       ? cleanFaDesc.substring(0, cleanFaDesc.indexOf(subRules[0]!.name)).trim()
       : cleanFaDesc
 
+    const ruleSubfaction = RULE_SUBFACTION[ruleNameKey]
     nodes.push({
       id: factionAbId,
       layer: 'faction',
-      category: 'faction-ability',
+      category: categoryForRule,
       title: ab.name,
       content: hasSubRules ? preamble : cleanFaDesc,
-      summary: `${ab.name} — army rule for ${fSlug}. ${truncate(preamble || cleanFaDesc, 100)}`,
+      summary: `${ab.name} — army rule for ${ruleSubfaction || fSlug}. ${truncate(preamble || cleanFaDesc, 100)}`,
       factionId: fSlug,
+      subfaction: ruleSubfaction,
       sources: [source],
       refs: [],
       version: 1,
@@ -837,7 +987,7 @@ export function convertGameData(input: GameDataInput, retrievedAt?: string): Gam
     if (fSlug) {
       refs.push({
         sourceId: factionAbId,
-        targetId: `faction:${fSlug}`,
+        targetId: `faction-root:${fSlug}`,
         rel: 'part_of',
         context: `${ab.name} is an army rule for ${fSlug}.`,
         bidirectional: true,
@@ -850,7 +1000,7 @@ export function convertGameData(input: GameDataInput, retrievedAt?: string): Gam
         nodes.push({
           id: subId,
           layer: 'faction',
-          category: 'faction-ability',
+          category: 'army-ability',
           title: `${sub.name} (${ab.name})`,
           content: sub.text,
           summary: `${sub.name}, option of ${ab.name} for ${fSlug} — ${truncate(sub.text, 120)}`,
@@ -873,7 +1023,11 @@ export function convertGameData(input: GameDataInput, retrievedAt?: string): Gam
         const FA_SUB_CORE_LINKS: Array<{ pattern: string; coreSlug: string; label: string }> = [
           { pattern: 'sustained hits', coreSlug: 'sustained-hits', label: 'Sustained Hits' },
           { pattern: 'lethal hits', coreSlug: 'lethal-hits', label: 'Lethal Hits' },
-          { pattern: 'devastating wounds', coreSlug: 'devastating-wounds', label: 'Devastating Wounds' },
+          {
+            pattern: 'devastating wounds',
+            coreSlug: 'devastating-wounds',
+            label: 'Devastating Wounds',
+          },
           { pattern: 'feel no pain', coreSlug: 'feel-no-pain', label: 'Feel No Pain' },
           { pattern: 'hazardous', coreSlug: 'hazardous', label: 'Hazardous' },
           { pattern: 'deep strike', coreSlug: 'deep-strike', label: 'Deep Strike' },
@@ -914,9 +1068,11 @@ export function convertGameData(input: GameDataInput, retrievedAt?: string): Gam
     const content = [
       det.legend ? `*${stripHtml(det.legend)}*` : '',
       detAbilities.length > 0
-        ? `**Detachment Ability:** ${detAbilities.map(a => `${a.name} — ${truncate(stripHtml(a.description), 200)}`).join('\n\n')}`
+        ? `**Detachment Ability:** ${detAbilities.map((a) => `${a.name} — ${truncate(stripHtml(a.description), 200)}`).join('\n\n')}`
         : '',
-    ].filter(Boolean).join('\n\n')
+    ]
+      .filter(Boolean)
+      .join('\n\n')
 
     nodes.push({
       id: detNodeId,
@@ -933,14 +1089,16 @@ export function convertGameData(input: GameDataInput, retrievedAt?: string): Gam
       version: 1,
       keywords: [
         ...extractTerms(content),
-        ...(detChapterMap.has(det.id) ? [detChapterMap.get(det.id)!.toLowerCase()] : ['any chapter']),
+        ...(detChapterMap.has(det.id)
+          ? [detChapterMap.get(det.id)!.toLowerCase()]
+          : ['any chapter']),
       ],
     })
 
     // Detachment → faction parent ref
     refs.push({
       sourceId: detNodeId,
-      targetId: `faction:${normalizeFactionId(det.factionId)}`,
+      targetId: `faction-root:${normalizeFactionId(det.factionId)}`,
       rel: 'part_of',
       context: `${det.name} is a detachment for ${normalizeFactionId(det.factionId)}.`,
       bidirectional: true,
@@ -952,7 +1110,9 @@ export function convertGameData(input: GameDataInput, retrievedAt?: string): Gam
       const daNodeId = `det:${normalizeFactionId(det.factionId)}:${slugify(det.name)}:${slugify(da.name)}`
 
       const cleanDaDesc = stripHtml(da.description)
-      const daSubfaction = detChapterMap.has(det.id) ? detChapterMap.get(det.id)!.toLowerCase() : undefined
+      const daSubfaction = detChapterMap.has(det.id)
+        ? detChapterMap.get(det.id)!.toLowerCase()
+        : undefined
 
       nodes.push({
         id: daNodeId,
@@ -986,7 +1146,9 @@ export function convertGameData(input: GameDataInput, retrievedAt?: string): Gam
 
       const cleanStratDesc = stripHtml(strat.description)
       // Inherit subfaction from parent detachment (chapter lock propagates to stratagems)
-      const stratSubfaction = detChapterMap.has(det.id) ? detChapterMap.get(det.id)!.toLowerCase() : undefined
+      const stratSubfaction = detChapterMap.has(det.id)
+        ? detChapterMap.get(det.id)!.toLowerCase()
+        : undefined
 
       nodes.push({
         id: stratNodeId,
@@ -1002,7 +1164,12 @@ export function convertGameData(input: GameDataInput, retrievedAt?: string): Gam
         sources: [source],
         refs: [],
         version: 1,
-        keywords: ['stratagem', strat.type.toLowerCase(), ...extractTerms(strat.description), ...extractTargetingKeywords(strat.description)],
+        keywords: [
+          'stratagem',
+          strat.type.toLowerCase(),
+          ...extractTerms(strat.description),
+          ...extractTargetingKeywords(strat.description),
+        ],
       })
 
       refs.push({
@@ -1020,7 +1187,9 @@ export function convertGameData(input: GameDataInput, retrievedAt?: string): Gam
       const enhNodeId = `det:${normalizeFactionId(det.factionId)}:${slugify(det.name)}:${slugify(enh.name)}`
 
       const cleanEnhDesc = stripHtml(enh.description)
-      const enhSubfaction = detChapterMap.has(det.id) ? detChapterMap.get(det.id)!.toLowerCase() : undefined
+      const enhSubfaction = detChapterMap.has(det.id)
+        ? detChapterMap.get(det.id)!.toLowerCase()
+        : undefined
 
       nodes.push({
         id: enhNodeId,
@@ -1035,7 +1204,11 @@ export function convertGameData(input: GameDataInput, retrievedAt?: string): Gam
         sources: [source],
         refs: [],
         version: 1,
-        keywords: ['enhancement', ...extractTerms(enh.description), ...extractTargetingKeywords(enh.description)],
+        keywords: [
+          'enhancement',
+          ...extractTerms(enh.description),
+          ...extractTargetingKeywords(enh.description),
+        ],
       })
 
       refs.push({
@@ -1053,9 +1226,9 @@ export function convertGameData(input: GameDataInput, retrievedAt?: string): Gam
   for (const j of filteredDsStratagems) {
     if (j.stratagemId) {
       // Find the stratagem node
-      const strat = filteredStratagems.find(s => s.id === j.stratagemId)
+      const strat = filteredStratagems.find((s) => s.id === j.stratagemId)
       if (strat) {
-        const det = input.detachments.find(d => d.id === strat.detachmentId)
+        const det = input.detachments.find((d) => d.id === strat.detachmentId)
         if (det) {
           const stratNodeId = `det:${normalizeFactionId(det.factionId)}:${slugify(det.name)}:${slugify(strat.name)}`
           refs.push({
@@ -1071,9 +1244,9 @@ export function convertGameData(input: GameDataInput, retrievedAt?: string): Gam
 
   for (const j of filteredDsEnhancements) {
     if (j.enhancementId) {
-      const enh = filteredEnhancements.find(e => e.id === j.enhancementId)
+      const enh = filteredEnhancements.find((e) => e.id === j.enhancementId)
       if (enh) {
-        const det = input.detachments.find(d => d.id === enh.detachmentId)
+        const det = input.detachments.find((d) => d.id === enh.detachmentId)
         if (det) {
           const enhNodeId = `det:${normalizeFactionId(det.factionId)}:${slugify(det.name)}:${slugify(enh.name)}`
           refs.push({
@@ -1182,7 +1355,7 @@ export function convertGameData(input: GameDataInput, retrievedAt?: string): Gam
   // ALL_CORE_PATTERNS already defined above
 
   for (const strat of filteredStratagems) {
-    const det = input.detachments.find(d => d.id === strat.detachmentId)
+    const det = input.detachments.find((d) => d.id === strat.detachmentId)
     if (!det) continue
     const stratNodeId = `det:${normalizeFactionId(det.factionId)}:${slugify(det.name)}:${slugify(strat.name)}`
     const text = `${strat.name} ${strat.description}`.toLowerCase()
@@ -1200,7 +1373,7 @@ export function convertGameData(input: GameDataInput, retrievedAt?: string): Gam
   }
 
   for (const enh of filteredEnhancements) {
-    const det = input.detachments.find(d => d.id === enh.detachmentId)
+    const det = input.detachments.find((d) => d.id === enh.detachmentId)
     if (!det) continue
     const enhNodeId = `det:${normalizeFactionId(det.factionId)}:${slugify(det.name)}:${slugify(enh.name)}`
     const text = `${enh.name} ${enh.description}`.toLowerCase()
@@ -1219,7 +1392,7 @@ export function convertGameData(input: GameDataInput, retrievedAt?: string): Gam
 
   // Detachment abilities too
   for (const da of filteredDetAbilities) {
-    const det = input.detachments.find(d => d.id === da.detachmentId)
+    const det = input.detachments.find((d) => d.id === da.detachmentId)
     if (!det) continue
     const daNodeId = `det:${normalizeFactionId(det.factionId)}:${slugify(det.name)}:${slugify(da.name)}`
     const text = `${da.name} ${da.description}`.toLowerCase()
@@ -1267,7 +1440,6 @@ function groupBy<T>(items: T[], key: (item: T) => string): Map<string, T[]> {
   return map
 }
 
-
 function extractWeaponKeywords(wg: DatasheetWargearRecord): string[] {
   const kw: string[] = []
   const desc = (wg.description ?? '').toLowerCase()
@@ -1296,17 +1468,55 @@ function extractWeaponKeywords(wg: DatasheetWargearRecord): string[] {
 function extractTerms(text: string): string[] {
   const lower = text.toLowerCase()
   const terms = [
-    'wound', 'hit', 'save', 'strength', 'toughness', 'leadership',
-    'charge', 'shoot', 'fight', 'advance', 'fall back', 'overwatch',
-    'battle-shock', 'deep strike', 'stratagem', 'engagement range',
-    'cover', 'terrain', 'objective', 'damage', 'mortal wound',
-    'feel no pain', 'invulnerable', 'transport', 'character',
-    'infantry', 'vehicle', 'monster', 'leader', 'attached',
-    'lone operative', 'stealth', 'scouts', 'deadly demise',
+    'wound',
+    'hit',
+    'save',
+    'strength',
+    'toughness',
+    'leadership',
+    'charge',
+    'shoot',
+    'fight',
+    'advance',
+    'fall back',
+    'overwatch',
+    'battle-shock',
+    'deep strike',
+    'stratagem',
+    'engagement range',
+    'cover',
+    'terrain',
+    'objective',
+    'damage',
+    'mortal wound',
+    'feel no pain',
+    'invulnerable',
+    'transport',
+    'character',
+    'infantry',
+    'vehicle',
+    'monster',
+    'leader',
+    'attached',
+    'lone operative',
+    'stealth',
+    'scouts',
+    'deadly demise',
     // Weapon abilities — also appear in unit abilities, stratagems, enhancements
-    'sustained hits', 'lethal hits', 'devastating wounds', 'hazardous',
-    'blast', 'torrent', 'twin-linked', 'rapid fire', 'pistol', 'melta',
-    'lance', 'anti-', 'ignores cover', 'indirect fire',
+    'sustained hits',
+    'lethal hits',
+    'devastating wounds',
+    'hazardous',
+    'blast',
+    'torrent',
+    'twin-linked',
+    'rapid fire',
+    'pistol',
+    'melta',
+    'lance',
+    'anti-',
+    'ignores cover',
+    'indirect fire',
   ]
-  return terms.filter(t => lower.includes(t))
+  return terms.filter((t) => lower.includes(t))
 }

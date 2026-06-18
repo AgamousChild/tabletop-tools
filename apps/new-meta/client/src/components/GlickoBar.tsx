@@ -16,11 +16,7 @@ export function GlickoBar({ rating, ratingDeviation, rank, playerName, gamesPlay
 
   // Uncertainty level: narrow (<50), medium (50–150), wide (>150)
   const bandColor =
-    band < 50
-      ? 'text-emerald-400'
-      : band < 150
-        ? 'text-amber-400'
-        : 'text-slate-400'
+    band < 50 ? 'text-emerald-400' : band < 150 ? 'text-amber-400' : 'text-slate-400'
 
   return (
     <div className="flex items-center gap-4 py-2">
@@ -28,9 +24,7 @@ export function GlickoBar({ rating, ratingDeviation, rank, playerName, gamesPlay
         <span className="text-slate-500 text-sm w-8 text-right flex-shrink-0">#{rank}</span>
       )}
       <span className="text-slate-100 flex-1 truncate">{playerName}</span>
-      <span className="text-slate-100 font-mono font-semibold">
-        {displayRating}
-      </span>
+      <span className="text-slate-100 font-mono font-semibold">{displayRating}</span>
       <span className={`font-mono text-sm ${bandColor}`}>±{band}</span>
       <span className="text-slate-500 text-xs w-16 text-right">{gamesPlayed}g</span>
     </div>

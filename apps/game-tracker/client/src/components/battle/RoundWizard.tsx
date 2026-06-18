@@ -1,10 +1,11 @@
-import { useState } from 'react'
 import type { Stratagem } from '@tabletop-tools/game-data-store'
+import { useState } from 'react'
+
+import { RoundSummary } from './RoundSummary'
 import type { SecondaryMission } from './SecondaryPicker'
+import { TurnFlow } from './TurnFlow'
 import type { TurnData } from './types'
 import { createEmptyTurnData } from './types'
-import { TurnFlow } from './TurnFlow'
-import { RoundSummary } from './RoundSummary'
 
 type Step = 'your-turn' | 'their-turn' | 'summary'
 
@@ -50,9 +51,7 @@ export function RoundWizard({
   opponentArmyUnits,
   availableSecondaries,
 }: Props) {
-  const [step, setStep] = useState<Step>(
-    whoGoesFirst === 'THEM' ? 'their-turn' : 'your-turn',
-  )
+  const [step, setStep] = useState<Step>(whoGoesFirst === 'THEM' ? 'their-turn' : 'your-turn')
   const [yourTurn, setYourTurn] = useState<TurnData>(createEmptyTurnData())
   const [theirTurn, setTheirTurn] = useState<TurnData>(createEmptyTurnData())
 

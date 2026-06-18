@@ -2,9 +2,9 @@ import { createClient } from '@libsql/client'
 import { createDbFromClient } from '@tabletop-tools/db'
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest'
 
+import type { R2Storage } from '../lib/storage/r2'
 import { createCallerFactory } from '../trpc'
 import { appRouter } from './index'
-import type { R2Storage } from '../lib/storage/r2'
 
 const mockStorage: R2Storage = {
   upload: vi.fn().mockResolvedValue('https://cdn.example.com/training/test.png'),
@@ -64,15 +64,27 @@ afterAll(() => client.close())
 
 const createCaller = createCallerFactory(appRouter)
 const req = new Request('http://localhost')
-const alice = { user: { id: 'user-1', email: 'alice@example.com', name: 'Alice' }, req, db, storage: mockStorage }
-const bob = { user: { id: 'user-2', email: 'bob@example.com', name: 'Bob' }, req, db, storage: mockStorage }
+const alice = {
+  user: { id: 'user-1', email: 'alice@example.com', name: 'Alice' },
+  req,
+  db,
+  storage: mockStorage,
+}
+const bob = {
+  user: { id: 'user-2', email: 'bob@example.com', name: 'Bob' },
+  req,
+  db,
+  storage: mockStorage,
+}
 const anon = { user: null, req, db, storage: mockStorage }
 
 // Fake base64 for a tiny grayscale image
 const fakeImageBase64 = Buffer.from(new Uint8Array(64 * 64).fill(128)).toString('base64')
 // Fake base64 for a full-frame image (small for tests)
 const fakeFrameBase64 = Buffer.from(new Uint8Array(100 * 100 * 4).fill(200)).toString('base64')
-const fakeFeatures = [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6]
+const fakeFeatures = [
+  0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6,
+]
 
 describe('training.saveExamples', () => {
   it('saves multiple training examples with images', async () => {
@@ -80,8 +92,20 @@ describe('training.saveExamples', () => {
     const result = await caller.training.saveExamples({
       diceSetId: 'set-1',
       examples: [
-        { label: 4, guess: 4, confidence: 0.9, features: fakeFeatures, imageBase64: fakeImageBase64 },
-        { label: 2, guess: 3, confidence: 0.6, features: fakeFeatures, imageBase64: fakeImageBase64 },
+        {
+          label: 4,
+          guess: 4,
+          confidence: 0.9,
+          features: fakeFeatures,
+          imageBase64: fakeImageBase64,
+        },
+        {
+          label: 2,
+          guess: 3,
+          confidence: 0.6,
+          features: fakeFeatures,
+          imageBase64: fakeImageBase64,
+        },
       ],
     })
     expect(result.saved).toBe(2)
@@ -107,7 +131,15 @@ describe('training.saveExamples', () => {
     await expect(
       caller.training.saveExamples({
         diceSetId: 'set-1',
-        examples: [{ label: 1, guess: 1, confidence: 0.8, features: fakeFeatures, imageBase64: fakeImageBase64 }],
+        examples: [
+          {
+            label: 1,
+            guess: 1,
+            confidence: 0.8,
+            features: fakeFeatures,
+            imageBase64: fakeImageBase64,
+          },
+        ],
       }),
     ).rejects.toMatchObject({ code: 'FORBIDDEN' })
   })
@@ -117,7 +149,15 @@ describe('training.saveExamples', () => {
     await expect(
       caller.training.saveExamples({
         diceSetId: 'set-1',
-        examples: [{ label: 1, guess: 1, confidence: 0.8, features: fakeFeatures, imageBase64: fakeImageBase64 }],
+        examples: [
+          {
+            label: 1,
+            guess: 1,
+            confidence: 0.8,
+            features: fakeFeatures,
+            imageBase64: fakeImageBase64,
+          },
+        ],
       }),
     ).rejects.toMatchObject({ code: 'UNAUTHORIZED' })
   })
@@ -142,7 +182,15 @@ describe('training.list', () => {
     const bobCaller = createCaller(bob)
     await bobCaller.training.saveExamples({
       diceSetId: 'set-2',
-      examples: [{ label: 6, guess: 6, confidence: 0.99, features: fakeFeatures, imageBase64: fakeImageBase64 }],
+      examples: [
+        {
+          label: 6,
+          guess: 6,
+          confidence: 0.99,
+          features: fakeFeatures,
+          imageBase64: fakeImageBase64,
+        },
+      ],
     })
 
     // Bob can only see his own with myOnly
@@ -195,7 +243,7 @@ describe('training.delete', () => {
     expect(after.examples.find((e) => e.id === firstId)).toBeUndefined()
   })
 
-  it('rejects deleting another user\'s example', async () => {
+  it("rejects deleting another user's example", async () => {
     const aliceCaller = createCaller(alice)
     const aliceList = await aliceCaller.training.list({ myOnly: true })
     if (aliceList.examples.length === 0) return // skip if no examples left
@@ -299,7 +347,7 @@ describe('training.deleteFrame', () => {
     expect(after.frames.find((f) => f.id === frameId)).toBeUndefined()
   })
 
-  it('rejects deleting another user\'s frame', async () => {
+  it("rejects deleting another user's frame", async () => {
     // Bob saves a frame to his own set
     const bobCaller = createCaller(bob)
     const saved = await bobCaller.training.saveFrame({
@@ -311,15 +359,15 @@ describe('training.deleteFrame', () => {
     })
 
     const aliceCaller = createCaller(alice)
-    await expect(
-      aliceCaller.training.deleteFrame({ id: saved.id }),
-    ).rejects.toMatchObject({ code: 'FORBIDDEN' })
+    await expect(aliceCaller.training.deleteFrame({ id: saved.id })).rejects.toMatchObject({
+      code: 'FORBIDDEN',
+    })
   })
 
   it('returns NOT_FOUND for nonexistent frame', async () => {
     const caller = createCaller(alice)
-    await expect(
-      caller.training.deleteFrame({ id: 'nonexistent' }),
-    ).rejects.toMatchObject({ code: 'NOT_FOUND' })
+    await expect(caller.training.deleteFrame({ id: 'nonexistent' })).rejects.toMatchObject({
+      code: 'NOT_FOUND',
+    })
   })
 })

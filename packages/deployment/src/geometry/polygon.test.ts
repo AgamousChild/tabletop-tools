@@ -1,6 +1,7 @@
-import { describe, it, expect } from 'vitest'
-import { pointInRect, rectsOverlap, pointInPolygon } from './polygon'
-import type { Rect, Point } from '../types'
+import { describe, expect, it } from 'vitest'
+
+import type { Point, Rect } from '../types'
+import { pointInPolygon, pointInRect, rectsOverlap } from './polygon'
 
 // Rect: center={x:5,y:5}, width=4, height=4 → x∈[3,7], y∈[3,7]
 const rect: Rect = { center: { x: 5, y: 5 }, width: 4, height: 4 }

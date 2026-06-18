@@ -1,12 +1,14 @@
-import { describe, it, expect, vi } from 'vitest'
-import { render, screen, fireEvent } from '@testing-library/react'
+import { fireEvent, render, screen } from '@testing-library/react'
+import { describe, expect, it, vi } from 'vitest'
+
 import { TwistCard } from './TwistCard'
-import type { TwistCardData, CardContext } from './types'
+import type { CardContext, TwistCardData } from './types'
 
 const mockTwist: TwistCardData = {
   id: 'mission:ca25:twist:chosen-battlefield',
   name: 'Chosen Battlefield',
-  description: 'Before setting up terrain, each player picks one of the terrain layouts from this pack. Roll off; the winner\'s layout is used.',
+  description:
+    "Before setting up terrain, each player picks one of the terrain layouts from this pack. Roll off; the winner's layout is used.",
 }
 
 const baseContext: CardContext = {
@@ -46,7 +48,12 @@ describe('TwistCard', () => {
     const data: TwistCardData = {
       ...mockTwist,
       errata: [
-        { nodeId: 'e1', title: 'Clarification', content: 'Roll-off occurs before deployment.', source: { type: 'pdf', title: 'Chapter Approved', page: 7 } },
+        {
+          nodeId: 'e1',
+          title: 'Clarification',
+          content: 'Roll-off occurs before deployment.',
+          source: { type: 'pdf', title: 'Chapter Approved', page: 7 },
+        },
       ],
     }
     render(<TwistCard data={data} context={baseContext} />)
@@ -73,7 +80,15 @@ describe('TwistCard', () => {
     const context: CardContext = { ...baseContext, onViewSource }
     render(<TwistCard data={data} context={context} />)
     fireEvent.click(screen.getByTestId('view-source'))
-    expect(onViewSource).toHaveBeenCalledWith('chapter-approved-2025', 18, 'Chosen Battlefield', undefined, undefined, undefined, undefined)
+    expect(onViewSource).toHaveBeenCalledWith(
+      'chapter-approved-2025',
+      18,
+      'Chosen Battlefield',
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+    )
   })
 
   it('does not show view-source button for non-pdf sources', () => {

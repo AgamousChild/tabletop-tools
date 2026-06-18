@@ -1,23 +1,26 @@
 import { describe, expect, it } from 'vitest'
 
+import { distance } from './geometry/point'
+import { baseSizeInches } from './placement/coherency'
+import { solveDeployment } from './solver'
 import type {
+  BaseSize,
   Battlefield,
   DeploymentInput,
   DeploymentUnit,
-  EnemyArmy,
   EnemyUnit,
   Objective,
+  Point,
   TerrainPiece,
   TransportDeclaration,
 } from './types'
 import { DEFAULT_10E_RULES } from './types'
-import { solveDeployment } from './solver'
-import { baseSizeInches } from './placement/coherency'
-import { distance } from './geometry/point'
 
 // ── Test helpers ─────────────────────────────────────────────────────────────
 
-function makeUnit(overrides: Partial<DeploymentUnit> & { id: string; name: string }): DeploymentUnit {
+function makeUnit(
+  overrides: Partial<DeploymentUnit> & { id: string; name: string },
+): DeploymentUnit {
   return {
     models: 5,
     baseSize: 32,
@@ -44,7 +47,14 @@ function makeEnemy(overrides: Partial<EnemyUnit> & { id: string; name: string })
   }
 }
 
-function makeTerrain(id: string, x: number, y: number, w: number, h: number, losBlocking: boolean = true): TerrainPiece {
+function makeTerrain(
+  id: string,
+  x: number,
+  y: number,
+  w: number,
+  h: number,
+  losBlocking: boolean = true,
+): TerrainPiece {
   return {
     id,
     position: { x, y },
@@ -230,12 +240,20 @@ describe('solveDeployment', () => {
       const input = makeInput({ units, enemies, terrain, objectives })
       const plan = solveDeployment(input)
 
-      const allPositions: { pos: import('./types').Point; unitId: string; baseSize: import('./types').BaseSize }[] = []
+      const allPositions: {
+        pos: Point
+        unitId: string
+        baseSize: BaseSize
+      }[] = []
       for (const placement of plan.placements) {
         const unit = units.find((u) => u.id === placement.unitId)
         if (!unit || placement.reservesCandidate) continue
         for (const model of placement.models) {
-          allPositions.push({ pos: model.position, unitId: placement.unitId, baseSize: unit.baseSize })
+          allPositions.push({
+            pos: model.position,
+            unitId: placement.unitId,
+            baseSize: unit.baseSize,
+          })
         }
       }
 
@@ -405,7 +423,7 @@ describe('solveDeployment', () => {
       expect(placedUnits.length).toBeGreaterThanOrEqual(1)
 
       // Collect all model positions with their unit ID
-      const allModels: { pos: import('./types').Point; unitId: string }[] = []
+      const allModels: { pos: Point; unitId: string }[] = []
       for (const placement of placedUnits) {
         for (const model of placement.models) {
           allModels.push({ pos: model.position, unitId: placement.unitId })

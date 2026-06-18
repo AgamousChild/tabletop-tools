@@ -13,11 +13,11 @@
  *   npx tsx src/generate-page-images.ts --upload
  */
 
-import { pdf } from 'pdf-to-img'
+import { execSync } from 'child_process'
 import { promises as fs } from 'fs'
 import { existsSync } from 'fs'
-import { join, basename } from 'path'
-import { execSync } from 'child_process'
+import { basename, join } from 'path'
+import { pdf } from 'pdf-to-img'
 
 const PDF_DIR = 'C:/R/sync-data/tools/gw-sync/.local/gw/pdfs'
 const CA_PDF_DIR = 'C:/R/sync-data/tools/ChapterApproved'
@@ -34,11 +34,11 @@ const CA_SKIP = new Set(['2025_MissionDeck_PrintableSpread.pdf'])
  */
 function slugifyPdfName(filename: string): string {
   return filename
-    .replace(/^2025_/, '')                   // strip year prefix
-    .replace(/\.pdf$/, '')                   // strip extension
-    .replace(/([a-z])([A-Z])/g, '$1-$2')    // camelCase → kebab
-    .replace(/[^a-z0-9]+/gi, '-')           // non-alphanumeric → dash
-    .replace(/^-|-$/g, '')                   // trim leading/trailing dashes
+    .replace(/^2025_/, '') // strip year prefix
+    .replace(/\.pdf$/, '') // strip extension
+    .replace(/([a-z])([A-Z])/g, '$1-$2') // camelCase → kebab
+    .replace(/[^a-z0-9]+/gi, '-') // non-alphanumeric → dash
+    .replace(/^-|-$/g, '') // trim leading/trailing dashes
     .toLowerCase()
 }
 
@@ -142,7 +142,9 @@ async function generateImages() {
     console.log(`  ✓ ${doc.length} pages → ${outDir}`)
   }
 
-  console.log(`\nDone: ${totalPages} pages written, ${totalSkipped} skipped (already exist), ${errors} errors`)
+  console.log(
+    `\nDone: ${totalPages} pages written, ${totalSkipped} skipped (already exist), ${errors} errors`,
+  )
 }
 
 async function uploadToR2() {
@@ -162,7 +164,7 @@ async function uploadToR2() {
     const stat = await fs.stat(dirPath)
     if (!stat.isDirectory()) continue
 
-    const pageFiles = (await fs.readdir(dirPath)).filter(f => f.endsWith('.png'))
+    const pageFiles = (await fs.readdir(dirPath)).filter((f) => f.endsWith('.png'))
     console.log(`Uploading ${pageFiles.length} pages for ${pdfName}...`)
 
     for (const pageFile of pageFiles) {
@@ -206,7 +208,7 @@ async function main() {
   }
 }
 
-main().catch(err => {
+main().catch((err) => {
   console.error('Fatal error:', err)
   process.exit(1)
 })

@@ -141,7 +141,6 @@ export async function scrapeAllPairings(
       // Try clicking any button with < arrow near the round text
       try {
         await page.evaluate(() => {
-          const buttons = Array.from(document.querySelectorAll('button'))
           // Find buttons near "Round" text — the < button is before the > button
           const roundEl = Array.from(document.querySelectorAll('*')).find(el => /^Round\s+\d+$/.test(el.textContent?.trim() || ''))
           if (roundEl?.parentElement) {

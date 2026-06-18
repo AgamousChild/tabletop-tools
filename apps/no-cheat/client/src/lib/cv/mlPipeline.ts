@@ -8,9 +8,9 @@
  * allowing seamless integration with the existing detection flow.
  */
 
-import type { RoiResult } from './pipeline'
-import { resizeBilinear, rgbaToRgbChw, nonMaxSuppression } from './mlPreprocess'
 import type { Detection } from './mlPreprocess'
+import { nonMaxSuppression, resizeBilinear, rgbaToRgbChw } from './mlPreprocess'
+import type { RoiResult } from './pipeline'
 
 export interface MlPipeline {
   readonly ready: boolean
@@ -33,7 +33,7 @@ const NUM_CLASSES = 6 // pip values 1-6
 export function createMlPipeline(modelPath?: string): MlPipeline {
   // Dynamic import to avoid pulling onnxruntime-web into bundles
   // where the model doesn't exist
-  let session: any = null  // ort.InferenceSession
+  let session: any = null // ort.InferenceSession
   let isReady = false
 
   async function load(): Promise<void> {
@@ -50,11 +50,7 @@ export function createMlPipeline(modelPath?: string): MlPipeline {
     isReady = true
   }
 
-  async function detect(
-    rgba: Uint8ClampedArray,
-    w: number,
-    h: number,
-  ): Promise<RoiResult[]> {
+  async function detect(rgba: Uint8ClampedArray, w: number, h: number): Promise<RoiResult[]> {
     if (!session) return []
 
     const ort = await import('onnxruntime-web')
@@ -64,7 +60,12 @@ export function createMlPipeline(modelPath?: string): MlPipeline {
     const tensor = rgbaToRgbChw(resized, MODEL_INPUT_SIZE, MODEL_INPUT_SIZE)
 
     // Create input tensor: [1, 3, 640, 640]
-    const inputTensor = new ort.Tensor('float32', tensor, [1, 3, MODEL_INPUT_SIZE, MODEL_INPUT_SIZE])
+    const inputTensor = new ort.Tensor('float32', tensor, [
+      1,
+      3,
+      MODEL_INPUT_SIZE,
+      MODEL_INPUT_SIZE,
+    ])
 
     // Run inference
     const inputName = session.inputNames[0]
@@ -106,7 +107,9 @@ export function createMlPipeline(modelPath?: string): MlPipeline {
   }
 
   return {
-    get ready() { return isReady },
+    get ready() {
+      return isReady
+    },
     load,
     detect,
     dispose,
@@ -124,12 +127,11 @@ function parseYoloOutput(data: Float32Array, dims: number[]): Detection[] {
   const detections: Detection[] = []
 
   // dims: [1, 4+numClasses, numDetections]
-  const numAttributes = dims[1]! // 4 + NUM_CLASSES
   const numDetections = dims[2]!
 
   for (let i = 0; i < numDetections; i++) {
     // Extract box coordinates
-    const cx = data[0 * numDetections + i]!
+    const cx = data[i]!
     const cy = data[1 * numDetections + i]!
     const w = data[2 * numDetections + i]!
     const h = data[3 * numDetections + i]!

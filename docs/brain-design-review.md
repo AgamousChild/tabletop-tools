@@ -71,11 +71,11 @@ The army rule applies to EVERYTHING. A detachment's rules apply only to units IN
 ### Army Rule
 **What it is in the game:** A passive ability that applies to your entire army at all times. Every faction has one. Oath of Moment, Waaagh!, Synapse, etc.
 
-**What it is in our data:** Nodes with `category: "army-rule"` (reclassified from `faction-ability` during build). Connected to faction via `part_of`.
+**What it is in our data:** Nodes with `category: "army-rule"`. The game-data parser classifies these correctly at parse time (no longer reclassified from `faction-ability` post-build). `PRIMARY_FACTION` mapping ensures shared rules are created under the canonical faction (e.g., Oath of Moment → space-marines). `RULE_SUBFACTION` mapping assigns chapter-specific rules to their subfaction (e.g., Templar Vows → black templars). Construction/mustering rules ("when mustering your army...") are classified as `army-ability` instead. Markdown content is preserved (not stripped) for proper rendering via `renderMarkdown()`. Connected to faction via `part_of`.
 
 **What's wrong:**
-- Some army rules have sub-rules (Blessings of Khorne has 6 options). These are separate nodes with parenthetical titles. The parent-child relationship uses ID prefix matching, not an explicit ref.
-- Army rules aren't connected to the units they affect. Oath of Moment affects every SM unit, but there's no ref from the rule to units. The connection is implicit: same factionId.
+- Some army rules have sub-rules (Blessings of Khorne has 6 options). These are separate `army-ability` nodes with parenthetical titles. The parent-child relationship uses explicit `part_of` refs.
+- Army rules now create `modifies` refs to datasheets that have the matching unit ability, connecting them to the units they affect. However, this only covers units that explicitly list the army rule as a unit ability — the implicit connection (same factionId) is still the primary link.
 
 ### Detachment
 **What it is in the game:** A package you buy with detachment points. Contains one passive rule, up to 6 stratagems, and several enhancements. In 10th edition, you pick one. In 11th, you pick multiple. Each detachment may only affect units with certain keywords (e.g., Wrath of the Doomed primarily affects DEATH COMPANY units).
@@ -116,12 +116,12 @@ Stratagems and enhancements connect to the container via `part_of`. Units connec
 ### Unit (Datasheet)
 **What it is in the game:** A squad of models you put on the table. Has a stat line (M, T, SV, W, LD, OC), weapons, abilities, and keywords. Can have a character leader attached.
 
-**What it is in our data:** Nodes with `category: "datasheet"`. Weapons and abilities connect via `part_of`. Keywords stored in the `keywords` array. Leader attachments stored as `interacts_with` refs.
+**What it is in our data:** Nodes with `category: "datasheet"`. Weapons and abilities connect via `part_of`. Keywords stored in the `keywords` array. Leader attachments stored as `can_lead` refs (bidirectional).
 
 **What's wrong:**
 - Stat line isn't parsed into structured fields. It's in the content text. Can't do "show me all T5 units."
 - Keywords are in the `keywords` array but mixed with search keywords. Game keywords (INFANTRY, DEATH COMPANY, FLY) are mixed with indexing keywords (the unit name, faction name).
-- Leader attachment refs exist (`interacts_with` with context "This leader can be attached to...") but they're not typed distinctly. Can't filter for just leader attachments vs other interactions.
+- Leader attachment refs now use a distinct `can_lead` rel type (no longer mixed into `interacts_with`). However, the UI doesn't yet surface "who can this leader lead?" as a navigation path.
 - **Leader abilities are NOT automatic.** Each ability explicitly states whether it affects the leader only or the whole attached unit. Abilities conditioned on "while leading a unit" only work when the leader has a bodyguard. In 10th, the leader LOSES those abilities when their bodyguard unit dies. In 11th, the leader KEEPS those abilities even after their unit is destroyed. This is a per-ability assessment, not a blanket rule.
 - No concept of "this unit is primarily a melee unit" or "this is a transport" — role/type classification is missing.
 - **Epic Heroes (named characters) cannot take enhancements.** This is a hard constraint not currently enforced in the data.
@@ -168,7 +168,7 @@ Stratagems and enhancements connect to the container via `part_of`. Units connec
 1. ✅ Faction node shows with army rule and detachments
 2. ✅ Detachments show as connections
 3. ❌ No indication of which units benefit from which detachment — eligible_for is too broad (all BA units eligible for all BA detachments)
-4. ❌ Units don't appear on the faction view (two hops away)
+4. ⚠️ Units now have `part_of` refs to faction-root nodes, but the faction browse primarily shows army rules + detachments (units are still secondary)
 5. ❌ Generic SM access not represented at all
 
 ### User Story 2: "What can Lemartes do?"
@@ -183,7 +183,7 @@ Stratagems and enhancements connect to the container via `part_of`. Units connec
 **What actually happens:**
 1. ✅ Weapons and abilities show via part_of
 2. ⚠️ Eligible detachments show, but ALL of them — no ranking by relevance
-3. ❌ Leader attachments exist as interacts_with refs but aren't surfaced distinctly
+3. ⚠️ Leader attachments now use distinct `can_lead` refs but aren't surfaced in the UI yet
 4. ❌ Stratagems that TARGET him aren't connected (target restriction is unstructured text)
 5. ⚠️ stacks_with combos exist but aren't scoped to "combos involving Lemartes' abilities specifically"
 
@@ -208,8 +208,8 @@ Stratagems and enhancements connect to the container via `part_of`. Units connec
 ### Problem 1: Keyword eligibility is invisible
 Detachments don't just apply to "all faction units." They apply to units with specific keywords. Wrath of the Doomed cares about DEATH COMPANY. Ironstorm Spearhead cares about VEHICLE. Our `eligible_for` refs ignore this — every SM unit is "eligible" for every SM detachment, which is technically true but useless for recommendations.
 
-### Problem 2: Leader attachments aren't first-class
-Which character can lead which unit is critical information. "Lemartes can lead Death Company Marines" matters. The data exists as `interacts_with` refs but they're not typed specifically, not surfaced in the UI, and not used in the graph navigation.
+### Problem 2: Leader attachments aren't fully surfaced
+Which character can lead which unit is critical information. "Lemartes can lead Death Company Marines" matters. The data now uses distinct `can_lead` refs (not mixed into `interacts_with`), but they are not yet surfaced in the UI or used in graph navigation.
 
 ### Problem 3: Target restrictions are unstructured
 Stratagems and enhancements have target restrictions ("DEATH COMPANY model only", "VEHICLE unit") buried in text. We can't answer "which stratagems can I use on Lemartes?" without NLP on every stratagem's text.

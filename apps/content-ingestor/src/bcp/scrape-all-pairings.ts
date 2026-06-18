@@ -9,10 +9,8 @@
  * and run it in the same browser context where BCP is logged in.
  */
 
-import { readFileSync, writeFileSync, mkdirSync } from 'node:fs'
-import path from 'node:path'
 import type { BCPEvent } from './event-list'
-import { deriveFormat, normalizeDate, deriveMetaWindow } from './event-parser'
+import { deriveFormat, normalizeDate } from './event-parser'
 
 export interface PairingResult {
   round: number

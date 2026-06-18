@@ -1,6 +1,7 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { listCatalogFiles, fetchCatalogXml, RateLimitError } from './github'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
+
 import type { CatalogFile } from './github'
+import { fetchCatalogXml, listCatalogFiles, RateLimitError } from './github'
 
 const mockFetch = vi.fn()
 
@@ -22,9 +23,23 @@ describe('listCatalogFiles', () => {
   it('fetches and filters .cat files from GitHub API', async () => {
     mockFetch.mockResolvedValueOnce(
       mockGitHubResponse([
-        { name: 'Imperium - Space Marines.cat', size: 500000, download_url: 'https://raw.githubusercontent.com/BSData/wh40k-10e/main/Imperium%20-%20Space%20Marines.cat' },
-        { name: 'Orks.cat', size: 200000, download_url: 'https://raw.githubusercontent.com/BSData/wh40k-10e/main/Orks.cat' },
-        { name: 'Warhammer 40,000.gst', size: 100000, download_url: 'https://raw.githubusercontent.com/BSData/wh40k-10e/main/Warhammer%2040%2C000.gst' },
+        {
+          name: 'Imperium - Space Marines.cat',
+          size: 500000,
+          download_url:
+            'https://raw.githubusercontent.com/BSData/wh40k-10e/main/Imperium%20-%20Space%20Marines.cat',
+        },
+        {
+          name: 'Orks.cat',
+          size: 200000,
+          download_url: 'https://raw.githubusercontent.com/BSData/wh40k-10e/main/Orks.cat',
+        },
+        {
+          name: 'Warhammer 40,000.gst',
+          size: 100000,
+          download_url:
+            'https://raw.githubusercontent.com/BSData/wh40k-10e/main/Warhammer%2040%2C000.gst',
+        },
         { name: 'README.md', size: 500, download_url: null },
       ]),
     )
@@ -43,7 +58,11 @@ describe('listCatalogFiles', () => {
   it('derives faction name by stripping .cat extension', async () => {
     mockFetch.mockResolvedValueOnce(
       mockGitHubResponse([
-        { name: 'Chaos - Death Guard.cat', size: 300000, download_url: 'https://example.com/file.cat' },
+        {
+          name: 'Chaos - Death Guard.cat',
+          size: 300000,
+          download_url: 'https://example.com/file.cat',
+        },
       ]),
     )
 
@@ -54,12 +73,18 @@ describe('listCatalogFiles', () => {
   it('constructs raw.githubusercontent.com download URL', async () => {
     mockFetch.mockResolvedValueOnce(
       mockGitHubResponse([
-        { name: 'Orks.cat', size: 200000, download_url: 'https://raw.githubusercontent.com/BSData/wh40k-10e/main/Orks.cat' },
+        {
+          name: 'Orks.cat',
+          size: 200000,
+          download_url: 'https://raw.githubusercontent.com/BSData/wh40k-10e/main/Orks.cat',
+        },
       ]),
     )
 
     const { files } = await listCatalogFiles('BSData/wh40k-10e', 'main')
-    expect(files[0]!.downloadUrl).toBe('https://raw.githubusercontent.com/BSData/wh40k-10e/main/Orks.cat')
+    expect(files[0]!.downloadUrl).toBe(
+      'https://raw.githubusercontent.com/BSData/wh40k-10e/main/Orks.cat',
+    )
   })
 
   it('supports custom repo and branch', async () => {
@@ -87,7 +112,11 @@ describe('listCatalogFiles', () => {
       mockGitHubResponse([
         { name: 'Orks.cat', size: 200000, download_url: 'https://example.com/orks.cat' },
         { name: 'Aeldari.cat', size: 300000, download_url: 'https://example.com/aeldari.cat' },
-        { name: 'Chaos - World Eaters.cat', size: 100000, download_url: 'https://example.com/we.cat' },
+        {
+          name: 'Chaos - World Eaters.cat',
+          size: 100000,
+          download_url: 'https://example.com/we.cat',
+        },
       ]),
     )
 
@@ -168,6 +197,8 @@ describe('fetchCatalogXml', () => {
       downloadUrl: 'https://example.com/orks.cat',
       size: 200000,
     }
-    await expect(fetchCatalogXml(file)).rejects.toThrow('Failed to fetch Orks.cat: 500 Server Error')
+    await expect(fetchCatalogXml(file)).rejects.toThrow(
+      'Failed to fetch Orks.cat: 500 Server Error',
+    )
   })
 })

@@ -1,6 +1,7 @@
-import { describe, it, expect, vi } from 'vitest'
-import { writeNodesToBrain } from './nodes'
+import { describe, expect, it, vi } from 'vitest'
+
 import type { ExtractedNode } from './extract'
+import { writeNodesToBrain } from './nodes'
 
 function mockR2Bucket(existing: unknown[] = []) {
   const stored = new Map<string, string>()
@@ -29,7 +30,7 @@ function mockVectorize() {
 function mockAi() {
   return {
     run: vi.fn(async (_model: string, input: { text: string[] }) => ({
-      data: input.text.map(() => new Array(768).fill(0.1)),
+      data: input.text.map(() => Array.from({ length: 768 }).fill(0.1)),
     })),
   }
 }
@@ -84,7 +85,9 @@ describe('writeNodesToBrain', () => {
   })
 
   it('deduplicates against existing nodes', async () => {
-    const existing = [{ id: 'community:gladius-task-force', title: 'Gladius Task Force', layer: 'community' }]
+    const existing = [
+      { id: 'community:gladius-task-force', title: 'Gladius Task Force', layer: 'community' },
+    ]
     const bucket = mockR2Bucket(existing)
     const vectorize = mockVectorize()
     const ai = mockAi()
@@ -104,10 +107,7 @@ describe('writeNodesToBrain', () => {
   })
 
   it('returns 0 when all nodes are duplicates', async () => {
-    const existing = [
-      { id: 'community:gladius-task-force' },
-      { id: 'community:oath-of-moment' },
-    ]
+    const existing = [{ id: 'community:gladius-task-force' }, { id: 'community:oath-of-moment' }]
     const bucket = mockR2Bucket(existing)
     const vectorize = mockVectorize()
     const ai = mockAi()

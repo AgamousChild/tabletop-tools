@@ -1,9 +1,16 @@
+import {
+  contentEntity,
+  pairings,
+  tournamentCards,
+  tournamentPlayers,
+  tournaments,
+  userBans,
+} from '@tabletop-tools/db'
 import { TRPCError } from '@trpc/server'
-import { eq, and, like, inArray } from 'drizzle-orm'
+import { and, asc, eq, inArray } from 'drizzle-orm'
 import { z } from 'zod'
 
-import { tournaments, tournamentPlayers, pairings, rounds, tournamentCards, userBans, authUsers } from '@tabletop-tools/db'
-import { router, protectedProcedure } from '../trpc'
+import { protectedProcedure, router } from '../trpc'
 
 export const playerRouter = router({
   register: protectedProcedure
@@ -15,6 +22,10 @@ export const playerRouter = router({
         detachment: z.string().optional(),
         listText: z.string().optional(),
         listId: z.string().optional(),
+        /** Optional FK to content_entity.id where type='faction' */
+        factionEntityId: z.string().optional(),
+        /** Optional FK to content_entity.id where type='detachment' */
+        detachmentEntityId: z.string().optional(),
       }),
     )
     .mutation(async ({ ctx, input }) => {
@@ -24,7 +35,8 @@ export const playerRouter = router({
         .where(eq(tournaments.id, input.tournamentId))
         .get()
       if (!tournament) throw new TRPCError({ code: 'NOT_FOUND', message: 'Tournament not found' })
-      if (tournament.status !== 'REGISTRATION') throw new TRPCError({ code: 'BAD_REQUEST', message: 'Registration is not open' })
+      if (tournament.status !== 'REGISTRATION')
+        throw new TRPCError({ code: 'BAD_REQUEST', message: 'Registration is not open' })
 
       const id = crypto.randomUUID()
       const now = Date.now()
@@ -41,6 +53,8 @@ export const playerRouter = router({
         checkedIn: 0,
         dropped: 0,
         registeredAt: now,
+        factionEntityId: input.factionEntityId ?? null,
+        detachmentEntityId: input.detachmentEntityId ?? null,
       })
       return ctx.db.select().from(tournamentPlayers).where(eq(tournamentPlayers.id, id)).get()
     }),
@@ -59,12 +73,17 @@ export const playerRouter = router({
         )
         .get()
       if (!player) throw new TRPCError({ code: 'NOT_FOUND', message: 'Not registered' })
-      if (player.listLocked) throw new TRPCError({ code: 'BAD_REQUEST', message: 'Lists are locked' })
+      if (player.listLocked)
+        throw new TRPCError({ code: 'BAD_REQUEST', message: 'Lists are locked' })
       await ctx.db
         .update(tournamentPlayers)
         .set({ listText: input.listText })
         .where(eq(tournamentPlayers.id, player.id))
-      return ctx.db.select().from(tournamentPlayers).where(eq(tournamentPlayers.id, player.id)).get()
+      return ctx.db
+        .select()
+        .from(tournamentPlayers)
+        .where(eq(tournamentPlayers.id, player.id))
+        .get()
     }),
 
   checkIn: protectedProcedure
@@ -119,7 +138,8 @@ export const playerRouter = router({
         .where(eq(tournaments.id, input.tournamentId))
         .get()
       if (!tournament) throw new TRPCError({ code: 'NOT_FOUND', message: 'Tournament not found' })
-      if (tournament.toUserId !== ctx.user.id) throw new TRPCError({ code: 'FORBIDDEN', message: 'Not authorized' })
+      if (tournament.toUserId !== ctx.user.id)
+        throw new TRPCError({ code: 'FORBIDDEN', message: 'Not authorized' })
       return ctx.db
         .select()
         .from(tournamentPlayers)
@@ -136,7 +156,8 @@ export const playerRouter = router({
         .where(eq(tournaments.id, input.tournamentId))
         .get()
       if (!tournament) throw new TRPCError({ code: 'NOT_FOUND', message: 'Tournament not found' })
-      if (tournament.toUserId !== ctx.user.id) throw new TRPCError({ code: 'FORBIDDEN', message: 'Not authorized' })
+      if (tournament.toUserId !== ctx.user.id)
+        throw new TRPCError({ code: 'FORBIDDEN', message: 'Not authorized' })
       await ctx.db
         .update(tournamentPlayers)
         .set({ listLocked: 1 })
@@ -183,7 +204,8 @@ export const playerRouter = router({
         .from(tournaments)
         .where(eq(tournaments.id, player.tournamentId))
         .get()
-      if (!tournament || tournament.toUserId !== ctx.user.id) throw new TRPCError({ code: 'FORBIDDEN', message: 'Not authorized' })
+      if (!tournament || tournament.toUserId !== ctx.user.id)
+        throw new TRPCError({ code: 'FORBIDDEN', message: 'Not authorized' })
       await ctx.db
         .update(tournamentPlayers)
         .set({ dropped: 1 })
@@ -201,15 +223,20 @@ export const playerRouter = router({
         .where(eq(tournaments.id, input.tournamentId))
         .get()
       if (!tournament) throw new TRPCError({ code: 'NOT_FOUND', message: 'Tournament not found' })
-      if (tournament.toUserId !== ctx.user.id) throw new TRPCError({ code: 'FORBIDDEN', message: 'Not authorized' })
+      if (tournament.toUserId !== ctx.user.id)
+        throw new TRPCError({ code: 'FORBIDDEN', message: 'Not authorized' })
 
       const count = input.count ?? 8
       const testPlayers = [
         { name: 'Alex Ironforge', faction: 'Space Marines', detachment: 'Gladius Task Force' },
         { name: 'Sam Greenskin', faction: 'Orks', detachment: 'Waaagh! Tribe' },
         { name: 'Jordan Cryptek', faction: 'Necrons', detachment: 'Awakened Dynasty' },
-        { name: 'Morgan Shas', faction: 'T\'au Empire', detachment: 'Kauyon' },
-        { name: 'Riley Warpsmith', faction: 'Chaos Space Marines', detachment: 'Pactbound Zealots' },
+        { name: 'Morgan Shas', faction: "T'au Empire", detachment: 'Kauyon' },
+        {
+          name: 'Riley Warpsmith',
+          faction: 'Chaos Space Marines',
+          detachment: 'Pactbound Zealots',
+        },
         { name: 'Casey Farstrider', faction: 'Aeldari', detachment: 'Battle Host' },
         { name: 'Taylor Canticles', faction: 'Adeptus Mechanicus', detachment: 'Rad-Zone Corps' },
         { name: 'Jamie Terminator', faction: 'Grey Knights', detachment: 'Teleport Strike Force' },
@@ -219,7 +246,11 @@ export const playerRouter = router({
         { name: 'Avery Commissar', faction: 'Astra Militarum', detachment: 'Combined Regiment' },
         { name: 'Quinn Plague', faction: 'Death Guard', detachment: 'Plague Company' },
         { name: 'Robin Hexfire', faction: 'Thousand Sons', detachment: 'Cult of Magic' },
-        { name: 'Blair Skitarii', faction: 'Adeptus Mechanicus', detachment: 'Skitarii Hunter Cohort' },
+        {
+          name: 'Blair Skitarii',
+          faction: 'Adeptus Mechanicus',
+          detachment: 'Skitarii Hunter Cohort',
+        },
         { name: 'Kai Wychking', faction: 'Drukhari', detachment: 'Realspace Raiders' },
       ]
 
@@ -262,13 +293,14 @@ export const playerRouter = router({
 
     // Get all tournaments the user participated in
     const tournamentIds = [...new Set(registrations.map((r) => r.tournamentId))]
-    const userTournaments = tournamentIds.length > 0
-      ? await ctx.db
-          .select()
-          .from(tournaments)
-          .where(inArray(tournaments.id, tournamentIds))
-          .all()
-      : []
+    const userTournaments =
+      tournamentIds.length > 0
+        ? await ctx.db
+            .select()
+            .from(tournaments)
+            .where(inArray(tournaments.id, tournamentIds))
+            .all()
+        : []
 
     // Compute W-L-D from pairings
     let wins = 0
@@ -281,7 +313,9 @@ export const playerRouter = router({
       // Get all pairings involving this player
       const allPairings = await ctx.db.select().from(pairings).all()
       const myPairings = allPairings.filter(
-        (p) => p.result && (regIds.includes(p.player1Id) || (p.player2Id && regIds.includes(p.player2Id))),
+        (p) =>
+          p.result &&
+          (regIds.includes(p.player1Id) || (p.player2Id && regIds.includes(p.player2Id))),
       )
 
       for (const pair of myPairings) {
@@ -305,16 +339,15 @@ export const playerRouter = router({
     }
 
     // Card history
-    const allCards = regIds.length > 0
-      ? (await ctx.db.select().from(tournamentCards).all()).filter((c) => regIds.includes(c.playerId))
-      : []
+    const allCards =
+      regIds.length > 0
+        ? (await ctx.db.select().from(tournamentCards).all()).filter((c) =>
+            regIds.includes(c.playerId),
+          )
+        : []
 
     // Ban status
-    const bans = await ctx.db
-      .select()
-      .from(userBans)
-      .where(eq(userBans.userId, userId))
-      .all()
+    const bans = await ctx.db.select().from(userBans).where(eq(userBans.userId, userId)).all()
 
     return {
       userId,
@@ -373,9 +406,10 @@ export const playerRouter = router({
 
       // Get tournament names for display
       const tIds = [...new Set(results.map((r) => r.tournamentId))]
-      const tourns = tIds.length > 0
-        ? await ctx.db.select().from(tournaments).where(inArray(tournaments.id, tIds)).all()
-        : []
+      const tourns =
+        tIds.length > 0
+          ? await ctx.db.select().from(tournaments).where(inArray(tournaments.id, tIds)).all()
+          : []
       const tournMap = new Map(tourns.map((t) => [t.id, t]))
 
       return results.slice(0, 50).map((r) => ({
@@ -400,7 +434,10 @@ export const playerRouter = router({
       const matchingRegs = allRegs.filter((r) => r.displayName.toLowerCase().includes(queryLower))
 
       // Group by userId to get unique players
-      const playerMap = new Map<string, { userId: string; displayName: string; registrations: typeof matchingRegs }>()
+      const playerMap = new Map<
+        string,
+        { userId: string; displayName: string; registrations: typeof matchingRegs }
+      >()
       for (const reg of matchingRegs) {
         const existing = playerMap.get(reg.userId)
         if (existing) {
@@ -425,9 +462,10 @@ export const playerRouter = router({
 
       // Get tournament names
       const tIds = [...new Set(matchingRegs.map((r) => r.tournamentId))]
-      const tourns = tIds.length > 0
-        ? await ctx.db.select().from(tournaments).where(inArray(tournaments.id, tIds)).all()
-        : []
+      const tourns =
+        tIds.length > 0
+          ? await ctx.db.select().from(tournaments).where(inArray(tournaments.id, tIds)).all()
+          : []
       const tournMap = new Map(tourns.map((t) => [t.id, t]))
 
       const results = [...playerMap.values()].slice(0, 25).map((p) => {
@@ -437,7 +475,9 @@ export const playerRouter = router({
           userId: p.userId,
           displayName: p.displayName,
           tournamentsPlayed: (regIdsByUser.get(p.userId) ?? []).length,
-          factions: [...new Set(allRegs.filter((r) => r.userId === p.userId).map((r) => r.faction))],
+          factions: [
+            ...new Set(allRegs.filter((r) => r.userId === p.userId).map((r) => r.faction)),
+          ],
           yellowCards: userCards.filter((c) => c.cardType === 'YELLOW').length,
           redCards: userCards.filter((c) => c.cardType === 'RED').length,
           recentTournaments: p.registrations.slice(0, 5).map((r) => ({
@@ -449,5 +489,47 @@ export const playerRouter = router({
       })
 
       return results
+    }),
+
+  /**
+   * List all factions available for tournament registration.
+   * Reads content_entity WHERE type='faction', ordered by name.
+   * Returns empty array if content_entity has no faction rows yet.
+   */
+  listFactions: protectedProcedure.query(async ({ ctx }) => {
+    return ctx.db
+      .select({
+        id: contentEntity.id,
+        name: contentEntity.name,
+      })
+      .from(contentEntity)
+      .where(eq(contentEntity.type, 'faction'))
+      .orderBy(asc(contentEntity.name))
+      .all()
+  }),
+
+  /**
+   * List detachments for a given faction entity.
+   * Reads content_entity WHERE type='detachment' AND factionId = input.factionEntityId.
+   * Returns empty array if none exist.
+   */
+  listDetachments: protectedProcedure
+    .input(z.object({ factionEntityId: z.string() }))
+    .query(async ({ ctx, input }) => {
+      return ctx.db
+        .select({
+          id: contentEntity.id,
+          name: contentEntity.name,
+          factionId: contentEntity.factionId,
+        })
+        .from(contentEntity)
+        .where(
+          and(
+            eq(contentEntity.type, 'detachment'),
+            eq(contentEntity.factionId, input.factionEntityId),
+          ),
+        )
+        .orderBy(asc(contentEntity.name))
+        .all()
     }),
 })

@@ -1,7 +1,8 @@
-import { describe, it, expect } from 'vitest'
-import { findHidingSpots, estimateTerrainCapacity } from './los-analysis'
+import { describe, expect, it } from 'vitest'
+
 import type { TerrainPiece } from '../types'
 import type { DeploymentZone } from '../zones/deployment-zones'
+import { estimateTerrainCapacity, findHidingSpots } from './los-analysis'
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -26,7 +27,7 @@ function makeBottomZone(): DeploymentZone {
 
 describe('findHidingSpots', () => {
   it('returns terrain whose center is inside the zone', () => {
-    const inside = makeTerrain('inside', 5, 10)   // y=10 → inside bottom zone [2,22]
+    const inside = makeTerrain('inside', 5, 10) // y=10 → inside bottom zone [2,22]
     const outside = makeTerrain('outside', 5, -10) // y=-10 → not in bottom zone
 
     const zone = makeBottomZone()
@@ -39,7 +40,7 @@ describe('findHidingSpots', () => {
   it('returns terrain within scout range of the zone edge when scoutRange provided', () => {
     // Piece at y=1 — just outside zone (zone starts at y>2).
     // Scout range of 3 → include pieces whose center is within 3" of the zone boundary.
-    const nearEdge = makeTerrain('near', 0, 1)   // 1" outside zone edge at y=2 → 1" away
+    const nearEdge = makeTerrain('near', 0, 1) // 1" outside zone edge at y=2 → 1" away
     const farOutside = makeTerrain('far', 0, -15) // 17" outside → too far
 
     const zone = makeBottomZone()

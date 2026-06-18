@@ -1,18 +1,26 @@
-import { describe, it, expect, vi } from 'vitest'
-import { render, screen, fireEvent } from '@testing-library/react'
+import { fireEvent, render, screen } from '@testing-library/react'
+import { describe, expect, it, vi } from 'vitest'
+
 import { RuleCard } from './RuleCard'
-import type { RuleCardData, CardContext } from './types'
+import type { CardContext, RuleCardData } from './types'
 
 const mockArmyRule: RuleCardData = {
   id: 'faction:world-eaters:blessings-of-khorne',
   name: 'Blessings of Khorne',
-  description: 'At the start of the battle round, roll eight D6. Activate up to two Blessings of Khorne.',
+  description:
+    'At the start of the battle round, roll eight D6. Activate up to two Blessings of Khorne.',
   factionId: 'world-eaters',
   isArmyRule: true,
   subRules: [
-    { name: 'Martial Excellence', description: 'Melee weapons have the [SUSTAINED HITS 1] ability.' },
+    {
+      name: 'Martial Excellence',
+      description: 'Melee weapons have the [SUSTAINED HITS 1] ability.',
+    },
     { name: 'Warp Blades', description: 'Melee weapons have the [LETHAL HITS] ability.' },
-    { name: 'Decapitating Strikes', description: 'Melee attacks targeting INFANTRY have [DEVASTATING WOUNDS].' },
+    {
+      name: 'Decapitating Strikes',
+      description: 'Melee attacks targeting INFANTRY have [DEVASTATING WOUNDS].',
+    },
   ],
   appliesTo: 54,
 }
@@ -156,7 +164,12 @@ describe('RuleCard', () => {
     const data: RuleCardData = {
       ...mockArmyRule,
       errata: [
-        { nodeId: 'e1', title: 'FAQ Q1', content: 'Yes, it works.', source: { type: 'pdf', title: 'Chapter Approved', page: 12 } },
+        {
+          nodeId: 'e1',
+          title: 'FAQ Q1',
+          content: 'Yes, it works.',
+          source: { type: 'pdf', title: 'Chapter Approved', page: 12 },
+        },
       ],
     }
     render(<RuleCard data={data} context={baseContext} />)
@@ -167,8 +180,18 @@ describe('RuleCard', () => {
     const data: RuleCardData = {
       ...mockArmyRule,
       errata: [
-        { nodeId: 'e1', title: 'FAQ Q1', content: 'Yes.', source: { type: 'pdf', title: 'Chapter Approved', page: 12 } },
-        { nodeId: 'e2', title: 'FAQ Q2', content: 'No.', source: { type: 'pdf', title: 'Chapter Approved', page: 13 } },
+        {
+          nodeId: 'e1',
+          title: 'FAQ Q1',
+          content: 'Yes.',
+          source: { type: 'pdf', title: 'Chapter Approved', page: 12 },
+        },
+        {
+          nodeId: 'e2',
+          title: 'FAQ Q2',
+          content: 'No.',
+          source: { type: 'pdf', title: 'Chapter Approved', page: 13 },
+        },
       ],
     }
     render(<RuleCard data={data} context={baseContext} />)
@@ -179,7 +202,12 @@ describe('RuleCard', () => {
     const data: RuleCardData = {
       ...mockArmyRule,
       errata: [
-        { nodeId: 'e1', title: 'FAQ Q1', content: 'Yes, it works.', source: { type: 'pdf', title: 'Chapter Approved', page: 12 } },
+        {
+          nodeId: 'e1',
+          title: 'FAQ Q1',
+          content: 'Yes, it works.',
+          source: { type: 'pdf', title: 'Chapter Approved', page: 12 },
+        },
       ],
     }
     render(<RuleCard data={data} context={baseContext} />)
@@ -192,7 +220,12 @@ describe('RuleCard', () => {
     const data: RuleCardData = {
       ...mockArmyRule,
       errata: [
-        { nodeId: 'e1', title: 'FAQ Q1', content: 'Yes.', source: { type: 'pdf', title: 'Chapter Approved', page: 42 } },
+        {
+          nodeId: 'e1',
+          title: 'FAQ Q1',
+          content: 'Yes.',
+          source: { type: 'pdf', title: 'Chapter Approved', page: 42 },
+        },
       ],
     }
     render(<RuleCard data={data} context={baseContext} />)
@@ -216,9 +249,7 @@ describe('RuleCard', () => {
   it('shows view-source button for PDF sources', () => {
     const data: RuleCardData = {
       ...mockArmyRule,
-      sources: [
-        { type: 'pdf', title: 'Core Rules', page: 25 },
-      ],
+      sources: [{ type: 'pdf', title: 'Core Rules', page: 25 }],
     }
     const context: CardContext = { ...baseContext, onViewSource: vi.fn() }
     render(<RuleCard data={data} context={context} />)

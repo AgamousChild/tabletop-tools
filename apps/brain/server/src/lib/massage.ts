@@ -109,7 +109,10 @@ export function massage(nodes: Node[]): MassageResult {
   }
 
   // Passes 4–6 mutate nodes — clone shallowly so we don't touch input objects
-  const working: Node[] = afterPass3.map(n => ({ ...n, qualityFlags: n.qualityFlags ? [...n.qualityFlags] : [] }))
+  const working: Node[] = afterPass3.map((n) => ({
+    ...n,
+    qualityFlags: n.qualityFlags ? [...n.qualityFlags] : [],
+  }))
 
   // Pass 4 — content independence
   // A node whose content just echoes its title (or is very short) should use
@@ -152,7 +155,7 @@ export function massage(nodes: Node[]): MassageResult {
   // Pass 6 — hierarchy validation
   // Weapon / unit-ability nodes reference a datasheet; stratagem / enhancement
   // nodes reference a detachment. Flag dangling references.
-  const idSet = new Set(working.map(n => n.id))
+  const idSet = new Set(working.map((n) => n.id))
   for (const node of working) {
     let orphaned = false
     if (
@@ -185,7 +188,7 @@ export function massage(nodes: Node[]): MassageResult {
     'Space Marine Chapters': 'space-marines',
     // Space Wolves (listed under space-marines by Wahapedia)
     'Curse of the Wulfen': 'space-wolves',
-    'Sagas': 'space-wolves',
+    Sagas: 'space-wolves',
     'Sons of Russ': 'space-wolves',
     // Dark Angels
     'The Unforgiven': 'dark-angels',
@@ -199,7 +202,7 @@ export function massage(nodes: Node[]): MassageResult {
     // Deathwatch
     'Mission Tactics': 'deathwatch',
     'Kill Teams': 'deathwatch',
-    'Deathwatch': 'deathwatch',
+    Deathwatch: 'deathwatch',
     // Imperial Agents
     'Assigned Agents': 'imperial-agents',
     'Kill Team': 'imperial-agents',
@@ -207,7 +210,7 @@ export function massage(nodes: Node[]): MassageResult {
     'Dark Pacts': 'chaos-space-marines',
     'Cult of the Dark Gods': 'chaos-space-marines',
     // Death Guard
-    "Nurgle\u2019s Gift (Aura)": 'death-guard',
+    'Nurgle\u2019s Gift (Aura)': 'death-guard',
     // World Eaters
     'Blessings of Khorne': 'world-eaters',
     'Pact of Blood': 'world-eaters',
@@ -222,7 +225,7 @@ export function massage(nodes: Node[]): MassageResult {
     'Battle Focus': 'aeldari',
     'Disparate Paths': 'aeldari',
     // Tyranids
-    'Synapse': 'tyranids',
+    Synapse: 'tyranids',
     'Shadow in the Warp': 'tyranids',
     // Adeptus Mechanicus
     'Doctrina Imperatives': 'adeptus-mechanicus',
@@ -233,7 +236,11 @@ export function massage(nodes: Node[]): MassageResult {
 
   // SM chapter slugs that Wahapedia groups under space-marines
   const SM_CHAPTER_SLUGS = new Set([
-    'space-wolves', 'dark-angels', 'blood-angels', 'black-templars', 'deathwatch',
+    'space-wolves',
+    'dark-angels',
+    'blood-angels',
+    'black-templars',
+    'deathwatch',
   ])
 
   const CHAPTER_DISPLAY_NAMES: Record<string, string> = {
@@ -241,10 +248,9 @@ export function massage(nodes: Node[]): MassageResult {
     'dark-angels': 'DARK ANGELS',
     'blood-angels': 'BLOOD ANGELS',
     'black-templars': 'BLACK TEMPLARS',
-    'deathwatch': 'DEATHWATCH',
+    deathwatch: 'DEATHWATCH',
   }
 
-  const beforeArmyRuleClean = working.length
   const armyRuleDropped: string[] = []
   const armyRuleReattributed: string[] = []
   const renamedIds = new Map<string, string>()
@@ -292,7 +298,9 @@ export function massage(nodes: Node[]): MassageResult {
     console.log(`  Army rule cleanup: removed ${armyRuleDropped.length} misattributed rules`)
   }
   if (armyRuleReattributed.length > 0) {
-    console.log(`  Army rule re-attribution: moved ${armyRuleReattributed.length} rules to correct chapter`)
+    console.log(
+      `  Army rule re-attribution: moved ${armyRuleReattributed.length} rules to correct chapter`,
+    )
   }
 
   // Pass 7b — fold sub-rules into parent army rules
@@ -347,7 +355,9 @@ export function massage(nodes: Node[]): MassageResult {
     }
   }
   if (droppedPhantomEnhancements > 0) {
-    console.log(`  Phantom enhancement cleanup: removed ${droppedPhantomEnhancements} datasheets misclassified as enhancements`)
+    console.log(
+      `  Phantom enhancement cleanup: removed ${droppedPhantomEnhancements} datasheets misclassified as enhancements`,
+    )
   }
 
   // Pass 7d — drop phantom detachment-rule nodes where content = title
@@ -356,13 +366,18 @@ export function massage(nodes: Node[]): MassageResult {
   let droppedPhantomDetachments = 0
   for (let i = working.length - 1; i >= 0; i--) {
     const node = working[i]!
-    if (node.category === 'detachment-rule' && node.title.toLowerCase().trim() === node.content.toLowerCase().trim()) {
+    if (
+      node.category === 'detachment-rule' &&
+      node.title.toLowerCase().trim() === node.content.toLowerCase().trim()
+    ) {
       working.splice(i, 1)
       droppedPhantomDetachments++
     }
   }
   if (droppedPhantomDetachments > 0) {
-    console.log(`  Phantom detachment cleanup: removed ${droppedPhantomDetachments} detachment-rules with no real content`)
+    console.log(
+      `  Phantom detachment cleanup: removed ${droppedPhantomDetachments} detachment-rules with no real content`,
+    )
   }
 
   // Pass 7e — set subfaction on SM chapter detachments and their children
@@ -415,7 +430,9 @@ export function massage(nodes: Node[]): MassageResult {
     // Extract detachment slug from the node's detachmentId or own ID
     const detSlug = node.detachmentId
       ? node.detachmentId.replace(/^det:space-marines:/, '').split(':')[0]!
-      : (node.category === 'detachment-rule' ? node.id.replace(/^det:space-marines:/, '').split(':')[0]! : undefined)
+      : node.category === 'detachment-rule'
+        ? node.id.replace(/^det:space-marines:/, '').split(':')[0]!
+        : undefined
     if (!detSlug) continue
     const chapter = DETACHMENT_CHAPTERS[detSlug]
     if (chapter) {
@@ -438,8 +455,8 @@ export function massage(nodes: Node[]): MassageResult {
 
   console.log(
     `[massage] ${inputCount} in → ${outputCount} out\n` +
-    `  Dropped: ${droppedPhantom} phantom, ${droppedShortContent} short-content, ${droppedDuplicateSummary} dup-summary\n` +
-    `  Flagged: ${flaggedContentInferred} content-inferred, ${flaggedPdfInvalid} pdf-invalid, ${flaggedOrphan} orphan`,
+      `  Dropped: ${droppedPhantom} phantom, ${droppedShortContent} short-content, ${droppedDuplicateSummary} dup-summary\n` +
+      `  Flagged: ${flaggedContentInferred} content-inferred, ${flaggedPdfInvalid} pdf-invalid, ${flaggedOrphan} orphan`,
   )
 
   return {

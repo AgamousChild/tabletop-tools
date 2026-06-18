@@ -1,5 +1,5 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import type { Pipeline, PipelineState } from '../lib/cv/pipeline'
 import { CalibrationWizard } from './CalibrationWizard'
@@ -64,9 +64,7 @@ describe('CalibrationWizard', () => {
 
   it('auto-calls captureBackground on mount when camera is ready', async () => {
     const pipeline = createMockPipeline()
-    render(
-      <CalibrationWizard pipeline={pipeline} diceSetId="d1" onComplete={vi.fn()} />,
-    )
+    render(<CalibrationWizard pipeline={pipeline} diceSetId="d1" onComplete={vi.fn()} />)
     await waitFor(() => expect(pipeline.captureBackground).toHaveBeenCalled())
   })
 

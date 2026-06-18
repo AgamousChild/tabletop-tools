@@ -71,8 +71,18 @@ afterAll(() => client.close())
 const createCaller = createCallerFactory(appRouter)
 const req = new Request('http://localhost')
 const nullStorage = { upload: vi.fn().mockResolvedValue('null://discarded') }
-const alice = { user: { id: 'user-1', email: 'alice@example.com', name: 'Alice' }, req, db, storage: nullStorage }
-const bob = { user: { id: 'user-2', email: 'bob@example.com', name: 'Bob' }, req, db, storage: nullStorage }
+const alice = {
+  user: { id: 'user-1', email: 'alice@example.com', name: 'Alice' },
+  req,
+  db,
+  storage: nullStorage,
+}
+const bob = {
+  user: { id: 'user-2', email: 'bob@example.com', name: 'Bob' },
+  req,
+  db,
+  storage: nullStorage,
+}
 
 // ---------------------------------------------------------------------------
 // session.start
@@ -330,7 +340,7 @@ describe('session.delete', () => {
     await expect(caller.session.get({ sessionId: session.id })).rejects.toThrow()
   })
 
-  it('rejects deleting another user\'s session', async () => {
+  it("rejects deleting another user's session", async () => {
     const aliceCaller = createCaller(alice)
     const session = await aliceCaller.session.start({ diceSetId: 'set-1' })
 

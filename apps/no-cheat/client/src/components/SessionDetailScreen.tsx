@@ -47,7 +47,8 @@ export function SessionDetailScreen({ sessionId, onBack }: Props) {
         </div>
 
         <p className="text-xs text-slate-500">
-          Session verdict and individual rolls recorded during this session. Tap the back arrow to return to the dice set.
+          Session verdict and individual rolls recorded during this session. Tap the back arrow to
+          return to the dice set.
         </p>
 
         <div className="px-4 py-3 rounded-lg bg-slate-900 border border-slate-800 space-y-1">

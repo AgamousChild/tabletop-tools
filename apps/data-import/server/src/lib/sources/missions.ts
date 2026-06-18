@@ -16,9 +16,7 @@ export interface MissionsResult {
   missions: Array<{ id: string; name: string; type: string; description: string }>
 }
 
-export async function fetchAndProcessMissions(
-  _existing: Manifest | null,
-): Promise<MissionsResult> {
+export async function fetchAndProcessMissions(_existing: Manifest | null): Promise<MissionsResult> {
   // Missions currently come through Wahapedia data pipeline.
   // PDF extraction for Chapter Approved can be added later.
   return { skipped: true, missions: [] }

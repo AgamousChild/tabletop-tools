@@ -1,5 +1,5 @@
-import { describe, it, expect, vi } from 'vitest'
-import { render, screen, fireEvent } from '@testing-library/react'
+import { fireEvent, render, screen } from '@testing-library/react'
+import { describe, expect, it, vi } from 'vitest'
 
 import { TrainingStats } from './TrainingStats'
 
@@ -24,12 +24,7 @@ const defaultProps = {
 describe('TrainingStats', () => {
   it('shows "No training data" when totalExamples is 0', () => {
     render(
-      <TrainingStats
-        {...defaultProps}
-        totalExamples={0}
-        exampleCounts={new Map()}
-        stats={null}
-      />,
+      <TrainingStats {...defaultProps} totalExamples={0} exampleCounts={new Map()} stats={null} />,
     )
     expect(screen.getByText('No training data')).toBeInTheDocument()
   })
@@ -56,14 +51,11 @@ describe('TrainingStats', () => {
   })
 
   it('shows 0 for classes with no examples', () => {
-    const sparse = new Map<number, number>([[1, 3], [4, 2]])
-    render(
-      <TrainingStats
-        {...defaultProps}
-        exampleCounts={sparse}
-        totalExamples={5}
-      />,
-    )
+    const sparse = new Map<number, number>([
+      [1, 3],
+      [4, 2],
+    ])
+    render(<TrainingStats {...defaultProps} exampleCounts={sparse} totalExamples={5} />)
     expect(screen.getByTestId('class-2')).toHaveTextContent('0')
     expect(screen.getByTestId('class-3')).toHaveTextContent('0')
     expect(screen.getByTestId('class-5')).toHaveTextContent('0')
@@ -93,9 +85,7 @@ describe('TrainingStats', () => {
 
   it('shows "Clear Training Data" button', () => {
     render(<TrainingStats {...defaultProps} />)
-    expect(
-      screen.getByRole('button', { name: /clear training data/i }),
-    ).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /clear training data/i })).toBeInTheDocument()
   })
 
   it('calls onClear when clear button is clicked', () => {

@@ -1,6 +1,6 @@
 import { createClient } from '@libsql/client'
 import { createDbFromClient } from '@tabletop-tools/db'
-import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest'
+import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 
 import { createNullR2Storage } from '../lib/storage/r2'
 import { createCallerFactory } from '../trpc'
@@ -364,7 +364,7 @@ describe('match.delete', () => {
     expect(found.id).toBe(match.id)
   })
 
-  it('rejects deleting another user\'s match', async () => {
+  it("rejects deleting another user's match", async () => {
     const caller = createCaller(ctx)
     const match = await caller.match.start({ opponentFaction: 'Eldar', mission: 'Ownership Test' })
     const caller2 = createCaller(ctx2)

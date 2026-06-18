@@ -1,52 +1,61 @@
 declare const __APP_VERSION__: string
 
-import { useState, useEffect, useCallback, useRef } from 'react'
-import { ForceGraph } from '../components/ForceGraph'
-import { ResultCard } from '../components/ResultCard'
-import { FactionBanner } from '../components/FactionBanner'
-import { Overlay } from '../components/Overlay'
-import { LinkedText } from '../components/LinkedText'
-import { UnitCard } from '../components/cards/UnitCard'
-import { StratagemCard } from '../components/cards/StratagemCard'
-import { EnhancementCard } from '../components/cards/EnhancementCard'
-import { RuleCard } from '../components/cards/RuleCard'
-import { MissionCard } from '../components/cards/MissionCard'
-import { TwistCard } from '../components/cards/TwistCard'
-import { ChallengerCard } from '../components/cards/ChallengerCard'
-import { CoreRuleCard } from '../components/cards/CoreRuleCard'
-import { ErrataCard } from '../components/cards/ErrataCard'
+import { useCallback, useEffect, useRef, useState } from 'react'
+
+import { deriveUnitType } from '../../../shared/derive-unit-type'
 import { BalanceCard } from '../components/cards/BalanceCard'
+import { ChallengerCard } from '../components/cards/ChallengerCard'
 import { CommunityCard } from '../components/cards/CommunityCard'
-import { DetachmentCard } from '../components/cards/DetachmentCard'
+import { CoreRuleCard } from '../components/cards/CoreRuleCard'
 import { DeploymentZoneCard } from '../components/cards/DeploymentZoneCard'
+import { DetachmentCard } from '../components/cards/DetachmentCard'
+import { EnhancementCard } from '../components/cards/EnhancementCard'
+import { ErrataCard } from '../components/cards/ErrataCard'
+import { MissionCard } from '../components/cards/MissionCard'
+import { PdfPageView } from '../components/cards/PdfPageView'
+import { RuleCard } from '../components/cards/RuleCard'
+import { StratagemCard } from '../components/cards/StratagemCard'
 import { TerrainLayoutCard } from '../components/cards/TerrainLayoutCard'
-import type { CardData, CardContext, ErrataEntry, MissionCardData, TwistCardData, ChallengerCardData } from '../components/cards/types'
+import { TwistCard } from '../components/cards/TwistCard'
+import type { CardContext, CardData, ErrataEntry, UnitCardData } from '../components/cards/types'
+import { UnitCard } from '../components/cards/UnitCard'
+import { FactionBanner } from '../components/FactionBanner'
+import { ForceGraph } from '../components/ForceGraph'
+import { LinkedText } from '../components/LinkedText'
+import { Overlay } from '../components/Overlay'
+import { Pagination } from '../components/Pagination'
+import { ResultCard } from '../components/ResultCard'
 import { resolveCardView } from '../lib/card-display'
 import { type EntityMap } from '../lib/entity-linker'
-import { PdfPageView } from '../components/cards/PdfPageView'
-import { DetachmentPage } from './DetachmentPage'
+import { LayoutRenderer } from '../lib/server-cards/Renderer'
+import type { CardLayout } from '../lib/server-cards/types'
 import type { DetachmentPageProps } from './DetachmentPage'
-import { deriveUnitType } from '../../../shared/derive-unit-type'
-import { Pagination } from '../components/Pagination'
+import { DetachmentPage } from './DetachmentPage'
 
 const API_BASE = import.meta.env.VITE_BRAIN_API_URL || '/brain/api'
 
 /** Simple markdown to HTML — handles ##, **, -, `, and brain: entity links */
-function renderMarkdown(text: string, onBrainLink?: (nodeId: string) => void): string {
+function renderMarkdown(text: string): string {
   // Convert [text](brain:nodeId) to clickable entity links
   const linkBrain = (s: string) =>
-    s.replace(/\[([^\]]+)\]\(brain:([^)]+)\)/g,
-      (_m, label, nodeId) => `<button class="text-amber-400 hover:text-amber-300 underline decoration-amber-400/30 hover:decoration-amber-400 cursor-pointer" data-brain-node="${nodeId}">${label}</button>`)
+    s.replace(
+      /\[([^\]]+)\]\(brain:([^)]+)\)/g,
+      (_m, label, nodeId) =>
+        `<button class="text-amber-400 hover:text-amber-300 underline decoration-amber-400/30 hover:decoration-amber-400 cursor-pointer" data-brain-node="${nodeId}">${label}</button>`,
+    )
 
   return text
     .split('\n')
-    .map(line => {
+    .map((line) => {
       // Headings
-      if (line.startsWith('## ')) return `<h2 class="text-lg font-bold text-amber-400 mt-4 mb-2">${linkBrain(line.slice(3))}</h2>`
-      if (line.startsWith('### ')) return `<h3 class="text-base font-semibold text-amber-300 mt-3 mb-1">${linkBrain(line.slice(4))}</h3>`
+      if (line.startsWith('## '))
+        return `<h2 class="text-lg font-bold text-amber-400 mt-4 mb-2">${linkBrain(line.slice(3))}</h2>`
+      if (line.startsWith('### '))
+        return `<h3 class="text-base font-semibold text-amber-300 mt-3 mb-1">${linkBrain(line.slice(4))}</h3>`
       // Bullet points
       if (line.startsWith('- ')) {
-        const content = line.slice(2)
+        const content = line
+          .slice(2)
           .replace(/\*\*([^*]+)\*\*/g, '<strong class="text-slate-100">$1</strong>')
         return `<div class="pl-4 py-0.5 text-sm text-slate-300 border-l border-slate-700 ml-2">${linkBrain(content)}</div>`
       }
@@ -57,8 +66,7 @@ function renderMarkdown(text: string, onBrainLink?: (nodeId: string) => void): s
       // Empty line
       if (!line.trim()) return ''
       // Regular text with bold
-      const formatted = line
-        .replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>')
+      const formatted = line.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>')
       return `<p class="text-sm text-slate-300 my-1">${linkBrain(formatted)}</p>`
     })
     .join('\n')
@@ -95,9 +103,18 @@ interface DetectedFactions {
 
 /** Parse "M6\" T4 Sv3+ W2 Ld6+ OC1" style stat line from content */
 function parseStatLine(content: string) {
-  const stats: { move: string; toughness: string; save: string; wounds: string; leadership: string; oc: string; invSv?: string } =
-    { move: '-', toughness: '-', save: '-', wounds: '-', leadership: '-', oc: '-' }
-  const m = content.match(/M(\d+["\u2033]?)\s+T(\d+)\s+Sv(\d+\+)\s+W(\d+)\s+Ld(\d+\+)\s+OC(\d+)\s*(\d+\+\+)?/)
+  const stats: {
+    move: string
+    toughness: string
+    save: string
+    wounds: string
+    leadership: string
+    oc: string
+    invSv?: string
+  } = { move: '-', toughness: '-', save: '-', wounds: '-', leadership: '-', oc: '-' }
+  const m = content.match(
+    /M(\d+["\u2033]?)\s+T(\d+)\s+Sv(\d+\+)\s+W(\d+)\s+Ld(\d+\+)\s+OC(\d+)\s*(\d+\+\+)?/,
+  )
   if (m) {
     stats.move = m[1]!
     stats.toughness = m[2]!
@@ -108,22 +125,6 @@ function parseStatLine(content: string) {
     if (m[7]) stats.invSv = m[7]
   }
   return stats
-}
-
-/** Parse weapon profiles from content sections */
-function parseWeapons(content: string, section: string) {
-  const lines: string[] = []
-  const sectionIdx = content.indexOf(section)
-  if (sectionIdx === -1) return lines
-
-  const after = content.slice(sectionIdx + section.length)
-  const nextSection = after.search(/Ranged weapons|Melee weapons|Abilities|Keywords/i)
-  const weaponBlock = nextSection === -1 ? after : after.slice(0, nextSection)
-
-  return weaponBlock
-    .split('\n')
-    .map(l => l.trim())
-    .filter(l => l.length > 0)
 }
 
 /** Parse WHEN/TARGET/EFFECT from stratagem content */
@@ -149,22 +150,56 @@ function extractContentField(content: string, field: string): string {
 
 /** Filter internal keywords from display, separate faction keywords */
 function filterDisplayKeywords(keywords: string[]): { display: string[]; faction: string[] } {
-  const internal = /^(t\d|sv\d|w\d|pts-|ppw-|moderate|cheap|expensive|premium|heavy-|light-|standard-|elite-|super-|titanic|toughness-|save-|wounds-|damage-|strength-|invuln-|ap-|ap\d|s\d|d\d|fnp-|feel no pain$|type:|characters$|sustained hits|lethal hits|devastating wounds|hazardous|blast|torrent|twin-linked|rapid fire|melta|lance|anti$|ignores cover|indirect fire|pistol|heavy$|assault$|one shot|^other$|^power armou?r$|^gravis$|^terminator armou?r$|^phobos$|^tacticus$|^mk x|^artificer armou?r$|^scout armou?r$|^deathwing$|^ravenwing$|^inner circle$|^wolf guard$|^sanguinary guard$|^lion guard$)/
+  const internal =
+    /^(t\d|sv\d|w\d|pts-|ppw-|moderate|cheap|expensive|premium|heavy-|light-|standard-|elite-|super-|titanic|toughness-|save-|wounds-|damage-|strength-|invuln-|ap-|ap\d|s\d|d\d|fnp-|feel no pain$|type:|characters$|sustained hits|lethal hits|devastating wounds|hazardous|blast|torrent|twin-linked|rapid fire|melta|lance|anti$|ignores cover|indirect fire|pistol|heavy$|assault$|one shot|^other$|^power armou?r$|^gravis$|^terminator armou?r$|^phobos$|^tacticus$|^mk x|^artificer armou?r$|^scout armou?r$|^deathwing$|^ravenwing$|^inner circle$|^wolf guard$|^sanguinary guard$|^lion guard$)/
   const factionNames = [
-    'adeptus astartes', 'heretic astartes', 'orks', 'necrons', 'tyranids',
-    'aeldari', "t'au empire", 'chaos', 'imperium', 'drukhari',
-    'leagues of votann', 'adeptus custodes', 'adeptus mechanicus',
-    'adepta sororitas', 'genestealer cults', 'death guard',
-    'thousand sons', 'world eaters', 'chaos daemons', 'grey knights',
-    'imperial agents', 'imperial knights', 'chaos knights',
-    'astra militarum', 'agents of the imperium',
+    'adeptus astartes',
+    'heretic astartes',
+    'orks',
+    'necrons',
+    'tyranids',
+    'aeldari',
+    "t'au empire",
+    'chaos',
+    'imperium',
+    'drukhari',
+    'leagues of votann',
+    'adeptus custodes',
+    'adeptus mechanicus',
+    'adepta sororitas',
+    'genestealer cults',
+    'death guard',
+    'thousand sons',
+    'world eaters',
+    'chaos daemons',
+    'grey knights',
+    'imperial agents',
+    'imperial knights',
+    'chaos knights',
+    'astra militarum',
+    'agents of the imperium',
     // Subfactions
-    'blood angels', 'dark angels', 'space wolves', 'black templars',
-    'ultramarines', 'deathwatch', 'imperial fists', 'iron hands',
-    'salamanders', 'raven guard', 'white scars', 'crimson fists',
-    'blood ravens', 'ynnari', 'harlequins', 'asuryani',
-    'plague legions', 'scintillating legions', 'legions of excess',
-    'blood legions', 'damned',
+    'blood angels',
+    'dark angels',
+    'space wolves',
+    'black templars',
+    'ultramarines',
+    'deathwatch',
+    'imperial fists',
+    'iron hands',
+    'salamanders',
+    'raven guard',
+    'white scars',
+    'crimson fists',
+    'blood ravens',
+    'ynnari',
+    'harlequins',
+    'asuryani',
+    'plague legions',
+    'scintillating legions',
+    'legions of excess',
+    'blood legions',
+    'damned',
   ]
   const display: string[] = []
   const factionKw: string[] = []
@@ -174,7 +209,7 @@ function filterDisplayKeywords(keywords: string[]): { display: string[]; faction
     if (seen.has(lower)) continue
     seen.add(lower)
     if (internal.test(lower)) continue
-    if (factionNames.some(f => lower === f)) {
+    if (factionNames.some((f) => lower === f)) {
       factionKw.push(kw)
     } else if (kw.length > 1) {
       display.push(kw)
@@ -196,8 +231,11 @@ const FORMAL_TO_SLUG: Record<string, string> = {
 }
 
 /** Remove faction keywords that are just the formal name of the node's own factionId */
-function filterRedundantFactionKeywords(factionKeywords: string[], nodeFactionId: string): string[] {
-  return factionKeywords.filter(kw => {
+function filterRedundantFactionKeywords(
+  factionKeywords: string[],
+  nodeFactionId: string,
+): string[] {
+  return factionKeywords.filter((kw) => {
     const slug = FORMAL_TO_SLUG[kw.toLowerCase()]
     return slug !== nodeFactionId
   })
@@ -222,16 +260,29 @@ function buildUnitData(node: ResultNode) {
   const factionKeywords = filterRedundantFactionKeywords(rawFactionKw, node.factionId || '')
 
   // Core abilities from keywords (some are parameterized like "deadly demise D3")
-  const coreAbilityPrefixes = ['grenades', 'deep strike', 'lone operative', 'stealth', 'scouts', 'infiltrators', 'deadly demise', 'fights first', 'firing deck']
+  const coreAbilityPrefixes = [
+    'grenades',
+    'deep strike',
+    'lone operative',
+    'stealth',
+    'scouts',
+    'infiltrators',
+    'deadly demise',
+    'fights first',
+    'firing deck',
+  ]
   const coreAbilities = displayKeywords
-    .filter(k => coreAbilityPrefixes.some(prefix => k.toLowerCase().startsWith(prefix)))
-    .map(k => {
+    .filter((k) => coreAbilityPrefixes.some((prefix) => k.toLowerCase().startsWith(prefix)))
+    .map((k) => {
       // Title-case the ability name
-      return k.split(' ').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ')
+      return k
+        .split(' ')
+        .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
+        .join(' ')
     })
 
   // Feel No Pain — extract value from fnp-X keyword (set by server parser)
-  const fnpKeyword = allKeywords.find(k => /^fnp-\d$/.test(k))
+  const fnpKeyword = allKeywords.find((k) => /^fnp-\d$/.test(k))
   const fnpValue = fnpKeyword ? `${fnpKeyword.replace('fnp-', '')}++` : undefined
 
   return {
@@ -243,11 +294,13 @@ function buildUnitData(node: ResultNode) {
     derivedType: role,
     points,
     stats: { ...stats, ...(fnpValue ? { fnp: fnpValue } : {}) },
-    rangedWeapons: [] as any[],  // populated async from /browse/unit/:id
+    rangedWeapons: [] as any[], // populated async from /browse/unit/:id
     meleeWeapons: [] as any[],
     abilities: [] as any[],
     coreAbilities,
-    keywords: displayKeywords.filter(k => !coreAbilityPrefixes.some(prefix => k.toLowerCase().startsWith(prefix))),
+    keywords: displayKeywords.filter(
+      (k) => !coreAbilityPrefixes.some((prefix) => k.toLowerCase().startsWith(prefix)),
+    ),
     factionKeywords,
     composition,
     loadout,
@@ -256,26 +309,42 @@ function buildUnitData(node: ResultNode) {
   }
 }
 
+/** Response type for the /browse/unit/:id endpoint */
+interface UnitEndpointResponse {
+  datasheet: any
+  weapons: Array<{ title: string; content: string; summary: string; category: string }>
+  abilities: Array<{
+    title: string
+    content: string
+    summary: string
+    category: string
+    keywords: string[]
+  }>
+  /** Server-driven layout descriptor — present when the server has a registered builder. */
+  layout?: CardLayout
+}
+
 /** Fetch full unit data (datasheet + weapons + abilities) from API */
-async function fetchFullUnitData(nodeId: string, node: ResultNode): Promise<import('../components/cards/types').UnitCardData> {
+async function fetchFullUnitData(
+  nodeId: string,
+  node: ResultNode,
+): Promise<{ unitData: UnitCardData; layout: CardLayout | null }> {
   const base = buildUnitData(node)
 
   try {
     const res = await fetch(`${API_BASE}/browse/unit/${encodeURIComponent(nodeId)}`)
-    if (!res.ok) return base
+    if (!res.ok) return { unitData: base, layout: null }
 
-    const data = await res.json() as {
-      datasheet: any
-      weapons: Array<{ title: string; content: string; summary: string; category: string }>
-      abilities: Array<{ title: string; content: string; summary: string; category: string; keywords: string[] }>
-    }
+    const data = (await res.json()) as UnitEndpointResponse
 
     // Parse weapons from weapon nodes
     const ranged: any[] = []
     const melee: any[] = []
     for (const w of data.weapons) {
       // Summary format: "Name (Type) — Range, AttA, SKILL, SSTR, APAP, DDAM. [abilities]"
-      const m = w.summary.match(/^(.+?)\s*\((\w+)\)\s*—\s*(\S+),\s*(\S+),\s*\S(\d+),\s*AP(\S+),\s*D(\S+)/)
+      const m = w.summary.match(
+        /^(.+?)\s*\((\w+)\)\s*—\s*(\S+),\s*(\S+),\s*\S(\d+),\s*AP(\S+),\s*D(\S+)/,
+      )
       const abMatch = w.summary.match(/\[([^\]]+)\]/g)
       const abilities = abMatch ? abMatch.join(' ') : ''
 
@@ -307,23 +376,23 @@ async function fetchFullUnitData(nodeId: string, node: ResultNode): Promise<impo
     }
 
     // Parse abilities from ability nodes
-    const unitAbilities = data.abilities.map(a => ({
+    const unitAbilities = data.abilities.map((a) => ({
       name: a.title,
       description: a.content || a.summary,
       type: a.keywords?.includes('faction') ? 'Faction' : 'Datasheet',
     }))
 
-    // Extract leaders from forward refs if available
-    // For now, leaders come from leader_attachments — the browse/unit endpoint could be extended
-
     return {
-      ...base,
-      rangedWeapons: ranged,
-      meleeWeapons: melee,
-      abilities: unitAbilities,
+      unitData: {
+        ...base,
+        rangedWeapons: ranged,
+        meleeWeapons: melee,
+        abilities: unitAbilities,
+      },
+      layout: data.layout ?? null,
     }
   } catch {
-    return base
+    return { unitData: base, layout: null }
   }
 }
 
@@ -351,13 +420,21 @@ function buildEnhancementData(node: ResultNode) {
   const costMatch = content.match(/\*\*Cost:\*\*\s*(\d+)/) || node.summary?.match(/\((\d+)pts?\)/)
   const cost = costMatch ? costMatch[1] : ''
   // Extract restriction — first line of content after cost (e.g., "Infantry Warboss model only.")
-  const lines = content.replace(/\*\*Cost:\*\*\s*\d+\s*/, '').split('\n').map(l => l.trim()).filter(Boolean)
+  const lines = content
+    .replace(/\*\*Cost:\*\*\s*\d+\s*/, '')
+    .split('\n')
+    .map((l) => l.trim())
+    .filter(Boolean)
   const restrictionLine = lines[0] && /model only/i.test(lines[0]) ? lines[0] : ''
   const description = restrictionLine ? lines.slice(1).join('\n') : lines.join('\n')
   // Detachment name from detachmentId (format: "det:faction:slug" or just a slug)
   const detSlug = node.detachmentId || ''
   const detName = detSlug.includes(':')
-    ? detSlug.split(':').pop()!.replace(/-/g, ' ').replace(/\b\w/g, (c: string) => c.toUpperCase())
+    ? detSlug
+        .split(':')
+        .pop()!
+        .replace(/-/g, ' ')
+        .replace(/\b\w/g, (c: string) => c.toUpperCase())
     : detSlug.replace(/-/g, ' ').replace(/\b\w/g, (c: string) => c.toUpperCase())
 
   return {
@@ -372,93 +449,21 @@ function buildEnhancementData(node: ResultNode) {
   }
 }
 
-function buildRuleData(node: ResultNode) {
-  return {
-    id: node.id,
-    name: node.title,
-    description: node.content || node.summary,
-    factionId: node.factionId || '',
-    subfaction: node.subfaction,
-    detachmentName: '',
-    sources: node.sources,
-  }
-}
-
-function buildCardFromNode(node: ResultNode): CardData {
-  switch (node.category) {
-    case 'datasheet':
-      return { type: 'unit', data: buildUnitData(node) }
-    case 'stratagem':
-      return { type: 'stratagem', data: buildStratagemData(node) }
-    case 'enhancement':
-      return { type: 'enhancement', data: buildEnhancementData(node) }
-    case 'faction-ability':
-      if (!node.detachmentId) {
-        return { type: 'rule', data: { ...buildRuleData(node), isArmyRule: true } }
-      }
-      return { type: 'rule', data: { ...buildRuleData(node), isArmyRule: false } }
-    case 'detachment-rule':
-      return { type: 'rule', data: { ...buildRuleData(node), isArmyRule: false } }
-    case 'primary-mission':
-      return {
-        type: 'mission',
-        data: {
-          id: node.id,
-          name: node.title,
-          missionType: 'primary',
-          content: node.content || node.summary,
-          sources: node.sources,
-        } as MissionCardData,
-      }
-    case 'secondary-mission':
-      return {
-        type: 'mission',
-        data: {
-          id: node.id,
-          name: node.title,
-          missionType: 'secondary',
-          side: node.id.includes(':atk:') ? 'attacker' : node.id.includes(':def:') ? 'defender' : undefined,
-          isFixed: node.keywords?.includes('fixed'),
-          content: node.content || node.summary,
-          sources: node.sources,
-        } as MissionCardData,
-      }
-    case 'twist':
-      return {
-        type: 'twist',
-        data: {
-          id: node.id,
-          name: node.title,
-          description: node.content || node.summary,
-          sources: node.sources,
-        } as TwistCardData,
-      }
-    case 'challenger':
-      return {
-        type: 'challenger',
-        data: {
-          id: node.id,
-          name: node.title,
-          content: node.content || node.summary,
-          sources: node.sources,
-        } as ChallengerCardData,
-      }
-    default:
-      return { type: 'rule', data: { ...buildRuleData(node), isArmyRule: false } }
-  }
-}
-
 // ── Entity map builder ───────────────────────────────────────────────────────
 
 function buildEntityMap(nodes: ResultNode[], keywords?: string[]): EntityMap {
   const map: EntityMap = new Map()
   for (const node of nodes) {
     const type =
-      node.category === 'datasheet' ? 'unit'
-      : node.category === 'stratagem' ? 'stratagem'
-      : node.category === 'enhancement' ? 'enhancement'
-      : node.category === 'faction-ability' || node.category === 'detachment-rule' ? 'rule'
-      : 'mechanic'
+      node.category === 'datasheet'
+        ? 'unit'
+        : node.category === 'stratagem'
+          ? 'stratagem'
+          : node.category === 'enhancement'
+            ? 'enhancement'
+            : node.category === 'faction-ability' || node.category === 'detachment-rule'
+              ? 'rule'
+              : 'mechanic'
     map.set(node.title.toLowerCase(), { type, nodeId: node.id })
   }
   if (keywords) {
@@ -529,7 +534,7 @@ function AskTab({ onOpenCard, activeFilters, onFilterChange }: AskTabProps) {
         throw new Error(err.error || `HTTP ${res.status}`)
       }
 
-      const data = await res.json() as QAResponse
+      const data = (await res.json()) as QAResponse
       setAnswer(data)
       setEntityMap(buildEntityMap(data.reference || [], data.detected?.keywords))
     } catch (err) {
@@ -544,18 +549,16 @@ function AskTab({ onOpenCard, activeFilters, onFilterChange }: AskTabProps) {
     if (!question.trim() || activeFilters.length === 0) return
     const combined = [question, ...activeFilters].join(' ')
     doAsk(combined)
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeFilters])
 
   function handleAsk() {
-    const combined = activeFilters.length > 0
-      ? [question, ...activeFilters].join(' ')
-      : question
+    const combined = activeFilters.length > 0 ? [question, ...activeFilters].join(' ') : question
     doAsk(combined)
   }
 
   function removeFilter(f: string) {
-    onFilterChange(activeFilters.filter(x => x !== f))
+    onFilterChange(activeFilters.filter((x) => x !== f))
   }
 
   return (
@@ -580,10 +583,18 @@ function AskTab({ onOpenCard, activeFilters, onFilterChange }: AskTabProps) {
 
       {activeFilters.length > 0 && (
         <div className="flex gap-2 flex-wrap">
-          {activeFilters.map(f => (
-            <span key={f} className="text-xs bg-amber-500/20 text-amber-400 px-2 py-1 rounded flex items-center gap-1">
+          {activeFilters.map((f) => (
+            <span
+              key={f}
+              className="text-xs bg-amber-500/20 text-amber-400 px-2 py-1 rounded flex items-center gap-1"
+            >
               {f}
-              <button onClick={() => removeFilter(f)} className="text-amber-400/60 hover:text-amber-400">×</button>
+              <button
+                onClick={() => removeFilter(f)}
+                className="text-amber-400/60 hover:text-amber-400"
+              >
+                ×
+              </button>
             </span>
           ))}
         </div>
@@ -597,7 +608,7 @@ function AskTab({ onOpenCard, activeFilters, onFilterChange }: AskTabProps) {
 
       {answer && (
         <div className="space-y-4">
-          {answer.detected?.factions?.length > 0 && (
+          {factionFilter && answer.detected?.factions?.length > 0 && (
             <FactionBanner
               factions={answer.detected.factions}
               subfaction={answer.detected.subfaction}
@@ -612,16 +623,21 @@ function AskTab({ onOpenCard, activeFilters, onFilterChange }: AskTabProps) {
               const nodeId = target.closest('[data-brain-node]')?.getAttribute('data-brain-node')
               if (!nodeId) return
               // Try reference list first
-              const node = answer.reference?.find(r => r.id === nodeId)
-              if (node) { onOpenCard(node); return }
+              const node = answer.reference?.find((r) => r.id === nodeId)
+              if (node) {
+                onOpenCard(node)
+                return
+              }
               // Fetch from API if not in reference
               try {
                 const res = await fetch(`${API_BASE}/browse/node/${encodeURIComponent(nodeId)}`)
                 if (res.ok) {
-                  const data = await res.json() as { node: ResultNode }
+                  const data = (await res.json()) as { node: ResultNode }
                   if (data.node) onOpenCard(data.node)
                 }
-              } catch { /* ignore fetch errors */ }
+              } catch {
+                /* ignore fetch errors */
+              }
             }}
           >
             <div
@@ -655,10 +671,7 @@ function AskTab({ onOpenCard, activeFilters, onFilterChange }: AskTabProps) {
               <h4 className="text-sm font-medium text-slate-400 uppercase mb-2">Reference</h4>
               {answer.reference.map((r, i) => (
                 <div key={r.id + '-' + i} className="mb-2">
-                  <button
-                    onClick={() => onOpenCard(r)}
-                    className="w-full text-left"
-                  >
+                  <button onClick={() => onOpenCard(r)} className="w-full text-left">
                     <ResultCard
                       index={i + 1}
                       title={r.title}
@@ -681,12 +694,19 @@ function AskTab({ onOpenCard, activeFilters, onFilterChange }: AskTabProps) {
                           const info = entityMap.get(name.toLowerCase())
                           if (info) {
                             try {
-                              const res = await fetch(`${API_BASE}/browse/node/${encodeURIComponent(info.nodeId)}`)
+                              const res = await fetch(
+                                `${API_BASE}/browse/node/${encodeURIComponent(info.nodeId)}`,
+                              )
                               if (res.ok) {
-                                const data = await res.json() as { node: ResultNode }
-                                if (data.node) { onOpenCard(data.node); return }
+                                const data = (await res.json()) as { node: ResultNode }
+                                if (data.node) {
+                                  onOpenCard(data.node)
+                                  return
+                                }
                               }
-                            } catch { /* fall through */ }
+                            } catch {
+                              /* fall through */
+                            }
                           }
                           onOpenCard(r)
                         }}
@@ -700,7 +720,9 @@ function AskTab({ onOpenCard, activeFilters, onFilterChange }: AskTabProps) {
 
           {answer.sources.length > 0 && (
             <div className="bg-slate-900/50 border border-slate-800 rounded p-3">
-              <h4 className="text-xs font-medium text-slate-400 uppercase mb-2">Sources ({answer.sources.length} nodes, {answer.connectedCount} connected)</h4>
+              <h4 className="text-xs font-medium text-slate-400 uppercase mb-2">
+                Sources ({answer.sources.length} nodes, {answer.connectedCount} connected)
+              </h4>
               <div className="flex flex-wrap gap-2">
                 {answer.sources.map((s) => (
                   <span
@@ -709,7 +731,9 @@ function AskTab({ onOpenCard, activeFilters, onFilterChange }: AskTabProps) {
                   >
                     <span className="text-amber-400">{s.layer}</span>
                     <span className="text-slate-500">/</span>
-                    <span className="text-slate-300">{s.title.length > 40 ? s.title.substring(0, 37) + '...' : s.title}</span>
+                    <span className="text-slate-300">
+                      {s.title.length > 40 ? s.title.substring(0, 37) + '...' : s.title}
+                    </span>
                   </span>
                 ))}
               </div>
@@ -780,12 +804,10 @@ function SearchTab({ onOpenCard, onOpenRecord, activeFilters, onFilterChange }: 
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ query: q, page: p, pageSize: 10 }),
       })
-      const data = await res.json() as SearchResponse
+      const data = (await res.json()) as SearchResponse
       setResponse(data)
       // Build entity map from whichever node list is available
-      const nodes = data.records
-        ? data.records.map(r => r.primaryNode)
-        : (data.results ?? [])
+      const nodes = data.records ? data.records.map((r) => r.primaryNode) : (data.results ?? [])
       setEntityMap(buildEntityMap(nodes, data.detected?.keywords))
     } catch {
       setResponse(null)
@@ -798,7 +820,7 @@ function SearchTab({ onOpenCard, onOpenRecord, activeFilters, onFilterChange }: 
   useEffect(() => {
     if (!lastQueryRef.current) return
     doSearch(lastQueryRef.current, page)
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [page])
 
   // Re-query when filters change (only if we have a query) — reset to page 1
@@ -807,19 +829,17 @@ function SearchTab({ onOpenCard, onOpenRecord, activeFilters, onFilterChange }: 
     const combined = [query, ...activeFilters].join(' ')
     setPage(1)
     doSearch(combined, 1)
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeFilters])
 
   function handleSearch() {
-    const combined = activeFilters.length > 0
-      ? [query, ...activeFilters].join(' ')
-      : query
+    const combined = activeFilters.length > 0 ? [query, ...activeFilters].join(' ') : query
     setPage(1)
     doSearch(combined, 1)
   }
 
   function removeFilter(f: string) {
-    onFilterChange(activeFilters.filter(x => x !== f))
+    onFilterChange(activeFilters.filter((x) => x !== f))
   }
 
   function handlePageChange(p: number) {
@@ -857,10 +877,18 @@ function SearchTab({ onOpenCard, onOpenRecord, activeFilters, onFilterChange }: 
 
       {activeFilters.length > 0 && (
         <div className="flex gap-2 flex-wrap">
-          {activeFilters.map(f => (
-            <span key={f} className="text-xs bg-amber-500/20 text-amber-400 px-2 py-1 rounded flex items-center gap-1">
+          {activeFilters.map((f) => (
+            <span
+              key={f}
+              className="text-xs bg-amber-500/20 text-amber-400 px-2 py-1 rounded flex items-center gap-1"
+            >
               {f}
-              <button onClick={() => removeFilter(f)} className="text-amber-400/60 hover:text-amber-400">×</button>
+              <button
+                onClick={() => removeFilter(f)}
+                className="text-amber-400/60 hover:text-amber-400"
+              >
+                ×
+              </button>
             </span>
           ))}
         </div>
@@ -885,16 +913,17 @@ function SearchTab({ onOpenCard, onOpenRecord, activeFilters, onFilterChange }: 
           {response!.records!.map((record, i) => {
             const r = record.primaryNode
             // Collect titles of matched child nodes for the badge
-            const matchedChildTitles = record.matchedChildIds.length > 0
-              ? record.childNodes
-                  .filter(c => record.matchedChildIds.includes(c.id))
-                  .map(c => c.title)
-              : []
+            const matchedChildTitles =
+              record.matchedChildIds.length > 0
+                ? record.childNodes
+                    .filter((c) => record.matchedChildIds.includes(c.id))
+                    .map((c) => c.title)
+                : []
 
             return (
               <div key={r.id + '-' + i} className="mb-2">
                 <button
-                  onClick={() => onOpenRecord ? onOpenRecord(record) : onOpenCard(r)}
+                  onClick={() => (onOpenRecord ? onOpenRecord(record) : onOpenCard(r))}
                   className="w-full text-left"
                 >
                   <ResultCard
@@ -913,7 +942,8 @@ function SearchTab({ onOpenCard, onOpenRecord, activeFilters, onFilterChange }: 
                 </button>
                 {matchedChildTitles.length > 0 && (
                   <p className="text-xs text-slate-500 mt-0.5 px-3">
-                    Matched: <span className="text-amber-400/70">{matchedChildTitles.join(', ')}</span>
+                    Matched:{' '}
+                    <span className="text-amber-400/70">{matchedChildTitles.join(', ')}</span>
                   </p>
                 )}
                 {entityMap.size > 0 && r.summary && (
@@ -921,7 +951,7 @@ function SearchTab({ onOpenCard, onOpenRecord, activeFilters, onFilterChange }: 
                     <LinkedText
                       text={r.summary}
                       entities={entityMap}
-                      onEntityClick={() => onOpenRecord ? onOpenRecord(record) : onOpenCard(r)}
+                      onEntityClick={() => (onOpenRecord ? onOpenRecord(record) : onOpenCard(r))}
                     />
                   </p>
                 )}
@@ -943,10 +973,7 @@ function SearchTab({ onOpenCard, onOpenRecord, activeFilters, onFilterChange }: 
         <div className="space-y-2">
           {legacyResults.map((r, i) => (
             <div key={r.id + '-' + i} className="mb-2">
-              <button
-                onClick={() => onOpenCard(r)}
-                className="w-full text-left"
-              >
+              <button onClick={() => onOpenCard(r)} className="w-full text-left">
                 <ResultCard
                   index={i + 1}
                   title={r.title}
@@ -986,7 +1013,7 @@ interface BrowseLayer {
 }
 
 interface BrowseTabProps {
-  onOpenCard: (node: ResultNode) => void
+  onOpenCard: (node: ResultNode) => void | Promise<void>
 }
 
 interface BrowsePaginatedResponse {
@@ -1009,8 +1036,11 @@ function BrowseTab({ onOpenCard }: BrowseTabProps) {
   // Load layers on mount
   useEffect(() => {
     fetch(`${API_BASE}/browse/layers`)
-      .then(r => r.json())
-      .then(data => { setLayers(data.layers || []); setLayersLoading(false) })
+      .then((r) => r.json())
+      .then((data) => {
+        setLayers(data.layers || [])
+        setLayersLoading(false)
+      })
       .catch(() => setLayersLoading(false))
   }, [])
 
@@ -1021,10 +1051,13 @@ function BrowseTab({ onOpenCard }: BrowseTabProps) {
 
   // Load nodes when layer or page changes
   useEffect(() => {
-    if (!selectedLayer) { setBrowseResponse(null); return }
+    if (!selectedLayer) {
+      setBrowseResponse(null)
+      return
+    }
     setLoading(true)
     fetch(`${API_BASE}/browse/nodes?layer=${selectedLayer}&page=${page}&pageSize=${pageSize}`)
-      .then(r => r.json())
+      .then((r) => r.json())
       .then((data: BrowsePaginatedResponse) => {
         setBrowseResponse({
           nodes: data.nodes || [],
@@ -1041,9 +1074,15 @@ function BrowseTab({ onOpenCard }: BrowseTabProps) {
   // Load full node detail and open card
   function viewNode(nodeId: string) {
     fetch(`${API_BASE}/browse/node/${encodeURIComponent(nodeId)}`)
-      .then(r => r.json())
-      .then(data => { if (data.node) onOpenCard(data.node) })
-      .catch(() => {})
+      .then((r) => r.json())
+      .then((data) => {
+        if (data.node) {
+          Promise.resolve(onOpenCard(data.node)).catch((err: unknown) =>
+            console.error('Card open failed:', err),
+          )
+        }
+      })
+      .catch((err) => console.error('Browse node fetch failed:', err))
   }
 
   const nodes = browseResponse?.nodes ?? []
@@ -1056,7 +1095,7 @@ function BrowseTab({ onOpenCard }: BrowseTabProps) {
       <aside className="w-48 border-r border-slate-800 p-4 shrink-0">
         <nav className="space-y-1">
           {layersLoading && <p className="text-xs text-slate-500">Loading...</p>}
-          {layers.map(layer => (
+          {layers.map((layer) => (
             <button
               key={layer.id}
               onClick={() => setSelectedLayer(layer.id)}
@@ -1074,9 +1113,7 @@ function BrowseTab({ onOpenCard }: BrowseTabProps) {
 
       <div className="flex-1 p-4 max-w-4xl">
         <div className="space-y-3">
-          {!selectedLayer && (
-            <p className="text-slate-400">Select a layer to browse rules.</p>
-          )}
+          {!selectedLayer && <p className="text-slate-400">Select a layer to browse rules.</p>}
           {loading && <p className="text-slate-400">Loading...</p>}
           {!loading && selectedLayer && nodes.length === 0 && (
             <p className="text-slate-400">No nodes in this layer.</p>
@@ -1121,125 +1158,66 @@ function BrowseTab({ onOpenCard }: BrowseTabProps) {
 export function BrainScreen() {
   const [tab, setTab] = useState<'ask' | 'search' | 'browse' | 'graph'>('ask')
   const [activeCard, setActiveCard] = useState<CardData | null>(null)
+  /** Server-driven layout descriptor — set alongside activeCard for datasheets. */
+  const [activeLayout, setActiveLayout] = useState<CardLayout | null>(null)
   const [activeFilters, setActiveFilters] = useState<string[]>([])
   const [detachmentView, setDetachmentView] = useState<DetachmentPageProps | null>(null)
-  const [pdfView, setPdfView] = useState<{ pdfName: string; page: number; title: string; topPct?: number; heightPct?: number; leftPct?: number; widthPct?: number } | null>(null)
-
-  async function openDetachmentPage(node: ResultNode) {
-    // Fetch stratagems and enhancements for this detachment via dedicated endpoint
-    const detachmentId = node.id
-    const factionId = node.factionId || ''
-
-    try {
-      const res = await fetch(`${API_BASE}/browse/detachment/${encodeURIComponent(detachmentId)}`)
-      const data = await res.json() as {
-        detachment: ResultNode
-        stratagems: ResultNode[]
-        enhancements: ResultNode[]
-        abilities: ResultNode[]
-      }
-
-      const stratagems = (data.stratagems || [])
-        .map(n => buildStratagemData(n))
-
-      const enhancements = (data.enhancements || [])
-        .map(n => buildEnhancementData(n))
-
-      const ability: DetachmentPageProps['ability'] = node.content
-        ? { ...buildRuleData(node), isArmyRule: false }
-        : undefined
-
-      setDetachmentView({
-        detachmentName: node.title,
-        factionId,
-        subfaction: node.subfaction,
-        ability,
-        stratagems,
-        enhancements,
-        onContentClick: (term: string) => {
-          setDetachmentView(null)
-          setActiveFilters(prev => prev.includes(term) ? prev : [...prev, term])
-        },
-        onBack: () => setDetachmentView(null),
-      })
-    } catch {
-      // Fallback: show page with just the ability node
-      const ability: DetachmentPageProps['ability'] = node.content
-        ? { ...buildRuleData(node), isArmyRule: false }
-        : undefined
-      setDetachmentView({
-        detachmentName: node.title,
-        factionId,
-        subfaction: node.subfaction,
-        ability,
-        stratagems: [],
-        enhancements: [],
-        onContentClick: (term: string) => {
-          setDetachmentView(null)
-          setActiveFilters(prev => prev.includes(term) ? prev : [...prev, term])
-        },
-        onBack: () => setDetachmentView(null),
-      })
-    }
-  }
+  const [pdfView, setPdfView] = useState<{
+    pdfName: string
+    page: number
+    title: string
+    topPct?: number
+    heightPct?: number
+    leftPct?: number
+    widthPct?: number
+  } | null>(null)
 
   async function handleOpenRecord(record: SearchRecord) {
     const node = record.primaryNode
 
-    // For unit cards — build data directly from record.childNodes, avoiding a second API fetch
+    // For unit cards — delegate to fetchFullUnitData to get the layout descriptor too
     if (record.type === 'unit' || node.category === 'datasheet') {
-      const base = buildUnitData(node)
-      const ranged: any[] = []
-      const melee: any[] = []
-      const unitAbilities: any[] = []
-
-      for (const child of record.childNodes) {
-        if (child.category === 'weapon') {
-          const rangeMatch = child.content.match(/\*\*Range:\*\*\s*(\S+)/)
-          const aMatch = child.content.match(/\*\*A:\*\*\s*(\S+)/)
-          const skillMatch = child.content.match(/\*\*BS\/WS:\*\*\s*(\S+)/)
-          const sMatch = child.content.match(/\*\*S:\*\*\s*(\S+)/)
-          const apMatch = child.content.match(/\*\*AP:\*\*\s*(\S+)/)
-          const dMatch = child.content.match(/\*\*D:\*\*\s*(\S+)/)
-          const abMatch = child.summary?.match(/\[([^\]]+)\]/g)
-          const abilities = abMatch ? abMatch.join(' ') : ''
-
-          const profile = {
-            name: child.title,
-            range: rangeMatch?.[1] ?? '',
-            attacks: aMatch?.[1] ?? '',
-            skill: skillMatch?.[1] ?? '',
-            strength: sMatch?.[1] ?? '',
-            ap: apMatch?.[1] ?? '',
-            damage: dMatch?.[1] ?? '',
-            abilities,
-          }
-          const isRanged = child.content.includes('**Type:** Ranged') || child.summary?.includes('(Ranged)')
-          if (isRanged) {
-            ranged.push(profile)
-          } else {
-            melee.push(profile)
-          }
-        } else if (child.category === 'unit-ability') {
-          unitAbilities.push({
-            name: child.title,
-            description: child.content || child.summary,
-            type: child.keywords?.includes('faction') ? 'Faction' : 'Datasheet',
-          })
-        }
-      }
-
+      const { unitData, layout } = await fetchFullUnitData(node.id, node)
       setActiveCard({
         type: 'unit',
-        data: { ...base, rangedWeapons: ranged, meleeWeapons: melee, abilities: unitAbilities, errata: record.errata },
+        data: { ...unitData, errata: record.errata },
       })
+      setActiveLayout(layout)
       return
+    }
+
+    // For army rules, fetch sub-abilities from API
+    if (node.category === 'army-rule') {
+      try {
+        const res = await fetch(`${API_BASE}/browse/army-rule/${encodeURIComponent(node.id)}`)
+        const data = (await res.json()) as { armyRule: ResultNode; subAbilities: ResultNode[] }
+        const subRules = data.subAbilities.map((a) => ({
+          name: a.title.replace(/\s*\(.*\)\s*$/, ''),
+          description: a.content || a.summary || '',
+        }))
+        setActiveCard({
+          type: 'rule',
+          data: {
+            id: node.id,
+            name: node.title,
+            description: node.content || node.summary || '',
+            factionId: node.factionId || '',
+            subfaction: node.subfaction,
+            isArmyRule: true,
+            subRules: subRules.length > 0 ? subRules : undefined,
+            sources: node.sources as any[],
+          },
+        })
+        return
+      } catch {
+        /* fall through to default */
+      }
     }
 
     // For ALL other types: use resolveCardView (never PDF-first)
     const { card } = resolveCardView(node)
     if (record.errata && record.errata.length > 0) {
-      (card.data as any).errata = record.errata
+      ;(card.data as any).errata = record.errata
     }
     setActiveCard(card)
   }
@@ -1247,8 +1225,9 @@ export function BrainScreen() {
   async function handleOpenCard(node: ResultNode) {
     // For unit cards, fetch full data (weapons + abilities) from API
     if (node.category === 'datasheet') {
-      const unitData = await fetchFullUnitData(node.id, node)
+      const { unitData, layout } = await fetchFullUnitData(node.id, node)
       setActiveCard({ type: 'unit', data: unitData })
+      setActiveLayout(layout)
       return
     }
 
@@ -1258,14 +1237,14 @@ export function BrainScreen() {
       if (card.type === 'detachment') {
         try {
           const res = await fetch(`${API_BASE}/browse/detachment/${encodeURIComponent(node.id)}`)
-          const data = await res.json() as {
+          const data = (await res.json()) as {
             detachment: ResultNode
             stratagems: ResultNode[]
             enhancements: ResultNode[]
             abilities: ResultNode[]
           }
-          card.data.stratagems = (data.stratagems || []).map(n => buildStratagemData(n))
-          card.data.enhancements = (data.enhancements || []).map(n => buildEnhancementData(n))
+          card.data.stratagems = (data.stratagems || []).map((n) => buildStratagemData(n))
+          card.data.enhancements = (data.enhancements || []).map((n) => buildEnhancementData(n))
         } catch {
           // Fallback: show card without stratagems/enhancements
         }
@@ -1274,8 +1253,37 @@ export function BrainScreen() {
       return
     }
 
+    // For army rules, fetch sub-abilities from API
+    if (node.category === 'army-rule') {
+      try {
+        const res = await fetch(`${API_BASE}/browse/army-rule/${encodeURIComponent(node.id)}`)
+        const data = (await res.json()) as { armyRule: ResultNode; subAbilities: ResultNode[] }
+        const subRules = data.subAbilities.map((a) => ({
+          name: a.title.replace(/\s*\(.*\)\s*$/, ''),
+          description: a.content || a.summary || '',
+        }))
+        setActiveCard({
+          type: 'rule',
+          data: {
+            id: node.id,
+            name: node.title,
+            description: node.content || node.summary || '',
+            factionId: node.factionId || '',
+            subfaction: node.subfaction,
+            isArmyRule: true,
+            subRules: subRules.length > 0 ? subRules : undefined,
+            sources: node.sources as any[],
+          },
+        })
+        return
+      } catch {
+        /* fall through */
+      }
+    }
+
     // For all other types: use resolveCardView
     const { card } = resolveCardView(node)
+    console.log('handleOpenCard setting card:', card.type, node.title)
     setActiveCard(card)
   }
 
@@ -1290,20 +1298,18 @@ export function BrainScreen() {
           body: JSON.stringify({ query: term, pageSize: 5 }),
         })
         if (res.ok) {
-          const data = await res.json() as SearchResponse
+          const data = (await res.json()) as SearchResponse
           // Look for an exact title match first among records
           const records = data.records ?? []
           const exactMatch = records.find(
-            r => r.primaryNode.title.toLowerCase() === term.toLowerCase()
+            (r) => r.primaryNode.title.toLowerCase() === term.toLowerCase(),
           )
           if (exactMatch) {
             handleOpenRecord(exactMatch)
             return
           }
           // Fall back to first non-unit result (prefer rules/mechanics)
-          const ruleResult = records.find(
-            r => r.primaryNode.category !== 'datasheet'
-          )
+          const ruleResult = records.find((r) => r.primaryNode.category !== 'datasheet')
           if (ruleResult) {
             handleOpenRecord(ruleResult)
             return
@@ -1320,12 +1326,17 @@ export function BrainScreen() {
             return
           }
         }
-      } catch { /* fall through to filter behavior */ }
+      } catch {
+        /* fall through to filter behavior */
+      }
       // If no rule found, add as filter
       setActiveCard(null)
-      setActiveFilters(prev => prev.includes(term) ? prev : [...prev, term])
+      setActiveFilters((prev) => (prev.includes(term) ? prev : [...prev, term]))
     },
-    onDismiss: () => setActiveCard(null),
+    onDismiss: () => {
+      setActiveCard(null)
+      setActiveLayout(null)
+    },
     onViewSource: (pdfName, page, title, topPct, heightPct, leftPct, widthPct) => {
       setActiveCard(null)
       setPdfView({ pdfName, page, title, topPct, heightPct, leftPct, widthPct })
@@ -1347,7 +1358,9 @@ export function BrainScreen() {
         <div className="flex items-center justify-between">
           <div className="flex items-baseline gap-2">
             <h1 className="text-xl font-bold text-amber-400">40K Brain</h1>
-            <span className="text-xs text-slate-600" data-testid="app-version">{__APP_VERSION__}</span>
+            <span className="text-xs text-slate-600" data-testid="app-version">
+              {__APP_VERSION__}
+            </span>
           </div>
           <div className="flex gap-1">
             {(['ask', 'search', 'browse', 'graph'] as const).map((t) => (
@@ -1360,7 +1373,13 @@ export function BrainScreen() {
                     : 'text-slate-400 hover:text-slate-200'
                 }`}
               >
-                {t === 'ask' ? 'Ask' : t === 'search' ? 'Search' : t === 'browse' ? 'Browse' : 'Graph'}
+                {t === 'ask'
+                  ? 'Ask'
+                  : t === 'search'
+                    ? 'Search'
+                    : t === 'browse'
+                      ? 'Browse'
+                      : 'Graph'}
               </button>
             ))}
           </div>
@@ -1393,21 +1412,54 @@ export function BrainScreen() {
         </main>
       )}
 
-      <Overlay open={!!activeCard} onDismiss={() => setActiveCard(null)}>
-        {activeCard?.type === 'unit' && <UnitCard data={activeCard.data} context={cardContext} />}
-        {activeCard?.type === 'stratagem' && <StratagemCard data={activeCard.data} context={cardContext} />}
-        {activeCard?.type === 'enhancement' && <EnhancementCard data={activeCard.data} context={cardContext} />}
+      <Overlay
+        open={!!activeCard}
+        onDismiss={() => {
+          setActiveCard(null)
+          setActiveLayout(null)
+        }}
+      >
+        {activeCard?.type === 'unit' &&
+          (activeLayout ? (
+            <LayoutRenderer layout={activeLayout} />
+          ) : (
+            <UnitCard data={activeCard.data} context={cardContext} />
+          ))}
+        {activeCard?.type === 'stratagem' && (
+          <StratagemCard data={activeCard.data} context={cardContext} />
+        )}
+        {activeCard?.type === 'enhancement' && (
+          <EnhancementCard data={activeCard.data} context={cardContext} />
+        )}
         {activeCard?.type === 'rule' && <RuleCard data={activeCard.data} context={cardContext} />}
-        {activeCard?.type === 'mission' && <MissionCard data={activeCard.data} context={cardContext} />}
+        {activeCard?.type === 'mission' && (
+          <MissionCard data={activeCard.data} context={cardContext} />
+        )}
         {activeCard?.type === 'twist' && <TwistCard data={activeCard.data} context={cardContext} />}
-        {activeCard?.type === 'challenger' && <ChallengerCard data={activeCard.data} context={cardContext} />}
-        {activeCard?.type === 'core-rule' && <CoreRuleCard data={activeCard.data} context={cardContext} />}
-        {activeCard?.type === 'deployment-zone' && <DeploymentZoneCard data={activeCard.data} context={cardContext} />}
-        {activeCard?.type === 'terrain-layout' && <TerrainLayoutCard data={activeCard.data} context={cardContext} />}
-        {activeCard?.type === 'errata' && <ErrataCard data={activeCard.data} context={cardContext} />}
-        {activeCard?.type === 'balance' && <BalanceCard data={activeCard.data} context={cardContext} />}
-        {activeCard?.type === 'community' && <CommunityCard data={activeCard.data} context={cardContext} />}
-        {activeCard?.type === 'detachment' && <DetachmentCard data={activeCard.data} context={cardContext} />}
+        {activeCard?.type === 'challenger' && (
+          <ChallengerCard data={activeCard.data} context={cardContext} />
+        )}
+        {activeCard?.type === 'core-rule' && (
+          <CoreRuleCard data={activeCard.data} context={cardContext} />
+        )}
+        {activeCard?.type === 'deployment-zone' && (
+          <DeploymentZoneCard data={activeCard.data} context={cardContext} />
+        )}
+        {activeCard?.type === 'terrain-layout' && (
+          <TerrainLayoutCard data={activeCard.data} context={cardContext} />
+        )}
+        {activeCard?.type === 'errata' && (
+          <ErrataCard data={activeCard.data} context={cardContext} />
+        )}
+        {activeCard?.type === 'balance' && (
+          <BalanceCard data={activeCard.data} context={cardContext} />
+        )}
+        {activeCard?.type === 'community' && (
+          <CommunityCard data={activeCard.data} context={cardContext} />
+        )}
+        {activeCard?.type === 'detachment' && (
+          <DetachmentCard data={activeCard.data} context={cardContext} />
+        )}
       </Overlay>
 
       {pdfView && (

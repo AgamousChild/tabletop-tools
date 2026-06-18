@@ -1,26 +1,26 @@
 /// <reference types="vite/client" />
 
 import {
-  saveUnits,
-  setImportMeta,
-  saveDetachments,
+  saveAbilities,
+  saveDatasheetDetachmentAbilities,
+  saveDatasheetEnhancements,
+  saveDatasheetModels,
+  saveDatasheets,
+  saveDatasheetStratagems,
+  saveDatasheetWargear,
   saveDetachmentAbilities,
-  saveStratagems,
+  saveDetachments,
   saveEnhancements,
   saveLeaderAttachments,
+  saveMissions,
+  saveStratagems,
+  saveUnitAbilities,
   saveUnitCompositions,
   saveUnitCosts,
-  saveWargearOptions,
   saveUnitKeywords,
-  saveUnitAbilities,
-  saveDatasheets,
-  saveDatasheetWargear,
-  saveDatasheetModels,
-  saveMissions,
-  saveAbilities,
-  saveDatasheetStratagems,
-  saveDatasheetEnhancements,
-  saveDatasheetDetachmentAbilities,
+  saveUnits,
+  saveWargearOptions,
+  setImportMeta,
   setRulesImportMeta,
 } from '@tabletop-tools/game-data-store'
 
@@ -84,31 +84,78 @@ async function fetchDataFile<T>(filename: string): Promise<T> {
 }
 
 /** Map of filename → save function for all data stores */
-const STORE_MAP: Record<string, {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  save: (items: any[]) => Promise<void>
-  label: string
-  rulesKey?: string
-}> = {
+const STORE_MAP: Record<
+  string,
+  {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    save: (items: any[]) => Promise<void>
+    label: string
+    rulesKey?: string
+  }
+> = {
   'bsdata-units.json': { save: saveUnits, label: 'Unit Profiles' },
   'datasheets.json': { save: saveDatasheets, label: 'Datasheets', rulesKey: 'datasheets' },
   'detachments.json': { save: saveDetachments, label: 'Detachments', rulesKey: 'detachments' },
-  'detachment_abilities.json': { save: saveDetachmentAbilities, label: 'Detachment Abilities', rulesKey: 'detachmentAbilities' },
+  'detachment_abilities.json': {
+    save: saveDetachmentAbilities,
+    label: 'Detachment Abilities',
+    rulesKey: 'detachmentAbilities',
+  },
   'stratagems.json': { save: saveStratagems, label: 'Stratagems', rulesKey: 'stratagems' },
   'enhancements.json': { save: saveEnhancements, label: 'Enhancements', rulesKey: 'enhancements' },
-  'leader_attachments.json': { save: saveLeaderAttachments, label: 'Leader Attachments', rulesKey: 'leaderAttachments' },
-  'unit_compositions.json': { save: saveUnitCompositions, label: 'Unit Compositions', rulesKey: 'unitCompositions' },
+  'leader_attachments.json': {
+    save: saveLeaderAttachments,
+    label: 'Leader Attachments',
+    rulesKey: 'leaderAttachments',
+  },
+  'unit_compositions.json': {
+    save: saveUnitCompositions,
+    label: 'Unit Compositions',
+    rulesKey: 'unitCompositions',
+  },
   'unit_costs.json': { save: saveUnitCosts, label: 'Unit Costs', rulesKey: 'unitCosts' },
-  'wargear_options.json': { save: saveWargearOptions, label: 'Wargear Options', rulesKey: 'wargearOptions' },
-  'unit_keywords.json': { save: saveUnitKeywords, label: 'Unit Keywords', rulesKey: 'unitKeywords' },
-  'unit_abilities.json': { save: saveUnitAbilities, label: 'Unit Abilities', rulesKey: 'unitAbilities' },
-  'datasheet_wargear.json': { save: saveDatasheetWargear, label: 'Weapon Profiles', rulesKey: 'datasheetWargear' },
-  'datasheet_models.json': { save: saveDatasheetModels, label: 'Model Stats', rulesKey: 'datasheetModels' },
+  'wargear_options.json': {
+    save: saveWargearOptions,
+    label: 'Wargear Options',
+    rulesKey: 'wargearOptions',
+  },
+  'unit_keywords.json': {
+    save: saveUnitKeywords,
+    label: 'Unit Keywords',
+    rulesKey: 'unitKeywords',
+  },
+  'unit_abilities.json': {
+    save: saveUnitAbilities,
+    label: 'Unit Abilities',
+    rulesKey: 'unitAbilities',
+  },
+  'datasheet_wargear.json': {
+    save: saveDatasheetWargear,
+    label: 'Weapon Profiles',
+    rulesKey: 'datasheetWargear',
+  },
+  'datasheet_models.json': {
+    save: saveDatasheetModels,
+    label: 'Model Stats',
+    rulesKey: 'datasheetModels',
+  },
   'missions.json': { save: saveMissions, label: 'Missions', rulesKey: 'missions' },
   'abilities.json': { save: saveAbilities, label: 'Global Abilities', rulesKey: 'abilities' },
-  'datasheet_stratagems.json': { save: saveDatasheetStratagems, label: 'Datasheet Stratagems', rulesKey: 'datasheetStratagems' },
-  'datasheet_enhancements.json': { save: saveDatasheetEnhancements, label: 'Datasheet Enhancements', rulesKey: 'datasheetEnhancements' },
-  'datasheet_detachment_abilities.json': { save: saveDatasheetDetachmentAbilities, label: 'Datasheet Det. Abilities', rulesKey: 'datasheetDetachmentAbilities' },
+  'datasheet_stratagems.json': {
+    save: saveDatasheetStratagems,
+    label: 'Datasheet Stratagems',
+    rulesKey: 'datasheetStratagems',
+  },
+  'datasheet_enhancements.json': {
+    save: saveDatasheetEnhancements,
+    label: 'Datasheet Enhancements',
+    rulesKey: 'datasheetEnhancements',
+  },
+  'datasheet_detachment_abilities.json': {
+    save: saveDatasheetDetachmentAbilities,
+    label: 'Datasheet Det. Abilities',
+    rulesKey: 'datasheetDetachmentAbilities',
+  },
   'factions.json': { save: async () => {}, label: 'Factions' }, // Factions don't have a separate store
 }
 
@@ -117,7 +164,7 @@ export async function syncAllData(
   onProgress: (progress: SyncProgress) => void,
 ): Promise<SyncResult> {
   const errors: string[] = []
-  const filesToSync = manifest.files.filter(f => STORE_MAP[f])
+  const filesToSync = manifest.files.filter((f) => STORE_MAP[f])
   const total = filesToSync.length
   let unitCount = 0
   const rulesCounts: Record<string, number> = {}

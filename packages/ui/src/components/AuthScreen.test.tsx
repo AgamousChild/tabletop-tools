@@ -1,4 +1,4 @@
-import { render, screen, fireEvent } from '@testing-library/react'
+import { fireEvent, render, screen } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
 
 import { AuthScreen } from './AuthScreen'
@@ -49,7 +49,13 @@ describe('AuthScreen', () => {
       signUp: { email: vi.fn() },
     }
 
-    render(<AuthScreen title="TestApp" onAuthenticated={onAuthenticated} authClient={authClient as any} />)
+    render(
+      <AuthScreen
+        title="TestApp"
+        onAuthenticated={onAuthenticated}
+        authClient={authClient as any}
+      />,
+    )
 
     fireEvent.change(screen.getByPlaceholderText('Email'), { target: { value: 'a@b.com' } })
     fireEvent.change(screen.getByPlaceholderText('Password'), { target: { value: 'pass123' } })
@@ -85,9 +91,7 @@ describe('AuthScreen', () => {
     fireEvent.change(screen.getByPlaceholderText('Password'), { target: { value: 'pass' } })
     fireEvent.submit(screen.getByRole('button', { name: 'Sign in' }))
 
-    await vi.waitFor(() =>
-      expect(screen.getByText(/network error/i)).toBeInTheDocument(),
-    )
+    await vi.waitFor(() => expect(screen.getByText(/network error/i)).toBeInTheDocument())
   })
 
   it('calls onAuthenticated after successful registration', async () => {
@@ -97,7 +101,13 @@ describe('AuthScreen', () => {
       signUp: { email: vi.fn().mockResolvedValue({ error: null }) },
     }
 
-    render(<AuthScreen title="TestApp" onAuthenticated={onAuthenticated} authClient={authClient as any} />)
+    render(
+      <AuthScreen
+        title="TestApp"
+        onAuthenticated={onAuthenticated}
+        authClient={authClient as any}
+      />,
+    )
 
     fireEvent.click(screen.getByText('Register'))
     fireEvent.change(screen.getByPlaceholderText('Name'), { target: { value: 'Tester' } })

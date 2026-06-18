@@ -1,6 +1,7 @@
-import { describe, it, expect } from 'vitest'
-import { assignRoles } from './role-assignment'
+import { describe, expect, it } from 'vitest'
+
 import type { DeploymentUnit } from '../types'
+import { assignRoles } from './role-assignment'
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -73,7 +74,10 @@ describe('assignRoles — strategic purpose', () => {
       toughness: 4,
       wounds: 2,
       abilities: { advanceAndCharge: true },
-      weapons: [{ name: 'Chainaxe', range: 'melee' }, { name: 'Bolt Pistol', range: 12 }],
+      weapons: [
+        { name: 'Chainaxe', range: 'melee' },
+        { name: 'Bolt Pistol', range: 12 },
+      ],
     })
     const [result] = assignRoles([unit])
     expect(result!.strategicPurpose).toBe('killing')
@@ -104,7 +108,10 @@ describe('assignRoles — strategic purpose', () => {
       toughness: 9,
       wounds: 8,
       keywords: ['Vehicle'],
-      weapons: [{ name: 'Dreadnought Fist', range: 'melee' }, { name: 'Assault Cannon', range: 24 }],
+      weapons: [
+        { name: 'Dreadnought Fist', range: 'melee' },
+        { name: 'Assault Cannon', range: 24 },
+      ],
     })
     const [result] = assignRoles([unit])
     // wounds >= 8 qualifies as holding; melee weapon also present but holding takes priority
@@ -137,7 +144,10 @@ describe('assignRoles — tactical role', () => {
       toughness: 4,
       wounds: 2,
       abilities: { deepStrike: true },
-      weapons: [{ name: 'Bolt Pistol', range: 12 }, { name: 'Chainsword', range: 'melee' }],
+      weapons: [
+        { name: 'Bolt Pistol', range: 12 },
+        { name: 'Chainsword', range: 'melee' },
+      ],
     })
     const [result] = assignRoles([unit])
     expect(result!.tacticalRole).toBe('deep-strike')
@@ -226,7 +236,10 @@ describe('assignRoles — tactical role', () => {
       toughness: 5,
       wounds: 3,
       invulnSave: 4,
-      weapons: [{ name: 'Power Fist', range: 'melee' }, { name: 'Storm Bolter', range: 24 }],
+      weapons: [
+        { name: 'Power Fist', range: 'melee' },
+        { name: 'Storm Bolter', range: 24 },
+      ],
     })
     // invulnSave 4 → holding → counter-charge via killing+melee path? No, invulnSave → holding
     // holding+melee → anchor takes priority over hammer; let's check the actual result

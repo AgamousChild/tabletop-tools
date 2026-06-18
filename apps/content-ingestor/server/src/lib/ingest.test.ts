@@ -1,8 +1,8 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { createClient } from '@libsql/client'
+import type { Db } from '@tabletop-tools/db'
 import { createDbFromClient, ingestJobs } from '@tabletop-tools/db'
 import { eq } from 'drizzle-orm'
-import type { Db } from '@tabletop-tools/db'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 vi.mock('./gladia', () => ({
   submitTranscription: vi.fn(),
@@ -20,11 +20,11 @@ vi.mock('./html', () => ({
   fetchArticleText: vi.fn(),
 }))
 
-import { startYoutubeIngest, completeYoutubeIngest, ingestWebArticle } from './ingest'
-import { submitTranscription } from './gladia'
 import { extractNodes } from './extract'
-import { writeNodesToBrain } from './nodes'
+import { submitTranscription } from './gladia'
 import { fetchArticleText } from './html'
+import { ingestWebArticle, processJob, startYoutubeIngest } from './ingest'
+import { writeNodesToBrain } from './nodes'
 
 const CREATE_TABLE = `
 CREATE TABLE ingest_jobs (
@@ -65,7 +65,7 @@ function mockVectorize() {
 function mockAi() {
   return {
     run: vi.fn(async (_model: string, input: { text: string[] }) => ({
-      data: input.text.map(() => new Array(768).fill(0.1)),
+      data: input.text.map(() => Array.from({ length: 768 }).fill(0.1)),
     })),
   }
 }
@@ -121,16 +121,17 @@ describe('startYoutubeIngest', () => {
   })
 })
 
-describe('completeYoutubeIngest', () => {
+describe('processJob', () => {
   it('finds job, extracts nodes, and writes to brain', async () => {
-    // Pre-create a job in transcribing state
+    // Pre-create a job in transcribed state (has transcript, ready for extraction)
     await db.insert(ingestJobs).values({
       id: 'job-1',
       url: 'https://youtube.com/watch?v=test',
       sourceType: 'youtube',
       sourceName: 'Test Channel',
-      status: 'transcribing',
+      status: 'transcribed',
       gladiaJobId: 'gladia-xyz',
+      transcript: 'Full transcript text here',
       createdAt: new Date(),
     })
 
@@ -149,9 +150,8 @@ describe('completeYoutubeIngest', () => {
     const vectorize = mockVectorize()
     const ai = mockAi()
 
-    await completeYoutubeIngest({
-      gladiaJobId: 'gladia-xyz',
-      transcript: 'Full transcript text here',
+    await processJob({
+      jobId: 'job-1',
       db,
       anthropicKey: 'test-anthropic-key',
       bucket: bucket as any,
@@ -165,22 +165,20 @@ describe('completeYoutubeIngest', () => {
     const [job] = await db.select().from(ingestJobs).where(eq(ingestJobs.id, 'job-1'))
     expect(job.status).toBe('completed')
     expect(job.nodesExtracted).toBe(1)
-    expect(job.transcript).toBe('Full transcript text here')
     expect(job.completedAt).toBeTruthy()
   })
 
-  it('throws when no job found for gladiaJobId', async () => {
+  it('throws when no job found', async () => {
     await expect(
-      completeYoutubeIngest({
-        gladiaJobId: 'nonexistent',
-        transcript: 'text',
+      processJob({
+        jobId: 'nonexistent',
         db,
         anthropicKey: 'key',
         bucket: mockBucket() as any,
         vectorize: mockVectorize() as any,
         ai: mockAi() as any,
       }),
-    ).rejects.toThrow('No job found for gladiaJobId: nonexistent')
+    ).rejects.toThrow('No job found: nonexistent')
   })
 
   it('marks job as failed on extraction error', async () => {
@@ -188,17 +186,17 @@ describe('completeYoutubeIngest', () => {
       id: 'job-2',
       url: 'https://youtube.com/watch?v=fail',
       sourceType: 'youtube',
-      status: 'transcribing',
+      status: 'transcribed',
       gladiaJobId: 'gladia-fail',
+      transcript: 'Some text',
       createdAt: new Date(),
     })
 
     vi.mocked(extractNodes).mockRejectedValue(new Error('API error 429'))
 
     await expect(
-      completeYoutubeIngest({
-        gladiaJobId: 'gladia-fail',
-        transcript: 'text',
+      processJob({
+        jobId: 'job-2',
         db,
         anthropicKey: 'key',
         bucket: mockBucket() as any,

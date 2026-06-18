@@ -1,10 +1,11 @@
 import type { Stratagem } from '@tabletop-tools/game-data-store'
+
 import type { SecondaryMission } from './SecondaryPicker'
+import { SecondaryPicker } from './SecondaryPicker'
 import type { StratagemEntry } from './StratagemPicker'
+import { StratagemPicker } from './StratagemPicker'
 import type { TurnData } from './types'
 import { VpStepper } from './VpStepper'
-import { SecondaryPicker } from './SecondaryPicker'
-import { StratagemPicker } from './StratagemPicker'
 
 type AvailableSecondary = {
   id: string
@@ -44,7 +45,9 @@ export function CommandPhaseScreen({
         <h3 className="text-lg font-semibold text-slate-200">
           {player === 'You' ? 'Your' : `${player}'s`} Command Phase
         </h3>
-        <span className="text-xs text-slate-500 bg-slate-800 px-2 py-1 rounded">R{currentRound}</span>
+        <span className="text-xs text-slate-500 bg-slate-800 px-2 py-1 rounded">
+          R{currentRound}
+        </span>
       </div>
 
       <div className="flex items-center gap-4">

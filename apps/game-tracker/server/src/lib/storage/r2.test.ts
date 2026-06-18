@@ -1,16 +1,13 @@
 import { describe, expect, it, vi } from 'vitest'
 
-import { createR2Storage, createNullR2Storage } from './r2'
+import { createNullR2Storage, createR2Storage } from './r2'
 
 describe('createR2Storage', () => {
   it('calls bucket.put with the correct key and content type', async () => {
     const mockBucket = { put: vi.fn().mockResolvedValue(undefined) }
     const storage = createR2Storage(mockBucket, 'https://photos.example.com')
 
-    await storage.upload(
-      'game-tracker/match-1/turn-1.jpg',
-      'data:image/jpeg;base64,dGVzdA==',
-    )
+    await storage.upload('game-tracker/match-1/turn-1.jpg', 'data:image/jpeg;base64,dGVzdA==')
 
     expect(mockBucket.put).toHaveBeenCalledWith(
       'game-tracker/match-1/turn-1.jpg',
@@ -47,9 +44,9 @@ describe('createR2Storage', () => {
     const mockBucket = { put: vi.fn().mockRejectedValue(new Error('Network error')) }
     const storage = createR2Storage(mockBucket, 'https://photos.example.com')
 
-    await expect(
-      storage.upload('key.jpg', 'data:image/jpeg;base64,dGVzdA=='),
-    ).rejects.toThrow('Network error')
+    await expect(storage.upload('key.jpg', 'data:image/jpeg;base64,dGVzdA==')).rejects.toThrow(
+      'Network error',
+    )
   })
 })
 

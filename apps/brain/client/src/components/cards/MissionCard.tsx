@@ -6,25 +6,11 @@ interface MissionCardProps {
   context: CardContext
 }
 
-function FieldRow({ label, value, color }: { label: string; value: string; color: string }) {
-  return (
-    <div className="flex gap-2 py-1.5 border-b border-slate-800 last:border-b-0">
-      <span className={`text-[10px] font-bold uppercase tracking-wide ${color} shrink-0 w-20`}>
-        {label}
-      </span>
-      <span className="text-xs text-slate-300 leading-snug">{value}</span>
-    </div>
-  )
-}
-
 export function MissionCard({ data, context }: MissionCardProps) {
   const isPrimary = data.missionType === 'primary'
   const accentBorder = isPrimary ? 'border-amber-500' : 'border-blue-500'
   const accentColor = isPrimary ? 'text-amber-400' : 'text-blue-400'
   const badgeBg = isPrimary ? 'bg-amber-500/20 text-amber-400' : 'bg-blue-500/20 text-blue-400'
-
-  // Determine if we have structured fields
-  const hasStructured = data.when || data.condition || data.scoring || data.action
 
   return (
     <div
@@ -76,10 +62,24 @@ export function MissionCard({ data, context }: MissionCardProps) {
             // Bold headers: **WHEN:** or **SECOND BATTLE ROUND ONWARDS**
             if (line.startsWith('**') && line.includes(':**')) {
               const [label, ...rest] = line.replace(/\*\*/g, '').split(':')
-              return <div key={i}><span className={`text-[10px] font-bold uppercase tracking-wide ${accentColor}`}>{label}:</span> <span className="text-slate-300">{rest.join(':').trim()}</span></div>
+              return (
+                <div key={i}>
+                  <span className={`text-[10px] font-bold uppercase tracking-wide ${accentColor}`}>
+                    {label}:
+                  </span>{' '}
+                  <span className="text-slate-300">{rest.join(':').trim()}</span>
+                </div>
+              )
             }
             if (line.startsWith('**') && line.endsWith('**')) {
-              return <div key={i} className={`text-[11px] font-bold uppercase tracking-wide ${accentColor} mt-2 pt-1 border-t border-slate-800`}>{line.replace(/\*\*/g, '')}</div>
+              return (
+                <div
+                  key={i}
+                  className={`text-[11px] font-bold uppercase tracking-wide ${accentColor} mt-2 pt-1 border-t border-slate-800`}
+                >
+                  {line.replace(/\*\*/g, '')}
+                </div>
+              )
             }
             // Bullet points with VP: - condition → **5 VP**
             if (line.startsWith('- ')) {
@@ -89,41 +89,77 @@ export function MissionCard({ data, context }: MissionCardProps) {
                 const vp = vpMatch[1]
                 const extra = vpMatch[2]?.trim() || ''
                 return (
-                  <div key={i} className="flex justify-between items-baseline gap-2 pl-2 border-l-2 border-slate-700 ml-1 py-0.5">
+                  <div
+                    key={i}
+                    className="flex justify-between items-baseline gap-2 pl-2 border-l-2 border-slate-700 ml-1 py-0.5"
+                  >
                     <span className="text-slate-300">{cond}</span>
-                    <span className="text-amber-400 font-bold text-[11px] shrink-0">{vp}{extra ? ` ${extra.replace(/[*()]/g, '')}` : ''}</span>
+                    <span className="text-amber-400 font-bold text-[11px] shrink-0">
+                      {vp}
+                      {extra ? ` ${extra.replace(/[*()]/g, '')}` : ''}
+                    </span>
                   </div>
                 )
               }
-              return <div key={i} className="pl-2 border-l-2 border-slate-700 ml-1 py-0.5 text-slate-300">{line.slice(2)}</div>
+              return (
+                <div
+                  key={i}
+                  className="pl-2 border-l-2 border-slate-700 ml-1 py-0.5 text-slate-300"
+                >
+                  {line.slice(2)}
+                </div>
+              )
             }
             // Italic designer note
             if (line.startsWith('*') && line.endsWith('*')) {
-              return <div key={i} className="text-[11px] text-slate-500 italic mt-1 border border-slate-800 rounded p-1.5">{line.replace(/^\*|\*$/g, '')}</div>
+              return (
+                <div
+                  key={i}
+                  className="text-[11px] text-slate-500 italic mt-1 border border-slate-800 rounded p-1.5"
+                >
+                  {line.replace(/^\*|\*$/g, '')}
+                </div>
+              )
             }
             // Empty lines
             if (!line.trim()) return <div key={i} className="h-1" />
             // Regular text
-            return <div key={i} className="text-slate-300">{line.replace(/\*\*/g, '')}</div>
+            return (
+              <div key={i} className="text-slate-300">
+                {line.replace(/\*\*/g, '')}
+              </div>
+            )
           })}
         </div>
 
         {/* View Source */}
-        {data.sources?.filter(s => s.type === 'pdf' && s.page).map((src, i) => (
-          context.onViewSource ? (
-            <button
-              key={i}
-              data-testid="view-source"
-              className="text-[10px] text-slate-500 hover:text-amber-400 underline mr-2"
-              onClick={() => context.onViewSource!(
-                src.title.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, ''),
-                src.page!, data.name, src.topPct, src.heightPct, src.leftPct, src.widthPct,
-              )}
-            >
-              View source (p.{src.page})
-            </button>
-          ) : null
-        ))}
+        {data.sources
+          ?.filter((s) => s.type === 'pdf' && s.page)
+          .map((src, i) =>
+            context.onViewSource ? (
+              <button
+                key={i}
+                data-testid="view-source"
+                className="text-[10px] text-slate-500 hover:text-amber-400 underline mr-2"
+                onClick={() =>
+                  context.onViewSource!(
+                    src.title
+                      .toLowerCase()
+                      .replace(/[^a-z0-9]+/g, '-')
+                      .replace(/^-|-$/g, ''),
+                    src.page!,
+                    data.name,
+                    src.topPct,
+                    src.heightPct,
+                    src.leftPct,
+                    src.widthPct,
+                  )
+                }
+              >
+                View source (p.{src.page})
+              </button>
+            ) : null,
+          )}
       </div>
 
       <ErrataSection errata={data.errata} />

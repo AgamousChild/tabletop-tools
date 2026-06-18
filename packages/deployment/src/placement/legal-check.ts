@@ -1,7 +1,7 @@
-import type { Point, TerrainPiece, GameRulesConfig, BaseSize } from '../types'
+import { distance } from '../geometry/point'
+import type { BaseSize, GameRulesConfig, Point, TerrainPiece } from '../types'
 import type { DeploymentZone } from '../zones/deployment-zones'
 import { canInfiltrate } from '../zones/exclusion-zones'
-import { distance } from '../geometry/point'
 import { isCoherent } from './coherency'
 import { baseSizeInches } from './coherency'
 

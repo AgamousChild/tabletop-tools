@@ -1,4 +1,5 @@
 import { AuthScreen } from '@tabletop-tools/ui'
+
 import { GameTrackerScreen } from './components/GameTrackerScreen'
 import { authClient } from './lib/auth'
 
@@ -14,7 +15,14 @@ export default function App() {
   }
 
   if (!session) {
-    return <AuthScreen title="Game Tracker" subtitle="40K match companion" authClient={authClient} onAuthenticated={() => void refetch()} />
+    return (
+      <AuthScreen
+        title="Game Tracker"
+        subtitle="40K match companion"
+        authClient={authClient}
+        onAuthenticated={() => void refetch()}
+      />
+    )
   }
 
   return <GameTrackerScreen onSignOut={() => void refetch()} />

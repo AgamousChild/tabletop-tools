@@ -1,1 +1,0 @@
-ALTER TABLE `list_units` ADD `model_count` integer;

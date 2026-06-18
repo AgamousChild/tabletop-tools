@@ -51,12 +51,12 @@ export const FACTION_PATTERNS: Array<{ pattern: string; slug: string }> = [
 
 // Abbreviation → subfaction mappings (resolved via SUBFACTION_TO_PARENT)
 export const ABBREVIATION_TO_SUBFACTION: Record<string, string> = {
-  'ba': 'blood angels',
-  'da': 'dark angels',
-  'sw': 'space wolves',
-  'bt': 'black templars',
-  'dw': 'deathwatch',
-  'sm': '',  // plain Space Marines, no subfaction
+  ba: 'blood angels',
+  da: 'dark angels',
+  sw: 'space wolves',
+  bt: 'black templars',
+  dw: 'deathwatch',
+  sm: '', // plain Space Marines, no subfaction
 }
 
 // ── Subfaction → parent faction mapping ───────────────────────────────────────
@@ -71,26 +71,26 @@ export const SUBFACTION_TO_PARENT: Record<string, string> = {
   'dark angels': 'space-marines',
   'space wolves': 'space-marines',
   'black templars': 'space-marines',
-  'deathwatch': 'space-marines',
+  deathwatch: 'space-marines',
   'iron hands': 'space-marines',
-  'ultramarines': 'space-marines',
-  'salamanders': 'space-marines',
+  ultramarines: 'space-marines',
+  salamanders: 'space-marines',
   'raven guard': 'space-marines',
   'imperial fists': 'space-marines',
   'white scars': 'space-marines',
   'crimson fists': 'space-marines',
   'blood ravens': 'space-marines',
   // Aeldari subfactions
-  'ynnari': 'aeldari',
-  'harlequins': 'aeldari',
-  'asuryani': 'aeldari',
+  ynnari: 'aeldari',
+  harlequins: 'aeldari',
+  asuryani: 'aeldari',
   // Chaos Daemons legions
   'plague legions': 'chaos-daemons',
   'scintillating legions': 'chaos-daemons',
   'legions of excess': 'chaos-daemons',
   'blood legions': 'chaos-daemons',
   // Chaos Space Marines
-  'damned': 'chaos-space-marines',
+  damned: 'chaos-space-marines',
 }
 
 // ── Mechanic aliases ──────────────────────────────────────────────────────────
@@ -212,9 +212,9 @@ export function stripFactionFromQuery(query: string, detectedFactions: string[])
   let result = query
 
   // Build the set of patterns to remove: any pattern whose slug is detected
-  const patternsToRemove = FACTION_PATTERNS
-    .filter(({ slug }) => detectedFactions.includes(slug))
-    .map(({ pattern }) => pattern)
+  const patternsToRemove = FACTION_PATTERNS.filter(({ slug }) =>
+    detectedFactions.includes(slug),
+  ).map(({ pattern }) => pattern)
 
   // Also remove subfaction names that appear in SUBFACTION_TO_PARENT
   for (const [sf, parent] of Object.entries(SUBFACTION_TO_PARENT)) {
@@ -233,7 +233,10 @@ export function stripFactionFromQuery(query: string, detectedFactions: string[])
     result = result.replace(new RegExp(`${escapeRegex(pattern)}s?\\b`, 'gi'), '')
   }
 
-  return result.replace(/\s{2,}/g, ' ').replace(/^[\s,]+|[\s,]+$/g, '').trim()
+  return result
+    .replace(/\s{2,}/g, ' ')
+    .replace(/^[\s,]+|[\s,]+$/g, '')
+    .trim()
 }
 
 function escapeRegex(s: string): string {
@@ -243,18 +246,50 @@ function escapeRegex(s: string): string {
 // ── Mechanic keyword extraction ───────────────────────────────────────────────
 
 const MECHANIC_TERMS = [
-  'sustained hits', 'lethal hits', 'devastating wounds', 'hazardous',
-  'blast', 'torrent', 'twin-linked', 'rapid fire', 'pistol', 'melta',
-  'lance', 'anti-', 'ignores cover', 'indirect fire',
-  'feel no pain', 'deadly demise', 'deep strike', 'lone operative',
-  'stealth', 'scouts', 'infiltrators', 'battle-shock', 'fights first',
-  'overwatch', 'wound roll', 'hit roll', 'saving throw',
-  'engagement range', 'coherency', 'visibility', 'cover',
-  'advance', 'fall back', 'charge', 'mortal wound',
-  'invulnerable', 'firing deck', 'transport', 'objective control',
+  'sustained hits',
+  'lethal hits',
+  'devastating wounds',
+  'hazardous',
+  'blast',
+  'torrent',
+  'twin-linked',
+  'rapid fire',
+  'pistol',
+  'melta',
+  'lance',
+  'anti-',
+  'ignores cover',
+  'indirect fire',
+  'feel no pain',
+  'deadly demise',
+  'deep strike',
+  'lone operative',
+  'stealth',
+  'scouts',
+  'infiltrators',
+  'battle-shock',
+  'fights first',
+  'overwatch',
+  'wound roll',
+  'hit roll',
+  'saving throw',
+  'engagement range',
+  'coherency',
+  'visibility',
+  'cover',
+  'advance',
+  'fall back',
+  'charge',
+  'mortal wound',
+  'invulnerable',
+  'firing deck',
+  'transport',
+  'objective control',
   'armour penetration',
   // Army rules (matched via aliases like ftgg, oath, bok)
-  'for the greater good', 'blessings of khorne', 'oath of moment',
+  'for the greater good',
+  'blessings of khorne',
+  'oath of moment',
 ]
 
 /**
@@ -267,5 +302,5 @@ export function extractMechanicKeywords(query: string): string[] {
       expanded = expanded.replace(alias, canonical)
     }
   }
-  return MECHANIC_TERMS.filter(m => expanded.includes(m))
+  return MECHANIC_TERMS.filter((m) => expanded.includes(m))
 }

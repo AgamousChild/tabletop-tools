@@ -29,11 +29,36 @@ function createDieFace(pipCount: number, w = W, h = H): Uint8Array {
 
   const layouts: Record<number, [number, number][]> = {
     1: [[32, 32]],
-    2: [[20, 20], [44, 44]],
-    3: [[20, 20], [32, 32], [44, 44]],
-    4: [[20, 20], [44, 20], [20, 44], [44, 44]],
-    5: [[20, 20], [44, 20], [32, 32], [20, 44], [44, 44]],
-    6: [[20, 16], [20, 32], [20, 48], [44, 16], [44, 32], [44, 48]],
+    2: [
+      [20, 20],
+      [44, 44],
+    ],
+    3: [
+      [20, 20],
+      [32, 32],
+      [44, 44],
+    ],
+    4: [
+      [20, 20],
+      [44, 20],
+      [20, 44],
+      [44, 44],
+    ],
+    5: [
+      [20, 20],
+      [44, 20],
+      [32, 32],
+      [20, 44],
+      [44, 44],
+    ],
+    6: [
+      [20, 16],
+      [20, 32],
+      [20, 48],
+      [44, 16],
+      [44, 32],
+      [44, 48],
+    ],
   }
 
   if (layouts[pipCount]) {
@@ -85,9 +110,7 @@ describe('extractFeatures', () => {
 
     // First 4 features are blob counts at different thresholds
     // At least one threshold's blob count should increase from 1->3->6 pips
-    const anyIncreasing = [0, 1, 2, 3].some(
-      (i) => f1[i]! <= f3[i]! && f3[i]! <= f6[i]!,
-    )
+    const anyIncreasing = [0, 1, 2, 3].some((i) => f1[i]! <= f3[i]! && f3[i]! <= f6[i]!)
     expect(anyIncreasing).toBe(true)
   })
 

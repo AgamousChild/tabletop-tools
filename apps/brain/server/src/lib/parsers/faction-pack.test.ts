@@ -1,4 +1,5 @@
-import { describe, it, expect } from 'vitest'
+import { describe, expect, it } from 'vitest'
+
 import { parseFactionPack } from './faction-pack'
 
 // Matches the actual structure produced by the gw-sync structured PDF parser:
@@ -47,34 +48,34 @@ describe('parseFactionPack', () => {
   const result = parseFactionPack(SAMPLE_FACTION, 'space-marines', '2026-04-08')
 
   it('extracts detachment rule node', () => {
-    const detRules = result.nodes.filter(n => n.category === 'detachment-rule')
+    const detRules = result.nodes.filter((n) => n.category === 'detachment-rule')
     expect(detRules.length).toBeGreaterThanOrEqual(1)
     expect(detRules[0]?.factionId).toBe('space-marines')
   })
 
   it('extracts detachment ability nodes', () => {
-    const abilities = result.nodes.filter(n =>
-      n.category === 'faction-ability' && n.title === 'ADAPTIVE DEFENCE'
+    const abilities = result.nodes.filter(
+      (n) => n.category === 'faction-ability' && n.title === 'ADAPTIVE DEFENCE',
     )
     expect(abilities.length).toBe(1)
     expect(abilities[0]!.content).toContain('terrain feature')
   })
 
   it('extracts stratagem nodes', () => {
-    const strats = result.nodes.filter(n => n.category === 'stratagem')
+    const strats = result.nodes.filter((n) => n.category === 'stratagem')
     expect(strats.length).toBe(2)
   })
 
   it('stratagem nodes have phase annotation', () => {
-    const strats = result.nodes.filter(n => n.category === 'stratagem')
-    const shootingStrat = strats.find(n => n.phase === 'shooting')
+    const strats = result.nodes.filter((n) => n.category === 'stratagem')
+    const shootingStrat = strats.find((n) => n.phase === 'shooting')
     expect(shootingStrat).toBeDefined()
   })
 
   it('extracts enhancement nodes', () => {
-    const enhancements = result.nodes.filter(n => n.category === 'enhancement')
+    const enhancements = result.nodes.filter((n) => n.category === 'enhancement')
     expect(enhancements.length).toBe(2)
-    const names = enhancements.map(n => n.title)
+    const names = enhancements.map((n) => n.title)
     expect(names).toContain('IRON RESOLVE')
     expect(names).toContain('MASTER-CRAFTED WEAPON')
   })
@@ -86,13 +87,13 @@ describe('parseFactionPack', () => {
   })
 
   it('generates part_of refs from components to detachment', () => {
-    const partOfRefs = result.refs.filter(r => r.rel === 'part_of')
+    const partOfRefs = result.refs.filter((r) => r.rel === 'part_of')
     expect(partOfRefs.length).toBeGreaterThan(0)
   })
 
   it('generates deterministic IDs', () => {
     const result2 = parseFactionPack(SAMPLE_FACTION, 'space-marines', '2026-04-08')
-    expect(result2.nodes.map(n => n.id)).toEqual(result.nodes.map(n => n.id))
+    expect(result2.nodes.map((n) => n.id)).toEqual(result.nodes.map((n) => n.id))
   })
 
   it('includes source attribution', () => {
@@ -105,6 +106,21 @@ describe('parseFactionPack', () => {
   it('sets version to 1 on all nodes', () => {
     for (const node of result.nodes) {
       expect(node.version).toBe(1)
+    }
+  })
+
+  it('detachment-rule node id has no doubled slug (regression: det:fac:slug:slug)', () => {
+    // The detachment heading "## CERAMITE SENTINELS" should produce id
+    // `det:space-marines:ceramite-sentinels`, NOT
+    // `det:space-marines:ceramite-sentinels:ceramite-sentinels`.
+    const det = result.nodes.find((n) => n.category === 'detachment-rule')
+    expect(det).toBeDefined()
+    expect(det!.id).toBe('det:space-marines:ceramite-sentinels')
+    // Generic regression check: no doubled trailing slug on any detachment-rule.
+    for (const n of result.nodes) {
+      if (n.category !== 'detachment-rule') continue
+      const m = n.id.match(/^det:[^:]+:([^:]+):(.+)$/)
+      if (m) expect(m[1]).not.toBe(m[2])
     }
   })
 })

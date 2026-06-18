@@ -98,7 +98,9 @@ export interface IngestConfig {
 
 export const DEFAULT_CONFIG: IngestConfig = {
   llm: DEFAULT_LLM_CONFIG,
-  ytdlpPath: 'C:/R/tools/yt-dlp.exe',
+  // YT_DLP_PATH env var overrides the default — used by the daily GH Actions
+  // workflow where yt-dlp lives at `which yt-dlp` (typically /usr/local/bin/yt-dlp).
+  ytdlpPath: process.env['YT_DLP_PATH'] ?? 'C:/R/tools/yt-dlp.exe',
   dataDir: '.local/ingest',
   brainNodesDir: '../brain/server/.local/brain/nodes',
 }

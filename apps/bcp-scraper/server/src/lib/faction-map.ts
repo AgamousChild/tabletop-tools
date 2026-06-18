@@ -1,83 +1,51 @@
-const BCP_FACTION_TO_SLUG: Record<string, string> = {
-  'Adepta Sororitas': 'adepta-sororitas',
-  'Adeptus Custodes': 'adeptus-custodes',
-  'Adeptus Mechanicus': 'adeptus-mechanicus',
-  'Aeldari': 'aeldari',
-  'Astra Militarum': 'astra-militarum',
-  'Blood Angels': 'blood-angels',
-  'Black Templars': 'black-templars',
-  'Chaos Daemons': 'chaos-daemons',
-  'Chaos Knights': 'chaos-knights',
-  'Chaos Space Marines': 'chaos-space-marines',
-  'Dark Angels': 'dark-angels',
-  'Death Guard': 'death-guard',
-  'Deathwatch': 'deathwatch',
-  'Drukhari': 'drukhari',
-  "Emperor's Children": 'emperors-children',
-  'Genestealer Cult': 'genestealer-cults',
-  'Genestealer Cults': 'genestealer-cults',
-  'Grey Knights': 'grey-knights',
-  'Imperial Agents': 'imperial-agents',
-  'Imperial Knights': 'imperial-knights',
-  'Leagues of Votann': 'leagues-of-votann',
-  'Necrons': 'necrons',
-  'Orks': 'orks',
-  'Space Marines (Astartes)': 'space-marines',
-  'Space Wolves': 'space-wolves',
-  "T'au Empire": 'tau-empire',
-  'Thousand Sons': 'thousand-sons',
-  'Tyranids': 'tyranids',
-  'World Eaters': 'world-eaters',
-  'Forces of the Hive Mind': 'tyranids',
-  'Hive Fleet Kronos': 'tyranids',
-  'Hive Fleet Hyrda': 'tyranids',
-  'Ultramarines': 'space-marines',
-  'Salamanders': 'space-marines',
-  'Imperial Fists': 'space-marines',
-  'Iron Hands': 'space-marines',
-  'Raven Guard': 'space-marines',
-  'White Scars': 'space-marines',
-  'Crimson Fists': 'space-marines',
-  'Carcharadons': 'space-marines',
-  'Alpha Legion': 'chaos-space-marines',
-  'Night Lords': 'chaos-space-marines',
-  'Iron Warriors': 'chaos-space-marines',
-  'Word Bearers': 'chaos-space-marines',
-  'Red Corsairs': 'chaos-space-marines',
-  'Black Legion': 'chaos-space-marines',
-  'Flesh Tearers': 'blood-angels',
-  'Deathwing': 'dark-angels',
-  'Kabal of the Flayed Skull': 'drukhari',
-  'Blood Axe': 'orks',
-  'Freebooterz': 'orks',
-  'Goffs': 'orks',
-  "T'au Sept": 'tau-empire',
-  'Farsight Enclaves': 'tau-empire',
-  'Sautekh': 'necrons',
-  'Nihilakh': 'necrons',
-  'Ymyr Conglomerate': 'leagues-of-votann',
-  'Nurgle Daemons': 'chaos-daemons',
-  'Slaanesh Daemons': 'chaos-daemons',
-  'Slaanesh': 'chaos-daemons',
-  'Cadian Shock Troops': 'astra-militarum',
-  'Catachan Jungle Fighters': 'astra-militarum',
-  'Imperium': 'imperial-agents',
-  'Chaos': 'chaos-space-marines',
-  'Xenos': 'aeldari',
+/**
+ * Faction name resolution — backed by dim_faction_alias table.
+ *
+ * Call loadFactionMap(db) once at the start of a scrape/parse operation,
+ * then use normalizeFaction() synchronously throughout.
+ */
+import type { Db } from '@tabletop-tools/db'
+import { getFactionAliasMap, getSubfactions } from '@tabletop-tools/db'
+
+let cachedAliasMap: Map<string, string> | null = null
+let cachedSubfactionParent: Map<string, string> | null = null
+
+/**
+ * Load faction alias map and subfaction parents from DB.
+ * Must be called before normalizeFaction() or getSubfactionParent().
+ */
+export async function loadFactionMap(db: Db): Promise<void> {
+  cachedAliasMap = await getFactionAliasMap(db)
+  const subfactions = await getSubfactions(db)
+  cachedSubfactionParent = new Map(subfactions.map((s) => [s.id, s.factionId]))
 }
 
-const SUBFACTION_PARENT: Record<string, string> = {
-  'blood-angels': 'space-marines',
-  'dark-angels': 'space-marines',
-  'space-wolves': 'space-marines',
-  'black-templars': 'space-marines',
-  'deathwatch': 'space-marines',
-}
-
+/**
+ * Resolve a BCP faction name to a canonical slug.
+ * Requires loadFactionMap() to have been called first.
+ */
 export function normalizeFaction(bcpFaction: string): string {
-  return BCP_FACTION_TO_SLUG[bcpFaction] ?? ''
+  if (!cachedAliasMap) {
+    throw new Error('Faction map not loaded — call loadFactionMap(db) first')
+  }
+  return cachedAliasMap.get(bcpFaction) ?? ''
 }
 
+/**
+ * Get the parent faction for a subfaction slug.
+ * Requires loadFactionMap() to have been called first.
+ */
 export function getSubfactionParent(slug: string): string | undefined {
-  return SUBFACTION_PARENT[slug]
+  if (!cachedSubfactionParent) {
+    throw new Error('Faction map not loaded — call loadFactionMap(db) first')
+  }
+  return cachedSubfactionParent.get(slug)
+}
+
+/**
+ * Reset cached maps (for testing).
+ */
+export function resetFactionMapCache(): void {
+  cachedAliasMap = null
+  cachedSubfactionParent = null
 }

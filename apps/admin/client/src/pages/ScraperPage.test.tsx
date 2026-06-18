@@ -1,5 +1,5 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { fireEvent, render, screen } from '@testing-library/react'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 let statusReturn: any
 let historyReturn: any
@@ -11,8 +11,12 @@ vi.mock('../lib/trpc', () => ({
     stats: {
       bcpScraperStatus: { useQuery: vi.fn(() => statusReturn) },
       bcpScraperHistory: { useQuery: vi.fn(() => historyReturn) },
-      triggerBcpScrape: { useMutation: vi.fn(() => ({ mutate: mockScrapeMutate, isPending: false })) },
-      triggerMetaPipeline: { useMutation: vi.fn(() => ({ mutate: mockPipelineMutate, isPending: false })) },
+      triggerBcpScrape: {
+        useMutation: vi.fn(() => ({ mutate: mockScrapeMutate, isPending: false })),
+      },
+      triggerMetaPipeline: {
+        useMutation: vi.fn(() => ({ mutate: mockPipelineMutate, isPending: false })),
+      },
     },
   },
 }))

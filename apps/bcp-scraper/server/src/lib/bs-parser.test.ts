@@ -1,5 +1,31 @@
-import { describe, it, expect } from 'vitest'
+import { createClient } from '@libsql/client'
+import { createDbFromClient } from '@tabletop-tools/db'
+import { afterAll, beforeAll, describe, expect, it } from 'vitest'
+
 import { parseBattleScribe } from './bs-parser'
+import { loadFactionMap, resetFactionMapCache } from './faction-map'
+import type { TTTPackage } from './ttt-types'
+
+const client = createClient({ url: ':memory:' })
+const db = createDbFromClient(client)
+
+beforeAll(async () => {
+  await client.executeMultiple(`
+    CREATE TABLE dim_faction (id TEXT PRIMARY KEY, name TEXT NOT NULL, allegiance TEXT NOT NULL);
+    CREATE TABLE dim_faction_alias (alias TEXT PRIMARY KEY, faction_id TEXT NOT NULL);
+    CREATE TABLE dim_subfaction (id TEXT PRIMARY KEY, name TEXT NOT NULL, faction_id TEXT NOT NULL);
+    INSERT INTO dim_faction VALUES ('chaos-space-marines', 'Chaos Space Marines', 'chaos');
+    INSERT INTO dim_faction VALUES ('emperors-children', 'Emperor''s Children', 'chaos');
+    INSERT INTO dim_faction_alias VALUES ('Chaos Space Marines', 'chaos-space-marines');
+    INSERT INTO dim_faction_alias VALUES ('Emperor''s Children', 'emperors-children');
+  `)
+  await loadFactionMap(db)
+})
+
+afterAll(() => {
+  resetFactionMapCache()
+  client.close()
+})
 
 const SAMPLE_CSM = `++++++++++++++++++++++++++++++++++++++++++++++++ FACTION KEYWORD: Chaos - Chaos Space Marines+ DETACHMENT: Pactbound Zealots (Marks of Chaos)+ TOTAL ARMY POINTS: 2000pts++ WARLORD: Char1: Abaddon the Despoiler+ ENHANCEMENT: Intoxicating Elixir (on Char4: Lord Discordant on Helstalker)+ NUMBER OF UNITS: 16+ SECONDARY: - Bring It Down: (3x2) - Assassination: 4 Characters+++++++++++++++++++++++++++++++++++++++++++++++Char1: 1x Abaddon the Despoiler (270 pts): Warlord, Drach'nyen, Talon of HorusChar2: 1x Dark Apostle (75 pts): Accursed crozius, Bolt pistolChar3: 1x Dark Apostle (75 pts): Accursed crozius, Bolt pistolChar4: 1x Lord Discordant on Helstalker (200 pts): Autocannon, Bolt pistol, Impaler chainglaive, Intoxicating Elixir, Mechatendrils, Techno-virus injector`
 
@@ -7,7 +33,11 @@ const SAMPLE_EC = `++++++++++++++++++++++++++++++++++++++++++++++++ FACTION KEYW
 
 describe('parseBattleScribe', () => {
   describe('Sample 1 - Chaos Space Marines', () => {
-    const result = parseBattleScribe(SAMPLE_CSM)
+    let result: TTTPackage
+
+    beforeAll(() => {
+      result = parseBattleScribe(SAMPLE_CSM)
+    })
 
     it('parses meta', () => {
       expect(result.version).toBe(1)
@@ -33,7 +63,7 @@ describe('parseBattleScribe', () => {
     })
 
     it('parses Abaddon as warlord', () => {
-      const abaddon = result.list.units.find(u => u.name === 'Abaddon the Despoiler')!
+      const abaddon = result.list.units.find((u) => u.name === 'Abaddon the Despoiler')!
       expect(abaddon).toBeDefined()
       expect(abaddon.points).toBe(270)
       expect(abaddon.models).toBe(1)
@@ -45,14 +75,14 @@ describe('parseBattleScribe', () => {
     })
 
     it('parses Dark Apostle', () => {
-      const apostles = result.list.units.filter(u => u.name === 'Dark Apostle')
+      const apostles = result.list.units.filter((u) => u.name === 'Dark Apostle')
       expect(apostles).toHaveLength(2)
       expect(apostles[0]!.points).toBe(75)
       expect(apostles[0]!.wargear).toContain('Accursed crozius')
     })
 
     it('parses Lord Discordant with enhancement', () => {
-      const lord = result.list.units.find(u => u.name === 'Lord Discordant on Helstalker')!
+      const lord = result.list.units.find((u) => u.name === 'Lord Discordant on Helstalker')!
       expect(lord).toBeDefined()
       expect(lord.points).toBe(200)
       expect(lord.enhancement).toBe('Intoxicating Elixir')
@@ -64,7 +94,11 @@ describe('parseBattleScribe', () => {
   })
 
   describe("Sample 2 - Emperor's Children", () => {
-    const result = parseBattleScribe(SAMPLE_EC)
+    let result: TTTPackage
+
+    beforeAll(() => {
+      result = parseBattleScribe(SAMPLE_EC)
+    })
 
     it('parses faction', () => {
       expect(result.list.factionName).toBe("Emperor's Children")
@@ -81,7 +115,7 @@ describe('parseBattleScribe', () => {
     })
 
     it('parses Daemon Prince as warlord with enhancement on other unit', () => {
-      const dp = result.list.units.find(u => u.name === 'Daemon Prince of Slaanesh with Wings')!
+      const dp = result.list.units.find((u) => u.name === 'Daemon Prince of Slaanesh with Wings')!
       expect(dp).toBeDefined()
       expect(dp.points).toBe(200)
       expect(dp.isWarlord).toBe(true)
@@ -90,7 +124,9 @@ describe('parseBattleScribe', () => {
 
   describe('edge cases', () => {
     it('returns failed for missing faction', () => {
-      const result = parseBattleScribe('+ TOTAL ARMY POINTS: 2000pts\nChar1: 1x Something (100 pts)')
+      const result = parseBattleScribe(
+        '+ TOTAL ARMY POINTS: 2000pts\nChar1: 1x Something (100 pts)',
+      )
       expect(result.parseStatus).toBe('failed')
       expect(result.parseError).toBeDefined()
     })

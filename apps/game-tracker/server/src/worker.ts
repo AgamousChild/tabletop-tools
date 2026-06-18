@@ -1,15 +1,21 @@
-import { createWorkerHandler } from '@tabletop-tools/server-core'
 import { createClient } from '@libsql/client/web'
 import { createDbFromClient } from '@tabletop-tools/db'
+import { createWorkerHandler } from '@tabletop-tools/server-core'
 
+import { createNullR2Storage, createR2Storage } from './lib/storage/r2'
 import { createServer } from './server'
-import { createR2Storage, createNullR2Storage } from './lib/storage/r2'
 
 interface Env {
   TURSO_DB_URL: string
   TURSO_AUTH_TOKEN: string
   AUTH_SECRET: string
-  PHOTOS_BUCKET?: { put(key: string, value: ArrayBuffer, options?: { httpMetadata?: { contentType: string } }): Promise<unknown> }
+  PHOTOS_BUCKET?: {
+    put(
+      key: string,
+      value: ArrayBuffer,
+      options?: { httpMetadata?: { contentType: string } },
+    ): Promise<unknown>
+  }
 }
 
 export default createWorkerHandler<Env>({

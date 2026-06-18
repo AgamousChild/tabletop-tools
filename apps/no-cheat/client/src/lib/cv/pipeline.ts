@@ -18,8 +18,8 @@
 
 import { adaptiveThreshold, erode, gaussianBlur, morphClose, rgbaToGray } from './background'
 import { detectPips } from './blobDetector'
-import { extractRois } from './isolate'
 import type { Roi } from './isolate'
+import { extractRois } from './isolate'
 
 export type { Roi }
 
@@ -114,7 +114,10 @@ function centerCropSubImage(
  * @param diceSetId - Dice set identifier
  * @param initialConfig - Optional initial configuration overrides
  */
-export function createPipeline(diceSetId: string, initialConfig?: Partial<PipelineConfig>): Pipeline {
+export function createPipeline(
+  diceSetId: string,
+  initialConfig?: Partial<PipelineConfig>,
+): Pipeline {
   const state: PipelineState = {
     diceSetId,
     ready: false,
@@ -165,7 +168,12 @@ export function createPipeline(diceSetId: string, initialConfig?: Partial<Pipeli
     const results: RoiResult[] = []
     for (const roi of rois) {
       const roiGray = extractSubImage(frameGray, width, roi.x, roi.y, roi.width, roi.height)
-      const { cropped, cw, ch } = centerCropSubImage(roiGray, roi.width, roi.height, config.centerCrop)
+      const { cropped, cw, ch } = centerCropSubImage(
+        roiGray,
+        roi.width,
+        roi.height,
+        config.centerCrop,
+      )
       const pipCount = detectPips(cropped, cw, ch)
       // Post-filter: reject ROIs where pip detection failed (non-dice edges)
       if (pipCount !== null) {

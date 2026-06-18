@@ -95,7 +95,7 @@ describe('extractRois', () => {
     // Two small regions touching (adjacent pixels) → one connected component
     const mask = binaryMask(W, H, [
       { x: 40, y: 40, w: 15, h: 15 },
-      { x: 55, y: 40, w: 15, h: 15 },  // adjacent to previous (x=55 touches x=54)
+      { x: 55, y: 40, w: 15, h: 15 }, // adjacent to previous (x=55 touches x=54)
     ])
     const rois = extractRois(mask, W, H)
     // Adjacent regions form one connected component via BFS

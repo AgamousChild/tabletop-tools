@@ -9,7 +9,7 @@
  * All functions are pure — no R2/bucket access, operates on pre-fetched arrays.
  */
 
-import type { Node, ErrataAnnotation } from './model'
+import type { ErrataAnnotation, Node } from './model'
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
@@ -49,7 +49,7 @@ const MIN_MATCH_CHARS = 4
 export function matchErrataToTargets(errataNode: Node, targetNodes: Node[]): ErrataMatch[] {
   const errataTitle = normalize(errataNode.title)
   const errataContent = normalize(errataNode.content)
-  const errataKeywords = new Set(errataNode.keywords.map(k => k.toLowerCase()))
+  const errataKeywords = new Set(errataNode.keywords.map((k) => k.toLowerCase()))
 
   const matches: ErrataMatch[] = []
 
@@ -63,24 +63,19 @@ export function matchErrataToTargets(errataNode: Node, targetNodes: Node[]): Err
     // 1. Exact title match
     if (errataTitle === targetTitle) {
       score = 1.0
-    // 2. Substring title containment (min 4 chars)
+      // 2. Substring title containment (min 4 chars)
     } else if (
       errataTitle.length >= MIN_MATCH_CHARS &&
       targetTitle.length >= MIN_MATCH_CHARS &&
       (targetTitle.includes(errataTitle) || errataTitle.includes(targetTitle))
     ) {
       score = 0.8
-    // 3. Errata content mentions target title (min 4 chars)
-    } else if (
-      targetTitle.length >= MIN_MATCH_CHARS &&
-      errataContent.includes(targetTitle)
-    ) {
+      // 3. Errata content mentions target title (min 4 chars)
+    } else if (targetTitle.length >= MIN_MATCH_CHARS && errataContent.includes(targetTitle)) {
       score = 0.5
-    // 4. Keyword overlap (≥2 shared keywords)
+      // 4. Keyword overlap (≥2 shared keywords)
     } else {
-      const sharedCount = target.keywords.filter(k =>
-        errataKeywords.has(k.toLowerCase()),
-      ).length
+      const sharedCount = target.keywords.filter((k) => errataKeywords.has(k.toLowerCase())).length
       if (sharedCount >= 2) {
         score = 0.3
       }
@@ -119,12 +114,9 @@ export function findErrataForNode(node: Node, allErrataNodes: Node[]): ErrataAnn
 
     const titleMatch = errataTitle === nodeTitle
 
-    const contentMatch =
-      nodeTitle.length >= MIN_MATCH_CHARS && errataContent.includes(nodeTitle)
+    const contentMatch = nodeTitle.length >= MIN_MATCH_CHARS && errataContent.includes(nodeTitle)
 
-    const refMatch = errata.refs.some(
-      ref => ref.rel === 'clarifies' && ref.targetId === node.id,
-    )
+    const refMatch = errata.refs.some((ref) => ref.rel === 'clarifies' && ref.targetId === node.id)
 
     if (!titleMatch && !contentMatch && !refMatch) continue
 

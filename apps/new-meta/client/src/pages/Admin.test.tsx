@@ -15,7 +15,13 @@ vi.mock('../lib/trpc', () => ({
   trpc: {
     admin: {
       import: {
-        useMutation: ({ onSuccess, onError }: { onSuccess: (d: unknown) => void; onError: (e: { message: string }) => void }) => ({
+        useMutation: ({
+          onSuccess,
+          onError,
+        }: {
+          onSuccess: (d: unknown) => void
+          onError: (e: { message: string }) => void
+        }) => ({
           mutate: (args: unknown) => mockMutate(args, { onSuccess, onError }),
           isPending: mockIsPending,
         }),

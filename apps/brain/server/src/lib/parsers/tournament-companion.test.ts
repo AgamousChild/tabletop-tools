@@ -1,5 +1,7 @@
 import { existsSync, readFileSync } from 'node:fs'
+
 import { describe, expect, it } from 'vitest'
+
 import { parseTournamentCompanion } from './tournament-companion'
 
 const TC_DIR = 'C:/R/sync-data/tools/gw-sync/.local/gw/markdown'

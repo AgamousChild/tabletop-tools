@@ -1,6 +1,6 @@
+import { parseBattleScribe } from './bs-parser'
 import { detectFormat } from './format-detector'
 import { parseGwApp } from './gw-parser'
-import { parseBattleScribe } from './bs-parser'
 import type { TTTPackage } from './ttt-types'
 
 export function parseList(text: string): TTTPackage {

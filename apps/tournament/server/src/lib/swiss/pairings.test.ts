@@ -16,7 +16,16 @@ type Player = {
 type PrevPairing = { player1Id: string; player2Id: string | null }
 
 function makePlayer(id: string, wins = 0, losses = 0, registeredAt = 0): Player {
-  return { id, displayName: id, wins, losses, draws: 0, margin: 0, strengthOfSchedule: 0, registeredAt }
+  return {
+    id,
+    displayName: id,
+    wins,
+    losses,
+    draws: 0,
+    margin: 0,
+    strengthOfSchedule: 0,
+    registeredAt,
+  }
 }
 
 describe('generatePairings', () => {

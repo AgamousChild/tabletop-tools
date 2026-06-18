@@ -1,6 +1,7 @@
-import { describe, it, expect } from 'vitest'
-import { computeDropOrder } from './drop-order'
+import { describe, expect, it } from 'vitest'
+
 import type { DeploymentUnit } from '../types'
+import { computeDropOrder } from './drop-order'
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 

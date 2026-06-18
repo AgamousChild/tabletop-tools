@@ -7,15 +7,15 @@ interface DeploymentZoneCardProps {
   context: CardContext
 }
 
-const SIZE_LABELS: Record<number, string> = {}
-
 function PageImage({ src, alt, onError }: { src: string; alt: string; onError: () => void }) {
   const [loaded, setLoaded] = useState(false)
 
   return (
     <div className="relative">
       {!loaded && (
-        <div className="flex items-center justify-center h-48 text-slate-400 text-xs">Loading...</div>
+        <div className="flex items-center justify-center h-48 text-slate-400 text-xs">
+          Loading...
+        </div>
       )}
       <img
         src={src}
@@ -23,7 +23,10 @@ function PageImage({ src, alt, onError }: { src: string; alt: string; onError: (
         className="w-full h-auto rounded"
         style={{ display: loaded ? undefined : 'none' }}
         onLoad={() => setLoaded(true)}
-        onError={() => { setLoaded(false); onError() }}
+        onError={() => {
+          setLoaded(false)
+          onError()
+        }}
       />
     </div>
   )
@@ -101,7 +104,7 @@ export function DeploymentZoneCard({ data }: DeploymentZoneCardProps) {
               <PageImage
                 src={`${apiBase}/pages/${images[currentPage].pdfName}/page-${images[currentPage].page}.png`}
                 alt={`${data.name} — ${pageLabels[currentPage]}`}
-                onError={() => setFailedPages(prev => new Set([...prev, currentPage]))}
+                onError={() => setFailedPages((prev) => new Set([...prev, currentPage]))}
               />
             )}
 
@@ -129,7 +132,10 @@ export function DeploymentZoneCard({ data }: DeploymentZoneCardProps) {
         {data.qualityFlags && data.qualityFlags.length > 0 && (
           <div className="flex flex-wrap gap-1 mt-2">
             {data.qualityFlags.map((flag) => (
-              <span key={flag} className="text-[9px] bg-amber-500/20 text-amber-400 px-1.5 py-0.5 rounded">
+              <span
+                key={flag}
+                className="text-[9px] bg-amber-500/20 text-amber-400 px-1.5 py-0.5 rounded"
+              >
                 {flag}
               </span>
             ))}

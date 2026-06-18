@@ -1,44 +1,54 @@
+/**
+ * Faction code resolution — backed by dim_faction / dim_faction_alias tables.
+ *
+ * Call loadFactionCodes(db) once at the start of a build-graph run,
+ * then use normalizeFactionId() synchronously throughout.
+ */
+import type { Db } from '@tabletop-tools/db'
+import { getAllFactions, getFactionAliasMap } from '@tabletop-tools/db'
+
 import { slugify } from './slugify'
 
-/** Map Wahapedia short codes to kebab-case slugs matching faction pack filenames. */
-export const FACTION_CODE_TO_SLUG: Record<string, string> = {
-  AS: 'adepta-sororitas',
-  AC: 'adeptus-custodes',
-  AdM: 'adeptus-mechanicus',
-  TL: 'adeptus-titanicus',
-  AE: 'aeldari',
-  AM: 'astra-militarum',
-  CD: 'chaos-daemons',
-  QT: 'chaos-knights',
-  CSM: 'chaos-space-marines',
-  DG: 'death-guard',
-  DRU: 'drukhari',
-  EC: 'emperors-children',
-  GC: 'genestealer-cults',
-  GK: 'grey-knights',
-  AoI: 'imperial-agents',
-  QI: 'imperial-knights',
-  LoV: 'leagues-of-votann',
-  NEC: 'necrons',
-  ORK: 'orks',
-  SM: 'space-marines',
-  TS: 'thousand-sons',
-  TYR: 'tyranids',
-  TAU: 't-au-empire',
-  UN: 'unaligned',
-  UA: 'unbound-adversaries',
-  WE: 'world-eaters',
+/** alias/code → canonical slug (e.g. 'SM' → 'space-marines', 'Adepta Sororitas' → 'adepta-sororitas') */
+let cachedCodeToSlug: Map<string, string> | null = null
+
+/** canonical slug set for fast "is this already a slug?" checks */
+let cachedSlugs: Set<string> | null = null
+
+/**
+ * Load faction alias map from DB. Must be called before normalizeFactionId().
+ */
+export async function loadFactionCodes(db: Db): Promise<void> {
+  cachedCodeToSlug = await getFactionAliasMap(db)
+  const factions = await getAllFactions(db)
+  cachedSlugs = new Set(factions.map((f) => f.id))
+  // Also add slugs as identity mappings so alias lookups work for slugs too
+  for (const slug of cachedSlugs) {
+    cachedCodeToSlug.set(slug, slug)
+  }
 }
 
-/** Reverse map: slug → list of codes that map to it. */
-export const SLUG_TO_CODES: Record<string, string[]> = {}
-for (const [code, slug] of Object.entries(FACTION_CODE_TO_SLUG)) {
-  if (!SLUG_TO_CODES[slug]) SLUG_TO_CODES[slug] = []
-  SLUG_TO_CODES[slug]!.push(code)
-}
-
-/** Normalize a faction ID from Wahapedia short code to canonical kebab-case slug. */
+/**
+ * Normalize a faction ID from Wahapedia short code to canonical kebab-case slug.
+ * Requires loadFactionCodes() to have been called first.
+ */
 export function normalizeFactionId(code: string): string {
-  if (Object.values(FACTION_CODE_TO_SLUG).includes(code)) return code
-  return FACTION_CODE_TO_SLUG[code] ?? slugify(code)
+  if (!cachedCodeToSlug || !cachedSlugs) {
+    throw new Error('Faction codes not loaded — call loadFactionCodes(db) first')
+  }
+  // Direct slug match
+  if (cachedSlugs.has(code)) return code
+  // Alias/code lookup
+  const slug = cachedCodeToSlug.get(code)
+  if (slug) return slug
+  // Fallback: slugify unknown codes
+  return slugify(code)
+}
+
+/**
+ * Reset cached maps (for testing).
+ */
+export function resetFactionCodes(): void {
+  cachedCodeToSlug = null
+  cachedSlugs = null
 }

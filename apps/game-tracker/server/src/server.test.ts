@@ -1,15 +1,16 @@
 import { createClient } from '@libsql/client'
-import { createDbFromClient } from '@tabletop-tools/db'
 import {
-  setupAuthTables,
-  createRequestHelper,
   authCookie,
+  createRequestHelper,
+  setupAuthTables,
   TEST_SECRET,
+  TEST_USER,
 } from '@tabletop-tools/auth/src/test-helpers'
+import { createDbFromClient } from '@tabletop-tools/db'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 
-import { createServer } from './server'
 import { createNullR2Storage } from './lib/storage/r2'
+import { createServer } from './server'
 
 const client = createClient({ url: ':memory:' })
 const db = createDbFromClient(client)
@@ -93,7 +94,7 @@ describe('HTTP integration — match.start via session cookie', () => {
     const json = (await res.json()) as any
     expect(json.result?.data?.opponentFaction).toBe('Orks')
     expect(json.result.data.mission).toBe('Scorched Earth')
-    expect(json.result.data.userId).toBe('user-1')
+    expect(json.result.data.userId).toBe(TEST_USER.id)
   })
 
   it('returns UNAUTHORIZED without a cookie', async () => {

@@ -1,8 +1,9 @@
-import { createWorkerHandler } from '@tabletop-tools/server-core'
 import { createClient } from '@libsql/client/web'
 import { createDbFromClient } from '@tabletop-tools/db'
+import { createWorkerHandler } from '@tabletop-tools/server-core'
 
 import { createServer } from './server'
+import type { AiBinding } from './trpc'
 
 interface Env {
   TURSO_DB_URL: string
@@ -11,6 +12,7 @@ interface Env {
   ADMIN_EMAILS: string
   BCP_SCRAPER?: { fetch(request: Request): Promise<Response> }
   CONTENT_INGESTOR?: { fetch(request: Request): Promise<Response> }
+  AI?: AiBinding
 }
 
 export default createWorkerHandler<Env>({
@@ -24,6 +26,13 @@ export default createWorkerHandler<Env>({
       .split(',')
       .map((e) => e.trim())
       .filter(Boolean)
-    return createServer(db, adminEmails, env.AUTH_SECRET, env.BCP_SCRAPER, env.CONTENT_INGESTOR)
+    return createServer(
+      db,
+      adminEmails,
+      env.AUTH_SECRET,
+      env.BCP_SCRAPER,
+      env.CONTENT_INGESTOR,
+      env.AI,
+    )
   },
 })

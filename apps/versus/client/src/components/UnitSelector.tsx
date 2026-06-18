@@ -1,8 +1,16 @@
 import { useState } from 'react'
+
 import { useUnitRoles } from '../lib/useGameData'
 
-const ROLE_FILTERS = ['All', 'Battleline', 'Characters', 'Other', 'Dedicated Transports', 'Fortifications'] as const
-type RoleFilter = typeof ROLE_FILTERS[number]
+const ROLE_FILTERS = [
+  'All',
+  'Battleline',
+  'Characters',
+  'Other',
+  'Dedicated Transports',
+  'Fortifications',
+] as const
+type RoleFilter = (typeof ROLE_FILTERS)[number]
 
 type UnitOption = {
   id: string
@@ -37,12 +45,13 @@ export function UnitSelector({
   const [roleFilter, setRoleFilter] = useState<RoleFilter>('All')
   const unitRoles = useUnitRoles()
 
-  const filteredUnits = roleFilter === 'All'
-    ? units
-    : units.filter((u) => {
-        const role = unitRoles.get(u.id) ?? ''
-        return role.toLowerCase() === roleFilter.toLowerCase()
-      })
+  const filteredUnits =
+    roleFilter === 'All'
+      ? units
+      : units.filter((u) => {
+          const role = unitRoles.get(u.id) ?? ''
+          return role.toLowerCase() === roleFilter.toLowerCase()
+        })
 
   return (
     <div className="space-y-3">
@@ -96,10 +105,14 @@ export function UnitSelector({
           <p className="text-slate-500 text-xs py-2 italic">Select a faction to browse units.</p>
         ) : filteredUnits.length === 0 ? (
           <p className="text-slate-500 text-xs py-2 italic">
-            {roleFilter !== 'All' ? `No ${roleFilter.toLowerCase()} units found.` : (
+            {roleFilter !== 'All' ? (
+              `No ${roleFilter.toLowerCase()} units found.`
+            ) : (
               <>
                 No units found. Import unit profiles from{' '}
-                <a href="/data-import/" className="text-amber-400 hover:underline">Data Import</a>{' '}
+                <a href="/data-import/" className="text-amber-400 hover:underline">
+                  Data Import
+                </a>{' '}
                 first.
               </>
             )}

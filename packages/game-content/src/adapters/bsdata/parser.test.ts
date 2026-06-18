@@ -128,7 +128,7 @@ describe('parseBSDataXml — basic unit', () => {
     const unit = units[0]!
     expect(unit.move).toBe(6)
     expect(unit.toughness).toBe(4)
-    expect(unit.save).toBe(3)   // "3+" → 3
+    expect(unit.save).toBe(3) // "3+" → 3
     expect(unit.wounds).toBe(2)
     expect(unit.leadership).toBe(6)
     expect(unit.oc).toBe(1)
@@ -465,7 +465,7 @@ describe('parseBSDataXml — nested selectionEntry', () => {
     expect(unit.weapons).toHaveLength(1)
     expect(unit.weapons[0]!.name).toBe('Bolt Rifle')
     // No warnings about missing characteristics
-    expect(errors.filter(e => e.includes('missing characteristic data'))).toHaveLength(0)
+    expect(errors.filter((e) => e.includes('missing characteristic data'))).toHaveLength(0)
   })
 })
 
@@ -595,7 +595,7 @@ describe('parseBSDataXml — invulnerable save and FNP', () => {
     const { units } = parseBSDataXml(INVULN_XML, 'Test Faction')
     expect(units[0]!.abilityDescriptions).toBeDefined()
     expect(units[0]!.abilityDescriptions!['Resilient']).toBe(
-      'This model has a feel no pain 5+ save.'
+      'This model has a feel no pain 5+ save.',
     )
   })
 
@@ -711,7 +711,10 @@ describe('parseBSDataXml — new weapon ability patterns', () => {
   })
 
   it('parses combined abilities: Anti-Infantry 4+, Melta 2, Ignores Cover', () => {
-    const { units } = parseBSDataXml(makeWeaponXml('Anti-Infantry 4+, Melta 2, Ignores Cover'), 'Test')
+    const { units } = parseBSDataXml(
+      makeWeaponXml('Anti-Infantry 4+, Melta 2, Ignores Cover'),
+      'Test',
+    )
     const w = units[0]!.weapons[0]!
     expect(w.abilities).toHaveLength(3)
     expect(w.abilities).toContainEqual({ type: 'ANTI', keyword: 'Infantry', value: 4 })
@@ -766,7 +769,11 @@ describe('parseBSDataXml — parenthesized ability values', () => {
 
   it('handles "Anti-Infantry (4+)" with parenthesized value', () => {
     const { units } = parseBSDataXml(makeWeaponXml('Anti-Infantry (4+)'), 'Test')
-    expect(units[0]!.weapons[0]!.abilities).toContainEqual({ type: 'ANTI', keyword: 'Infantry', value: 4 })
+    expect(units[0]!.weapons[0]!.abilities).toContainEqual({
+      type: 'ANTI',
+      keyword: 'Infantry',
+      value: 4,
+    })
   })
 
   it('handles "Melta (2)" with parentheses', () => {
@@ -825,7 +832,7 @@ describe('parseBSDataXml — validation warnings', () => {
     const { units, errors } = parseBSDataXml(xml, 'Test')
     expect(units).toHaveLength(1)
     expect(units[0]!.toughness).toBe(0)
-    expect(errors.some(e => e.includes('Toughness is 0'))).toBe(true)
+    expect(errors.some((e) => e.includes('Toughness is 0'))).toBe(true)
   })
 
   it('warns when unit has no weapons', () => {
@@ -850,7 +857,7 @@ describe('parseBSDataXml — validation warnings', () => {
 </gameSystem>`
     const { units, errors } = parseBSDataXml(xml, 'Test')
     expect(units).toHaveLength(1)
-    expect(errors.some(e => e.includes('No weapons found'))).toBe(true)
+    expect(errors.some((e) => e.includes('No weapons found'))).toBe(true)
   })
 
   it('warns when weapon has strength 0 (empty value)', () => {
@@ -885,7 +892,7 @@ describe('parseBSDataXml — validation warnings', () => {
 </gameSystem>`
     const { units, errors } = parseBSDataXml(xml, 'Test')
     expect(units).toHaveLength(1)
-    expect(errors.some(e => e.includes('Strength 0'))).toBe(true)
+    expect(errors.some((e) => e.includes('Strength 0'))).toBe(true)
   })
 
   it('no warnings for properly formed unit', () => {
@@ -938,8 +945,8 @@ describe('parseBSDataXml — BSData 2025+ format (typeName="Unit", uppercase sta
     expect(units[0]!.leadership).toBe(6)
     expect(units[0]!.oc).toBe(2)
     // No validation warnings for T or Sv
-    expect(errors.some(e => e.includes('Toughness is 0'))).toBe(false)
-    expect(errors.some(e => e.includes('Save is 0'))).toBe(false)
+    expect(errors.some((e) => e.includes('Toughness is 0'))).toBe(false)
+    expect(errors.some((e) => e.includes('Save is 0'))).toBe(false)
   })
 
   it('handles uppercase characteristic names SV and LD', () => {
@@ -996,7 +1003,7 @@ describe('parseBSDataXml — BSData 2025+ format (typeName="Unit", uppercase sta
     expect(units[0]!.toughness).toBe(5)
     expect(units[0]!.save).toBe(3)
     expect(units[0]!.leadership).toBe(7)
-    expect(errors.some(e => e.includes('Toughness is 0'))).toBe(false)
+    expect(errors.some((e) => e.includes('Toughness is 0'))).toBe(false)
   })
 })
 
@@ -1184,7 +1191,7 @@ const ENTRYLINK_MODEL_XML = `<?xml version="1.0" encoding="UTF-8" standalone="ye
 describe('parseBSDataXml — infoLink/entryLink resolution', () => {
   it('resolves infoLink to shared profile for characteristics', () => {
     const { units, errors } = parseBSDataXml(INFOLINK_PROFILE_XML, 'Test')
-    const unit = units.find(u => u.name === 'Alpha Squad')
+    const unit = units.find((u) => u.name === 'Alpha Squad')
     expect(unit).toBeDefined()
     expect(unit!.toughness).toBe(3)
     expect(unit!.save).toBe(5)
@@ -1192,61 +1199,65 @@ describe('parseBSDataXml — infoLink/entryLink resolution', () => {
     expect(unit!.leadership).toBe(7)
     expect(unit!.oc).toBe(2)
     // Should not have toughness/save warnings
-    const charErrors = errors.filter(e => e.includes('Alpha Squad') && e.includes('missing characteristic'))
+    const charErrors = errors.filter(
+      (e) => e.includes('Alpha Squad') && e.includes('missing characteristic'),
+    )
     expect(charErrors).toHaveLength(0)
   })
 
   it('resolves entryLink to shared weapon definitions', () => {
     const { units, errors } = parseBSDataXml(INFOLINK_PROFILE_XML, 'Test')
-    const unit = units.find(u => u.name === 'Alpha Squad')
+    const unit = units.find((u) => u.name === 'Alpha Squad')
     expect(unit).toBeDefined()
     expect(unit!.weapons.length).toBeGreaterThanOrEqual(2)
-    const pulse = unit!.weapons.find(w => w.name === 'Pulse Rifle')
+    const pulse = unit!.weapons.find((w) => w.name === 'Pulse Rifle')
     expect(pulse).toBeDefined()
     expect(pulse!.strength).toBe(5)
     expect(pulse!.range).toBe(30)
-    const blade = unit!.weapons.find(w => w.name === 'Combat Blade')
+    const blade = unit!.weapons.find((w) => w.name === 'Combat Blade')
     expect(blade).toBeDefined()
     expect(blade!.range).toBe('melee')
     // Should not have "no weapons" warning for this unit
-    const weaponErrors = errors.filter(e => e.includes('Alpha Squad') && e.includes('No weapons'))
+    const weaponErrors = errors.filter((e) => e.includes('Alpha Squad') && e.includes('No weapons'))
     expect(weaponErrors).toHaveLength(0)
   })
 
   it('resolves nested entryLink → model → infoLink → profile chain', () => {
     const { units, errors } = parseBSDataXml(ENTRYLINK_MODEL_XML, 'Test')
-    const unit = units.find(u => u.name === 'Bravo Team')
+    const unit = units.find((u) => u.name === 'Bravo Team')
     expect(unit).toBeDefined()
     // Characteristics resolved via: unit → entryLink(model) → infoLink(profile) → shared profile
     expect(unit!.toughness).toBe(3)
     expect(unit!.save).toBe(5)
-    const charErrors = errors.filter(e => e.includes('Bravo Team') && e.includes('missing characteristic'))
+    const charErrors = errors.filter(
+      (e) => e.includes('Bravo Team') && e.includes('missing characteristic'),
+    )
     expect(charErrors).toHaveLength(0)
   })
 
   it('resolves weapons from entryLink → model → entryLink → weapon chain', () => {
     const { units, errors } = parseBSDataXml(ENTRYLINK_MODEL_XML, 'Test')
-    const unit = units.find(u => u.name === 'Bravo Team')
+    const unit = units.find((u) => u.name === 'Bravo Team')
     expect(unit).toBeDefined()
     // Weapons resolved via: unit → entryLink(model) → entryLink(weapon) → profile
-    const autogun = unit!.weapons.find(w => w.name === 'Autogun')
+    const autogun = unit!.weapons.find((w) => w.name === 'Autogun')
     expect(autogun).toBeDefined()
     expect(autogun!.strength).toBe(3)
-    const pistol = unit!.weapons.find(w => w.name === 'Pistol')
+    const pistol = unit!.weapons.find((w) => w.name === 'Pistol')
     expect(pistol).toBeDefined()
-    const bayonet = unit!.weapons.find(w => w.name === 'Bayonet')
+    const bayonet = unit!.weapons.find((w) => w.name === 'Bayonet')
     expect(bayonet).toBeDefined()
     expect(bayonet!.range).toBe('melee')
-    const weaponErrors = errors.filter(e => e.includes('Bravo Team') && e.includes('No weapons'))
+    const weaponErrors = errors.filter((e) => e.includes('Bravo Team') && e.includes('No weapons'))
     expect(weaponErrors).toHaveLength(0)
   })
 
   it('deduplicates weapons referenced by multiple models', () => {
     const { units } = parseBSDataXml(ENTRYLINK_MODEL_XML, 'Test')
-    const unit = units.find(u => u.name === 'Bravo Team')
+    const unit = units.find((u) => u.name === 'Bravo Team')
     expect(unit).toBeDefined()
     // Both Sergeant and Trooper reference Bayonet, but it should appear only once
-    const bayonets = unit!.weapons.filter(w => w.name === 'Bayonet')
+    const bayonets = unit!.weapons.filter((w) => w.name === 'Bayonet')
     expect(bayonets).toHaveLength(1)
   })
 })
@@ -1331,21 +1342,23 @@ describe('parseBSDataXml — selectionEntryGroup resolution', () => {
 
   it('resolves entryLink type="selectionEntryGroup" to find weapons in shared groups', () => {
     const { units, errors } = parseBSDataXml(SEG_XML, 'Test')
-    const unit = units.find(u => u.name === 'Vanguard Squad')
+    const unit = units.find((u) => u.name === 'Vanguard Squad')
     expect(unit).toBeDefined()
-    const plasma = unit!.weapons.find(w => w.name === 'Plasma Gun')
+    const plasma = unit!.weapons.find((w) => w.name === 'Plasma Gun')
     expect(plasma).toBeDefined()
     expect(plasma!.strength).toBe(7)
     expect(plasma!.ap).toBe(-2)
-    const weaponErrors = errors.filter(e => e.includes('Vanguard Squad') && e.includes('No weapons'))
+    const weaponErrors = errors.filter(
+      (e) => e.includes('Vanguard Squad') && e.includes('No weapons'),
+    )
     expect(weaponErrors).toHaveLength(0)
   })
 
   it('resolves nested entryLink inside selectionEntryGroup to shared weapon definitions', () => {
     const { units } = parseBSDataXml(SEG_XML, 'Test')
-    const unit = units.find(u => u.name === 'Vanguard Squad')
+    const unit = units.find((u) => u.name === 'Vanguard Squad')
     expect(unit).toBeDefined()
-    const chain = unit!.weapons.find(w => w.name === 'Chain Sword')
+    const chain = unit!.weapons.find((w) => w.name === 'Chain Sword')
     expect(chain).toBeDefined()
     expect(chain!.range).toBe('melee')
     expect(chain!.attacks).toBe(4)
@@ -1353,11 +1366,13 @@ describe('parseBSDataXml — selectionEntryGroup resolution', () => {
 
   it('resolves characteristics from shared profile via infoLink alongside selectionEntryGroup weapons', () => {
     const { units, errors } = parseBSDataXml(SEG_XML, 'Test')
-    const unit = units.find(u => u.name === 'Vanguard Squad')
+    const unit = units.find((u) => u.name === 'Vanguard Squad')
     expect(unit).toBeDefined()
     expect(unit!.toughness).toBe(4)
     expect(unit!.save).toBe(3)
-    const charErrors = errors.filter(e => e.includes('Vanguard Squad') && e.includes('missing characteristic'))
+    const charErrors = errors.filter(
+      (e) => e.includes('Vanguard Squad') && e.includes('missing characteristic'),
+    )
     expect(charErrors).toHaveLength(0)
   })
 })
@@ -1429,30 +1444,32 @@ describe('parseBSDataXml — infoGroup resolution', () => {
 
   it('resolves infoLink type="infoGroup" → infoGroup → infoLink type="profile" for characteristics', () => {
     const { units, errors } = parseBSDataXml(INFOGROUP_XML, 'Test')
-    const unit = units.find(u => u.name === 'Echo Squad')
+    const unit = units.find((u) => u.name === 'Echo Squad')
     expect(unit).toBeDefined()
     expect(unit!.toughness).toBe(3)
     expect(unit!.save).toBe(5)
     expect(unit!.wounds).toBe(1)
-    const charErrors = errors.filter(e => e.includes('Echo Squad') && e.includes('missing characteristic'))
+    const charErrors = errors.filter(
+      (e) => e.includes('Echo Squad') && e.includes('missing characteristic'),
+    )
     expect(charErrors).toHaveLength(0)
   })
 
   it('resolves abilities defined inline within the infoGroup', () => {
     const { units } = parseBSDataXml(INFOGROUP_XML, 'Test')
-    const unit = units.find(u => u.name === 'Echo Squad')
+    const unit = units.find((u) => u.name === 'Echo Squad')
     expect(unit).toBeDefined()
     expect(unit!.abilities).toContain('Shield Wall')
   })
 
   it('resolves weapons alongside infoGroup-based characteristics', () => {
     const { units, errors } = parseBSDataXml(INFOGROUP_XML, 'Test')
-    const unit = units.find(u => u.name === 'Echo Squad')
+    const unit = units.find((u) => u.name === 'Echo Squad')
     expect(unit).toBeDefined()
-    const lasgun = unit!.weapons.find(w => w.name === 'Lasgun')
+    const lasgun = unit!.weapons.find((w) => w.name === 'Lasgun')
     expect(lasgun).toBeDefined()
     expect(lasgun!.strength).toBe(3)
-    const weaponErrors = errors.filter(e => e.includes('Echo Squad') && e.includes('No weapons'))
+    const weaponErrors = errors.filter((e) => e.includes('Echo Squad') && e.includes('No weapons'))
     expect(weaponErrors).toHaveLength(0)
   })
 })
@@ -1527,28 +1544,94 @@ describe('parseBSDataXml — shared sub-model filtering', () => {
 
   it('does not extract type="model" entries from sharedSelectionEntries as standalone units', () => {
     const { units } = parseBSDataXml(SHARED_MODEL_XML, 'Test')
-    const foxTrooper = units.find(u => u.name === 'Foxtrot Trooper')
+    const foxTrooper = units.find((u) => u.name === 'Foxtrot Trooper')
     expect(foxTrooper).toBeUndefined()
   })
 
   it('still extracts the parent unit that references the shared model', () => {
     const { units } = parseBSDataXml(SHARED_MODEL_XML, 'Test')
-    const foxSquad = units.find(u => u.name === 'Foxtrot Squad')
+    const foxSquad = units.find((u) => u.name === 'Foxtrot Squad')
     expect(foxSquad).toBeDefined()
   })
 
   it('keeps type="unit" entries from sharedSelectionEntries as legitimate units', () => {
     const { units } = parseBSDataXml(SHARED_MODEL_XML, 'Test')
-    const sharedUnit = units.find(u => u.name === 'Shared Reusable Unit')
+    const sharedUnit = units.find((u) => u.name === 'Shared Reusable Unit')
     expect(sharedUnit).toBeDefined()
     expect(sharedUnit!.toughness).toBe(5)
   })
 
   it('resolves weapons from shared model into parent unit via entryLink', () => {
     const { units } = parseBSDataXml(SHARED_MODEL_XML, 'Test')
-    const foxSquad = units.find(u => u.name === 'Foxtrot Squad')
+    const foxSquad = units.find((u) => u.name === 'Foxtrot Squad')
     expect(foxSquad).toBeDefined()
-    const lasgun = foxSquad!.weapons.find(w => w.name === 'Lasgun')
+    const lasgun = foxSquad!.weapons.find((w) => w.name === 'Lasgun')
     expect(lasgun).toBeDefined()
+  })
+})
+
+describe('subfaction extraction', () => {
+  const SUBFACTION_XML = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<catalogue id="test-cat" name="Test">
+  <sharedSelectionEntryGroups>
+    <selectionEntryGroup name="Chapter" id="grp-chapter" hidden="false">
+      <selectionEntries>
+        <selectionEntry type="upgrade" name="Iron Brothers" id="sf-iron-brothers" hidden="false"/>
+        <selectionEntry type="upgrade" name="Crimson Knights" id="sf-crimson-knights" hidden="false"/>
+      </selectionEntries>
+    </selectionEntryGroup>
+    <selectionEntryGroup name="Dynasty" id="grp-dynasty" hidden="false">
+      <selectionEntries>
+        <selectionEntry type="upgrade" name="Steel Dynasty" id="sf-steel" hidden="false"/>
+      </selectionEntries>
+    </selectionEntryGroup>
+  </sharedSelectionEntryGroups>
+</catalogue>`
+
+  it('extracts subfactions from known group names with id + name + parent faction', () => {
+    const { subfactions } = parseBSDataXml(SUBFACTION_XML, 'Test Faction')
+    expect(subfactions).toHaveLength(3)
+    const iron = subfactions.find((s) => s.id === 'sf-iron-brothers')
+    expect(iron).toEqual({
+      id: 'sf-iron-brothers',
+      name: 'Iron Brothers',
+      faction: 'Test Faction',
+      groupName: 'Chapter',
+    })
+    const dyn = subfactions.find((s) => s.groupName === 'Dynasty')
+    expect(dyn?.name).toBe('Steel Dynasty')
+  })
+
+  it('dedupes by id so a subfaction referenced from multiple groups counts once', () => {
+    const xml = `<catalogue>
+      <selectionEntryGroup name="Chapter" id="g1"><selectionEntries>
+        <selectionEntry type="upgrade" name="X" id="dup-id"/>
+      </selectionEntries></selectionEntryGroup>
+      <selectionEntryGroup name="Chapter" id="g2"><selectionEntries>
+        <selectionEntry type="upgrade" name="X" id="dup-id"/>
+      </selectionEntries></selectionEntryGroup>
+    </catalogue>`
+    const { subfactions } = parseBSDataXml(xml, 'Test')
+    expect(subfactions).toHaveLength(1)
+  })
+
+  it('ignores non-upgrade selectionEntries inside the group', () => {
+    const xml = `<catalogue>
+      <selectionEntryGroup name="Chapter" id="g1"><selectionEntries>
+        <selectionEntry type="model" name="A model unit" id="not-a-subfaction"/>
+        <selectionEntry type="upgrade" name="Real Subfaction" id="real"/>
+      </selectionEntries></selectionEntryGroup>
+    </catalogue>`
+    const { subfactions } = parseBSDataXml(xml, 'Test')
+    expect(subfactions).toHaveLength(1)
+    expect(subfactions[0]?.id).toBe('real')
+  })
+
+  it('returns an empty array when no recognized group is present', () => {
+    const xml = `<catalogue><selectionEntryGroup name="Random Group" id="g1"><selectionEntries>
+      <selectionEntry type="upgrade" name="Not A Subfaction" id="x"/>
+    </selectionEntries></selectionEntryGroup></catalogue>`
+    const { subfactions } = parseBSDataXml(xml, 'Test')
+    expect(subfactions).toEqual([])
   })
 })

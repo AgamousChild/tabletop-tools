@@ -11,11 +11,13 @@
     "test:watch": "vitest"
   },
   "dependencies": {
+    "@tabletop-tools/ui": "workspace:*",
+    "@tanstack/react-form": "^1.33.0",
     "@tanstack/react-query": "^5.56.0",
+    "@tanstack/zod-form-adapter": "^0.42.1",
     "@trpc/client": "^11.0.0",
     "@trpc/react-query": "^11.0.0",
     "@trpc/server": "^11.0.0",
-    "@tabletop-tools/ui": "workspace:*",
     "better-auth": "^1.4.18",
     "react": "^18.3.1",
     "react-dom": "^18.3.1"

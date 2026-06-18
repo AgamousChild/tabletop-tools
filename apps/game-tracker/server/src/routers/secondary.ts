@@ -1,7 +1,7 @@
+import { matches, matchSecondaries } from '@tabletop-tools/db'
 import { TRPCError } from '@trpc/server'
 import { and, eq } from 'drizzle-orm'
 import { z } from 'zod'
-import { matches, matchSecondaries } from '@tabletop-tools/db'
 
 import { protectedProcedure, router } from '../trpc'
 
@@ -36,10 +36,7 @@ export const secondaryRouter = router({
         vpPerRound: '[]',
       })
 
-      const [row] = await ctx.db
-        .select()
-        .from(matchSecondaries)
-        .where(eq(matchSecondaries.id, id))
+      const [row] = await ctx.db.select().from(matchSecondaries).where(eq(matchSecondaries.id, id))
       return row!
     }),
 
@@ -123,8 +120,6 @@ export const secondaryRouter = router({
         throw new TRPCError({ code: 'NOT_FOUND', message: 'Match not found' })
       }
 
-      await ctx.db
-        .delete(matchSecondaries)
-        .where(eq(matchSecondaries.id, input.secondaryId))
+      await ctx.db.delete(matchSecondaries).where(eq(matchSecondaries.id, input.secondaryId))
     }),
 })

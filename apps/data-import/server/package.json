@@ -11,7 +11,10 @@
     "test:watch": "vitest"
   },
   "dependencies": {
+    "@libsql/client": "^0.14.0",
+    "@tabletop-tools/db": "workspace:*",
     "@tabletop-tools/game-content": "workspace:*",
+    "drizzle-orm": "^0.38.0",
     "hono": "^4.6.0"
   },
   "devDependencies": {

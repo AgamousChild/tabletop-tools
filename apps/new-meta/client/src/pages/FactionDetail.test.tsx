@@ -40,7 +40,16 @@ const fakeData = {
     players: 8,
   },
   detachments: [
-    { detachmentId: 'det-1', detachment: 'Waaagh! Tribe', wins: 8, losses: 5, draws: 0, games: 13, winRate: 0.615, players: 3 },
+    {
+      detachmentId: 'det-1',
+      detachment: 'Waaagh! Tribe',
+      wins: 8,
+      losses: 5,
+      draws: 0,
+      games: 13,
+      winRate: 0.615,
+      players: 3,
+    },
   ],
   timeline: [
     { week: '2025-01-06', winRate: 0.625, games: 8, wins: 5, losses: 3, draws: 0 },
@@ -88,7 +97,7 @@ describe('FactionDetail', () => {
   it('shows detachment names', () => {
     mockQueryResult = { data: fakeData, isLoading: false }
     render(<FactionDetail factionId="ork-1" onBack={() => {}} />)
-    expect(screen.getByText("Waaagh! Tribe")).toBeInTheDocument()
+    expect(screen.getByText('Waaagh! Tribe')).toBeInTheDocument()
   })
 
   it('shows top list via ListCard', () => {

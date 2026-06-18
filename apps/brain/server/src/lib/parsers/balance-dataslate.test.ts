@@ -1,4 +1,5 @@
-import { describe, it, expect } from 'vitest'
+import { describe, expect, it } from 'vitest'
+
 import { parseBalanceDataslate } from './balance-dataslate'
 
 const SAMPLE_DATASLATE = `
@@ -43,22 +44,22 @@ describe('parseBalanceDataslate', () => {
   const result = parseBalanceDataslate(SAMPLE_DATASLATE, '2026-04-08')
 
   it('creates balance-change nodes for core rules entries', () => {
-    const core = result.nodes.filter(n => !n.factionId)
+    const core = result.nodes.filter((n) => !n.factionId)
     expect(core.length).toBe(2)
   })
 
   it('creates balance-change nodes for faction entries', () => {
-    const sororitas = result.nodes.filter(n => n.factionId === 'adepta-sororitas')
+    const sororitas = result.nodes.filter((n) => n.factionId === 'adepta-sororitas')
     expect(sororitas.length).toBe(2)
   })
 
   it('skips factions with no changes', () => {
-    const custodes = result.nodes.filter(n => n.factionId === 'adeptus-custodes')
+    const custodes = result.nodes.filter((n) => n.factionId === 'adeptus-custodes')
     expect(custodes.length).toBe(0)
   })
 
   it('creates aeldari entry', () => {
-    const aeldari = result.nodes.filter(n => n.factionId === 'aeldari')
+    const aeldari = result.nodes.filter((n) => n.factionId === 'aeldari')
     expect(aeldari.length).toBe(1)
     expect(aeldari[0]!.content).toContain('Strands of Fate')
   })
@@ -70,17 +71,17 @@ describe('parseBalanceDataslate', () => {
   })
 
   it('generates modifies refs', () => {
-    const modRefs = result.refs.filter(r => r.rel === 'modifies')
+    const modRefs = result.refs.filter((r) => r.rel === 'modifies')
     expect(modRefs.length).toBeGreaterThan(0)
   })
 
   it('skips version meta headings', () => {
-    const version = result.nodes.find(n => n.title.includes('VERSION'))
+    const version = result.nodes.find((n) => n.title.includes('VERSION'))
     expect(version).toBeUndefined()
   })
 
   it('is idempotent', () => {
     const result2 = parseBalanceDataslate(SAMPLE_DATASLATE, '2026-04-08')
-    expect(result2.nodes.map(n => n.id)).toEqual(result.nodes.map(n => n.id))
+    expect(result2.nodes.map((n) => n.id)).toEqual(result.nodes.map((n) => n.id))
   })
 })

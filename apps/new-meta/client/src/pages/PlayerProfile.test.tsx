@@ -29,8 +29,22 @@ const fakeProfile = {
     displayBand: 90,
   },
   history: [
-    { id: 'h1', playerId: 'p1', eventName: 'London GT', ratingBefore: 1500, ratingAfter: 1650, recordedAt: 1700000000 },
-    { id: 'h2', playerId: 'p1', eventName: 'Paris Open', ratingBefore: 1650, ratingAfter: 1720, recordedAt: 1700100000 },
+    {
+      id: 'h1',
+      playerId: 'p1',
+      eventName: 'London GT',
+      ratingBefore: 1500,
+      ratingAfter: 1650,
+      recordedAt: 1700000000,
+    },
+    {
+      id: 'h2',
+      playerId: 'p1',
+      eventName: 'Paris Open',
+      ratingBefore: 1650,
+      ratingAfter: 1720,
+      recordedAt: 1700100000,
+    },
   ],
 }
 

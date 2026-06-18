@@ -1,7 +1,8 @@
-import { describe, it, expect, vi } from 'vitest'
-import { render, screen, fireEvent } from '@testing-library/react'
+import { fireEvent, render, screen } from '@testing-library/react'
+import { describe, expect, it, vi } from 'vitest'
+
 import { StratagemCard } from './StratagemCard'
-import type { StratagemCardData, CardContext } from './types'
+import type { CardContext, StratagemCardData } from './types'
 
 const mockStratagem: StratagemCardData = {
   id: 'det:space-marines:forgefathers-seekers:immolation-protocols',
@@ -11,8 +12,10 @@ const mockStratagem: StratagemCardData = {
   turn: 'Your turn',
   phase: 'Shooting phase',
   when: 'Your Shooting phase.',
-  target: 'One ADEPTUS ASTARTES unit from your army that has not been selected to shoot this phase.',
-  effect: 'Until the end of the phase, Torrent weapons equipped by models in your unit have the [DEVASTATING WOUNDS] ability.',
+  target:
+    'One ADEPTUS ASTARTES unit from your army that has not been selected to shoot this phase.',
+  effect:
+    'Until the end of the phase, Torrent weapons equipped by models in your unit have the [DEVASTATING WOUNDS] ability.',
   detachmentName: "Forgefather's Seekers",
   factionId: 'space-marines',
 }
@@ -36,7 +39,9 @@ describe('StratagemCard', () => {
 
   it('renders type line with phase', () => {
     render(<StratagemCard data={mockStratagem} context={baseContext} />)
-    expect(screen.getByText("Forgefather's Seekers — Battle Tactic Stratagem — Shooting phase")).toBeInTheDocument()
+    expect(
+      screen.getByText("Forgefather's Seekers — Battle Tactic Stratagem — Shooting phase"),
+    ).toBeInTheDocument()
   })
 
   it('renders WHEN section with label and text', () => {
@@ -120,7 +125,12 @@ describe('StratagemCard', () => {
     const data = {
       ...mockStratagem,
       errata: [
-        { nodeId: 'e1', title: 'Stratagem FAQ', content: 'This can only be used once per phase.', source: { type: 'pdf', title: 'Chapter Approved', page: 15 } },
+        {
+          nodeId: 'e1',
+          title: 'Stratagem FAQ',
+          content: 'This can only be used once per phase.',
+          source: { type: 'pdf', title: 'Chapter Approved', page: 15 },
+        },
       ],
     }
     render(<StratagemCard data={data} context={baseContext} />)
@@ -131,7 +141,12 @@ describe('StratagemCard', () => {
     const data = {
       ...mockStratagem,
       errata: [
-        { nodeId: 'e1', title: 'Stratagem FAQ', content: 'This can only be used once per phase.', source: { type: 'pdf', title: 'Chapter Approved', page: 15 } },
+        {
+          nodeId: 'e1',
+          title: 'Stratagem FAQ',
+          content: 'This can only be used once per phase.',
+          source: { type: 'pdf', title: 'Chapter Approved', page: 15 },
+        },
       ],
     }
     render(<StratagemCard data={data} context={baseContext} />)

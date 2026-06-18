@@ -55,7 +55,10 @@ beforeAll(async () => {
       list_locked INTEGER NOT NULL DEFAULT 0,
       checked_in INTEGER NOT NULL DEFAULT 0,
       dropped INTEGER NOT NULL DEFAULT 0,
-      registered_at INTEGER NOT NULL
+      registered_at INTEGER NOT NULL,
+      faction_entity_id TEXT,
+      detachment_entity_id TEXT,
+      placement INTEGER
     );
     CREATE TABLE IF NOT EXISTS rounds (
       id TEXT PRIMARY KEY,
@@ -80,34 +83,96 @@ beforeAll(async () => {
       to_override INTEGER NOT NULL DEFAULT 0,
       created_at INTEGER NOT NULL
     );
-    CREATE TABLE IF NOT EXISTS player_elo (
+    CREATE TABLE IF NOT EXISTS dim_faction (
       id TEXT PRIMARY KEY,
-      user_id TEXT NOT NULL UNIQUE REFERENCES "user"(id),
-      rating INTEGER NOT NULL DEFAULT 1200,
+      name TEXT NOT NULL,
+      allegiance TEXT NOT NULL
+    );
+    CREATE TABLE IF NOT EXISTS dim_faction_alias (
+      alias TEXT PRIMARY KEY,
+      faction_id TEXT NOT NULL REFERENCES dim_faction(id)
+    );
+    CREATE TABLE IF NOT EXISTS dim_subfaction (
+      id TEXT PRIMARY KEY,
+      name TEXT NOT NULL,
+      faction_id TEXT NOT NULL REFERENCES dim_faction(id)
+    );
+    CREATE TABLE IF NOT EXISTS meta_events (
+      id TEXT PRIMARY KEY,
+      name TEXT NOT NULL,
+      date INTEGER NOT NULL,
+      location TEXT,
+      gps_coords TEXT,
+      region_id INTEGER,
+      format TEXT NOT NULL,
+      rounds INTEGER,
+      player_count INTEGER NOT NULL,
+      source TEXT NOT NULL,
+      source_id TEXT,
+      imported_at INTEGER NOT NULL,
+      win_faction_id TEXT,
+      win_subfaction_id TEXT,
+      win_detachment_id TEXT,
+      UNIQUE(source, source_id)
+    );
+    CREATE TABLE IF NOT EXISTS meta_event_players (
+      id TEXT PRIMARY KEY,
+      event_id TEXT NOT NULL REFERENCES meta_events(id) ON DELETE CASCADE,
+      player_name TEXT NOT NULL,
+      source_player_id TEXT,
+      faction_id TEXT NOT NULL REFERENCES dim_faction(id),
+      subfaction_id TEXT,
+      detachment_id TEXT,
+      placement INTEGER NOT NULL,
+      list_text TEXT,
+      list_ttt TEXT,
+      wins INTEGER NOT NULL DEFAULT 0,
+      losses INTEGER NOT NULL DEFAULT 0,
+      draws INTEGER NOT NULL DEFAULT 0,
+      gl2_rating_start REAL,
+      gl2_rd_start REAL,
+      gl2_vol_start REAL,
+      gl2_rating_end REAL,
+      gl2_rd_end REAL,
+      gl2_vol_end REAL
+    );
+    CREATE TABLE IF NOT EXISTS meta_pairings (
+      id TEXT PRIMARY KEY,
+      event_id TEXT NOT NULL REFERENCES meta_events(id) ON DELETE CASCADE,
+      round INTEGER NOT NULL,
+      player1_id TEXT NOT NULL REFERENCES meta_event_players(id) ON DELETE CASCADE,
+      player2_id TEXT NOT NULL REFERENCES meta_event_players(id) ON DELETE CASCADE,
+      player1_score INTEGER,
+      player2_score INTEGER,
+      player1_gl2 REAL,
+      player2_gl2 REAL,
+      result TEXT NOT NULL
+    );
+    CREATE TABLE IF NOT EXISTS player_glicko (
+      id TEXT PRIMARY KEY,
+      user_id TEXT REFERENCES "user"(id),
+      player_name TEXT NOT NULL,
+      rating REAL NOT NULL DEFAULT 1500,
+      rating_deviation REAL NOT NULL DEFAULT 350,
+      volatility REAL NOT NULL DEFAULT 0.06,
       games_played INTEGER NOT NULL DEFAULT 0,
+      last_rating_period TEXT,
       updated_at INTEGER NOT NULL
     );
-    CREATE TABLE IF NOT EXISTS elo_history (
+    CREATE TABLE IF NOT EXISTS glicko_history (
       id TEXT PRIMARY KEY,
-      user_id TEXT NOT NULL REFERENCES "user"(id),
-      pairing_id TEXT NOT NULL REFERENCES pairings(id),
-      rating_before INTEGER NOT NULL,
-      rating_after INTEGER NOT NULL,
-      delta INTEGER NOT NULL,
-      opponent_id TEXT NOT NULL REFERENCES "user"(id),
+      player_id TEXT NOT NULL REFERENCES player_glicko(id),
+      rating_period TEXT NOT NULL,
+      rating_before REAL NOT NULL,
+      rd_before REAL NOT NULL,
+      rating_after REAL NOT NULL,
+      rd_after REAL NOT NULL,
+      volatility_after REAL NOT NULL,
+      delta REAL NOT NULL,
+      games_in_period INTEGER NOT NULL,
       recorded_at INTEGER NOT NULL
     );
-    CREATE TABLE IF NOT EXISTS imported_tournament_results (
-      id TEXT PRIMARY KEY,
-      imported_by TEXT NOT NULL,
-      event_name TEXT NOT NULL,
-      event_date INTEGER NOT NULL,
-      format TEXT NOT NULL,
-      meta_window TEXT NOT NULL,
-      raw_data TEXT NOT NULL,
-      parsed_data TEXT NOT NULL,
-      imported_at INTEGER NOT NULL
-    );
+    INSERT OR IGNORE INTO dim_faction (id, name, allegiance) VALUES ('unknown', 'Unknown', 'unknown');
     CREATE TABLE IF NOT EXISTS tournament_cards (
       id TEXT PRIMARY KEY,
       tournament_id TEXT NOT NULL REFERENCES tournaments(id),
@@ -132,6 +197,40 @@ beforeAll(async () => {
       banned_by TEXT NOT NULL REFERENCES "user"(id),
       banned_at INTEGER NOT NULL,
       lifted_at INTEGER
+    );
+    CREATE TABLE IF NOT EXISTS content_entity (
+      id TEXT PRIMARY KEY,
+      type TEXT NOT NULL,
+      name TEXT NOT NULL,
+      faction_id TEXT REFERENCES content_entity(id),
+      parent_id TEXT REFERENCES content_entity(id),
+      dataslate_id TEXT,
+      r2_key TEXT,
+      wahapedia_id TEXT,
+      bsdata_id TEXT,
+      updated_at INTEGER NOT NULL
+    );
+    CREATE TABLE IF NOT EXISTS ranking_metric (
+      id TEXT PRIMARY KEY,
+      key TEXT NOT NULL UNIQUE,
+      label TEXT NOT NULL,
+      description TEXT
+    );
+    CREATE TABLE IF NOT EXISTS tournament_pairing_metric (
+      id TEXT PRIMARY KEY,
+      tournament_id TEXT NOT NULL REFERENCES tournaments(id) ON DELETE CASCADE,
+      ranking_metric_id TEXT NOT NULL REFERENCES ranking_metric(id),
+      sort_order INTEGER NOT NULL,
+      enabled INTEGER NOT NULL DEFAULT 1,
+      CONSTRAINT uq_tourn_pairing_metric UNIQUE(tournament_id, ranking_metric_id)
+    );
+    CREATE TABLE IF NOT EXISTS tournament_placing_metric (
+      id TEXT PRIMARY KEY,
+      tournament_id TEXT NOT NULL REFERENCES tournaments(id) ON DELETE CASCADE,
+      ranking_metric_id TEXT NOT NULL REFERENCES ranking_metric(id),
+      sort_order INTEGER NOT NULL,
+      enabled INTEGER NOT NULL DEFAULT 1,
+      CONSTRAINT uq_tourn_placing_metric UNIQUE(tournament_id, ranking_metric_id)
     );
     INSERT INTO "user" (id, name, email, email_verified, created_at, updated_at)
     VALUES ('to-1', 'Alice', 'alice@example.com', 0, 0, 0);
@@ -317,17 +416,8 @@ describe('result.report + result.confirm', () => {
   })
 })
 
-describe('elo.get', () => {
-  it('returns default rating 1200 for a player with no ELO record', async () => {
-    const caller = createCaller(toCtx)
-    const result = await caller.elo.get('to-1')
-    expect(result.rating).toBe(1200)
-    expect(result.gamesPlayed).toBe(0)
-  })
-})
-
-describe('tournament export to new-meta on COMPLETE', () => {
-  it('exports results to imported_tournament_results when advancing to COMPLETE', async () => {
+describe('tournament export to meta on COMPLETE', () => {
+  it('exports results to meta tables when advancing to COMPLETE', async () => {
     const toCaller = createCaller(toCtx)
     const t = await toCaller.tournament.create({
       name: 'Export Test GT',
@@ -341,7 +431,11 @@ describe('tournament export to new-meta on COMPLETE', () => {
     const p1Caller = createCaller(p1Ctx)
     const p2Caller = createCaller(p2Ctx)
     await p1Caller.player.register({ tournamentId: t!.id, displayName: 'Bob', faction: 'Orks' })
-    await p2Caller.player.register({ tournamentId: t!.id, displayName: 'Carol', faction: 'Necrons' })
+    await p2Caller.player.register({
+      tournamentId: t!.id,
+      displayName: 'Carol',
+      faction: 'Necrons',
+    })
 
     await toCaller.tournament.advanceStatus(t!.id) // → CHECK_IN
     await toCaller.tournament.advanceStatus(t!.id) // → IN_PROGRESS
@@ -361,20 +455,45 @@ describe('tournament export to new-meta on COMPLETE', () => {
     // Advance to COMPLETE — should export
     await toCaller.tournament.advanceStatus(t!.id) // → COMPLETE
 
-    // Verify export was written
-    const rows = await client.execute({ sql: 'SELECT * FROM imported_tournament_results WHERE event_name = ?', args: ['Export Test GT'] })
-    expect(rows.rows).toHaveLength(1)
-    const row = rows.rows[0]!
-    expect(row['format']).toBe('2000pts')
-    const parsed = JSON.parse(row['parsed_data'] as string)
-    expect(parsed).toHaveLength(1)
-    expect(parsed[0].players).toHaveLength(2)
-    // Bob won, so should be first
-    expect(parsed[0].players[0].playerName).toBe('Bob')
-    expect(parsed[0].players[0].wins).toBe(1)
-    expect(parsed[0].players[0].points).toBe(85)
-    expect(parsed[0].players[1].playerName).toBe('Carol')
-    expect(parsed[0].players[1].losses).toBe(1)
+    // Verify meta event was created
+    const eventRows = await client.execute({
+      sql: `SELECT * FROM meta_events WHERE source = 'native' AND source_id = ?`,
+      args: [t!.id],
+    })
+    expect(eventRows.rows).toHaveLength(1)
+    const event = eventRows.rows[0]!
+    expect(event['name']).toBe('Export Test GT')
+    expect(event['format']).toBe('2000pts')
+    expect(event['player_count']).toBe(2)
+
+    // Verify meta event players
+    const playerRows = await client.execute({
+      sql: `SELECT * FROM meta_event_players WHERE event_id = ? ORDER BY placement`,
+      args: [event['id'] as string],
+    })
+    expect(playerRows.rows).toHaveLength(2)
+    // Bob won, so should be placement 1
+    expect(playerRows.rows[0]!['player_name']).toBe('Bob')
+    expect(playerRows.rows[0]!['wins']).toBe(1)
+    expect(playerRows.rows[0]!['faction_id']).toBe('unknown') // Orks not in dim_faction
+    expect(playerRows.rows[1]!['player_name']).toBe('Carol')
+    expect(playerRows.rows[1]!['losses']).toBe(1)
+
+    // Verify meta pairings
+    const pairingRows = await client.execute({
+      sql: `SELECT * FROM meta_pairings WHERE event_id = ?`,
+      args: [event['id'] as string],
+    })
+    expect(pairingRows.rows).toHaveLength(1)
+    expect(pairingRows.rows[0]!['result']).toBe('p1')
+    expect(pairingRows.rows[0]!['player1_score']).toBe(85)
+    expect(pairingRows.rows[0]!['player2_score']).toBe(60)
+
+    // Verify Glicko-2 records were created
+    const glickoRows = await client.execute(
+      `SELECT * FROM player_glicko WHERE player_name IN ('Bob', 'Carol')`,
+    )
+    expect(glickoRows.rows).toHaveLength(2)
   })
 })
 
@@ -420,9 +539,13 @@ describe('tournament.standings', () => {
       faction: 'Orks',
     })
 
-    const standings = await toCaller.tournament.standings(t!.id)
+    const standings = await toCaller.tournament.standings({
+      tournamentId: t!.id,
+      stackType: 'pairing',
+    })
     expect(standings.players).toHaveLength(1)
-    expect(standings.players[0].wins).toBe(0)
+    // Legacy fallback (no metric stack configured) returns computeStandings shape
+    expect((standings.players[0] as any).wins).toBe(0)
   })
 })
 
@@ -478,7 +601,7 @@ describe('player.myProfile', () => {
 
     const p1Caller = createCaller(p1Ctx)
     const p2Caller = createCaller(p2Ctx)
-    const tp1 = await p1Caller.player.register({
+    await p1Caller.player.register({
       tournamentId: t!.id,
       displayName: 'Bob',
       faction: 'Orks',
@@ -658,5 +781,69 @@ describe('round.create with startTime', () => {
 
     const fetched = await toCaller.round.get(round!.id)
     expect(fetched?.startTime).toBe('2:30 PM')
+  })
+})
+
+describe('player.listFactions', () => {
+  it('returns empty list when no faction entities exist', async () => {
+    const caller = createCaller(p1Ctx)
+    const factions = await caller.player.listFactions()
+    // content_entity is empty in this test setup
+    expect(Array.isArray(factions)).toBe(true)
+    expect(factions.filter((f) => f.id === 'faction-space-marines')).toHaveLength(0)
+  })
+
+  it('returns factions from content_entity', async () => {
+    // Seed a faction entity
+    await client.execute(`
+      INSERT INTO content_entity (id, type, name, updated_at)
+      VALUES ('faction-space-marines', 'faction', 'Space Marines', 0)
+    `)
+    await client.execute(`
+      INSERT INTO content_entity (id, type, name, updated_at)
+      VALUES ('faction-orks', 'faction', 'Orks', 0)
+    `)
+    await client.execute(`
+      INSERT INTO content_entity (id, type, name, updated_at)
+      VALUES ('detachment-gladius', 'detachment', 'Gladius Task Force', 0)
+    `)
+
+    const caller = createCaller(p1Ctx)
+    const factions = await caller.player.listFactions()
+    const names = factions.map((f) => f.name)
+    expect(names).toContain('Space Marines')
+    expect(names).toContain('Orks')
+    // detachments should not appear
+    expect(names).not.toContain('Gladius Task Force')
+  })
+})
+
+describe('player.listDetachments', () => {
+  it('returns detachments for a given faction entity', async () => {
+    // Link the detachment to space marines faction
+    await client.execute(`
+      UPDATE content_entity SET faction_id = 'faction-space-marines'
+      WHERE id = 'detachment-gladius'
+    `)
+    await client.execute(`
+      INSERT INTO content_entity (id, type, name, faction_id, updated_at)
+      VALUES ('detachment-ironstorm', 'detachment', 'Ironstorm Spearhead', 'faction-space-marines', 0)
+    `)
+
+    const caller = createCaller(p1Ctx)
+    const detachments = await caller.player.listDetachments({
+      factionEntityId: 'faction-space-marines',
+    })
+    const names = detachments.map((d) => d.name)
+    expect(names).toContain('Gladius Task Force')
+    expect(names).toContain('Ironstorm Spearhead')
+    // Other faction's detachments should not appear
+    expect(names).not.toContain('Space Marines')
+  })
+
+  it('returns empty list for faction with no detachments', async () => {
+    const caller = createCaller(p1Ctx)
+    const detachments = await caller.player.listDetachments({ factionEntityId: 'faction-orks' })
+    expect(detachments).toHaveLength(0)
   })
 })

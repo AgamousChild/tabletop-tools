@@ -1,3 +1,4 @@
+import { renderMarkdown } from '../../lib/render-markdown'
 import { ErrataSection } from './ErrataSection'
 import type { CardContext, TwistCardData } from './types'
 
@@ -30,7 +31,7 @@ export function TwistCard({ data, context }: TwistCardProps) {
       {/* Body */}
       <div className="px-3 py-2 md:px-4 md:py-3">
         <p className="text-slate-300 text-[13px] md:text-[15px] leading-relaxed whitespace-pre-wrap break-words">
-          {data.description}
+          <span dangerouslySetInnerHTML={{ __html: renderMarkdown(data.description) }} />
         </p>
       </div>
 
@@ -48,7 +49,10 @@ export function TwistCard({ data, context }: TwistCardProps) {
                 className="text-[13px] text-blue-400 hover:text-blue-300 cursor-pointer bg-transparent border-0 p-0"
                 onClick={() =>
                   context.onViewSource!(
-                    src.title.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, ''),
+                    src.title
+                      .toLowerCase()
+                      .replace(/[^a-z0-9]+/g, '-')
+                      .replace(/^-|-$/g, ''),
                     src.page!,
                     data.name,
                     src.topPct,

@@ -3,7 +3,8 @@
  */
 export async function fetchArticleText(
   url: string,
-  fetchFn: (...args: Parameters<typeof fetch>) => ReturnType<typeof fetch> = (...args) => fetch(...args),
+  fetchFn: (...args: Parameters<typeof fetch>) => ReturnType<typeof fetch> = (...args) =>
+    fetch(...args),
 ): Promise<string> {
   const response = await fetchFn(url)
   if (!response.ok) {

@@ -1,9 +1,10 @@
 import type { Stratagem } from '@tabletop-tools/game-data-store'
+
 import type { StratagemEntry } from './StratagemPicker'
-import type { DestroyedUnit } from './UnitPicker'
-import type { TurnData } from './types'
-import { UnitPicker } from './UnitPicker'
 import { StratagemPicker } from './StratagemPicker'
+import type { TurnData } from './types'
+import type { DestroyedUnit } from './UnitPicker'
+import { UnitPicker } from './UnitPicker'
 
 type AvailableUnit = {
   contentId: string
@@ -19,7 +20,14 @@ type Props = {
   availableUnits?: AvailableUnit[]
 }
 
-export function ActionPhaseScreen({ player, turnData, onUpdate, onNext, availableStratagems, availableUnits }: Props) {
+export function ActionPhaseScreen({
+  player,
+  turnData,
+  onUpdate,
+  onNext,
+  availableStratagems,
+  availableUnits,
+}: Props) {
   const isYou = player === 'You'
 
   return (

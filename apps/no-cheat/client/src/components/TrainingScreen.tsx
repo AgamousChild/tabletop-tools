@@ -1,23 +1,23 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 
-import type { RoiResult } from '../lib/cv/pipeline'
-import { DEFAULT_CONFIG } from '../lib/cv/pipeline'
-import type { Roi } from '../lib/cv/isolate'
-import { createTrainedPipeline } from '../lib/cv/trainedPipeline'
-import { getMainCamera } from '../lib/getMainCamera'
-import { extractFeatures } from '../lib/cv/features'
-import { classifyKnn } from '../lib/cv/knnClassifier'
-import type { TrainingExample } from '../lib/cv/knnClassifier'
 import { rgbaToGray } from '../lib/cv/background'
 import { detectPips } from '../lib/cv/blobDetector'
+import { extractFeatures } from '../lib/cv/features'
+import type { Roi } from '../lib/cv/isolate'
+import type { TrainingExample } from '../lib/cv/knnClassifier'
+import { classifyKnn } from '../lib/cv/knnClassifier'
+import type { RoiResult } from '../lib/cv/pipeline'
+import { DEFAULT_CONFIG } from '../lib/cv/pipeline'
+import { createTrainedPipeline } from '../lib/cv/trainedPipeline'
+import { getMainCamera } from '../lib/getMainCamera'
+import type { StoredExample, TrainingStats as TrainingStatsType } from '../lib/store/trainingStore'
 import {
   addExample,
+  clearAll,
   getExamples,
   getStats,
   updateStats,
-  clearAll,
 } from '../lib/store/trainingStore'
-import type { StoredExample, TrainingStats as TrainingStatsType } from '../lib/store/trainingStore'
 import { trpc } from '../lib/trpc'
 import { DiceCheckCard } from './DiceCheckCard'
 import { TrainingHistory } from './TrainingHistory'
@@ -52,7 +52,12 @@ type DetectedRoi = {
 
 type Phase =
   | { name: 'detecting' }
-  | { name: 'confirming'; lockedResults: RoiResult[]; samples: (number | null)[][]; startTime: number }
+  | {
+      name: 'confirming'
+      lockedResults: RoiResult[]
+      samples: (number | null)[][]
+      startTime: number
+    }
   | { name: 'dice_check'; candidates: DiceCandidate[] }
   | { name: 'labeling'; rois: DetectedRoi[] }
 
@@ -95,9 +100,13 @@ function mode(values: (number | null)[]): number | null {
   for (const v of values) {
     if (v !== null) freq.set(v, (freq.get(v) ?? 0) + 1)
   }
-  let best: number | null = null, bestCount = 0
+  let best: number | null = null,
+    bestCount = 0
   for (const [val, count] of freq) {
-    if (count > bestCount) { best = val; bestCount = count }
+    if (count > bestCount) {
+      best = val
+      bestCount = count
+    }
   }
   return best
 }
@@ -106,7 +115,6 @@ export function TrainingScreen({ diceSet, onBack }: Props) {
   const [showHistory, setShowHistory] = useState(false)
   const [phase, setPhase] = useState<Phase>({ name: 'detecting' })
   const [error, setError] = useState<string | null>(null)
-  const [cameraReady, setCameraReady] = useState(false)
   const [detectedCount, setDetectedCount] = useState(0)
   const [confirmProgress, setConfirmProgress] = useState(0)
   const [showSettings, setShowSettings] = useState(false)
@@ -140,9 +148,7 @@ export function TrainingScreen({ diceSet, onBack }: Props) {
       ])
       setExamples(storedExamples)
       setStats(storedStats)
-      pipeline.setExamples(
-        storedExamples.map((e) => ({ features: e.features, label: e.label })),
-      )
+      pipeline.setExamples(storedExamples.map((e) => ({ features: e.features, label: e.label })))
     }
     load()
   }, [diceSet.id, pipeline])
@@ -156,7 +162,6 @@ export function TrainingScreen({ diceSet, onBack }: Props) {
         stream = s
         if (videoRef.current) {
           videoRef.current.srcObject = s
-          setCameraReady(true)
           const video = videoRef.current
           const w = video.videoWidth || 320
           const h = video.videoHeight || 240
@@ -178,8 +183,16 @@ export function TrainingScreen({ diceSet, onBack }: Props) {
     canvas.height = video.videoHeight || 240
     const ctx = canvas.getContext('2d')!
     ctx.drawImage(video, 0, 0, canvas.width, canvas.height)
-    if (!pipeline.state.ready || pipeline.state.width !== canvas.width || pipeline.state.height !== canvas.height) {
-      pipeline.captureBackground(new Uint8ClampedArray(canvas.width * canvas.height * 4), canvas.width, canvas.height)
+    if (
+      !pipeline.state.ready ||
+      pipeline.state.width !== canvas.width ||
+      pipeline.state.height !== canvas.height
+    ) {
+      pipeline.captureBackground(
+        new Uint8ClampedArray(canvas.width * canvas.height * 4),
+        canvas.width,
+        canvas.height,
+      )
     }
     return { imageData: ctx.getImageData(0, 0, canvas.width, canvas.height), canvas }
   }
@@ -254,19 +267,31 @@ export function TrainingScreen({ diceSet, onBack }: Props) {
           for (const c of counts) {
             if (c > 0) freq.set(c, (freq.get(c) ?? 0) + 1)
           }
-          let modeVal = 0, modeCount = 0
+          let modeVal = 0,
+            modeCount = 0
           for (const [val, count] of freq) {
-            if (count > modeCount) { modeVal = val; modeCount = count }
+            if (count > modeCount) {
+              modeVal = val
+              modeCount = count
+            }
           }
 
-          if (modeVal > 0 && modeCount / WINDOW_SIZE >= STABILITY_RATIO && currentCount === modeVal) {
+          if (
+            modeVal > 0 &&
+            modeCount / WINDOW_SIZE >= STABILITY_RATIO &&
+            currentCount === modeVal
+          ) {
             shouldLock = true
           }
         }
 
         // Auto-lock timeout: if we've been detecting long enough and have
         // seen dice at some point, lock with best available results.
-        if (!shouldLock && lastNonZeroResults.length > 0 && Date.now() - detectStartTime > AUTO_LOCK_TIMEOUT) {
+        if (
+          !shouldLock &&
+          lastNonZeroResults.length > 0 &&
+          Date.now() - detectStartTime > AUTO_LOCK_TIMEOUT
+        ) {
           shouldLock = true
         }
 
@@ -304,7 +329,7 @@ export function TrainingScreen({ diceSet, onBack }: Props) {
 
     const lockedResults = phase.lockedResults
     const startTime = phase.startTime
-    let samples = phase.samples.map((s) => [...s])
+    const samples = phase.samples.map((s) => [...s])
     let lastSampleTime = Date.now()
 
     function confirmLoop() {
@@ -348,14 +373,17 @@ export function TrainingScreen({ diceSet, onBack }: Props) {
       // Sample every 250ms
       if (frame && now - lastSampleTime >= CONFIRM_INTERVAL) {
         lastSampleTime = now
-        const frameGray = rgbaToGray(
-          frame.imageData.data,
-          frame.canvas.width,
-          frame.canvas.height,
-        )
+        const frameGray = rgbaToGray(frame.imageData.data, frame.canvas.width, frame.canvas.height)
         for (let i = 0; i < lockedResults.length; i++) {
           const r = lockedResults[i]!
-          const roiGray = extractSubImage(frameGray, frame.canvas.width, r.roi.x, r.roi.y, r.roi.width, r.roi.height)
+          const roiGray = extractSubImage(
+            frameGray,
+            frame.canvas.width,
+            r.roi.x,
+            r.roi.y,
+            r.roi.width,
+            r.roi.height,
+          )
           const pip = detectPips(roiGray, r.roi.width, r.roi.height)
           samples[i]!.push(pip)
         }
@@ -365,7 +393,11 @@ export function TrainingScreen({ diceSet, onBack }: Props) {
       if (elapsed >= CONFIRM_DURATION) {
         const frameForSnapshot = getFrame()
         const frameGray = frameForSnapshot
-          ? rgbaToGray(frameForSnapshot.imageData.data, frameForSnapshot.canvas.width, frameForSnapshot.canvas.height)
+          ? rgbaToGray(
+              frameForSnapshot.imageData.data,
+              frameForSnapshot.canvas.width,
+              frameForSnapshot.canvas.height,
+            )
           : null
 
         const currentExamples = examplesRef.current
@@ -384,7 +416,8 @@ export function TrainingScreen({ diceSet, onBack }: Props) {
 
           // Auto-dismiss if kNN classifies as "not a die" (label 0)
           const knnResult = classifyKnn(features, trainingExamples)
-          const autoDismissed = knnResult !== null && knnResult.label === 0 && knnResult.confidence >= 0.6
+          const autoDismissed =
+            knnResult !== null && knnResult.label === 0 && knnResult.confidence >= 0.6
 
           return {
             roi: r.roi,
@@ -415,7 +448,10 @@ export function TrainingScreen({ diceSet, onBack }: Props) {
     setPhase((prev) => {
       if (prev.name !== 'dice_check') return prev
       const newCandidates = [...prev.candidates]
-      newCandidates[index] = { ...newCandidates[index]!, dismissed: !newCandidates[index]!.dismissed }
+      newCandidates[index] = {
+        ...newCandidates[index]!,
+        dismissed: !newCandidates[index]!.dismissed,
+      }
       return { name: 'dice_check', candidates: newCandidates }
     })
   }
@@ -431,8 +467,11 @@ export function TrainingScreen({ diceSet, onBack }: Props) {
 
     // Save dismissed candidates as negative examples (label 0)
     const dismissedServerExamples: Array<{
-      label: number; guess: number | null; confidence: number | null;
-      features: number[]; imageBase64: string
+      label: number
+      guess: number | null
+      confidence: number | null
+      features: number[]
+      imageBase64: string
     }> = []
 
     for (const candidate of phase.candidates) {
@@ -534,8 +573,11 @@ export function TrainingScreen({ diceSet, onBack }: Props) {
     let corrections = stats?.corrections ?? 0
 
     const serverExamples: Array<{
-      label: number; guess: number | null; confidence: number | null;
-      features: number[]; imageBase64: string
+      label: number
+      guess: number | null
+      confidence: number | null
+      features: number[]
+      imageBase64: string
     }> = []
 
     for (const roi of roisToSave) {
@@ -579,9 +621,7 @@ export function TrainingScreen({ diceSet, onBack }: Props) {
 
     const updatedExamples = await getExamples(diceSet.id)
     setExamples(updatedExamples)
-    pipeline.setExamples(
-      updatedExamples.map((e) => ({ features: e.features, label: e.label })),
-    )
+    pipeline.setExamples(updatedExamples.map((e) => ({ features: e.features, label: e.label })))
 
     // Non-blocking server sync
     saveToServer.mutate(
@@ -612,7 +652,11 @@ export function TrainingScreen({ diceSet, onBack }: Props) {
   }, [examples])
 
   const statsForComponent = stats
-    ? { totalGuesses: stats.totalGuesses, correctGuesses: stats.correctGuesses, corrections: stats.corrections }
+    ? {
+        totalGuesses: stats.totalGuesses,
+        correctGuesses: stats.correctGuesses,
+        corrections: stats.corrections,
+      }
     : null
 
   const allRoisHandled =
@@ -629,7 +673,11 @@ export function TrainingScreen({ diceSet, onBack }: Props) {
       <div className="min-h-screen bg-slate-950 text-slate-100 p-4">
         <div className="max-w-md mx-auto space-y-4">
           <div className="flex items-center gap-3">
-            <button onClick={onBack} className="text-slate-400 hover:text-slate-200 text-sm" aria-label="Back">
+            <button
+              onClick={onBack}
+              className="text-slate-400 hover:text-slate-200 text-sm"
+              aria-label="Back"
+            >
               ← Back
             </button>
             <h2 className="text-lg font-semibold text-slate-100">{diceSet.name}</h2>
@@ -647,7 +695,11 @@ export function TrainingScreen({ diceSet, onBack }: Props) {
       <div className="max-w-md mx-auto space-y-4">
         {/* Header */}
         <div className="flex items-center gap-3">
-          <button onClick={onBack} className="text-slate-400 hover:text-slate-200 text-sm" aria-label="Back">
+          <button
+            onClick={onBack}
+            className="text-slate-400 hover:text-slate-200 text-sm"
+            aria-label="Back"
+          >
             ← Back
           </button>
           <h2 className="text-lg font-semibold text-slate-100">{diceSet.name}</h2>
@@ -667,7 +719,9 @@ export function TrainingScreen({ diceSet, onBack }: Props) {
 
         {showSettings && (
           <div className="bg-slate-900 rounded-lg p-3 space-y-3 border border-slate-800">
-            <p className="text-xs text-slate-400 font-semibold uppercase tracking-wider">Detection Settings</p>
+            <p className="text-xs text-slate-400 font-semibold uppercase tracking-wider">
+              Detection Settings
+            </p>
 
             <div className="space-y-1">
               <div className="flex items-center justify-between">
@@ -687,13 +741,17 @@ export function TrainingScreen({ diceSet, onBack }: Props) {
                 }}
                 className="w-full accent-amber-400"
               />
-              <p className="text-[10px] text-slate-600">Lower = more sensitive (catches faint dice). Higher = fewer false detections.</p>
+              <p className="text-[10px] text-slate-600">
+                Lower = more sensitive (catches faint dice). Higher = fewer false detections.
+              </p>
             </div>
 
             <div className="space-y-1">
               <div className="flex items-center justify-between">
                 <label className="text-xs text-slate-400">Edge Crop</label>
-                <span className="text-xs text-slate-500 font-mono">{Math.round(centerCrop * 100)}%</span>
+                <span className="text-xs text-slate-500 font-mono">
+                  {Math.round(centerCrop * 100)}%
+                </span>
               </div>
               <input
                 type="range"
@@ -708,7 +766,9 @@ export function TrainingScreen({ diceSet, onBack }: Props) {
                 }}
                 className="w-full accent-amber-400"
               />
-              <p className="text-[10px] text-slate-600">Trims edges before pip counting. Higher = ignores more table bleed.</p>
+              <p className="text-[10px] text-slate-600">
+                Trims edges before pip counting. Higher = ignores more table bleed.
+              </p>
             </div>
 
             <button
@@ -726,18 +786,9 @@ export function TrainingScreen({ diceSet, onBack }: Props) {
 
         {/* Camera feed */}
         <div className="relative rounded-lg overflow-hidden bg-slate-900 aspect-square">
-          <video
-            ref={videoRef}
-            autoPlay
-            playsInline
-            muted
-            className="w-full h-full object-cover"
-          />
+          <video ref={videoRef} autoPlay playsInline muted className="w-full h-full object-cover" />
           <canvas ref={canvasRef} className="hidden" />
-          <canvas
-            ref={overlayRef}
-            className="absolute inset-0 w-full h-full pointer-events-none"
-          />
+          <canvas ref={overlayRef} className="absolute inset-0 w-full h-full pointer-events-none" />
           {phase.name === 'confirming' && (
             <div className="absolute inset-0 border-4 border-emerald-400 rounded-lg pointer-events-none" />
           )}
@@ -753,7 +804,8 @@ export function TrainingScreen({ diceSet, onBack }: Props) {
         {phase.name === 'confirming' && (
           <div className="space-y-2">
             <p className="text-emerald-400 text-sm text-center font-semibold">
-              Locking in {phase.lockedResults.length} {phase.lockedResults.length === 1 ? 'die' : 'dice'}...
+              Locking in {phase.lockedResults.length}{' '}
+              {phase.lockedResults.length === 1 ? 'die' : 'dice'}...
             </p>
             <div className="h-2 bg-slate-800 rounded-full overflow-hidden">
               <div
@@ -779,7 +831,8 @@ export function TrainingScreen({ diceSet, onBack }: Props) {
         {phase.name === 'dice_check' && (
           <div className="space-y-3">
             <p className="text-slate-100 font-semibold text-center">
-              {phase.candidates.filter((c) => !c.dismissed).length} of {phase.candidates.length} detections — tap to dismiss non-dice
+              {phase.candidates.filter((c) => !c.dismissed).length} of {phase.candidates.length}{' '}
+              detections — tap to dismiss non-dice
             </p>
 
             <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
@@ -817,7 +870,8 @@ export function TrainingScreen({ diceSet, onBack }: Props) {
         {phase.name === 'labeling' && phase.rois.length > 0 && (
           <div className="space-y-3">
             <p className="text-slate-100 font-semibold text-center">
-              {phase.rois.length} {phase.rois.length === 1 ? 'die' : 'dice'} detected — label each face
+              {phase.rois.length} {phase.rois.length === 1 ? 'die' : 'dice'} detected — label each
+              face
             </p>
 
             <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">

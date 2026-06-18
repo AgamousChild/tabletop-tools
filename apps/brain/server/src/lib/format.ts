@@ -8,14 +8,14 @@ const IMPACT_ORDER = [
   'detachment-rule',
   'stratagem',
   'enhancement',
-  'leader-ability',   // virtual bucket for leader unit-abilities
+  'leader-ability', // virtual bucket for leader unit-abilities
   'unit-ability',
   'weapon',
   'datasheet',
   'other',
 ] as const
 
-type ImpactTier = typeof IMPACT_ORDER[number]
+type ImpactTier = (typeof IMPACT_ORDER)[number]
 
 interface Entry {
   node: Node
@@ -27,10 +27,14 @@ interface Entry {
 /** Determine the impact tier for a node, splitting unit-ability into leader vs regular. */
 function getTier(node: Node): ImpactTier {
   switch (node.category) {
-    case 'faction-ability':  return 'faction-ability'
-    case 'detachment-rule':  return 'detachment-rule'
-    case 'stratagem':        return 'stratagem'
-    case 'enhancement':      return 'enhancement'
+    case 'faction-ability':
+      return 'faction-ability'
+    case 'detachment-rule':
+      return 'detachment-rule'
+    case 'stratagem':
+      return 'stratagem'
+    case 'enhancement':
+      return 'enhancement'
     case 'unit-ability': {
       const text = (node.content || '').toLowerCase()
       if (
@@ -42,23 +46,26 @@ function getTier(node: Node): ImpactTier {
       }
       return 'unit-ability'
     }
-    case 'weapon':    return 'weapon'
-    case 'datasheet': return 'datasheet'
-    default:          return 'other'
+    case 'weapon':
+      return 'weapon'
+    case 'datasheet':
+      return 'datasheet'
+    default:
+      return 'other'
   }
 }
 
 /** Human-readable heading for each tier. */
 const TIER_HEADING: Record<ImpactTier, string> = {
-  'faction-ability':  'Army-Wide Abilities',
-  'detachment-rule':  'Detachment Rules',
-  'stratagem':        'Stratagems',
-  'enhancement':      'Enhancements',
-  'leader-ability':   'Leader Abilities (affect attached unit)',
-  'unit-ability':     'Unit Abilities',
-  'weapon':           'Weapons',
-  'datasheet':        'Datasheets',
-  'other':            'Other Rules',
+  'faction-ability': 'Army-Wide Abilities',
+  'detachment-rule': 'Detachment Rules',
+  stratagem: 'Stratagems',
+  enhancement: 'Enhancements',
+  'leader-ability': 'Leader Abilities (affect attached unit)',
+  'unit-ability': 'Unit Abilities',
+  weapon: 'Weapons',
+  datasheet: 'Datasheets',
+  other: 'Other Rules',
 }
 
 // ── formatConversationalAnswer ───────────────────────────────────────────────
@@ -76,7 +83,7 @@ export function formatConversationalAnswer(
   combos?: string[],
 ): string {
   // Build entries with stripped content
-  const allEntries: Entry[] = nodes.map(node => {
+  const allEntries: Entry[] = nodes.map((node) => {
     const parent = parentMap.get(node.id) ?? ''
     const rawContent = node.content || node.summary
     const stripped = stripFlavorText(rawContent)
@@ -86,9 +93,12 @@ export function formatConversationalAnswer(
   // When subfaction is detected, split into subfaction-specific and generic,
   // format each as its own section
   if (subfaction) {
-    const sfLabel = subfaction.split(' ').map(w => w[0]!.toUpperCase() + w.slice(1)).join(' ')
-    const sfEntries = allEntries.filter(e => e.node.subfaction === subfaction)
-    const genericEntries = allEntries.filter(e => e.node.subfaction !== subfaction)
+    const sfLabel = subfaction
+      .split(' ')
+      .map((w) => w[0]!.toUpperCase() + w.slice(1))
+      .join(' ')
+    const sfEntries = allEntries.filter((e) => e.node.subfaction === subfaction)
+    const genericEntries = allEntries.filter((e) => e.node.subfaction !== subfaction)
 
     const parts: string[] = []
     parts.push(`Results for: "${question}"\n`)
@@ -111,7 +121,9 @@ export function formatConversationalAnswer(
     }
 
     parts.push(formatReferenceSection(allEntries))
-    parts.push(`\n*${nodes.length} total result${nodes.length !== 1 ? 's' : ''} from the knowledge graph. Source: Wahapedia 10th Edition, Core Rules.*`)
+    parts.push(
+      `\n*${nodes.length} total result${nodes.length !== 1 ? 's' : ''} from the knowledge graph. Source: Wahapedia 10th Edition, Core Rules.*`,
+    )
     return parts.join('\n')
   }
 
@@ -125,7 +137,9 @@ export function formatConversationalAnswer(
   parts.push(formatEntriesAsProse(allEntries))
   parts.push('')
   parts.push(formatReferenceSection(allEntries))
-  parts.push(`\n*${nodes.length} total result${nodes.length !== 1 ? 's' : ''} from the knowledge graph. Source: Wahapedia 10th Edition, Core Rules.*`)
+  parts.push(
+    `\n*${nodes.length} total result${nodes.length !== 1 ? 's' : ''} from the knowledge graph. Source: Wahapedia 10th Edition, Core Rules.*`,
+  )
   return parts.join('\n')
 }
 
@@ -142,7 +156,7 @@ function formatEntriesAsProse(entries: Entry[]): string {
 
     parts.push(`### ${TIER_HEADING[tier]}`)
     const intro = buildIntroSentence(tier, tierEntries.length)
-    const sentences = [intro, ...tierEntries.map(e => buildEntrySentence(e))]
+    const sentences = [intro, ...tierEntries.map((e) => buildEntrySentence(e))]
     parts.push(sentences.join(' '))
     parts.push('')
   }
@@ -153,10 +167,7 @@ function formatEntriesAsProse(entries: Entry[]): string {
 function formatComboSection(combos: string[]): string {
   const MAX_COMBOS = 10
   const shown = combos.slice(0, MAX_COMBOS)
-  const parts: string[] = [
-    '## Competitive Combos',
-    '',
-  ]
+  const parts: string[] = ['## Competitive Combos', '']
   for (const combo of shown) {
     parts.push(`- ${combo}`)
   }
@@ -174,11 +185,14 @@ function formatReferenceSection(entries: Entry[]): string {
   for (const { node, parent } of entries) {
     const unitLine = parent ? `\n  - Unit: ${parent}` : ''
     const factionLine = node.factionId ? `\n  - Faction: ${node.factionId}` : ''
-    const sourceLine = node.sources.length > 0
-      ? `\n  - Source: ${node.sources.map(s => `${s.title}${s.page ? `, p.${s.page}` : ''}`).join('; ')}`
-      : ''
+    const sourceLine =
+      node.sources.length > 0
+        ? `\n  - Source: ${node.sources.map((s) => `${s.title}${s.page ? `, p.${s.page}` : ''}`).join('; ')}`
+        : ''
     const summaryLine = `\n  - Summary: ${node.summary}`
-    parts.push(`**${node.title}** [${node.category}]${unitLine}${factionLine}${summaryLine}${sourceLine}`)
+    parts.push(
+      `**${node.title}** [${node.category}]${unitLine}${factionLine}${summaryLine}${sourceLine}`,
+    )
   }
   return parts.join('\n')
 }
@@ -199,9 +213,7 @@ function buildIntroSentence(tier: ImpactTier, count: number): string {
         ? 'One stratagem can be used here.'
         : `${countWord} stratagems can be used here.`
     case 'enhancement':
-      return count === 1
-        ? 'One enhancement applies.'
-        : `${countWord} enhancements apply.`
+      return count === 1 ? 'One enhancement applies.' : `${countWord} enhancements apply.`
     case 'leader-ability':
       return count === 1
         ? 'One leader ability affects attached units.'
@@ -211,17 +223,13 @@ function buildIntroSentence(tier: ImpactTier, count: number): string {
         ? 'One unit ability is relevant.'
         : `${countWord} unit abilities are relevant.`
     case 'weapon':
-      return count === 1
-        ? 'One weapon profile matches.'
-        : `${countWord} weapon profiles match.`
+      return count === 1 ? 'One weapon profile matches.' : `${countWord} weapon profiles match.`
     case 'datasheet':
       return count === 1
         ? 'One datasheet is referenced.'
         : `${countWord} datasheets are referenced.`
     case 'other':
-      return count === 1
-        ? 'One additional rule applies.'
-        : `${countWord} additional rules apply.`
+      return count === 1 ? 'One additional rule applies.' : `${countWord} additional rules apply.`
   }
 }
 
@@ -235,9 +243,7 @@ function buildEntrySentence(entry: Entry): string {
     : node.title
 
   // Build the sentence: "Title (faction) [on parent]: content."
-  const contentPart = content
-    ? ` ${content.endsWith('.') ? content : `${content}.`}`
-    : '.'
+  const contentPart = content ? ` ${content.endsWith('.') ? content : `${content}.`}` : '.'
 
   if (parent) {
     return `${parentPart}${factionPart}:${contentPart}`
@@ -266,7 +272,7 @@ export function assembleContext(
     parts.push(node.content)
     if (node.sources.length > 0) {
       const srcText = node.sources
-        .map(s => `${s.title}${s.page ? `, p.${s.page}` : ''}`)
+        .map((s) => `${s.title}${s.page ? `, p.${s.page}` : ''}`)
         .join('; ')
       parts.push(`(Source: ${srcText})`)
     }
@@ -282,21 +288,26 @@ export function assembleContext(
     let generic: Node[]
 
     if (subfaction) {
-      sfSpecific = connectedNodes.filter(n => n.subfaction === subfaction)
-      generic = connectedNodes.filter(n => n.subfaction !== subfaction)
+      sfSpecific = connectedNodes.filter((n) => n.subfaction === subfaction)
+      generic = connectedNodes.filter((n) => n.subfaction !== subfaction)
     } else {
       sfSpecific = []
       generic = connectedNodes
     }
 
     const sfLabel = subfaction
-      ? subfaction.split(' ').map(w => w[0]!.toUpperCase() + w.slice(1)).join(' ')
+      ? subfaction
+          .split(' ')
+          .map((w) => w[0]!.toUpperCase() + w.slice(1))
+          .join(' ')
       : null
 
     if (sfLabel && sfSpecific.length > 0) {
       parts.push(`========================================`)
       parts.push(`SECTION 1: ${sfLabel.toUpperCase()} SPECIFIC`)
-      parts.push(`These rules are ONLY available to ${sfLabel}. Present these FIRST in your answer.`)
+      parts.push(
+        `These rules are ONLY available to ${sfLabel}. Present these FIRST in your answer.`,
+      )
       parts.push(`========================================`)
       parts.push('')
       renderNodeGroup(sfSpecific, parentMap, parts)
@@ -305,12 +316,16 @@ export function assembleContext(
     if (generic.length > 0) {
       if (sfLabel) {
         parts.push(`========================================`)
-        parts.push(`SECTION 2: GENERIC SPACE MARINES (available to all chapters including ${sfLabel})`)
+        parts.push(
+          `SECTION 2: GENERIC SPACE MARINES (available to all chapters including ${sfLabel})`,
+        )
         parts.push(`Present these AFTER the ${sfLabel}-specific results above.`)
         parts.push(`========================================`)
         parts.push('')
       } else {
-        parts.push('--- Connected rules (ordered by impact: army-wide → detachment → leader/unit → weapon) ---')
+        parts.push(
+          '--- Connected rules (ordered by impact: army-wide → detachment → leader/unit → weapon) ---',
+        )
         parts.push('')
       }
       renderNodeGroup(generic, parentMap, parts)
@@ -323,8 +338,13 @@ export function assembleContext(
 /** Render a group of nodes into parts, grouped by category in impact order. */
 function renderNodeGroup(nodes: Node[], parentMap: Map<string, string>, parts: string[]): void {
   const categories = [
-    'faction-ability', 'detachment-rule', 'stratagem', 'enhancement',
-    'unit-ability', 'weapon', 'datasheet',
+    'faction-ability',
+    'detachment-rule',
+    'stratagem',
+    'enhancement',
+    'unit-ability',
+    'weapon',
+    'datasheet',
   ] as const
 
   const groups: Record<string, Node[]> = {}
@@ -344,19 +364,27 @@ function renderNodeGroup(nodes: Node[], parentMap: Map<string, string>, parts: s
       const parent = parentMap.get(n.id)
 
       if (cat === 'weapon') {
-        parts.push(`### ${n.title} [weapon, ON UNIT: ${parent || 'unknown unit'}${n.factionId ? `, ${n.factionId}` : ''}]`)
+        parts.push(
+          `### ${n.title} [weapon, ON UNIT: ${parent || 'unknown unit'}${n.factionId ? `, ${n.factionId}` : ''}]`,
+        )
         parts.push(n.summary)
       } else if (cat === 'unit-ability') {
-        parts.push(`### ${n.title} [unit-ability, ON UNIT: ${parent || 'unknown unit'}${n.factionId ? `, ${n.factionId}` : ''}]`)
+        parts.push(
+          `### ${n.title} [unit-ability, ON UNIT: ${parent || 'unknown unit'}${n.factionId ? `, ${n.factionId}` : ''}]`,
+        )
         parts.push(n.content || n.summary)
       } else if (cat === 'datasheet') {
         parts.push(`### ${n.title} [datasheet${n.factionId ? `, ${n.factionId}` : ''}]`)
         parts.push(n.summary)
       } else if (cat === 'faction-ability') {
-        parts.push(`### ${n.title} [faction-ability${n.factionId ? `, ${n.factionId}` : ''}${parent ? `, from detachment: ${parent}` : ''}]`)
+        parts.push(
+          `### ${n.title} [faction-ability${n.factionId ? `, ${n.factionId}` : ''}${parent ? `, from detachment: ${parent}` : ''}]`,
+        )
         parts.push(n.content || n.summary)
       } else if (cat === 'stratagem' || cat === 'enhancement') {
-        parts.push(`### ${n.title} [${cat}${n.factionId ? `, ${n.factionId}` : ''}${parent ? `, detachment: ${parent}` : ''}]`)
+        parts.push(
+          `### ${n.title} [${cat}${n.factionId ? `, ${n.factionId}` : ''}${parent ? `, detachment: ${parent}` : ''}]`,
+        )
         parts.push(n.content || n.summary)
       } else if (cat === 'detachment-rule') {
         parts.push(`### ${n.title} [detachment-rule${n.factionId ? `, ${n.factionId}` : ''}]`)

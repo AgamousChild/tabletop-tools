@@ -1,18 +1,35 @@
 import { useState } from 'react'
-import { ErrataSection } from './ErrataSection'
+
 import { factionDisplayName } from '../../lib/faction-names'
+import { ErrataSection } from './ErrataSection'
 import type { CardContext, UnitCardData, WeaponProfile } from './types'
 
 // Universal Special Rules — these are core rules, not unit-specific abilities.
 // Displayed as collapsible badges rather than expanded ability boxes.
 const USR_NAMES = new Set([
-  'deep strike', 'deadly demise', 'feel no pain', 'fights first',
-  'firing deck', 'hover', 'infiltrators', 'scouts', 'stealth',
-  'lone operative', 'leader', 'assault', 'heavy', 'rapid fire',
+  'deep strike',
+  'deadly demise',
+  'feel no pain',
+  'fights first',
+  'firing deck',
+  'hover',
+  'infiltrators',
+  'scouts',
+  'stealth',
+  'lone operative',
+  'leader',
+  'assault',
+  'heavy',
+  'rapid fire',
 ])
 
 function isUSR(name: string): boolean {
-  return USR_NAMES.has(name.toLowerCase().replace(/\s*\d+\+?\s*$/, '').trim())
+  return USR_NAMES.has(
+    name
+      .toLowerCase()
+      .replace(/\s*\d+\+?\s*$/, '')
+      .trim(),
+  )
 }
 
 interface UnitCardProps {
@@ -77,8 +94,16 @@ function CollapsibleUSR({
           role="button"
           tabIndex={0}
           className="text-xs font-bold text-green-300 uppercase tracking-wide hover:text-green-200 transition-colors"
-          onClick={(e) => { e.stopPropagation(); onContentClick(ability.name) }}
-          onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.stopPropagation(); onContentClick(ability.name) } }}
+          onClick={(e) => {
+            e.stopPropagation()
+            onContentClick(ability.name)
+          }}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter' || e.key === ' ') {
+              e.stopPropagation()
+              onContentClick(ability.name)
+            }
+          }}
         >
           {ability.name}
         </span>
@@ -93,12 +118,16 @@ function CollapsibleUSR({
 
 // Keyword → Core Stratagem mapping
 // These are core stratagems gated by unit keywords.
-const KEYWORD_STRATAGEMS: Record<string, { name: string; cp: string; when: string; effect: string }> = {
+const KEYWORD_STRATAGEMS: Record<
+  string,
+  { name: string; cp: string; when: string; effect: string }
+> = {
   grenades: {
     name: 'GRENADE',
     cp: '1',
     when: 'Your Shooting phase.',
-    effect: 'Select one enemy unit within 8" and visible. Roll 6 dice — for each 4+, the target takes 1 mortal wound.',
+    effect:
+      'Select one enemy unit within 8" and visible. Roll 6 dice — for each 4+, the target takes 1 mortal wound.',
   },
   smoke: {
     name: 'SMOKESCREEN',
@@ -110,7 +139,8 @@ const KEYWORD_STRATAGEMS: Record<string, { name: string; cp: string; when: strin
     name: 'GO TO GROUND',
     cp: '1',
     when: "Opponent's Shooting phase, after targets selected.",
-    effect: 'Until end of phase, all models in your unit have a 6+ invulnerable save and Benefit of Cover.',
+    effect:
+      'Until end of phase, all models in your unit have a 6+ invulnerable save and Benefit of Cover.',
   },
 }
 
@@ -152,11 +182,15 @@ function KeywordWithStratagem({
         {display} ⚡
       </Clickable>
       {showTooltip && (
-        <div className="absolute z-50 bottom-full left-0 mb-1 w-64 bg-slate-900 border border-blue-800 rounded-md shadow-xl p-2.5"
+        <div
+          className="absolute z-50 bottom-full left-0 mb-1 w-64 bg-slate-900 border border-blue-800 rounded-md shadow-xl p-2.5"
           style={{ fontFamily: "'Source Sans 3', sans-serif" }}
         >
           <div className="flex items-start justify-between mb-1">
-            <span className="text-xs font-bold text-white uppercase tracking-wide" style={{ fontFamily: "'Oswald', sans-serif" }}>
+            <span
+              className="text-xs font-bold text-white uppercase tracking-wide"
+              style={{ fontFamily: "'Oswald', sans-serif" }}
+            >
               {strat.name}
             </span>
             <span className="text-[10px] font-bold text-amber-400 bg-amber-400/20 px-1.5 py-0.5 rounded">
@@ -196,22 +230,35 @@ function ToughnessStat({ value }: { value: string }) {
       {showTooltip && (
         <div
           className="absolute z-50 top-full mt-1 w-56 bg-slate-900 border border-blue-800 rounded-md shadow-xl p-2.5"
-          style={{ fontFamily: "'Source Sans 3', sans-serif", left: '50%', transform: 'translateX(-50%)' }}
+          style={{
+            fontFamily: "'Source Sans 3', sans-serif",
+            left: '50%',
+            transform: 'translateX(-50%)',
+          }}
         >
           <div className="flex items-start justify-between mb-1">
-            <span className="text-xs font-bold text-white uppercase tracking-wide" style={{ fontFamily: "'Oswald', sans-serif" }}>
+            <span
+              className="text-xs font-bold text-white uppercase tracking-wide"
+              style={{ fontFamily: "'Oswald', sans-serif" }}
+            >
               TANK SHOCK
             </span>
-            <span className="text-[10px] font-bold text-amber-400 bg-amber-400/20 px-1.5 py-0.5 rounded">1CP</span>
+            <span className="text-[10px] font-bold text-amber-400 bg-amber-400/20 px-1.5 py-0.5 rounded">
+              1CP
+            </span>
           </div>
           <div className="text-[10px] text-blue-400 mb-1">Core Stratagem</div>
           <div className="text-[10px] mb-0.5">
             <span className="font-bold text-blue-400 uppercase mr-1">WHEN:</span>
-            <span className="text-slate-300">Your Charge phase, after this unit ends a Charge move.</span>
+            <span className="text-slate-300">
+              Your Charge phase, after this unit ends a Charge move.
+            </span>
           </div>
           <div className="text-[10px]">
             <span className="font-bold text-blue-400 uppercase mr-1">EFFECT:</span>
-            <span className="text-slate-300">Roll {value} D6 (= Toughness). Each 5+ deals 1 mortal wound (max 6).</span>
+            <span className="text-slate-300">
+              Roll {value} D6 (= Toughness). Each 5+ deals 1 mortal wound (max 6).
+            </span>
           </div>
         </div>
       )}
@@ -378,7 +425,7 @@ export function UnitCard({ data, context }: UnitCardProps) {
           ...(stats.invSv ? [{ label: 'INV', value: stats.invSv }] : []),
           ...(stats.fnp ? [{ label: 'FNP', value: stats.fnp }] : []),
         ].map(({ label, value }) => {
-          const isVehicle = data.keywords.some(k => k.toLowerCase() === 'vehicle')
+          const isVehicle = data.keywords.some((k) => k.toLowerCase() === 'vehicle')
           const isToughness = label === 'T' && isVehicle
           return isToughness ? (
             <ToughnessStat key={label} value={value} />
@@ -447,47 +494,54 @@ export function UnitCard({ data, context }: UnitCardProps) {
 
           {/* Custom/unique abilities — always expanded */}
           <div className="flex flex-col gap-2">
-            {data.abilities.filter(a => !isUSR(a.name)).map((ability) => {
-              const highlighted = isHighlighted(
-                ability.name + ' ' + ability.description,
-                highlightTerms,
-              )
-              return (
-                <div
-                  key={ability.name}
-                  data-highlight={highlighted ? 'true' : undefined}
-                  className={`rounded border p-1.5 ${
-                    highlighted
-                      ? 'border-green-400 bg-green-900/40'
-                      : 'border-green-800 bg-green-950/30'
-                  }`}
-                >
-                  <Clickable
-                    term={ability.name}
-                    onClick={onContentClick}
-                    className="text-xs font-bold text-green-200 uppercase tracking-wide hover:text-green-100 transition-colors block"
+            {data.abilities
+              .filter((a) => !isUSR(a.name))
+              .map((ability) => {
+                const highlighted = isHighlighted(
+                  ability.name + ' ' + ability.description,
+                  highlightTerms,
+                )
+                return (
+                  <div
+                    key={ability.name}
+                    data-highlight={highlighted ? 'true' : undefined}
+                    className={`rounded border p-1.5 ${
+                      highlighted
+                        ? 'border-green-400 bg-green-900/40'
+                        : 'border-green-800 bg-green-950/30'
+                    }`}
                   >
-                    {ability.name}
-                  </Clickable>
-                  <p className="text-[11px] text-slate-300 mt-0.5 leading-snug">
-                    {ability.description}
-                  </p>
-                </div>
-              )
-            })}
+                    <Clickable
+                      term={ability.name}
+                      onClick={onContentClick}
+                      className="text-xs font-bold text-green-200 uppercase tracking-wide hover:text-green-100 transition-colors block"
+                    >
+                      {ability.name}
+                    </Clickable>
+                    <p className="text-[11px] text-slate-300 mt-0.5 leading-snug">
+                      {ability.description}
+                    </p>
+                  </div>
+                )
+              })}
           </div>
 
           {/* USR abilities — collapsed, click to expand rule text */}
-          {data.abilities.filter(a => isUSR(a.name)).length > 0 && (
+          {data.abilities.filter((a) => isUSR(a.name)).length > 0 && (
             <div className="flex flex-col gap-1 mt-2">
-              {data.abilities.filter(a => isUSR(a.name)).map((ability) => (
-                <CollapsibleUSR
-                  key={ability.name}
-                  ability={ability}
-                  highlighted={isHighlighted(ability.name + ' ' + ability.description, highlightTerms)}
-                  onContentClick={onContentClick}
-                />
-              ))}
+              {data.abilities
+                .filter((a) => isUSR(a.name))
+                .map((ability) => (
+                  <CollapsibleUSR
+                    key={ability.name}
+                    ability={ability}
+                    highlighted={isHighlighted(
+                      ability.name + ' ' + ability.description,
+                      highlightTerms,
+                    )}
+                    onContentClick={onContentClick}
+                  />
+                ))}
             </div>
           )}
         </div>

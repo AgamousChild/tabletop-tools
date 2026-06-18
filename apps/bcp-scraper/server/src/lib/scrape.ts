@@ -1,12 +1,16 @@
-import { authenticateBcp } from './cognito'
-import { BcpApiClient } from './bcp-api'
-import type { BcpEvent, BcpPairing } from './bcp-api'
-import { normalizeFaction } from './faction-map'
-import { extractDetachment } from './detachment-map'
-import { generateId } from '@tabletop-tools/server-core'
-import { metaEvents, metaEventPlayers, metaPairings, bcpScrapeJobs } from '@tabletop-tools/db'
-import { eq } from 'drizzle-orm'
+/**
+ * @see docs/etl-data-pipelines.md — ETL diagram and function reference
+ * @see docs/schema-turso.md — Turso database schema (meta_events, meta_event_players, meta_pairings)
+ */
 import type { Db } from '@tabletop-tools/db'
+import { bcpScrapeJobs, metaEventPlayers, metaEvents, metaPairings } from '@tabletop-tools/db'
+import { generateId } from '@tabletop-tools/server-core'
+import { eq } from 'drizzle-orm'
+
+import type { BcpEvent, BcpPairing } from './bcp-api'
+import { BcpApiClient } from './bcp-api'
+import { authenticateBcp } from './cognito'
+import { loadFactionMap, normalizeFaction } from './faction-map'
 
 interface ScrapeConfig {
   bcpEmail: string
@@ -29,6 +33,7 @@ function mapResult(p1Result: number, p2Result: number): 'p1' | 'p2' | 'draw' {
 interface PlayerAccumulator {
   name: string
   faction: string
+  userId?: string
   wins: number
   losses: number
   draws: number
@@ -50,6 +55,9 @@ export async function runScrape(
   })
 
   try {
+    // Load faction lookup from DB
+    await loadFactionMap(db)
+
     // Authenticate
     const token = await authenticateBcp({
       email: bcpEmail,
@@ -77,9 +85,7 @@ export async function runScrape(
     const existingSourceIds = new Set(existingEvents.map((e) => e.sourceId))
 
     // Filter to new, non-team events
-    const newEvents = events.filter(
-      (e) => !e.isTeamEvent && !existingSourceIds.has(e.id),
-    )
+    const newEvents = events.filter((e) => !e.isTeamEvent && !existingSourceIds.has(e.id))
 
     let eventsScraped = 0
     let totalPairings = 0
@@ -87,132 +93,131 @@ export async function runScrape(
 
     for (const searchEvent of newEvents) {
       try {
-      // Get full event details
-      const event = await api.getEvent(searchEvent.id)
-      const eventId = generateId()
+        // Get full event details
+        const event = await api.getEvent(searchEvent.id)
+        const eventId = generateId()
 
-      // Insert event
-      await db.insert(metaEvents).values({
-        id: eventId,
-        name: event.name,
-        date: new Date(event.endDate).getTime(),
-        location: buildLocation(event),
-        format: 'GT',
-        rounds: event.rounds,
-        playerCount: event.playerCount,
-        source: 'bcp',
-        sourceId: event.id,
-        importedAt: Date.now(),
-      })
+        // Insert event
+        await db.insert(metaEvents).values({
+          id: eventId,
+          name: event.name,
+          date: new Date(event.endDate).getTime(),
+          location: buildLocation(event),
+          format: 'GT',
+          rounds: event.rounds,
+          playerCount: event.playerCount,
+          source: 'bcp',
+          sourceId: event.id,
+          importedAt: Date.now(),
+        })
 
-      // Collect all pairings across rounds
-      const allPairings: BcpPairing[] = []
-      for (let round = 1; round <= event.rounds; round++) {
-        const roundPairings = await api.getPairings(event.id, round)
-        allPairings.push(...roundPairings)
-      }
+        // Collect all pairings across rounds
+        const allPairings: BcpPairing[] = []
+        for (let round = 1; round <= event.rounds; round++) {
+          const roundPairings = await api.getPairings(event.id, round)
+          allPairings.push(...roundPairings)
+        }
 
-      // Accumulate player stats from pairings
-      const playerMap = new Map<string, PlayerAccumulator>()
+        // Accumulate player stats from pairings
+        const playerMap = new Map<string, PlayerAccumulator>()
 
-      for (const pairing of allPairings) {
-        if (!pairing.player1Game || !pairing.player2Game) continue
-        const result = mapResult(
-          pairing.player1Game.result,
-          pairing.player2Game.result,
+        for (const pairing of allPairings) {
+          if (!pairing.player1Game || !pairing.player2Game) continue
+          const result = mapResult(pairing.player1Game.result, pairing.player2Game.result)
+
+          // Player 1
+          if (!playerMap.has(pairing.player1.name)) {
+            playerMap.set(pairing.player1.name, {
+              name: pairing.player1.name,
+              faction: pairing.player1.faction,
+              userId: pairing.player1.userId,
+              wins: 0,
+              losses: 0,
+              draws: 0,
+            })
+          }
+          const p1 = playerMap.get(pairing.player1.name)!
+          if (result === 'p1') p1.wins++
+          else if (result === 'p2') p1.losses++
+          else p1.draws++
+
+          // Player 2
+          if (!playerMap.has(pairing.player2.name)) {
+            playerMap.set(pairing.player2.name, {
+              name: pairing.player2.name,
+              faction: pairing.player2.faction,
+              userId: pairing.player2.userId,
+              wins: 0,
+              losses: 0,
+              draws: 0,
+            })
+          }
+          const p2 = playerMap.get(pairing.player2.name)!
+          if (result === 'p2') p2.wins++
+          else if (result === 'p1') p2.losses++
+          else p2.draws++
+        }
+
+        // Sort players by wins (descending) for placement
+        const sortedPlayers = [...playerMap.values()].sort(
+          (a, b) => b.wins - a.wins || a.losses - b.losses,
         )
 
-        // Player 1
-        if (!playerMap.has(pairing.player1.name)) {
-          playerMap.set(pairing.player1.name, {
-            name: pairing.player1.name,
-            faction: pairing.player1.faction,
-            wins: 0,
-            losses: 0,
-            draws: 0,
+        // Insert players, build name->id map for pairing FKs
+        const playerIdMap = new Map<string, string>()
+        for (let i = 0; i < sortedPlayers.length; i++) {
+          const player = sortedPlayers[i]!
+          const playerId = generateId()
+          playerIdMap.set(player.name, playerId)
+
+          const factionSlug = normalizeFaction(player.faction)
+          if (!factionSlug) {
+            errors.push(
+              `Unknown faction "${player.faction}" for player "${player.name}" in event ${searchEvent.id}`,
+            )
+            continue
+          }
+
+          await db.insert(metaEventPlayers).values({
+            id: playerId,
+            eventId,
+            playerName: player.name,
+            sourcePlayerId: player.userId ?? null,
+            factionId: factionSlug,
+            subfactionId: null,
+            detachmentId: null,
+            placement: i + 1,
+            wins: player.wins,
+            losses: player.losses,
+            draws: player.draws,
           })
         }
-        const p1 = playerMap.get(pairing.player1.name)!
-        if (result === 'p1') p1.wins++
-        else if (result === 'p2') p1.losses++
-        else p1.draws++
 
-        // Player 2
-        if (!playerMap.has(pairing.player2.name)) {
-          playerMap.set(pairing.player2.name, {
-            name: pairing.player2.name,
-            faction: pairing.player2.faction,
-            wins: 0,
-            losses: 0,
-            draws: 0,
+        // Insert pairings (skip if either player wasn't inserted)
+        for (const pairing of allPairings) {
+          if (!pairing.player1Game || !pairing.player2Game) continue
+
+          const p1Id = playerIdMap.get(pairing.player1.name)
+          const p2Id = playerIdMap.get(pairing.player2.name)
+          if (!p1Id || !p2Id) continue
+
+          const pairingId = generateId()
+          const result = mapResult(pairing.player1Game.result, pairing.player2Game.result)
+
+          await db.insert(metaPairings).values({
+            id: pairingId,
+            eventId,
+            round: pairing.round,
+            player1Id: p1Id,
+            player2Id: p2Id,
+            player1Score: pairing.player1Game.points,
+            player2Score: pairing.player2Game.points,
+            result,
           })
         }
-        const p2 = playerMap.get(pairing.player2.name)!
-        if (result === 'p2') p2.wins++
-        else if (result === 'p1') p2.losses++
-        else p2.draws++
-      }
 
-      // Sort players by wins (descending) for placement
-      const sortedPlayers = [...playerMap.values()].sort(
-        (a, b) => b.wins - a.wins || a.losses - b.losses,
-      )
-
-      // Insert players, build name->id map for pairing FKs
-      const playerIdMap = new Map<string, string>()
-      for (let i = 0; i < sortedPlayers.length; i++) {
-        const player = sortedPlayers[i]!
-        const playerId = generateId()
-        playerIdMap.set(player.name, playerId)
-
-        const factionSlug = normalizeFaction(player.faction)
-        if (!factionSlug) {
-          errors.push(`Unknown faction "${player.faction}" for player "${player.name}" in event ${searchEvent.id}`)
-          continue
-        }
-
-        await db.insert(metaEventPlayers).values({
-          id: playerId,
-          eventId,
-          playerName: player.name,
-          factionId: factionSlug,
-          subfactionId: null,
-          detachmentId: null,
-          placement: i + 1,
-          wins: player.wins,
-          losses: player.losses,
-          draws: player.draws,
-        })
-      }
-
-      // Insert pairings (skip if either player wasn't inserted)
-      for (const pairing of allPairings) {
-        if (!pairing.player1Game || !pairing.player2Game) continue
-
-        const p1Id = playerIdMap.get(pairing.player1.name)
-        const p2Id = playerIdMap.get(pairing.player2.name)
-        if (!p1Id || !p2Id) continue
-
-        const pairingId = generateId()
-        const result = mapResult(
-          pairing.player1Game.result,
-          pairing.player2Game.result,
-        )
-
-        await db.insert(metaPairings).values({
-          id: pairingId,
-          eventId,
-          round: pairing.round,
-          player1Id: p1Id,
-          player2Id: p2Id,
-          player1Score: pairing.player1Game.points,
-          player2Score: pairing.player2Game.points,
-          result,
-        })
-      }
-
-      totalPairings += allPairings.length
-      eventsScraped++
+        totalPairings += allPairings.length
+        eventsScraped++
       } catch (eventErr) {
         errors.push(`Event ${searchEvent.id} (${searchEvent.name}): ${(eventErr as Error).message}`)
       }

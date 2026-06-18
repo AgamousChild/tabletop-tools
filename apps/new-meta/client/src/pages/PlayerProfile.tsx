@@ -1,4 +1,5 @@
 import { useMemo } from 'react'
+
 import { trpc } from '../lib/trpc'
 
 interface Props {
@@ -11,9 +12,7 @@ export function PlayerProfile({ playerId, onBack }: Props) {
 
   const sortedHistory = useMemo(() => {
     if (!data?.history) return []
-    return [...data.history].sort(
-      (a, b) => (a.recordedAt ?? 0) - (b.recordedAt ?? 0),
-    )
+    return [...data.history].sort((a, b) => (a.recordedAt ?? 0) - (b.recordedAt ?? 0))
   }, [data?.history])
 
   if (isLoading) {
@@ -23,10 +22,7 @@ export function PlayerProfile({ playerId, onBack }: Props) {
   if (!data) {
     return (
       <div>
-        <button
-          onClick={onBack}
-          className="text-amber-400 text-sm hover:text-amber-300 mb-4"
-        >
+        <button onClick={onBack} className="text-amber-400 text-sm hover:text-amber-300 mb-4">
           ← Back
         </button>
         <p className="text-slate-400">Player not found.</p>
@@ -42,10 +38,7 @@ export function PlayerProfile({ playerId, onBack }: Props) {
   return (
     <div className="space-y-8">
       <div>
-        <button
-          onClick={onBack}
-          className="text-amber-400 text-sm hover:text-amber-300 mb-4"
-        >
+        <button onClick={onBack} className="text-amber-400 text-sm hover:text-amber-300 mb-4">
           ← Back
         </button>
         <h1 className="text-2xl font-semibold text-slate-100">{player.playerName}</h1>
@@ -54,8 +47,7 @@ export function PlayerProfile({ playerId, onBack }: Props) {
         </p>
         <div className="flex gap-6 mt-2 text-sm text-slate-400">
           <span>
-            Rating:{' '}
-            <span className="text-slate-100 font-mono">{player.displayRating}</span>
+            Rating: <span className="text-slate-100 font-mono">{player.displayRating}</span>
             <span className="text-slate-500"> ± {player.displayBand}</span>
           </span>
           <span>
@@ -109,10 +101,16 @@ export function PlayerProfile({ playerId, onBack }: Props) {
                 </div>
                 <div className="flex items-center gap-3 text-xs">
                   <span className="text-slate-400 font-mono">
-                    {Math.round(h.ratingAfter)}
-                    {' '}
-                    <span className={h.ratingAfter > (h.ratingBefore ?? 1500) ? 'text-emerald-400' : 'text-red-400'}>
-                      ({h.ratingAfter > (h.ratingBefore ?? 1500) ? '+' : ''}{Math.round(h.ratingAfter - (h.ratingBefore ?? 1500))})
+                    {Math.round(h.ratingAfter)}{' '}
+                    <span
+                      className={
+                        h.ratingAfter > (h.ratingBefore ?? 1500)
+                          ? 'text-emerald-400'
+                          : 'text-red-400'
+                      }
+                    >
+                      ({h.ratingAfter > (h.ratingBefore ?? 1500) ? '+' : ''}
+                      {Math.round(h.ratingAfter - (h.ratingBefore ?? 1500))})
                     </span>
                   </span>
                 </div>

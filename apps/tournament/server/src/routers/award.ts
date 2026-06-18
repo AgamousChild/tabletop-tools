@@ -1,9 +1,9 @@
+import { tournamentAwards, tournaments } from '@tabletop-tools/db'
 import { TRPCError } from '@trpc/server'
 import { eq } from 'drizzle-orm'
 import { z } from 'zod'
 
-import { tournaments, tournamentAwards } from '@tabletop-tools/db'
-import { router, protectedProcedure } from '../trpc'
+import { protectedProcedure, router } from '../trpc'
 
 export const awardRouter = router({
   create: protectedProcedure
@@ -65,7 +65,11 @@ export const awardRouter = router({
         .set({ recipientId: input.recipientId })
         .where(eq(tournamentAwards.id, input.awardId))
 
-      return ctx.db.select().from(tournamentAwards).where(eq(tournamentAwards.id, input.awardId)).get()
+      return ctx.db
+        .select()
+        .from(tournamentAwards)
+        .where(eq(tournamentAwards.id, input.awardId))
+        .get()
     }),
 
   list: protectedProcedure

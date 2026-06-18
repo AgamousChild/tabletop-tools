@@ -24,7 +24,7 @@ graph TD
     %% FACTION LAYER
     BA[BLOOD ANGELS]:::faction
     SM[SPACE MARINES\ngeneric - shared]:::faction
-    BA -.->|accesses| SM
+    %% No "accesses" ref — generic SM content (no subfaction) is available to all chapters
 
     %% ARMY RULES — always active
     OOM[Oath of Moment\nre-roll hits+wounds vs 1 target\nAPPLIES TO: all units in army]:::armyrule
@@ -285,7 +285,7 @@ graph TD
         V1[✅ BLOOD ANGELS faction node]:::visible
         V2[✅ 9 detachments]:::visible
         V3[✅ 1 army rule\nThe Sons of Sanguinius]:::visible
-        H1[❌ 15 BA units — not shown\ntwo hops away]:::hidden
+        H1[⚠️ 15 BA units — part_of refs exist\nbut not prominently surfaced]:::partial
         H2[❌ Oath of Moment — not shown\nlives under space-marines faction]:::hidden
         H3[❌ Generic SM detachments\nGladius, Ironstorm, etc.\nno access relationship]:::hidden
         H4[❌ Community tactics about BA\nno structural connection]:::hidden
@@ -297,7 +297,7 @@ graph TD
         V6[✅ Abilities: Black Rage, Guardian]:::visible
         V7[✅ 20 eligible detachments\nbut ALL shown equally]:::partial
         H5[❌ Which detachments are BEST for him\nno affinity scoring]:::hidden
-        H6[❌ Who he can lead\nrefs exist but not surfaced]:::hidden
+        H6[⚠️ Who he can lead\ncan_lead refs exist but not surfaced in UI]:::partial
         H7[❌ Which stratagems target him\ntarget text not parsed]:::hidden
         H8[❌ His stat line as numbers\nburied in content text]:::hidden
     end
@@ -318,7 +318,7 @@ graph TD
 
 I'm listing these explicitly so you can correct me:
 
-1. **"Blood Angels accesses Space Marines content"** — I modeled this as BA having access to generic SM detachments and units. But maybe in 11th edition this changes? Maybe each chapter becomes fully standalone?
+1. **"Blood Angels accesses Space Marines content"** — RESOLVED: There is no "accesses" relationship. Generic SM content (no subfaction keyword) is available to all chapters. The query is: same factionId where subfaction matches mine OR subfaction is empty. Faction nodes are created by `buildFactionNodes()` in combo-detection.ts.
 
 2. **"eligible_for means the unit can be in that detachment"** — I assumed any BA unit can be assigned to any BA detachment. But maybe some detachments REQUIRE specific keywords (not just benefit from them)?
 

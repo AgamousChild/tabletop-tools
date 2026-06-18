@@ -16,7 +16,7 @@ export function LayerNav({
 }) {
   return (
     <nav className="space-y-1">
-      {LAYERS.map(layer => (
+      {LAYERS.map((layer) => (
         <button
           key={layer.id}
           onClick={() => onLayerSelect(layer.id)}

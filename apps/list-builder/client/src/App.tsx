@@ -1,4 +1,5 @@
 import { AuthScreen } from '@tabletop-tools/ui'
+
 import { ListBuilderScreen } from './components/ListBuilderScreen'
 import { authClient } from './lib/auth'
 
@@ -14,7 +15,14 @@ export default function App() {
   }
 
   if (!session) {
-    return <AuthScreen title="List Builder" subtitle="40K meta list builder" authClient={authClient} onAuthenticated={() => void refetch()} />
+    return (
+      <AuthScreen
+        title="List Builder"
+        subtitle="40K meta list builder"
+        authClient={authClient}
+        onAuthenticated={() => void refetch()}
+      />
+    )
   }
 
   return <ListBuilderScreen onSignOut={() => void refetch()} />

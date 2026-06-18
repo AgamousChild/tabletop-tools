@@ -1,8 +1,8 @@
-import type { EnemyUnit, GameRulesConfig, TerrainPiece, ThreatOverlay, Point } from '../types'
-import type { DeploymentZone } from '../zones/deployment-zones'
-import { distance } from '../geometry/point'
 import { hasLOS } from '../geometry/los'
-import { maxShootingThreat, maxMeleeThreat, THREAT_WEIGHT } from './threat-range'
+import { distance } from '../geometry/point'
+import type { EnemyUnit, GameRulesConfig, Point, TerrainPiece, ThreatOverlay } from '../types'
+import type { DeploymentZone } from '../zones/deployment-zones'
+import { maxMeleeThreat, maxShootingThreat, THREAT_WEIGHT } from './threat-range'
 
 const DEFAULT_GRID_RESOLUTION = 2 // inches per cell
 const SAMPLE_STEP = 3 // inches between sampled enemy positions
@@ -87,10 +87,10 @@ export function generateThreatMap(
 
   // Initialise heat maps to zero
   const shootingHeatMap: number[][] = Array.from({ length: numRows }, () =>
-    new Array<number>(numCols).fill(0),
+    Array.from<number>({ length: numCols }).fill(0),
   )
   const meleeHeatMap: number[][] = Array.from({ length: numRows }, () =>
-    new Array<number>(numCols).fill(0),
+    Array.from<number>({ length: numCols }).fill(0),
   )
 
   if (enemyUnits.length === 0) {

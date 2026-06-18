@@ -206,7 +206,7 @@ server.tool(
     await conn.ensureListening()
     try {
       // MessageID 0 requests all scripts — TTS responds with messageID 1
-      const result = await new Promise<string>(async (resolve, reject) => {
+      const result = await new Promise<string>((resolve, reject) => {
         const timer = setTimeout(() => reject(new Error('Timeout waiting for scripts')), 60000)
 
         conn.once('gameLoad', (msg) => {
@@ -218,7 +218,10 @@ server.tool(
           resolve(`${scripts.length} scripts:\n\n${summary}`)
         })
 
-        await conn.send({ messageID: 0 })
+        conn.send({ messageID: 0 }).catch((err) => {
+          clearTimeout(timer)
+          reject(err)
+        })
       })
 
       return { content: [{ type: 'text' as const, text: result }] }

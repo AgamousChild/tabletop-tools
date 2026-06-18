@@ -2,15 +2,26 @@ import { fireEvent, render, screen } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 let mockMissions: Array<{ id: string; name: string; type: string; description: string }> = []
+let mockCatalogPrimaries: Array<{ id: string; name: string; kind: string }> = []
 
 vi.mock('@tabletop-tools/game-data-store', () => ({
   useMissions: () => ({ data: mockMissions, error: null, isLoading: false }),
+}))
+
+vi.mock('../lib/useMissionCatalog', () => ({
+  useMissionCatalog: () => ({
+    primaries: mockCatalogPrimaries,
+    secondaries: [],
+    isLoading: false,
+  }),
 }))
 
 import { MissionSetupScreen } from './MissionSetupScreen'
 
 beforeEach(() => {
   mockMissions = []
+  // Provide a default catalog primary so tests that need a mission option have one
+  mockCatalogPrimaries = [{ id: 'c1', name: 'Take and Hold', kind: 'primary' }]
 })
 
 describe('MissionSetupScreen', () => {
@@ -48,9 +59,7 @@ describe('MissionSetupScreen', () => {
     })
     fireEvent.click(screen.getByRole('button', { name: /next/i }))
 
-    expect(onNext).toHaveBeenCalledWith(
-      expect.objectContaining({ mission: 'Take and Hold' }),
-    )
+    expect(onNext).toHaveBeenCalledWith(expect.objectContaining({ mission: 'Take and Hold' }))
   })
 
   it('shows twist cards checkbox', () => {
@@ -114,9 +123,13 @@ describe('MissionSetupScreen', () => {
     const onNext = vi.fn()
     render(<MissionSetupScreen onNext={onNext} onBack={vi.fn()} />)
 
-    fireEvent.change(screen.getByLabelText('Select mission'), { target: { value: 'Take and Hold' } })
+    fireEvent.change(screen.getByLabelText('Select mission'), {
+      target: { value: 'Take and Hold' },
+    })
     fireEvent.click(screen.getByLabelText('Include Twist Cards'))
-    fireEvent.change(screen.getByLabelText('Twist card name'), { target: { value: 'Chilling Rain' } })
+    fireEvent.change(screen.getByLabelText('Twist card name'), {
+      target: { value: 'Chilling Rain' },
+    })
     // Click the Add button next to the twist input
     const addButtons = screen.getAllByRole('button', { name: /add/i })
     fireEvent.click(addButtons[0]!)
@@ -134,7 +147,9 @@ describe('MissionSetupScreen', () => {
   it('removes twist card when x clicked', () => {
     render(<MissionSetupScreen onNext={vi.fn()} onBack={vi.fn()} />)
     fireEvent.click(screen.getByLabelText('Include Twist Cards'))
-    fireEvent.change(screen.getByLabelText('Twist card name'), { target: { value: 'Chilling Rain' } })
+    fireEvent.change(screen.getByLabelText('Twist card name'), {
+      target: { value: 'Chilling Rain' },
+    })
     const addButtons = screen.getAllByRole('button', { name: /add/i })
     fireEvent.click(addButtons[0]!)
 
@@ -147,9 +162,13 @@ describe('MissionSetupScreen', () => {
     const onNext = vi.fn()
     render(<MissionSetupScreen onNext={onNext} onBack={vi.fn()} />)
 
-    fireEvent.change(screen.getByLabelText('Select mission'), { target: { value: 'Take and Hold' } })
+    fireEvent.change(screen.getByLabelText('Select mission'), {
+      target: { value: 'Take and Hold' },
+    })
     fireEvent.click(screen.getByLabelText('Include Challenger Cards'))
-    fireEvent.change(screen.getByLabelText('Challenger card name'), { target: { value: 'Double Down' } })
+    fireEvent.change(screen.getByLabelText('Challenger card name'), {
+      target: { value: 'Double Down' },
+    })
     const addButtons = screen.getAllByRole('button', { name: /add/i })
     fireEvent.click(addButtons[0]!)
 
@@ -161,7 +180,22 @@ describe('MissionSetupScreen', () => {
     )
   })
 
-  it('uses data-driven missions instead of fallbacks when available', () => {
+  it('uses server catalog missions when available', () => {
+    mockCatalogPrimaries = [
+      { id: 'm1', name: 'Scorched Earth', kind: 'primary' },
+      { id: 'm2', name: 'Supply Drop', kind: 'primary' },
+    ]
+    render(<MissionSetupScreen onNext={vi.fn()} onBack={vi.fn()} />)
+    const missionSelect = screen.getByLabelText('Select mission')
+    const options = missionSelect.querySelectorAll('option')
+    // Placeholder + 2 catalog missions
+    expect(options).toHaveLength(3)
+    expect(options[1]!.textContent).toBe('Scorched Earth')
+    expect(options[2]!.textContent).toBe('Supply Drop')
+  })
+
+  it('falls back to IndexedDB missions when catalog is empty', () => {
+    mockCatalogPrimaries = []
     mockMissions = [
       { id: 'm1', name: 'Scorched Earth', type: 'primary', description: 'Burn objectives' },
       { id: 'm2', name: 'Supply Drop', type: 'primary', description: 'Secure supplies' },
@@ -170,7 +204,7 @@ describe('MissionSetupScreen', () => {
     render(<MissionSetupScreen onNext={vi.fn()} onBack={vi.fn()} />)
     const missionSelect = screen.getByLabelText('Select mission')
     const options = missionSelect.querySelectorAll('option')
-    // Placeholder + 2 data-driven missions (not 7 fallbacks)
+    // Placeholder + 2 data-driven missions
     expect(options).toHaveLength(3)
     expect(options[1]!.textContent).toBe('Scorched Earth')
     expect(options[2]!.textContent).toBe('Supply Drop')
@@ -190,15 +224,19 @@ describe('MissionSetupScreen', () => {
     expect(options[2]!.textContent).toBe('Hammer and Anvil')
   })
 
-  it('selects a data-driven mission and includes in onNext', () => {
+  it('selects a catalog mission and includes in onNext', () => {
+    mockCatalogPrimaries = [{ id: 'm1', name: 'Scorched Earth', kind: 'primary' }]
     mockMissions = [
-      { id: 'm1', name: 'Scorched Earth', type: 'primary', description: 'Burn objectives' },
       { id: 'd1', name: 'Dawn of War', type: 'deployment_zone', description: 'Long edges' },
     ]
     const onNext = vi.fn()
     render(<MissionSetupScreen onNext={onNext} onBack={vi.fn()} />)
-    fireEvent.change(screen.getByLabelText('Select mission'), { target: { value: 'Scorched Earth' } })
-    fireEvent.change(screen.getByLabelText('Select deployment zone'), { target: { value: 'Dawn of War' } })
+    fireEvent.change(screen.getByLabelText('Select mission'), {
+      target: { value: 'Scorched Earth' },
+    })
+    fireEvent.change(screen.getByLabelText('Select deployment zone'), {
+      target: { value: 'Dawn of War' },
+    })
     fireEvent.click(screen.getByRole('button', { name: /next/i }))
     expect(onNext).toHaveBeenCalledWith(
       expect.objectContaining({

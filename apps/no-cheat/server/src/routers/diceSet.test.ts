@@ -40,8 +40,18 @@ const createCaller = createCallerFactory(appRouter)
 const req = new Request('http://localhost')
 
 const nullStorage = { upload: vi.fn().mockResolvedValue('null://discarded') }
-const aliceCtx = { user: { id: 'user-1', email: 'alice@example.com', name: 'Alice' }, req, db, storage: nullStorage }
-const bobCtx = { user: { id: 'user-2', email: 'bob@example.com', name: 'Bob' }, req, db, storage: nullStorage }
+const aliceCtx = {
+  user: { id: 'user-1', email: 'alice@example.com', name: 'Alice' },
+  req,
+  db,
+  storage: nullStorage,
+}
+const bobCtx = {
+  user: { id: 'user-2', email: 'bob@example.com', name: 'Bob' },
+  req,
+  db,
+  storage: nullStorage,
+}
 
 describe('diceSet.create', () => {
   it('creates a dice set for the authenticated user', async () => {
@@ -69,7 +79,7 @@ describe('diceSet.delete', () => {
     expect(sets.find((s) => s.id === created.id)).toBeUndefined()
   })
 
-  it('rejects deleting another user\'s dice set', async () => {
+  it("rejects deleting another user's dice set", async () => {
     const caller = createCaller(aliceCtx)
     const created = await caller.diceSet.create({ name: 'Alice Only' })
     const bobCaller = createCaller(bobCtx)

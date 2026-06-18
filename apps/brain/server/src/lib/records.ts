@@ -1,4 +1,4 @@
-import type { Node, RecordType, CrossRef, ErrataAnnotation } from './model'
+import type { CrossRef, ErrataAnnotation, Node, RecordType } from './model'
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -30,13 +30,22 @@ interface R2Bucket {
 // ── Unit child categories ─────────────────────────────────────────────────────
 
 const UNIT_CHILD_CATEGORIES = new Set<Node['category']>([
-  'weapon', 'unit-ability', 'wargear-option', 'leader-attachment', 'unit-composition',
+  'weapon',
+  'unit-ability',
+  'wargear-option',
+  'leader-attachment',
+  'unit-composition',
 ])
 
 // ── Mission/deployment categories that map 1:1 to RecordType ─────────────────
 
 const PASSTHROUGH_CATEGORIES = new Set<Node['category']>([
-  'primary-mission', 'secondary-mission', 'deployment-zone', 'twist', 'challenger', 'terrain-layout',
+  'primary-mission',
+  'secondary-mission',
+  'deployment-zone',
+  'twist',
+  'challenger',
+  'terrain-layout',
 ])
 
 // ── classifyNode ──────────────────────────────────────────────────────────────
@@ -54,7 +63,7 @@ const PASSTHROUGH_CATEGORIES = new Set<Node['category']>([
  * by stripping the last segment from the ID.
  */
 export function classifyNode(node: Node): Classification {
-  const { category, id, datasheetId, detachmentId } = node
+  const { category, id, datasheetId } = node
 
   // Unit child nodes → group under parent datasheet
   if (UNIT_CHILD_CATEGORIES.has(category) && datasheetId) {
@@ -138,12 +147,15 @@ export function aggregateToRecords(
   allNodes: Map<string, Node>,
 ): AggregatedRecord[] {
   // Map<containerId, { type, childIds, childNodes }>
-  const containers = new Map<string, {
-    type: RecordType
-    childIds: string[]       // IDs of matched child nodes (not the primary)
-    childNodes: Node[]       // the matched child node objects
-    order: number            // first-seen index for stable ordering
-  }>()
+  const containers = new Map<
+    string,
+    {
+      type: RecordType
+      childIds: string[] // IDs of matched child nodes (not the primary)
+      childNodes: Node[] // the matched child node objects
+      order: number // first-seen index for stable ordering
+    }
+  >()
 
   // Index result nodes for fast lookup
   const resultById = new Map<string, Node>()
@@ -181,12 +193,9 @@ export function aggregateToRecords(
 
   for (const [containerId, container] of sorted) {
     // Resolve primary node — result set first, then allNodes lookup
-    const primaryNode =
-      resultById.get(containerId) ??
-      allNodes.get(containerId) ??
-      null
+    const primaryNode = resultById.get(containerId) ?? allNodes.get(containerId) ?? null
 
-    if (!primaryNode) continue  // can't build a record without a primary
+    if (!primaryNode) continue // can't build a record without a primary
 
     records.push({
       type: container.type,
@@ -210,17 +219,14 @@ export function aggregateToRecords(
  * Used to populate unit records with their complete weapon/ability lists
  * (not just the nodes that matched the search query).
  */
-export async function fetchAllChildren(
-  bucket: R2Bucket,
-  containerIds: string[],
-): Promise<Node[]> {
+export async function fetchAllChildren(bucket: R2Bucket, containerIds: string[]): Promise<Node[]> {
   if (containerIds.length === 0) return []
 
   const manifestObj = await bucket.get('manifest.json')
   if (!manifestObj) return []
 
   const manifest = await manifestObj.json<{ files: Record<string, string> }>()
-  const nodeFiles = Object.keys(manifest.files).filter(f => f.startsWith('nodes/'))
+  const nodeFiles = Object.keys(manifest.files).filter((f) => f.startsWith('nodes/'))
 
   const idSet = new Set(containerIds)
   const results: Node[] = []

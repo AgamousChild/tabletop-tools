@@ -1,11 +1,12 @@
 import { createClient } from '@libsql/client'
-import { createDbFromClient } from '@tabletop-tools/db'
 import {
-  setupAuthTables,
-  createRequestHelper,
   authCookie,
+  createRequestHelper,
+  setupAuthTables,
   TEST_SECRET,
+  TEST_USER,
 } from '@tabletop-tools/auth/src/test-helpers'
+import { createDbFromClient } from '@tabletop-tools/db'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 
 import { createServer } from './server'
@@ -50,7 +51,10 @@ beforeAll(async () => {
       list_locked INTEGER NOT NULL DEFAULT 0,
       checked_in INTEGER NOT NULL DEFAULT 0,
       dropped INTEGER NOT NULL DEFAULT 0,
-      registered_at INTEGER NOT NULL
+      registered_at INTEGER NOT NULL,
+      faction_entity_id TEXT,
+      detachment_entity_id TEXT,
+      placement INTEGER
     );
     CREATE TABLE IF NOT EXISTS rounds (
       id TEXT PRIMARY KEY,
@@ -75,23 +79,6 @@ beforeAll(async () => {
       to_override INTEGER NOT NULL DEFAULT 0,
       created_at INTEGER NOT NULL
     );
-    CREATE TABLE IF NOT EXISTS player_elo (
-      id TEXT PRIMARY KEY,
-      user_id TEXT NOT NULL UNIQUE,
-      rating INTEGER NOT NULL DEFAULT 1200,
-      games_played INTEGER NOT NULL DEFAULT 0,
-      updated_at INTEGER NOT NULL
-    );
-    CREATE TABLE IF NOT EXISTS elo_history (
-      id TEXT PRIMARY KEY,
-      user_id TEXT NOT NULL,
-      pairing_id TEXT NOT NULL,
-      rating_before INTEGER NOT NULL,
-      rating_after INTEGER NOT NULL,
-      delta INTEGER NOT NULL,
-      opponent_id TEXT NOT NULL,
-      recorded_at INTEGER NOT NULL
-    );
   `)
 })
 
@@ -115,7 +102,7 @@ describe('HTTP integration — tournament.create via session cookie', () => {
     expect(res.status).toBe(200)
     const json = (await res.json()) as any
     expect(json.result?.data?.name).toBe('GT Finals London')
-    expect(json.result.data.toUserId).toBe('user-1')
+    expect(json.result.data.toUserId).toBe(TEST_USER.id)
     expect(json.result.data.status).toBe('DRAFT')
   })
 

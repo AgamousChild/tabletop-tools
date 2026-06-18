@@ -7,7 +7,7 @@ set -e
 REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 GATEWAY_DIR="$REPO_ROOT/apps/gateway"
 
-# Load .env for CF_ZONE_ID and CF_API_TOKEN
+# Load .env for CF_ZONE_ID and CLOUDFLARE_API_TOKEN
 if [ -f "$REPO_ROOT/.env" ]; then
   set -a; source "$REPO_ROOT/.env"; set +a
 fi
@@ -25,14 +25,14 @@ echo ""
 echo "=== Step 3: Purge CDN cache ==="
 # Cloudflare Pages CDN caches HTML and assets aggressively.
 # Without purging, users may get stale JS bundles even after a deploy.
-if [ -n "$CF_ZONE_ID" ] && [ -n "$CF_API_TOKEN" ]; then
+if [ -n "$CF_ZONE_ID" ] && [ -n "$CLOUDFLARE_API_TOKEN" ]; then
   echo "Purging cache for zone $CF_ZONE_ID..."
   curl -s -X POST "https://api.cloudflare.com/client/v4/zones/$CF_ZONE_ID/purge_cache" \
-    -H "Authorization: Bearer $CF_API_TOKEN" \
+    -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" \
     -H "Content-Type: application/json" \
     --data '{"purge_everything":true}' | python3 -c "import sys,json; d=json.load(sys.stdin); print('  Cache purged' if d.get('success') else f'  Purge failed: {d}')" 2>/dev/null || echo "  Purge request sent (couldn't parse response)"
 else
-  echo "  Skipping cache purge (set CF_ZONE_ID and CF_API_TOKEN env vars to enable)"
+  echo "  Skipping cache purge (set CF_ZONE_ID and CLOUDFLARE_API_TOKEN env vars to enable)"
   echo "  Without purge, CDN may serve stale HTML/JS for up to 5 minutes"
 fi
 

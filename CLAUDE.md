@@ -1,437 +1,207 @@
-# CLAUDE.md — Tabletop Tools Platform (V2)
+# CLAUDE.md — Tabletop Tools Platform
 
 > Read SOUL.md first. Every decision here flows from it.
-> V1 archive: `v1/CLAUDE.md`
-
----
-
-## V1 → V2 Changes
-
-V1 shipped 8 apps with 866 passing tests and a working deployment. A 4-agent code review found
-26 issues — the root cause of most was shared code being copy-pasted instead of extracted into
-packages. V2 redesigns the architecture to fix this structurally.
-
-**What changed:**
-- **`packages/server-core` (NEW)** — eliminates 7× duplication of trpc.ts, server.ts, worker.ts, index.ts
-- **`packages/ui` expansion** — eliminates 6× AuthScreen, 7× auth.ts, 7× main.tsx, 8× tailwind.config
-- **Auth security** — HMAC verification, timing-safe comparison, CORS lockdown
-- **DB integrity** — indexes on all FKs, unique constraints, cascading deletes
-- **SQL-first queries** — no more SELECT * → filter in JS
-- **TRPCError everywhere** — proper HTTP status codes from every app
-- **Client resilience** — ErrorBoundary, global tRPC error link, client-side routing
-- **Worker caching** — DB client + Hono app created once per isolate, not per request
-- **Dead code removal** — tfjs dependency, broken R2, non-functional suggestions
-
-**What didn't change:** SOUL.md, the stack choices, the app boundaries, TDD, the data boundary rules.
 
 ---
 
 ## What This Platform Is
 
 Tabletop Tools is a monorepo of tools for tabletop miniature wargamers. One login. Shared UI.
-Each app deploys independently and does exactly one thing. The first app ships, then more follow.
+Each app deploys independently and does exactly one thing.
+
+Each app has its own `CLAUDE.md` with architecture and implementation detail.
 
 ---
 
-## Monorepo Structure
+## Project Rules
 
-```
-tabletop-tools/
-  v1/                ← archived V1 CLAUDE.md files (read-only reference)
-  packages/
-    server-core/     ← NEW: base tRPC, createBaseServer, Worker handler, ID gen
-    ui/              ← EXPANDED: AuthScreen, auth client, tRPC factory, AppShell, ErrorBoundary, Tailwind preset
-    auth/            ← HARDENED: HMAC verification, timing-safe comparison, declared deps
-    db/              ← FIXED: indexes, unique constraints, cascading deletes, timestamp normalization
-    game-content/    ← shared parsers, DRY tournament import, fix nested XML
-    game-data-store/ ← error handling in hooks, efficient IndexedDB operations
-  apps/
-    auth-server/     ← central auth Worker (CORS lockdown, caching)
-    gateway/         ← unified Cloudflare Pages project (landing + tRPC proxies)
-    brain/           ← 40K knowledge graph: search, browse, ask (Hono, not tRPC)
-    content-ingestor/← YouTube/article → brain node pipeline
-    bcp-scraper/     ← BCP tournament data scraper
-    data-import/     ← game data pipeline (Worker fetches sources → R2, client syncs to IndexedDB)
-    no-cheat/        ← dice cheat detection        (port 3001)
-    versus/          ← combat simulator             (port 3002)
-    list-builder/    ← meta list builder            (port 3003)
-    game-tracker/    ← match tracker                (port 3004)
-    tournament/      ← tournament manager           (port 3005)
-    new-meta/        ← 40K meta analytics           (port 3006)
-    admin/           ← platform admin dashboard     (port 3007)
-  e2e/               ← Playwright browser tests (all apps, landing, auth flows)
-```
+### 1. One data source per entity
+Don't build parallel implementations of the same data for different apps. If units exist in one
+store, every app reads from that store. No copies, no sync, no "this app's version."
 
-All apps are served from a single origin: `tabletop-tools.net/<app>/`. The gateway builds all
-client SPAs into `dist/<app>/` and deploys as one Cloudflare Pages project. Pages Functions
-proxy each app's `/trpc` calls to its Worker via service bindings. Auth runs on a Workers Route
-at `tabletop-tools.net/auth/*`.
+### 2. Shared UI components
+Same card, same widget across all apps. If the brain app has a unit card, versus uses the same
+component. Build once in `packages/ui`, import everywhere.
 
----
+### 3. DRY across app boundaries
+If two app servers have similar logic, extract it to a shared package. Similar functions in
+different apps is a bug, not a pattern.
 
-## App Registry
+### 4. Everything is a callable function
+Build as an importable module first, then wrap it for CLI, cron, or API. Every data process,
+cleanup, and setup is a repeatable function callable from the server layer. One-off shell
+scripts in `scripts/` are allowed for ingestion bridges and admin chores, but anything the
+running system depends on must be importable code.
 
-| App | Port | Status | Purpose |
-|---|---|---|---|
-| brain | 3008 | Deployed | 40K knowledge graph: search, browse, ask (Hono, not tRPC) |
-| no-cheat | 3001 | Deployed | Detect loaded dice via CV + statistics |
-| versus | 3002 | Deployed | Simulate 40K combat: hit/wound/save/damage |
-| list-builder | 3003 | Deployed | Build lists with live meta ratings from GT data |
-| game-tracker | 3004 | Deployed | Track matches turn-by-turn with photos |
-| tournament | 3005 | Deployed | Swiss events: pairings, results, standings, ELO |
-| new-meta | 3006 | Deployed | Meta analytics: win rates, Glicko-2 ratings |
-| data-import | — | Deployed | Game data pipeline: Worker fetches BSData+Wahapedia → R2 → client IndexedDB |
-| admin | 3007 | Deployed | Platform dashboard: users, sessions, app stats |
-| content-ingestor | — | Local | YouTube/article → brain node pipeline |
-| bcp-scraper | — | Local | BCP tournament data scraper |
+### 5. 11th edition is the active edition
+11th edition is the only edition under development. 10th edition content is preserved and
+tagged as legacy in the brain but is not updated. New features, parsers, rules logic, and
+data sync target 11th edition exclusively.
 
-Each app has its own `CLAUDE.md` with full spec, architecture, and V2 implementation detail.
+### 6. Data lives in datastores, not source code
+No hardcoded lookup tables in `.ts` files. Faction maps, detachment lists, source registries —
+all go in the database (or other datastore). Code reads from data, doesn't contain data.
+
+### 7. No test data in production
+No hardcoded test users, tokens, or secrets in source code. Test infrastructure uses isolated
+environments only. E2E tests clean up after themselves. No test setup function can touch prod.
+
+### 8. Skinnable UI
+Separate data/logic from presentation. Components take props and render. Hooks and state
+management handle what to show. Swapping the component layer gives you a new skin without
+touching logic.
+
+### 9. Tournament and meta analytics share one data model
+A tournament you run and a tournament scraped from BCP are the same thing in the database.
+One set of tables for events, players, pairings, results. No import/export pipeline between apps.
+
+### 10. One canonical entity registry
+Factions, subfactions, detachments — one set of tables, queried by everything. No app maintains
+its own lookup map. If the registry needs a new entry, it goes in the database.
 
 ---
 
-## Shared Stack
-
-| Layer | Choice | Reason |
-|---|---|---|
-| Language | TypeScript | Throughout — front to back, no exceptions |
-| Runtime | Node.js | Stable, full ecosystem compatibility |
-| Package Manager | pnpm | Fast, strict, disk-efficient — no hoisting surprises |
-| Bundler | Vite | Best DX for React, fast HMR, esbuild under the hood |
-| Test Runner | Vitest | Pairs naturally with Vite, same config, fast |
-| API | tRPC + Zod | Type-safe end-to-end, no REST boilerplate |
-| UI | React | Clean, uncluttered, easy to use |
-| Database | Turso (libSQL/SQLite) | Edge-compatible, lean, no heavy ORM |
-| ORM | Drizzle | Lightweight, type-safe, SQLite-native |
-| Auth | Better Auth | TypeScript-first, self-hosted |
-| Deploy | Cloudflare Workers + Pages | Free tier covers personal use — near-zero cost |
-
----
-
-## Shared Packages — API Surface
-
-### `packages/server-core`
-
-Eliminates the 7× copy-paste of trpc.ts, server.ts, worker.ts, and index.ts across app servers.
-
-```typescript
-// Base context — every app extends this
-export type BaseContext = {
-  user: User | null
-  req: Request
-  db: Db
-}
-
-// Base tRPC setup — apps import and extend
-export const t = initTRPC.context<BaseContext>().create()
-export const router = t.router
-export const publicProcedure = t.procedure
-export const protectedProcedure = t.procedure.use(authMiddleware)
-
-// Server factory — handles Hono + CORS + tRPC handler + auth
-export function createBaseServer<TContext extends BaseContext>(opts: {
-  router: AnyRouter
-  db: Db
-  secret: string
-  extendContext?: (baseCtx: BaseContext) => TContext | Promise<TContext>
-}): Hono
-
-// Worker handler — module-scope caching, lazy init
-export function createWorkerHandler<TEnv extends BaseEnv>(opts: {
-  createApp: (env: TEnv) => Promise<Hono>
-}): { fetch(request: Request, env: TEnv, ctx?: unknown): Promise<Response> }
-
-// Dev server factory
-export function startDevServer(opts: {
-  port: number
-  createApp: () => Promise<Hono>
-}): void
-
-// Shared ID generation
-export function generateId(): string  // nanoid, 21 chars
-```
-
-### `packages/ui`
-
-Expanded from 1 component to the full shared client library.
-
-```typescript
-// Components
-export { AuthScreen } from './components/AuthScreen'       // configurable title/subtitle
-export { AppShell } from './components/AppShell'           // header + sign out + content
-export { ErrorBoundary } from './components/ErrorBoundary' // catches render errors
-export { GameContentDisclaimer } from './components/GameContentDisclaimer'
-
-// Auth client factory
-export { createAuthClient } from './lib/auth'              // shared Better Auth client
-
-// tRPC link factory
-export { createTRPCLinks } from './lib/trpc'               // shared httpBatchLink with credentials
-
-// App entry point
-export { renderApp } from './lib/render'                   // StrictMode mount (apps add own providers)
-
-// Tailwind preset
-export { default as tailwindPreset } from './tailwind-preset'  // shared colors, fonts, tokens
-```
-
-### `packages/auth`
-
-Security-hardened session validation and auth factory.
-
-```typescript
-export function createAuth(db, baseURL?, trustedOrigins?, secret?, basePath?): Auth
-export async function validateSession(db, headers, secret?): Promise<User | null>
-//                                                 ^^^^^^^ NEW: verifies HMAC signature
-export type User = { id: string; email: string; name: string }
-
-// Test helpers (for app server tests)
-export { setupAuthTables, createRequestHelper, authCookie, TEST_USER, TEST_TOKEN }
-```
-
-### `packages/db`
-
-Schema with indexes, constraints, and cascading deletes.
-
-```typescript
-export { createDb, createDbFromClient } from './client'
-export type { Db } from './client'
-export * from './schema'  // all 22 tables + indexes + constraints
-```
-
-### `packages/game-content`
-
-Game content adapter boundary + shared parsers.
-
-```typescript
-export type { GameContentAdapter, UnitProfile, WeaponProfile, WeaponAbility }
-export { BSDataAdapter } from './adapters/bsdata'
-export { NullAdapter } from './adapters/null'
-export { parseBSDataXml } from './adapters/bsdata/parser'
-
-// Shared unit router factory (eliminates versus/list-builder duplication)
-export { createUnitRouter } from './routers/unit'  // no args — uses own tRPC instance
-```
-
-### `packages/game-data-store`
-
-Client-side IndexedDB store with error handling.
-
-```typescript
-export { saveUnits, getUnit, searchUnits, listFactions, clearAll, setImportMeta, getImportMeta }
-export { useUnit, useUnitSearch, useFactions, useGameDataAvailable }
-```
-
----
-
-## Data Boundary Rules
+## Data Boundary
 
 **No GW (Games Workshop) content is ever committed to this repository.**
 
-Unit profiles, weapon stats, ability text, and faction data are loaded at runtime from
-BSData (community-maintained XML). The platform adapts to this data at startup via
-`packages/game-content`. Nothing from GW ever lands in committed source files or the DB schema.
-
-```typescript
-// packages/game-content exports:
-interface GameContentAdapter {
-  load(): Promise<void>
-  getUnit(id: string): Promise<UnitProfile | null>
-  searchUnits(opts: { faction?: string; name?: string }): Promise<UnitProfile[]>
-  listFactions(): Promise<string[]>
-}
-
-// At server startup — operator sets BSDATA_DIR env var:
-const gameContent = process.env.BSDATA_DIR
-  ? new BSDataAdapter(process.env.BSDATA_DIR)
-  : new NullAdapter()
-await gameContent.load()
-```
-
-**What this means in practice:**
-- No `.cat` or `.gst` BSData XML files committed
-- Faction strings entered by users are stored verbatim — never validated against GW data
-- Army list text is stored raw — never parsed for GW content
-- If `BSDATA_DIR` is unset, apps serve empty unit lists (not an error)
-- `GameContentDisclaimer` UI component (in `packages/ui`) surfaces the data source to users
+Unit profiles, weapon stats, ability text, and faction data are loaded at runtime from community
+sources (BSData, Wahapedia). Nothing from GW lands in committed source files or the DB schema.
+The `GameContentDisclaimer` component surfaces the data source to users.
 
 ---
 
-## Shared Server Pattern (V2)
+## Stack
 
-Every app server uses `packages/server-core` instead of copy-pasting boilerplate.
-
-```typescript
-// apps/<app>/server/src/routers/index.ts
-import { router } from '@tabletop-tools/server-core'
-import { appSpecificRouter } from './appSpecific'
-
-export const appRouter = router({
-  health: publicProcedure.query(() => ({ status: 'ok' })),
-  ...appSpecificRouter,
-})
-export type AppRouter = typeof appRouter
-
-// apps/<app>/server/src/server.ts  — no auth imports, no validateSession
-import { createBaseServer } from '@tabletop-tools/server-core'
-import { appRouter } from './routers'
-
-// Simple apps (tournament, new-meta, versus, list-builder) — no extra context needed
-export const createServer = (db: Db, secret: string) =>
-  createBaseServer({ router: appRouter, db, secret })
-
-// Apps with extra context (admin, no-cheat, game-tracker)
-export const createServer = (db: Db, storage: R2Storage, secret: string) =>
-  createBaseServer({
-    router: appRouter, db, secret,
-    extendContext: (ctx) => ({ ...ctx, storage }),
-  })
-
-// apps/<app>/server/src/worker.ts  — module-scope caching
-import { createWorkerHandler } from '@tabletop-tools/server-core'
-import { createServer } from './server'
-
-export default createWorkerHandler({
-  createApp: async (env) => {
-    const db = createDbFromClient(createClient({
-      url: env.TURSO_DB_URL,
-      authToken: env.TURSO_AUTH_TOKEN,
-    }))
-    return createServer(db, env.AUTH_SECRET)
-  },
-})
-```
-
-Auth is middleware inside `server-core` — `createBaseServer` calls `validateSession` internally.
-Apps never import from `packages/auth` directly. The tRPC context carries the already-validated
-user. All protected procedures share the `protectedProcedure` middleware from `server-core`.
-Router tests use `createCallerFactory` with an in-memory SQLite database.
+| Layer | Choice | Why |
+|---|---|---|
+| Language | TypeScript | Front to back, no exceptions |
+| API | tRPC + Zod | Type-safe end-to-end, no REST boilerplate |
+| UI | React | Clean, uncluttered |
+| Database | Turso (libSQL/SQLite) | Edge-compatible, lean |
+| ORM | Drizzle | Lightweight, type-safe, SQLite-native |
+| Auth | Better Auth | TypeScript-first, self-hosted |
+| Deploy | Cloudflare Workers + Pages | Free tier, near-zero cost |
 
 ---
 
-## Shared Client Pattern (V2)
+## Testing
 
-Every app client uses `packages/ui` instead of copy-pasting boilerplate.
+**TDD for logic, algorithms, and routers.** Write the test first, confirm it fails, implement,
+confirm it passes.
 
-```typescript
-// apps/<app>/client/src/main.tsx  — 3 lines, not 20
-import { renderApp } from '@tabletop-tools/ui'
-import { App } from './App'
-renderApp(App)
+**Exception:** exploratory work (scrapers, pipelines, graph builders) — test after the shape
+stabilizes, not before.
 
-// apps/<app>/client/src/App.tsx
-import { AuthScreen, AppShell, ErrorBoundary } from '@tabletop-tools/ui'
-import { trpc, trpcClient, queryClient } from './lib/trpc'
-
-export function App() {
-  // ... app-specific UI, using shared components
-}
-
-// apps/<app>/client/tailwind.config.ts  — 4 lines, not 28
-import { tailwindPreset } from '@tabletop-tools/ui'
-export default {
-  presets: [tailwindPreset],
-  content: ['./index.html', './src/**/*.{ts,tsx}'],
-}
-```
+**Real dependencies in tests.** In-memory SQLite, real functions. Only mock external APIs and
+system boundaries (network calls, subprocesses). A mock that passes while the real thing fails
+is worse than no test.
 
 ---
 
-## Shared UI Design System
+## Code Quality
 
-**Component library:** shadcn/ui + Tailwind CSS — components you own, not a dependency.
-Built on Radix UI primitives. TypeScript-native, Vite-compatible. Include only what you use.
-
-**Typography:** Geist — clean, modern, readable at small sizes.
-
-**Color tokens (all apps use these via the shared Tailwind preset):**
-```
-Background:    slate-950  (#0f172a)  — near black
-Surface:       slate-900  (#0f172a)  — cards, panels
-Border:        slate-800  (#1e293b)  — subtle separation
-Text:          slate-100  (#f1f5f9)  — primary
-Muted text:    slate-400  (#94a3b8)  — labels, secondary
-
-Accent:        amber-400  (#fbbf24)  — buttons, highlights, active states
-```
-
-App-specific result colors (defined per app, not here).
-
----
-
-## Auth Routing (Path-Based)
-
-- **Prod** (`apps/auth-server/src/worker.ts`): Better Auth configured with `basePath: '/auth/api/auth'`.
-  Workers Route delivers requests at `/auth/**`. CORS restricted to `https://tabletop-tools.net`.
-- **Dev** (`apps/auth-server/src/index.ts`): Default basePath `/api/auth`, port 3000.
-- `AUTH_BASE_URL` in wrangler.toml: `https://tabletop-tools.net` (no `/auth` suffix).
-- Client `VITE_AUTH_SERVER_URL=https://tabletop-tools.net/auth/api/auth`.
-- Cookie: `__Secure-better-auth.session_token` on HTTPS, `better-auth.session_token` on HTTP.
-  `validateSession` verifies HMAC signature before accepting the token (V2 fix).
-- Cookie `path: /` — shared across all apps on same origin.
+**Prettier** for formatting. **ESLint + oxlint** for code rules. **TypeScript strict** for
+type safety. **Pre-commit hooks** run all three — code that doesn't pass doesn't land.
 
 ---
 
 ## Rules for Every Session
 
-- Scope before you start — understand what you're touching and what depends on it. Small fixes don't need architecture reviews.
+- Scope before you start — understand what you're touching and what depends on it.
 - No features that aren't needed yet.
 - Validate statistically before claiming anything.
 - Keep the stack shallow. Don't add layers.
 - Stop when it works. Don't polish what doesn't need polishing.
-- **Never duplicate functions.** If a utility exists, import it. If it needs to be shared across
-  packages, extract it to a shared module. Use dependency injection over copy-paste. Three copies
-  of the same function is a bug, not a pattern.
+- Don't try to prove you're right. State your reasoning once, briefly; then defer or verify. Don't re-litigate, justify, or argue the point.
+- If you need to verify something, write a test. Don't run throwaway/ad-hoc checks to make a point, and don't ask permission to test — just write the test.
+- Follow the process all the way through. When you change data, rebuild the dependent indexes/derived artifacts in the same pass — never leave "data updated, indexes stale" or bad data comes through.
 
 ---
 
-## Security & Authentication
+## Environment + Operational Gotchas
 
-**Auth is middleware, not application code.** Session validation runs inside `server-core`
-before any app code sees the request. Apps receive `ctx.user` pre-populated and never import
-from `packages/auth` directly.
+These are caltrops people have stepped on. Always honor them.
 
-- `createBaseServer` accepts `db` and `secret`, calls `validateSession` internally
-- Apps opt into auth by using `protectedProcedure` — that's the entire auth surface area
-- Apps that need extra context (storage, adminEmails) use `extendContext`
-- One implementation, one place to audit, tested once in `server-core`
-
-**Why middleware, not utility function:** If Express, Rails, Django, and ASP.NET all handle
-auth as built-in middleware, so should we. Don't follow tRPC tutorial patterns that inline
-auth in `createContext` — follow 30 years of web application architecture. Security-critical
-code should never be scattered across 7 app boundaries.
-
----
-
-## Testing: TDD Required
-
-**Default: TDD for logic, algorithms, and routers.** Write the test first, confirm it fails,
-implement, confirm it passes.
-
-**Exception: exploratory/integration work** (scrapers, data pipelines, graph builders, one-off
-scripts) — test after the shape stabilizes, not before.
-
-```bash
-pnpm test --watch   # keep this running during development
-```
-
-Tests live next to the code they test (`foo.ts` / `foo.test.ts`). Pure functions
-(stats, algorithms, business logic) are always tested in isolation before wiring into
-tRPC routers. Routers are tested using `createCallerFactory` against an in-memory
-SQLite database — no mocks for the database layer.
-
-The specific test file structure for each app is documented in that app's own CLAUDE.md.
+- **`wrangler r2 object put` defaults to LOCAL.** Always pass `--remote` for
+  production R2. Always prefix wrangler commands with empty `CF_API_TOKEN=`
+  + `CLOUDFLARE_API_TOKEN=$CF_FULL_API_TOKEN` to override deprecated env
+  vars, OR ensure the new `CLOUDFLARE_API_TOKEN` is set in the calling
+  environment.
+- **Purge CDN cache after every deploy.** `deploy-gateway.sh` does this
+  automatically using `CLOUDFLARE_API_TOKEN`. After any brain data upload
+  + Worker deploy, also purge cache. When Micah says something is broken
+  on the live site, check the cache first.
+- **Clear cache before verifying anything.** `wrangler r2 object get`,
+  Cloudflare CDN, browser cache — all can return stale data. Before
+  concluding something didn't work, clear the cache.
+- **Don't chain `cd path && command` in bash.** Compound commands with
+  `cd` trigger a manual approval prompt. Use absolute paths in tool args
+  (Read/Edit/Write already take absolute paths). For pnpm, use
+  `pnpm -F <package>` or `pnpm --dir <path>` from the repo root.
+- **Playwright MCP browser is sandboxed.** No access to Micah's Chrome
+  passwords, cookies, or sessions. For pages that need auth, use
+  `launchPersistentContext` with a local cookie directory rather than
+  the MCP browser.
 
 ---
 
-## E2E Browser Tests (Playwright)
+## Memory Hygiene
 
-See `e2e/CLAUDE.md` for full conventions.
+The memory system at `C:\Users\micah\.claude\projects\C--R-tabletop-tools\memory\`
+is written by Claude based on in-conversation corrections. Apply these rules
+when deciding whether to save.
 
-```bash
-# Against production
-cd e2e && BASE_URL=https://tabletop-tools.net pnpm test
+1. **Search before writing.** Before creating a new feedback file, grep
+   existing `feedback_*.md` for similar themes. If one covers it, update
+   that file. Don't create duplicates.
 
-# Against local dev
-cd e2e && pnpm test
-```
+2. **Don't save single-incident lessons.** Save only when the correction
+   is a STANDING pattern Micah will give repeatedly. One-off clarifications
+   are conversational, not durable.
 
+3. **Index is one line per pointer.** `MEMORY.md` is an index, not a
+   memory. Never put multi-line detail in `MEMORY.md`. Detail goes in
+   topic files, linked by name.
+
+4. **Stale state goes in git, not memory.** File counts, test counts,
+   deployment state, phase status — derivable from code. Don't save
+   these as memories; they go stale within days.
+
+5. **Domain bugs live as code comments.** If a bug is worth remembering,
+   put a comment at the affected file:line. Don't carve the rule into
+   memory where it rots when the code changes.
+
+6. **Consolidate before adding when MEMORY.md hits its limit.** If
+   `MEMORY.md` exceeds 150 lines, consolidate existing entries before
+   adding new ones. Don't just trim — merge.
+
+7. **Approval applies to the whole approved unit.** Don't re-ask for
+   sub-steps inside a plan Micah already approved unless the step is
+   prod-touching or irreversible.
+
+---
+
+## Skills — project override
+
+The `superpowers:using-superpowers` SessionStart skill says: "If you think
+there is even a 1% chance a skill might apply to what you are doing, you
+ABSOLUTELY MUST invoke the skill." **For this project, that rule is
+suspended.** It is incompatible with how Micah and Claude actually work
+together: interactive iteration, conversational planning, fast SCAD tweaks,
+quick refactors, ad-hoc code edits.
+
+Replace it with this rule:
+
+> Invoke a skill ONLY when (a) the user explicitly types `/<skill-name>`,
+> or (b) the task genuinely matches the skill's stated purpose AND the
+> overhead of following its checklist is justified by the task's scope.
+> Routine code edits, conversational design discussion, single-file
+> tweaks, and quick research lookups do NOT trigger skill invocation.
+
+When unsure, prefer NOT invoking. If the skill would have helped, it's
+fine — the cost of skipping is small. The cost of invoking on every turn
+is real (overhead, friction, conversational drag).
+
+Explicit user invocation (`/skill-name`) always wins. Always follow what
+the user explicitly asks for over any default behaviour from this rule.

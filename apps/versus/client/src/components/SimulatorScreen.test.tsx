@@ -4,6 +4,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { SimulatorScreen } from './SimulatorScreen'
 
 const mockSave = vi.fn()
+const mockSaveV2 = vi.fn()
 
 vi.mock('../lib/auth', () => ({
   authClient: {
@@ -12,11 +13,24 @@ vi.mock('../lib/auth', () => ({
   },
 }))
 
+vi.mock('../lib/useSimulateV2', () => ({
+  useSimulateV2: () => ({
+    save: mockSaveV2,
+    isSaving: false,
+    lastSavedId: null,
+    isError: false,
+    error: null,
+  }),
+  weaponAbilityToModifier: vi.fn().mockReturnValue({
+    side: 'ATTACK',
+    source: 'weapon_ability',
+    key: 'TEST',
+    value: null,
+  }),
+}))
+
 vi.mock('../lib/trpc', () => ({
   trpc: {
-    useUtils: () => ({
-      simulate: { history: { invalidate: vi.fn() } },
-    }),
     simulate: {
       save: {
         useMutation: () => ({ mutate: mockSave }),
@@ -31,12 +45,28 @@ vi.mock('../lib/trpc', () => ({
         useMutation: () => ({ mutate: vi.fn() }),
       },
     },
+    simulateV2: {
+      history: {
+        useQuery: () => ({ data: [] }),
+      },
+      delete: {
+        useMutation: () => ({ mutate: vi.fn() }),
+      },
+    },
+    useUtils: () => ({
+      simulate: { history: { invalidate: vi.fn() } },
+      simulateV2: { history: { invalidate: vi.fn() } },
+    }),
   },
 }))
 
 vi.mock('@tabletop-tools/game-data-store', () => ({
   useGameDataAvailable: () => true,
-  useUnitCompositions: () => ({ data: [{ id: 'comp1', datasheetId: 'u1', line: '1', description: '5 models' }], error: null, isLoading: false }),
+  useUnitCompositions: () => ({
+    data: [{ id: 'comp1', datasheetId: 'u1', line: '1', description: '5 models' }],
+    error: null,
+    isLoading: false,
+  }),
 }))
 
 vi.mock('../lib/useGameData', () => ({
@@ -44,9 +74,7 @@ vi.mock('../lib/useGameData', () => ({
   useUnits: (query: { faction?: string; name?: string }) => {
     if (!query?.faction) return { data: [], isLoading: false }
     return {
-      data: [
-        { id: 'u1', name: 'Intercessor Squad', faction: 'Space Marines', points: 100 },
-      ],
+      data: [{ id: 'u1', name: 'Intercessor Squad', faction: 'Space Marines', points: 100 }],
       isLoading: false,
     }
   },
@@ -64,9 +92,36 @@ vi.mock('../lib/useGameData', () => ({
             leadership: 6,
             oc: 2,
             weapons: [
-              { name: 'Bolt Rifle', range: 30, attacks: 2, skill: 3, strength: 4, ap: -1, damage: 1, abilities: [] },
-              { name: 'Bolt Pistol', range: 12, attacks: 1, skill: 3, strength: 4, ap: 0, damage: 1, abilities: [] },
-              { name: 'Close Combat Weapon', range: 'melee', attacks: 3, skill: 3, strength: 4, ap: 0, damage: 1, abilities: [] },
+              {
+                name: 'Bolt Rifle',
+                range: 30,
+                attacks: 2,
+                skill: 3,
+                strength: 4,
+                ap: -1,
+                damage: 1,
+                abilities: [],
+              },
+              {
+                name: 'Bolt Pistol',
+                range: 12,
+                attacks: 1,
+                skill: 3,
+                strength: 4,
+                ap: 0,
+                damage: 1,
+                abilities: [],
+              },
+              {
+                name: 'Close Combat Weapon',
+                range: 'melee',
+                attacks: 3,
+                skill: 3,
+                strength: 4,
+                ap: 0,
+                damage: 1,
+                abilities: [],
+              },
             ],
             abilities: [],
             points: 100,
@@ -90,6 +145,7 @@ vi.mock('../lib/useGameData', () => ({
 
 beforeEach(() => {
   mockSave.mockReset()
+  mockSaveV2.mockReset()
 })
 
 describe('SimulatorScreen', () => {

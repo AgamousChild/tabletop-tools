@@ -1,4 +1,4 @@
-import type { Point, GameRulesConfig, BaseSize, FormationType } from '../types'
+import type { BaseSize, FormationType, GameRulesConfig, Point } from '../types'
 import { isCoherent } from './coherency'
 
 export interface Formation {
@@ -124,7 +124,8 @@ function buildDogBone(modelCount: number): Point[] {
   }))
 
   // Right cluster: mirror of left, positioned after chain
-  const rightStart = chainStart + (chainCount > 0 ? (chainCount - 1) * CHAIN_SPACING + CHAIN_SPACING : 0)
+  const rightStart =
+    chainStart + (chainCount > 0 ? (chainCount - 1) * CHAIN_SPACING + CHAIN_SPACING : 0)
   const rightCluster: Point[] = [
     { x: rightStart, y: 0 },
     { x: rightStart + CLUSTER_SPACING, y: 0 },
@@ -155,7 +156,7 @@ function buildBlob(modelCount: number): Point[] {
   const candidates: { x: number; y: number; dist: number }[] = []
 
   for (let row = -gridSize; row <= gridSize; row++) {
-    const xOffset = (row % 2 !== 0 ? S / 2 : 0)
+    const xOffset = row % 2 !== 0 ? S / 2 : 0
     for (let col = -gridSize; col <= gridSize; col++) {
       const x = col * S + xOffset
       const y = row * rowSpacing

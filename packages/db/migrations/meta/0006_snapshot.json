@@ -1,8 +1,8 @@
 {
+  "id": "7ec8424c-01e8-4089-ac48-bd1f94ba23fe",
+  "prevId": "75ef8ac5-907e-403b-91bc-b91fe3ca3ae5",
   "version": "6",
   "dialect": "sqlite",
-  "id": "b556f373-cd0d-4852-be96-d8e20d37d860",
-  "prevId": "7084f62b-4eee-4b2a-bf62-ed9899d60d0d",
   "tables": {
     "account": {
       "name": "account",
@@ -105,15 +105,15 @@
         "account_user_id_user_id_fk": {
           "name": "account_user_id_user_id_fk",
           "tableFrom": "account",
-          "tableTo": "user",
           "columnsFrom": [
             "user_id"
           ],
+          "tableTo": "user",
           "columnsTo": [
             "id"
           ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
+          "onUpdate": "no action",
+          "onDelete": "cascade"
         }
       },
       "compositePrimaryKeys": {},
@@ -200,15 +200,15 @@
         "session_user_id_user_id_fk": {
           "name": "session_user_id_user_id_fk",
           "tableFrom": "session",
-          "tableTo": "user",
           "columnsFrom": [
             "user_id"
           ],
+          "tableTo": "user",
           "columnsTo": [
             "id"
           ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
+          "onUpdate": "no action",
+          "onDelete": "cascade"
         }
       },
       "compositePrimaryKeys": {},
@@ -457,6 +457,539 @@
       "uniqueConstraints": {},
       "checkConstraints": {}
     },
+    "content_entity": {
+      "name": "content_entity",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "type": {
+          "name": "type",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "name": {
+          "name": "name",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "faction_id": {
+          "name": "faction_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "parent_id": {
+          "name": "parent_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "dataslate_id": {
+          "name": "dataslate_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "r2_key": {
+          "name": "r2_key",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "wahapedia_id": {
+          "name": "wahapedia_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "bsdata_id": {
+          "name": "bsdata_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        }
+      },
+      "indexes": {
+        "idx_content_entity_type": {
+          "name": "idx_content_entity_type",
+          "columns": [
+            "type"
+          ],
+          "isUnique": false
+        },
+        "idx_content_entity_faction": {
+          "name": "idx_content_entity_faction",
+          "columns": [
+            "faction_id"
+          ],
+          "isUnique": false
+        },
+        "idx_content_entity_parent": {
+          "name": "idx_content_entity_parent",
+          "columns": [
+            "parent_id"
+          ],
+          "isUnique": false
+        },
+        "idx_content_entity_dataslate": {
+          "name": "idx_content_entity_dataslate",
+          "columns": [
+            "dataslate_id"
+          ],
+          "isUnique": false
+        },
+        "idx_content_entity_name": {
+          "name": "idx_content_entity_name",
+          "columns": [
+            "name"
+          ],
+          "isUnique": false
+        },
+        "idx_content_entity_wahapedia": {
+          "name": "idx_content_entity_wahapedia",
+          "columns": [
+            "wahapedia_id"
+          ],
+          "isUnique": false
+        },
+        "idx_content_entity_bsdata": {
+          "name": "idx_content_entity_bsdata",
+          "columns": [
+            "bsdata_id"
+          ],
+          "isUnique": false
+        }
+      },
+      "foreignKeys": {
+        "content_entity_faction_id_content_entity_id_fk": {
+          "name": "content_entity_faction_id_content_entity_id_fk",
+          "tableFrom": "content_entity",
+          "columnsFrom": [
+            "faction_id"
+          ],
+          "tableTo": "content_entity",
+          "columnsTo": [
+            "id"
+          ],
+          "onUpdate": "no action",
+          "onDelete": "no action"
+        },
+        "content_entity_parent_id_content_entity_id_fk": {
+          "name": "content_entity_parent_id_content_entity_id_fk",
+          "tableFrom": "content_entity",
+          "columnsFrom": [
+            "parent_id"
+          ],
+          "tableTo": "content_entity",
+          "columnsTo": [
+            "id"
+          ],
+          "onUpdate": "no action",
+          "onDelete": "no action"
+        },
+        "content_entity_dataslate_id_dim_dataslate_id_fk": {
+          "name": "content_entity_dataslate_id_dim_dataslate_id_fk",
+          "tableFrom": "content_entity",
+          "columnsFrom": [
+            "dataslate_id"
+          ],
+          "tableTo": "dim_dataslate",
+          "columnsTo": [
+            "id"
+          ],
+          "onUpdate": "no action",
+          "onDelete": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {}
+    },
+    "content_node_link": {
+      "name": "content_node_link",
+      "columns": {
+        "link_id": {
+          "name": "link_id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "brain_node_id": {
+          "name": "brain_node_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "canonical_id": {
+          "name": "canonical_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "match_method": {
+          "name": "match_method",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "confidence": {
+          "name": "confidence",
+          "type": "real",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": 1
+        },
+        "prior_link_id": {
+          "name": "prior_link_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "validation_method": {
+          "name": "validation_method",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "validated_by": {
+          "name": "validated_by",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "validated_at": {
+          "name": "validated_at",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "superseded_at": {
+          "name": "superseded_at",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        }
+      },
+      "indexes": {
+        "idx_content_node_link_canonical": {
+          "name": "idx_content_node_link_canonical",
+          "columns": [
+            "canonical_id"
+          ],
+          "isUnique": false
+        },
+        "idx_content_node_link_brain_node": {
+          "name": "idx_content_node_link_brain_node",
+          "columns": [
+            "brain_node_id"
+          ],
+          "isUnique": false
+        },
+        "idx_content_node_link_prior": {
+          "name": "idx_content_node_link_prior",
+          "columns": [
+            "prior_link_id"
+          ],
+          "isUnique": false
+        },
+        "idx_content_node_link_active": {
+          "name": "idx_content_node_link_active",
+          "columns": [
+            "brain_node_id",
+            "superseded_at"
+          ],
+          "isUnique": false
+        },
+        "uq_content_node_link_active": {
+          "name": "uq_content_node_link_active",
+          "columns": [
+            "brain_node_id"
+          ],
+          "where": "\"content_node_link\".\"superseded_at\" IS NULL",
+          "isUnique": true
+        }
+      },
+      "foreignKeys": {
+        "content_node_link_canonical_id_content_entity_id_fk": {
+          "name": "content_node_link_canonical_id_content_entity_id_fk",
+          "tableFrom": "content_node_link",
+          "columnsFrom": [
+            "canonical_id"
+          ],
+          "tableTo": "content_entity",
+          "columnsTo": [
+            "id"
+          ],
+          "onUpdate": "no action",
+          "onDelete": "cascade"
+        },
+        "content_node_link_prior_link_id_content_node_link_link_id_fk": {
+          "name": "content_node_link_prior_link_id_content_node_link_link_id_fk",
+          "tableFrom": "content_node_link",
+          "columnsFrom": [
+            "prior_link_id"
+          ],
+          "tableTo": "content_node_link",
+          "columnsTo": [
+            "link_id"
+          ],
+          "onUpdate": "no action",
+          "onDelete": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {}
+    },
+    "content_node_link_candidate": {
+      "name": "content_node_link_candidate",
+      "columns": {
+        "candidate_id": {
+          "name": "candidate_id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "brain_node_id": {
+          "name": "brain_node_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "proposed_canonical_id": {
+          "name": "proposed_canonical_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "match_method": {
+          "name": "match_method",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "confidence": {
+          "name": "confidence",
+          "type": "real",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": 1
+        },
+        "prior_link_id": {
+          "name": "prior_link_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "source": {
+          "name": "source",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "run_id": {
+          "name": "run_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "proposed_at": {
+          "name": "proposed_at",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "status": {
+          "name": "status",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "'pending'"
+        },
+        "decision_method": {
+          "name": "decision_method",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "decided_by": {
+          "name": "decided_by",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "decided_at": {
+          "name": "decided_at",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "decision_reason": {
+          "name": "decision_reason",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "resulting_link_id": {
+          "name": "resulting_link_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "llm_attempt_count": {
+          "name": "llm_attempt_count",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": 0
+        },
+        "llm_last_attempted_at": {
+          "name": "llm_last_attempted_at",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        }
+      },
+      "indexes": {
+        "idx_candidate_brain_node": {
+          "name": "idx_candidate_brain_node",
+          "columns": [
+            "brain_node_id"
+          ],
+          "isUnique": false
+        },
+        "idx_candidate_status": {
+          "name": "idx_candidate_status",
+          "columns": [
+            "status"
+          ],
+          "isUnique": false
+        },
+        "idx_candidate_proposed_at": {
+          "name": "idx_candidate_proposed_at",
+          "columns": [
+            "proposed_at"
+          ],
+          "isUnique": false
+        },
+        "idx_candidate_prior_link": {
+          "name": "idx_candidate_prior_link",
+          "columns": [
+            "prior_link_id"
+          ],
+          "isUnique": false
+        },
+        "idx_candidate_source": {
+          "name": "idx_candidate_source",
+          "columns": [
+            "source"
+          ],
+          "isUnique": false
+        },
+        "uq_candidate_pending": {
+          "name": "uq_candidate_pending",
+          "columns": [
+            "brain_node_id",
+            "proposed_canonical_id"
+          ],
+          "where": "\"content_node_link_candidate\".\"status\" = 'pending'",
+          "isUnique": true
+        }
+      },
+      "foreignKeys": {
+        "content_node_link_candidate_proposed_canonical_id_content_entity_id_fk": {
+          "name": "content_node_link_candidate_proposed_canonical_id_content_entity_id_fk",
+          "tableFrom": "content_node_link_candidate",
+          "columnsFrom": [
+            "proposed_canonical_id"
+          ],
+          "tableTo": "content_entity",
+          "columnsTo": [
+            "id"
+          ],
+          "onUpdate": "no action",
+          "onDelete": "cascade"
+        },
+        "content_node_link_candidate_prior_link_id_content_node_link_link_id_fk": {
+          "name": "content_node_link_candidate_prior_link_id_content_node_link_link_id_fk",
+          "tableFrom": "content_node_link_candidate",
+          "columnsFrom": [
+            "prior_link_id"
+          ],
+          "tableTo": "content_node_link",
+          "columnsTo": [
+            "link_id"
+          ],
+          "onUpdate": "no action",
+          "onDelete": "cascade"
+        },
+        "content_node_link_candidate_resulting_link_id_content_node_link_link_id_fk": {
+          "name": "content_node_link_candidate_resulting_link_id_content_node_link_link_id_fk",
+          "tableFrom": "content_node_link_candidate",
+          "columnsFrom": [
+            "resulting_link_id"
+          ],
+          "tableTo": "content_node_link",
+          "columnsTo": [
+            "link_id"
+          ],
+          "onUpdate": "no action",
+          "onDelete": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {}
+    },
     "sessions": {
       "name": "sessions",
       "columns": {
@@ -544,28 +1077,28 @@
         "sessions_user_id_user_id_fk": {
           "name": "sessions_user_id_user_id_fk",
           "tableFrom": "sessions",
-          "tableTo": "user",
           "columnsFrom": [
             "user_id"
           ],
+          "tableTo": "user",
           "columnsTo": [
             "id"
           ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
+          "onUpdate": "no action",
+          "onDelete": "cascade"
         },
         "sessions_dice_set_id_dice_sets_id_fk": {
           "name": "sessions_dice_set_id_dice_sets_id_fk",
           "tableFrom": "sessions",
-          "tableTo": "dice_sets",
           "columnsFrom": [
             "dice_set_id"
           ],
+          "tableTo": "dice_sets",
           "columnsTo": [
             "id"
           ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
+          "onUpdate": "no action",
+          "onDelete": "cascade"
         }
       },
       "compositePrimaryKeys": {},
@@ -617,15 +1150,15 @@
         "dice_sets_user_id_user_id_fk": {
           "name": "dice_sets_user_id_user_id_fk",
           "tableFrom": "dice_sets",
-          "tableTo": "user",
           "columnsFrom": [
             "user_id"
           ],
+          "tableTo": "user",
           "columnsTo": [
             "id"
           ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
+          "onUpdate": "no action",
+          "onDelete": "cascade"
         }
       },
       "compositePrimaryKeys": {},
@@ -722,28 +1255,28 @@
         "dim_detachment_faction_id_dim_faction_id_fk": {
           "name": "dim_detachment_faction_id_dim_faction_id_fk",
           "tableFrom": "dim_detachment",
-          "tableTo": "dim_faction",
           "columnsFrom": [
             "faction_id"
           ],
+          "tableTo": "dim_faction",
           "columnsTo": [
             "id"
           ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
+          "onUpdate": "no action",
+          "onDelete": "no action"
         },
         "dim_detachment_subfaction_id_dim_subfaction_id_fk": {
           "name": "dim_detachment_subfaction_id_dim_subfaction_id_fk",
           "tableFrom": "dim_detachment",
-          "tableTo": "dim_subfaction",
           "columnsFrom": [
             "subfaction_id"
           ],
+          "tableTo": "dim_subfaction",
           "columnsTo": [
             "id"
           ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
+          "onUpdate": "no action",
+          "onDelete": "no action"
         }
       },
       "compositePrimaryKeys": {},
@@ -815,6 +1348,52 @@
       },
       "indexes": {},
       "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {}
+    },
+    "dim_faction_alias": {
+      "name": "dim_faction_alias",
+      "columns": {
+        "alias": {
+          "name": "alias",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "faction_id": {
+          "name": "faction_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        }
+      },
+      "indexes": {
+        "idx_dim_faction_alias_faction": {
+          "name": "idx_dim_faction_alias_faction",
+          "columns": [
+            "faction_id"
+          ],
+          "isUnique": false
+        }
+      },
+      "foreignKeys": {
+        "dim_faction_alias_faction_id_dim_faction_id_fk": {
+          "name": "dim_faction_alias_faction_id_dim_faction_id_fk",
+          "tableFrom": "dim_faction_alias",
+          "columnsFrom": [
+            "faction_id"
+          ],
+          "tableTo": "dim_faction",
+          "columnsTo": [
+            "id"
+          ],
+          "onUpdate": "no action",
+          "onDelete": "no action"
+        }
+      },
       "compositePrimaryKeys": {},
       "uniqueConstraints": {},
       "checkConstraints": {}
@@ -952,15 +1531,15 @@
         "dim_subfaction_faction_id_dim_faction_id_fk": {
           "name": "dim_subfaction_faction_id_dim_faction_id_fk",
           "tableFrom": "dim_subfaction",
-          "tableTo": "dim_faction",
           "columnsFrom": [
             "faction_id"
           ],
+          "tableTo": "dim_faction",
           "columnsTo": [
             "id"
           ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
+          "onUpdate": "no action",
+          "onDelete": "no action"
         }
       },
       "compositePrimaryKeys": {},
@@ -1001,134 +1580,6 @@
       },
       "indexes": {},
       "foreignKeys": {},
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {},
-      "checkConstraints": {}
-    },
-    "elo_history": {
-      "name": "elo_history",
-      "columns": {
-        "id": {
-          "name": "id",
-          "type": "text",
-          "primaryKey": true,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "user_id": {
-          "name": "user_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "pairing_id": {
-          "name": "pairing_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "rating_before": {
-          "name": "rating_before",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "rating_after": {
-          "name": "rating_after",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "delta": {
-          "name": "delta",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "opponent_id": {
-          "name": "opponent_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "recorded_at": {
-          "name": "recorded_at",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        }
-      },
-      "indexes": {
-        "idx_elo_history_user_id": {
-          "name": "idx_elo_history_user_id",
-          "columns": [
-            "user_id"
-          ],
-          "isUnique": false
-        },
-        "idx_elo_history_pairing_id": {
-          "name": "idx_elo_history_pairing_id",
-          "columns": [
-            "pairing_id"
-          ],
-          "isUnique": false
-        },
-        "idx_elo_history_opponent_id": {
-          "name": "idx_elo_history_opponent_id",
-          "columns": [
-            "opponent_id"
-          ],
-          "isUnique": false
-        }
-      },
-      "foreignKeys": {
-        "elo_history_user_id_user_id_fk": {
-          "name": "elo_history_user_id_user_id_fk",
-          "tableFrom": "elo_history",
-          "tableTo": "user",
-          "columnsFrom": [
-            "user_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        },
-        "elo_history_pairing_id_pairings_id_fk": {
-          "name": "elo_history_pairing_id_pairings_id_fk",
-          "tableFrom": "elo_history",
-          "tableTo": "pairings",
-          "columnsFrom": [
-            "pairing_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        },
-        "elo_history_opponent_id_user_id_fk": {
-          "name": "elo_history_opponent_id_user_id_fk",
-          "tableFrom": "elo_history",
-          "tableTo": "user",
-          "columnsFrom": [
-            "opponent_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        }
-      },
       "compositePrimaryKeys": {},
       "uniqueConstraints": {},
       "checkConstraints": {}
@@ -1270,121 +1721,167 @@
         "fact_game_results_event_id_meta_events_id_fk": {
           "name": "fact_game_results_event_id_meta_events_id_fk",
           "tableFrom": "fact_game_results",
-          "tableTo": "meta_events",
           "columnsFrom": [
             "event_id"
           ],
+          "tableTo": "meta_events",
           "columnsTo": [
             "id"
           ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
+          "onUpdate": "no action",
+          "onDelete": "cascade"
         },
         "fact_game_results_player_id_meta_event_players_id_fk": {
           "name": "fact_game_results_player_id_meta_event_players_id_fk",
           "tableFrom": "fact_game_results",
-          "tableTo": "meta_event_players",
           "columnsFrom": [
             "player_id"
           ],
+          "tableTo": "meta_event_players",
           "columnsTo": [
             "id"
           ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
+          "onUpdate": "no action",
+          "onDelete": "cascade"
         },
         "fact_game_results_opponent_id_meta_event_players_id_fk": {
           "name": "fact_game_results_opponent_id_meta_event_players_id_fk",
           "tableFrom": "fact_game_results",
-          "tableTo": "meta_event_players",
           "columnsFrom": [
             "opponent_id"
           ],
+          "tableTo": "meta_event_players",
           "columnsTo": [
             "id"
           ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
+          "onUpdate": "no action",
+          "onDelete": "cascade"
         },
         "fact_game_results_faction_id_dim_faction_id_fk": {
           "name": "fact_game_results_faction_id_dim_faction_id_fk",
           "tableFrom": "fact_game_results",
-          "tableTo": "dim_faction",
           "columnsFrom": [
             "faction_id"
           ],
+          "tableTo": "dim_faction",
           "columnsTo": [
             "id"
           ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
+          "onUpdate": "no action",
+          "onDelete": "no action"
         },
         "fact_game_results_subfaction_id_dim_subfaction_id_fk": {
           "name": "fact_game_results_subfaction_id_dim_subfaction_id_fk",
           "tableFrom": "fact_game_results",
-          "tableTo": "dim_subfaction",
           "columnsFrom": [
             "subfaction_id"
           ],
+          "tableTo": "dim_subfaction",
           "columnsTo": [
             "id"
           ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
+          "onUpdate": "no action",
+          "onDelete": "no action"
         },
         "fact_game_results_detachment_id_dim_detachment_id_fk": {
           "name": "fact_game_results_detachment_id_dim_detachment_id_fk",
           "tableFrom": "fact_game_results",
-          "tableTo": "dim_detachment",
           "columnsFrom": [
             "detachment_id"
           ],
+          "tableTo": "dim_detachment",
           "columnsTo": [
             "id"
           ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
+          "onUpdate": "no action",
+          "onDelete": "no action"
         },
         "fact_game_results_opponent_faction_id_dim_faction_id_fk": {
           "name": "fact_game_results_opponent_faction_id_dim_faction_id_fk",
           "tableFrom": "fact_game_results",
-          "tableTo": "dim_faction",
           "columnsFrom": [
             "opponent_faction_id"
           ],
+          "tableTo": "dim_faction",
           "columnsTo": [
             "id"
           ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
+          "onUpdate": "no action",
+          "onDelete": "no action"
         },
         "fact_game_results_opponent_subfaction_id_dim_subfaction_id_fk": {
           "name": "fact_game_results_opponent_subfaction_id_dim_subfaction_id_fk",
           "tableFrom": "fact_game_results",
-          "tableTo": "dim_subfaction",
           "columnsFrom": [
             "opponent_subfaction_id"
           ],
+          "tableTo": "dim_subfaction",
           "columnsTo": [
             "id"
           ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
+          "onUpdate": "no action",
+          "onDelete": "no action"
         },
         "fact_game_results_opponent_detachment_id_dim_detachment_id_fk": {
           "name": "fact_game_results_opponent_detachment_id_dim_detachment_id_fk",
           "tableFrom": "fact_game_results",
-          "tableTo": "dim_detachment",
           "columnsFrom": [
             "opponent_detachment_id"
           ],
+          "tableTo": "dim_detachment",
           "columnsTo": [
             "id"
           ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
+          "onUpdate": "no action",
+          "onDelete": "no action"
         }
       },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {}
+    },
+    "game_state": {
+      "name": "game_state",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "key": {
+          "name": "key",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "label": {
+          "name": "label",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "category": {
+          "name": "category",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        }
+      },
+      "indexes": {
+        "game_state_key_unique": {
+          "name": "game_state_key_unique",
+          "columns": [
+            "key"
+          ],
+          "isUnique": true
+        }
+      },
+      "foreignKeys": {},
       "compositePrimaryKeys": {},
       "uniqueConstraints": {},
       "checkConstraints": {}
@@ -1483,15 +1980,15 @@
         "glicko_history_player_id_player_glicko_id_fk": {
           "name": "glicko_history_player_id_player_glicko_id_fk",
           "tableFrom": "glicko_history",
-          "tableTo": "player_glicko",
           "columnsFrom": [
             "player_id"
           ],
+          "tableTo": "player_glicko",
           "columnsTo": [
             "id"
           ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
+          "onUpdate": "no action",
+          "onDelete": "cascade"
         }
       },
       "compositePrimaryKeys": {},
@@ -1578,17 +2075,299 @@
         "imported_tournament_results_imported_by_user_id_fk": {
           "name": "imported_tournament_results_imported_by_user_id_fk",
           "tableFrom": "imported_tournament_results",
-          "tableTo": "user",
           "columnsFrom": [
             "imported_by"
           ],
+          "tableTo": "user",
           "columnsTo": [
             "id"
           ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
+          "onUpdate": "no action",
+          "onDelete": "cascade"
         }
       },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {}
+    },
+    "ingest_content": {
+      "name": "ingest_content",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "url": {
+          "name": "url",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "title": {
+          "name": "title",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "source_id": {
+          "name": "source_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "status": {
+          "name": "status",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "'discovered'"
+        },
+        "gladia_job_id": {
+          "name": "gladia_job_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "transcript": {
+          "name": "transcript",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "nodes_extracted": {
+          "name": "nodes_extracted",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false,
+          "default": 0
+        },
+        "error": {
+          "name": "error",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "discovered_at": {
+          "name": "discovered_at",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "processed_at": {
+          "name": "processed_at",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        }
+      },
+      "indexes": {
+        "ingest_content_url_unique": {
+          "name": "ingest_content_url_unique",
+          "columns": [
+            "url"
+          ],
+          "isUnique": true
+        },
+        "idx_ingest_content_source": {
+          "name": "idx_ingest_content_source",
+          "columns": [
+            "source_id"
+          ],
+          "isUnique": false
+        },
+        "idx_ingest_content_status": {
+          "name": "idx_ingest_content_status",
+          "columns": [
+            "status"
+          ],
+          "isUnique": false
+        }
+      },
+      "foreignKeys": {
+        "ingest_content_source_id_ingest_sources_id_fk": {
+          "name": "ingest_content_source_id_ingest_sources_id_fk",
+          "tableFrom": "ingest_content",
+          "columnsFrom": [
+            "source_id"
+          ],
+          "tableTo": "ingest_sources",
+          "columnsTo": [
+            "id"
+          ],
+          "onUpdate": "no action",
+          "onDelete": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {}
+    },
+    "ingest_jobs": {
+      "name": "ingest_jobs",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "url": {
+          "name": "url",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "source_type": {
+          "name": "source_type",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "source_name": {
+          "name": "source_name",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "title": {
+          "name": "title",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "status": {
+          "name": "status",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "'pending'"
+        },
+        "gladia_job_id": {
+          "name": "gladia_job_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "transcript": {
+          "name": "transcript",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "nodes_extracted": {
+          "name": "nodes_extracted",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false,
+          "default": 0
+        },
+        "error": {
+          "name": "error",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "completed_at": {
+          "name": "completed_at",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {}
+    },
+    "ingest_sources": {
+      "name": "ingest_sources",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "name": {
+          "name": "name",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "url": {
+          "name": "url",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "type": {
+          "name": "type",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "active": {
+          "name": "active",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": 1
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        }
+      },
+      "indexes": {
+        "ingest_sources_url_unique": {
+          "name": "ingest_sources_url_unique",
+          "columns": [
+            "url"
+          ],
+          "isUnique": true
+        }
+      },
+      "foreignKeys": {},
       "compositePrimaryKeys": {},
       "uniqueConstraints": {},
       "checkConstraints": {}
@@ -1689,15 +2468,15 @@
         "list_units_list_id_lists_id_fk": {
           "name": "list_units_list_id_lists_id_fk",
           "tableFrom": "list_units",
-          "tableTo": "lists",
           "columnsFrom": [
             "list_id"
           ],
+          "tableTo": "lists",
           "columnsTo": [
             "id"
           ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
+          "onUpdate": "no action",
+          "onDelete": "cascade"
         }
       },
       "compositePrimaryKeys": {},
@@ -1799,15 +2578,15 @@
         "lists_user_id_user_id_fk": {
           "name": "lists_user_id_user_id_fk",
           "tableFrom": "lists",
-          "tableTo": "user",
           "columnsFrom": [
             "user_id"
           ],
+          "tableTo": "user",
           "columnsTo": [
             "id"
           ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
+          "onUpdate": "no action",
+          "onDelete": "cascade"
         }
       },
       "compositePrimaryKeys": {},
@@ -1867,15 +2646,15 @@
         "match_secondaries_match_id_matches_id_fk": {
           "name": "match_secondaries_match_id_matches_id_fk",
           "tableFrom": "match_secondaries",
-          "tableTo": "matches",
           "columnsFrom": [
             "match_id"
           ],
+          "tableTo": "matches",
           "columnsTo": [
             "id"
           ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
+          "onUpdate": "no action",
+          "onDelete": "cascade"
         }
       },
       "compositePrimaryKeys": {},
@@ -2090,15 +2869,15 @@
         "matches_user_id_user_id_fk": {
           "name": "matches_user_id_user_id_fk",
           "tableFrom": "matches",
-          "tableTo": "user",
           "columnsFrom": [
             "user_id"
           ],
+          "tableTo": "user",
           "columnsTo": [
             "id"
           ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
+          "onUpdate": "no action",
+          "onDelete": "cascade"
         }
       },
       "compositePrimaryKeys": {},
@@ -2232,54 +3011,54 @@
         "meta_event_placements_event_id_meta_events_id_fk": {
           "name": "meta_event_placements_event_id_meta_events_id_fk",
           "tableFrom": "meta_event_placements",
-          "tableTo": "meta_events",
           "columnsFrom": [
             "event_id"
           ],
+          "tableTo": "meta_events",
           "columnsTo": [
             "id"
           ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
+          "onUpdate": "no action",
+          "onDelete": "cascade"
         },
         "meta_event_placements_faction_id_dim_faction_id_fk": {
           "name": "meta_event_placements_faction_id_dim_faction_id_fk",
           "tableFrom": "meta_event_placements",
-          "tableTo": "dim_faction",
           "columnsFrom": [
             "faction_id"
           ],
+          "tableTo": "dim_faction",
           "columnsTo": [
             "id"
           ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
+          "onUpdate": "no action",
+          "onDelete": "no action"
         },
         "meta_event_placements_subfaction_id_dim_subfaction_id_fk": {
           "name": "meta_event_placements_subfaction_id_dim_subfaction_id_fk",
           "tableFrom": "meta_event_placements",
-          "tableTo": "dim_subfaction",
           "columnsFrom": [
             "subfaction_id"
           ],
+          "tableTo": "dim_subfaction",
           "columnsTo": [
             "id"
           ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
+          "onUpdate": "no action",
+          "onDelete": "no action"
         },
         "meta_event_placements_detachment_id_dim_detachment_id_fk": {
           "name": "meta_event_placements_detachment_id_dim_detachment_id_fk",
           "tableFrom": "meta_event_placements",
-          "tableTo": "dim_detachment",
           "columnsFrom": [
             "detachment_id"
           ],
+          "tableTo": "dim_detachment",
           "columnsTo": [
             "id"
           ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
+          "onUpdate": "no action",
+          "onDelete": "no action"
         }
       },
       "compositePrimaryKeys": {},
@@ -2347,6 +3126,13 @@
         },
         "list_text": {
           "name": "list_text",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "list_ttt": {
+          "name": "list_ttt",
           "type": "text",
           "primaryKey": false,
           "notNull": false,
@@ -2439,54 +3225,54 @@
         "meta_event_players_event_id_meta_events_id_fk": {
           "name": "meta_event_players_event_id_meta_events_id_fk",
           "tableFrom": "meta_event_players",
-          "tableTo": "meta_events",
           "columnsFrom": [
             "event_id"
           ],
+          "tableTo": "meta_events",
           "columnsTo": [
             "id"
           ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
+          "onUpdate": "no action",
+          "onDelete": "cascade"
         },
         "meta_event_players_faction_id_dim_faction_id_fk": {
           "name": "meta_event_players_faction_id_dim_faction_id_fk",
           "tableFrom": "meta_event_players",
-          "tableTo": "dim_faction",
           "columnsFrom": [
             "faction_id"
           ],
+          "tableTo": "dim_faction",
           "columnsTo": [
             "id"
           ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
+          "onUpdate": "no action",
+          "onDelete": "no action"
         },
         "meta_event_players_subfaction_id_dim_subfaction_id_fk": {
           "name": "meta_event_players_subfaction_id_dim_subfaction_id_fk",
           "tableFrom": "meta_event_players",
-          "tableTo": "dim_subfaction",
           "columnsFrom": [
             "subfaction_id"
           ],
+          "tableTo": "dim_subfaction",
           "columnsTo": [
             "id"
           ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
+          "onUpdate": "no action",
+          "onDelete": "no action"
         },
         "meta_event_players_detachment_id_dim_detachment_id_fk": {
           "name": "meta_event_players_detachment_id_dim_detachment_id_fk",
           "tableFrom": "meta_event_players",
-          "tableTo": "dim_detachment",
           "columnsFrom": [
             "detachment_id"
           ],
+          "tableTo": "dim_detachment",
           "columnsTo": [
             "id"
           ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
+          "onUpdate": "no action",
+          "onDelete": "no action"
         }
       },
       "compositePrimaryKeys": {},
@@ -2539,21 +3325,29 @@
             "event_id"
           ],
           "isUnique": false
+        },
+        "idx_event_win_dist_unique": {
+          "name": "idx_event_win_dist_unique",
+          "columns": [
+            "event_id",
+            "wins"
+          ],
+          "isUnique": true
         }
       },
       "foreignKeys": {
         "meta_event_win_distribution_event_id_meta_events_id_fk": {
           "name": "meta_event_win_distribution_event_id_meta_events_id_fk",
           "tableFrom": "meta_event_win_distribution",
-          "tableTo": "meta_events",
           "columnsFrom": [
             "event_id"
           ],
+          "tableTo": "meta_events",
           "columnsTo": [
             "id"
           ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
+          "onUpdate": "no action",
+          "onDelete": "cascade"
         }
       },
       "compositePrimaryKeys": {},
@@ -2704,54 +3498,54 @@
         "meta_events_region_id_dim_region_id_fk": {
           "name": "meta_events_region_id_dim_region_id_fk",
           "tableFrom": "meta_events",
-          "tableTo": "dim_region",
           "columnsFrom": [
             "region_id"
           ],
+          "tableTo": "dim_region",
           "columnsTo": [
             "id"
           ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
+          "onUpdate": "no action",
+          "onDelete": "no action"
         },
         "meta_events_win_faction_id_dim_faction_id_fk": {
           "name": "meta_events_win_faction_id_dim_faction_id_fk",
           "tableFrom": "meta_events",
-          "tableTo": "dim_faction",
           "columnsFrom": [
             "win_faction_id"
           ],
+          "tableTo": "dim_faction",
           "columnsTo": [
             "id"
           ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
+          "onUpdate": "no action",
+          "onDelete": "no action"
         },
         "meta_events_win_subfaction_id_dim_subfaction_id_fk": {
           "name": "meta_events_win_subfaction_id_dim_subfaction_id_fk",
           "tableFrom": "meta_events",
-          "tableTo": "dim_subfaction",
           "columnsFrom": [
             "win_subfaction_id"
           ],
+          "tableTo": "dim_subfaction",
           "columnsTo": [
             "id"
           ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
+          "onUpdate": "no action",
+          "onDelete": "no action"
         },
         "meta_events_win_detachment_id_dim_detachment_id_fk": {
           "name": "meta_events_win_detachment_id_dim_detachment_id_fk",
           "tableFrom": "meta_events",
-          "tableTo": "dim_detachment",
           "columnsFrom": [
             "win_detachment_id"
           ],
+          "tableTo": "dim_detachment",
           "columnsTo": [
             "id"
           ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
+          "onUpdate": "no action",
+          "onDelete": "no action"
         }
       },
       "compositePrimaryKeys": {},
@@ -2860,54 +3654,54 @@
         "meta_for_type_id_dim_for_type_id_fk": {
           "name": "meta_for_type_id_dim_for_type_id_fk",
           "tableFrom": "meta_for",
-          "tableTo": "dim_for_type",
           "columnsFrom": [
             "type_id"
           ],
+          "tableTo": "dim_for_type",
           "columnsTo": [
             "id"
           ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
+          "onUpdate": "no action",
+          "onDelete": "no action"
         },
         "meta_for_dataslate_id_dim_dataslate_id_fk": {
           "name": "meta_for_dataslate_id_dim_dataslate_id_fk",
           "tableFrom": "meta_for",
-          "tableTo": "dim_dataslate",
           "columnsFrom": [
             "dataslate_id"
           ],
+          "tableTo": "dim_dataslate",
           "columnsTo": [
             "id"
           ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
+          "onUpdate": "no action",
+          "onDelete": "no action"
         },
         "meta_for_tourney_pack_id_dim_tournament_pack_id_fk": {
           "name": "meta_for_tourney_pack_id_dim_tournament_pack_id_fk",
           "tableFrom": "meta_for",
-          "tableTo": "dim_tournament_pack",
           "columnsFrom": [
             "tourney_pack_id"
           ],
+          "tableTo": "dim_tournament_pack",
           "columnsTo": [
             "id"
           ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
+          "onUpdate": "no action",
+          "onDelete": "no action"
         },
         "meta_for_edition_id_dim_edition_id_fk": {
           "name": "meta_for_edition_id_dim_edition_id_fk",
           "tableFrom": "meta_for",
-          "tableTo": "dim_edition",
           "columnsFrom": [
             "edition_id"
           ],
+          "tableTo": "dim_edition",
           "columnsTo": [
             "id"
           ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
+          "onUpdate": "no action",
+          "onDelete": "no action"
         }
       },
       "compositePrimaryKeys": {},
@@ -3016,41 +3810,41 @@
         "meta_pairings_event_id_meta_events_id_fk": {
           "name": "meta_pairings_event_id_meta_events_id_fk",
           "tableFrom": "meta_pairings",
-          "tableTo": "meta_events",
           "columnsFrom": [
             "event_id"
           ],
+          "tableTo": "meta_events",
           "columnsTo": [
             "id"
           ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
+          "onUpdate": "no action",
+          "onDelete": "cascade"
         },
         "meta_pairings_player1_id_meta_event_players_id_fk": {
           "name": "meta_pairings_player1_id_meta_event_players_id_fk",
           "tableFrom": "meta_pairings",
-          "tableTo": "meta_event_players",
           "columnsFrom": [
             "player1_id"
           ],
+          "tableTo": "meta_event_players",
           "columnsTo": [
             "id"
           ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
+          "onUpdate": "no action",
+          "onDelete": "cascade"
         },
         "meta_pairings_player2_id_meta_event_players_id_fk": {
           "name": "meta_pairings_player2_id_meta_event_players_id_fk",
           "tableFrom": "meta_pairings",
-          "tableTo": "meta_event_players",
           "columnsFrom": [
             "player2_id"
           ],
+          "tableTo": "meta_event_players",
           "columnsTo": [
             "id"
           ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
+          "onUpdate": "no action",
+          "onDelete": "cascade"
         }
       },
       "compositePrimaryKeys": {},
@@ -3247,67 +4041,163 @@
         "meta_top_granularity_id_dim_granularity_id_fk": {
           "name": "meta_top_granularity_id_dim_granularity_id_fk",
           "tableFrom": "meta_top",
-          "tableTo": "dim_granularity",
           "columnsFrom": [
             "granularity_id"
           ],
+          "tableTo": "dim_granularity",
           "columnsTo": [
             "id"
           ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
+          "onUpdate": "no action",
+          "onDelete": "no action"
         },
         "meta_top_faction_id_dim_faction_id_fk": {
           "name": "meta_top_faction_id_dim_faction_id_fk",
           "tableFrom": "meta_top",
-          "tableTo": "dim_faction",
           "columnsFrom": [
             "faction_id"
           ],
+          "tableTo": "dim_faction",
           "columnsTo": [
             "id"
           ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
+          "onUpdate": "no action",
+          "onDelete": "no action"
         },
         "meta_top_subfaction_id_dim_subfaction_id_fk": {
           "name": "meta_top_subfaction_id_dim_subfaction_id_fk",
           "tableFrom": "meta_top",
-          "tableTo": "dim_subfaction",
           "columnsFrom": [
             "subfaction_id"
           ],
+          "tableTo": "dim_subfaction",
           "columnsTo": [
             "id"
           ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
+          "onUpdate": "no action",
+          "onDelete": "no action"
         },
         "meta_top_detachment_id_dim_detachment_id_fk": {
           "name": "meta_top_detachment_id_dim_detachment_id_fk",
           "tableFrom": "meta_top",
-          "tableTo": "dim_detachment",
           "columnsFrom": [
             "detachment_id"
           ],
+          "tableTo": "dim_detachment",
           "columnsTo": [
             "id"
           ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
+          "onUpdate": "no action",
+          "onDelete": "no action"
         },
         "meta_top_meta_for_id_meta_for_id_fk": {
           "name": "meta_top_meta_for_id_meta_for_id_fk",
           "tableFrom": "meta_top",
-          "tableTo": "meta_for",
           "columnsFrom": [
             "meta_for_id"
           ],
+          "tableTo": "meta_for",
           "columnsTo": [
             "id"
           ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
+          "onUpdate": "no action",
+          "onDelete": "cascade"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {}
+    },
+    "mission_game_state": {
+      "name": "mission_game_state",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "scoring_mission_id": {
+          "name": "scoring_mission_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "game_state_id": {
+          "name": "game_state_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "points": {
+          "name": "points",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "count_mode": {
+          "name": "count_mode",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "'flag'"
+        },
+        "sort_order": {
+          "name": "sort_order",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": 0
+        }
+      },
+      "indexes": {
+        "idx_mgs_mission": {
+          "name": "idx_mgs_mission",
+          "columns": [
+            "scoring_mission_id"
+          ],
+          "isUnique": false
+        },
+        "idx_mgs_state": {
+          "name": "idx_mgs_state",
+          "columns": [
+            "game_state_id"
+          ],
+          "isUnique": false
+        }
+      },
+      "foreignKeys": {
+        "mission_game_state_scoring_mission_id_scoring_mission_id_fk": {
+          "name": "mission_game_state_scoring_mission_id_scoring_mission_id_fk",
+          "tableFrom": "mission_game_state",
+          "columnsFrom": [
+            "scoring_mission_id"
+          ],
+          "tableTo": "scoring_mission",
+          "columnsTo": [
+            "id"
+          ],
+          "onUpdate": "no action",
+          "onDelete": "cascade"
+        },
+        "mission_game_state_game_state_id_game_state_id_fk": {
+          "name": "mission_game_state_game_state_id_game_state_id_fk",
+          "tableFrom": "mission_game_state",
+          "columnsFrom": [
+            "game_state_id"
+          ],
+          "tableTo": "game_state",
+          "columnsTo": [
+            "id"
+          ],
+          "onUpdate": "no action",
+          "onDelete": "no action"
         }
       },
       "compositePrimaryKeys": {},
@@ -3438,36 +4328,36 @@
         "pairings_round_id_rounds_id_fk": {
           "name": "pairings_round_id_rounds_id_fk",
           "tableFrom": "pairings",
-          "tableTo": "rounds",
           "columnsFrom": [
             "round_id"
           ],
+          "tableTo": "rounds",
           "columnsTo": [
             "id"
           ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
+          "onUpdate": "no action",
+          "onDelete": "cascade"
         },
         "pairings_player1_id_tournament_players_id_fk": {
           "name": "pairings_player1_id_tournament_players_id_fk",
           "tableFrom": "pairings",
-          "tableTo": "tournament_players",
           "columnsFrom": [
             "player1_id"
           ],
+          "tableTo": "tournament_players",
           "columnsTo": [
             "id"
           ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
+          "onUpdate": "no action",
+          "onDelete": "cascade"
         }
       },
       "compositePrimaryKeys": {},
       "uniqueConstraints": {},
       "checkConstraints": {}
     },
-    "player_elo": {
-      "name": "player_elo",
+    "pipeline_item": {
+      "name": "pipeline_item",
       "columns": {
         "id": {
           "name": "id",
@@ -3476,61 +4366,400 @@
           "notNull": true,
           "autoincrement": false
         },
-        "user_id": {
-          "name": "user_id",
+        "source_id": {
+          "name": "source_id",
           "type": "text",
           "primaryKey": false,
           "notNull": true,
           "autoincrement": false
         },
-        "rating": {
-          "name": "rating",
-          "type": "integer",
+        "title": {
+          "name": "title",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "kind": {
+          "name": "kind",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "external_url": {
+          "name": "external_url",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "external_id": {
+          "name": "external_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "status": {
+          "name": "status",
+          "type": "text",
           "primaryKey": false,
           "notNull": true,
           "autoincrement": false,
-          "default": 1200
+          "default": "'discovered'"
         },
-        "games_played": {
-          "name": "games_played",
+        "discovered_at": {
+          "name": "discovered_at",
           "type": "integer",
           "primaryKey": false,
           "notNull": true,
-          "autoincrement": false,
-          "default": 0
+          "autoincrement": false
         },
-        "updated_at": {
-          "name": "updated_at",
+        "published_at": {
+          "name": "published_at",
           "type": "integer",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "processed_at": {
+          "name": "processed_at",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "result_summary": {
+          "name": "result_summary",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "error": {
+          "name": "error",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        }
+      },
+      "indexes": {
+        "uq_pipeline_item_source_external": {
+          "name": "uq_pipeline_item_source_external",
+          "columns": [
+            "source_id",
+            "external_id"
+          ],
+          "isUnique": true
+        },
+        "idx_pipeline_item_source": {
+          "name": "idx_pipeline_item_source",
+          "columns": [
+            "source_id"
+          ],
+          "isUnique": false
+        },
+        "idx_pipeline_item_status": {
+          "name": "idx_pipeline_item_status",
+          "columns": [
+            "status"
+          ],
+          "isUnique": false
+        },
+        "idx_pipeline_item_discovered": {
+          "name": "idx_pipeline_item_discovered",
+          "columns": [
+            "discovered_at"
+          ],
+          "isUnique": false
+        }
+      },
+      "foreignKeys": {
+        "pipeline_item_source_id_pipeline_source_id_fk": {
+          "name": "pipeline_item_source_id_pipeline_source_id_fk",
+          "tableFrom": "pipeline_item",
+          "columnsFrom": [
+            "source_id"
+          ],
+          "tableTo": "pipeline_source",
+          "columnsTo": [
+            "id"
+          ],
+          "onUpdate": "no action",
+          "onDelete": "cascade"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {}
+    },
+    "pipeline_run_item": {
+      "name": "pipeline_run_item",
+      "columns": {
+        "run_id": {
+          "name": "run_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "item_id": {
+          "name": "item_id",
+          "type": "text",
           "primaryKey": false,
           "notNull": true,
           "autoincrement": false
         }
       },
       "indexes": {
-        "player_elo_user_id_unique": {
-          "name": "player_elo_user_id_unique",
+        "idx_pipeline_run_item_item": {
+          "name": "idx_pipeline_run_item_item",
           "columns": [
-            "user_id"
+            "item_id"
+          ],
+          "isUnique": false
+        }
+      },
+      "foreignKeys": {
+        "pipeline_run_item_run_id_pipeline_run_id_fk": {
+          "name": "pipeline_run_item_run_id_pipeline_run_id_fk",
+          "tableFrom": "pipeline_run_item",
+          "columnsFrom": [
+            "run_id"
+          ],
+          "tableTo": "pipeline_run",
+          "columnsTo": [
+            "id"
+          ],
+          "onUpdate": "no action",
+          "onDelete": "cascade"
+        },
+        "pipeline_run_item_item_id_pipeline_item_id_fk": {
+          "name": "pipeline_run_item_item_id_pipeline_item_id_fk",
+          "tableFrom": "pipeline_run_item",
+          "columnsFrom": [
+            "item_id"
+          ],
+          "tableTo": "pipeline_item",
+          "columnsTo": [
+            "id"
+          ],
+          "onUpdate": "no action",
+          "onDelete": "cascade"
+        }
+      },
+      "compositePrimaryKeys": {
+        "pipeline_run_item_run_id_item_id_pk": {
+          "columns": [
+            "run_id",
+            "item_id"
+          ],
+          "name": "pipeline_run_item_run_id_item_id_pk"
+        }
+      },
+      "uniqueConstraints": {},
+      "checkConstraints": {}
+    },
+    "pipeline_run": {
+      "name": "pipeline_run",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "pipeline": {
+          "name": "pipeline",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "trigger": {
+          "name": "trigger",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "status": {
+          "name": "status",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "'running'"
+        },
+        "started_at": {
+          "name": "started_at",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "finished_at": {
+          "name": "finished_at",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "found": {
+          "name": "found",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": 0
+        },
+        "processed": {
+          "name": "processed",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": 0
+        },
+        "failed": {
+          "name": "failed",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": 0
+        },
+        "triggered_by": {
+          "name": "triggered_by",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "summary": {
+          "name": "summary",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "error": {
+          "name": "error",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        }
+      },
+      "indexes": {
+        "idx_pipeline_run_pipeline": {
+          "name": "idx_pipeline_run_pipeline",
+          "columns": [
+            "pipeline"
+          ],
+          "isUnique": false
+        },
+        "idx_pipeline_run_started": {
+          "name": "idx_pipeline_run_started",
+          "columns": [
+            "started_at"
+          ],
+          "isUnique": false
+        }
+      },
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {}
+    },
+    "pipeline_source": {
+      "name": "pipeline_source",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "name": {
+          "name": "name",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "kind": {
+          "name": "kind",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "url": {
+          "name": "url",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "external_id": {
+          "name": "external_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "active": {
+          "name": "active",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": 1
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "last_checked_at": {
+          "name": "last_checked_at",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "last_success_at": {
+          "name": "last_success_at",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "last_error": {
+          "name": "last_error",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        }
+      },
+      "indexes": {
+        "uq_pipeline_source_url": {
+          "name": "uq_pipeline_source_url",
+          "columns": [
+            "url"
           ],
           "isUnique": true
         }
       },
-      "foreignKeys": {
-        "player_elo_user_id_user_id_fk": {
-          "name": "player_elo_user_id_user_id_fk",
-          "tableFrom": "player_elo",
-          "tableTo": "user",
-          "columnsFrom": [
-            "user_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        }
-      },
+      "foreignKeys": {},
       "compositePrimaryKeys": {},
       "uniqueConstraints": {},
       "checkConstraints": {}
@@ -3619,15 +4848,15 @@
         "player_glicko_user_id_user_id_fk": {
           "name": "player_glicko_user_id_user_id_fk",
           "tableFrom": "player_glicko",
-          "tableTo": "user",
           "columnsFrom": [
             "user_id"
           ],
+          "tableTo": "user",
           "columnsTo": [
             "id"
           ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
+          "onUpdate": "no action",
+          "onDelete": "cascade"
         }
       },
       "compositePrimaryKeys": {},
@@ -3679,15 +4908,15 @@
         "rolls_session_id_sessions_id_fk": {
           "name": "rolls_session_id_sessions_id_fk",
           "tableFrom": "rolls",
-          "tableTo": "sessions",
           "columnsFrom": [
             "session_id"
           ],
+          "tableTo": "sessions",
           "columnsTo": [
             "id"
           ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
+          "onUpdate": "no action",
+          "onDelete": "cascade"
         }
       },
       "compositePrimaryKeys": {},
@@ -3762,15 +4991,90 @@
         "rounds_tournament_id_tournaments_id_fk": {
           "name": "rounds_tournament_id_tournaments_id_fk",
           "tableFrom": "rounds",
-          "tableTo": "tournaments",
           "columnsFrom": [
             "tournament_id"
           ],
+          "tableTo": "tournaments",
           "columnsTo": [
             "id"
           ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
+          "onUpdate": "no action",
+          "onDelete": "cascade"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {}
+    },
+    "scoring_mission": {
+      "name": "scoring_mission",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "name": {
+          "name": "name",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "kind": {
+          "name": "kind",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "side": {
+          "name": "side",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "'symmetric'"
+        },
+        "cap": {
+          "name": "cap",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "ui_pattern": {
+          "name": "ui_pattern",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        }
+      },
+      "indexes": {
+        "idx_scoring_mission_kind": {
+          "name": "idx_scoring_mission_kind",
+          "columns": [
+            "kind"
+          ],
+          "isUnique": false
+        }
+      },
+      "foreignKeys": {
+        "scoring_mission_id_content_entity_id_fk": {
+          "name": "scoring_mission_id_content_entity_id_fk",
+          "tableFrom": "scoring_mission",
+          "columnsFrom": [
+            "id"
+          ],
+          "tableTo": "content_entity",
+          "columnsTo": [
+            "id"
+          ],
+          "onUpdate": "no action",
+          "onDelete": "cascade"
         }
       },
       "compositePrimaryKeys": {},
@@ -3864,15 +5168,15 @@
         "simulations_user_id_user_id_fk": {
           "name": "simulations_user_id_user_id_fk",
           "tableFrom": "simulations",
-          "tableTo": "user",
           "columnsFrom": [
             "user_id"
           ],
+          "tableTo": "user",
           "columnsTo": [
             "id"
           ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
+          "onUpdate": "no action",
+          "onDelete": "cascade"
         }
       },
       "compositePrimaryKeys": {},
@@ -3932,15 +5236,15 @@
         "stratagem_log_turn_id_turns_id_fk": {
           "name": "stratagem_log_turn_id_turns_id_fk",
           "tableFrom": "stratagem_log",
-          "tableTo": "turns",
           "columnsFrom": [
             "turn_id"
           ],
+          "tableTo": "turns",
           "columnsTo": [
             "id"
           ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
+          "onUpdate": "no action",
+          "onDelete": "cascade"
         }
       },
       "compositePrimaryKeys": {},
@@ -4006,28 +5310,28 @@
         "tournament_awards_tournament_id_tournaments_id_fk": {
           "name": "tournament_awards_tournament_id_tournaments_id_fk",
           "tableFrom": "tournament_awards",
-          "tableTo": "tournaments",
           "columnsFrom": [
             "tournament_id"
           ],
+          "tableTo": "tournaments",
           "columnsTo": [
             "id"
           ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
+          "onUpdate": "no action",
+          "onDelete": "cascade"
         },
         "tournament_awards_recipient_id_tournament_players_id_fk": {
           "name": "tournament_awards_recipient_id_tournament_players_id_fk",
           "tableFrom": "tournament_awards",
-          "tableTo": "tournament_players",
           "columnsFrom": [
             "recipient_id"
           ],
+          "tableTo": "tournament_players",
           "columnsTo": [
             "id"
           ],
-          "onDelete": "set null",
-          "onUpdate": "no action"
+          "onUpdate": "no action",
+          "onDelete": "set null"
         }
       },
       "compositePrimaryKeys": {},
@@ -4107,41 +5411,41 @@
         "tournament_cards_tournament_id_tournaments_id_fk": {
           "name": "tournament_cards_tournament_id_tournaments_id_fk",
           "tableFrom": "tournament_cards",
-          "tableTo": "tournaments",
           "columnsFrom": [
             "tournament_id"
           ],
+          "tableTo": "tournaments",
           "columnsTo": [
             "id"
           ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
+          "onUpdate": "no action",
+          "onDelete": "cascade"
         },
         "tournament_cards_player_id_tournament_players_id_fk": {
           "name": "tournament_cards_player_id_tournament_players_id_fk",
           "tableFrom": "tournament_cards",
-          "tableTo": "tournament_players",
           "columnsFrom": [
             "player_id"
           ],
+          "tableTo": "tournament_players",
           "columnsTo": [
             "id"
           ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
+          "onUpdate": "no action",
+          "onDelete": "cascade"
         },
         "tournament_cards_issued_by_user_id_fk": {
           "name": "tournament_cards_issued_by_user_id_fk",
           "tableFrom": "tournament_cards",
-          "tableTo": "user",
           "columnsFrom": [
             "issued_by"
           ],
+          "tableTo": "user",
           "columnsTo": [
             "id"
           ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
+          "onUpdate": "no action",
+          "onDelete": "cascade"
         }
       },
       "compositePrimaryKeys": {},
@@ -4267,28 +5571,28 @@
         "tournament_players_tournament_id_tournaments_id_fk": {
           "name": "tournament_players_tournament_id_tournaments_id_fk",
           "tableFrom": "tournament_players",
-          "tableTo": "tournaments",
           "columnsFrom": [
             "tournament_id"
           ],
+          "tableTo": "tournaments",
           "columnsTo": [
             "id"
           ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
+          "onUpdate": "no action",
+          "onDelete": "cascade"
         },
         "tournament_players_user_id_user_id_fk": {
           "name": "tournament_players_user_id_user_id_fk",
           "tableFrom": "tournament_players",
-          "tableTo": "user",
           "columnsFrom": [
             "user_id"
           ],
+          "tableTo": "user",
           "columnsTo": [
             "id"
           ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
+          "onUpdate": "no action",
+          "onDelete": "cascade"
         }
       },
       "compositePrimaryKeys": {},
@@ -4456,15 +5760,15 @@
         "tournaments_to_user_id_user_id_fk": {
           "name": "tournaments_to_user_id_user_id_fk",
           "tableFrom": "tournaments",
-          "tableTo": "user",
           "columnsFrom": [
             "to_user_id"
           ],
+          "tableTo": "user",
           "columnsTo": [
             "id"
           ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
+          "onUpdate": "no action",
+          "onDelete": "cascade"
         }
       },
       "compositePrimaryKeys": {},
@@ -4572,28 +5876,28 @@
         "training_examples_user_id_user_id_fk": {
           "name": "training_examples_user_id_user_id_fk",
           "tableFrom": "training_examples",
-          "tableTo": "user",
           "columnsFrom": [
             "user_id"
           ],
+          "tableTo": "user",
           "columnsTo": [
             "id"
           ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
+          "onUpdate": "no action",
+          "onDelete": "cascade"
         },
         "training_examples_dice_set_id_dice_sets_id_fk": {
           "name": "training_examples_dice_set_id_dice_sets_id_fk",
           "tableFrom": "training_examples",
-          "tableTo": "dice_sets",
           "columnsFrom": [
             "dice_set_id"
           ],
+          "tableTo": "dice_sets",
           "columnsTo": [
             "id"
           ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
+          "onUpdate": "no action",
+          "onDelete": "cascade"
         }
       },
       "compositePrimaryKeys": {},
@@ -4680,28 +5984,28 @@
         "training_frames_user_id_user_id_fk": {
           "name": "training_frames_user_id_user_id_fk",
           "tableFrom": "training_frames",
-          "tableTo": "user",
           "columnsFrom": [
             "user_id"
           ],
+          "tableTo": "user",
           "columnsTo": [
             "id"
           ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
+          "onUpdate": "no action",
+          "onDelete": "cascade"
         },
         "training_frames_dice_set_id_dice_sets_id_fk": {
           "name": "training_frames_dice_set_id_dice_sets_id_fk",
           "tableFrom": "training_frames",
-          "tableTo": "dice_sets",
           "columnsFrom": [
             "dice_set_id"
           ],
+          "tableTo": "dice_sets",
           "columnsTo": [
             "id"
           ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
+          "onUpdate": "no action",
+          "onDelete": "cascade"
         }
       },
       "compositePrimaryKeys": {},
@@ -4925,15 +6229,15 @@
         "turns_match_id_matches_id_fk": {
           "name": "turns_match_id_matches_id_fk",
           "tableFrom": "turns",
-          "tableTo": "matches",
           "columnsFrom": [
             "match_id"
           ],
+          "tableTo": "matches",
           "columnsTo": [
             "id"
           ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
+          "onUpdate": "no action",
+          "onDelete": "cascade"
         }
       },
       "compositePrimaryKeys": {},
@@ -5081,28 +6385,28 @@
         "user_bans_user_id_user_id_fk": {
           "name": "user_bans_user_id_user_id_fk",
           "tableFrom": "user_bans",
-          "tableTo": "user",
           "columnsFrom": [
             "user_id"
           ],
+          "tableTo": "user",
           "columnsTo": [
             "id"
           ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
+          "onUpdate": "no action",
+          "onDelete": "cascade"
         },
         "user_bans_banned_by_user_id_fk": {
           "name": "user_bans_banned_by_user_id_fk",
           "tableFrom": "user_bans",
-          "tableTo": "user",
           "columnsFrom": [
             "banned_by"
           ],
+          "tableTo": "user",
           "columnsTo": [
             "id"
           ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
+          "onUpdate": "no action",
+          "onDelete": "no action"
         }
       },
       "compositePrimaryKeys": {},
@@ -5113,9 +6417,9 @@
   "views": {},
   "enums": {},
   "_meta": {
+    "columns": {},
     "schemas": {},
-    "tables": {},
-    "columns": {}
+    "tables": {}
   },
   "internal": {
     "indexes": {}

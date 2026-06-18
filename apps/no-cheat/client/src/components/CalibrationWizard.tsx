@@ -9,10 +9,9 @@ type Props = {
   onComplete: () => void
 }
 
-type Step =
-  | { name: 'test-roll'; results: RoiResult[]; pipValues: number[] }
+type Step = { name: 'test-roll'; results: RoiResult[]; pipValues: number[] }
 
-export function CalibrationWizard({ pipeline, diceSetId, onComplete }: Props) {
+export function CalibrationWizard({ pipeline, onComplete }: Props) {
   const videoRef = useRef<HTMLVideoElement>(null)
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const [step, setStep] = useState<Step>({ name: 'test-roll', results: [], pipValues: [] })
@@ -52,8 +51,16 @@ export function CalibrationWizard({ pipeline, diceSetId, onComplete }: Props) {
     const ctx = canvas.getContext('2d')!
     ctx.drawImage(video, 0, 0, canvas.width, canvas.height)
     // Ensure pipeline dimensions match current frame
-    if (!pipeline.state.ready || pipeline.state.width !== canvas.width || pipeline.state.height !== canvas.height) {
-      pipeline.captureBackground(new Uint8ClampedArray(canvas.width * canvas.height * 4), canvas.width, canvas.height)
+    if (
+      !pipeline.state.ready ||
+      pipeline.state.width !== canvas.width ||
+      pipeline.state.height !== canvas.height
+    ) {
+      pipeline.captureBackground(
+        new Uint8ClampedArray(canvas.width * canvas.height * 4),
+        canvas.width,
+        canvas.height,
+      )
     }
     return { imageData: ctx.getImageData(0, 0, canvas.width, canvas.height), canvas }
   }
@@ -61,7 +68,11 @@ export function CalibrationWizard({ pipeline, diceSetId, onComplete }: Props) {
   function handleTestRoll() {
     const frame = getFrame()
     if (!frame) return
-    const results = pipeline.processFrame(frame.imageData.data, frame.canvas.width, frame.canvas.height)
+    const results = pipeline.processFrame(
+      frame.imageData.data,
+      frame.canvas.width,
+      frame.canvas.height,
+    )
 
     if (results.length === 0) {
       setError('No dice detected. Place dice on the surface and try again.')
@@ -92,13 +103,7 @@ export function CalibrationWizard({ pipeline, diceSetId, onComplete }: Props) {
     <div className="space-y-4">
       {/* Camera feed */}
       <div className="relative rounded-lg overflow-hidden bg-slate-900 aspect-square">
-        <video
-          ref={videoRef}
-          autoPlay
-          playsInline
-          muted
-          className="w-full h-full object-cover"
-        />
+        <video ref={videoRef} autoPlay playsInline muted className="w-full h-full object-cover" />
         <canvas ref={canvasRef} className="hidden" />
 
         {/* Test roll overlay: bounding boxes */}
@@ -155,8 +160,8 @@ export function CalibrationWizard({ pipeline, diceSetId, onComplete }: Props) {
         ) : (
           <>
             <p className="text-slate-400 text-sm text-center">
-              Detected {step.results.length} {step.results.length === 1 ? 'die' : 'dice'}:
-              {' '}{step.pipValues.join(', ')}
+              Detected {step.results.length} {step.results.length === 1 ? 'die' : 'dice'}:{' '}
+              {step.pipValues.join(', ')}
             </p>
             <p className="text-slate-300 text-sm text-center">Does this look correct?</p>
           </>

@@ -1,4 +1,4 @@
-import { describe, expect, it, vi, beforeEach } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 const mockSession = {
   inputNames: ['images'],
@@ -13,7 +13,9 @@ vi.mock('onnxruntime-web', () => ({
   InferenceSession: {
     create: vi.fn().mockResolvedValue(mockSession),
   },
-  Tensor: vi.fn().mockImplementation((type: string, data: unknown, dims: number[]) => ({ type, data, dims })),
+  Tensor: vi
+    .fn()
+    .mockImplementation((type: string, data: unknown, dims: number[]) => ({ type, data, dims })),
 }))
 
 import { createMlPipeline } from './mlPipeline'
@@ -51,14 +53,14 @@ describe('mlPipeline', () => {
     const outputData = new Float32Array(numAttrs * numDetections)
 
     // Detection 0: cx=320, cy=240, w=100, h=100, class 3 (pip 4) with conf 0.85
-    outputData[0 * numDetections + 0] = 320  // cx
-    outputData[1 * numDetections + 0] = 240  // cy
-    outputData[2 * numDetections + 0] = 100  // w
-    outputData[3 * numDetections + 0] = 100  // h
+    outputData[0] = 320 // cx
+    outputData[1 * numDetections + 0] = 240 // cy
+    outputData[2 * numDetections + 0] = 100 // w
+    outputData[3 * numDetections + 0] = 100 // h
     outputData[(4 + 3) * numDetections + 0] = 0.85 // class 3
 
     // Detection 1: low confidence — should be filtered out
-    outputData[0 * numDetections + 1] = 100
+    outputData[1] = 100
     outputData[1 * numDetections + 1] = 100
     outputData[2 * numDetections + 1] = 50
     outputData[3 * numDetections + 1] = 50
@@ -98,10 +100,10 @@ describe('mlPipeline', () => {
     const numDetections = 1
     const numAttrs = 10
     const outputData = new Float32Array(numAttrs * numDetections)
-    outputData[0] = 320  // cx
-    outputData[1] = 240  // cy
-    outputData[2] = 80   // w
-    outputData[3] = 80   // h
+    outputData[0] = 320 // cx
+    outputData[1] = 240 // cy
+    outputData[2] = 80 // w
+    outputData[3] = 80 // h
     outputData[4 + 5] = 0.95 // class 5
 
     mockSession.run.mockResolvedValue({

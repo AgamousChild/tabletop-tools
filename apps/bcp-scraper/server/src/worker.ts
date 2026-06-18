@@ -1,9 +1,14 @@
-import { Hono } from 'hono'
+/**
+ * @see docs/etl-data-pipelines.md — ETL diagram and function reference
+ * @see docs/schema-turso.md — Turso database schema (meta_events, bcp_scrape_jobs, etc.)
+ */
 import { createClient } from '@libsql/client'
 import { createDbFromClient } from '@tabletop-tools/db'
-import { runScrape } from './lib/scrape'
-import { runPipeline } from './lib/pipeline'
+import { Hono } from 'hono'
+
 import { parsePendingLists } from './lib/parse-lists'
+import { runPipeline } from './lib/pipeline'
+import { runScrape } from './lib/scrape'
 
 interface Env {
   TURSO_DB_URL: string
@@ -14,10 +19,12 @@ interface Env {
 }
 
 function createDb(env: Env) {
-  return createDbFromClient(createClient({
-    url: env.TURSO_DB_URL,
-    authToken: env.TURSO_AUTH_TOKEN,
-  }))
+  return createDbFromClient(
+    createClient({
+      url: env.TURSO_DB_URL,
+      authToken: env.TURSO_AUTH_TOKEN,
+    }),
+  )
 }
 
 let cachedApp: Hono<{ Bindings: Env }> | null = null
@@ -39,11 +46,14 @@ function getApp() {
 
     const db = createDb(c.env)
 
-    const result = await runScrape({
-      bcpEmail: c.env.BCP_EMAIL,
-      bcpPassword: c.env.BCP_PASSWORD,
-      db,
-    }, 'manual')
+    const result = await runScrape(
+      {
+        bcpEmail: c.env.BCP_EMAIL,
+        bcpPassword: c.env.BCP_PASSWORD,
+        db,
+      },
+      'manual',
+    )
 
     await runPipeline(db)
     await parsePendingLists(db)
@@ -61,11 +71,16 @@ export default {
   async scheduled(_event: ScheduledEvent, env: Env, ctx: ExecutionContext) {
     const db = createDb(env)
     ctx.waitUntil(
-      runScrape({
-        bcpEmail: env.BCP_EMAIL,
-        bcpPassword: env.BCP_PASSWORD,
-        db,
-      }, 'cron').then(() => runPipeline(db)).then(() => parsePendingLists(db))
+      runScrape(
+        {
+          bcpEmail: env.BCP_EMAIL,
+          bcpPassword: env.BCP_PASSWORD,
+          db,
+        },
+        'cron',
+      )
+        .then(() => runPipeline(db))
+        .then(() => parsePendingLists(db)),
     )
   },
 }

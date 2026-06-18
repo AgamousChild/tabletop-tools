@@ -1,11 +1,24 @@
-import { describe, it, expect } from 'vitest'
+import { describe, expect, it } from 'vitest'
+
 import {
-  NodeSchema, NodeRefSchema, SourceSchema,
+  type BrainRecord,
+  type CrossRef,
+  CrossRefSchema,
+  type ErrataAnnotation,
+  ErrataAnnotationSchema,
+  type GamePhase,
+  type Node,
+  type NodeCategory,
   NodeCategorySchema,
-  RecordTypeSchema, RecordSchema, CrossRefSchema, ErrataAnnotationSchema,
-  type Node, type NodeRef, type Source,
-  type NodeLayer, type NodeCategory, type GamePhase, type RefType,
-  type BrainRecord, type CrossRef, type ErrataAnnotation,
+  type NodeLayer,
+  type NodeRef,
+  NodeRefSchema,
+  NodeSchema,
+  RecordSchema,
+  RecordTypeSchema,
+  type RefType,
+  type Source,
+  SourceSchema,
 } from './model'
 
 describe('model schemas', () => {
@@ -32,18 +45,22 @@ describe('model schemas', () => {
     })
 
     it('rejects invalid source type', () => {
-      expect(() => SourceSchema.parse({
-        type: 'invalid',
-        title: 'X',
-        retrievedAt: '2026-04-08',
-      })).toThrow()
+      expect(() =>
+        SourceSchema.parse({
+          type: 'invalid',
+          title: 'X',
+          retrievedAt: '2026-04-08',
+        }),
+      ).toThrow()
     })
 
     it('rejects missing title', () => {
-      expect(() => SourceSchema.parse({
-        type: 'pdf',
-        retrievedAt: '2026-04-08',
-      })).toThrow()
+      expect(() =>
+        SourceSchema.parse({
+          type: 'pdf',
+          retrievedAt: '2026-04-08',
+        }),
+      ).toThrow()
     })
   })
 
@@ -70,36 +87,44 @@ describe('model schemas', () => {
     })
 
     it('rejects ref without context', () => {
-      expect(() => NodeRefSchema.parse({
-        sourceId: 'core:a',
-        targetId: 'core:wound-roll',
-        rel: 'requires',
-      })).toThrow()
+      expect(() =>
+        NodeRefSchema.parse({
+          sourceId: 'core:a',
+          targetId: 'core:wound-roll',
+          rel: 'requires',
+        }),
+      ).toThrow()
     })
 
     it('rejects ref without targetId', () => {
-      expect(() => NodeRefSchema.parse({
-        sourceId: 'core:a',
-        rel: 'requires',
-        context: 'some context',
-      })).toThrow()
+      expect(() =>
+        NodeRefSchema.parse({
+          sourceId: 'core:a',
+          rel: 'requires',
+          context: 'some context',
+        }),
+      ).toThrow()
     })
 
     it('rejects ref without sourceId', () => {
-      expect(() => NodeRefSchema.parse({
-        targetId: 'core:wound-roll',
-        rel: 'requires',
-        context: 'some context',
-      })).toThrow()
+      expect(() =>
+        NodeRefSchema.parse({
+          targetId: 'core:wound-roll',
+          rel: 'requires',
+          context: 'some context',
+        }),
+      ).toThrow()
     })
 
     it('rejects invalid rel type', () => {
-      expect(() => NodeRefSchema.parse({
-        sourceId: 'core:a',
-        targetId: 'core:wound-roll',
-        rel: 'invalid_rel',
-        context: 'some context',
-      })).toThrow()
+      expect(() =>
+        NodeRefSchema.parse({
+          sourceId: 'core:a',
+          targetId: 'core:wound-roll',
+          rel: 'invalid_rel',
+          context: 'some context',
+        }),
+      ).toThrow()
     })
   })
 
@@ -112,12 +137,14 @@ describe('model schemas', () => {
         title: 'Wound Roll',
         content: 'When making a wound roll...',
         summary: 'How to resolve wound rolls in the shooting and fight phases.',
-        sources: [{
-          type: 'pdf',
-          title: 'Core Rules v1.0',
-          page: 22,
-          retrievedAt: '2026-04-08',
-        }],
+        sources: [
+          {
+            type: 'pdf',
+            title: 'Core Rules v1.0',
+            page: 22,
+            retrievedAt: '2026-04-08',
+          },
+        ],
         refs: [],
         version: 1,
         keywords: ['wound', 'roll', 'shooting', 'fight'],
@@ -137,17 +164,21 @@ describe('model schemas', () => {
         summary: 'Space Marines faction ability that marks a target for re-rolls.',
         phase: 'command',
         factionId: 'space-marines',
-        sources: [{
-          type: 'pdf',
-          title: 'Faction Pack: Space Marines v1.6',
-          retrievedAt: '2026-04-08',
-        }],
-        refs: [{
-          sourceId: 'faction:space-marines:oath-of-moment',
-          targetId: 'core:command-phase',
-          rel: 'part_of',
-          context: 'Resolved at the start of the Command phase',
-        }],
+        sources: [
+          {
+            type: 'pdf',
+            title: 'Faction Pack: Space Marines v1.6',
+            retrievedAt: '2026-04-08',
+          },
+        ],
+        refs: [
+          {
+            sourceId: 'faction:space-marines:oath-of-moment',
+            targetId: 'core:command-phase',
+            rel: 'part_of',
+            context: 'Resolved at the start of the Command phase',
+          },
+        ],
         version: 1,
         keywords: ['oath', 'moment', 're-roll'],
       }
@@ -175,25 +206,29 @@ describe('model schemas', () => {
     })
 
     it('rejects node without required fields', () => {
-      expect(() => NodeSchema.parse({
-        id: 'core:test',
-        layer: 'core',
-      })).toThrow()
+      expect(() =>
+        NodeSchema.parse({
+          id: 'core:test',
+          layer: 'core',
+        }),
+      ).toThrow()
     })
 
     it('rejects node with empty sources', () => {
-      expect(() => NodeSchema.parse({
-        id: 'core:test',
-        layer: 'core',
-        category: 'core-mechanic',
-        title: 'Test',
-        content: 'Content',
-        summary: 'Summary',
-        sources: [],
-        refs: [],
-        version: 1,
-        keywords: [],
-      })).toThrow()
+      expect(() =>
+        NodeSchema.parse({
+          id: 'core:test',
+          layer: 'core',
+          category: 'core-mechanic',
+          title: 'Test',
+          content: 'Content',
+          summary: 'Summary',
+          sources: [],
+          refs: [],
+          version: 1,
+          keywords: [],
+        }),
+      ).toThrow()
     })
 
     it('accepts optional qualityFlags array', () => {
@@ -240,30 +275,67 @@ describe('model schemas', () => {
 
     it('category values cover all spec categories', () => {
       const categories: NodeCategory[] = [
-        'core-mechanic', 'phase-sequence', 'terrain', 'army-construction', 'mission', 'keyword',
-        'detachment-rule', 'stratagem', 'enhancement', 'faction-ability',
-        'datasheet', 'weapon', 'unit-ability', 'wargear-option', 'leader-attachment', 'unit-composition',
-        'balance-change', 'faq', 'commentary',
-        'ruling', 'tactic', 'worked-example',
-        'primary-mission', 'secondary-mission', 'deployment-zone',
-        'twist', 'challenger', 'terrain-layout',
+        'core-mechanic',
+        'phase-sequence',
+        'terrain',
+        'army-construction',
+        'mission',
+        'keyword',
+        'detachment-rule',
+        'stratagem',
+        'enhancement',
+        'faction-ability',
+        'datasheet',
+        'weapon',
+        'unit-ability',
+        'wargear-option',
+        'leader-attachment',
+        'unit-composition',
+        'balance-change',
+        'faq',
+        'commentary',
+        'ruling',
+        'tactic',
+        'worked-example',
+        'primary-mission',
+        'secondary-mission',
+        'deployment-zone',
+        'twist',
+        'challenger',
+        'terrain-layout',
       ]
       expect(categories).toHaveLength(28)
     })
 
     it('game phase values are exhaustive', () => {
       const phases: GamePhase[] = [
-        'command', 'movement', 'shooting', 'charge', 'fight',
-        'any', 'pre-battle', 'deployment', 'end-of-turn',
+        'command',
+        'movement',
+        'shooting',
+        'charge',
+        'fight',
+        'any',
+        'pre-battle',
+        'deployment',
+        'end-of-turn',
       ]
       expect(phases).toHaveLength(9)
     })
 
     it('ref type values are exhaustive', () => {
       const refs: RefType[] = [
-        'part_of', 'supersedes', 'clarifies',
-        'requires', 'modifies', 'triggers', 'sequence_adjacent',
-        'interacts_with', 'commonly_confused', 'edge_case', 'stacks_with', 'prevents',
+        'part_of',
+        'supersedes',
+        'clarifies',
+        'requires',
+        'modifies',
+        'triggers',
+        'sequence_adjacent',
+        'interacts_with',
+        'commonly_confused',
+        'edge_case',
+        'stacks_with',
+        'prevents',
       ]
       expect(refs).toHaveLength(12)
     })
@@ -311,10 +383,20 @@ describe('Record schema', () => {
 
   it('validates all record types', () => {
     const recordTypes = [
-      'unit', 'detachment', 'stratagem', 'enhancement',
-      'rule', 'army-rule', 'errata', 'balance',
-      'primary-mission', 'secondary-mission', 'deployment-zone',
-      'twist', 'challenger', 'terrain-layout',
+      'unit',
+      'detachment',
+      'stratagem',
+      'enhancement',
+      'rule',
+      'army-rule',
+      'errata',
+      'balance',
+      'primary-mission',
+      'secondary-mission',
+      'deployment-zone',
+      'twist',
+      'challenger',
+      'terrain-layout',
     ] as const
     for (const type of recordTypes) {
       expect(() => RecordTypeSchema.parse(type)).not.toThrow()
@@ -334,14 +416,16 @@ describe('Record schema', () => {
   })
 
   it('rejects a cross-reference with refCount < 1', () => {
-    expect(() => CrossRefSchema.parse({
-      targetRecordId: 'core:wound-roll',
-      targetTitle: 'Wound Roll',
-      targetType: 'rule',
-      rel: 'modifies',
-      context: 'Some context',
-      refCount: 0,
-    })).toThrow()
+    expect(() =>
+      CrossRefSchema.parse({
+        targetRecordId: 'core:wound-roll',
+        targetTitle: 'Wound Roll',
+        targetType: 'rule',
+        rel: 'modifies',
+        context: 'Some context',
+        refCount: 0,
+      }),
+    ).toThrow()
   })
 
   it('validates an errata annotation', () => {

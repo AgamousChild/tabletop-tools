@@ -16,8 +16,8 @@ export function GameContentDisclaimer() {
       >
         BSData
       </a>
-      , maintained by the community. Warhammer 40,000 is copyright Games Workshop
-      Limited. This tool is not affiliated with or endorsed by Games Workshop.
+      , maintained by the community. Warhammer 40,000 is copyright Games Workshop Limited. This tool
+      is not affiliated with or endorsed by Games Workshop.
     </p>
   )
 }

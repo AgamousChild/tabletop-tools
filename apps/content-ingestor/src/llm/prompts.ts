@@ -205,8 +205,8 @@ EXAMPLE OUTPUT:
 [
   {
     "title": "Screen Your Deep Strike Threats with Chaff",
-    "summary": "Place expendable units 9\" from likely deep strike zones to deny enemy reserves from landing close to your key pieces.",
-    "content": "Denying deep strike space is one of the most impactful pregame decisions you can make. By positioning cheap units — infantry, transports, or even characters — 9.1\" away from your valuable units and objectives, you force enemy deep striking units to land further away, reducing their threat range by a full movement phase.\\n\\nThis technique is especially effective against armies that rely on alpha-strike deep strikers like Warp Talons, Terminators, or Crisis Suits. Identify the likely landing zones in your deployment and pre-position screens during deployment rather than after.\\n\\nThe cost is minimal: a unit of Scouts, Cultists, or similar cheap infantry can screen a huge area. They do not need to survive — their job is positional denial, not combat.",
+    "summary": "Place expendable units 9" from likely deep strike zones to deny enemy reserves from landing close to your key pieces.",
+    "content": "Denying deep strike space is one of the most impactful pregame decisions you can make. By positioning cheap units — infantry, transports, or even characters — 9.1" away from your valuable units and objectives, you force enemy deep striking units to land further away, reducing their threat range by a full movement phase.\\n\\nThis technique is especially effective against armies that rely on alpha-strike deep strikers like Warp Talons, Terminators, or Crisis Suits. Identify the likely landing zones in your deployment and pre-position screens during deployment rather than after.\\n\\nThe cost is minimal: a unit of Scouts, Cultists, or similar cheap infantry can screen a huge area. They do not need to survive — their job is positional denial, not combat.",
     "keywords": ["deep strike", "screening", "deployment", "positional play", "pregame"],
     "confidence": 0.92,
     "category": "tactic"

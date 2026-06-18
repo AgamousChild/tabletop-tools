@@ -1,9 +1,9 @@
 import {
   type BaseContext,
-  type User,
-  router,
-  publicProcedure,
   createCallerFactory,
+  publicProcedure,
+  router,
+  type User,
 } from '@tabletop-tools/server-core'
 import { initTRPC, TRPCError } from '@trpc/server'
 
@@ -25,4 +25,4 @@ export const adminProcedure = protectedProcedure.use(({ ctx, next }) => {
   return next({ ctx })
 })
 
-export { type User, router, publicProcedure, createCallerFactory }
+export { createCallerFactory, publicProcedure, router, type User }

@@ -54,8 +54,8 @@ export function findSentenceBoundaries(text: string): number[] {
 }
 
 export interface Section {
-  heading: string    // the ALL-CAPS heading text
-  body: string       // everything between this heading and the next
+  heading: string // the ALL-CAPS heading text
+  body: string // everything between this heading and the next
 }
 
 /**

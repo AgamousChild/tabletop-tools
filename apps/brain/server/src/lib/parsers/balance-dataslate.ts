@@ -1,8 +1,7 @@
-import type { Node, NodeRef, Source } from '../model'
 import { truncate } from '../filters'
-import { slugify, balanceId } from '../slugify'
+import type { Node, NodeRef, Source } from '../model'
+import { balanceId, slugify } from '../slugify'
 import type { ParseResult } from './core-rules'
-
 
 /**
  * Parse balance dataslate markdown into balance-change nodes.
@@ -12,7 +11,10 @@ import type { ParseResult } from './core-rules'
  * - #### = faction headers (CORE RULES, ADEPTA SORORITAS, etc.)
  * - ##### = individual changes (ARMY RULE, DETACHMENT entries, DATASHEETS, etc.)
  */
-export function parseBalanceDataslate(normalizedMarkdown: string, retrievedAt: string): ParseResult {
+export function parseBalanceDataslate(
+  normalizedMarkdown: string,
+  retrievedAt: string,
+): ParseResult {
   const nodes: Node[] = []
   const refs: NodeRef[] = []
   const seenIds = new Map<string, number>()
@@ -53,9 +55,7 @@ export function parseBalanceDataslate(normalizedMarkdown: string, retrievedAt: s
 
     const isCoreChange = !currentFaction || currentFaction.toUpperCase() === 'CORE RULES'
     const fSlug = isCoreChange ? undefined : currentFactionSlug
-    const baseId = isCoreChange
-      ? balanceId('core', title)
-      : balanceId(fSlug!, title)
+    const baseId = isCoreChange ? balanceId('core', title) : balanceId(fSlug!, title)
     const nodeId = makeId(baseId)
 
     const node: Node = {

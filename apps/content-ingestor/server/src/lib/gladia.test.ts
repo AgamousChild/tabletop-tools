@@ -1,11 +1,16 @@
-import { describe, it, expect, vi } from 'vitest'
-import { submitTranscription, parseGladiaCallback } from './gladia'
+import { describe, expect, it, vi } from 'vitest'
+
+import { parseGladiaCallback, submitTranscription } from './gladia'
 
 describe('submitTranscription', () => {
   it('sends correct request to Gladia API', async () => {
     const mockFetch = vi.fn().mockResolvedValue({
       ok: true,
-      json: () => Promise.resolve({ id: 'job-123', result_url: 'https://api.gladia.io/v2/pre-recorded/job-123' }),
+      json: () =>
+        Promise.resolve({
+          id: 'job-123',
+          result_url: 'https://api.gladia.io/v2/pre-recorded/job-123',
+        }),
     })
 
     const result = await submitTranscription({

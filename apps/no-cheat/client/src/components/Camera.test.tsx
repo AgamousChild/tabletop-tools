@@ -26,9 +26,7 @@ beforeEach(() => {
   mockPipelineState.height = 0
   mockCaptureBackground.mockReset()
   mockProcessFrame.mockReset()
-  mockProcessFrame.mockReturnValue([
-    { roi: { x: 30, y: 30, width: 45, height: 45 }, pipCount: 4 },
-  ])
+  mockProcessFrame.mockReturnValue([{ roi: { x: 30, y: 30, width: 45, height: 45 }, pipCount: 4 }])
 
   vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue({
     drawImage: vi.fn(),
@@ -100,9 +98,7 @@ describe('Camera', () => {
     fireEvent.click(screen.getByRole('button', { name: /calibrate background/i }))
     await waitFor(() => screen.getByRole('button', { name: /capture/i }))
     fireEvent.click(screen.getByRole('button', { name: /capture/i }))
-    await waitFor(() =>
-      expect(screen.getByRole('button', { name: /retake/i })).toBeInTheDocument(),
-    )
+    await waitFor(() => expect(screen.getByRole('button', { name: /retake/i })).toBeInTheDocument())
   })
 
   it('retake clears detected values and shows capture again', async () => {

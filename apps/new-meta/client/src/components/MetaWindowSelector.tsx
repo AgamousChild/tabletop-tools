@@ -23,23 +23,31 @@ export function MetaWindowSelector({ value, onChange }: Props) {
       <option value="">Latest Quarter</option>
       <optgroup label="Quarters">
         {quarters.map((f) => (
-          <option key={f.id} value={f.id}>{f.label}</option>
+          <option key={f.id} value={f.id}>
+            {f.label}
+          </option>
         ))}
       </optgroup>
       <optgroup label="Months">
         {months.map((f) => (
-          <option key={f.id} value={f.id}>{f.label}</option>
+          <option key={f.id} value={f.id}>
+            {f.label}
+          </option>
         ))}
       </optgroup>
       <optgroup label="Years">
         {years.map((f) => (
-          <option key={f.id} value={f.id}>{f.label}</option>
+          <option key={f.id} value={f.id}>
+            {f.label}
+          </option>
         ))}
       </optgroup>
       {dataslates.length > 0 && (
         <optgroup label="Balance Dataslates">
           {dataslates.map((f) => (
-            <option key={f.id} value={f.id}>{f.label}</option>
+            <option key={f.id} value={f.id}>
+              {f.label}
+            </option>
           ))}
         </optgroup>
       )}

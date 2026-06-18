@@ -1,4 +1,8 @@
-import { describe, it, expect } from 'vitest'
+import { createClient } from '@libsql/client'
+import { createDbFromClient } from '@tabletop-tools/db'
+import { afterAll, beforeAll, describe, expect, it } from 'vitest'
+
+import { loadFactionCodes, resetFactionCodes } from './faction-codes'
 import { mergeSources } from './merge-sources'
 import type { Node, NodeRef } from './model'
 
@@ -20,23 +24,71 @@ function makeNode(overrides: Partial<Node>): Node {
 }
 
 describe('mergeSources', () => {
+  beforeAll(async () => {
+    const client = createClient({ url: ':memory:' })
+    const db = createDbFromClient(client)
+    await client.execute(
+      'CREATE TABLE dim_faction (id TEXT PRIMARY KEY, name TEXT NOT NULL, allegiance TEXT NOT NULL)',
+    )
+    await client.execute(
+      'CREATE TABLE dim_faction_alias (alias TEXT PRIMARY KEY, faction_id TEXT NOT NULL)',
+    )
+    const factions = [
+      ['space-marines', 'Space Marines', 'imperium'],
+      ['chaos-space-marines', 'Chaos Space Marines', 'chaos'],
+      ['death-guard', 'Death Guard', 'chaos'],
+    ]
+    for (const [id, name, alleg] of factions) {
+      await client.execute({
+        sql: 'INSERT INTO dim_faction VALUES (?, ?, ?)',
+        args: [id!, name!, alleg!],
+      })
+    }
+    const aliases = [
+      ['SM', 'space-marines'],
+      ['CSM', 'chaos-space-marines'],
+      ['DG', 'death-guard'],
+    ]
+    for (const [alias, fid] of aliases) {
+      await client.execute({
+        sql: 'INSERT INTO dim_faction_alias VALUES (?, ?)',
+        args: [alias!, fid!],
+      })
+    }
+    await loadFactionCodes(db)
+  })
+
+  afterAll(() => {
+    resetFactionCodes()
+  })
+
   it('normalizes all factionIds to canonical slugs', () => {
     const nodes = [
       makeNode({ id: '001', factionId: 'SM', title: 'Intercessors' }),
       makeNode({ id: '002', factionId: 'CSM', title: 'Chosen' }),
     ]
     const result = mergeSources(nodes, [])
-    expect(result.nodes.find(n => n.id === '001')!.factionId).toBe('space-marines')
-    expect(result.nodes.find(n => n.id === '002')!.factionId).toBe('chaos-space-marines')
+    expect(result.nodes.find((n) => n.id === '001')!.factionId).toBe('space-marines')
+    expect(result.nodes.find((n) => n.id === '002')!.factionId).toBe('chaos-space-marines')
   })
 
   it('deduplicates nodes with same ID, keeping the first occurrence', () => {
     const nodes = [
-      makeNode({ id: '001', title: 'Intercessors', content: 'Game data version', keywords: ['infantry'] }),
-      makeNode({ id: '001', title: 'Intercessors', content: 'BSData version', keywords: ['infantry', 'extra-kw'] }),
+      makeNode({
+        id: '001',
+        title: 'Intercessors',
+        content: 'Game data version',
+        keywords: ['infantry'],
+      }),
+      makeNode({
+        id: '001',
+        title: 'Intercessors',
+        content: 'BSData version',
+        keywords: ['infantry', 'extra-kw'],
+      }),
     ]
     const result = mergeSources(nodes, [])
-    const matching = result.nodes.filter(n => n.id === '001')
+    const matching = result.nodes.filter((n) => n.id === '001')
     expect(matching).toHaveLength(1)
     expect(matching[0]!.content).toBe('Game data version')
     expect(matching[0]!.keywords).toContain('extra-kw')
@@ -44,36 +96,56 @@ describe('mergeSources', () => {
 
   it('includes faction name in datasheet summary for embedding disambiguation', () => {
     const nodes = [
-      makeNode({ id: '001', factionId: 'death-guard', category: 'datasheet', title: 'Chaos Rhino', summary: 'Chaos Rhino — Dedicated Transports' }),
+      makeNode({
+        id: '001',
+        factionId: 'death-guard',
+        category: 'datasheet',
+        title: 'Chaos Rhino',
+        summary: 'Chaos Rhino — Dedicated Transports',
+      }),
     ]
     const result = mergeSources(nodes, [])
-    const rhino = result.nodes.find(n => n.id === '001')!
+    const rhino = result.nodes.find((n) => n.id === '001')!
     expect(rhino.summary).toContain('Death Guard')
   })
 
   it('does NOT prefix faction name if already present in summary', () => {
     const nodes = [
-      makeNode({ id: '001', factionId: 'death-guard', category: 'datasheet', title: 'Death Guard Rhino', summary: 'Death Guard Rhino — Dedicated Transports' }),
+      makeNode({
+        id: '001',
+        factionId: 'death-guard',
+        category: 'datasheet',
+        title: 'Death Guard Rhino',
+        summary: 'Death Guard Rhino — Dedicated Transports',
+      }),
     ]
     const result = mergeSources(nodes, [])
-    const rhino = result.nodes.find(n => n.id === '001')!
+    const rhino = result.nodes.find((n) => n.id === '001')!
     expect(rhino.summary.match(/death guard/gi)?.length ?? 0).toBeLessThanOrEqual(1)
   })
 
   it('appends category tag to non-datasheet nodes that share a title with a datasheet', () => {
     const nodes = [
-      makeNode({ id: '001', category: 'datasheet', title: 'Assault Squad', summary: 'Assault Squad — unit' }),
-      makeNode({ id: 'det:sm:x:assault-squad', category: 'faction-ability', title: 'ASSAULT SQUAD', summary: 'ASSAULT SQUAD rule text' }),
+      makeNode({
+        id: '001',
+        category: 'datasheet',
+        title: 'Assault Squad',
+        summary: 'Assault Squad — unit',
+      }),
+      makeNode({
+        id: 'det:sm:x:assault-squad',
+        category: 'faction-ability',
+        title: 'ASSAULT SQUAD',
+        summary: 'ASSAULT SQUAD rule text',
+      }),
     ]
     const result = mergeSources(nodes, [])
-    const rule = result.nodes.find(n => n.id === 'det:sm:x:assault-squad')!
+    const rule = result.nodes.find((n) => n.id === 'det:sm:x:assault-squad')!
     expect(rule.summary).toContain('faction rule')
   })
 
   it('removes refs where either endpoint does not exist', () => {
-    const nodes = [
-      makeNode({ id: '001', content: 'first', keywords: ['a'] }),
-    ]
+    const nodes = [makeNode({ id: '001', content: 'first', keywords: ['a'] })]
     const refs: NodeRef[] = [
       { sourceId: '001', targetId: '999', rel: 'part_of', context: 'target missing' },
       { sourceId: '999', targetId: '001', rel: 'modifies', context: 'source missing' },

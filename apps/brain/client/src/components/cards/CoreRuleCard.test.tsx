@@ -1,5 +1,6 @@
-import { describe, it, expect } from 'vitest'
 import { render, screen } from '@testing-library/react'
+import { describe, expect, it } from 'vitest'
+
 import { CoreRuleCard } from './CoreRuleCard'
 import type { CardContext } from './types'
 
@@ -28,7 +29,12 @@ describe('CoreRuleCard', () => {
   it('renders phase badge when provided', () => {
     render(
       <CoreRuleCard
-        data={{ id: '1', name: 'WOUND ROLL', description: 'Make a wound roll...', phase: 'shooting' }}
+        data={{
+          id: '1',
+          name: 'WOUND ROLL',
+          description: 'Make a wound roll...',
+          phase: 'shooting',
+        }}
         context={mockContext}
       />,
     )
@@ -69,7 +75,10 @@ describe('CoreRuleCard', () => {
 
   it('renders without crashing when all optional fields absent', () => {
     render(
-      <CoreRuleCard data={{ id: '1', name: 'Min', description: 'Minimal.' }} context={mockContext} />,
+      <CoreRuleCard
+        data={{ id: '1', name: 'Min', description: 'Minimal.' }}
+        context={mockContext}
+      />,
     )
     expect(screen.getByText('Min')).toBeInTheDocument()
   })

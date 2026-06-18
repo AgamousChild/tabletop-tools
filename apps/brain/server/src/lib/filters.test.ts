@@ -1,12 +1,13 @@
-import { describe, it, expect } from 'vitest'
+import { describe, expect, it } from 'vitest'
+
 import {
-  isBoardingAction,
-  isLegends,
-  detectChapterFromText,
   buildDetachmentChapterMap,
+  classifyGrants,
+  detectChapterFromText,
   detectScope,
   detectWeaponTypes,
-  classifyGrants,
+  isBoardingAction,
+  isLegends,
 } from './filters'
 
 describe('isBoardingAction', () => {
@@ -71,14 +72,18 @@ describe('detectChapterFromText', () => {
 describe('buildDetachmentChapterMap', () => {
   it('maps detachment to chapter from ability text', () => {
     const dets = [{ id: 'det1' }]
-    const abilities = [{ detachmentId: 'det1', description: 'Blood Angels models from your army gain this ability' }]
+    const abilities = [
+      { detachmentId: 'det1', description: 'Blood Angels models from your army gain this ability' },
+    ]
     const map = buildDetachmentChapterMap(dets, abilities)
     expect(map.get('det1')).toBe('blood angels')
   })
 
   it('returns empty map for generic detachments', () => {
     const dets = [{ id: 'det1' }]
-    const abilities = [{ detachmentId: 'det1', description: 'ADEPTUS ASTARTES models gain this ability' }]
+    const abilities = [
+      { detachmentId: 'det1', description: 'ADEPTUS ASTARTES models gain this ability' },
+    ]
     const map = buildDetachmentChapterMap(dets, abilities)
     expect(map.has('det1')).toBe(false)
   })
@@ -94,7 +99,9 @@ describe('detectScope', () => {
   })
 
   it('detects unit scope from leader text', () => {
-    expect(detectScope('unit-ability', 'While this model is leading a unit, models in that unit gain')).toBe('unit')
+    expect(
+      detectScope('unit-ability', 'While this model is leading a unit, models in that unit gain'),
+    ).toBe('unit')
   })
 
   it('detects army scope for faction abilities', () => {

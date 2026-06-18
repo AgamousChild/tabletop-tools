@@ -63,13 +63,13 @@ function validate() {
   const allNodes = loadAllNodes()
   console.log(`Loaded ${allNodes.length} nodes\n`)
 
-  const datasheets = allNodes.filter(n => n.category === 'datasheet')
-  const weapons = allNodes.filter(n => n.category === 'weapon')
-  const abilities = allNodes.filter(n => n.category === 'unit-ability')
-  const stratagems = allNodes.filter(n => n.category === 'stratagem')
-  const enhancements = allNodes.filter(n => n.category === 'enhancement')
-  const detachments = allNodes.filter(n => n.category === 'detachment-rule')
-  const factionAbilities = allNodes.filter(n => n.category === 'faction-ability')
+  const datasheets = allNodes.filter((n) => n.category === 'datasheet')
+  const weapons = allNodes.filter((n) => n.category === 'weapon')
+  const abilities = allNodes.filter((n) => n.category === 'unit-ability')
+  const stratagems = allNodes.filter((n) => n.category === 'stratagem')
+  const enhancements = allNodes.filter((n) => n.category === 'enhancement')
+  const detachments = allNodes.filter((n) => n.category === 'detachment-rule')
+  const factionAbilities = allNodes.filter((n) => n.category === 'faction-ability')
 
   console.log(`Datasheets: ${datasheets.length}`)
   console.log(`Weapons: ${weapons.length}`)
@@ -112,7 +112,7 @@ function validate() {
   let ddNoValue = 0
   let ddWithValue = 0
   for (const n of datasheets) {
-    const ddKw = n.keywords.find(k => k.startsWith('deadly demise'))
+    const ddKw = n.keywords.find((k) => k.startsWith('deadly demise'))
     if (ddKw) {
       // Check if it has a value (e.g., "deadly demise D3" vs bare "deadly demise")
       if (ddKw.length > 'deadly demise'.length) {
@@ -142,19 +142,45 @@ function validate() {
   // ── 5. Multi-Faction Keywords Check ─────────────────────────────────────────
   console.log('\n=== CHECK 5: Multi-Faction Keywords ===')
   const FACTION_KW_LIST = [
-    'adeptus astartes', 'heretic astartes', 'orks', 'necrons', 'tyranids',
-    'aeldari', "t'au empire", 'chaos', 'imperium', 'drukhari',
-    'leagues of votann', 'adeptus custodes', 'adeptus mechanicus',
-    'adepta sororitas', 'genestealer cults', 'death guard',
-    'thousand sons', 'world eaters', 'chaos daemons', 'grey knights',
-    'imperial agents', 'imperial knights', 'chaos knights', 'astra militarum',
-    'blood angels', 'dark angels', 'space wolves', 'black templars',
-    'ultramarines', 'deathwatch', 'imperial fists', 'iron hands',
-    'salamanders', 'raven guard', 'white scars',
+    'adeptus astartes',
+    'heretic astartes',
+    'orks',
+    'necrons',
+    'tyranids',
+    'aeldari',
+    "t'au empire",
+    'chaos',
+    'imperium',
+    'drukhari',
+    'leagues of votann',
+    'adeptus custodes',
+    'adeptus mechanicus',
+    'adepta sororitas',
+    'genestealer cults',
+    'death guard',
+    'thousand sons',
+    'world eaters',
+    'chaos daemons',
+    'grey knights',
+    'imperial agents',
+    'imperial knights',
+    'chaos knights',
+    'astra militarum',
+    'blood angels',
+    'dark angels',
+    'space wolves',
+    'black templars',
+    'ultramarines',
+    'deathwatch',
+    'imperial fists',
+    'iron hands',
+    'salamanders',
+    'raven guard',
+    'white scars',
   ]
   let multiFactionCount = 0
   for (const n of datasheets) {
-    const factionKws = n.keywords.filter(k => FACTION_KW_LIST.includes(k))
+    const factionKws = n.keywords.filter((k) => FACTION_KW_LIST.includes(k))
     if (factionKws.length > 2) {
       multiFactionCount++
       // Only warn for >2 (one parent + one subfaction is ok)
@@ -214,7 +240,8 @@ function validate() {
     // Stratagems link via short slug (e.g., "champions-of-faith"), not full node ID
     // Extract the slug from the detachment ID format: "det:faction:slug:slug"
     const detSlug = d.id.split(':')[2] || d.id
-    const dStrats = stratsByDet.get(d.id) ?? stratsByDet.get(detSlug) ?? stratsByDet.get(d.title) ?? []
+    const dStrats =
+      stratsByDet.get(d.id) ?? stratsByDet.get(detSlug) ?? stratsByDet.get(d.title) ?? []
     const dEnhs = enhsByDet.get(d.id) ?? enhsByDet.get(detSlug) ?? enhsByDet.get(d.title) ?? []
     if (dStrats.length === 0) {
       detNoStratagems++
@@ -237,7 +264,7 @@ function validate() {
   }
   const sortedFactions = [...factionCounts.entries()].sort((a, b) => b[1] - a[1])
   for (const [faction, count] of sortedFactions) {
-    const displayName = allNodes.find(n => n.factionId === faction)?.factionName || faction
+    const displayName = allNodes.find((n) => n.factionId === faction)?.factionName || faction
     console.log(`  ${displayName}: ${count} datasheets`)
   }
 
@@ -253,10 +280,19 @@ function validate() {
 
   // ── 11. Armor Keyword Check ─────────────────────────────────────────────────
   console.log('\n=== CHECK 11: Armor Keywords on Datasheets ===')
-  const armorKeywords = ['power armour', 'power armor', 'gravis', 'terminator armour', 'terminator armor', 'phobos', 'tacticus', 'artificer armour']
+  const armorKeywords = [
+    'power armour',
+    'power armor',
+    'gravis',
+    'terminator armour',
+    'terminator armor',
+    'phobos',
+    'tacticus',
+    'artificer armour',
+  ]
   let armorKwCount = 0
   for (const n of datasheets) {
-    const hasArmor = n.keywords.some(k => armorKeywords.includes(k))
+    const hasArmor = n.keywords.some((k) => armorKeywords.includes(k))
     if (hasArmor) armorKwCount++
   }
   console.log(`  Datasheets with armor-type keywords: ${armorKwCount}`)
@@ -264,8 +300,8 @@ function validate() {
 
   // ── SUMMARY ─────────────────────────────────────────────────────────────────
   console.log('\n\n=== SUMMARY ===')
-  const errors = issues.filter(i => i.severity === 'error')
-  const warnings = issues.filter(i => i.severity === 'warning')
+  const errors = issues.filter((i) => i.severity === 'error')
+  const warnings = issues.filter((i) => i.severity === 'warning')
   console.log(`Errors: ${errors.length}`)
   console.log(`Warnings: ${warnings.length}`)
 

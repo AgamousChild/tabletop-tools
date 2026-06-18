@@ -1,7 +1,8 @@
-import { describe, it, expect } from 'vitest'
-import { maxShootingThreat, maxMeleeThreat, avgMeleeThreat } from './threat-range'
-import { DEFAULT_10E_RULES } from '../types'
+import { describe, expect, it } from 'vitest'
+
 import type { EnemyUnit } from '../types'
+import { DEFAULT_10E_RULES } from '../types'
+import { avgMeleeThreat, maxMeleeThreat, maxShootingThreat } from './threat-range'
 
 // ── Fixtures ──────────────────────────────────────────────────────────────────
 

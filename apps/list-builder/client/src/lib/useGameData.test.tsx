@@ -1,7 +1,7 @@
 import { renderHook } from '@testing-library/react'
-import { describe, expect, it, vi, beforeEach } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 
-import { useUnits, useGameFactions } from './useGameData'
+import { useGameFactions, useUnits } from './useGameData'
 
 // ---- Mocks ----
 
@@ -28,9 +28,7 @@ beforeEach(() => {
   vi.clearAllMocks()
 })
 
-const MOCK_UNITS = [
-  { id: 'u1', name: 'Alpha Squad', faction: 'Faction A', points: 100 },
-]
+const MOCK_UNITS = [{ id: 'u1', name: 'Alpha Squad', faction: 'Faction A', points: 100 }]
 
 describe('useUnits', () => {
   it('returns units from primary source when enabled', () => {

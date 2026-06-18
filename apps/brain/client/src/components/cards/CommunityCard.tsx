@@ -1,3 +1,4 @@
+import { renderMarkdown } from '../../lib/render-markdown'
 import type { CardContext, CommunityCardData } from './types'
 
 interface CommunityCardProps {
@@ -5,37 +6,7 @@ interface CommunityCardProps {
   context: CardContext
 }
 
-function highlightText(
-  text: string,
-  terms: string[],
-  onContentClick: (term: string) => void,
-): React.ReactNode {
-  if (!terms.length) return text
-
-  const escaped = terms.map((t) => t.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'))
-  const regex = new RegExp(`(${escaped.join('|')})`, 'gi')
-  const parts = text.split(regex)
-
-  return parts.map((part, i) => {
-    const matched = terms.find((t) => t.toLowerCase() === part.toLowerCase())
-    if (matched) {
-      return (
-        <mark
-          key={i}
-          className="bg-amber-400 text-slate-900 cursor-pointer rounded-sm px-0.5"
-          onClick={() => onContentClick(matched)}
-        >
-          {part}
-        </mark>
-      )
-    }
-    return part
-  })
-}
-
-export function CommunityCard({ data, context }: CommunityCardProps) {
-  const { highlightTerms, onContentClick } = context
-
+export function CommunityCard({ data }: CommunityCardProps) {
   return (
     <div
       className="border-2 border-slate-700 rounded-md overflow-hidden bg-slate-950"
@@ -65,9 +36,10 @@ export function CommunityCard({ data, context }: CommunityCardProps) {
         </div>
 
         {/* Description */}
-        <div className="text-xs text-slate-300 leading-snug">
-          {highlightText(data.description, highlightTerms, onContentClick)}
-        </div>
+        <div
+          className="text-xs text-slate-300 leading-snug"
+          dangerouslySetInnerHTML={{ __html: renderMarkdown(data.description) }}
+        />
 
         {/* Footer */}
         {data.sourceAttribution && (

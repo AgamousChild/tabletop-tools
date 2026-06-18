@@ -13,7 +13,14 @@ export function DistributionChart({ distribution }: Props) {
         const pct = total > 0 ? (count / total) * 100 : 0
         const isOver = pct > expectedPct + 5
         const isUnder = pct < expectedPct - 5
-        const barColor = total < 6 ? 'bg-amber-400' : isOver ? 'bg-red-400' : isUnder ? 'bg-blue-400' : 'bg-emerald-400'
+        const barColor =
+          total < 6
+            ? 'bg-amber-400'
+            : isOver
+              ? 'bg-red-400'
+              : isUnder
+                ? 'bg-blue-400'
+                : 'bg-emerald-400'
 
         return (
           <div key={pip} className="flex items-center gap-2 text-xs">

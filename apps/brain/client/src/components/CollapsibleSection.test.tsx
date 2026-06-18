@@ -1,5 +1,6 @@
-import { describe, it, expect } from 'vitest'
-import { render, screen, fireEvent } from '@testing-library/react'
+import { fireEvent, render, screen } from '@testing-library/react'
+import { describe, expect, it } from 'vitest'
+
 import { CollapsibleSection } from './CollapsibleSection'
 
 describe('CollapsibleSection', () => {
@@ -7,7 +8,7 @@ describe('CollapsibleSection', () => {
     render(
       <CollapsibleSection title="Errata" count={3}>
         <p>Errata content</p>
-      </CollapsibleSection>
+      </CollapsibleSection>,
     )
     expect(screen.queryByText('Errata content')).toBeNull()
     expect(screen.getByText('Errata')).toBeDefined()
@@ -17,7 +18,7 @@ describe('CollapsibleSection', () => {
     render(
       <CollapsibleSection title="Errata" count={3}>
         <p>Errata content</p>
-      </CollapsibleSection>
+      </CollapsibleSection>,
     )
     fireEvent.click(screen.getByText('Errata'))
     expect(screen.getByText('Errata content')).toBeDefined()
@@ -27,7 +28,7 @@ describe('CollapsibleSection', () => {
     render(
       <CollapsibleSection title="Errata" count={3}>
         <p>Errata content</p>
-      </CollapsibleSection>
+      </CollapsibleSection>,
     )
     fireEvent.click(screen.getByText('Errata'))
     expect(screen.getByText('Errata content')).toBeDefined()
@@ -39,7 +40,7 @@ describe('CollapsibleSection', () => {
     render(
       <CollapsibleSection title="Errata" count={5}>
         <p>Content</p>
-      </CollapsibleSection>
+      </CollapsibleSection>,
     )
     expect(screen.getByText('5')).toBeDefined()
   })
@@ -48,7 +49,7 @@ describe('CollapsibleSection', () => {
     const { container } = render(
       <CollapsibleSection title="Errata" count={0}>
         <p>Content</p>
-      </CollapsibleSection>
+      </CollapsibleSection>,
     )
     expect(container.innerHTML).toBe('')
   })

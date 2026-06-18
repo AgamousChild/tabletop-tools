@@ -1,4 +1,5 @@
-import { describe, it, expect } from 'vitest'
+import { describe, expect, it } from 'vitest'
+
 import { parseHash } from './router'
 
 describe('parseHash', () => {
@@ -19,11 +20,17 @@ describe('parseHash', () => {
   })
 
   it('returns tournament-standings view', () => {
-    expect(parseHash('#/tournament/abc/standings')).toEqual({ view: 'tournament-standings', id: 'abc' })
+    expect(parseHash('#/tournament/abc/standings')).toEqual({
+      view: 'tournament-standings',
+      id: 'abc',
+    })
   })
 
   it('returns tournament-register view', () => {
-    expect(parseHash('#/tournament/abc/register')).toEqual({ view: 'tournament-register', id: 'abc' })
+    expect(parseHash('#/tournament/abc/register')).toEqual({
+      view: 'tournament-register',
+      id: 'abc',
+    })
   })
 
   it('returns tournament-manage view', () => {

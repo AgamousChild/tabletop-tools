@@ -1,6 +1,6 @@
-import { describe, it, expect } from 'vitest'
-import { readFileSync, existsSync, readdirSync } from 'fs'
+import { existsSync, readdirSync, readFileSync } from 'fs'
 import { join } from 'path'
+import { describe, expect, it } from 'vitest'
 
 const POSITIONS_DIR = 'C:/R/sync-data/tools/gw-sync/.local/gw/markdown'
 const NODES_DIR = join(__dirname, '../../.local/brain/nodes')
@@ -9,7 +9,7 @@ const hasLocalData = existsSync(POSITIONS_DIR) && existsSync(NODES_DIR)
 
 describe.skipIf(!hasLocalData)('PDF position accuracy', () => {
   it('all nodes with PDF sources have positions within page bounds', () => {
-    const nodeFiles = readdirSync(NODES_DIR).filter(f => f.endsWith('.json'))
+    const nodeFiles = readdirSync(NODES_DIR).filter((f) => f.endsWith('.json'))
     let checked = 0
     const outOfBounds: string[] = []
 
@@ -45,20 +45,20 @@ describe.skipIf(!hasLocalData)('PDF position accuracy', () => {
 
     if (outOfBounds.length > 0) {
       console.warn(`Out of bounds positions (${outOfBounds.length}):`)
-      outOfBounds.slice(0, 20).forEach(o => console.warn(`  ${o}`))
+      outOfBounds.slice(0, 20).forEach((o) => console.warn(`  ${o}`))
     }
     expect(outOfBounds).toEqual([])
     expect(checked).toBeGreaterThan(0)
   })
 
   it('every mapped node has a valid page number', () => {
-    const nodeFiles = readdirSync(NODES_DIR).filter(f => f.endsWith('.json'))
+    const nodeFiles = readdirSync(NODES_DIR).filter((f) => f.endsWith('.json'))
     const invalidPages: string[] = []
     let checked = 0
 
     // Build max-page map from sidecars
     const maxPageByPdf = new Map<string, number>()
-    const sidecarFiles = readdirSync(POSITIONS_DIR).filter(f => f.endsWith('.positions.json'))
+    const sidecarFiles = readdirSync(POSITIONS_DIR).filter((f) => f.endsWith('.positions.json'))
     for (const file of sidecarFiles) {
       const positions = JSON.parse(readFileSync(join(POSITIONS_DIR, file), 'utf8'))
       const pdfName = file.replace('.positions.json', '')
@@ -73,11 +73,16 @@ describe.skipIf(!hasLocalData)('PDF position accuracy', () => {
           if (src.type !== 'pdf' || !src.page) continue
           checked++
 
-          const pdfSlug = src.title.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '')
+          const pdfSlug = src.title
+            .toLowerCase()
+            .replace(/[^a-z0-9]+/g, '-')
+            .replace(/^-|-$/g, '')
           const maxPage = maxPageByPdf.get(pdfSlug)
           if (maxPage !== undefined) {
             if (src.page > maxPage || src.page < 1) {
-              invalidPages.push(`${node.id}: page ${src.page} out of range [1, ${maxPage}] for ${pdfSlug}`)
+              invalidPages.push(
+                `${node.id}: page ${src.page} out of range [1, ${maxPage}] for ${pdfSlug}`,
+              )
             }
           }
         }
@@ -86,14 +91,14 @@ describe.skipIf(!hasLocalData)('PDF position accuracy', () => {
 
     if (invalidPages.length > 0) {
       console.warn(`Invalid page numbers (${invalidPages.length}):`)
-      invalidPages.slice(0, 20).forEach(o => console.warn(`  ${o}`))
+      invalidPages.slice(0, 20).forEach((o) => console.warn(`  ${o}`))
     }
     expect(invalidPages).toEqual([])
     expect(checked).toBeGreaterThan(0)
   })
 
   it('reports position coverage statistics', () => {
-    const nodeFiles = readdirSync(NODES_DIR).filter(f => f.endsWith('.json'))
+    const nodeFiles = readdirSync(NODES_DIR).filter((f) => f.endsWith('.json'))
     let totalPdfSources = 0
     let withPositions = 0
     let withoutPositions = 0
@@ -113,7 +118,9 @@ describe.skipIf(!hasLocalData)('PDF position accuracy', () => {
       }
     }
 
-    console.log(`PDF position coverage: ${withPositions}/${totalPdfSources} sources have positions (${withoutPositions} without)`)
+    console.log(
+      `PDF position coverage: ${withPositions}/${totalPdfSources} sources have positions (${withoutPositions} without)`,
+    )
     // Informational — don't fail
     expect(totalPdfSources).toBeGreaterThan(0)
   })

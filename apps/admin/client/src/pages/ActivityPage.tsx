@@ -2,10 +2,10 @@ import { trpc } from '../lib/trpc'
 
 const APP_LABELS: Record<string, string> = {
   'no-cheat': 'No Cheat',
-  'versus': 'Versus',
+  versus: 'Versus',
   'list-builder': 'List Builder',
   'game-tracker': 'Game Tracker',
-  'tournament': 'Tournament',
+  tournament: 'Tournament',
   'new-meta': 'New Meta',
 }
 

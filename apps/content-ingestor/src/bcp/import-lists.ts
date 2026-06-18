@@ -5,54 +5,33 @@
  * Run: TURSO_DB_URL=... TURSO_AUTH_TOKEN=... npx tsx src/bcp/import-lists.ts
  */
 
-import { readFileSync, readdirSync } from 'node:fs'
+import { readdirSync, readFileSync } from 'node:fs'
 import path from 'node:path'
+
 import { createClient } from '@libsql/client'
+import { createDbFromClient, getAllFactions, getFactionAliasMap } from '@tabletop-tools/db'
 
 const BCP_DIR = '.local/ingest/bcp'
 
-const FACTION_ALIASES: Record<string, string> = {
-  'Forces of the Hive Mind': 'Tyranids',
-  'Hive Fleet Kronos': 'Tyranids',
-  'Hive Fleet Hyrda': 'Tyranids',
-  'Ultramarines': 'Space Marines (Astartes)',
-  'Salamanders': 'Space Marines (Astartes)',
-  'Imperial Fists': 'Space Marines (Astartes)',
-  'Iron Hands': 'Space Marines (Astartes)',
-  'Raven Guard': 'Space Marines (Astartes)',
-  'White Scars': 'Space Marines (Astartes)',
-  'Crimson Fists': 'Space Marines (Astartes)',
-  'Carcharadons': 'Space Marines (Astartes)',
-  'Alpha Legion': 'Chaos Space Marines',
-  'Night Lords': 'Chaos Space Marines',
-  'Iron Warriors': 'Chaos Space Marines',
-  'Word Bearers': 'Chaos Space Marines',
-  'Red Corsairs': 'Chaos Space Marines',
-  'Black Legion': 'Chaos Space Marines',
-  'Flesh Tearers': 'Blood Angels',
-  'Deathwing': 'Dark Angels',
-  'Kabal of the Flayed Skull': 'Drukhari',
-  'Blood Axe': 'Orks',
-  'Freebooterz': 'Orks',
-  'Goffs': 'Orks',
-  'T\'au Sept': 'T\'au Empire',
-  'Farsight Enclaves': 'T\'au Empire',
-  'Sautekh': 'Necrons',
-  'Nihilakh': 'Necrons',
-  'Ymyr Conglomerate': 'Leagues of Votann',
-  'Nurgle Daemons': 'Chaos Daemons',
-  'Slaanesh Daemons': 'Chaos Daemons',
-  'Slaanesh': 'Chaos Daemons',
-  'Cadian Shock Troops': 'Astra Militarum',
-  'Catachan Jungle Fighters': 'Astra Militarum',
-  'Imperium': 'Imperial Agents',
-  'Chaos': 'Chaos Space Marines',
-  'Xenos': 'Aeldari',
-  '--------': '',
+let factionAliasToName: Map<string, string> | null = null
+
+async function loadFactionAliases(client: ReturnType<typeof createClient>) {
+  const db = createDbFromClient(client)
+  const aliasMap = await getFactionAliasMap(db)
+  const factions = await getAllFactions(db)
+  const slugToName = new Map(factions.map((f) => [f.id, f.name]))
+
+  // Build alias → canonical name (not slug) for BCP list import
+  factionAliasToName = new Map<string, string>()
+  for (const [alias, slug] of aliasMap) {
+    const name = slugToName.get(slug)
+    if (name) factionAliasToName.set(alias, name)
+  }
 }
 
 function normalizeFaction(faction: string): string {
-  return FACTION_ALIASES[faction] ?? faction
+  if (!factionAliasToName) throw new Error('Faction aliases not loaded')
+  return factionAliasToName.get(faction) ?? faction
 }
 
 function generateId(): string {
@@ -73,6 +52,9 @@ async function main() {
 
   const client = createClient({ url: dbUrl, authToken })
 
+  // Load faction aliases from DB
+  await loadFactionAliases(client)
+
   // Create table if it doesn't exist
   await client.execute(`CREATE TABLE IF NOT EXISTS bcp_army_lists (
     id TEXT PRIMARY KEY,
@@ -86,15 +68,21 @@ async function main() {
     list_text TEXT NOT NULL,
     event_date INTEGER
   )`)
-  await client.execute('CREATE INDEX IF NOT EXISTS idx_bcp_lists_event_id ON bcp_army_lists(event_id)')
-  await client.execute('CREATE INDEX IF NOT EXISTS idx_bcp_lists_faction ON bcp_army_lists(faction)')
-  await client.execute('CREATE INDEX IF NOT EXISTS idx_bcp_lists_event_date ON bcp_army_lists(event_date)')
+  await client.execute(
+    'CREATE INDEX IF NOT EXISTS idx_bcp_lists_event_id ON bcp_army_lists(event_id)',
+  )
+  await client.execute(
+    'CREATE INDEX IF NOT EXISTS idx_bcp_lists_faction ON bcp_army_lists(faction)',
+  )
+  await client.execute(
+    'CREATE INDEX IF NOT EXISTS idx_bcp_lists_event_date ON bcp_army_lists(event_date)',
+  )
 
   // Clear existing
   await client.execute('DELETE FROM bcp_army_lists')
   console.log('Cleared existing lists\n')
 
-  const files = readdirSync(BCP_DIR).filter(f => f.startsWith('pairings-') && f.endsWith('.json'))
+  const files = readdirSync(BCP_DIR).filter((f) => f.startsWith('pairings-') && f.endsWith('.json'))
   console.log(`Processing ${files.length} events...\n`)
 
   let imported = 0
@@ -103,10 +91,17 @@ async function main() {
   for (const file of files) {
     const data = JSON.parse(readFileSync(path.join(BCP_DIR, file), 'utf-8'))
     const event = data.event
-    const records = data.records as Record<string, {
-      wins: number; losses: number; draws: number
-      faction: string; listUrl: string | null; listText?: string
-    }>
+    const records = data.records as Record<
+      string,
+      {
+        wins: number
+        losses: number
+        draws: number
+        faction: string
+        listUrl: string | null
+        listText?: string
+      }
+    >
 
     if (!records) continue
 
@@ -122,7 +117,10 @@ async function main() {
       }
 
       const faction = normalizeFaction(record.faction)
-      if (!faction) { skipped++; continue }
+      if (!faction) {
+        skipped++
+        continue
+      }
 
       batch.push({
         sql: `INSERT INTO bcp_army_lists (id, event_id, event_name, player_name, faction, wins, losses, draws, list_text, event_date) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
@@ -148,7 +146,9 @@ async function main() {
     }
   }
 
-  console.log(`\nDone. ${imported} lists imported, ${skipped} skipped (no list text or bad faction).`)
+  console.log(
+    `\nDone. ${imported} lists imported, ${skipped} skipped (no list text or bad faction).`,
+  )
   client.close()
 }
 

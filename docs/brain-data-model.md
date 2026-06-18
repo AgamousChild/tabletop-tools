@@ -8,13 +8,14 @@
 
 | Category | What it is | Example |
 |---|---|---|
-| `faction` | A playable army — auto-generated root node | BLOOD ANGELS, ORKS |
-| `army-rule` | Army-wide rule that applies regardless of detachment | Oath of Moment, Blessings of Khorne |
+| `faction` | A playable army — auto-generated root node from `buildFactionNodes()` in combo-detection.ts (not from game-data parser) | BLOOD ANGELS, ORKS |
+| `army-rule` | Army-wide rule that applies regardless of detachment. Parser classifies these directly via `PRIMARY_FACTION` mapping for shared rules and `RULE_SUBFACTION` for chapter-specific rules. Construction/mustering rules are classified as `army-ability` instead. | Oath of Moment, Blessings of Khorne |
+| `army-ability` | Sub-rule or component of an army rule, OR construction/mustering restrictions (e.g., "when mustering your army...") | The Sons of Sanguinius (sub-option of Oath of Moment), Assigned Agents (mustering rule) |
 | `detachment` | A detachment container — holds rules, stratagems, enhancements | Wrath of the Doomed, Gladius Task Force |
 | `detachment-rule` | The passive ability a detachment grants | Fanatical Celerity, Combat Doctrines |
 | `stratagem` | A stratagem inside a detachment | Rage-Fuelled Response (1CP) |
 | `enhancement` | An enhancement inside a detachment | Instinctive Interception |
-| `faction-ability` | A detachment-scoped ability (not army-wide) | Relentless Rage |
+| `faction-ability` | A detachment-scoped ability ONLY (not army-wide — those are `army-rule` or `army-ability`) | Relentless Rage |
 | `datasheet` | A unit | Lemartes, Intercessors |
 | `weapon` | A weapon profile on a unit | The Blood Crozius |
 | `unit-ability` | An ability on a unit | Black Rage |
@@ -31,11 +32,12 @@
 | `part_of` | child → parent | "This belongs to that container" |
 | `eligible_for` | unit → detachment | "This unit can be fielded in this detachment" |
 | `stacks_with` | ability ↔ ability | "These abilities combo together legally" |
-| `modifies` | ability → core rule | "This ability changes how this rule works" |
+| `modifies` | ability → core rule / army-rule → datasheet | "This ability changes how this rule works" or "This army rule applies to this unit" |
 | `interacts_with` | node ↔ node | "These interact mechanically" |
 | `requires` | node → node | "This needs that to function" |
 | `clarifies` | errata → rule | "This FAQ clarifies that rule" |
 | `supersedes` | new rule → old rule | "This replaces that" |
+| `can_lead` | leader ↔ unit | "This character can be attached to this unit" (bidirectional) |
 
 ---
 
@@ -210,18 +212,25 @@ graph TD
 
 ```
 1. Parse sources (core rules, faction packs, Wahapedia, community, 11th edition)
+   - Game-data parser classifies army-rule/army-ability/faction-ability correctly at parse time
+   - PRIMARY_FACTION mapping ensures shared rules (Oath of Moment → space-marines) are created once
+   - RULE_SUBFACTION mapping assigns chapter-specific rules (Templar Vows → black templars)
+   - Construction/mustering rules classified as army-ability (not army-rule)
+   - Markdown preserved in army rule content (not stripped)
 2. Merge + deduplicate (by ID, then by title+faction for detachment-rules)
 3. Massage (cleanup, subfaction assignment, phantom removal)
 4. Add 11th edition nodes
-5. Reclassify army rules (faction-ability without detachmentId → army-rule)
+5. Extract structured fields (CP costs, model restrictions, target keywords, epic heroes)
 6. Build detachment container nodes
-7. Build faction root nodes
+7. Build faction root nodes (from buildFactionNodes in combo-detection.ts)
 8. Build eligible_for refs (unit → detachment)
 9. Build stacks_with refs (combo detection)
 10. Edition stamping (9th/10th/11th)
 11. PDF position mapping
 12. Partition + write to disk
 ```
+
+**Note:** The old `reclassifyArmyRules` step (faction-ability without detachmentId → army-rule) has been removed. The game-data parser now handles category classification correctly at parse time. The function still exists in combo-detection.ts but is no longer called in the build pipeline.
 
 ---
 

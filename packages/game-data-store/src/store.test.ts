@@ -1,57 +1,70 @@
-import { describe, it, expect, beforeEach } from 'vitest'
 import type { UnitProfile } from '@tabletop-tools/game-content'
+import { beforeEach, describe, expect, it } from 'vitest'
+
+import type {
+  Detachment,
+  DetachmentAbility,
+  Enhancement,
+  LeaderAttachment,
+  LocalList,
+  LocalListUnit,
+  Mission,
+  Stratagem,
+  UnitAbility,
+  UnitComposition,
+  UnitCost,
+  UnitKeyword,
+  WargearOption,
+} from './store'
 import {
-  saveUnits,
-  getUnit,
-  searchUnits,
-  listFactions,
-  clearFaction,
-  clearAll,
-  clearGameRules,
-  getImportMeta,
-  setImportMeta,
-  getRulesImportMeta,
-  setRulesImportMeta,
-  createList,
-  getLists,
-  getList,
-  updateList,
-  deleteList,
   addListUnit,
-  getListUnits,
-  removeListUnit,
-  saveDetachments,
-  getDetachmentsByFaction,
+  clearAll,
+  clearFaction,
+  clearGameRules,
+  createList,
+  deleteList,
   getDetachment,
-  saveDetachmentAbilities,
   getDetachmentAbilities,
-  saveStratagems,
-  getStratagems,
-  saveEnhancements,
+  getDetachmentsByFaction,
   getEnhancements,
-  saveLeaderAttachments,
+  getImportMeta,
   getLeaderAttachments,
   getLeadersForUnit,
-  saveUnitCompositions,
-  getUnitCompositions,
-  saveUnitCosts,
-  getUnitCosts,
-  saveWargearOptions,
-  getWargearOptions,
-  saveUnitKeywords,
-  getUnitKeywords,
-  saveUnitAbilities,
-  getUnitAbilities,
-  saveMissions,
+  getList,
+  getLists,
+  getListUnits,
   getMissions,
-} from './store'
-import type {
-  LocalList, LocalListUnit, Detachment, DetachmentAbility,
-  Stratagem, Enhancement, LeaderAttachment, UnitComposition,
-  UnitCost, WargearOption, UnitKeyword, UnitAbility, Mission,
+  getRulesImportMeta,
+  getStratagems,
+  getUnit,
+  getUnitAbilities,
+  getUnitCompositions,
+  getUnitCosts,
+  getUnitKeywords,
+  getWargearOptions,
+  listFactions,
+  removeListUnit,
+  saveDetachmentAbilities,
+  saveDetachments,
+  saveEnhancements,
+  saveLeaderAttachments,
+  saveMissions,
+  saveStratagems,
+  saveUnitAbilities,
+  saveUnitCompositions,
+  saveUnitCosts,
+  saveUnitKeywords,
+  saveUnits,
+  saveWargearOptions,
+  searchUnits,
+  setImportMeta,
+  setRulesImportMeta,
+  updateList,
 } from './store'
 
-function makeUnit(overrides: Partial<UnitProfile> & { id: string; name: string; faction: string }): UnitProfile {
+function makeUnit(
+  overrides: Partial<UnitProfile> & { id: string; name: string; faction: string },
+): UnitProfile {
   return {
     move: 6,
     toughness: 4,
@@ -134,7 +147,7 @@ describe('searchUnits', () => {
   it('filters by faction', async () => {
     const results = await searchUnits({ faction: 'Orks' })
     expect(results).toHaveLength(2)
-    expect(results.every(u => u.faction === 'Orks')).toBe(true)
+    expect(results.every((u) => u.faction === 'Orks')).toBe(true)
   })
 
   it('filters by name substring (case-insensitive)', async () => {
@@ -191,9 +204,7 @@ describe('clearFaction', () => {
 
 describe('clearAll', () => {
   it('removes all units and meta', async () => {
-    await saveUnits([
-      makeUnit({ id: 'u1', name: 'Intercessors', faction: 'Space Marines' }),
-    ])
+    await saveUnits([makeUnit({ id: 'u1', name: 'Intercessors', faction: 'Space Marines' })])
     await setImportMeta({ lastImport: Date.now(), factions: ['Space Marines'], totalUnits: 1 })
     await clearAll()
     expect(await getUnit('u1')).toBeNull()
@@ -202,7 +213,20 @@ describe('clearAll', () => {
 
   it('clears game rules stores too', async () => {
     await saveDetachments([{ id: 'd1', factionId: 'SM', name: 'Gladius', legend: '', type: '' }])
-    await saveStratagems([{ id: 's1', factionId: 'SM', detachmentId: 'd1', name: 'Test', type: '', cpCost: '1', turn: '', phase: '', legend: '', description: '' }])
+    await saveStratagems([
+      {
+        id: 's1',
+        factionId: 'SM',
+        detachmentId: 'd1',
+        name: 'Test',
+        type: '',
+        cpCost: '1',
+        turn: '',
+        phase: '',
+        legend: '',
+        description: '',
+      },
+    ])
     await clearAll()
     expect(await getDetachmentsByFaction('SM')).toEqual([])
     expect(await getStratagems({ factionId: 'SM' })).toEqual([])
@@ -244,11 +268,20 @@ describe('rulesImportMeta', () => {
     const meta = {
       lastImport: 1700000000000,
       counts: {
-        detachments: 246, stratagems: 1397, enhancements: 869,
-        leaderAttachments: 1899, unitCompositions: 2138, unitCosts: 2104,
-        wargearOptions: 2790, unitKeywords: 15685, unitAbilities: 7031,
-        missions: 0, abilities: 0, datasheetStratagems: 0,
-        datasheetEnhancements: 0, datasheetDetachmentAbilities: 0,
+        detachments: 246,
+        stratagems: 1397,
+        enhancements: 869,
+        leaderAttachments: 1899,
+        unitCompositions: 2138,
+        unitCosts: 2104,
+        wargearOptions: 2790,
+        unitKeywords: 15685,
+        unitAbilities: 7031,
+        missions: 0,
+        abilities: 0,
+        datasheetStratagems: 0,
+        datasheetEnhancements: 0,
+        datasheetDetachmentAbilities: 0,
       },
     }
     await setRulesImportMeta(meta)
@@ -259,7 +292,22 @@ describe('rulesImportMeta', () => {
     await setImportMeta({ lastImport: 1, factions: ['A'], totalUnits: 1 })
     await setRulesImportMeta({
       lastImport: 2,
-      counts: { detachments: 1, stratagems: 0, enhancements: 0, leaderAttachments: 0, unitCompositions: 0, unitCosts: 0, wargearOptions: 0, unitKeywords: 0, unitAbilities: 0, missions: 0, abilities: 0, datasheetStratagems: 0, datasheetEnhancements: 0, datasheetDetachmentAbilities: 0 },
+      counts: {
+        detachments: 1,
+        stratagems: 0,
+        enhancements: 0,
+        leaderAttachments: 0,
+        unitCompositions: 0,
+        unitCosts: 0,
+        wargearOptions: 0,
+        unitKeywords: 0,
+        unitAbilities: 0,
+        missions: 0,
+        abilities: 0,
+        datasheetStratagems: 0,
+        datasheetEnhancements: 0,
+        datasheetDetachmentAbilities: 0,
+      },
     })
     expect((await getImportMeta())?.lastImport).toBe(1)
     expect((await getRulesImportMeta())?.lastImport).toBe(2)
@@ -279,7 +327,9 @@ function makeList(overrides: Partial<LocalList> & { id: string }): LocalList {
   }
 }
 
-function makeListUnit(overrides: Partial<LocalListUnit> & { id: string; listId: string }): LocalListUnit {
+function makeListUnit(
+  overrides: Partial<LocalListUnit> & { id: string; listId: string },
+): LocalListUnit {
   return {
     unitContentId: 'unit-1',
     unitName: 'Intercessors',
@@ -386,8 +436,20 @@ describe('removeListUnit', () => {
 
 describe('detachments', () => {
   const detachments: Detachment[] = [
-    { id: 'd1', factionId: 'SM', name: 'Gladius Task Force', legend: 'A versatile force', type: '' },
-    { id: 'd2', factionId: 'SM', name: 'Firestorm Assault', legend: 'Aggressive tactics', type: '' },
+    {
+      id: 'd1',
+      factionId: 'SM',
+      name: 'Gladius Task Force',
+      legend: 'A versatile force',
+      type: '',
+    },
+    {
+      id: 'd2',
+      factionId: 'SM',
+      name: 'Firestorm Assault',
+      legend: 'Aggressive tactics',
+      type: '',
+    },
     { id: 'd3', factionId: 'ORK', name: 'Waaagh! Tribe', legend: 'Green tide', type: '' },
   ]
 
@@ -395,7 +457,7 @@ describe('detachments', () => {
     await saveDetachments(detachments)
     const sm = await getDetachmentsByFaction('SM')
     expect(sm).toHaveLength(2)
-    expect(sm.map(d => d.name).sort()).toEqual(['Firestorm Assault', 'Gladius Task Force'])
+    expect(sm.map((d) => d.name).sort()).toEqual(['Firestorm Assault', 'Gladius Task Force'])
   })
 
   it('returns empty for unknown faction', async () => {
@@ -427,9 +489,30 @@ describe('detachments', () => {
 describe('detachmentAbilities', () => {
   it('saves and retrieves by detachment', async () => {
     const abilities: DetachmentAbility[] = [
-      { id: 'da1', detachmentId: 'd1', factionId: 'SM', name: 'Combat Doctrines', legend: '', description: 'Re-roll hits' },
-      { id: 'da2', detachmentId: 'd1', factionId: 'SM', name: 'Oath of Moment', legend: '', description: 'Re-roll wounds' },
-      { id: 'da3', detachmentId: 'd2', factionId: 'SM', name: 'Other', legend: '', description: 'Something' },
+      {
+        id: 'da1',
+        detachmentId: 'd1',
+        factionId: 'SM',
+        name: 'Combat Doctrines',
+        legend: '',
+        description: 'Re-roll hits',
+      },
+      {
+        id: 'da2',
+        detachmentId: 'd1',
+        factionId: 'SM',
+        name: 'Oath of Moment',
+        legend: '',
+        description: 'Re-roll wounds',
+      },
+      {
+        id: 'da3',
+        detachmentId: 'd2',
+        factionId: 'SM',
+        name: 'Other',
+        legend: '',
+        description: 'Something',
+      },
     ]
     await saveDetachmentAbilities(abilities)
     const result = await getDetachmentAbilities('d1')
@@ -445,10 +528,54 @@ describe('detachmentAbilities', () => {
 
 describe('stratagems', () => {
   const stratagems: Stratagem[] = [
-    { id: 's1', factionId: 'SM', detachmentId: 'd1', name: 'Fire Discipline', type: 'Battle Tactic', cpCost: '1', turn: 'Your turn', phase: 'Shooting', legend: '', description: 'Re-roll hits' },
-    { id: 's2', factionId: 'SM', detachmentId: 'd1', name: 'Armour of Contempt', type: 'Strategic Ploy', cpCost: '1', turn: 'Either', phase: 'Shooting', legend: '', description: 'Improve save' },
-    { id: 's3', factionId: 'SM', detachmentId: 'd2', name: 'Firestorm', type: 'Battle Tactic', cpCost: '2', turn: 'Your turn', phase: 'Shooting', legend: '', description: 'Extra attacks' },
-    { id: 's4', factionId: 'ORK', detachmentId: 'd3', name: 'Waaagh!', type: 'Epic Deed', cpCost: '1', turn: 'Your turn', phase: 'Command', legend: '', description: 'Charge bonus' },
+    {
+      id: 's1',
+      factionId: 'SM',
+      detachmentId: 'd1',
+      name: 'Fire Discipline',
+      type: 'Battle Tactic',
+      cpCost: '1',
+      turn: 'Your turn',
+      phase: 'Shooting',
+      legend: '',
+      description: 'Re-roll hits',
+    },
+    {
+      id: 's2',
+      factionId: 'SM',
+      detachmentId: 'd1',
+      name: 'Armour of Contempt',
+      type: 'Strategic Ploy',
+      cpCost: '1',
+      turn: 'Either',
+      phase: 'Shooting',
+      legend: '',
+      description: 'Improve save',
+    },
+    {
+      id: 's3',
+      factionId: 'SM',
+      detachmentId: 'd2',
+      name: 'Firestorm',
+      type: 'Battle Tactic',
+      cpCost: '2',
+      turn: 'Your turn',
+      phase: 'Shooting',
+      legend: '',
+      description: 'Extra attacks',
+    },
+    {
+      id: 's4',
+      factionId: 'ORK',
+      detachmentId: 'd3',
+      name: 'Waaagh!',
+      type: 'Epic Deed',
+      cpCost: '1',
+      turn: 'Your turn',
+      phase: 'Command',
+      legend: '',
+      description: 'Charge bonus',
+    },
   ]
 
   beforeEach(async () => {
@@ -463,7 +590,7 @@ describe('stratagems', () => {
   it('filters by faction + detachment', async () => {
     const result = await getStratagems({ factionId: 'SM', detachmentId: 'd1' })
     expect(result).toHaveLength(2)
-    expect(result.every(s => s.detachmentId === 'd1')).toBe(true)
+    expect(result.every((s) => s.detachmentId === 'd1')).toBe(true)
   })
 
   it('returns empty for unknown faction', async () => {
@@ -480,9 +607,33 @@ describe('stratagems', () => {
 describe('enhancements', () => {
   it('saves and retrieves by detachment', async () => {
     const items: Enhancement[] = [
-      { id: 'e1', factionId: 'SM', detachmentId: 'd1', name: 'Artificer Armour', legend: '', description: '+1 save', cost: '25' },
-      { id: 'e2', factionId: 'SM', detachmentId: 'd1', name: 'Master-crafted Weapon', legend: '', description: '+1 damage', cost: '15' },
-      { id: 'e3', factionId: 'SM', detachmentId: 'd2', name: 'Other', legend: '', description: 'Something', cost: '10' },
+      {
+        id: 'e1',
+        factionId: 'SM',
+        detachmentId: 'd1',
+        name: 'Artificer Armour',
+        legend: '',
+        description: '+1 save',
+        cost: '25',
+      },
+      {
+        id: 'e2',
+        factionId: 'SM',
+        detachmentId: 'd1',
+        name: 'Master-crafted Weapon',
+        legend: '',
+        description: '+1 damage',
+        cost: '15',
+      },
+      {
+        id: 'e3',
+        factionId: 'SM',
+        detachmentId: 'd2',
+        name: 'Other',
+        legend: '',
+        description: 'Something',
+        cost: '10',
+      },
     ]
     await saveEnhancements(items)
     const result = await getEnhancements('d1')
@@ -506,7 +657,7 @@ describe('leaderAttachments', () => {
     await saveLeaderAttachments(items)
     const result = await getLeaderAttachments('captain')
     expect(result).toHaveLength(2)
-    expect(result.map(la => la.attachedId).sort()).toEqual(['hellblasters', 'intercessors'])
+    expect(result.map((la) => la.attachedId).sort()).toEqual(['hellblasters', 'intercessors'])
   })
 
   it('returns empty for unknown leader', async () => {
@@ -522,7 +673,7 @@ describe('leaderAttachments', () => {
     await saveLeaderAttachments(items)
     const result = await getLeadersForUnit('intercessors')
     expect(result).toHaveLength(2)
-    expect(result.map(la => la.leaderId).sort()).toEqual(['captain', 'chaplain'])
+    expect(result.map((la) => la.leaderId).sort()).toEqual(['captain', 'chaplain'])
   })
 
   it('reverse lookup returns empty for unknown unit', async () => {
@@ -556,7 +707,7 @@ describe('unitCosts', () => {
     await saveUnitCosts(items)
     const result = await getUnitCosts('ds1')
     expect(result).toHaveLength(2)
-    expect(result.find(c => c.line === '1')!.cost).toBe('90')
+    expect(result.find((c) => c.line === '1')!.cost).toBe('90')
   })
 })
 
@@ -565,8 +716,18 @@ describe('unitCosts', () => {
 describe('wargearOptions', () => {
   it('saves and retrieves by datasheet', async () => {
     const items: WargearOption[] = [
-      { id: 'wo1', datasheetId: 'ds1', line: '1', description: 'Replace bolt rifle with stalker bolt rifle' },
-      { id: 'wo2', datasheetId: 'ds1', line: '2', description: 'Replace bolt pistol with plasma pistol' },
+      {
+        id: 'wo1',
+        datasheetId: 'ds1',
+        line: '1',
+        description: 'Replace bolt rifle with stalker bolt rifle',
+      },
+      {
+        id: 'wo2',
+        datasheetId: 'ds1',
+        line: '2',
+        description: 'Replace bolt pistol with plasma pistol',
+      },
     ]
     await saveWargearOptions(items)
     expect(await getWargearOptions('ds1')).toHaveLength(2)
@@ -587,7 +748,7 @@ describe('unitKeywords', () => {
     await saveUnitKeywords(items)
     const result = await getUnitKeywords('ds1')
     expect(result).toHaveLength(3)
-    expect(result.filter(k => k.isFactionKeyword)).toHaveLength(1)
+    expect(result.filter((k) => k.isFactionKeyword)).toHaveLength(1)
   })
 })
 
@@ -596,8 +757,20 @@ describe('unitKeywords', () => {
 describe('unitAbilities', () => {
   it('saves and retrieves by datasheet', async () => {
     const items: UnitAbility[] = [
-      { id: 'ab1', datasheetId: 'ds1', name: 'Oath of Moment', description: 'Re-roll hits against target', type: 'Faction' },
-      { id: 'ab2', datasheetId: 'ds1', name: 'Bolter Discipline', description: 'Rapid fire bonus', type: 'Core' },
+      {
+        id: 'ab1',
+        datasheetId: 'ds1',
+        name: 'Oath of Moment',
+        description: 'Re-roll hits against target',
+        type: 'Faction',
+      },
+      {
+        id: 'ab2',
+        datasheetId: 'ds1',
+        name: 'Bolter Discipline',
+        description: 'Rapid fire bonus',
+        type: 'Core',
+      },
     ]
     await saveUnitAbilities(items)
     expect(await getUnitAbilities('ds1')).toHaveLength(2)
@@ -610,9 +783,24 @@ describe('unitAbilities', () => {
 describe('missions', () => {
   it('saves and retrieves all missions', async () => {
     const items: Mission[] = [
-      { id: 'm1', name: 'Take and Hold', type: 'primary', description: 'Score VP for objectives held' },
-      { id: 'm2', name: 'Supply Drop', type: 'primary', description: 'New objectives appear mid-game' },
-      { id: 'm3', name: 'Hammer and Anvil', type: 'deployment_zone', description: 'Long deployment zones' },
+      {
+        id: 'm1',
+        name: 'Take and Hold',
+        type: 'primary',
+        description: 'Score VP for objectives held',
+      },
+      {
+        id: 'm2',
+        name: 'Supply Drop',
+        type: 'primary',
+        description: 'New objectives appear mid-game',
+      },
+      {
+        id: 'm3',
+        name: 'Hammer and Anvil',
+        type: 'deployment_zone',
+        description: 'Long deployment zones',
+      },
     ]
     await saveMissions(items)
     const result = await getMissions()
@@ -642,8 +830,31 @@ describe('clearGameRules', () => {
 
     // Save game rules data
     await saveDetachments([{ id: 'd1', factionId: 'SM', name: 'Gladius', legend: '', type: '' }])
-    await saveStratagems([{ id: 's1', factionId: 'SM', detachmentId: 'd1', name: 'Test', type: '', cpCost: '1', turn: '', phase: '', legend: '', description: '' }])
-    await saveEnhancements([{ id: 'e1', factionId: 'SM', detachmentId: 'd1', name: 'Test', legend: '', description: '', cost: '10' }])
+    await saveStratagems([
+      {
+        id: 's1',
+        factionId: 'SM',
+        detachmentId: 'd1',
+        name: 'Test',
+        type: '',
+        cpCost: '1',
+        turn: '',
+        phase: '',
+        legend: '',
+        description: '',
+      },
+    ])
+    await saveEnhancements([
+      {
+        id: 'e1',
+        factionId: 'SM',
+        detachmentId: 'd1',
+        name: 'Test',
+        legend: '',
+        description: '',
+        cost: '10',
+      },
+    ])
     await saveMissions([{ id: 'm1', name: 'Test', type: 'primary', description: '' }])
 
     // Clear only game rules

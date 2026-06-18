@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
-import { parseAbilityDescription, extractLeaderRules } from './leaderAbilities'
+
+import { extractLeaderRules, parseAbilityDescription } from './leaderAbilities'
 
 describe('parseAbilityDescription', () => {
   it('returns empty array for empty description', () => {
@@ -47,9 +48,7 @@ describe('parseAbilityDescription', () => {
   })
 
   it('extracts Sustained Hits 2', () => {
-    const result = parseAbilityDescription(
-      'Attacks made by this unit have Sustained Hits 2.',
-    )
+    const result = parseAbilityDescription('Attacks made by this unit have Sustained Hits 2.')
     expect(result).toContainEqual({ type: 'SUSTAINED_HITS', value: 2 })
   })
 
@@ -91,18 +90,14 @@ describe('parseAbilityDescription', () => {
   })
 
   it('deduplicates identical rules from one description', () => {
-    const result = parseAbilityDescription(
-      'Lethal Hits: attacks have lethal hits.',
-    )
+    const result = parseAbilityDescription('Lethal Hits: attacks have lethal hits.')
     // Should only appear once even though "lethal hits" appears twice
     expect(result).toHaveLength(1)
     expect(result[0]).toEqual({ type: 'LETHAL_HITS' })
   })
 
   it('handles +1 with plus sign notation', () => {
-    const result = parseAbilityDescription(
-      'Each time a model makes an attack, +1 to hit rolls.',
-    )
+    const result = parseAbilityDescription('Each time a model makes an attack, +1 to hit rolls.')
     expect(result).toContainEqual({ type: 'HIT_MOD', value: 1 })
   })
 
@@ -130,7 +125,8 @@ describe('extractLeaderRules', () => {
     const result = extractLeaderRules([
       {
         name: 'Rites of Battle',
-        description: 'While this model is leading a unit, each time a model in that unit makes an attack, you can re-roll the hit roll.',
+        description:
+          'While this model is leading a unit, each time a model in that unit makes an attack, you can re-roll the hit roll.',
       },
     ])
     expect(result).toHaveLength(1)

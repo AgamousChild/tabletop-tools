@@ -67,8 +67,12 @@ export function EndGameScreen({ matchId, onBack }: Props) {
     theirCpSpent: turn.theirCpSpent ?? 0,
     yourLost: JSON.parse(turn.yourUnitsLost) as Array<{ name: string }>,
     theirLost: JSON.parse(turn.theirUnitsLost) as Array<{ name: string }>,
-    yourDestroyed: turn.yourUnitsDestroyed ? JSON.parse(turn.yourUnitsDestroyed) as Array<{ name: string }> : [],
-    theirDestroyed: turn.theirUnitsDestroyed ? JSON.parse(turn.theirUnitsDestroyed) as Array<{ name: string }> : [],
+    yourDestroyed: turn.yourUnitsDestroyed
+      ? (JSON.parse(turn.yourUnitsDestroyed) as Array<{ name: string }>)
+      : [],
+    theirDestroyed: turn.theirUnitsDestroyed
+      ? (JSON.parse(turn.theirUnitsDestroyed) as Array<{ name: string }>)
+      : [],
     yourPhotoUrl: turn.yourPhotoUrl,
     theirPhotoUrl: turn.theirPhotoUrl,
     notes: turn.notes,
@@ -85,9 +89,22 @@ export function EndGameScreen({ matchId, onBack }: Props) {
         <button onClick={onBack} className="text-slate-400 hover:text-slate-100">
           Back
         </button>
-        <a href="/" className="flex items-center gap-1 text-xs text-slate-400 hover:text-slate-200 transition-colors" title="Back to Home">
-          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-3.5 h-3.5">
-            <path fillRule="evenodd" d="M9.293 2.293a1 1 0 0 1 1.414 0l7 7A1 1 0 0 1 17 11h-1v6a1 1 0 0 1-1 1h-2a1 1 0 0 1-1-1v-3a1 1 0 0 0-1-1H9a1 1 0 0 0-1 1v3a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1v-6H3a1 1 0 0 1-.707-1.707l7-7Z" clipRule="evenodd" />
+        <a
+          href="/"
+          className="flex items-center gap-1 text-xs text-slate-400 hover:text-slate-200 transition-colors"
+          title="Back to Home"
+        >
+          <svg
+            xmlns="http://www.w3.org/2000/svg"
+            viewBox="0 0 20 20"
+            fill="currentColor"
+            className="w-3.5 h-3.5"
+          >
+            <path
+              fillRule="evenodd"
+              d="M9.293 2.293a1 1 0 0 1 1.414 0l7 7A1 1 0 0 1 17 11h-1v6a1 1 0 0 1-1 1h-2a1 1 0 0 1-1-1v-3a1 1 0 0 0-1-1H9a1 1 0 0 0-1 1v3a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1v-6H3a1 1 0 0 1-.707-1.707l7-7Z"
+              clipRule="evenodd"
+            />
           </svg>
           Home
         </a>
@@ -95,7 +112,10 @@ export function EndGameScreen({ matchId, onBack }: Props) {
       </header>
 
       <div className="p-6 space-y-6">
-        <p className="text-xs text-slate-500 mb-4">Here is your match summary with round-by-round breakdown. Tap Back to return to your match list and start a new game.</p>
+        <p className="text-xs text-slate-500 mb-4">
+          Here is your match summary with round-by-round breakdown. Tap Back to return to your match
+          list and start a new game.
+        </p>
         {/* Result card */}
         <div className="text-center p-6 rounded-xl bg-slate-900 border border-slate-700">
           <p className="text-sm text-slate-400 mb-1">
@@ -193,10 +213,7 @@ export function EndGameScreen({ matchId, onBack }: Props) {
             <h3 className="font-semibold text-slate-300 mb-3">Round Breakdown</h3>
             <div className="space-y-2">
               {roundBreakdown.map((r) => (
-                <div
-                  key={r.round}
-                  className="p-4 rounded-lg bg-slate-900 border border-slate-800"
-                >
+                <div key={r.round} className="p-4 rounded-lg bg-slate-900 border border-slate-800">
                   <div className="flex items-center justify-between mb-1">
                     <span className="font-medium text-slate-200">Round {r.round}</span>
                   </div>
@@ -227,9 +244,7 @@ export function EndGameScreen({ matchId, onBack }: Props) {
                       </span>
                     )}
                   </div>
-                  {r.notes && (
-                    <p className="text-sm text-slate-500 mt-1 italic">{r.notes}</p>
-                  )}
+                  {r.notes && <p className="text-sm text-slate-500 mt-1 italic">{r.notes}</p>}
                 </div>
               ))}
             </div>

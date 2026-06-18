@@ -1,6 +1,7 @@
 import { useMemo } from 'react'
-import { trpc } from '../lib/trpc'
+
 import { ListCard } from '../components/ListCard'
+import { trpc } from '../lib/trpc'
 
 interface Props {
   factionId: string
@@ -36,7 +37,11 @@ export function FactionDetail({ factionId, onBack }: Props) {
         <h1 className="text-2xl font-semibold text-slate-100">{stat.faction}</h1>
 
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mt-4">
-          <StatCard label="Win Rate" value={`${(stat.winRate * 100).toFixed(1)}%`} color={stat.winRate > 0.55 ? 'emerald' : stat.winRate < 0.45 ? 'red' : 'slate'} />
+          <StatCard
+            label="Win Rate"
+            value={`${(stat.winRate * 100).toFixed(1)}%`}
+            color={stat.winRate > 0.55 ? 'emerald' : stat.winRate < 0.45 ? 'red' : 'slate'}
+          />
           <StatCard label="Games" value={stat.games.toLocaleString()} />
           <StatCard label="Players" value={stat.players.toLocaleString()} />
           <StatCard label="Event Wins" value={String(stat.eventWins)} color="amber" />
@@ -70,7 +75,15 @@ export function FactionDetail({ factionId, onBack }: Props) {
                 <tr key={d.detachmentId} className="border-b border-slate-800/50">
                   <td className="py-1.5 pr-4 text-slate-100">{d.detachment}</td>
                   <td className="py-1.5 pr-3 text-right">
-                    <span className={d.winRate > 0.55 ? 'text-emerald-400' : d.winRate < 0.45 ? 'text-red-400' : 'text-slate-300'}>
+                    <span
+                      className={
+                        d.winRate > 0.55
+                          ? 'text-emerald-400'
+                          : d.winRate < 0.45
+                            ? 'text-red-400'
+                            : 'text-slate-300'
+                      }
+                    >
                       {(d.winRate * 100).toFixed(1)}%
                     </span>
                   </td>
@@ -86,9 +99,7 @@ export function FactionDetail({ factionId, onBack }: Props) {
         </section>
       )}
 
-      {timeline && timeline.length > 0 && (
-        <TimelineChart points={timeline} />
-      )}
+      {timeline && timeline.length > 0 && <TimelineChart points={timeline} />}
 
       {topLists.length > 0 && (
         <section>
@@ -99,7 +110,9 @@ export function FactionDetail({ factionId, onBack }: Props) {
                 key={`${list.eventName}-${list.placement}-${i}`}
                 list={{
                   eventName: list.eventName,
-                  eventDate: list.eventDate ? new Date(list.eventDate).toISOString().slice(0, 10) : '',
+                  eventDate: list.eventDate
+                    ? new Date(list.eventDate).toISOString().slice(0, 10)
+                    : '',
                   placement: list.placement,
                   faction: stat.faction,
                   detachment: list.detachment,
@@ -118,8 +131,23 @@ export function FactionDetail({ factionId, onBack }: Props) {
   )
 }
 
-function StatCard({ label, value, color = 'slate' }: { label: string; value: string; color?: string }) {
-  const textColor = color === 'emerald' ? 'text-emerald-400' : color === 'red' ? 'text-red-400' : color === 'amber' ? 'text-amber-400' : 'text-slate-100'
+function StatCard({
+  label,
+  value,
+  color = 'slate',
+}: {
+  label: string
+  value: string
+  color?: string
+}) {
+  const textColor =
+    color === 'emerald'
+      ? 'text-emerald-400'
+      : color === 'red'
+        ? 'text-red-400'
+        : color === 'amber'
+          ? 'text-amber-400'
+          : 'text-slate-100'
   return (
     <div className="bg-slate-900 border border-slate-800 rounded-lg p-3">
       <p className="text-xs text-slate-500">{label}</p>
@@ -128,7 +156,18 @@ function StatCard({ label, value, color = 'slate' }: { label: string; value: str
   )
 }
 
-function TimelineChart({ points }: { points: Array<{ week: string; winRate: number; games: number; wins: number; losses: number; draws: number }> }) {
+function TimelineChart({
+  points,
+}: {
+  points: Array<{
+    week: string
+    winRate: number
+    games: number
+    wins: number
+    losses: number
+    draws: number
+  }>
+}) {
   const sorted = useMemo(() => [...points].sort((a, b) => a.week.localeCompare(b.week)), [points])
   const maxGames = Math.max(...sorted.map((p) => p.games), 1)
 
@@ -138,11 +177,8 @@ function TimelineChart({ points }: { points: Array<{ week: string; winRate: numb
       <div className="flex items-end gap-1 h-32">
         {sorted.map((p) => {
           const height = Math.max((p.games / maxGames) * 100, 4)
-          const color = p.winRate >= 0.55
-            ? 'bg-emerald-400'
-            : p.winRate >= 0.45
-              ? 'bg-amber-400'
-              : 'bg-red-400'
+          const color =
+            p.winRate >= 0.55 ? 'bg-emerald-400' : p.winRate >= 0.45 ? 'bg-amber-400' : 'bg-red-400'
           return (
             <div
               key={p.week}

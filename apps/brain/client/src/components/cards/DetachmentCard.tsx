@@ -1,3 +1,4 @@
+import { renderMarkdown } from '../../lib/render-markdown'
 import { CollapsibleSection } from '../CollapsibleSection'
 import { EnhancementCard } from './EnhancementCard'
 import { ErrataSection } from './ErrataSection'
@@ -37,9 +38,10 @@ export function DetachmentCard({ data, context }: DetachmentCardProps) {
         </div>
 
         {/* Ability text */}
-        <div className="text-xs text-slate-300 leading-snug whitespace-pre-line">
-          {data.abilityText}
-        </div>
+        <div
+          className="text-xs text-slate-300 leading-snug"
+          dangerouslySetInnerHTML={{ __html: renderMarkdown(data.abilityText) }}
+        />
 
         {/* Chapter badge */}
         {data.chapterBadge && (
@@ -70,7 +72,10 @@ export function DetachmentCard({ data, context }: DetachmentCardProps) {
         {data.qualityFlags?.length ? (
           <div className="flex gap-1 mt-2">
             {data.qualityFlags.map((f) => (
-              <span key={f} className="text-[9px] bg-amber-500/20 text-amber-400 px-1.5 py-0.5 rounded">
+              <span
+                key={f}
+                className="text-[9px] bg-amber-500/20 text-amber-400 px-1.5 py-0.5 rounded"
+              >
                 {f}
               </span>
             ))}

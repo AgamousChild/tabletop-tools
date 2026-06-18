@@ -26,9 +26,7 @@ interface Props {
 
 export function FactionTable({ stats, onSelect }: Props) {
   if (stats.length === 0) {
-    return (
-      <p className="text-slate-400 text-sm py-4 text-center">No data yet.</p>
-    )
+    return <p className="text-slate-400 text-sm py-4 text-center">No data yet.</p>
   }
 
   return (
@@ -43,9 +41,15 @@ export function FactionTable({ stats, onSelect }: Props) {
             <th className="pb-2 pr-3 text-right">D</th>
             <th className="pb-2 pr-3 text-right">Games</th>
             <th className="pb-2 pr-3 text-right">Players</th>
-            <th className="pb-2 pr-3 text-right" title="Percentage of meta playerbase">Meta%</th>
-            <th className="pb-2 pr-3 text-right" title="Event wins">1st</th>
-            <th className="pb-2 text-right" title="Top 4 finishes">T4</th>
+            <th className="pb-2 pr-3 text-right" title="Percentage of meta playerbase">
+              Meta%
+            </th>
+            <th className="pb-2 pr-3 text-right" title="Event wins">
+              1st
+            </th>
+            <th className="pb-2 text-right" title="Top 4 finishes">
+              T4
+            </th>
           </tr>
         </thead>
         <tbody>
@@ -82,8 +86,7 @@ export function FactionTable({ stats, onSelect }: Props) {
 
 function WinRateBar({ rate }: { rate: number }) {
   const pct = (rate * 100).toFixed(1)
-  const color =
-    rate > 0.55 ? 'text-emerald-400' : rate < 0.45 ? 'text-red-400' : 'text-slate-300'
+  const color = rate > 0.55 ? 'text-emerald-400' : rate < 0.45 ? 'text-red-400' : 'text-slate-300'
   return <span className={`font-mono ${color}`}>{pct}%</span>
 }
 
@@ -95,8 +98,15 @@ function MetaPctBadge({ value }: { value: number }) {
 
 function AllegianceDot({ allegiance }: { allegiance: string }) {
   const color =
-    allegiance === 'imperium' ? 'bg-blue-400' :
-    allegiance === 'chaos' ? 'bg-red-400' :
-    'bg-green-400'
-  return <span className={`inline-block w-1.5 h-1.5 rounded-full ${color} ml-2 opacity-60`} title={allegiance} />
+    allegiance === 'imperium'
+      ? 'bg-blue-400'
+      : allegiance === 'chaos'
+        ? 'bg-red-400'
+        : 'bg-green-400'
+  return (
+    <span
+      className={`inline-block w-1.5 h-1.5 rounded-full ${color} ml-2 opacity-60`}
+      title={allegiance}
+    />
+  )
 }

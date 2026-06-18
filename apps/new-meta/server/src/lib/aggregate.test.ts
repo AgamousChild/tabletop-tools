@@ -1,12 +1,13 @@
-import { describe, it, expect } from 'vitest'
+import type { TournamentRecord } from '@tabletop-tools/game-content'
+import { describe, expect, it } from 'vitest'
+
 import {
-  computeFactionStats,
   computeDetachmentStats,
+  computeFactionStats,
   computeTimeline,
   getTopLists,
   getWeekStart,
 } from './aggregate.js'
-import type { TournamentRecord } from '@tabletop-tools/game-content'
 
 // ---- Fixtures ----
 
@@ -19,9 +20,9 @@ const BASIC: TournamentRecord[] = [
     format: 'GT',
     players: [
       { placement: 1, faction: 'Space Marines', wins: 5, losses: 0, draws: 0, points: 100 },
-      { placement: 2, faction: 'Orks',          wins: 4, losses: 1, draws: 0, points: 80 },
-      { placement: 3, faction: 'Necrons',        wins: 3, losses: 2, draws: 0, points: 60 },
-      { placement: 4, faction: 'Orks',           wins: 2, losses: 3, draws: 0, points: 40 },
+      { placement: 2, faction: 'Orks', wins: 4, losses: 1, draws: 0, points: 80 },
+      { placement: 3, faction: 'Necrons', wins: 3, losses: 2, draws: 0, points: 60 },
+      { placement: 4, faction: 'Orks', wins: 2, losses: 3, draws: 0, points: 40 },
     ],
   },
 ]
@@ -32,9 +33,33 @@ const WITH_DETACHMENTS: TournamentRecord[] = [
     eventDate: '2025-06-16',
     format: 'GT',
     players: [
-      { placement: 1, faction: 'Space Marines', detachment: 'Gladius Task Force', wins: 5, losses: 0, draws: 0, points: 100 },
-      { placement: 2, faction: 'Space Marines', detachment: 'Ironstorm Spearhead', wins: 4, losses: 1, draws: 0, points: 80 },
-      { placement: 3, faction: 'Orks',          detachment: 'Waaagh Tribe',        wins: 3, losses: 2, draws: 0, points: 60 },
+      {
+        placement: 1,
+        faction: 'Space Marines',
+        detachment: 'Gladius Task Force',
+        wins: 5,
+        losses: 0,
+        draws: 0,
+        points: 100,
+      },
+      {
+        placement: 2,
+        faction: 'Space Marines',
+        detachment: 'Ironstorm Spearhead',
+        wins: 4,
+        losses: 1,
+        draws: 0,
+        points: 80,
+      },
+      {
+        placement: 3,
+        faction: 'Orks',
+        detachment: 'Waaagh Tribe',
+        wins: 3,
+        losses: 2,
+        draws: 0,
+        points: 60,
+      },
     ],
   },
 ]
@@ -58,7 +83,7 @@ const MULTI_EVENT: TournamentRecord[] = [
     format: 'GT',
     players: [
       { placement: 1, faction: 'Space Marines', wins: 5, losses: 0, draws: 0, points: 100 },
-      { placement: 2, faction: 'Orks',          wins: 2, losses: 3, draws: 0, points: 40 },
+      { placement: 2, faction: 'Orks', wins: 2, losses: 3, draws: 0, points: 40 },
     ],
   },
   {
@@ -66,8 +91,8 @@ const MULTI_EVENT: TournamentRecord[] = [
     eventDate: '2025-06-16',
     format: 'GT',
     players: [
-      { placement: 1, faction: 'Orks',          wins: 5, losses: 0, draws: 0, points: 100 },
-      { placement: 2, faction: 'Space Marines',  wins: 2, losses: 3, draws: 0, points: 40 },
+      { placement: 1, faction: 'Orks', wins: 5, losses: 0, draws: 0, points: 100 },
+      { placement: 2, faction: 'Space Marines', wins: 2, losses: 3, draws: 0, points: 40 },
     ],
   },
 ]
@@ -110,7 +135,7 @@ describe('computeFactionStats — basic', () => {
     const repTotal = stats.reduce((sum, s) => sum + s.representationPct, 0)
     // All reps should sum to 1 (100%)
     expect(repTotal).toBeCloseTo(1, 5)
-    expect(total).toBe(4)  // 4 players total
+    expect(total).toBe(4) // 4 players total
   })
 })
 

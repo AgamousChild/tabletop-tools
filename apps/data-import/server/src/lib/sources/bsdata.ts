@@ -1,4 +1,10 @@
-import { parseBSDataXml } from '@tabletop-tools/game-content/src/adapters/bsdata/parser'
+/**
+ * @see docs/etl-data-pipelines.md — ETL diagram and function reference
+ */
+import {
+  parseBSDataXml,
+  type Subfaction,
+} from '@tabletop-tools/game-content/src/adapters/bsdata/parser'
 import type { UnitProfile } from '@tabletop-tools/game-content/src/types'
 
 const DEFAULT_REPO = 'BSData/wh40k-10e'
@@ -15,6 +21,7 @@ export interface BSDataResult {
   skipped: boolean
   commitSha: string
   units: UnitProfile[]
+  subfactions: Subfaction[]
 }
 
 /** Strip BSData catalog prefixes for consistency with Wahapedia faction names */
@@ -29,22 +36,21 @@ export async function fetchAndProcessBSData(
   githubToken?: string,
 ): Promise<BSDataResult> {
   const ghHeaders: Record<string, string> = {
-    'Accept': 'application/vnd.github.v3+json',
+    Accept: 'application/vnd.github.v3+json',
     'User-Agent': 'tabletop-tools',
   }
   if (githubToken) ghHeaders['Authorization'] = `token ${githubToken}`
 
   // Get latest commit SHA
-  const commitResp = await fetch(
-    `https://api.github.com/repos/${repo}/commits/${branch}`,
-    { headers: ghHeaders },
-  )
+  const commitResp = await fetch(`https://api.github.com/repos/${repo}/commits/${branch}`, {
+    headers: ghHeaders,
+  })
   if (!commitResp.ok) throw new Error(`GitHub commit API: HTTP ${commitResp.status}`)
-  const commitData = await commitResp.json() as { sha: string }
+  const commitData = (await commitResp.json()) as { sha: string }
   const commitSha = commitData.sha
 
   if (previousCommitSha && commitSha === previousCommitSha) {
-    return { skipped: true, commitSha, units: [] }
+    return { skipped: true, commitSha, units: [], subfactions: [] }
   }
 
   // Get file tree
@@ -53,21 +59,20 @@ export async function fetchAndProcessBSData(
     { headers: ghHeaders },
   )
   if (!treeResp.ok) throw new Error(`GitHub tree API: HTTP ${treeResp.status}`)
-  const treeData = await treeResp.json() as { tree: GitHubTreeItem[] }
+  const treeData = (await treeResp.json()) as { tree: GitHubTreeItem[] }
 
   // Filter to .cat files only
-  const catFiles = treeData.tree.filter(item =>
-    item.type === 'blob' && item.path.endsWith('.cat')
+  const catFiles = treeData.tree.filter(
+    (item) => item.type === 'blob' && item.path.endsWith('.cat'),
   )
 
   // Fetch and parse each catalog
   const allUnits: BSDataResult['units'] = []
+  const allSubfactions: BSDataResult['subfactions'] = []
   const errors: string[] = []
 
   for (const file of catFiles) {
-    const faction = normalizeFactionName(
-      file.path.replace(/\.cat$/, '').replace(/.*\//, '')
-    )
+    const faction = normalizeFactionName(file.path.replace(/\.cat$/, '').replace(/.*\//, ''))
 
     try {
       const rawResp = await fetch(
@@ -77,8 +82,9 @@ export async function fetchAndProcessBSData(
       if (!rawResp.ok) throw new Error(`HTTP ${rawResp.status}`)
       const xml = await rawResp.text()
 
-      const { units, errors: parseErrors } = parseBSDataXml(xml, faction)
+      const { units, subfactions, errors: parseErrors } = parseBSDataXml(xml, faction)
       allUnits.push(...units)
+      allSubfactions.push(...subfactions)
       errors.push(...parseErrors)
     } catch (err) {
       errors.push(`${faction}: ${err instanceof Error ? err.message : String(err)}`)
@@ -89,5 +95,5 @@ export async function fetchAndProcessBSData(
     console.log(`BSData parse warnings: ${errors.length}`)
   }
 
-  return { skipped: false, commitSha, units: allUnits }
+  return { skipped: false, commitSha, units: allUnits, subfactions: allSubfactions }
 }

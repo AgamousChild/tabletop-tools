@@ -1,21 +1,41 @@
-import type { Node, NodeRef, Source } from '../model'
 import { truncate } from '../filters'
-import { errataId, coreId, slugify } from '../slugify'
+import type { Node, NodeRef, Source } from '../model'
+import { coreId, errataId } from '../slugify'
 import type { ParseResult } from './core-rules'
 
 function extractCommentaryKeywords(title: string, content: string): string[] {
   const combined = `${title} ${content}`.toLowerCase()
   const terms = [
-    'errata', 'faq', 'clarification', 'amendment',
-    'coherency', 'redeployment', 'battle-shock', 'stratagem',
-    'out-of-phase', 'overwatch', 'fights first', 'charge',
-    'wound', 'hit', 'save', 'movement', 'shooting', 'fight',
-    'transport', 'deep strike', 'engagement range', 'visibility',
-    'terrain', 'cover', 'leadership', 'morale', 'aircraft',
+    'errata',
+    'faq',
+    'clarification',
+    'amendment',
+    'coherency',
+    'redeployment',
+    'battle-shock',
+    'stratagem',
+    'out-of-phase',
+    'overwatch',
+    'fights first',
+    'charge',
+    'wound',
+    'hit',
+    'save',
+    'movement',
+    'shooting',
+    'fight',
+    'transport',
+    'deep strike',
+    'engagement range',
+    'visibility',
+    'terrain',
+    'cover',
+    'leadership',
+    'morale',
+    'aircraft',
   ]
-  return terms.filter(t => combined.includes(t))
+  return terms.filter((t) => combined.includes(t))
 }
-
 
 /**
  * Parse rules commentary markdown into errata and FAQ nodes.
@@ -58,7 +78,8 @@ export function parseRulesCommentary(normalizedMarkdown: string, retrievedAt: st
 
     // Skip meta headings
     const upper = title.toUpperCase()
-    if (upper.includes('VERSION') || upper === 'CORE RULES UPDATES' || upper === 'RULES COMMENTARY') return
+    if (upper.includes('VERSION') || upper === 'CORE RULES UPDATES' || upper === 'RULES COMMENTARY')
+      return
 
     nodeIndex++
 
@@ -68,7 +89,7 @@ export function parseRulesCommentary(normalizedMarkdown: string, retrievedAt: st
 
     // Determine category based on zone
     let category: Node['category']
-    let layer: Node['layer'] = 'errata'
+    const layer: Node['layer'] = 'errata'
 
     if (zone === 'faq') {
       category = 'faq'

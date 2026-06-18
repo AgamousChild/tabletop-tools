@@ -11,14 +11,19 @@
  * Run: npx tsx src/meta/extract-detachments.ts
  */
 
-import { readFileSync, writeFileSync, readdirSync } from 'node:fs'
+import { readdirSync, readFileSync, writeFileSync } from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { BCP_FACTION_TO_SLUG, SUBFACTION_PARENT } from './seed-dimensions.js'
+
+import { createClient } from '@libsql/client'
+import { createDbFromClient, getFactionAliasMap, getSubfactions } from '@tabletop-tools/db'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const BCP_DIR = '.local/ingest/bcp'
-const WAHAPEDIA_PATH = path.resolve(__dirname, '../../../data-import/client/public/wahapedia/detachments.json')
+const WAHAPEDIA_PATH = path.resolve(
+  __dirname,
+  '../../../data-import/client/public/wahapedia/detachments.json',
+)
 const OUTPUT_PATH = '.local/meta/detachment-map.json'
 
 interface WahapediaDetachment {
@@ -29,12 +34,29 @@ interface WahapediaDetachment {
 
 // Wahapedia faction ID → our slug
 const WH_FACTION_MAP: Record<string, string> = {
-  AC: 'adeptus-custodes', AE: 'aeldari', AM: 'astra-militarum', AS: 'adepta-sororitas',
-  AdM: 'adeptus-mechanicus', AoI: 'imperial-agents', CD: 'chaos-daemons', CSM: 'chaos-space-marines',
-  DG: 'death-guard', DRU: 'drukhari', EC: 'emperors-children', GC: 'genestealer-cults',
-  GK: 'grey-knights', LoV: 'leagues-of-votann', NEC: 'necrons', ORK: 'orks',
-  QI: 'imperial-knights', QT: 'chaos-knights', SM: 'space-marines', TAU: 'tau-empire',
-  TS: 'thousand-sons', TYR: 'tyranids', WE: 'world-eaters',
+  AC: 'adeptus-custodes',
+  AE: 'aeldari',
+  AM: 'astra-militarum',
+  AS: 'adepta-sororitas',
+  AdM: 'adeptus-mechanicus',
+  AoI: 'imperial-agents',
+  CD: 'chaos-daemons',
+  CSM: 'chaos-space-marines',
+  DG: 'death-guard',
+  DRU: 'drukhari',
+  EC: 'emperors-children',
+  GC: 'genestealer-cults',
+  GK: 'grey-knights',
+  LoV: 'leagues-of-votann',
+  NEC: 'necrons',
+  ORK: 'orks',
+  QI: 'imperial-knights',
+  QT: 'chaos-knights',
+  SM: 'space-marines',
+  TAU: 'tau-empire',
+  TS: 'thousand-sons',
+  TYR: 'tyranids',
+  WE: 'world-eaters',
 }
 
 // Structured patterns (high confidence)
@@ -46,7 +68,10 @@ const STRUCTURED_PATTERNS: RegExp[] = [
 ]
 
 function slugify(name: string, factionSlug: string): string {
-  return `${factionSlug}:${name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '')}`
+  return `${factionSlug}:${name
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '')}`
 }
 
 interface DetachmentMatch {
@@ -58,7 +83,18 @@ interface DetachmentMatch {
   method: 'structured' | 'substring'
 }
 
-function main() {
+async function main() {
+  // Load faction maps from DB
+  const dbUrl = process.env.TURSO_DB_URL ?? 'file:.local/meta/meta.db'
+  const authToken = process.env.TURSO_AUTH_TOKEN
+  const client = createClient({ url: dbUrl, ...(authToken ? { authToken } : {}) })
+  const db = createDbFromClient(client)
+  const BCP_FACTION_TO_SLUG = Object.fromEntries(await getFactionAliasMap(db))
+  const subfactions = await getSubfactions(db)
+  const SUBFACTION_PARENT: Record<string, string> = Object.fromEntries(
+    subfactions.map((s) => [s.id, s.factionId]),
+  )
+
   // Load Wahapedia detachments
   const wahapedia: WahapediaDetachment[] = JSON.parse(readFileSync(WAHAPEDIA_PATH, 'utf-8'))
 
@@ -73,11 +109,13 @@ function main() {
   }
 
   // Sort detachment names by length descending (match longest first to avoid partial matches)
-  const sortedDetNames = [...detByName.keys()].filter(n => n.length > 5).sort((a, b) => b.length - a.length)
+  const sortedDetNames = [...detByName.keys()]
+    .filter((n) => n.length > 5)
+    .sort((a, b) => b.length - a.length)
 
   console.log(`${wahapedia.length} detachments loaded, ${sortedDetNames.length} searchable names\n`)
 
-  const files = readdirSync(BCP_DIR).filter(f => f.startsWith('pairings-') && f.endsWith('.json'))
+  const files = readdirSync(BCP_DIR).filter((f) => f.startsWith('pairings-') && f.endsWith('.json'))
   const results: DetachmentMatch[] = []
   let total = 0
   let structured = 0
@@ -110,12 +148,15 @@ function main() {
         if (m && m[1]) {
           const detName = m[1].trim()
           // Clean up common suffixes
-          const cleaned = detName.replace(/\s*\(.*\)$/, '').replace(/\s*[-–].*$/, '').trim()
+          const cleaned = detName
+            .replace(/\s*\(.*\)$/, '')
+            .replace(/\s*[-–].*$/, '')
+            .trim()
           const key = cleaned.toLowerCase()
           const candidates = detByName.get(key)
           if (candidates) {
             // Prefer same-faction match
-            const sameFaction = candidates.find(c => c.factionSlug === factionSlug)
+            const sameFaction = candidates.find((c) => c.factionSlug === factionSlug)
             const match = sameFaction || candidates[0]!
             results.push({
               eventId: event.id,
@@ -140,7 +181,7 @@ function main() {
         if (textLower.includes(detNameLower)) {
           const candidates = detByName.get(detNameLower)!
           // Prefer same-faction match
-          const sameFaction = candidates.find(c => c.factionSlug === factionSlug)
+          const sameFaction = candidates.find((c) => c.factionSlug === factionSlug)
           if (sameFaction) {
             results.push({
               eventId: event.id,
@@ -164,22 +205,28 @@ function main() {
   }
 
   console.log(`Total players with list text: ${total}`)
-  console.log(`Structured match: ${structured} (${(structured / total * 100).toFixed(1)}%)`)
-  console.log(`Substring match: ${substring} (${(substring / total * 100).toFixed(1)}%)`)
-  console.log(`Total matched: ${structured + substring} (${((structured + substring) / total * 100).toFixed(1)}%)`)
+  console.log(`Structured match: ${structured} (${((structured / total) * 100).toFixed(1)}%)`)
+  console.log(`Substring match: ${substring} (${((substring / total) * 100).toFixed(1)}%)`)
+  console.log(
+    `Total matched: ${structured + substring} (${(((structured + substring) / total) * 100).toFixed(1)}%)`,
+  )
   console.log(`No match: ${noMatch}`)
 
   // Top detachments
   const detCounts = new Map<string, number>()
-  for (const r of results) detCounts.set(r.detachmentName, (detCounts.get(r.detachmentName) || 0) + 1)
+  for (const r of results)
+    detCounts.set(r.detachmentName, (detCounts.get(r.detachmentName) || 0) + 1)
   console.log('\nTop 20 detachments:')
-  ;[...detCounts.entries()].sort((a, b) => b[1] - a[1]).slice(0, 20).forEach(([n, c]) => {
-    console.log(`  ${c.toString().padStart(5)}  ${n}`)
-  })
+  ;[...detCounts.entries()]
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 20)
+    .forEach(([n, c]) => {
+      console.log(`  ${c.toString().padStart(5)}  ${n}`)
+    })
 
   // Save results
   writeFileSync(OUTPUT_PATH, JSON.stringify(results, null, 2))
   console.log(`\nSaved ${results.length} matches to ${OUTPUT_PATH}`)
 }
 
-main()
+main().catch(console.error)

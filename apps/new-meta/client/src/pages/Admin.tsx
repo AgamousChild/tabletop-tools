@@ -1,11 +1,14 @@
 import { useState } from 'react'
-import { trpc } from '../lib/trpc'
+
 import { useSession } from '../lib/auth'
+import { trpc } from '../lib/trpc'
 
 export function Admin() {
   const { data: session } = useSession()
   const [csv, setCsv] = useState('')
-  const [format, setFormat] = useState<'bcp-csv' | 'tabletop-admiral-csv' | 'generic-csv'>('bcp-csv')
+  const [format, setFormat] = useState<'bcp-csv' | 'tabletop-admiral-csv' | 'generic-csv'>(
+    'bcp-csv',
+  )
   const [eventName, setEventName] = useState('')
   const [eventDate, setEventDate] = useState('')
   const [metaWindow, setMetaWindow] = useState('')
@@ -48,7 +51,8 @@ export function Admin() {
     <div className="space-y-8 max-w-2xl">
       <h1 className="text-2xl font-semibold text-slate-100">Admin — Import Tournament</h1>
       <p className="text-xs text-slate-500 mb-4">
-        Paste CSV tournament results below. Select the format, fill in event details, and click Import to add the data and update Glicko-2 ratings.
+        Paste CSV tournament results below. Select the format, fill in event details, and click
+        Import to add the data and update Glicko-2 ratings.
       </p>
 
       <form onSubmit={handleSubmit} className="space-y-4">
@@ -107,13 +111,9 @@ export function Admin() {
           />
         </div>
 
-        {error && (
-          <p className="text-red-400 text-sm">{error}</p>
-        )}
+        {error && <p className="text-red-400 text-sm">{error}</p>}
 
-        {result && (
-          <p className="text-emerald-400 text-sm">{result}</p>
-        )}
+        {result && <p className="text-emerald-400 text-sm">{result}</p>}
 
         <button
           type="submit"

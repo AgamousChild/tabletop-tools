@@ -1,6 +1,7 @@
 import { useState } from 'react'
-import { trpc } from '../lib/trpc'
+
 import { StatCard } from '../components/StatCard'
+import { trpc } from '../lib/trpc'
 
 export function ScraperPage() {
   const status = trpc.stats.bcpScraperStatus.useQuery()
@@ -27,7 +28,9 @@ export function ScraperPage() {
 
       {/* Summary stats */}
       <section>
-        <h2 className="text-sm font-medium text-slate-400 mb-3 uppercase tracking-wider">Summary</h2>
+        <h2 className="text-sm font-medium text-slate-400 mb-3 uppercase tracking-wider">
+          Summary
+        </h2>
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
           <StatCard label="Total Events" value={totalEvents.toLocaleString()} />
           <StatCard
@@ -39,23 +42,26 @@ export function ScraperPage() {
             label="Last Run"
             value={latestJob?.startedAt ? formatTs(latestJob.startedAt) : '--'}
           />
-          <StatCard
-            label="Triggered By"
-            value={latestJob?.triggeredBy ?? '--'}
-          />
+          <StatCard label="Triggered By" value={latestJob?.triggeredBy ?? '--'} />
         </div>
       </section>
 
       {/* Latest job detail */}
       {latestJob && (
         <section>
-          <h2 className="text-sm font-medium text-slate-400 mb-3 uppercase tracking-wider">Latest Job</h2>
+          <h2 className="text-sm font-medium text-slate-400 mb-3 uppercase tracking-wider">
+            Latest Job
+          </h2>
           <div className="bg-slate-900 border border-slate-800 rounded-lg p-4 space-y-2">
             <div className="flex items-center gap-3">
               <StatusBadge status={latestJob.status} />
-              <span className="text-sm text-slate-400">Started: {formatTs(latestJob.startedAt)}</span>
+              <span className="text-sm text-slate-400">
+                Started: {formatTs(latestJob.startedAt)}
+              </span>
               {latestJob.completedAt && (
-                <span className="text-sm text-slate-400">Completed: {formatTs(latestJob.completedAt)}</span>
+                <span className="text-sm text-slate-400">
+                  Completed: {formatTs(latestJob.completedAt)}
+                </span>
               )}
             </div>
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mt-3">
@@ -87,7 +93,9 @@ export function ScraperPage() {
 
       {/* Action buttons */}
       <section>
-        <h2 className="text-sm font-medium text-slate-400 mb-3 uppercase tracking-wider">Actions</h2>
+        <h2 className="text-sm font-medium text-slate-400 mb-3 uppercase tracking-wider">
+          Actions
+        </h2>
         <div className="flex gap-3">
           <button
             onClick={() => {
@@ -114,15 +122,16 @@ export function ScraperPage() {
             {pipelineMutation.isPending ? 'Running...' : 'Rebuild Cube'}
           </button>
         </div>
-        {actionResult && (
-          <p className="text-sm text-slate-400 mt-2">{actionResult}</p>
-        )}
+        {actionResult && <p className="text-sm text-slate-400 mt-2">{actionResult}</p>}
       </section>
 
       {/* History table */}
       <section>
         <h2 className="text-sm font-medium text-slate-400 mb-3 uppercase tracking-wider">
-          Job History {history.data && history.data.length > 0 && <span className="font-normal">({history.data.length})</span>}
+          Job History{' '}
+          {history.data && history.data.length > 0 && (
+            <span className="font-normal">({history.data.length})</span>
+          )}
         </h2>
         {history.isLoading && <p className="text-slate-400 text-sm">Loading history...</p>}
         {history.data && history.data.length === 0 && (
@@ -146,12 +155,22 @@ export function ScraperPage() {
                 {history.data.map((job) => (
                   <tr key={job.id} className="border-b border-slate-800/50 last:border-0">
                     <td className="px-4 py-3 text-slate-300">{formatTs(job.startedAt)}</td>
-                    <td className="px-4 py-3"><StatusBadge status={job.status} /></td>
-                    <td className="px-4 py-3 text-slate-100 text-right font-mono">{job.eventsFound ?? 0}</td>
-                    <td className="px-4 py-3 text-slate-100 text-right font-mono">{job.eventsScraped ?? 0}</td>
-                    <td className="px-4 py-3 text-slate-100 text-right font-mono">{job.pairingsScraped ?? 0}</td>
+                    <td className="px-4 py-3">
+                      <StatusBadge status={job.status} />
+                    </td>
+                    <td className="px-4 py-3 text-slate-100 text-right font-mono">
+                      {job.eventsFound ?? 0}
+                    </td>
+                    <td className="px-4 py-3 text-slate-100 text-right font-mono">
+                      {job.eventsScraped ?? 0}
+                    </td>
+                    <td className="px-4 py-3 text-slate-100 text-right font-mono">
+                      {job.pairingsScraped ?? 0}
+                    </td>
                     <td className="px-4 py-3 text-slate-400">{job.triggeredBy}</td>
-                    <td className="px-4 py-3 text-red-400 text-xs truncate max-w-[200px]">{job.errors ?? '--'}</td>
+                    <td className="px-4 py-3 text-red-400 text-xs truncate max-w-[200px]">
+                      {job.errors ?? '--'}
+                    </td>
                   </tr>
                 ))}
               </tbody>
@@ -187,6 +206,13 @@ function statusColor(status?: string): 'emerald' | 'red' | 'amber' | undefined {
 }
 
 function formatTs(ts: Date | string | number): string {
-  const d = ts instanceof Date ? ts : new Date(typeof ts === 'number' ? (ts > 1e12 ? ts : ts * 1000) : ts)
-  return d.toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })
+  const d =
+    ts instanceof Date ? ts : new Date(typeof ts === 'number' ? (ts > 1e12 ? ts : ts * 1000) : ts)
+  return d.toLocaleDateString('en-US', {
+    year: 'numeric',
+    month: 'short',
+    day: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+  })
 }

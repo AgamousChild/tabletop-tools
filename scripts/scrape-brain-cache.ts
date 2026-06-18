@@ -9,6 +9,9 @@
  *
  * In GitHub Actions:
  *   npx tsx scripts/scrape-brain-cache.ts --output $RUNNER_TEMP/brain-cache --batch 100
+ *
+ * @see docs/etl-scripts.md — ETL diagram and function reference
+ * @see docs/schema-indexeddb-brain.md — Brain knowledge graph schema
  */
 import { chromium } from 'playwright'
 import { mkdirSync, writeFileSync, readFileSync, existsSync } from 'fs'

@@ -1,3 +1,13 @@
+// HIGH-SENSITIVITY AREA. The brain card components in this directory render
+// the user-visible product surface. Regressions here are immediately apparent.
+// Before claiming a change is safe:
+//   - "Intact" (render bytes unchanged) is not the same as "correct" (card works).
+//   - An "unused" prop or function (e.g. KeywordText, factionFilter) is usually
+//     DROPPED WIRING, not dead code — the fix is to wire it back, not delete it.
+//   - The [KEYWORD] clickable-button pattern is canonical across cards. Don't
+//     change `lib/render-markdown.ts` to alter keyword behavior — it ripples.
+//   - When intent is ambiguous (markdown vs clickable, etc.), ASK. Don't guess.
+
 export interface ErrataEntry {
   nodeId: string
   title: string
@@ -85,6 +95,7 @@ export interface RuleCardData {
   subfaction?: string
   detachmentName?: string
   isArmyRule: boolean
+  isFaction?: boolean
   subRules?: { name: string; description: string }[]
   appliesTo?: number
   sources?: SourceRef[]

@@ -1,7 +1,7 @@
-import { describe, it, expect } from 'vitest'
-import { baseSizeInches, isCoherent } from './coherency'
-import type { BaseSize } from '../types'
+import { describe, expect, it } from 'vitest'
+
 import { DEFAULT_10E_RULES } from '../types'
+import { baseSizeInches, isCoherent } from './coherency'
 
 // ── baseSizeInches ────────────────────────────────────────────────────────────
 
@@ -111,11 +111,27 @@ describe('isCoherent', () => {
   })
 
   it('returns true for 2 models within 2" of each other', () => {
-    expect(isCoherent([{ x: 0, y: 0 }, { x: 1.5, y: 0 }], rules)).toBe(true)
+    expect(
+      isCoherent(
+        [
+          { x: 0, y: 0 },
+          { x: 1.5, y: 0 },
+        ],
+        rules,
+      ),
+    ).toBe(true)
   })
 
   it('returns false for 2 models exactly 2" apart (exclusive boundary)', () => {
     // distance exactly 2" — NOT connected (must be strictly less than coherency distance)
-    expect(isCoherent([{ x: 0, y: 0 }, { x: 2, y: 0 }], rules)).toBe(false)
+    expect(
+      isCoherent(
+        [
+          { x: 0, y: 0 },
+          { x: 2, y: 0 },
+        ],
+        rules,
+      ),
+    ).toBe(false)
   })
 })

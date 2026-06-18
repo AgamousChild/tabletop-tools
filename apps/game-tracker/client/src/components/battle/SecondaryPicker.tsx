@@ -94,7 +94,9 @@ export function SecondaryPicker({
                   >
                     -
                   </button>
-                  <span className="text-sm font-bold text-amber-400 w-6 text-center">{roundVp}</span>
+                  <span className="text-sm font-bold text-amber-400 w-6 text-center">
+                    {roundVp}
+                  </span>
                   <button
                     onClick={() => onScore(s.id, currentRound, roundVp + 1)}
                     aria-label={`Increase ${s.secondaryName} VP`}

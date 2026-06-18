@@ -1,24 +1,67 @@
-import { useState, useEffect, useCallback, useMemo } from 'react'
 import type { UnitProfile, WeaponProfile } from '@tabletop-tools/game-content'
-import {
-  getUnit, searchUnits, listFactions, getImportMeta, getLists, getList, getListUnits,
-  getDetachmentsByFaction, getDetachment, getDetachmentAbilities,
-  getStratagems, getEnhancements, getLeaderAttachments, getLeadersForUnit,
-  getUnitCompositions, getUnitCosts, getAllUnitCosts, getWargearOptions,
-  getUnitKeywords, getAllUnitKeywords, getUnitAbilities, getMissions,
-  getRulesImportMeta, getIncludeLegends,
-  getAllDatasheets, getDatasheetWargear, getDatasheetModels,
-  getDatasheetStratagems, getDatasheetEnhancements, getDatasheetDetachmentAbilities,
-  listDatasheetFactions, searchDatasheets, getDatasheetAsUnit, hasDatasheets,
-  parseStat, parseDiceOrNum, parseWeaponAbilities,
-  normalizeFactionName,
-} from './store.js'
+import { useCallback, useEffect, useMemo, useState } from 'react'
+
 import type {
-  LocalList, LocalListUnit, Detachment, DetachmentAbility,
-  Stratagem, Enhancement, LeaderAttachment, UnitComposition,
-  UnitCost, WargearOption, UnitKeyword, UnitAbility, Mission,
-  RulesImportMeta, Datasheet, DatasheetWargear, DatasheetModel,
-  DatasheetStratagem, DatasheetEnhancement, DatasheetDetachmentAbility,
+  Datasheet,
+  DatasheetDetachmentAbility,
+  DatasheetEnhancement,
+  DatasheetModel,
+  DatasheetStratagem,
+  DatasheetWargear,
+  Detachment,
+  DetachmentAbility,
+  Enhancement,
+  LeaderAttachment,
+  LocalList,
+  LocalListUnit,
+  Mission,
+  RulesImportMeta,
+  Stratagem,
+  UnitAbility,
+  UnitComposition,
+  UnitCost,
+  UnitKeyword,
+  WargearOption,
+} from './store.js'
+import {
+  getAllDatasheets,
+  getAllUnitCosts,
+  getAllUnitKeywords,
+  getDatasheetAsUnit,
+  getDatasheetDetachmentAbilities,
+  getDatasheetEnhancements,
+  getDatasheetModels,
+  getDatasheetStratagems,
+  getDatasheetWargear,
+  getDetachment,
+  getDetachmentAbilities,
+  getDetachmentsByFaction,
+  getEnhancements,
+  getImportMeta,
+  getIncludeLegends,
+  getLeaderAttachments,
+  getLeadersForUnit,
+  getList,
+  getLists,
+  getListUnits,
+  getMissions,
+  getRulesImportMeta,
+  getStratagems,
+  getUnit,
+  getUnitAbilities,
+  getUnitCompositions,
+  getUnitCosts,
+  getUnitKeywords,
+  getWargearOptions,
+  hasDatasheets,
+  listDatasheetFactions,
+  listFactions,
+  normalizeFactionName,
+  parseDiceOrNum,
+  parseStat,
+  parseWeaponAbilities,
+  searchDatasheets,
+  searchUnits,
 } from './store.js'
 
 // ── Internal helper ──────────────────────────────────────────────────────────
@@ -50,8 +93,10 @@ function useStoreQuery<T>(
           setIsLoading(false)
         }
       })
-    return () => { cancelled = true }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    return () => {
+      cancelled = true
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, deps)
 
   return { data, error, isLoading }
@@ -59,7 +104,11 @@ function useStoreQuery<T>(
 
 // ── Unit hooks (existing) ────────────────────────────────────────────────────
 
-export function useUnit(id: string): { data: UnitProfile | null; error: string | null; isLoading: boolean } {
+export function useUnit(id: string): {
+  data: UnitProfile | null
+  error: string | null
+  isLoading: boolean
+} {
   const [data, setData] = useState<UnitProfile | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [isLoading, setIsLoading] = useState(true)
@@ -82,19 +131,25 @@ export function useUnit(id: string): { data: UnitProfile | null; error: string |
           setIsLoading(false)
         }
       })
-    return () => { cancelled = true }
+    return () => {
+      cancelled = true
+    }
   }, [id])
 
   return { data, error, isLoading }
 }
 
-export function useUnitSearch(query: { faction?: string; name?: string }): { data: UnitProfile[]; error: string | null; isLoading: boolean } {
+export function useUnitSearch(query: { faction?: string; name?: string }): {
+  data: UnitProfile[]
+  error: string | null
+  isLoading: boolean
+} {
   const [data, setData] = useState<UnitProfile[]>([])
   const [error, setError] = useState<string | null>(null)
   const [isLoading, setIsLoading] = useState(true)
 
   useEffect(() => {
-    let cancelled = false
+    const cancelled = false
     setIsLoading(true)
     setError(null)
     searchUnits(query)
@@ -111,8 +166,8 @@ export function useUnitSearch(query: { faction?: string; name?: string }): { dat
           setIsLoading(false)
         }
       })
-  // Serialize query to avoid infinite re-renders
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    // Serialize query to avoid infinite re-renders
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [query.faction, query.name])
 
   return { data, error, isLoading }
@@ -143,7 +198,9 @@ export function useFactions(): { data: string[]; error: string | null; isLoading
           setIsLoading(false)
         }
       })
-    return () => { cancelled = true }
+    return () => {
+      cancelled = true
+    }
   }, [])
 
   return { data, error, isLoading }
@@ -165,7 +222,9 @@ export function useGameDataAvailable(): boolean {
           setAvailable(false)
         }
       })
-    return () => { cancelled = true }
+    return () => {
+      cancelled = true
+    }
   }, [])
 
   return available
@@ -188,7 +247,9 @@ export function useLists(): { data: LocalList[]; refetch: () => void } {
       .catch(() => {
         if (!cancelled) setData([])
       })
-    return () => { cancelled = true }
+    return () => {
+      cancelled = true
+    }
   }, [counter])
 
   return { data, refetch }
@@ -218,7 +279,9 @@ export function useList(id: string | null): {
       .catch(() => {
         if (!cancelled) setData(null)
       })
-    return () => { cancelled = true }
+    return () => {
+      cancelled = true
+    }
   }, [id, counter])
 
   return { data, refetch }
@@ -235,7 +298,11 @@ export function useDetachment(id: string) {
 }
 
 export function useDetachmentAbilities(detachmentId: string) {
-  return useStoreQuery(() => getDetachmentAbilities(detachmentId), [detachmentId], [] as DetachmentAbility[])
+  return useStoreQuery(
+    () => getDetachmentAbilities(detachmentId),
+    [detachmentId],
+    [] as DetachmentAbility[],
+  )
 }
 
 // ── Stratagem hooks ──────────────────────────────────────────────────────────
@@ -267,7 +334,11 @@ export function useLeadersForUnit(attachedId: string) {
 // ── Unit detail hooks ────────────────────────────────────────────────────────
 
 export function useUnitCompositions(datasheetId: string) {
-  return useStoreQuery(() => getUnitCompositions(datasheetId), [datasheetId], [] as UnitComposition[])
+  return useStoreQuery(
+    () => getUnitCompositions(datasheetId),
+    [datasheetId],
+    [] as UnitComposition[],
+  )
 }
 
 export function useUnitCosts(datasheetId: string) {
@@ -328,7 +399,11 @@ export function useAllDatasheets() {
 }
 
 export function useDatasheetWargear(datasheetId: string) {
-  return useStoreQuery(() => getDatasheetWargear(datasheetId), [datasheetId], [] as DatasheetWargear[])
+  return useStoreQuery(
+    () => getDatasheetWargear(datasheetId),
+    [datasheetId],
+    [] as DatasheetWargear[],
+  )
 }
 
 export function useDatasheetModels(datasheetId: string) {
@@ -338,15 +413,27 @@ export function useDatasheetModels(datasheetId: string) {
 // ── Junction table hooks ────────────────────────────────────────────────────
 
 export function useDatasheetStratagems(datasheetId: string) {
-  return useStoreQuery(() => getDatasheetStratagems(datasheetId), [datasheetId], [] as DatasheetStratagem[])
+  return useStoreQuery(
+    () => getDatasheetStratagems(datasheetId),
+    [datasheetId],
+    [] as DatasheetStratagem[],
+  )
 }
 
 export function useDatasheetEnhancements(datasheetId: string) {
-  return useStoreQuery(() => getDatasheetEnhancements(datasheetId), [datasheetId], [] as DatasheetEnhancement[])
+  return useStoreQuery(
+    () => getDatasheetEnhancements(datasheetId),
+    [datasheetId],
+    [] as DatasheetEnhancement[],
+  )
 }
 
 export function useDatasheetDetachmentAbilities(datasheetId: string) {
-  return useStoreQuery(() => getDatasheetDetachmentAbilities(datasheetId), [datasheetId], [] as DatasheetDetachmentAbility[])
+  return useStoreQuery(
+    () => getDatasheetDetachmentAbilities(datasheetId),
+    [datasheetId],
+    [] as DatasheetDetachmentAbility[],
+  )
 }
 
 // ── Wahapedia-primary hooks ─────────────────────────────────────────────────
@@ -364,11 +451,7 @@ export function useDatasheetSearch(query: { faction?: string; name?: string }) {
 }
 
 export function useDatasheetUnit(id: string) {
-  return useStoreQuery(
-    () => getDatasheetAsUnit(id),
-    [id],
-    null as import('@tabletop-tools/game-content').UnitProfile | null,
-  )
+  return useStoreQuery(() => getDatasheetAsUnit(id), [id], null as UnitProfile | null)
 }
 
 export function useHasDatasheets() {
@@ -380,10 +463,10 @@ export function useHasDatasheets() {
 /** Convert Wahapedia DatasheetWargear[] to WeaponProfile[] (shared by all apps). */
 export function convertWargearToWeapons(wargear: DatasheetWargear[]): WeaponProfile[] {
   return wargear
-    .filter(w => w.name && w.name !== '-')
-    .map(w => ({
+    .filter((w) => w.name && w.name !== '-')
+    .map((w) => ({
       name: w.name,
-      range: w.type === 'Melee' || w.range === 'Melee' ? 'melee' as const : parseStat(w.range),
+      range: w.type === 'Melee' || w.range === 'Melee' ? ('melee' as const) : parseStat(w.range),
       attacks: parseDiceOrNum(w.attacks),
       skill: parseStat(w.skill),
       strength: parseStat(w.strength),
@@ -460,20 +543,23 @@ export function usePrimaryUnitSearch(query: { faction?: string; name?: string })
   // Convert Wahapedia datasheets to lightweight UnitProfile for list display
   // Uses embedded primary model stats from the datasheets export
   const wahaUnits = useMemo(() => {
-    return wahaResult.data.map(ds => ({
-      id: ds.id,
-      faction: ds.factionId,
-      name: ds.name,
-      move: ds.move ? parseStat(ds.move) : 0,
-      toughness: ds.toughness ? parseStat(ds.toughness) : 0,
-      save: ds.save ? parseStat(ds.save) : 0,
-      wounds: ds.wounds ? parseStat(ds.wounds) : 0,
-      leadership: ds.leadership ? parseStat(ds.leadership) : 0,
-      oc: ds.oc ? parseStat(ds.oc) : 0,
-      weapons: [],
-      abilities: [],
-      points: costMap.get(ds.id) ?? 0,
-    } as UnitProfile))
+    return wahaResult.data.map(
+      (ds) =>
+        ({
+          id: ds.id,
+          faction: ds.factionId,
+          name: ds.name,
+          move: ds.move ? parseStat(ds.move) : 0,
+          toughness: ds.toughness ? parseStat(ds.toughness) : 0,
+          save: ds.save ? parseStat(ds.save) : 0,
+          wounds: ds.wounds ? parseStat(ds.wounds) : 0,
+          leadership: ds.leadership ? parseStat(ds.leadership) : 0,
+          oc: ds.oc ? parseStat(ds.oc) : 0,
+          weapons: [],
+          abilities: [],
+          points: costMap.get(ds.id) ?? 0,
+        }) as UnitProfile,
+    )
   }, [wahaResult.data, costMap])
 
   if (checkLoading) return { data: [] as UnitProfile[], isLoading: true }

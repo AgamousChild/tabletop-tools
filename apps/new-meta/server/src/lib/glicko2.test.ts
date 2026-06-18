@@ -1,5 +1,5 @@
-import { describe, it, expect } from 'vitest'
-import { updateGlicko2 } from './glicko2.js'
+import { updateGlicko2 } from '@tabletop-tools/server-core'
+import { describe, expect, it } from 'vitest'
 
 // ============================================================
 // Tests against Glickman (2012) worked example
@@ -20,7 +20,7 @@ import { updateGlicko2 } from './glicko2.js'
 const PLAYER = { rating: 1500, ratingDeviation: 200, volatility: 0.06 }
 
 const GAMES = [
-  { opponentRating: 1400, opponentRD: 30,  score: 1 },
+  { opponentRating: 1400, opponentRD: 30, score: 1 },
   { opponentRating: 1550, opponentRD: 100, score: 0 },
   { opponentRating: 1700, opponentRD: 300, score: 0 },
 ]
@@ -57,9 +57,7 @@ describe('updateGlicko2 — inactivity (no games)', () => {
 describe('updateGlicko2 — edge cases', () => {
   it('handles a single win against equal opponent', () => {
     const player = { rating: 1500, ratingDeviation: 350, volatility: 0.06 }
-    const result = updateGlicko2(player, [
-      { opponentRating: 1500, opponentRD: 350, score: 1 },
-    ])
+    const result = updateGlicko2(player, [{ opponentRating: 1500, opponentRD: 350, score: 1 }])
     // Winning against equal opponent should increase rating above 1500
     expect(result.rating).toBeGreaterThan(1500)
     // RD should decrease from 350
@@ -68,9 +66,7 @@ describe('updateGlicko2 — edge cases', () => {
 
   it('handles a single loss against equal opponent', () => {
     const player = { rating: 1500, ratingDeviation: 350, volatility: 0.06 }
-    const result = updateGlicko2(player, [
-      { opponentRating: 1500, opponentRD: 350, score: 0 },
-    ])
+    const result = updateGlicko2(player, [{ opponentRating: 1500, opponentRD: 350, score: 0 }])
     // Losing against equal opponent should decrease rating below 1500
     expect(result.rating).toBeLessThan(1500)
     expect(result.ratingDeviation).toBeLessThan(350)
@@ -78,12 +74,8 @@ describe('updateGlicko2 — edge cases', () => {
 
   it('produces symmetric results for wins and losses against equal opponents', () => {
     const player = { rating: 1500, ratingDeviation: 350, volatility: 0.06 }
-    const winResult = updateGlicko2(player, [
-      { opponentRating: 1500, opponentRD: 350, score: 1 },
-    ])
-    const lossResult = updateGlicko2(player, [
-      { opponentRating: 1500, opponentRD: 350, score: 0 },
-    ])
+    const winResult = updateGlicko2(player, [{ opponentRating: 1500, opponentRD: 350, score: 1 }])
+    const lossResult = updateGlicko2(player, [{ opponentRating: 1500, opponentRD: 350, score: 0 }])
     // Win gain == loss drop (symmetric around 1500)
     expect(winResult.rating - 1500).toBeCloseTo(1500 - lossResult.rating, 5)
     expect(winResult.ratingDeviation).toBeCloseTo(lossResult.ratingDeviation, 5)

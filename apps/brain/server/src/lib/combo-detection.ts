@@ -5,8 +5,8 @@
  * subfaction, and detachmentId. Running earlier produces cross-faction refs
  * because nodes haven't been normalized yet.
  */
+import { classifyGrants, detectScope, detectWeaponTypes } from './filters'
 import type { Node, NodeRef } from './model'
-import { detectScope, detectWeaponTypes, classifyGrants } from './filters'
 
 interface BuffEntry {
   nodeId: string
@@ -22,12 +22,19 @@ interface BuffEntry {
   grantsAbility: string[]
 }
 
-function classifyBuff(nodeId: string, title: string, content: string, factionId: string): BuffEntry | null {
+function classifyBuff(
+  nodeId: string,
+  title: string,
+  content: string,
+  factionId: string,
+): BuffEntry | null {
   const grants = classifyGrants(content)
   if (!grants.grantsRerolls && grants.grantsAbility.length === 0) return null
 
   return {
-    nodeId, title, factionId,
+    nodeId,
+    title,
+    factionId,
     unitName: '',
     subfaction: '',
     detachmentId: '',
@@ -65,7 +72,13 @@ export function buildComboRefs(allNodes: Node[]): NodeRef[] {
   // Only consider nodes that ARE game rules — not community content, errata, or balance changes
   const RULES_LAYERS = new Set(['faction', 'unit', 'core'])
   const RULES_CATEGORIES = new Set([
-    'faction-ability', 'detachment-rule', 'stratagem', 'enhancement', 'unit-ability',
+    'army-rule',
+    'army-ability',
+    'faction-ability',
+    'detachment-rule',
+    'stratagem',
+    'enhancement',
+    'unit-ability',
   ])
 
   // Collect all buffs
@@ -75,8 +88,11 @@ export function buildComboRefs(allNodes: Node[]): NodeRef[] {
     if (!RULES_CATEGORIES.has(n.category)) continue
     const buff = classifyBuff(n.id, n.title, n.content, n.factionId ?? '')
     if (buff) {
-      buff.unitName = n.datasheetId ? (dsNameMap.get(n.datasheetId) ?? '') :
-                      n.detachmentId ? (detNameMap.get(n.detachmentId) ?? '') : ''
+      buff.unitName = n.datasheetId
+        ? (dsNameMap.get(n.datasheetId) ?? '')
+        : n.detachmentId
+          ? (detNameMap.get(n.detachmentId) ?? '')
+          : ''
       buff.subfaction = n.subfaction ?? ''
       buff.detachmentId = n.detachmentId ?? ''
       buff.category = n.category
@@ -94,8 +110,8 @@ export function buildComboRefs(allNodes: Node[]): NodeRef[] {
   const seenCombos = new Set<string>()
 
   for (const combo of COMBOS) {
-    const rerollers = allBuffs.filter(b => b.grantsRerolls === combo.rerollType)
-    const abilityGranters = allBuffs.filter(b => b.grantsAbility.includes(combo.ability))
+    const rerollers = allBuffs.filter((b) => b.grantsRerolls === combo.rerollType)
+    const abilityGranters = allBuffs.filter((b) => b.grantsAbility.includes(combo.ability))
 
     for (const rr of rerollers) {
       for (const ag of abilityGranters) {
@@ -117,22 +133,31 @@ export function buildComboRefs(allNodes: Node[]): NodeRef[] {
         if (rr.subfaction && ag.subfaction && rr.subfaction !== ag.subfaction) continue
 
         // Detachment lock: stratagems/enhancements from different detachments can't combine
-        if (rr.detachmentId && ag.detachmentId && rr.detachmentId !== ag.detachmentId
-            && (rr.category === 'stratagem' || rr.category === 'enhancement')
-            && (ag.category === 'stratagem' || ag.category === 'enhancement')) continue
+        if (
+          rr.detachmentId &&
+          ag.detachmentId &&
+          rr.detachmentId !== ag.detachmentId &&
+          (rr.category === 'stratagem' || rr.category === 'enhancement') &&
+          (ag.category === 'stratagem' || ag.category === 'enhancement')
+        )
+          continue
 
         // Bearer-only scope
         const bearerLimited = rr.scope === 'bearer' || ag.scope === 'bearer'
 
         // Two leader abilities can't apply to the same unit
-        const bothLeaders = rr.scope === 'unit' && ag.scope === 'unit'
-            && rr.category === 'unit-ability' && ag.category === 'unit-ability'
-            && rr.nodeId.startsWith('ability:') && ag.nodeId.startsWith('ability:')
+        const bothLeaders =
+          rr.scope === 'unit' &&
+          ag.scope === 'unit' &&
+          rr.category === 'unit-ability' &&
+          ag.category === 'unit-ability' &&
+          rr.nodeId.startsWith('ability:') &&
+          ag.nodeId.startsWith('ability:')
         if (bothLeaders) continue
 
         // Must share a weapon type or one targets 'all'
-        const sharedTypes = rr.weaponTypes.filter(t =>
-          t === 'all' || ag.weaponTypes.includes(t) || ag.weaponTypes.includes('all')
+        const sharedTypes = rr.weaponTypes.filter(
+          (t) => t === 'all' || ag.weaponTypes.includes(t) || ag.weaponTypes.includes('all'),
         )
         if (sharedTypes.length === 0) continue
 
@@ -141,7 +166,9 @@ export function buildComboRefs(allNodes: Node[]): NodeRef[] {
         if (seenCombos.has(comboKey)) continue
         seenCombos.add(comboKey)
 
-        const weaponTypeStr = sharedTypes.includes('all') ? 'weapons' : sharedTypes.join('/') + ' weapons'
+        const weaponTypeStr = sharedTypes.includes('all')
+          ? 'weapons'
+          : sharedTypes.join('/') + ' weapons'
         const factionStr = rr.factionId || ag.factionId || 'generic'
         const rrUnit = rr.unitName ? ` on ${rr.unitName}` : ''
         const agUnit = ag.unitName ? ` on ${ag.unitName}` : ''
@@ -202,23 +229,24 @@ export function buildFactionNodes(allNodes: Node[]): { nodes: Node[]; refs: Node
     const hasMatchingSub = subfactionSet.has(matchingSubfaction)
 
     // Collect content from both factionId match AND subfaction match
-    const detachments = allNodes.filter(n =>
-      n.category === 'detachment-rule' && (
-        (n.factionId === fid && !n.subfaction) ||
-        (hasMatchingSub && n.subfaction === matchingSubfaction)
-      )
+    const detachments = allNodes.filter(
+      (n) =>
+        n.category === 'detachment-rule' &&
+        ((n.factionId === fid && !n.subfaction) ||
+          (hasMatchingSub && n.subfaction === matchingSubfaction)),
     )
-    const armyRules = allNodes.filter(n =>
-      n.category === 'army-rule' && !n.detachmentId && (
-        (n.factionId === fid && !n.subfaction) ||
-        (hasMatchingSub && n.subfaction === matchingSubfaction)
-      )
+    const armyRules = allNodes.filter(
+      (n) =>
+        n.category === 'army-rule' &&
+        !n.detachmentId &&
+        ((n.factionId === fid && !n.subfaction) ||
+          (hasMatchingSub && n.subfaction === matchingSubfaction)),
     )
-    const unitCount = allNodes.filter(n =>
-      n.category === 'datasheet' && (
-        (n.factionId === fid && !n.subfaction) ||
-        (hasMatchingSub && n.subfaction === matchingSubfaction)
-      )
+    const unitCount = allNodes.filter(
+      (n) =>
+        n.category === 'datasheet' &&
+        ((n.factionId === fid && !n.subfaction) ||
+          (hasMatchingSub && n.subfaction === matchingSubfaction)),
     ).length
 
     nodes.push({
@@ -230,34 +258,59 @@ export function buildFactionNodes(allNodes: Node[]): { nodes: Node[]; refs: Node
       summary: `${displayName} — ${detachments.length} detachments, ${unitCount} units`,
       factionId: fid,
       factionName: displayName,
-      sources: [{ type: 'manual' as const, title: 'Auto-generated faction node', retrievedAt: new Date().toISOString() }],
+      sources: [
+        {
+          type: 'manual' as const,
+          title: 'Auto-generated faction node',
+          retrievedAt: new Date().toISOString(),
+        },
+      ],
       refs: [],
       version: 1,
       keywords: [fid, displayName.toLowerCase(), 'faction'],
     })
 
     for (const rule of armyRules) {
-      refs.push({ sourceId: rule.id, targetId: `faction-root:${fid}`, rel: 'part_of', context: `${rule.title} is an army rule for ${displayName}.` })
+      refs.push({
+        sourceId: rule.id,
+        targetId: `faction-root:${fid}`,
+        rel: 'part_of',
+        context: `${rule.title} is an army rule for ${displayName}.`,
+      })
     }
     // Connect detachment CONTAINERS to faction (not detachment-rules)
     for (const det of detachments) {
-      refs.push({ sourceId: `detachment:${det.id}`, targetId: `faction-root:${fid}`, rel: 'part_of', context: `${det.title} is a detachment in ${displayName}.` })
+      refs.push({
+        sourceId: `detachment:${det.id}`,
+        targetId: `faction-root:${fid}`,
+        rel: 'part_of',
+        context: `${det.title} is a detachment in ${displayName}.`,
+      })
     }
   }
 
   // Build faction nodes for each subfaction (Blood Angels, Dark Angels, etc.)
   for (const sub of subfactionSet) {
     const parentFid = subfactionToParent.get(sub)!
-    const displayName = sub.split(' ').map(w => w[0]!.toUpperCase() + w.slice(1)).join(' ')
+    const displayName = sub
+      .split(' ')
+      .map((w) => w[0]!.toUpperCase() + w.slice(1))
+      .join(' ')
     const slug = sub.replace(/\s+/g, '-')
     const nodeId = `faction-root:${slug}`
 
     // Skip if a factionId already exists with this slug (e.g. "deathwatch" is both a factionId and a subfaction)
     if (factionIds.has(slug)) continue
 
-    const detachments = allNodes.filter(n => n.category === 'detachment-rule' && n.subfaction === sub)
-    const armyRules = allNodes.filter(n => n.category === 'army-rule' && n.subfaction === sub && !n.detachmentId)
-    const unitCount = allNodes.filter(n => n.category === 'datasheet' && n.subfaction === sub).length
+    const detachments = allNodes.filter(
+      (n) => n.category === 'detachment-rule' && n.subfaction === sub,
+    )
+    const armyRules = allNodes.filter(
+      (n) => n.category === 'army-rule' && n.subfaction === sub && !n.detachmentId,
+    )
+    const unitCount = allNodes.filter(
+      (n) => n.category === 'datasheet' && n.subfaction === sub,
+    ).length
 
     nodes.push({
       id: nodeId,
@@ -269,17 +322,33 @@ export function buildFactionNodes(allNodes: Node[]): { nodes: Node[]; refs: Node
       factionId: parentFid,
       factionName: displayName.toUpperCase(),
       subfaction: sub,
-      sources: [{ type: 'manual' as const, title: 'Auto-generated faction node', retrievedAt: new Date().toISOString() }],
+      sources: [
+        {
+          type: 'manual' as const,
+          title: 'Auto-generated faction node',
+          retrievedAt: new Date().toISOString(),
+        },
+      ],
       refs: [],
       version: 1,
       keywords: [sub, slug, displayName.toLowerCase(), 'faction'],
     })
 
     for (const det of detachments) {
-      refs.push({ sourceId: `detachment:${det.id}`, targetId: nodeId, rel: 'part_of', context: `${det.title} is a ${displayName} detachment.` })
+      refs.push({
+        sourceId: `detachment:${det.id}`,
+        targetId: nodeId,
+        rel: 'part_of',
+        context: `${det.title} is a ${displayName} detachment.`,
+      })
     }
     for (const rule of armyRules) {
-      refs.push({ sourceId: rule.id, targetId: nodeId, rel: 'part_of', context: `${rule.title} is a ${displayName} army rule.` })
+      refs.push({
+        sourceId: rule.id,
+        targetId: nodeId,
+        rel: 'part_of',
+        context: `${rule.title} is a ${displayName} army rule.`,
+      })
     }
   }
 
@@ -310,15 +379,19 @@ export function buildDetachmentNodes(allNodes: Node[]): { nodes: Node[]; refs: N
   const nodes: Node[] = []
   const refs: NodeRef[] = []
 
-  const detRules = allNodes.filter(n => n.category === 'detachment-rule')
+  const detRules = allNodes.filter((n) => n.category === 'detachment-rule')
 
   for (const rule of detRules) {
     const containerId = `detachment:${rule.id}`
 
     // Count what's inside this detachment
-    const strats = allNodes.filter(n => n.detachmentId === rule.id && n.category === 'stratagem')
-    const enhancements = allNodes.filter(n => n.detachmentId === rule.id && n.category === 'enhancement')
-    const factionAbilities = allNodes.filter(n => n.detachmentId === rule.id && n.category === 'faction-ability')
+    const strats = allNodes.filter((n) => n.detachmentId === rule.id && n.category === 'stratagem')
+    const enhancements = allNodes.filter(
+      (n) => n.detachmentId === rule.id && n.category === 'enhancement',
+    )
+    const factionAbilities = allNodes.filter(
+      (n) => n.detachmentId === rule.id && n.category === 'faction-ability',
+    )
     const targetKw = (rule as any).targetKeywords as string[] | undefined
     const kwNote = targetKw?.length ? ` Primarily benefits: ${targetKw.join(', ')}.` : ''
     const containerContent = `**${rule.title}** detachment. ${strats.length} stratagem${strats.length !== 1 ? 's' : ''}, ${enhancements.length} enhancement${enhancements.length !== 1 ? 's' : ''}${factionAbilities.length > 0 ? `, ${factionAbilities.length} detachment abilit${factionAbilities.length !== 1 ? 'ies' : 'y'}` : ''}.${kwNote}\n\n**Detachment Rule:** ${rule.title}\n${rule.summary}`
@@ -351,7 +424,12 @@ export function buildDetachmentNodes(allNodes: Node[]): { nodes: Node[]; refs: N
 
     // Find stratagems/enhancements that belong to this detachment
     for (const n of allNodes) {
-      if (n.detachmentId === rule.id && (n.category === 'stratagem' || n.category === 'enhancement' || n.category === 'faction-ability')) {
+      if (
+        n.detachmentId === rule.id &&
+        (n.category === 'stratagem' ||
+          n.category === 'enhancement' ||
+          n.category === 'faction-ability')
+      ) {
         refs.push({
           sourceId: n.id,
           targetId: containerId,
@@ -377,12 +455,12 @@ export function buildDetachmentNodes(allNodes: Node[]): { nodes: Node[]; refs: N
 export function buildEligibleForRefs(allNodes: Node[]): NodeRef[] {
   const refs: NodeRef[] = []
 
-  const datasheets = allNodes.filter(n => n.category === 'datasheet')
-  const detachments = allNodes.filter(n => n.category === 'detachment')
+  const datasheets = allNodes.filter((n) => n.category === 'datasheet')
+  const detachments = allNodes.filter((n) => n.category === 'detachment')
 
   // Build keyword lookup: detachment container ID → target keywords from its rule
   const detKeywords = new Map<string, string[]>()
-  const detRules = allNodes.filter(n => n.category === 'detachment-rule')
+  const detRules = allNodes.filter((n) => n.category === 'detachment-rule')
   for (const rule of detRules) {
     const containerId = `detachment:${rule.id}`
     if ((rule as any).targetKeywords?.length > 0) {
@@ -405,7 +483,7 @@ export function buildEligibleForRefs(allNodes: Node[]): NodeRef[] {
       // Compute keyword affinity: how many of the detachment's target keywords
       // match the unit's keywords?
       const targetKw = detKeywords.get(det.id) || []
-      const unitKwLower = new Set(unit.keywords.map(k => k.toLowerCase()))
+      const unitKwLower = new Set(unit.keywords.map((k) => k.toLowerCase()))
       let matchCount = 0
       const matchedKeywords: string[] = []
       for (const kw of targetKw) {
@@ -415,11 +493,13 @@ export function buildEligibleForRefs(allNodes: Node[]): NodeRef[] {
         }
       }
 
-      const affinity = targetKw.length === 0 ? 'generic' :
-                       matchCount > 0 ? 'high' : 'low'
-      const affinityNote = matchedKeywords.length > 0
-        ? ` (${matchedKeywords.join(', ')} keyword match)`
-        : targetKw.length > 0 ? ` (no keyword match — generic benefit only)` : ''
+      const affinity = targetKw.length === 0 ? 'generic' : matchCount > 0 ? 'high' : 'low'
+      const affinityNote =
+        matchedKeywords.length > 0
+          ? ` (${matchedKeywords.join(', ')} keyword match)`
+          : targetKw.length > 0
+            ? ` (no keyword match — generic benefit only)`
+            : ''
 
       refs.push({
         sourceId: unit.id,

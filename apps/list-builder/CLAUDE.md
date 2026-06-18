@@ -22,10 +22,9 @@ higher-rated alternatives at the same points cost.
 |  - Faction selector                |
 |  - Unit browser + search           |
 |  - List builder (add/remove)       |
-|  - Lists stored in IndexedDB       |
-|  - Name/description editing        |
+|  - Lists stored in server DB       |  ← V2: server is source of truth
+|  - Name editing                    |
 |  - Model count selection           |
-|  - Background sync to server       |
 |  - Unit data from IndexedDB        |
 |  - Rating badges + suggestions     |
 |  - tRPC client (from packages/ui)  |
@@ -33,8 +32,8 @@ higher-rated alternatives at the same points cost.
                  | tRPC over HTTP
 +----------------v-------------------+
 |  Tier 2: tRPC Server               |
+|  - listV2 router (primary)         |  ← V2: all list CRUD goes here
 |  - Rating router                   |
-|  - List sync router (backup)       |
 |  - SQLite via Turso                |
 |  - Base infra from server-core     |
 +------------------------------------+
@@ -42,46 +41,53 @@ higher-rated alternatives at the same points cost.
 
 Server uses `@tabletop-tools/server-core` for base tRPC, Hono, and Worker handler.
 Client uses `@tabletop-tools/ui` for AuthScreen, auth client, tRPC links, and Tailwind preset.
-Unit data and army lists stored client-side in IndexedDB via `@tabletop-tools/game-data-store`.
-Server provides rating data and list backup sync. All list CRUD happens client-side first,
-then syncs to server in the background (fire-and-forget).
+
+### Data sources
+
+**Unit catalog** (datasheets, weapons, abilities, detachments) lives in IndexedDB via
+`@tabletop-tools/game-data-store`. Populated by the data-import app. No GW content is
+committed to this repo.
+
+**Army lists** are stored server-first in the `list` / `list_unit` / `list_unit_loadout` /
+`list_unit_loadout_weapon` tables (Phase 2 schema). The client's IndexedDB `lists` /
+`list_units` stores are deprecated as primary storage. A one-time migration runs on first
+load to push any pre-V2 IndexedDB lists to the server.
 
 ---
 
-## Features required to be considered functional 
-  
-1. More than one screen, create a screen with the names of the lists chosen. and the ability to add lists.
-2. After creating a list, the next screen should be the size of the army, with the associated battle size name 500, 1000, 2000, 3000 pts
-3. Then the faction should be chosen on the next screen, with the detachment then chosen.
-4. In the unit selector, only legal choices should be shown, we can worry about legends later.
-5. There are rules in army creation, limited choices for 500 pt games, 2 of any in 1000 pt games, and 3 of any in 2000 pt games, plus warlords must be chosen. And the user cant choose more than the allotted number of points.
-6. Some detachments have unit choice limitations, use them if they exist.
-7. During unit selection, after each unit is chosen, show the statistical information about that unit, and in a popup, show units that have the same or fewer points in the same role that have higher win rates.
-8. There should be a done button, and then the list selections should be saved back to the server, associated with the user and the list name, it should just be user_id, faction_id, detachment_id, unit_id(S) for that list. This is the same as saved locally, except that the user can a list name, and a description to the list.
-9. The export should export in full text format, and the user can then edit that text before saving off, it should be stored in the clipboard, and the user should see a note.
-10. The user should be able to select a list and then a button should be available that says use list in tournament tracker. that list is then used when the user registers for a tournament.
+## Features required to be considered functional
+
+1. More than one screen; a screen with the names of lists and the ability to add new ones.
+2. After creating a list, the next screen is battle size: 500, 1000, 2000, 3000 pts.
+3. Then faction is chosen, then detachment.
+4. In the unit selector, only legal choices are shown (legends excluded unless toggled).
+5. Army creation rules enforced: limited duplicates per battle size, warlord required,
+   points cap enforced.
+6. Detachment unit choice limitations applied where they exist.
+7. After each unit is added, show the unit's statistical information and a popup of
+   higher-rated alternatives at the same or fewer points.
+8. Done saves the list back to the server (user_id, faction_id, detachment_id, unit list).
+9. Export copies the list as plain text to the clipboard.
+10. "Use in Tournament" button stores the list in localStorage for the tournament app.
+
+---
 
 ## Data Sources
 
 ### Unit Profiles: IndexedDB (via game-data-store)
 
-**The platform ships zero GW content.** Unit profiles come from BSData XML imported via the
-data-import app and stored client-side in IndexedDB. The server has no access to unit data.
+Unit profiles come from BSData XML imported via the data-import app and stored client-side
+in IndexedDB. The server has no access to unit profile data.
 
-### Army Lists: IndexedDB primary, server backup
+### Army Lists: Server (listV2 tRPC router) — Phase 2
 
-Lists and list units are stored client-side in IndexedDB. All list CRUD operations (create,
-add unit, remove unit, delete) happen directly in the browser. After each mutation, a
-background sync fires to back up the list to the server (fire-and-forget — UI never blocks).
+Lists and list units are stored server-first via the `listV2` tRPC router. All list CRUD
+operations write to the relational DB immediately. There is no offline/IndexedDB fallback for
+list storage in V2.
 
-Lists now support:
-- **Name** — editable inline in UnitSelectionScreen (click to edit)
-- **Description** — optional notes, editable inline
-- **Model count** — when a unit has multiple size options (e.g., 5 or 10 models), users pick
-  from available options with corresponding points costs
-- **Detachment** and **Battle size** — stored on the list for proper recall
-
-The header includes Sync (push all to server) and Restore (pull all from server) buttons.
+**One-time migration** (`migrateIndexedDbLists.ts`): on first load after the V2 upgrade, any
+lists found in the legacy IndexedDB `lists` / `list_units` stores are pushed to the server.
+The migration is gated by `localStorage['list-builder:idb-migration-v2-done']`.
 
 ### Ratings: Native match records + imported tournament data
 
@@ -93,7 +99,7 @@ The header includes Sync (push all to server) and Restore (pull all from server)
 
 ## Database Schema
 
-### Server (Turso/SQLite) — ratings + list backup
+### Server (Turso/SQLite) — ratings + army lists
 
 ```typescript
 // unit_ratings
@@ -105,19 +111,32 @@ pts_eff          REAL NOT NULL
 meta_window      TEXT NOT NULL
 computed_at      INTEGER NOT NULL
 
-// lists (server backup)
-id, user_id, faction, name, description, detachment, battle_size, total_pts, synced_at, created_at, updated_at
+// list (Phase 2 schema — packages/db/src/list-schema.ts)
+id, user_id, name, edition, battle_size, total_points, source, author,
+faction_id, subfaction_id, detachment_id, dataslate_id, created_at, updated_at
 
-// list_units (server backup)
-id, list_id, unit_content_id, unit_name, unit_points, count, model_count, is_warlord, enhancement_*
+// list_unit
+id, list_id, datasheet_id, enhancement_id, is_warlord, points,
+attached_to_unit_id, attach_role
+
+// list_unit_loadout
+id, list_unit_id, model_count
+
+// list_unit_loadout_weapon
+id, loadout_id, weapon_id, count
 ```
 
-### Client (IndexedDB) — lists and units
+**No scratch / ad-hoc list rows.** `list_unit.list_id` is NOT NULL by design. There is
+no "unsaved" list row, no nullable-FK orphan, no hidden scratch container. Ad-hoc work
+(e.g. configuring a unit in versus for a one-off sim) lives in memory and is discarded
+unless the user explicitly saves it into a real list. Don't reintroduce scratch rows —
+they create orphans and schema complexity for state that should never have hit disk.
 
-Lists and list units are stored in the `lists` and `list_units` object stores in IndexedDB
-via `@tabletop-tools/game-data-store`. See game-data-store CLAUDE.md for the schema.
+### Client (IndexedDB) — catalog only
 
-The server-side `lists` and `list_units` tables are now actively written via background sync.
+IndexedDB stores unit profiles, factions, detachments, weapons, abilities etc. via
+`@tabletop-tools/game-data-store`. The `lists` and `list_units` IndexedDB stores are
+deprecated and kept only for the one-time migration read.
 
 ---
 
@@ -128,40 +147,86 @@ The server-side `lists` and `list_units` tables are now actively written via bac
 rating.get(unitId)                            -> { rating, winContrib, ptsEff }
 rating.alternatives({ metaWindow? })          -> rating[]
 
-// List sync (server backup — IndexedDB is primary)
-list.sync({ id, faction, name, description?, detachment?, battleSize?, totalPts, units[] })  -> { success }
-list.syncAll({ lists[] })                     -> { success }   // batch sync
-list.getAll()                                 -> list[] (with units)  // for restore
-list.delete({ id })                           -> { success }
+// Lists (primary — Phase 2 relational model)
+listV2.create(...)                            -> { id }
+listV2.update({ id, ... })                    -> { success }
+listV2.get({ id })                            -> list with units + loadouts
+listV2.getAll()                               -> list[]
+listV2.delete({ id })                         -> { success }
+listV2.addUnit({ listId, datasheetId, ... })  -> { id }
+listV2.updateUnit({ id, ... })                -> { success }
+listV2.removeUnit({ id })                     -> { success }
+listV2.setLoadout({ unitId, loadouts[] })     -> { success }
+listV2.computePoints({ listId })              -> { totalPoints }
+
+// Legacy list router (kept for backward compat; deprecated)
+list.sync(...)       -> { success }
+list.syncAll(...)    -> { success }
+list.getAll()        -> list[]
+list.delete({ id })  -> { success }
 ```
 
-Unit browsing, list CRUD, and suggestion filtering all happen client-side using IndexedDB data.
-List sync runs in the background after every IndexedDB write.
+---
+
+## Client hooks (`apps/list-builder/client/src/lib/`)
+
+```typescript
+// useListsV2.ts — primary hooks
+useListsV2()             -> { data: ListSummaryV2[]; ... }
+useListV2(id)            -> { data: ListV2 | null; ... }
+useCreateListV2()        -> mutation hook
+useUpdateListV2()        -> mutation hook
+useDeleteListV2()        -> mutation hook
+useAddUnitV2()           -> mutation hook
+useUpdateUnitV2()        -> mutation hook
+useRemoveUnitV2()        -> mutation hook
+useInvalidateListsV2()   -> invalidate callback
+
+// Imperative helpers (for event handlers)
+createListV2Imperative(input)  -> Promise<string>  (returns id)
+addUnitV2Imperative(input)     -> Promise<string>  (returns unit id)
+updateListV2Imperative(input)  -> Promise<{ success }>
+removeUnitV2Imperative(id)     -> Promise<{ success }>
+deleteListV2Imperative(id)     -> Promise<{ success }>
+updateUnitV2Imperative(input)  -> Promise<{ success }>
+
+// migrateIndexedDbLists.ts — one-time migration
+migrateIndexedDbLists()       -> Promise<MigrationResult>
+isMigrationDone()             -> boolean
+markMigrationDone()           -> void
+```
 
 ---
 
 ## Testing
 
-**85 tests** (35 server + 50 client), all passing.
+**129 tests** (53 server + 76 client), all passing.
 
 ```
 server/src/
   routers/
-    rating.test.ts           <- rating get, alternatives query
-    list.test.ts             <- list sync, syncAll, getAll, delete (10 tests)
+    rating.test.ts           <- rating get, alternatives query (7 tests)
+    list.test.ts             <- legacy sync, syncAll, getAll, delete (10 tests)
+    list-v2.test.ts          <- V2 CRUD + attachment enforcement (18 tests)
   lib/ratings/
-    score.ts / score.test.ts <- scoring logic: win contribution, points efficiency
-server/src/server.test.ts    <- HTTP session integration tests
+    score.ts / score.test.ts <- scoring logic (14 tests)
+server/src/server.test.ts    <- HTTP session integration tests (4 tests)
 client/src/
   lib/
-    useGameData.test.tsx     <- IndexedDB hook tests
+    useGameData.test.tsx     <- IndexedDB hook wrappers (3 tests)
     modelOptions.test.ts     <- model count parser (8 tests)
+    armyRules.test.ts        <- army validation (11 tests)
+    detachmentRestrictions.test.ts  (11 tests)
+    useListsV2.test.ts       <- pointsToBattleSizeEnum + utilities (5 tests)
+    migrateIndexedDbLists.test.ts   <- migration helper (7 tests)
   components/
-    ListBuilderScreen.test.tsx <- list CRUD, units, remove, export, empty state
-    RatingBadge.test.tsx       <- 5 tests: null/undefined → dash, tier colors (S/B/D)
+    ListBuilderScreen.test.tsx  <- navigation + V2 integration (12 tests)
+    MyListsScreen.test.tsx   <- V2 list display + tournament (9 tests)
+    BattleSizeScreen.test.tsx   <- (5 tests)
+    RatingBadge.test.tsx     <- (5 tests)
 ```
 
 ```bash
-cd apps/list-builder/server && pnpm test   # 35 server tests
-cd apps/list-builder/client && pnpm test   # 50 client tests
+cd apps/list-builder/server && pnpm test   # 53 server tests
+cd apps/list-builder/client && pnpm test   # 76 client tests
 ```

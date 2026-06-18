@@ -1,7 +1,7 @@
 import 'dotenv/config'
 
-import { startDevServer } from '@tabletop-tools/server-core'
 import { createDb } from '@tabletop-tools/db'
+import { startDevServer } from '@tabletop-tools/server-core'
 
 import { createServer } from './server'
 
@@ -12,5 +12,6 @@ const db = createDb({
 
 startDevServer({
   port: 3003,
-  createApp: async () => createServer(db, process.env['AUTH_SECRET'] ?? 'dev-secret-change-in-production'),
+  createApp: async () =>
+    createServer(db, process.env['AUTH_SECRET'] ?? 'dev-secret-change-in-production'),
 })

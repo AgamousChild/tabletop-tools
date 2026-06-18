@@ -217,7 +217,9 @@ describe('turn.add', () => {
     expect(turn.yourSecondary).toBe(3)
     expect(turn.theirSecondary).toBe(4)
     expect(JSON.parse(turn.yourUnitsDestroyed)).toEqual([{ contentId: 'u1', name: 'Boyz' }])
-    expect(JSON.parse(turn.theirUnitsDestroyed)).toEqual([{ contentId: 'u2', name: 'Intercessors' }])
+    expect(JSON.parse(turn.theirUnitsDestroyed)).toEqual([
+      { contentId: 'u2', name: 'Intercessors' },
+    ])
   })
 
   it('writes stratagems to stratagem_log', async () => {
@@ -236,10 +238,7 @@ describe('turn.add', () => {
       ],
     })
     // Verify stratagems were written
-    const rows = await db
-      .select()
-      .from(stratagemLog)
-      .where(eq(stratagemLog.turnId, turn.id))
+    const rows = await db.select().from(stratagemLog).where(eq(stratagemLog.turnId, turn.id))
     expect(rows).toHaveLength(2)
     expect(rows[0].stratagemName).toBe('Overwatch')
     expect(rows[0].player).toBe('YOUR')
@@ -286,8 +285,8 @@ describe('turn.update', () => {
 
   it('rejects unauthenticated callers', async () => {
     const caller = createCaller(unauthCtx)
-    await expect(
-      caller.turn.update({ turnId: 'any', notes: 'test' }),
-    ).rejects.toMatchObject({ code: 'UNAUTHORIZED' })
+    await expect(caller.turn.update({ turnId: 'any', notes: 'test' })).rejects.toMatchObject({
+      code: 'UNAUTHORIZED',
+    })
   })
 })

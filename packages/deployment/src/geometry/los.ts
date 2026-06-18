@@ -53,7 +53,7 @@ function segmentsIntersect(p1: Point, p2: Point, p3: Point, p4: Point): boolean 
   const d3 = cross(p1, p2, p3)
   const d4 = cross(p1, p2, p4)
 
-  if ((d1 > 0 && d2 < 0 || d1 < 0 && d2 > 0) && (d3 > 0 && d4 < 0 || d3 < 0 && d4 > 0)) {
+  if (((d1 > 0 && d2 < 0) || (d1 < 0 && d2 > 0)) && ((d3 > 0 && d4 < 0) || (d3 < 0 && d4 > 0))) {
     return true
   }
 
@@ -69,9 +69,7 @@ function segmentsIntersect(p1: Point, p2: Point, p3: Point, p4: Point): boolean 
  * Returns true if the line segment crosses any edge of the rectangle.
  */
 export function lineIntersectsRect(line: LineSegment, rect: Rect): boolean {
-  return rectEdges(rect).some((edge) =>
-    segmentsIntersect(line.a, line.b, edge.a, edge.b),
-  )
+  return rectEdges(rect).some((edge) => segmentsIntersect(line.a, line.b, edge.a, edge.b))
 }
 
 /**

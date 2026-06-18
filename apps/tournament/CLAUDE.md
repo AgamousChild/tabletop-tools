@@ -46,6 +46,13 @@ live standings with tiebreakers, and a public pairings board for venue projectio
 Server uses `@tabletop-tools/server-core` for base tRPC, Hono, and Worker handler.
 Client uses `@tabletop-tools/ui` for AuthScreen, auth client, tRPC links, and Tailwind preset.
 
+**Phase 3 additions (2026-06-01):**
+- Metric-stack standings engine: `ranking_metric` catalog + `tournament_pairing_metric` / `tournament_placing_metric` ordered stacks
+- `passthrough_event`: thin BCP event reference table — directory of external BCP events
+- `bcp_registration`: consent-gated BCP list submission record (consentAt from client click time)
+- `tournament_players` gains `faction_entity_id`, `detachment_entity_id` (FK → content_entity), `placement` (frozen at tournament close)
+- Client: `FactionDetachmentPicker` (data-driven from content_entity), `MetricStackStandings` (columns from metricKeys[]), `PassthroughDirectory`, `BcpListDrop`
+
 ---
 
 ## Features required to be considered functional 
@@ -101,7 +108,8 @@ Every state transition is a TO action.
 id, to_user_id, name, event_date, location, format, total_rounds, status, created_at
 
 // tournament_players  (UNIQUE: tournament_id + user_id)
-id, tournament_id, user_id, display_name, faction, list_text, list_locked, checked_in, dropped, registered_at
+id, tournament_id, user_id, display_name, faction, list_text, list_locked, checked_in, dropped, registered_at,
+faction_entity_id (FK→content_entity), detachment_entity_id (FK→content_entity), placement
 
 // rounds  (UNIQUE: tournament_id + round_number)
 id, tournament_id, round_number, status, created_at
@@ -114,6 +122,21 @@ id, user_id, rating, games_played, updated_at
 
 // elo_history
 id, user_id, pairing_id, rating_before, rating_after, delta, opponent_id, recorded_at
+
+// ranking_metric — catalog of metric keys (wins, losses, battle_points, sos_wins, etc.)
+id, key (UNIQUE), label, description, created_at
+
+// tournament_pairing_metric — ordered metric stack for pairing tiebreakers
+id, tournament_id, metric_id (FK→ranking_metric), position, enabled, created_at
+
+// tournament_placing_metric — ordered metric stack for final placing
+id, tournament_id, metric_id (FK→ranking_metric), position, enabled, created_at
+
+// passthrough_event — BCP event directory (thin reference)
+id, bcp_event_id (UNIQUE), name, location, event_date, player_count, game_system, registration_url, raw_data, synced_at
+
+// bcp_registration — consent-gated BCP list submission record
+id, user_id, bcp_event_id, list_id, method (server|agent), status (submitted|failed|pending), consent_at, submitted_at, error_message
 ```
 
 ---
@@ -122,14 +145,36 @@ id, user_id, pairing_id, rating_before, rating_after, delta, opponent_id, record
 
 ```typescript
 // Tournaments
-tournament.create({ name, eventDate, location?, format, totalRounds, description?, externalLink?, startTime?, maxPlayers?, missionPool?, requirePhotos?, includeTwists?, includeChallenger? }) -> tournament
+tournament.create({ name, eventDate, location?, format, totalRounds, ... }) -> tournament
 tournament.get(id), tournament.listOpen(), tournament.listMine()
 tournament.advanceStatus(id), tournament.delete(id)
-tournament.standings(id)  -> { round, players[] with rank/wins/losses/draws/VP/margin/SOS }
+tournament.standings({ tournamentId, stackType: 'pairing'|'placing' })
+  -> { round, stackType, metricKeys[], players[] }
+  // Falls back to legacy compute when no metric stack configured
 
 // Players
-player.register(), player.updateList(), player.checkIn(), player.drop()
+player.register({ ..., factionEntityId?, detachmentEntityId? })
+player.updateList(), player.checkIn(), player.drop()
 player.list(), player.lockLists(), player.removePlayer(), player.reinstate()
+player.listFactions()       -> { id, name }[] from content_entity WHERE type='faction'
+player.listDetachments({ factionEntityId }) -> { id, name, factionId }[] WHERE type='detachment'
+
+// Metrics
+metric.listMetrics()        -> ranking_metric catalog
+metric.upsertMetric({ id?, key, label, description })
+metric.getStack({ tournamentId, stackType: 'pairing'|'placing' })
+metric.setStack({ tournamentId, stackType, metrics: [{ metricId, position, enabled }] })
+
+// Passthrough (BCP event directory)
+passthrough.list({ search?, limit? }) -> passthrough_event[]
+passthrough.get(id)
+passthrough.upsert({ bcpEventId, name, location?, eventDate?, playerCount?, gameSystem?, registrationUrl? })
+
+// BCP Registration
+bcpRegistration.record({ bcpEventId, listId?, method, status, consentAt }) -> bcp_registration
+bcpRegistration.updateStatus({ id, status })
+bcpRegistration.listMine()
+bcpRegistration.getForEvent({ bcpEventId })
 
 // Cards (Yellow/Red)
 card.issue({ tournamentId, playerId, cardType, reason })
@@ -177,29 +222,33 @@ ELO updates when the TO closes a round -- all results committed together.
 
 ## Testing
 
-**98 tests** (60 server + 38 client), all passing.
+**158 tests** (100 server + 58 client), all passing.
 
 ```
 server/src/
   lib/
-    swiss/pairings.ts / .test.ts         <- Swiss algorithm: round 1, mid-event, odd players, rematches, byes
-    standings/compute.ts / .test.ts      <- tiebreaker ordering, SOS calculation
-    result/derive.ts / .test.ts          <- result derivation from VP
+    swiss/pairings.ts / .test.ts           <- Swiss algorithm: round 1, mid-event, odd players, rematches, byes
+    standings/compute.ts / .test.ts        <- tiebreaker ordering, SOS calculation
+    standings/metric-compute.ts / .test.ts <- data-driven metric-stack standings (9 tests)
+    result/derive.ts / .test.ts            <- result derivation from VP
   routers/
-    tournament.test.ts                   <- 11 tests: CRUD, status, standings
-    card.test.ts                         <- 5 tests: issue, list, history, auth
-    award.test.ts                        <- 5 tests: create, assign, list, auth
-  server.test.ts                         <- 6 tests: HTTP session integration
+    tournament.test.ts                     <- 29 tests: CRUD, status, standings, exportToMeta, placement freeze
+    metric.test.ts                         <- 9 tests: catalog CRUD, getStack, setStack
+    passthrough.test.ts                    <- 7 tests: list, get, upsert, search
+    bcp-registration.test.ts               <- 9 tests: record, updateStatus, listMine, getForEvent, auth
+    card.test.ts                           <- 5 tests: issue, list, history, auth
+    award.test.ts                          <- 5 tests: create, assign, list, auth
+  server.test.ts                           <- 6 tests: HTTP session integration
 
 client/src/
   components/
-    TournamentScreen.test.tsx            <- 18 tests: list, create, detail, standings, registration, rounds
-    ManageTournament.test.tsx            <- 12 tests: tabs, players, cards, awards, reinstate
+    TournamentScreen.test.tsx              <- 32 tests: list, create, detail, standings, registration, rounds
+    ManageTournament.test.tsx              <- 14 tests: tabs, players, cards, awards, reinstate
   lib/
-    router.test.ts                       <- 8 tests: parseHash for all hash routes
+    router.test.ts                         <- 12 tests: parseHash for all hash routes
 ```
 
 ```bash
-cd apps/tournament/server && pnpm test   # 60 server tests
-cd apps/tournament/client && pnpm test   # 38 client tests
+cd apps/tournament/server && pnpm test   # 100 server tests
+cd apps/tournament/client && pnpm test   # 58 client tests
 ```

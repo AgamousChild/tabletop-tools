@@ -1,17 +1,18 @@
 import { createClient } from '@libsql/client'
-import { createDbFromClient } from '@tabletop-tools/db'
 import {
-  setupAuthTables,
-  createRequestHelper,
   authCookie,
-  TEST_TOKEN,
+  createRequestHelper,
   EXPIRED_TOKEN,
+  setupAuthTables,
   TEST_SECRET,
+  TEST_TOKEN,
+  TEST_USER,
 } from '@tabletop-tools/auth/src/test-helpers'
-import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest'
+import { createDbFromClient } from '@tabletop-tools/db'
+import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 
-import { createServer } from './server'
 import { createNullR2Storage } from './lib/storage/r2'
+import { createServer } from './server'
 
 const client = createClient({ url: ':memory:' })
 const db = createDbFromClient(client)
@@ -82,7 +83,7 @@ describe('HTTP integration — diceSet.create via session cookie', () => {
     expect(res.status).toBe(200)
     const json = (await res.json()) as any
     expect(json.result?.data?.name).toBe('Integration Test Dice')
-    expect(json.result.data.userId).toBe('user-1')
+    expect(json.result.data.userId).toBe(TEST_USER.id)
   })
 
   it('returns UNAUTHORIZED when no cookie is provided', async () => {
@@ -119,7 +120,10 @@ describe('HTTP integration — diceSet.create via session cookie', () => {
 
   it('works with __Secure- prefixed cookie (production HTTPS)', async () => {
     const cookie = await authCookie()
-    const secureCookie = cookie.replace('better-auth.session_token=', '__Secure-better-auth.session_token=')
+    const secureCookie = cookie.replace(
+      'better-auth.session_token=',
+      '__Secure-better-auth.session_token=',
+    )
     const res = await makeRequest('/trpc/diceSet.create', {
       method: 'POST',
       cookie: secureCookie,

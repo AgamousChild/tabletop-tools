@@ -20,13 +20,13 @@ import { commitApprovedNodes } from './commit/commit'
 import { mkdirSync, readdirSync, readFileSync, writeFileSync } from 'node:fs'
 import path from 'node:path'
 import { validateDraft } from './extract/validate'
-import { loadTermDictionary, buildPhoneticIndex, scanDraftsForMismatches, applyPhoneticFixes, findPhoneticMatches } from './extract/phonetic-fix'
+import { loadTermDictionary, buildPhoneticIndex, applyPhoneticFixes, findPhoneticMatches } from './extract/phonetic-fix'
 import { autoReviewDrafts, REVIEWER_CONFIG } from './review/auto-review'
 import { scrapeEventList, saveEventList, loadEventList, BCP_SEARCH_URL } from './bcp/event-list'
 import { scrapeStandings } from './bcp/standings'
 import { scrapeArmyList } from './bcp/army-list'
 import { toTournamentRecord } from './bcp/event-parser'
-import { prepareForImport, generateSummaryCSV } from './bcp/import'
+import { prepareForImport } from './bcp/import'
 
 const config = DEFAULT_CONFIG
 

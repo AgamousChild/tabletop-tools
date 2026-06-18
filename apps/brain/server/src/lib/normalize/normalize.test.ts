@@ -1,4 +1,5 @@
-import { describe, it, expect } from 'vitest'
+import { describe, expect, it } from 'vitest'
+
 import { normalizeMarkdown } from './normalize'
 
 describe('normalizeMarkdown', () => {
@@ -24,7 +25,8 @@ describe('normalizeMarkdown', () => {
   })
 
   it('formats stratagem blocks', () => {
-    const input = 'FIRE OVERWATCH COST: 1CP WHEN: Your opponent declares a charge. TARGET: One unit. EFFECT: That unit can shoot.'
+    const input =
+      'FIRE OVERWATCH COST: 1CP WHEN: Your opponent declares a charge. TARGET: One unit. EFFECT: That unit can shoot.'
     const result = normalizeMarkdown(input)
     expect(result).toContain('**COST:** 1CP')
     expect(result).toContain('**WHEN:**')
@@ -41,7 +43,8 @@ describe('normalizeMarkdown', () => {
   })
 
   it('preserves the original content', () => {
-    const input = 'WOUND ROLL Compare the Strength of the attacking weapon. If equal to Toughness, wound on 4+.'
+    const input =
+      'WOUND ROLL Compare the Strength of the attacking weapon. If equal to Toughness, wound on 4+.'
     const result = normalizeMarkdown(input)
     expect(result).toContain('Compare the Strength')
     expect(result).toContain('wound on 4+')

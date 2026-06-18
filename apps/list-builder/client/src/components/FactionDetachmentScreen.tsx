@@ -1,9 +1,9 @@
-import { useState } from 'react'
+import { useDetachmentAbilities, useGameDataAvailable } from '@tabletop-tools/game-data-store'
 import { htmlToText } from '@tabletop-tools/ui'
-import { useGameDataAvailable, useDetachmentAbilities } from '@tabletop-tools/game-data-store'
+import { useState } from 'react'
 
-import { useGameFactions, useGameDetachments } from '../lib/useGameData'
 import type { BattleSize } from '../lib/armyRules'
+import { useGameDetachments, useGameFactions } from '../lib/useGameData'
 
 type Props = {
   battleSize: BattleSize
@@ -12,7 +12,11 @@ type Props = {
 }
 
 /** Shows detachment button with abilities preview */
-function DetachmentCard({ detId, detName, onSelect }: {
+function DetachmentCard({
+  detId,
+  detName,
+  onSelect,
+}: {
   detId: string
   detName: string
   onSelect: () => void
@@ -54,13 +58,12 @@ export function FactionDetachmentScreen({ battleSize, onSelect, onBack }: Props)
   return (
     <div className="space-y-6">
       <div className="flex items-center gap-3">
-        <button
-          onClick={onBack}
-          className="text-slate-400 hover:text-slate-200 text-sm"
-        >
+        <button onClick={onBack} className="text-slate-400 hover:text-slate-200 text-sm">
           Back
         </button>
-        <h2 className="text-lg font-semibold text-slate-100">{battleSize.points}pts {battleSize.name}</h2>
+        <h2 className="text-lg font-semibold text-slate-100">
+          {battleSize.points}pts {battleSize.name}
+        </h2>
       </div>
 
       {!gameDataAvailable && (
@@ -68,7 +71,9 @@ export function FactionDetachmentScreen({ battleSize, onSelect, onBack }: Props)
           <p className="text-slate-200 font-semibold">No game data imported</p>
           <p className="text-slate-400 text-sm mt-1">
             Import unit profiles from the{' '}
-            <a href="/data-import/" className="text-amber-400 hover:underline">Data Import</a>{' '}
+            <a href="/data-import/" className="text-amber-400 hover:underline">
+              Data Import
+            </a>{' '}
             app to browse factions and build lists.
           </p>
         </div>
@@ -84,7 +89,9 @@ export function FactionDetachmentScreen({ battleSize, onSelect, onBack }: Props)
         >
           <option value="">Choose faction...</option>
           {factions.map((f) => (
-            <option key={f} value={f}>{f}</option>
+            <option key={f} value={f}>
+              {f}
+            </option>
           ))}
         </select>
       </div>
@@ -97,7 +104,9 @@ export function FactionDetachmentScreen({ battleSize, onSelect, onBack }: Props)
               <div className="p-4 rounded-xl bg-slate-900 border border-slate-800 text-center">
                 <p className="text-slate-400 text-sm">
                   No detachments found for this faction. Import data from the{' '}
-                  <a href="/data-import/" className="text-amber-400 hover:underline">Data Import</a>{' '}
+                  <a href="/data-import/" className="text-amber-400 hover:underline">
+                    Data Import
+                  </a>{' '}
                   app to see available detachments.
                 </p>
               </div>

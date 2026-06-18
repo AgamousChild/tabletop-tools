@@ -5,7 +5,7 @@
 // stats. No database access here.
 // ============================================================
 
-import type { TournamentRecord, TournamentPlayer } from '@tabletop-tools/game-content'
+import type { TournamentPlayer, TournamentRecord } from '@tabletop-tools/game-content'
 
 export interface FactionStat {
   faction: string
@@ -13,9 +13,9 @@ export interface FactionStat {
   losses: number
   draws: number
   games: number
-  winRate: number       // 0–1, counting draws as 0.5
-  players: number       // distinct player entries
-  representationPct: number  // % of all player-events
+  winRate: number // 0–1, counting draws as 0.5
+  players: number // distinct player entries
+  representationPct: number // % of all player-events
 }
 
 export interface DetachmentStat {
@@ -36,7 +36,7 @@ export interface MatchupCell {
   bWins: number
   draws: number
   totalGames: number
-  aWinRate: number   // from faction A's perspective
+  aWinRate: number // from faction A's perspective
 }
 
 export interface ListResult {
@@ -53,7 +53,7 @@ export interface ListResult {
 }
 
 export interface WeeklyPoint {
-  week: string      // ISO week start date e.g. "2025-06-09"
+  week: string // ISO week start date e.g. "2025-06-09"
   faction: string
   wins: number
   losses: number
@@ -105,7 +105,10 @@ export function computeFactionStats(records: TournamentRecord[]): FactionStat[] 
 // ---- Detachment stats ----
 
 export function computeDetachmentStats(records: TournamentRecord[]): DetachmentStat[] {
-  const map = new Map<string, { faction: string; wins: number; losses: number; draws: number; players: number }>()
+  const map = new Map<
+    string,
+    { faction: string; wins: number; losses: number; draws: number; players: number }
+  >()
 
   for (const record of records) {
     for (const player of record.players) {
@@ -181,7 +184,7 @@ function buildMatchupCells(records: TournamentRecord[]): MatchupCell[] {
     for (let i = 0; i < Math.floor(n / 2); i++) {
       const p1 = players[i]!
       const p2 = players[n - 1 - i]!
-      if (p1.faction === p2.faction) continue  // skip mirror matches
+      if (p1.faction === p2.faction) continue // skip mirror matches
 
       const [a, b] = sortFactionPair(p1.faction, p2.faction)
       const key = `${a}::${b}`
@@ -222,11 +225,14 @@ function sortFactionPair(a: string, b: string): [string, string] {
 
 // ---- Top lists ----
 
-export function getTopLists(records: TournamentRecord[], opts: {
-  faction?: string
-  detachment?: string
-  limit?: number
-} = {}): ListResult[] {
+export function getTopLists(
+  records: TournamentRecord[],
+  opts: {
+    faction?: string
+    detachment?: string
+    limit?: number
+  } = {},
+): ListResult[] {
   const results: ListResult[] = []
 
   for (const record of records) {
@@ -307,9 +313,9 @@ export function computeTimeline(records: TournamentRecord[], faction?: string): 
 /** Return the Monday (week start) for an ISO date string. */
 function getWeekStart(isoDate: string): string {
   const d = new Date(isoDate)
-  if (isNaN(d.getTime())) return isoDate  // fallback: return as-is
+  if (isNaN(d.getTime())) return isoDate // fallback: return as-is
   const day = d.getUTCDay()
-  const diff = (day + 6) % 7  // Monday = 0
+  const diff = (day + 6) % 7 // Monday = 0
   d.setUTCDate(d.getUTCDate() - diff)
   return d.toISOString().slice(0, 10)
 }
@@ -319,10 +325,13 @@ function getWeekStart(isoDate: string): string {
 export { getWeekStart }
 
 /** Flatten all players from all records, optionally filtering by faction/detachment */
-export function flattenPlayers(records: TournamentRecord[], opts: {
-  faction?: string
-  detachment?: string
-} = {}): Array<TournamentPlayer & { eventName: string; eventDate: string }> {
+export function flattenPlayers(
+  records: TournamentRecord[],
+  opts: {
+    faction?: string
+    detachment?: string
+  } = {},
+): Array<TournamentPlayer & { eventName: string; eventDate: string }> {
   const result = []
   for (const record of records) {
     for (const player of record.players) {

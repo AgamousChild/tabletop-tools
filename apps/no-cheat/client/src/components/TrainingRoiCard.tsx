@@ -1,4 +1,4 @@
-import { useRef, useEffect } from 'react'
+import { useEffect, useRef } from 'react'
 
 type Props = {
   roiGray: Uint8Array
@@ -66,12 +66,7 @@ export function TrainingRoiCard({
       className={`bg-slate-900 border-2 ${borderColor} rounded-lg p-2 flex flex-col items-center gap-1`}
     >
       {/* ROI canvas */}
-      <canvas
-        ref={canvasRef}
-        width={80}
-        height={80}
-        className="rounded bg-slate-950"
-      />
+      <canvas ref={canvasRef} width={80} height={80} className="rounded bg-slate-950" />
 
       {/* Guess display */}
       <div data-testid="guess-display" className="text-lg font-bold text-slate-100">

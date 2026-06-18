@@ -64,8 +64,10 @@ export function SourceData({ onTournamentSelect }: Props) {
 
 function FormatBadge({ format }: { format: string }) {
   const color =
-    format === 'Super Major' ? 'text-amber-400 bg-amber-400/10' :
-    format === 'Major' ? 'text-purple-400 bg-purple-400/10' :
-    'text-slate-400 bg-slate-800'
+    format === 'Super Major'
+      ? 'text-amber-400 bg-amber-400/10'
+      : format === 'Major'
+        ? 'text-purple-400 bg-purple-400/10'
+        : 'text-slate-400 bg-slate-800'
   return <span className={`text-xs px-1.5 py-0.5 rounded ${color}`}>{format}</span>
 }

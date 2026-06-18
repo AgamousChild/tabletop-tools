@@ -1,39 +1,12 @@
+import type { MouseEvent } from 'react'
+
+import { renderMarkdown as renderMarkdownFn } from '../../lib/render-markdown'
 import { ErrataSection } from './ErrataSection'
 import type { CardContext, RuleCardData } from './types'
 
 interface RuleCardProps {
   data: RuleCardData
   context: CardContext
-}
-
-// Renders text with [KEYWORD] tokens as clickable spans
-function KeywordText({
-  text,
-  onContentClick,
-}: {
-  text: string
-  onContentClick: (term: string) => void
-}) {
-  const parts = text.split(/(\[[^\]]+\])/g)
-  return (
-    <>
-      {parts.map((part, i) => {
-        const match = part.match(/^\[([^\]]+)\]$/)
-        if (match) {
-          return (
-            <button
-              key={i}
-              className="text-amber-400 font-semibold hover:underline cursor-pointer bg-transparent border-0 p-0 m-0 font-[inherit] text-[inherit]"
-              onClick={() => onContentClick(match[1])}
-            >
-              {part}
-            </button>
-          )
-        }
-        return <span key={i}>{part}</span>
-      })}
-    </>
-  )
 }
 
 function subRuleIsHighlighted(
@@ -45,12 +18,36 @@ function subRuleIsHighlighted(
   return terms.some((t) => lower.includes(t.toLowerCase()))
 }
 
+// Render markdown content, then wrap [KEYWORD] tokens as clickable buttons.
+// Clicks are delegated to onContentClick via the container's handleKeywordClick.
+function renderContentHtml(text: string): string {
+  return renderMarkdownFn(text).replace(
+    /\[([^\]]+)\]/g,
+    (_m, kw: string) =>
+      `<button type="button" data-keyword="${kw}" class="text-amber-400 font-semibold hover:underline cursor-pointer bg-transparent border-0 p-0 m-0 font-[inherit] text-[inherit]">[${kw}]</button>`,
+  )
+}
+
 export function RuleCard({ data, context }: RuleCardProps) {
   const { highlightTerms, onContentClick } = context
-  const borderClass = data.isArmyRule ? 'border-amber-400' : 'border-blue-400'
+  const isFaction = data.isFaction
+  const borderClass = isFaction
+    ? 'border-red-400'
+    : data.isArmyRule
+      ? 'border-amber-400'
+      : 'border-blue-400'
   const subRuleNameClass = data.isArmyRule ? 'text-amber-400' : 'text-blue-400'
-  const subtitleLabel = data.isArmyRule ? 'Army Rule' : 'Detachment Ability'
-  const subtitlePrefix = data.isArmyRule ? data.factionId : (data.detachmentName ?? data.factionId)
+  const subtitleLabel = isFaction ? 'Faction' : data.isArmyRule ? 'Army Rule' : 'Detachment Ability'
+  const subtitlePrefix =
+    isFaction || data.isArmyRule
+      ? data.factionId || ''
+      : (data.detachmentName ?? data.factionId ?? '')
+
+  // Delegate clicks on [KEYWORD] buttons (rendered via dangerouslySetInnerHTML) to onContentClick.
+  const handleKeywordClick = (e: MouseEvent<HTMLElement>) => {
+    const el = (e.target as HTMLElement).closest('[data-keyword]')
+    if (el) onContentClick(el.getAttribute('data-keyword') ?? '')
+  }
 
   return (
     <div className="bg-slate-900 border border-slate-800 rounded-lg overflow-hidden">
@@ -64,7 +61,9 @@ export function RuleCard({ data, context }: RuleCardProps) {
             <h2 className="font-['Oswald'] uppercase tracking-wide text-white text-[17px] font-semibold">
               {data.name}
             </h2>
-            <p className={`text-[13px] mt-0.5 ${data.isArmyRule ? 'text-amber-400' : 'text-blue-400'}`}>
+            <p
+              className={`text-[13px] mt-0.5 ${data.isArmyRule ? 'text-amber-400' : 'text-blue-400'}`}
+            >
               {subtitlePrefix} — {subtitleLabel}
             </p>
           </div>
@@ -81,10 +80,12 @@ export function RuleCard({ data, context }: RuleCardProps) {
 
       {/* Body */}
       <div className="px-3 py-2 md:px-4 md:py-3 space-y-3">
-        {/* Main description */}
-        <p className="text-slate-300 leading-relaxed text-[13px] md:text-[15px] break-words">
-          <KeywordText text={data.description} onContentClick={onContentClick} />
-        </p>
+        {/* Main description — render markdown */}
+        <div
+          className="text-slate-300 leading-relaxed text-[13px] md:text-[15px] break-words"
+          onClick={handleKeywordClick}
+          dangerouslySetInnerHTML={{ __html: renderContentHtml(data.description) }}
+        />
 
         {/* Sub-rules */}
         {data.subRules && data.subRules.length > 0 && (
@@ -102,9 +103,11 @@ export function RuleCard({ data, context }: RuleCardProps) {
                   >
                     {subRule.name}
                   </span>
-                  <span className="text-slate-300 text-[13px] md:text-[15px] break-words">
-                    <KeywordText text={subRule.description} onContentClick={onContentClick} />
-                  </span>
+                  <span
+                    className="text-slate-300 text-[13px] md:text-[15px] break-words"
+                    onClick={handleKeywordClick}
+                    dangerouslySetInnerHTML={{ __html: renderContentHtml(subRule.description) }}
+                  />
                 </div>
               )
             })}

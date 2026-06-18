@@ -49,11 +49,6 @@ interface PlayerRecord {
   listUrl: string | null
 }
 
-function parsePairingsFromPage(pageContent: string): Array<{ ps: string[]; listUrls: string[] }> {
-  // This is a placeholder — the actual parsing happens in page.evaluate()
-  return []
-}
-
 async function scrapeEvent(
   eventId: string,
   context: Awaited<ReturnType<typeof chromium.launchPersistentContext>>,

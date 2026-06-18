@@ -17,17 +17,19 @@ export async function authenticateBcp(opts: AuthOptions): Promise<string> {
   const basicAuth = btoa(`${opts.email}:${opts.password}`)
 
   // Step 1: Get authorization code
-  const state = btoa(JSON.stringify({
-    redirect_uri: REDIRECT_URI,
-    client_id: 'web-app',
-    salt: 'scraper',
-  }))
+  const state = btoa(
+    JSON.stringify({
+      redirect_uri: REDIRECT_URI,
+      client_id: 'web-app',
+      salt: 'scraper',
+    }),
+  )
 
   const authorizeUrl = `${BCP_API}/oauth/authorize?response_type=code&redirect_uri=${encodeURIComponent(REDIRECT_URI)}&state=${state}`
 
   const authResp = await f(authorizeUrl, {
     headers: {
-      'authorization': `Basic ${basicAuth}`,
+      authorization: `Basic ${basicAuth}`,
       'client-id': 'web-app',
       'content-type': 'application/json',
     },
@@ -37,7 +39,7 @@ export async function authenticateBcp(opts: AuthOptions): Promise<string> {
     throw new Error(`BCP auth failed: authorize returned ${authResp.status}`)
   }
 
-  const authData = await authResp.json() as { code?: string; authorizationCode?: string }
+  const authData = (await authResp.json()) as { code?: string; authorizationCode?: string }
   const code = authData.code || authData.authorizationCode
   if (!code) {
     throw new Error('BCP auth failed: no authorization code returned')
@@ -61,7 +63,7 @@ export async function authenticateBcp(opts: AuthOptions): Promise<string> {
     throw new Error(`BCP auth failed: token exchange returned ${tokenResp.status}`)
   }
 
-  const tokenData = await tokenResp.json() as { accessToken?: string; access_token?: string }
+  const tokenData = (await tokenResp.json()) as { accessToken?: string; access_token?: string }
   const token = tokenData.accessToken || tokenData.access_token
   if (!token) {
     throw new Error('BCP auth failed: no access token returned')

@@ -1,16 +1,21 @@
-import { useState, useEffect } from 'react'
-import { authClient } from '../lib/auth'
 import { HelpTip, SimpleMarkdown } from '@tabletop-tools/ui'
+import { useEffect, useState } from 'react'
+
+import { authClient } from '../lib/auth'
+import { navigate, useHashRoute } from '../lib/router'
 import { trpc } from '../lib/trpc'
-import { useHashRoute, navigate } from '../lib/router'
-import type { Route } from '../lib/router'
+import { FactionDetachmentPicker } from './FactionDetachmentPicker'
 import { ManageTournament } from './ManageTournament'
+import { MetricStackStandings } from './MetricStackStandings'
 
 /** Formats elapsed time since a given timestamp as HH:MM:SS */
 function useElapsedTime(startTimestamp: number | null): string | null {
   const [elapsed, setElapsed] = useState<string | null>(null)
   useEffect(() => {
-    if (!startTimestamp) { setElapsed(null); return }
+    if (!startTimestamp) {
+      setElapsed(null)
+      return
+    }
     function tick() {
       const diff = Math.max(0, Math.floor((Date.now() - startTimestamp!) / 1000))
       const h = Math.floor(diff / 3600)
@@ -28,9 +33,7 @@ function useElapsedTime(startTimestamp: number | null): string | null {
 function RoundClock({ createdAt }: { createdAt: number }) {
   const elapsed = useElapsedTime(createdAt)
   if (!elapsed) return null
-  return (
-    <p className="text-amber-400 text-sm font-mono">Elapsed: {elapsed}</p>
-  )
+  return <p className="text-amber-400 text-sm font-mono">Elapsed: {elapsed}</p>
 }
 
 type Props = { onSignOut: () => void }
@@ -59,19 +62,6 @@ type Tournament = {
   includeChallenger?: number
 }
 
-type PlayerStanding = {
-  rank: number
-  id: string
-  displayName: string
-  faction: string
-  wins: number
-  losses: number
-  draws: number
-  margin: number
-  totalVP: number
-  strengthOfSchedule: number
-}
-
 function StatusBadge({ status }: { status: string }) {
   const colors: Record<string, string> = {
     DRAFT: 'text-slate-400 bg-slate-800',
@@ -81,48 +71,11 @@ function StatusBadge({ status }: { status: string }) {
     COMPLETE: 'text-slate-400 bg-slate-800',
   }
   return (
-    <span className={`text-xs px-2 py-0.5 rounded font-medium ${colors[status] ?? 'text-slate-400'}`}>
+    <span
+      className={`text-xs px-2 py-0.5 rounded font-medium ${colors[status] ?? 'text-slate-400'}`}
+    >
       {status.replace('_', ' ')}
     </span>
-  )
-}
-
-function StandingsTable({ players }: { players: PlayerStanding[] }) {
-  return (
-    <div className="overflow-x-auto">
-      <table className="w-full text-sm text-left text-slate-300">
-        <thead className="text-xs text-slate-500 uppercase">
-          <tr>
-            <th className="px-3 py-2">#</th>
-            <th className="px-3 py-2">Player</th>
-            <th className="px-3 py-2">Faction</th>
-            <th className="px-3 py-2 text-center">W</th>
-            <th className="px-3 py-2 text-center">L</th>
-            <th className="px-3 py-2 text-center">D</th>
-            <th className="px-3 py-2 text-center">+/-</th>
-            <th className="px-3 py-2 text-center">VP</th>
-            <th className="px-3 py-2 text-center">SOS</th>
-          </tr>
-        </thead>
-        <tbody>
-          {players.map((p) => (
-            <tr key={p.id} className="border-t border-slate-800">
-              <td className="px-3 py-2 text-slate-500">{p.rank}</td>
-              <td className="px-3 py-2 font-medium text-slate-100">{p.displayName}</td>
-              <td className="px-3 py-2 text-slate-400">{p.faction}</td>
-              <td className="px-3 py-2 text-center text-emerald-400">{p.wins}</td>
-              <td className="px-3 py-2 text-center text-red-400">{p.losses}</td>
-              <td className="px-3 py-2 text-center">{p.draws}</td>
-              <td className={`px-3 py-2 text-center ${p.margin >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
-                {p.margin >= 0 ? '+' : ''}{p.margin}
-              </td>
-              <td className="px-3 py-2 text-center">{p.totalVP}</td>
-              <td className="px-3 py-2 text-center">{(p.strengthOfSchedule * 100).toFixed(1)}%</td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-    </div>
   )
 }
 
@@ -132,11 +85,15 @@ export function TournamentScreen({ onSignOut }: Props) {
   const route = useHashRoute()
 
   // Extract IDs from route
-  const selectedTournamentId = route.view === 'tournament' || route.view === 'tournament-standings' || route.view === 'tournament-register' || route.view === 'tournament-manage'
-    ? route.id
-    : route.view === 'round'
-      ? route.tournamentId
-      : null
+  const selectedTournamentId =
+    route.view === 'tournament' ||
+    route.view === 'tournament-standings' ||
+    route.view === 'tournament-register' ||
+    route.view === 'tournament-manage'
+      ? route.id
+      : route.view === 'round'
+        ? route.tournamentId
+        : null
   const selectedRoundId = route.view === 'round' ? route.roundId : null
 
   // Create tournament form
@@ -159,9 +116,13 @@ export function TournamentScreen({ onSignOut }: Props) {
     try {
       const stored = localStorage.getItem('tournament-list')
       if (stored) return JSON.parse(stored).faction ?? ''
-    } catch { /* ignore */ }
+    } catch {
+      /* ignore */
+    }
     return ''
   })
+  const [regFactionEntityId, setRegFactionEntityId] = useState<string | null>(null)
+  const [regDetachmentEntityId, setRegDetachmentEntityId] = useState<string | null>(null)
   const [regList, setRegList] = useState('')
 
   // Round start time
@@ -181,9 +142,10 @@ export function TournamentScreen({ onSignOut }: Props) {
   const tournamentDetailQuery = trpc.tournament.get.useQuery(selectedTournamentId!, {
     enabled: !!selectedTournamentId,
   })
-  const standingsQuery = trpc.tournament.standings.useQuery(selectedTournamentId!, {
-    enabled: !!selectedTournamentId,
-  })
+  const standingsQuery = trpc.tournament.standings.useQuery(
+    { tournamentId: selectedTournamentId!, stackType: 'pairing' },
+    { enabled: !!selectedTournamentId },
+  )
   const roundDetailQuery = trpc.round.get.useQuery(selectedRoundId!, {
     enabled: !!selectedRoundId,
   })
@@ -329,9 +291,13 @@ export function TournamentScreen({ onSignOut }: Props) {
       displayName: regName,
       faction: regFaction,
       listText: regList || undefined,
+      factionEntityId: regFactionEntityId ?? undefined,
+      detachmentEntityId: regDetachmentEntityId ?? undefined,
     })
     setRegName('')
     setRegFaction('')
+    setRegFactionEntityId(null)
+    setRegDetachmentEntityId(null)
     setRegList('')
   }
 
@@ -361,7 +327,8 @@ export function TournamentScreen({ onSignOut }: Props) {
         </a>
         <h2 className="text-xl font-bold mb-4">Create Tournament</h2>
         <p className="text-xs text-slate-500 mb-4">
-          Fill in the details below to set up your event. You can change settings later while the tournament is still in DRAFT status.
+          Fill in the details below to set up your event. You can change settings later while the
+          tournament is still in DRAFT status.
         </p>
         <form onSubmit={(e) => void handleCreateTournament(e)} className="space-y-3">
           <input
@@ -372,7 +339,10 @@ export function TournamentScreen({ onSignOut }: Props) {
             required
           />
           <div>
-            <label className="text-slate-400 text-xs flex items-center mb-1">Format<HelpTip text="Game format and points level, e.g. 2000pts Matched Play or 1000pts Incursion" /></label>
+            <label className="text-slate-400 text-xs flex items-center mb-1">
+              Format
+              <HelpTip text="Game format and points level, e.g. 2000pts Matched Play or 1000pts Incursion" />
+            </label>
             <input
               className="w-full px-3 py-2 rounded bg-slate-800 border border-slate-700 text-slate-100"
               placeholder="Format (e.g. 2000pts Matched Play)"
@@ -389,7 +359,10 @@ export function TournamentScreen({ onSignOut }: Props) {
           />
           <div className="flex gap-4 items-center">
             <div className="flex gap-2 items-center">
-              <label className="text-slate-400 text-sm flex items-center">Rounds:<HelpTip text="Number of Swiss rounds to play (typically 3-6)" /></label>
+              <label className="text-slate-400 text-sm flex items-center">
+                Rounds:
+                <HelpTip text="Number of Swiss rounds to play (typically 3-6)" />
+              </label>
               <input
                 type="number"
                 min={1}
@@ -401,7 +374,10 @@ export function TournamentScreen({ onSignOut }: Props) {
               />
             </div>
             <div className="flex gap-2 items-center">
-              <label className="text-slate-400 text-sm flex items-center">Max players:<HelpTip text="Player cap for registration. Leave blank for unlimited." /></label>
+              <label className="text-slate-400 text-sm flex items-center">
+                Max players:
+                <HelpTip text="Player cap for registration. Leave blank for unlimited." />
+              </label>
               <input
                 type="number"
                 min={2}
@@ -439,15 +415,30 @@ export function TournamentScreen({ onSignOut }: Props) {
           <div className="space-y-2">
             <p className="text-slate-400 text-sm font-medium">Mission settings</p>
             <label className="flex items-center gap-2 cursor-pointer">
-              <input type="checkbox" checked={newRequirePhotos} onChange={(e) => setNewRequirePhotos(e.target.checked)} className="w-4 h-4 accent-amber-400" />
+              <input
+                type="checkbox"
+                checked={newRequirePhotos}
+                onChange={(e) => setNewRequirePhotos(e.target.checked)}
+                className="w-4 h-4 accent-amber-400"
+              />
               <span className="text-sm text-slate-300">Require photos</span>
             </label>
             <label className="flex items-center gap-2 cursor-pointer">
-              <input type="checkbox" checked={newIncludeTwists} onChange={(e) => setNewIncludeTwists(e.target.checked)} className="w-4 h-4 accent-amber-400" />
+              <input
+                type="checkbox"
+                checked={newIncludeTwists}
+                onChange={(e) => setNewIncludeTwists(e.target.checked)}
+                className="w-4 h-4 accent-amber-400"
+              />
               <span className="text-sm text-slate-300">Include twist cards</span>
             </label>
             <label className="flex items-center gap-2 cursor-pointer">
-              <input type="checkbox" checked={newIncludeChallenger} onChange={(e) => setNewIncludeChallenger(e.target.checked)} className="w-4 h-4 accent-amber-400" />
+              <input
+                type="checkbox"
+                checked={newIncludeChallenger}
+                onChange={(e) => setNewIncludeChallenger(e.target.checked)}
+                className="w-4 h-4 accent-amber-400"
+              />
               <span className="text-sm text-slate-300">Include challenger cards</span>
             </label>
           </div>
@@ -484,11 +475,15 @@ export function TournamentScreen({ onSignOut }: Props) {
               return (
                 <div className="bg-slate-900 border border-amber-400/30 rounded-lg p-3 text-sm">
                   <p className="text-slate-400">Linked list from List Builder:</p>
-                  <p className="text-slate-100 font-medium">{name} — {faction} ({totalPts}pts)</p>
+                  <p className="text-slate-100 font-medium">
+                    {name} — {faction} ({totalPts}pts)
+                  </p>
                 </div>
               )
             }
-          } catch { /* ignore */ }
+          } catch {
+            /* ignore */
+          }
           return null
         })()}
         <form onSubmit={(e) => void handleRegister(e)} className="space-y-3">
@@ -499,12 +494,18 @@ export function TournamentScreen({ onSignOut }: Props) {
             onChange={(e) => setRegName(e.target.value)}
             required
           />
-          <input
-            className="w-full px-3 py-2 rounded bg-slate-800 border border-slate-700 text-slate-100"
-            placeholder="Faction (e.g. Space Marines)"
-            value={regFaction}
-            onChange={(e) => setRegFaction(e.target.value)}
-            required
+          <FactionDetachmentPicker
+            factionEntityId={regFactionEntityId}
+            detachmentEntityId={regDetachmentEntityId}
+            onFactionChange={(id) => {
+              setRegFactionEntityId(id)
+              // Keep free-text faction in sync with entity selection for legacy field
+              setRegFaction(id ? id : regFaction)
+            }}
+            onDetachmentChange={setRegDetachmentEntityId}
+            factionText={regFaction}
+            onFactionTextChange={setRegFaction}
+            disabled={registerPlayer.isPending}
           />
           <textarea
             className="w-full px-3 py-2 rounded bg-slate-800 border border-slate-700 text-slate-100 h-40 font-mono text-sm"
@@ -535,13 +536,15 @@ export function TournamentScreen({ onSignOut }: Props) {
         </a>
 
         <p className="text-xs text-slate-500 mb-4">
-          View pairings and report results below. Both players should confirm the result after reporting.
+          View pairings and report results below. Both players should confirm the result after
+          reporting.
         </p>
 
         <div className="flex justify-between items-center mb-4">
           <div>
             <h2 className="text-xl font-bold">
-              Round {roundDetail?.roundNumber ?? '…'} — <span className="text-slate-400">{roundDetail?.status}</span>
+              Round {roundDetail?.roundNumber ?? '…'} —{' '}
+              <span className="text-slate-400">{roundDetail?.status}</span>
             </h2>
             {roundDetail?.startTime && (
               <p className="text-slate-500 text-sm">Start: {roundDetail.startTime}</p>
@@ -695,7 +698,9 @@ export function TournamentScreen({ onSignOut }: Props) {
                     onSubmit={(e) => void handleOverride(e)}
                     className="mt-3 p-3 rounded bg-slate-800 border border-slate-700"
                   >
-                    <p className="text-xs text-slate-400 mb-2 font-medium">TO Score Override (auto-confirms)</p>
+                    <p className="text-xs text-slate-400 mb-2 font-medium">
+                      TO Score Override (auto-confirms)
+                    </p>
                     <div className="flex gap-2 items-end">
                       <div>
                         <label className="text-xs text-slate-500 block">P1 VP</label>
@@ -738,11 +743,13 @@ export function TournamentScreen({ onSignOut }: Props) {
                 )}
               </div>
             ))}
-          {pairings.filter((p) => p.result === 'BYE').map((p) => (
-            <div key={p.id} className="bg-slate-900 rounded p-3 text-slate-400 text-sm">
-              BYE: {p.player1Name ?? p.player1Id}
-            </div>
-          ))}
+          {pairings
+            .filter((p) => p.result === 'BYE')
+            .map((p) => (
+              <div key={p.id} className="bg-slate-900 rounded p-3 text-slate-400 text-sm">
+                BYE: {p.player1Name ?? p.player1Id}
+              </div>
+            ))}
         </div>
       </div>
     )
@@ -757,7 +764,10 @@ export function TournamentScreen({ onSignOut }: Props) {
     )
   }
 
-  if ((route.view === 'tournament' || route.view === 'tournament-standings') && selectedTournamentId) {
+  if (
+    (route.view === 'tournament' || route.view === 'tournament-standings') &&
+    selectedTournamentId
+  ) {
     return (
       <div className="min-h-screen bg-slate-950 text-slate-100 p-4 max-w-2xl mx-auto">
         <a href="#/" className="text-slate-400 hover:text-slate-200 mb-4 inline-block">
@@ -872,7 +882,12 @@ export function TournamentScreen({ onSignOut }: Props) {
                 onChange={(e) => setRoundStartTime(e.target.value)}
               />
               <button
-                onClick={() => createRound.mutate({ tournamentId: selectedTournamentId, startTime: roundStartTime || undefined })}
+                onClick={() =>
+                  createRound.mutate({
+                    tournamentId: selectedTournamentId,
+                    startTime: roundStartTime || undefined,
+                  })
+                }
                 disabled={createRound.isPending}
                 className="px-4 py-2 rounded bg-amber-400 text-slate-950 font-semibold text-sm hover:bg-amber-300 disabled:opacity-50"
               >
@@ -899,10 +914,13 @@ export function TournamentScreen({ onSignOut }: Props) {
         {/* Standings */}
         {standings && standings.players.length > 0 && (
           <div className="mb-6">
-            <h3 className="text-sm font-semibold text-slate-500 uppercase mb-2">
-              Standings · Round {standings.round}
-            </h3>
-            <StandingsTable players={standings.players} />
+            <h3 className="text-sm font-semibold text-slate-500 uppercase mb-2">Standings</h3>
+            <MetricStackStandings
+              round={standings.round}
+              stackType={standings.stackType}
+              metricKeys={standings.metricKeys}
+              players={standings.players as any}
+            />
           </div>
         )}
 
@@ -911,35 +929,48 @@ export function TournamentScreen({ onSignOut }: Props) {
           <div className="mb-6">
             <h3 className="text-sm font-semibold text-slate-500 uppercase mb-2">Awards</h3>
             <div className="space-y-2">
-              {awardsQuery.data.map((award: { id: string; name: string; description: string | null; recipientId: string | null }) => {
-                const recipient = award.recipientId && standings
-                  ? standings.players.find((p: PlayerStanding) => p.id === award.recipientId)
-                  : null
-                return (
-                  <div key={award.id} className="flex items-center justify-between p-3 rounded-lg bg-slate-900 border border-slate-800">
-                    <div>
-                      <span className="text-slate-100 font-medium">{award.name}</span>
-                      {award.description && (
-                        <p className="text-xs text-slate-500 mt-0.5">{award.description}</p>
+              {awardsQuery.data.map(
+                (award: {
+                  id: string
+                  name: string
+                  description: string | null
+                  recipientId: string | null
+                }) => {
+                  const recipient =
+                    award.recipientId && standings
+                      ? standings.players.find((p: { id: string }) => p.id === award.recipientId)
+                      : null
+                  return (
+                    <div
+                      key={award.id}
+                      className="flex items-center justify-between p-3 rounded-lg bg-slate-900 border border-slate-800"
+                    >
+                      <div>
+                        <span className="text-slate-100 font-medium">{award.name}</span>
+                        {award.description && (
+                          <p className="text-xs text-slate-500 mt-0.5">{award.description}</p>
+                        )}
+                      </div>
+                      {recipient ? (
+                        <span className="text-xs px-2 py-0.5 rounded bg-emerald-400/10 text-emerald-400 font-medium">
+                          {recipient.displayName}
+                        </span>
+                      ) : (
+                        <span className="text-xs text-slate-600">Unassigned</span>
                       )}
                     </div>
-                    {recipient ? (
-                      <span className="text-xs px-2 py-0.5 rounded bg-emerald-400/10 text-emerald-400 font-medium">
-                        {recipient.displayName}
-                      </span>
-                    ) : (
-                      <span className="text-xs text-slate-600">Unassigned</span>
-                    )}
-                  </div>
-                )
-              })}
+                  )
+                },
+              )}
             </div>
           </div>
         )}
 
         {/* Player count */}
         <p className="text-slate-500 text-sm">
-          {tournament?.playerCount ?? 0}{tournament?.maxPlayers ? ` / ${tournament.maxPlayers}` : ''} player{tournament?.playerCount === 1 ? '' : 's'} registered
+          {tournament?.playerCount ?? 0}
+          {tournament?.maxPlayers ? ` / ${tournament.maxPlayers}` : ''} player
+          {tournament?.playerCount === 1 ? '' : 's'} registered
         </p>
       </div>
     )
@@ -971,13 +1002,30 @@ export function TournamentScreen({ onSignOut }: Props) {
       <div className="max-w-2xl mx-auto p-4">
         <div className="flex justify-between items-center mb-4">
           <div className="flex items-center gap-3">
-            <a href="/" className="flex items-center gap-1 text-xs text-slate-400 hover:text-slate-200 transition-colors" title="Back to Home">
-              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-3.5 h-3.5">
-                <path fillRule="evenodd" d="M9.293 2.293a1 1 0 0 1 1.414 0l7 7A1 1 0 0 1 17 11h-1v6a1 1 0 0 1-1 1h-2a1 1 0 0 1-1-1v-3a1 1 0 0 0-1-1H9a1 1 0 0 0-1 1v3a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1v-6H3a1 1 0 0 1-.707-1.707l7-7Z" clipRule="evenodd" />
+            <a
+              href="/"
+              className="flex items-center gap-1 text-xs text-slate-400 hover:text-slate-200 transition-colors"
+              title="Back to Home"
+            >
+              <svg
+                xmlns="http://www.w3.org/2000/svg"
+                viewBox="0 0 20 20"
+                fill="currentColor"
+                className="w-3.5 h-3.5"
+              >
+                <path
+                  fillRule="evenodd"
+                  d="M9.293 2.293a1 1 0 0 1 1.414 0l7 7A1 1 0 0 1 17 11h-1v6a1 1 0 0 1-1 1h-2a1 1 0 0 1-1-1v-3a1 1 0 0 0-1-1H9a1 1 0 0 0-1 1v3a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1v-6H3a1 1 0 0 1-.707-1.707l7-7Z"
+                  clipRule="evenodd"
+                />
               </svg>
               Home
             </a>
-            <h1><a href="/" className="text-2xl font-bold hover:text-amber-400 transition-colors">Tournament</a></h1>
+            <h1>
+              <a href="/" className="text-2xl font-bold hover:text-amber-400 transition-colors">
+                Tournament
+              </a>
+            </h1>
           </div>
           <div className="flex gap-2">
             <a
@@ -999,25 +1047,55 @@ export function TournamentScreen({ onSignOut }: Props) {
 
         {/* Navigation tabs */}
         <div className="flex gap-1 mb-6 border-b border-slate-800 pb-2">
-          <a href="#/" className="px-3 py-1.5 rounded text-sm font-medium bg-amber-400 text-slate-950">My Tournaments</a>
-          <a href="#/play" className="px-3 py-1.5 rounded text-sm font-medium text-slate-400 hover:text-slate-200">Play</a>
-          <a href="#/my-info" className="px-3 py-1.5 rounded text-sm font-medium text-slate-400 hover:text-slate-200">My Info</a>
-          <a href="#/search/lists" className="px-3 py-1.5 rounded text-sm font-medium text-slate-400 hover:text-slate-200">Lists</a>
-          <a href="#/search/players" className="px-3 py-1.5 rounded text-sm font-medium text-slate-400 hover:text-slate-200">Players</a>
+          <a
+            href="#/"
+            className="px-3 py-1.5 rounded text-sm font-medium bg-amber-400 text-slate-950"
+          >
+            My Tournaments
+          </a>
+          <a
+            href="#/play"
+            className="px-3 py-1.5 rounded text-sm font-medium text-slate-400 hover:text-slate-200"
+          >
+            Play
+          </a>
+          <a
+            href="#/my-info"
+            className="px-3 py-1.5 rounded text-sm font-medium text-slate-400 hover:text-slate-200"
+          >
+            My Info
+          </a>
+          <a
+            href="#/search/lists"
+            className="px-3 py-1.5 rounded text-sm font-medium text-slate-400 hover:text-slate-200"
+          >
+            Lists
+          </a>
+          <a
+            href="#/search/players"
+            className="px-3 py-1.5 rounded text-sm font-medium text-slate-400 hover:text-slate-200"
+          >
+            Players
+          </a>
         </div>
 
         <p className="text-xs text-slate-500 mb-4">
-          View your tournaments below, or tap "+ New Tournament" to create one. Use the tabs to find open events, search lists, or check your ELO.
+          View your tournaments below, or tap "+ New Tournament" to create one. Use the tabs to find
+          open events, search lists, or check your rating.
         </p>
 
-        {myTournamentsQuery.isPending && (
-          <p className="text-slate-400">Loading…</p>
-        )}
+        {myTournamentsQuery.isPending && <p className="text-slate-400">Loading…</p>}
 
         {tournaments.length === 0 && !myTournamentsQuery.isPending && (
           <div className="text-center py-12 text-slate-500">
             <p>No tournaments yet.</p>
-            <p className="text-sm mt-1">Create one or <a href="#/play" className="text-amber-400 hover:underline">find an open event</a> to register for.</p>
+            <p className="text-sm mt-1">
+              Create one or{' '}
+              <a href="#/play" className="text-amber-400 hover:underline">
+                find an open event
+              </a>{' '}
+              to register for.
+            </p>
           </div>
         )}
 
@@ -1034,9 +1112,7 @@ export function TournamentScreen({ onSignOut }: Props) {
                   <p className="text-sm text-slate-400 mt-0.5">
                     {t.format} · {new Date(t.eventDate).toLocaleDateString()}
                   </p>
-                  {t.location && (
-                    <p className="text-xs text-slate-500">{t.location}</p>
-                  )}
+                  {t.location && <p className="text-xs text-slate-500">{t.location}</p>}
                 </div>
                 <StatusBadge status={t.status} />
               </div>
@@ -1094,7 +1170,9 @@ function PlayScreen() {
   const [favorites, setFavorites] = useState<string[]>(() => {
     try {
       return JSON.parse(localStorage.getItem('tournament-favorites') ?? '[]')
-    } catch { return [] }
+    } catch {
+      return []
+    }
   })
 
   const searchResults = trpc.tournament.search.useQuery({
@@ -1129,12 +1207,14 @@ function PlayScreen() {
   // Sort by distance if user location is available
   const results = userLocation
     ? [...rawResults].sort((a, b) => {
-        const distA = a.latitude != null && a.longitude != null
-          ? haversineDistance(userLocation.lat, userLocation.lng, a.latitude, a.longitude)
-          : Infinity
-        const distB = b.latitude != null && b.longitude != null
-          ? haversineDistance(userLocation.lat, userLocation.lng, b.latitude, b.longitude)
-          : Infinity
+        const distA =
+          a.latitude != null && a.longitude != null
+            ? haversineDistance(userLocation.lat, userLocation.lng, a.latitude, a.longitude)
+            : Infinity
+        const distB =
+          b.latitude != null && b.longitude != null
+            ? haversineDistance(userLocation.lat, userLocation.lng, b.latitude, b.longitude)
+            : Infinity
         return distA - distB
       })
     : rawResults
@@ -1192,7 +1272,13 @@ function PlayScreen() {
             <h3 className="text-xs font-semibold text-amber-400 uppercase mb-2">Favorites</h3>
             <div className="space-y-2">
               {favorited.map((t) => (
-                <TournamentSearchCard key={t.id} tournament={t} isFavorite onToggleFavorite={() => toggleFavorite(t.id)} userLocation={userLocation} />
+                <TournamentSearchCard
+                  key={t.id}
+                  tournament={t}
+                  isFavorite
+                  onToggleFavorite={() => toggleFavorite(t.id)}
+                  userLocation={userLocation}
+                />
               ))}
             </div>
           </div>
@@ -1200,9 +1286,17 @@ function PlayScreen() {
 
         {others.length > 0 && (
           <div className="space-y-2">
-            {favorited.length > 0 && <h3 className="text-xs font-semibold text-slate-500 uppercase mb-2">All Results</h3>}
+            {favorited.length > 0 && (
+              <h3 className="text-xs font-semibold text-slate-500 uppercase mb-2">All Results</h3>
+            )}
             {others.map((t) => (
-              <TournamentSearchCard key={t.id} tournament={t} isFavorite={false} onToggleFavorite={() => toggleFavorite(t.id)} userLocation={userLocation} />
+              <TournamentSearchCard
+                key={t.id}
+                tournament={t}
+                isFavorite={false}
+                onToggleFavorite={() => toggleFavorite(t.id)}
+                userLocation={userLocation}
+              />
             ))}
           </div>
         )}
@@ -1244,9 +1338,10 @@ function TournamentSearchCard({
   onToggleFavorite: () => void
   userLocation?: { lat: number; lng: number } | null
 }) {
-  const distance = userLocation && t.latitude != null && t.longitude != null
-    ? haversineDistance(userLocation.lat, userLocation.lng, t.latitude, t.longitude)
-    : null
+  const distance =
+    userLocation && t.latitude != null && t.longitude != null
+      ? haversineDistance(userLocation.lat, userLocation.lng, t.latitude, t.longitude)
+      : null
 
   return (
     <div className="bg-slate-900 rounded p-4 flex justify-between items-start">
@@ -1259,13 +1354,16 @@ function TournamentSearchCard({
           <p className="text-xs text-slate-500">
             {t.location}
             {distance != null && (
-              <span className="ml-1 text-amber-400">{distance < 1 ? '< 1' : Math.round(distance)} mi</span>
+              <span className="ml-1 text-amber-400">
+                {distance < 1 ? '< 1' : Math.round(distance)} mi
+              </span>
             )}
           </p>
         )}
         {t.startTime && <p className="text-xs text-slate-500">Start: {t.startTime}</p>}
         <p className="text-xs text-slate-500 mt-1">
-          {t.playerCount}{t.maxPlayers ? ` / ${t.maxPlayers}` : ''} players
+          {t.playerCount}
+          {t.maxPlayers ? ` / ${t.maxPlayers}` : ''} players
         </p>
       </a>
       <div className="flex flex-col items-end gap-2">
@@ -1290,16 +1388,10 @@ function TournamentSearchCard({
   )
 }
 
-function MyInfoScreen({ userId }: { userId: string }) {
+function MyInfoScreen({ userId: _userId }: { userId: string }) {
   const profileQuery = trpc.player.myProfile.useQuery()
-  const eloQuery = trpc.elo.get.useQuery(userId, { enabled: !!userId })
-  const leaderboardQuery = trpc.elo.leaderboard.useQuery()
 
   const profile = profileQuery.data
-  const elo = eloQuery.data
-  const leaderboard = leaderboardQuery.data ?? []
-
-  const rank = leaderboard.findIndex((p) => p.userId === userId) + 1
 
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100">
@@ -1313,8 +1405,8 @@ function MyInfoScreen({ userId }: { userId: string }) {
           <div className="space-y-6">
             {/* Stats cards */}
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-              <StatCard label="ELO Rating" value={elo?.rating ?? 1200} />
-              <StatCard label="Rank" value={rank > 0 ? `#${rank}` : '—'} />
+              <StatCard label="Rating" value="—" />
+              <StatCard label="Rank" value="—" />
               <StatCard label="Tournaments" value={profile.tournamentsPlayed} />
               <StatCard label="Games" value={profile.gamesPlayed} />
             </div>
@@ -1345,7 +1437,9 @@ function MyInfoScreen({ userId }: { userId: string }) {
             {/* Tournament history */}
             {profile.tournaments.length > 0 && (
               <div>
-                <h3 className="text-sm font-semibold text-slate-500 uppercase mb-2">Tournament History</h3>
+                <h3 className="text-sm font-semibold text-slate-500 uppercase mb-2">
+                  Tournament History
+                </h3>
                 <div className="space-y-2">
                   {profile.tournaments.map((t) => (
                     <a
@@ -1356,11 +1450,15 @@ function MyInfoScreen({ userId }: { userId: string }) {
                       <div className="flex justify-between items-start">
                         <div>
                           <p className="font-medium text-slate-100">{t.name}</p>
-                          <p className="text-xs text-slate-400">{t.faction} · {t.format}</p>
+                          <p className="text-xs text-slate-400">
+                            {t.faction} · {t.format}
+                          </p>
                         </div>
                         <div className="text-right">
                           <StatusBadge status={t.status} />
-                          <p className="text-xs text-slate-500 mt-1">{new Date(t.eventDate).toLocaleDateString()}</p>
+                          <p className="text-xs text-slate-500 mt-1">
+                            {new Date(t.eventDate).toLocaleDateString()}
+                          </p>
                         </div>
                       </div>
                     </a>
@@ -1372,10 +1470,15 @@ function MyInfoScreen({ userId }: { userId: string }) {
             {/* Cards */}
             {profile.cards.length > 0 && (
               <div>
-                <h3 className="text-sm font-semibold text-slate-500 uppercase mb-2">Card History</h3>
+                <h3 className="text-sm font-semibold text-slate-500 uppercase mb-2">
+                  Card History
+                </h3>
                 <div className="space-y-2">
                   {profile.cards.map((c) => (
-                    <div key={c.id} className="bg-slate-900 rounded p-3 flex justify-between items-center">
+                    <div
+                      key={c.id}
+                      className="bg-slate-900 rounded p-3 flex justify-between items-center"
+                    >
                       <div className="flex items-center gap-2">
                         <span
                           className={`text-xs px-1.5 py-0.5 rounded font-medium ${
@@ -1388,7 +1491,9 @@ function MyInfoScreen({ userId }: { userId: string }) {
                         </span>
                         <span className="text-sm text-slate-300">{c.reason}</span>
                       </div>
-                      <span className="text-xs text-slate-500">{new Date(c.issuedAt).toLocaleDateString()}</span>
+                      <span className="text-xs text-slate-500">
+                        {new Date(c.issuedAt).toLocaleDateString()}
+                      </span>
                     </div>
                   ))}
                 </div>
@@ -1405,7 +1510,9 @@ function MyInfoScreen({ userId }: { userId: string }) {
                       <p className="text-sm text-red-300">{b.reason}</p>
                       <p className="text-xs text-red-500/60 mt-1">
                         {new Date(b.bannedAt).toLocaleDateString()}
-                        {b.liftedAt ? ` — Lifted ${new Date(b.liftedAt).toLocaleDateString()}` : ' — Active'}
+                        {b.liftedAt
+                          ? ` — Lifted ${new Date(b.liftedAt).toLocaleDateString()}`
+                          : ' — Active'}
                       </p>
                     </div>
                   ))}
@@ -1416,7 +1523,12 @@ function MyInfoScreen({ userId }: { userId: string }) {
             {profile.tournamentsPlayed === 0 && (
               <div className="text-center py-8 text-slate-500">
                 <p>No tournament history yet.</p>
-                <p className="text-sm mt-1"><a href="#/play" className="text-amber-400 hover:underline">Find a tournament</a> to get started.</p>
+                <p className="text-sm mt-1">
+                  <a href="#/play" className="text-amber-400 hover:underline">
+                    Find a tournament
+                  </a>{' '}
+                  to get started.
+                </p>
               </div>
             )}
           </div>
@@ -1476,13 +1588,21 @@ function ListSearchScreen() {
                 <div className="flex justify-between items-start mb-2">
                   <div>
                     <p className="font-medium text-slate-100">{r.playerName}</p>
-                    <p className="text-sm text-amber-400">{r.faction}{r.detachment ? ` · ${r.detachment}` : ''}</p>
+                    <p className="text-sm text-amber-400">
+                      {r.faction}
+                      {r.detachment ? ` · ${r.detachment}` : ''}
+                    </p>
                   </div>
                   <div className="text-right">
-                    <a href={`#/tournament/${r.tournamentId}`} className="text-xs text-slate-400 hover:text-amber-400">
+                    <a
+                      href={`#/tournament/${r.tournamentId}`}
+                      className="text-xs text-slate-400 hover:text-amber-400"
+                    >
                       {r.tournamentName}
                     </a>
-                    <p className="text-xs text-slate-600">{new Date(r.eventDate).toLocaleDateString()}</p>
+                    <p className="text-xs text-slate-600">
+                      {new Date(r.eventDate).toLocaleDateString()}
+                    </p>
                   </div>
                 </div>
                 {r.listText && (
@@ -1539,7 +1659,8 @@ function PlayerSearchScreen() {
                   <div>
                     <p className="font-semibold text-slate-100">{p.displayName}</p>
                     <p className="text-xs text-slate-400 mt-0.5">
-                      {p.tournamentsPlayed} tournament{p.tournamentsPlayed === 1 ? '' : 's'} · {p.factions.join(', ')}
+                      {p.tournamentsPlayed} tournament{p.tournamentsPlayed === 1 ? '' : 's'} ·{' '}
+                      {p.factions.join(', ')}
                     </p>
                   </div>
                   <div className="flex gap-2">

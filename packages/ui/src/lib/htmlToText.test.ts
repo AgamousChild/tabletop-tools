@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest'
+
 import { htmlToText } from './htmlToText'
 
 describe('htmlToText', () => {
@@ -23,15 +24,11 @@ describe('htmlToText', () => {
   })
 
   it('converts <li> to bullet points', () => {
-    expect(htmlToText('<ul><li>Item one</li><li>Item two</li></ul>')).toBe(
-      '• Item one\n• Item two',
-    )
+    expect(htmlToText('<ul><li>Item one</li><li>Item two</li></ul>')).toBe('• Item one\n• Item two')
   })
 
   it('strips bold and italic tags but keeps text', () => {
-    expect(htmlToText('This is <b>bold</b> and <em>italic</em>')).toBe(
-      'This is bold and italic',
-    )
+    expect(htmlToText('This is <b>bold</b> and <em>italic</em>')).toBe('This is bold and italic')
     expect(htmlToText('<strong>Strong text</strong>')).toBe('Strong text')
   })
 
@@ -53,7 +50,7 @@ describe('htmlToText', () => {
 
   it('handles Wahapedia-style ability description', () => {
     const html =
-      '<b>Oath of Moment:</b> At the start of your Command phase, select one unit from your opponent\'s army. Until the start of your next Command phase, each time a model in this unit makes an attack that targets that unit, you can re-roll the Hit roll.'
+      "<b>Oath of Moment:</b> At the start of your Command phase, select one unit from your opponent's army. Until the start of your next Command phase, each time a model in this unit makes an attack that targets that unit, you can re-roll the Hit roll."
     const result = htmlToText(html)
     expect(result).toContain('Oath of Moment:')
     expect(result).toContain('re-roll the Hit roll')

@@ -1,7 +1,8 @@
-import { describe, it, expect, vi } from 'vitest'
 import { render, screen } from '@testing-library/react'
+import { describe, expect, it, vi } from 'vitest'
+
 import { ComboView } from './ComboView'
-import type { CardData, CardContext } from './types'
+import type { CardContext, CardData } from './types'
 
 const leftCard: CardData = {
   type: 'unit',
@@ -56,7 +57,7 @@ describe('ComboView', () => {
         rightCard={rightCard}
         label="wound re-rolls + devastating wounds on torrent weapons"
         context={makeContext()}
-      />
+      />,
     )
     expect(screen.getByText('Forgefather')).toBeInTheDocument()
   })
@@ -68,7 +69,7 @@ describe('ComboView', () => {
         rightCard={rightCard}
         label="wound re-rolls + devastating wounds on torrent weapons"
         context={makeContext()}
-      />
+      />,
     )
     expect(screen.getByText('Immolation Protocols')).toBeInTheDocument()
   })
@@ -80,9 +81,11 @@ describe('ComboView', () => {
         rightCard={rightCard}
         label="wound re-rolls + devastating wounds on torrent weapons"
         context={makeContext()}
-      />
+      />,
     )
-    expect(screen.getByText('wound re-rolls + devastating wounds on torrent weapons')).toBeInTheDocument()
+    expect(
+      screen.getByText('wound re-rolls + devastating wounds on torrent weapons'),
+    ).toBeInTheDocument()
   })
 
   it('renders an SVG arrow between the cards', () => {
@@ -92,7 +95,7 @@ describe('ComboView', () => {
         rightCard={rightCard}
         label="combo label"
         context={makeContext()}
-      />
+      />,
     )
     const svg = container.querySelector('svg')
     expect(svg).toBeInTheDocument()
@@ -105,7 +108,7 @@ describe('ComboView', () => {
         rightCard={rightCard}
         label="combo label"
         context={makeContext()}
-      />
+      />,
     )
     const line = container.querySelector('svg line')
     expect(line).toBeInTheDocument()
@@ -118,7 +121,7 @@ describe('ComboView', () => {
         rightCard={rightCard}
         label="combo label"
         context={makeContext()}
-      />
+      />,
     )
     const polygon = container.querySelector('svg polygon')
     expect(polygon).toBeInTheDocument()
@@ -131,7 +134,7 @@ describe('ComboView', () => {
         rightCard={rightCard}
         label="combo label"
         context={makeContext()}
-      />
+      />,
     )
     // Both card names visible = both cards rendered
     expect(screen.getByText('Forgefather')).toBeInTheDocument()
@@ -147,7 +150,7 @@ describe('ComboView', () => {
         rightCard={rightCard}
         label="combo label"
         context={makeContext()}
-      />
+      />,
     )
     // The cards wrapper should have flex-col (default/mobile) and sm:flex-row (desktop)
     const cardsWrapper = container.querySelector('[data-testid="combo-cards"]')
@@ -160,12 +163,7 @@ describe('ComboView', () => {
     const onContentClick = vi.fn()
     const context = makeContext({ onContentClick })
     render(
-      <ComboView
-        leftCard={leftCard}
-        rightCard={rightCard}
-        label="combo label"
-        context={context}
-      />
+      <ComboView leftCard={leftCard} rightCard={rightCard} label="combo label" context={context} />,
     )
     // Both cards rendered with context — just confirm the component renders without error
     expect(screen.getByText('Forgefather')).toBeInTheDocument()

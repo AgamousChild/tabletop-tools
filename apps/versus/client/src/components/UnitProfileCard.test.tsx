@@ -1,8 +1,8 @@
+import type { UnitProfile } from '@tabletop-tools/game-content'
 import { render, screen } from '@testing-library/react'
 import { describe, expect, it } from 'vitest'
 
 import { UnitProfileCard } from './UnitProfileCard'
-import type { UnitProfile } from '@tabletop-tools/game-content'
 
 const unit: UnitProfile = {
   id: 'u1',
@@ -37,9 +37,9 @@ describe('UnitProfileCard', () => {
 
   it('shows stat values', () => {
     render(<UnitProfileCard unit={unit} />)
-    expect(screen.getByText('6"')).toBeInTheDocument()  // move
-    expect(screen.getByText('4')).toBeInTheDocument()    // toughness
-    expect(screen.getByText('3+')).toBeInTheDocument()   // save
+    expect(screen.getByText('6"')).toBeInTheDocument() // move
+    expect(screen.getByText('4')).toBeInTheDocument() // toughness
+    expect(screen.getByText('3+')).toBeInTheDocument() // save
     // wounds=2 and oc=2 both show "2"
     expect(screen.getAllByText('2')).toHaveLength(2)
   })
@@ -63,7 +63,18 @@ describe('UnitProfileCard', () => {
   it('shows warning for weapon with strength 0', () => {
     const unitWithBadWeapon = {
       ...unit,
-      weapons: [{ name: 'Broken Gun', range: 24 as const, attacks: 2, skill: 3, strength: 0, ap: 0, damage: 1, abilities: [] }],
+      weapons: [
+        {
+          name: 'Broken Gun',
+          range: 24 as const,
+          attacks: 2,
+          skill: 3,
+          strength: 0,
+          ap: 0,
+          damage: 1,
+          abilities: [],
+        },
+      ],
     }
     render(<UnitProfileCard unit={unitWithBadWeapon} />)
     expect(screen.getByText(/Broken Gun.*S0/)).toBeInTheDocument()
@@ -72,7 +83,18 @@ describe('UnitProfileCard', () => {
   it('shows no warnings for valid unit', () => {
     const validUnit = {
       ...unit,
-      weapons: [{ name: 'Good Gun', range: 24 as const, attacks: 2, skill: 3, strength: 4, ap: 0, damage: 1, abilities: [] }],
+      weapons: [
+        {
+          name: 'Good Gun',
+          range: 24 as const,
+          attacks: 2,
+          skill: 3,
+          strength: 4,
+          ap: 0,
+          damage: 1,
+          abilities: [],
+        },
+      ],
     }
     render(<UnitProfileCard unit={validUnit} />)
     expect(screen.queryByText('Data quality issues:')).not.toBeInTheDocument()

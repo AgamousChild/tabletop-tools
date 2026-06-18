@@ -15,7 +15,13 @@ function formatAccuracy(stats: Props['stats']): string {
   return ((stats.correctGuesses / stats.totalGuesses) * 100).toFixed(1) + '%'
 }
 
-export function TrainingStats({ stats, exampleCounts, totalExamples, onClear, onViewHistory }: Props) {
+export function TrainingStats({
+  stats,
+  exampleCounts,
+  totalExamples,
+  onClear,
+  onViewHistory,
+}: Props) {
   if (totalExamples === 0) {
     return (
       <div className="bg-slate-900 border border-slate-800 rounded-lg p-4">

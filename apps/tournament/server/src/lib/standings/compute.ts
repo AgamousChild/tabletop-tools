@@ -34,7 +34,14 @@ export function computeStandings(
   // Build per-player record
   const record = new Map<
     string,
-    { wins: number; losses: number; draws: number; totalVP: number; vpAgainst: number; opponents: string[] }
+    {
+      wins: number
+      losses: number
+      draws: number
+      totalVP: number
+      vpAgainst: number
+      opponents: string[]
+    }
   >()
 
   for (const p of players) {

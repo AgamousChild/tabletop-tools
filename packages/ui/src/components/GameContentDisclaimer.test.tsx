@@ -1,5 +1,5 @@
-import { describe, it, expect } from 'vitest'
 import { render, screen } from '@testing-library/react'
+import { describe, expect, it } from 'vitest'
 
 import { GameContentDisclaimer } from './GameContentDisclaimer'
 
@@ -17,6 +17,8 @@ describe('GameContentDisclaimer', () => {
 
   it('contains "not affiliated" disclaimer', () => {
     render(<GameContentDisclaimer />)
-    expect(screen.getByText(/not affiliated with or endorsed by Games Workshop/)).toBeInTheDocument()
+    expect(
+      screen.getByText(/not affiliated with or endorsed by Games Workshop/),
+    ).toBeInTheDocument()
   })
 })

@@ -8,11 +8,11 @@
 export interface WeaponProfile {
   name: string
   range: number | 'melee'
-  attacks: number | string   // string for dice notation e.g. "D6"
-  skill: number              // BS or WS — hit on this value or better
+  attacks: number | string // string for dice notation e.g. "D6"
+  skill: number // BS or WS — hit on this value or better
   strength: number
-  ap: number                 // negative modifier to armor save
-  damage: number | string    // string for dice notation e.g. "D3"
+  ap: number // negative modifier to armor save
+  damage: number | string // string for dice notation e.g. "D3"
   abilities: WeaponAbility[]
 }
 
@@ -43,22 +43,22 @@ export type WeaponAbility =
   | { type: 'PSYCHIC' }
 
 export interface UnitProfile {
-  id: string           // stable content ID (e.g. BSData entry ID)
-  faction: string      // operator-defined faction string
-  name: string         // unit name
+  id: string // stable content ID (e.g. BSData entry ID)
+  faction: string // operator-defined faction string
+  name: string // unit name
   move: number
   toughness: number
-  save: number         // armor save value (e.g. 3 means 3+)
+  save: number // armor save value (e.g. 3 means 3+)
   wounds: number
   leadership: number
-  oc: number           // objective control
-  invulnSave?: number  // invulnerable save (e.g. 4 means 4+)
-  fnp?: number         // feel no pain (e.g. 5 means 5+)
+  oc: number // objective control
+  invulnSave?: number // invulnerable save (e.g. 4 means 4+)
+  fnp?: number // feel no pain (e.g. 5 means 5+)
   weapons: WeaponProfile[]
-  abilities: string[]  // free-text ability names; mapped to typed rules separately
-  abilityDescriptions?: Record<string, string>  // ability name -> rule text
+  abilities: string[] // free-text ability names; mapped to typed rules separately
+  abilityDescriptions?: Record<string, string> // ability name -> rule text
   points: number
-  isLegends?: boolean  // true if unit name contains [Legends]
+  isLegends?: boolean // true if unit name contains [Legends]
 }
 
 // ============================================================
@@ -82,17 +82,17 @@ export interface GameContentAdapter {
 
 export interface UnitResult {
   unitName: string
-  contentId?: string    // resolved against content adapter if available
+  contentId?: string // resolved against content adapter if available
   gamesPlayed: number
   averagePoints: number
 }
 
 export interface TournamentPlayer {
   placement: number
-  playerName?: string   // player's display name from the import source
-  faction: string       // user-entered string — NOT validated against GW
-  detachment?: string   // user-entered detachment name — NOT validated against GW
-  listText?: string     // optional army list as pasted text
+  playerName?: string // player's display name from the import source
+  faction: string // user-entered string — NOT validated against GW
+  detachment?: string // user-entered detachment name — NOT validated against GW
+  listText?: string // optional army list as pasted text
   wins: number
   losses: number
   draws: number
@@ -102,15 +102,12 @@ export interface TournamentPlayer {
 
 export interface TournamentRecord {
   eventName: string
-  eventDate: string     // ISO date string e.g. "2025-06-14"
-  format: string        // e.g. "GT", "RTT", "local"
+  eventDate: string // ISO date string e.g. "2025-06-14"
+  format: string // e.g. "GT", "RTT", "local"
   players: TournamentPlayer[]
 }
 
-export type TournamentImportFormat =
-  | 'bcp-csv'
-  | 'tabletop-admiral-csv'
-  | 'generic-csv'
+export type TournamentImportFormat = 'bcp-csv' | 'tabletop-admiral-csv' | 'generic-csv'
 
 export interface TournamentDataAdapter {
   parse(raw: string, format: TournamentImportFormat): TournamentRecord[]

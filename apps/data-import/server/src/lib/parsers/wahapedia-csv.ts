@@ -2,9 +2,7 @@
  * Parse Wahapedia's pipe-delimited CSV format.
  * First line is headers, subsequent lines are data, delimiter is |
  */
-export function parsePipeCsv<T extends Record<string, string>>(
-  raw: string,
-): T[] {
+export function parsePipeCsv<T extends Record<string, string>>(raw: string): T[] {
   const lines = raw.split('\n').filter((line) => line.trim() !== '')
   if (lines.length === 0) return []
 
@@ -79,7 +77,7 @@ export function titleCase(s: string): string {
   return s
     .replace(/[\u2018\u2019\u2032]/g, "'")
     .toLowerCase()
-    .replace(/(?:^|\s)\S/g, c => c.toUpperCase())
+    .replace(/(?:^|\s)\S/g, (c) => c.toUpperCase())
     .trim()
 }
 
@@ -88,7 +86,7 @@ export function convertDescriptions(
   rows: Record<string, unknown>[],
   field = 'description',
 ): Record<string, unknown>[] {
-  return rows.map(row => ({
+  return rows.map((row) => ({
     ...row,
     [field]: typeof row[field] === 'string' ? htmlToMarkdown(row[field] as string) : row[field],
   }))

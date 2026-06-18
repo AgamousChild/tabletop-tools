@@ -8,8 +8,8 @@ export type MatchRecord = {
 export type UnitRatingResult = {
   unitContentId: string
   rating: 'S' | 'A' | 'B' | 'C' | 'D'
-  winContrib: number  // win rate when this unit is present (0–1)
-  ptsEff: number      // wins per 100 points (0+)
+  winContrib: number // win rate when this unit is present (0–1)
+  ptsEff: number // wins per 100 points (0+)
   metaWindow: string
   computedAt: number
 }
@@ -24,9 +24,9 @@ const MIN_APPEARANCES = 3
  */
 export function assignGrade(winContrib: number): 'S' | 'A' | 'B' | 'C' | 'D' {
   if (winContrib >= 0.75) return 'S'
-  if (winContrib >= 0.60) return 'A'
+  if (winContrib >= 0.6) return 'A'
   if (winContrib >= 0.45) return 'B'
-  if (winContrib >= 0.30) return 'C'
+  if (winContrib >= 0.3) return 'C'
   return 'D'
 }
 
@@ -38,7 +38,10 @@ export function computeRatings(records: MatchRecord[], metaWindow: string): Unit
   if (records.length === 0) return []
 
   // Aggregate per-unit stats
-  const stats = new Map<string, { wins: number; games: number; totalPoints: number; pointsSeen: number }>()
+  const stats = new Map<
+    string,
+    { wins: number; games: number; totalPoints: number; pointsSeen: number }
+  >()
 
   for (const record of records) {
     for (const unitId of record.unitIds) {

@@ -1,5 +1,5 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { fireEvent, render, screen } from '@testing-library/react'
+import { describe, expect, it, vi } from 'vitest'
 
 // Mock auth client before importing App
 vi.mock('./lib/auth', () => ({
@@ -25,7 +25,7 @@ vi.mock('./lib/trpc', () => {
       revokeSession: { useMutation: () => ({ mutate: vi.fn(), isPending: false }) },
       revokeAllSessions: { useMutation: () => ({ mutate: vi.fn(), isPending: false }) },
       appActivity: { useQuery: vi.fn(() => ({ data: null, isLoading: true })) },
-      importHistory: { useQuery: vi.fn(() => ({ data: null, isLoading: true })) },
+      recentEvents: { useQuery: vi.fn(() => ({ data: null, isLoading: true })) },
       bsdataVersion: { useQuery: vi.fn(() => ({ data: null, isLoading: true })) },
       matchResults: { useQuery: vi.fn(() => ({ data: null, isLoading: true })) },
       topFactions: { useQuery: vi.fn(() => ({ data: null, isLoading: true })) },
@@ -33,9 +33,31 @@ vi.mock('./lib/trpc', () => {
       bcpScraperHistory: { useQuery: vi.fn(() => ({ data: null, isLoading: true })) },
       triggerBcpScrape: { useMutation: vi.fn(() => ({ mutate: vi.fn(), isPending: false })) },
       triggerMetaPipeline: { useMutation: vi.fn(() => ({ mutate: vi.fn(), isPending: false })) },
-      ingestJobs: { useQuery: vi.fn(() => ({ data: null, isLoading: true, refetch: vi.fn() })) },
+      ingestSourcesList: {
+        useQuery: vi.fn(() => ({ data: [], isLoading: false, refetch: vi.fn() })),
+      },
+      ingestJobs: { useQuery: vi.fn(() => ({ data: [], isLoading: false, refetch: vi.fn() })) },
+      addIngestSource: { useMutation: vi.fn(() => ({ mutate: vi.fn(), isPending: false })) },
+      toggleIngestSource: { useMutation: vi.fn(() => ({ mutate: vi.fn(), isPending: false })) },
+      triggerDiscover: { useMutation: vi.fn(() => ({ mutate: vi.fn(), isPending: false })) },
+      triggerProcess: { useMutation: vi.fn(() => ({ mutate: vi.fn(), isPending: false })) },
       triggerYoutubeIngest: { useMutation: vi.fn(() => ({ mutate: vi.fn(), isPending: false })) },
       triggerWebIngest: { useMutation: vi.fn(() => ({ mutate: vi.fn(), isPending: false })) },
+    },
+    crosswalk: {
+      stats: { useQuery: vi.fn(() => ({ data: null, isLoading: true, refetch: vi.fn() })) },
+      listPending: {
+        useQuery: vi.fn(() => ({ data: null, isLoading: true, refetch: vi.fn() })),
+      },
+      candidate: {
+        byId: { useQuery: vi.fn(() => ({ data: null, isLoading: true })) },
+        approve: { useMutation: () => ({ mutate: vi.fn(), isPending: false }) },
+        reject: { useMutation: () => ({ mutate: vi.fn(), isPending: false }) },
+        override: { useMutation: () => ({ mutate: vi.fn(), isPending: false }) },
+        approveBulk: { useMutation: () => ({ mutate: vi.fn(), isPending: false }) },
+        rejectBulk: { useMutation: () => ({ mutate: vi.fn(), isPending: false }) },
+      },
+      runLlmEvaluator: { useMutation: () => ({ mutate: vi.fn(), isPending: false }) },
     },
   }
   return { trpc, createTRPCClient: vi.fn() }
@@ -80,9 +102,10 @@ describe('App', () => {
     expect(screen.getByText('Users')).toBeInTheDocument()
     expect(screen.getByText('Sessions')).toBeInTheDocument()
     expect(screen.getByText('Activity')).toBeInTheDocument()
-    expect(screen.getByText('Imports')).toBeInTheDocument()
+    expect(screen.getByText('Events')).toBeInTheDocument()
     expect(screen.getByText('Scraper')).toBeInTheDocument()
     expect(screen.getByText('Ingest')).toBeInTheDocument()
+    expect(screen.getByText('Crosswalk')).toBeInTheDocument()
     expect(screen.getByText('Micah')).toBeInTheDocument()
     expect(screen.getByText('Sign out')).toBeInTheDocument()
   })
@@ -124,7 +147,7 @@ describe('App', () => {
     expect(screen.getByText('Loading activity...')).toBeInTheDocument()
   })
 
-  it('clicking Imports nav renders ImportsPage', () => {
+  it('clicking Events nav renders EventsPage', () => {
     vi.mocked(authClient.useSession).mockReturnValue({
       data: { user: { id: '1', name: 'Micah', email: 'micah@test.com' }, session: {} },
       isPending: false,
@@ -132,8 +155,8 @@ describe('App', () => {
     } as any)
 
     render(<App />)
-    fireEvent.click(screen.getByText('Imports'))
-    expect(screen.getByText('Loading imports...')).toBeInTheDocument()
+    fireEvent.click(screen.getByText('Events'))
+    expect(screen.getByText('Loading events...')).toBeInTheDocument()
   })
 
   it('clicking Scraper nav renders ScraperPage', () => {
@@ -157,7 +180,19 @@ describe('App', () => {
 
     render(<App />)
     fireEvent.click(screen.getByText('Ingest'))
-    expect(screen.getByText('Loading ingest jobs...')).toBeInTheDocument()
+    expect(screen.getByText('Content Ingestor')).toBeInTheDocument()
+  })
+
+  it('clicking Crosswalk nav renders CrosswalkPage', () => {
+    vi.mocked(authClient.useSession).mockReturnValue({
+      data: { user: { id: '1', name: 'Micah', email: 'micah@test.com' }, session: {} },
+      isPending: false,
+      refetch: vi.fn(),
+    } as any)
+
+    render(<App />)
+    fireEvent.click(screen.getByText('Crosswalk'))
+    expect(screen.getByText('Crosswalk Review')).toBeInTheDocument()
   })
 
   it('defaults to Overview (Dashboard) page', () => {

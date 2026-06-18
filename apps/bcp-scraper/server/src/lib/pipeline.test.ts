@@ -1,8 +1,9 @@
-import { describe, it, expect, beforeEach } from 'vitest'
 import { createClient } from '@libsql/client'
 import { createDbFromClient } from '@tabletop-tools/db'
 import { sql } from 'drizzle-orm'
-import { runPipeline, generateFrames } from './pipeline'
+import { beforeEach, describe, expect, it } from 'vitest'
+
+import { generateFrames, runPipeline } from './pipeline'
 
 const CREATE_TABLES = `
 CREATE TABLE IF NOT EXISTS dim_faction (id TEXT PRIMARY KEY, name TEXT NOT NULL, allegiance TEXT NOT NULL);
@@ -30,7 +31,9 @@ function createTestDb() {
 }
 
 async function setupTables(client: ReturnType<typeof createClient>) {
-  for (const stmt of CREATE_TABLES.split(';').map(s => s.trim()).filter(Boolean)) {
+  for (const stmt of CREATE_TABLES.split(';')
+    .map((s) => s.trim())
+    .filter(Boolean)) {
     await client.execute(stmt)
   }
 }
@@ -65,15 +68,66 @@ async function seedData(client: ReturnType<typeof createClient>) {
   })
   await client.execute({
     sql: `INSERT INTO meta_events VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-    args: ['evt1', 'Test GT', eventDate, 'London', null, 'GT', 5, 2, 'bcp', 'bcp-1', Date.now(), null, null, null],
+    args: [
+      'evt1',
+      'Test GT',
+      eventDate,
+      'London',
+      null,
+      'GT',
+      5,
+      2,
+      'bcp',
+      'bcp-1',
+      Date.now(),
+      null,
+      null,
+      null,
+    ],
   })
   await client.execute({
     sql: `INSERT INTO meta_event_players VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-    args: ['p1', 'evt1', 'Alice', 'sm', null, null, 1, null, 3, 2, 0, null, null, null, null, null, null],
+    args: [
+      'p1',
+      'evt1',
+      'Alice',
+      'sm',
+      null,
+      null,
+      1,
+      null,
+      3,
+      2,
+      0,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+    ],
   })
   await client.execute({
     sql: `INSERT INTO meta_event_players VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-    args: ['p2', 'evt1', 'Bob', 'ork', null, null, 2, null, 2, 3, 0, null, null, null, null, null, null],
+    args: [
+      'p2',
+      'evt1',
+      'Bob',
+      'ork',
+      null,
+      null,
+      2,
+      null,
+      2,
+      3,
+      0,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+    ],
   })
   await client.execute({
     sql: `INSERT INTO meta_pairings VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
@@ -91,7 +145,7 @@ describe('generateFrames', () => {
 
     const frames = generateFrames(events, dataslates, packs, editions)
 
-    const types = frames.map(f => f.id.split(':')[0])
+    const types = frames.map((f) => f.id.split(':')[0])
     expect(types).toContain('event')
     expect(types).toContain('weekend')
     expect(types).toContain('month')
@@ -100,7 +154,7 @@ describe('generateFrames', () => {
     expect(types).toContain('dataslate')
     expect(types).toContain('edition')
 
-    const eventFrame = frames.find(f => f.id === 'event:evt1')!
+    const eventFrame = frames.find((f) => f.id === 'event:evt1')!
     expect(eventFrame.typeId).toBe(1)
     expect(eventFrame.date).toBe(eventDate)
     expect(eventFrame.year).toBe(2025)
@@ -118,8 +172,8 @@ describe('generateFrames', () => {
     const frames = generateFrames(events, [], [], [])
 
     // Should have 2 event frames but only 1 weekend frame (same Saturday)
-    const eventFrames = frames.filter(f => f.id.startsWith('event:'))
-    const weekendFrames = frames.filter(f => f.id.startsWith('weekend:'))
+    const eventFrames = frames.filter((f) => f.id.startsWith('event:'))
+    const weekendFrames = frames.filter((f) => f.id.startsWith('weekend:'))
     expect(eventFrames).toHaveLength(2)
     expect(weekendFrames).toHaveLength(1)
   })

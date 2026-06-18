@@ -1,10 +1,10 @@
+import { pairings, rounds, tournamentPlayers, tournaments } from '@tabletop-tools/db'
 import { TRPCError } from '@trpc/server'
 import { eq } from 'drizzle-orm'
 import { z } from 'zod'
 
-import { pairings, tournamentPlayers, rounds, tournaments } from '@tabletop-tools/db'
 import { deriveResult } from '../lib/result/derive'
-import { router, protectedProcedure } from '../trpc'
+import { protectedProcedure, router } from '../trpc'
 
 export const resultRouter = router({
   report: protectedProcedure
@@ -22,7 +22,8 @@ export const resultRouter = router({
         .where(eq(pairings.id, input.pairingId))
         .get()
       if (!pairing) throw new TRPCError({ code: 'NOT_FOUND', message: 'Pairing not found' })
-      if (pairing.result === 'BYE') throw new TRPCError({ code: 'BAD_REQUEST', message: 'Cannot report BYE result' })
+      if (pairing.result === 'BYE')
+        throw new TRPCError({ code: 'BAD_REQUEST', message: 'Cannot report BYE result' })
 
       // Check user is one of the players in this pairing
       const player1 = await ctx.db
@@ -38,9 +39,9 @@ export const resultRouter = router({
             .get()
         : null
 
-      const isPlayer =
-        player1?.userId === ctx.user.id || player2?.userId === ctx.user.id
-      if (!isPlayer) throw new TRPCError({ code: 'FORBIDDEN', message: 'Not a player in this pairing' })
+      const isPlayer = player1?.userId === ctx.user.id || player2?.userId === ctx.user.id
+      if (!isPlayer)
+        throw new TRPCError({ code: 'FORBIDDEN', message: 'Not a player in this pairing' })
 
       const result = deriveResult(input.player1VP, input.player2VP)
 
@@ -58,99 +59,83 @@ export const resultRouter = router({
       return ctx.db.select().from(pairings).where(eq(pairings.id, input.pairingId)).get()
     }),
 
-  confirm: protectedProcedure
-    .input(z.string())
-    .mutation(async ({ ctx, input }) => {
-      const pairing = await ctx.db
-        .select()
-        .from(pairings)
-        .where(eq(pairings.id, input))
-        .get()
-      if (!pairing) throw new TRPCError({ code: 'NOT_FOUND', message: 'Pairing not found' })
-      if (!pairing.result) throw new TRPCError({ code: 'BAD_REQUEST', message: 'No result to confirm' })
+  confirm: protectedProcedure.input(z.string()).mutation(async ({ ctx, input }) => {
+    const pairing = await ctx.db.select().from(pairings).where(eq(pairings.id, input)).get()
+    if (!pairing) throw new TRPCError({ code: 'NOT_FOUND', message: 'Pairing not found' })
+    if (!pairing.result)
+      throw new TRPCError({ code: 'BAD_REQUEST', message: 'No result to confirm' })
 
-      const player2 = pairing.player2Id
-        ? await ctx.db
-            .select()
-            .from(tournamentPlayers)
-            .where(eq(tournamentPlayers.id, pairing.player2Id))
-            .get()
-        : null
-
-      // The confirming player must be the other player (not the reporter)
-      const isOtherPlayer = player2?.userId === ctx.user.id
-      if (!isOtherPlayer && pairing.reportedBy !== ctx.user.id) {
-        // Also allow confirmer to be the one who didn't report
-        const player1 = await ctx.db
+    const player2 = pairing.player2Id
+      ? await ctx.db
           .select()
           .from(tournamentPlayers)
-          .where(eq(tournamentPlayers.id, pairing.player1Id))
+          .where(eq(tournamentPlayers.id, pairing.player2Id))
           .get()
-        if (player1?.userId !== ctx.user.id && player2?.userId !== ctx.user.id) {
-          throw new TRPCError({ code: 'FORBIDDEN', message: 'Not a player in this pairing' })
-        }
-      }
+      : null
 
-      await ctx.db
-        .update(pairings)
-        .set({ confirmed: 1 })
-        .where(eq(pairings.id, input))
-
-      return { confirmed: true }
-    }),
-
-  dispute: protectedProcedure
-    .input(z.string())
-    .mutation(async ({ ctx, input }) => {
-      const pairing = await ctx.db
-        .select()
-        .from(pairings)
-        .where(eq(pairings.id, input))
-        .get()
-      if (!pairing) throw new TRPCError({ code: 'NOT_FOUND', message: 'Pairing not found' })
-
-      // Authorization: must be a participant or the TO
+    // The confirming player must be the other player (not the reporter)
+    const isOtherPlayer = player2?.userId === ctx.user.id
+    if (!isOtherPlayer && pairing.reportedBy !== ctx.user.id) {
+      // Also allow confirmer to be the one who didn't report
       const player1 = await ctx.db
         .select()
         .from(tournamentPlayers)
         .where(eq(tournamentPlayers.id, pairing.player1Id))
         .get()
-      const player2 = pairing.player2Id
+      if (player1?.userId !== ctx.user.id && player2?.userId !== ctx.user.id) {
+        throw new TRPCError({ code: 'FORBIDDEN', message: 'Not a player in this pairing' })
+      }
+    }
+
+    await ctx.db.update(pairings).set({ confirmed: 1 }).where(eq(pairings.id, input))
+
+    return { confirmed: true }
+  }),
+
+  dispute: protectedProcedure.input(z.string()).mutation(async ({ ctx, input }) => {
+    const pairing = await ctx.db.select().from(pairings).where(eq(pairings.id, input)).get()
+    if (!pairing) throw new TRPCError({ code: 'NOT_FOUND', message: 'Pairing not found' })
+
+    // Authorization: must be a participant or the TO
+    const player1 = await ctx.db
+      .select()
+      .from(tournamentPlayers)
+      .where(eq(tournamentPlayers.id, pairing.player1Id))
+      .get()
+    const player2 = pairing.player2Id
+      ? await ctx.db
+          .select()
+          .from(tournamentPlayers)
+          .where(eq(tournamentPlayers.id, pairing.player2Id))
+          .get()
+      : null
+    const isParticipant = player1?.userId === ctx.user.id || player2?.userId === ctx.user.id
+
+    if (!isParticipant) {
+      // Check if user is the TO
+      const round = await ctx.db.select().from(rounds).where(eq(rounds.id, pairing.roundId)).get()
+      const tournament = round
         ? await ctx.db
             .select()
-            .from(tournamentPlayers)
-            .where(eq(tournamentPlayers.id, pairing.player2Id))
+            .from(tournaments)
+            .where(eq(tournaments.id, round.tournamentId))
             .get()
         : null
-      const isParticipant =
-        player1?.userId === ctx.user.id || player2?.userId === ctx.user.id
-
-      if (!isParticipant) {
-        // Check if user is the TO
-        const round = await ctx.db
-          .select()
-          .from(rounds)
-          .where(eq(rounds.id, pairing.roundId))
-          .get()
-        const tournament = round
-          ? await ctx.db
-              .select()
-              .from(tournaments)
-              .where(eq(tournaments.id, round.tournamentId))
-              .get()
-          : null
-        if (!tournament || tournament.toUserId !== ctx.user.id) {
-          throw new TRPCError({ code: 'FORBIDDEN', message: 'Only participants or the TO can dispute' })
-        }
+      if (!tournament || tournament.toUserId !== ctx.user.id) {
+        throw new TRPCError({
+          code: 'FORBIDDEN',
+          message: 'Only participants or the TO can dispute',
+        })
       }
+    }
 
-      // Flag for TO by clearing confirmation
-      await ctx.db
-        .update(pairings)
-        .set({ confirmed: 0, result: null, player1Vp: null, player2Vp: null })
-        .where(eq(pairings.id, input))
-      return { disputed: true }
-    }),
+    // Flag for TO by clearing confirmation
+    await ctx.db
+      .update(pairings)
+      .set({ confirmed: 0, result: null, player1Vp: null, player2Vp: null })
+      .where(eq(pairings.id, input))
+    return { disputed: true }
+  }),
 
   override: protectedProcedure
     .input(
@@ -169,11 +154,7 @@ export const resultRouter = router({
       if (!pairing) throw new TRPCError({ code: 'NOT_FOUND', message: 'Pairing not found' })
 
       // Check user is the TO for this tournament
-      const round = await ctx.db
-        .select()
-        .from(rounds)
-        .where(eq(rounds.id, pairing.roundId))
-        .get()
+      const round = await ctx.db.select().from(rounds).where(eq(rounds.id, pairing.roundId)).get()
       const tournament = round
         ? await ctx.db
             .select()

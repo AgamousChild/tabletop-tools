@@ -1,4 +1,5 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
+
 import { fetchAndProcessBSData } from './bsdata'
 
 const mockFetch = vi.fn()
@@ -71,12 +72,13 @@ describe('fetchAndProcessBSData', () => {
     // 2. Tree
     mockFetch.mockResolvedValueOnce({
       ok: true,
-      json: () => Promise.resolve({
-        tree: [
-          { path: 'Imperium - Space Marines.cat', type: 'blob', url: '', sha: '' },
-          { path: 'README.md', type: 'blob', url: '', sha: '' }, // non-cat, should be filtered
-        ],
-      }),
+      json: () =>
+        Promise.resolve({
+          tree: [
+            { path: 'Imperium - Space Marines.cat', type: 'blob', url: '', sha: '' },
+            { path: 'README.md', type: 'blob', url: '', sha: '' }, // non-cat, should be filtered
+          ],
+        }),
     })
 
     // 3. Raw XML fetch
@@ -109,11 +111,10 @@ describe('fetchAndProcessBSData', () => {
       })
       .mockResolvedValueOnce({
         ok: true,
-        json: () => Promise.resolve({
-          tree: [
-            { path: 'Bad Catalog.cat', type: 'blob', url: '', sha: '' },
-          ],
-        }),
+        json: () =>
+          Promise.resolve({
+            tree: [{ path: 'Bad Catalog.cat', type: 'blob', url: '', sha: '' }],
+          }),
       })
       .mockResolvedValueOnce({
         ok: false,

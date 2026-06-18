@@ -1,12 +1,13 @@
 import { createClient } from '@libsql/client'
-import { createDbFromClient } from '@tabletop-tools/db'
 import {
-  setupAuthTables,
-  createRequestHelper,
   authCookie,
-  TEST_USER,
+  createRequestHelper,
+  setupAuthTables,
   TEST_SECRET,
+  TEST_TOKEN_2,
+  TEST_USER,
 } from '@tabletop-tools/auth/src/test-helpers'
+import { createDbFromClient } from '@tabletop-tools/db'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 
 import { createServer } from './server'
@@ -64,14 +65,12 @@ beforeAll(async () => {
       list_locked INTEGER NOT NULL DEFAULT 0, checked_in INTEGER NOT NULL DEFAULT 0,
       dropped INTEGER NOT NULL DEFAULT 0, registered_at INTEGER NOT NULL
     );
-    CREATE TABLE IF NOT EXISTS player_elo (
-      id TEXT PRIMARY KEY, user_id TEXT NOT NULL UNIQUE, rating INTEGER NOT NULL DEFAULT 1200,
-      games_played INTEGER NOT NULL DEFAULT 0, updated_at INTEGER NOT NULL
-    );
-    CREATE TABLE IF NOT EXISTS imported_tournament_results (
-      id TEXT PRIMARY KEY, imported_by TEXT NOT NULL, event_name TEXT NOT NULL,
-      event_date INTEGER NOT NULL, format TEXT NOT NULL, meta_window TEXT NOT NULL,
-      raw_data TEXT NOT NULL, parsed_data TEXT NOT NULL, imported_at INTEGER NOT NULL
+    CREATE TABLE IF NOT EXISTS meta_events (
+      id TEXT PRIMARY KEY, name TEXT NOT NULL, date INTEGER NOT NULL, location TEXT,
+      gps_coords TEXT, region_id INTEGER, format TEXT NOT NULL, rounds INTEGER,
+      player_count INTEGER NOT NULL, source TEXT NOT NULL, source_id TEXT,
+      imported_at INTEGER NOT NULL, win_faction_id TEXT, win_subfaction_id TEXT,
+      win_detachment_id TEXT
     );
     CREATE TABLE IF NOT EXISTS player_glicko (
       id TEXT PRIMARY KEY, user_id TEXT, player_name TEXT NOT NULL,
@@ -106,7 +105,7 @@ describe('HTTP integration — stats.overview via session cookie', () => {
 
   it('returns FORBIDDEN for non-admin user', async () => {
     const res = await makeRequest('/trpc/stats.overview', {
-      cookie: await authCookie('bob-token'),
+      cookie: await authCookie(TEST_TOKEN_2),
     })
     const json = (await res.json()) as any
     expect(json.error?.data?.code).toBe('FORBIDDEN')
