@@ -19,8 +19,8 @@ import { execFileSync } from 'node:child_process'
 import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { basename, extname, join, resolve } from 'node:path'
 import { tmpdir } from 'node:os'
-import { extractText, getDocumentProxy } from 'unpdf'
 import { pdf } from 'pdf-to-img'
+import * as pdfjs from 'pdfjs-dist/legacy/build/pdf.mjs'
 
 const SRC_DIR =
   process.env.STUDY_SRC_DIR || 'C:/Users/micah/OneDrive/Documents/Psy'
@@ -59,9 +59,24 @@ function deckTitle(filename) {
 
 async function pptxToPdf(soffice, pptxPath, outDir) {
   mkdirSync(outDir, { recursive: true })
+  // Uses LibreOffice's DEFAULT user profile so it doesn't redo the first-run
+  // setup (printer detection, EULA acceptance, etc.) on every script call.
+  // If you haven't yet, open LibreOffice once interactively and close it.
+  // `pdf:impress_pdf_Export` picks the Impress PDF filter directly,
+  // bypassing the internal print pipeline that queries Windows printers.
   execFileSync(
     soffice,
-    ['--headless', '--convert-to', 'pdf', '--outdir', outDir, pptxPath],
+    [
+      '--headless',
+      '--norestore',
+      '--nologo',
+      '--nofirststartwizard',
+      '--convert-to',
+      'pdf:impress_pdf_Export',
+      '--outdir',
+      outDir,
+      pptxPath,
+    ],
     { stdio: 'inherit' },
   )
   const pdfName = basename(pptxPath, extname(pptxPath)) + '.pdf'
@@ -72,13 +87,16 @@ async function pptxToPdf(soffice, pptxPath, outDir) {
   return pdfPath
 }
 
+async function loadDoc(pdfPath) {
+  const buffer = readFileSync(pdfPath)
+  return pdfjs.getDocument({ data: new Uint8Array(buffer) }).promise
+}
+
 /**
  * Extract text blocks per page with their bounding boxes from a PDF.
  * Returns one entry per textual element with bounding-box percentages.
  */
-async function extractBlocksByPage(pdfPath) {
-  const buffer = readFileSync(pdfPath)
-  const doc = await getDocumentProxy(new Uint8Array(buffer))
+async function extractBlocksByPage(doc) {
   const numPages = doc.numPages
   const byPage = new Map()
 
@@ -113,6 +131,11 @@ async function extractBlocksByPage(pdfPath) {
   return byPage
 }
 
+/**
+ * Render each PDF page to PNG via pdf-to-img v6, which uses
+ * pdfjs-dist 5.x's built-in node canvas shim — no native canvas
+ * dep, no native compile, just works on every platform.
+ */
 async function renderPages(pdfPath, outDir) {
   mkdirSync(outDir, { recursive: true })
   const document = await pdf(pdfPath, { scale: SCALE })
@@ -174,14 +197,20 @@ async function main() {
   const tmpRoot = join(tmpdir(), 'study-build')
   if (existsSync(tmpRoot)) rmSync(tmpRoot, { recursive: true, force: true })
 
+  // Shared isolated LibreOffice profile across all conversions.
+  const soProfileDir = join(tmpRoot, '_soffice-profile')
+  mkdirSync(soProfileDir, { recursive: true })
+
   for (const pptxFile of pptxFiles) {
     const deckId = slugifyDeck(pptxFile)
     const tmpDir = join(tmpRoot, deckId)
     const pptxPath = join(SRC_DIR, pptxFile)
     console.log(`\n[${deckId}] converting → pdf…`)
-    const pdfPath = await pptxToPdf(soffice, pptxPath, tmpDir)
+    const pdfPath = await pptxToPdf(soffice, pptxPath, tmpDir, soProfileDir)
+    console.log(`[${deckId}] loading pdf…`)
+    const doc = await loadDoc(pdfPath)
     console.log(`[${deckId}] extracting positions…`)
-    const blocksByPage = await extractBlocksByPage(pdfPath)
+    const blocksByPage = await extractBlocksByPage(doc)
     console.log(`[${deckId}] rendering ${blocksByPage.size} pages → png…`)
     const written = await renderPages(pdfPath, join(PAGES_DIR, deckId))
 
@@ -194,7 +223,7 @@ async function main() {
         slideNum,
         title,
         body,
-        imageUrl: `/study/data/pages/${deckId}/slide-${slideNum}.png`,
+        imageUrl: `data/pages/${deckId}/slide-${slideNum}.png`,
         blocks,
       })
     }
@@ -217,6 +246,3 @@ main().catch((err) => {
   process.exit(1)
 })
 
-// Suppress "extractText imported but unused" — keeping the export in case
-// someone wants a quick all-text dump separate from the per-block extraction.
-void extractText

@@ -2,6 +2,8 @@ import { useState } from 'react'
 
 import type { SearchResult } from '@/types'
 
+const BASE = import.meta.env.BASE_URL.replace(/\/$/, '')
+
 interface Props {
   result: SearchResult
   onClose: () => void
@@ -11,6 +13,7 @@ export function SlideViewer({ result, onClose }: Props) {
   const [loaded, setLoaded] = useState(false)
   const [error, setError] = useState(false)
   const b = result.matchedBlock
+  const src = `${BASE}/${result.imageUrl.replace(/^\//, '')}`
 
   return (
     <div className="slide-viewer" onClick={onClose}>
@@ -24,9 +27,9 @@ export function SlideViewer({ result, onClose }: Props) {
         </header>
         <div className="slide-image-wrap">
           {!loaded && !error && <div className="loading">Loading slide…</div>}
-          {error && <div className="error">Image unavailable: {result.imageUrl}</div>}
+          {error && <div className="error">Image unavailable: {src}</div>}
           <img
-            src={result.imageUrl}
+            src={src}
             alt={`${result.deckName} slide ${result.slideNum}`}
             style={{ display: error ? 'none' : undefined }}
             onLoad={() => setLoaded(true)}
