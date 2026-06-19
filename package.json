@@ -57,6 +57,9 @@
     "onlyBuiltDependencies": [
       "esbuild",
       "better-sqlite3"
+    ],
+    "ignoredBuiltDependencies": [
+      "canvas"
     ]
   }
 }
