@@ -11,7 +11,7 @@ mkdir -p "$DIST"
 
 # Build each app with its base path
 # Clean tsc incremental cache first to prevent stale builds
-for app in no-cheat versus list-builder game-tracker tournament new-meta data-import admin brain; do
+for app in no-cheat versus list-builder game-tracker tournament new-meta data-import admin brain study; do
   echo "Building $app..."
   cd "$REPO_ROOT/apps/$app/client"
   rm -f tsconfig.tsbuildinfo
@@ -29,7 +29,7 @@ cp "$GATEWAY_DIR/_redirects" "$DIST/_redirects"
 
 # Validate all outputs exist before declaring success
 echo "Validating build outputs..."
-for app in no-cheat versus list-builder game-tracker tournament new-meta data-import admin brain; do
+for app in no-cheat versus list-builder game-tracker tournament new-meta data-import admin brain study; do
   if [ ! -f "$DIST/$app/index.html" ]; then
     echo "ERROR: $DIST/$app/index.html missing — build failed for $app"
     exit 1
@@ -41,4 +41,4 @@ if [ ! -f "$DIST/index.html" ]; then
   exit 1
 fi
 
-echo "Gateway build complete: $DIST (all 9 apps validated)"
+echo "Gateway build complete: $DIST (all 10 apps validated)"
