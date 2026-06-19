@@ -50,7 +50,7 @@ jobs:
         run: pnpm install --frozen-lockfile --filter "@tabletop-tools/content-ingestor..."
 
       - name: Install Playwright Chromium
-        run: pnpm --filter "@tabletop-tools/content-ingestor" exec playwright install chromium --with-deps
+        run: pnpm --filter "content-ingestor" exec playwright install chromium --with-deps
 
       - name: Run discovery
         env:

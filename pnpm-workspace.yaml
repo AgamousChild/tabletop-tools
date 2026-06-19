@@ -3,5 +3,6 @@ packages:
   - 'apps/*/client'
   - 'apps/*/server'
   - 'apps/auth-server'
+  - 'apps/content-ingestor'
   - 'e2e'
 
