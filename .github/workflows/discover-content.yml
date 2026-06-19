@@ -47,7 +47,7 @@ jobs:
           version: 9
 
       - name: Install root deps
-        run: pnpm install --frozen-lockfile --filter "@tabletop-tools/content-ingestor..."
+        run: pnpm install --frozen-lockfile --filter "content-ingestor..."
 
       - name: Install Playwright Chromium
         run: pnpm --filter "content-ingestor" exec playwright install chromium --with-deps
