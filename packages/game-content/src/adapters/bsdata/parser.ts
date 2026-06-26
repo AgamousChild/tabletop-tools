@@ -1,7 +1,13 @@
 import type { UnitProfile, WeaponAbility, WeaponProfile } from '../../types.js'
 
 /** Bump when parser output changes in a way that invalidates previously-imported data. */
-export const PARSER_VERSION = 11
+export const PARSER_VERSION = 12
+
+/**
+ * BattleScribe typeId for matched-play points (`<cost name="pts">`). Stable
+ * across the wh40k-10e / wh40k-11e BSData catalogs.
+ */
+const PTS_TYPE_ID = '51b2-306e-1021-d207'
 
 /**
  * A catalog registry maps BSData catalogue IDs (from `<catalogue id="...">`)
@@ -83,6 +89,11 @@ export function parseBSDataXml(
   const subfactions: Subfaction[] = extractSubfactions(xml, faction)
   const errors: string[] = []
 
+  // The local catalogue's id is the one that primary-catalogue conditions are
+  // evaluated against — chapter-cost modifiers in the SM library use the
+  // chapter's catalogue id as the condition childId.
+  const importingCatalogueId = extractCatalogueId(xml)
+
   // If a registry is provided, merge in the XML of every catalog reached by
   // catalogueLink importRootEntries="true" (transitively, with cycle detection).
   // The downstream extraction passes then see units and shared definitions from
@@ -124,7 +135,14 @@ export function parseBSDataXml(
         infoGroupMap,
       )
       const enrichedStripped = stripNestedSelectionEntries(enrichedBody)
-      const unit = parseUnitEntry(id, name, faction, enrichedStripped, enrichedBody)
+      const unit = parseUnitEntry(
+        id,
+        name,
+        faction,
+        enrichedStripped,
+        enrichedBody,
+        importingCatalogueId,
+      )
       // Validate parsed data and add warnings for suspicious values
       validateUnit(unit, errors)
       units.push(unit)
@@ -609,6 +627,7 @@ function parseUnitEntry(
   faction: string,
   body: string,
   fullBody: string,
+  importingCatalogueId?: string,
 ): UnitProfile {
   // Extract characteristics from fullBody (includes nested model entries).
   // Real BSData XML puts the unit profile inside nested <selectionEntry type="model"> blocks,
@@ -627,7 +646,7 @@ function parseUnitEntry(
   }
   const abilities = extractAbilityNames(body)
   const abilityDescriptions = extractAbilityDescriptions(body)
-  const points = extractPoints(body)
+  const points = extractPoints(body, importingCatalogueId)
   const invulnSave = extractInvulnerableSave(body)
   const fnp = extractFeelNoPain(body, abilityDescriptions)
 
@@ -897,11 +916,70 @@ function extractFeelNoPain(
 
 // ---- Points extraction ----
 
-function extractPoints(body: string): number {
+function extractPoints(body: string, importingCatalogueId?: string): number {
+  const basePts = extractBaseCost(body)
+  if (!importingCatalogueId) return basePts
+  const override = extractChapterCostOverride(body, importingCatalogueId)
+  return override ?? basePts
+}
+
+function extractBaseCost(body: string): number {
   const costPattern = /<cost\b[^>]*name="pts"[^>]*value="([^"]+)"/i
   const m = costPattern.exec(body)
   if (!m) return 0
   return Math.round(parseFloat(m[1] ?? '0'))
+}
+
+/**
+ * 11e SM library uses chapter-cost modifiers to override a unit's base points
+ * when the army's primary catalogue is a specific chapter:
+ *
+ *   <modifier type="set" field="<PTS_TYPE_ID>" value="80">
+ *     <comment>chapter-cost: BA …</comment>
+ *     <conditions>
+ *       <condition type="instanceOf" scope="primary-catalogue"
+ *                  field="selections" childId="<chapter-catalogue-id>"/>
+ *     </conditions>
+ *   </modifier>
+ *
+ * If exactly one such modifier on the unit has a single primary-catalogue
+ * condition whose childId equals our importing catalogue id, return its
+ * value as the effective cost. Skip modifiers with compound conditions —
+ * those require full modifier evaluation we don't do yet.
+ */
+function extractChapterCostOverride(
+  body: string,
+  importingCatalogueId: string,
+): number | undefined {
+  const modifierPattern = new RegExp(
+    `<modifier\\b[^>]*\\btype="set"[^>]*\\bfield="${PTS_TYPE_ID}"[^>]*\\bvalue="([^"]+)"[^>]*>([\\s\\S]*?)</modifier>`,
+    'gi',
+  )
+  let m: RegExpExecArray | null
+  while ((m = modifierPattern.exec(body)) !== null) {
+    const value = parseFloat(m[1] ?? '')
+    if (!Number.isFinite(value)) continue
+    const modifierBody = m[2] ?? ''
+
+    const conditions: Array<{ scope: string; childId: string }> = []
+    const condPattern = /<condition\b([^/>]*)\/?>/gi
+    let c: RegExpExecArray | null
+    while ((c = condPattern.exec(modifierBody)) !== null) {
+      const attrs = c[1] ?? ''
+      const scope = /\bscope="([^"]+)"/i.exec(attrs)?.[1] ?? ''
+      const childId = /\bchildId="([^"]+)"/i.exec(attrs)?.[1] ?? ''
+      if (scope && childId) conditions.push({ scope, childId })
+    }
+
+    if (
+      conditions.length === 1 &&
+      conditions[0]!.scope === 'primary-catalogue' &&
+      conditions[0]!.childId === importingCatalogueId
+    ) {
+      return Math.round(value)
+    }
+  }
+  return undefined
 }
 
 // ---- Ability mapping ----

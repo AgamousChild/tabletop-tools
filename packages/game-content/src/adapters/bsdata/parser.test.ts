@@ -261,6 +261,99 @@ describe('parseBSDataXml — faction-specific ability typeNames', () => {
   })
 })
 
+describe('parseBSDataXml — chapter-cost overrides', () => {
+  const PTS_TYPE_ID = '51b2-306e-1021-d207'
+  const CHAPTER_A_ID = 'chapter-a-id'
+  const CHAPTER_B_ID = 'chapter-b-id'
+  const SM_LIBRARY_XML = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<catalogue id="sm-library-id" name="SM Library">
+  <selectionEntries>
+    <selectionEntry id="unit-marine" name="Battle Sister Squad" type="unit">
+      <profiles>
+        <profile id="p" name="Battle Sister" typeName="Unit">
+          <characteristics>
+            <characteristic name="M">6</characteristic>
+            <characteristic name="T">4</characteristic>
+            <characteristic name="Sv">3+</characteristic>
+            <characteristic name="W">1</characteristic>
+            <characteristic name="Ld">6</characteristic>
+            <characteristic name="OC">2</characteristic>
+          </characteristics>
+        </profile>
+        <profile id="w" name="Bolter" typeName="Ranged Weapons">
+          <characteristics>
+            <characteristic name="Range">24</characteristic>
+            <characteristic name="A">2</characteristic>
+            <characteristic name="BS">3+</characteristic>
+            <characteristic name="S">4</characteristic>
+            <characteristic name="AP">0</characteristic>
+            <characteristic name="D">1</characteristic>
+            <characteristic name="Abilities">-</characteristic>
+          </characteristics>
+        </profile>
+      </profiles>
+      <modifiers>
+        <modifier type="set" field="${PTS_TYPE_ID}" value="80">
+          <comment>chapter-cost: Chapter A premium</comment>
+          <conditions>
+            <condition type="instanceOf" value="1" field="selections" scope="primary-catalogue" childId="${CHAPTER_A_ID}"/>
+          </conditions>
+        </modifier>
+        <modifier type="set" field="${PTS_TYPE_ID}" value="60">
+          <comment>chapter-cost: Chapter B discount</comment>
+          <conditions>
+            <condition type="instanceOf" value="1" field="selections" scope="primary-catalogue" childId="${CHAPTER_B_ID}"/>
+          </conditions>
+        </modifier>
+      </modifiers>
+      <costs>
+        <cost name="pts" typeId="${PTS_TYPE_ID}" value="70"/>
+      </costs>
+    </selectionEntry>
+  </selectionEntries>
+</catalogue>`
+
+  const CHAPTER_A_XML = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<catalogue id="${CHAPTER_A_ID}" name="Chapter A">
+  <catalogueLinks>
+    <catalogueLink id="cl-a" name="SM Library" targetId="sm-library-id" type="catalogue" importRootEntries="true"/>
+  </catalogueLinks>
+</catalogue>`
+
+  const CHAPTER_B_XML = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<catalogue id="${CHAPTER_B_ID}" name="Chapter B">
+  <catalogueLinks>
+    <catalogueLink id="cl-b" name="SM Library" targetId="sm-library-id" type="catalogue" importRootEntries="true"/>
+  </catalogueLinks>
+</catalogue>`
+
+  const registry = new Map([
+    ['sm-library-id', { name: 'SM Library', xml: SM_LIBRARY_XML }],
+    [CHAPTER_A_ID, { name: 'Chapter A', xml: CHAPTER_A_XML }],
+    [CHAPTER_B_ID, { name: 'Chapter B', xml: CHAPTER_B_XML }],
+  ])
+
+  it('falls back to base cost when parsing the library directly', () => {
+    const { units } = parseBSDataXml(SM_LIBRARY_XML, 'Library', registry)
+    expect(units[0]!.points).toBe(70)
+  })
+
+  it('applies chapter-A override when parsing chapter A', () => {
+    const { units } = parseBSDataXml(CHAPTER_A_XML, 'Chapter A', registry)
+    expect(units[0]!.points).toBe(80)
+  })
+
+  it('applies chapter-B override when parsing chapter B', () => {
+    const { units } = parseBSDataXml(CHAPTER_B_XML, 'Chapter B', registry)
+    expect(units[0]!.points).toBe(60)
+  })
+
+  it('falls back to base cost when no registry is provided', () => {
+    const { units } = parseBSDataXml(SM_LIBRARY_XML, 'Library')
+    expect(units[0]!.points).toBe(70)
+  })
+})
+
 describe('parseBSDataXml — non-unit entries', () => {
   it('skips entries that are not type "unit" or "model"', () => {
     const { units } = parseBSDataXml(NON_UNIT_XML, 'Test Faction')
