@@ -15,7 +15,8 @@
     "@tabletop-tools/db": "workspace:*",
     "@tabletop-tools/game-content": "workspace:*",
     "drizzle-orm": "^0.38.0",
-    "hono": "^4.6.0"
+    "hono": "^4.6.0",
+    "yaml": "^2.9.0"
   },
   "devDependencies": {
     "@cloudflare/workers-types": "^4.20240512.0",
