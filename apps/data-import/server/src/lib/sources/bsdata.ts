@@ -2,6 +2,7 @@
  * @see docs/etl-data-pipelines.md — ETL diagram and function reference
  */
 import {
+  type CatalogRegistry,
   parseBSDataXml,
   type Subfaction,
 } from '@tabletop-tools/game-content/src/adapters/bsdata/parser'
@@ -66,28 +67,60 @@ export async function fetchAndProcessBSData(
     (item) => item.type === 'blob' && item.path.endsWith('.cat'),
   )
 
-  // Fetch and parse each catalog
   const allUnits: BSDataResult['units'] = []
   const allSubfactions: BSDataResult['subfactions'] = []
   const errors: string[] = []
 
-  for (const file of catFiles) {
-    const faction = normalizeFactionName(file.path.replace(/\.cat$/, '').replace(/.*\//, ''))
+  // Phase 1: fetch every .cat file. We need the full set in hand before parsing
+  // because 11e splits sub-faction content (Craftworlds, SM chapters, …) into a
+  // wrapper file that catalogueLinks a parent library catalog by id. Without the
+  // library xml available at parse time, the sub-faction file parses to 0 units.
+  const fetchResults = await Promise.all(
+    catFiles.map(async (file) => {
+      const faction = normalizeFactionName(file.path.replace(/\.cat$/, '').replace(/.*\//, ''))
+      try {
+        const rawResp = await fetch(
+          `https://raw.githubusercontent.com/${repo}/${branch}/${file.path}`,
+          { headers: { 'User-Agent': 'tabletop-tools' } },
+        )
+        if (!rawResp.ok) throw new Error(`HTTP ${rawResp.status}`)
+        const xml = await rawResp.text()
+        return { ok: true as const, path: file.path, faction, xml }
+      } catch (err) {
+        return {
+          ok: false as const,
+          path: file.path,
+          faction,
+          error: err instanceof Error ? err.message : String(err),
+        }
+      }
+    }),
+  )
 
+  // Phase 2: build catalog registry by extracting `<catalogue id="...">` from
+  // each successfully-fetched file. The id is the key catalogueLink uses to
+  // refer between files.
+  const registry: CatalogRegistry = new Map()
+  const fetched: Array<{ path: string; faction: string; xml: string }> = []
+  for (const r of fetchResults) {
+    if (!r.ok) {
+      errors.push(`${r.faction}: ${r.error}`)
+      continue
+    }
+    fetched.push({ path: r.path, faction: r.faction, xml: r.xml })
+    const idMatch = /<catalogue\b[^>]*?\bid="([^"]+)"/i.exec(r.xml)
+    if (idMatch?.[1]) registry.set(idMatch[1], { name: r.path, xml: r.xml })
+  }
+
+  // Phase 3: parse each file with the registry, so catalogueLinks resolve.
+  for (const f of fetched) {
     try {
-      const rawResp = await fetch(
-        `https://raw.githubusercontent.com/${repo}/${branch}/${file.path}`,
-        { headers: { 'User-Agent': 'tabletop-tools' } },
-      )
-      if (!rawResp.ok) throw new Error(`HTTP ${rawResp.status}`)
-      const xml = await rawResp.text()
-
-      const { units, subfactions, errors: parseErrors } = parseBSDataXml(xml, faction)
+      const { units, subfactions, errors: parseErrors } = parseBSDataXml(f.xml, f.faction, registry)
       allUnits.push(...units)
       allSubfactions.push(...subfactions)
       errors.push(...parseErrors)
     } catch (err) {
-      errors.push(`${faction}: ${err instanceof Error ? err.message : String(err)}`)
+      errors.push(`${f.faction}: ${err instanceof Error ? err.message : String(err)}`)
     }
   }
 

@@ -1,7 +1,17 @@
 import type { UnitProfile, WeaponAbility, WeaponProfile } from '../../types.js'
 
 /** Bump when parser output changes in a way that invalidates previously-imported data. */
-export const PARSER_VERSION = 8
+export const PARSER_VERSION = 10
+
+/**
+ * A catalog registry maps BSData catalogue IDs (from `<catalogue id="...">`)
+ * to the catalog's XML content. Pass to {@link parseBSDataXml} to enable
+ * cross-file resolution of `<catalogueLink importRootEntries="true">`, which is
+ * how 11e splits faction content between a sub-faction file (e.g. Craftworlds)
+ * and a parent library (e.g. Aeldari Library). Without the registry, sub-faction
+ * files parse to zero units.
+ */
+export type CatalogRegistry = Map<string, { name: string; xml: string }>
 
 // ============================================================
 // BSData XML → UnitProfile parser
@@ -57,24 +67,40 @@ const SUBFACTION_GROUP_NAMES = [
 
 /**
  * Parse a BSData XML string (from a .cat or .gst file) into UnitProfile[].
+ *
+ * When `registry` is supplied, `<catalogueLink importRootEntries="true">` is
+ * followed transitively (with cycle detection) so units defined in a parent
+ * library catalog are extracted as members of `faction`.
  */
-export function parseBSDataXml(xml: string, faction: string): ParseResult {
+export function parseBSDataXml(
+  xml: string,
+  faction: string,
+  registry?: CatalogRegistry,
+): ParseResult {
   const units: UnitProfile[] = []
+  // Subfactions are extracted only from the local file — parent libraries don't
+  // own the subfaction grouping for the consuming catalog.
   const subfactions: Subfaction[] = extractSubfactions(xml, faction)
   const errors: string[] = []
+
+  // If a registry is provided, merge in the XML of every catalog reached by
+  // catalogueLink importRootEntries="true" (transitively, with cycle detection).
+  // The downstream extraction passes then see units and shared definitions from
+  // both the local file and its imported libraries in a single namespace.
+  const effectiveXml = registry ? resolveCatalogueImports(xml, registry, new Set()) : xml
 
   // Build reference maps for resolving <infoLink> and <entryLink> references.
   // BSData XML uses these to point to shared definitions (profiles, weapons, models)
   // defined elsewhere in the file (e.g. in <sharedProfiles> or <sharedSelectionEntries>).
-  const profileMap = buildProfileMap(xml)
-  const entryMap = buildEntryMap(xml)
-  const selectionEntryGroupMap = buildSelectionEntryGroupMap(xml)
-  const infoGroupMap = buildInfoGroupMap(xml)
+  const profileMap = buildProfileMap(effectiveXml)
+  const entryMap = buildEntryMap(effectiveXml)
+  const selectionEntryGroupMap = buildSelectionEntryGroupMap(effectiveXml)
+  const infoGroupMap = buildInfoGroupMap(effectiveXml)
 
   // Stack-based extraction of <selectionEntry> to handle nested entries correctly.
   // The regex approach fails when <selectionEntry> elements are nested (the non-greedy
   // match captures the inner closing tag instead of the outer one).
-  for (const entry of extractSelectionEntries(xml)) {
+  for (const entry of extractSelectionEntries(effectiveXml)) {
     const type = extractAttr(entry.attrs, 'type')
     if (type !== 'unit' && type !== 'model') continue
     // Skip shared sub-models — these are components referenced by units via entryLink,
@@ -108,6 +134,47 @@ export function parseBSDataXml(xml: string, faction: string): ParseResult {
   }
 
   return { units, subfactions, errors }
+}
+
+function extractCatalogueId(xml: string): string | undefined {
+  const m = /<catalogue\b[^>]*?\bid="([^"]+)"/i.exec(xml)
+  return m?.[1]
+}
+
+/** Find every `<catalogueLink importRootEntries="true">` and return its targetId. */
+function findRootEntryImports(xml: string): string[] {
+  const ids: string[] = []
+  const pattern = /<catalogueLink\b[^>]*>/gi
+  let m: RegExpExecArray | null
+  while ((m = pattern.exec(xml)) !== null) {
+    const tag = m[0]
+    if (!/\bimportRootEntries="true"/i.test(tag)) continue
+    const targetId = /\btargetId="([^"]+)"/i.exec(tag)?.[1]
+    if (targetId) ids.push(targetId)
+  }
+  return ids
+}
+
+/**
+ * Transitively concatenate `xml` with every catalog reached via
+ * `catalogueLink importRootEntries="true"`. `visited` carries catalog IDs already
+ * pulled in to break import cycles.
+ */
+function resolveCatalogueImports(
+  xml: string,
+  registry: CatalogRegistry,
+  visited: Set<string>,
+): string {
+  const localId = extractCatalogueId(xml)
+  if (localId) visited.add(localId)
+  let merged = xml
+  for (const targetId of findRootEntryImports(xml)) {
+    if (visited.has(targetId)) continue
+    const target = registry.get(targetId)
+    if (!target) continue
+    merged += '\n' + resolveCatalogueImports(target.xml, registry, visited)
+  }
+  return merged
 }
 
 /**
@@ -209,8 +276,7 @@ function buildEntryMap(xml: string): Map<string, string> {
 
   let m: RegExpExecArray | null
   while ((m = openTag.exec(xml)) !== null) {
-    const fullMatch = xml.slice(m.index, m.index + m[0].length + 1)
-    if (fullMatch.endsWith('/>')) continue
+    if (m[0].endsWith('/>')) continue
     tags.push({ type: 'open', index: m.index, end: m.index + m[0].length, attrs: m[1] ?? '' })
   }
   while ((m = closeTag.exec(xml)) !== null) {
@@ -252,8 +318,7 @@ function buildSelectionEntryGroupMap(xml: string): Map<string, string> {
 
   let m: RegExpExecArray | null
   while ((m = openTag.exec(xml)) !== null) {
-    const fullMatch = xml.slice(m.index, m.index + m[0].length + 1)
-    if (fullMatch.endsWith('/>')) continue
+    if (m[0].endsWith('/>')) continue
     tags.push({ type: 'open', index: m.index, end: m.index + m[0].length, attrs: m[1] ?? '' })
   }
   while ((m = closeTag.exec(xml)) !== null) {
@@ -294,8 +359,7 @@ function buildInfoGroupMap(xml: string): Map<string, string> {
 
   let m: RegExpExecArray | null
   while ((m = openTag.exec(xml)) !== null) {
-    const fullMatch = xml.slice(m.index, m.index + m[0].length + 1)
-    if (fullMatch.endsWith('/>')) continue
+    if (m[0].endsWith('/>')) continue
     tags.push({ type: 'open', index: m.index, end: m.index + m[0].length, attrs: m[1] ?? '' })
   }
   while ((m = closeTag.exec(xml)) !== null) {
@@ -448,8 +512,7 @@ function extractSelectionEntries(
   let m: RegExpExecArray | null
   while ((m = openTag.exec(xml)) !== null) {
     // Skip self-closing tags like <selectionEntry ... />
-    const fullMatch = xml.slice(m.index, m.index + m[0].length + 1)
-    if (fullMatch.endsWith('/>')) continue
+    if (m[0].endsWith('/>')) continue
     tags.push({ type: 'open', index: m.index, end: m.index + m[0].length, attrs: m[1] ?? '' })
   }
   while ((m = closeTag.exec(xml)) !== null) {
@@ -501,8 +564,7 @@ function stripNestedSelectionEntries(body: string): string {
 
   let m: RegExpExecArray | null
   while ((m = openTag.exec(body)) !== null) {
-    const fullMatch = body.slice(m.index, m.index + m[0].length + 1)
-    if (fullMatch.endsWith('/>')) continue
+    if (m[0].endsWith('/>')) continue
     tags.push({ type: 'open', index: m.index, end: m.index + m[0].length })
   }
   while ((m = closeTag.exec(body)) !== null) {
