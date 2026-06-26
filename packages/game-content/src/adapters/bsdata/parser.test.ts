@@ -354,6 +354,91 @@ describe('parseBSDataXml — chapter-cost overrides', () => {
   })
 })
 
+describe('parseBSDataXml — repeat-cost', () => {
+  const PTS_TYPE_ID = '51b2-306e-1021-d207'
+  const REPEAT_COST_XML = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<catalogue id="cat" name="cat">
+  <selectionEntries>
+    <selectionEntry id="unit-rep" name="Honored Champion" type="unit">
+      <profiles>
+        <profile id="p" name="Honored Champion" typeName="Unit">
+          <characteristics>
+            <characteristic name="M">6</characteristic>
+            <characteristic name="T">4</characteristic>
+            <characteristic name="Sv">3+</characteristic>
+            <characteristic name="W">2</characteristic>
+            <characteristic name="Ld">6</characteristic>
+            <characteristic name="OC">1</characteristic>
+          </characteristics>
+        </profile>
+        <profile id="w" name="Sword" typeName="Melee Weapons">
+          <characteristics>
+            <characteristic name="Range">Melee</characteristic>
+            <characteristic name="A">2</characteristic>
+            <characteristic name="WS">3+</characteristic>
+            <characteristic name="S">4</characteristic>
+            <characteristic name="AP">-1</characteristic>
+            <characteristic name="D">1</characteristic>
+            <characteristic name="Abilities">-</characteristic>
+          </characteristics>
+        </profile>
+      </profiles>
+      <modifiers>
+        <modifier type="increment" field="${PTS_TYPE_ID}" value="15">
+          <comment>repeat-cost: threshold=2 delta=15 (surcout par exemplaire au-dela du Neme)</comment>
+          <conditions>
+            <condition type="atLeast" value="3" field="selections" scope="roster" childId="unit-rep"/>
+          </conditions>
+        </modifier>
+      </modifiers>
+      <costs>
+        <cost name="pts" typeId="${PTS_TYPE_ID}" value="80"/>
+      </costs>
+    </selectionEntry>
+    <selectionEntry id="unit-plain" name="Vanilla Squad" type="unit">
+      <profiles>
+        <profile id="p2" name="Vanilla Squad" typeName="Unit">
+          <characteristics>
+            <characteristic name="M">6</characteristic>
+            <characteristic name="T">4</characteristic>
+            <characteristic name="Sv">3+</characteristic>
+            <characteristic name="W">1</characteristic>
+            <characteristic name="Ld">6</characteristic>
+            <characteristic name="OC">2</characteristic>
+          </characteristics>
+        </profile>
+        <profile id="w2" name="Rifle" typeName="Ranged Weapons">
+          <characteristics>
+            <characteristic name="Range">24</characteristic>
+            <characteristic name="A">2</characteristic>
+            <characteristic name="BS">3+</characteristic>
+            <characteristic name="S">4</characteristic>
+            <characteristic name="AP">0</characteristic>
+            <characteristic name="D">1</characteristic>
+            <characteristic name="Abilities">-</characteristic>
+          </characteristics>
+        </profile>
+      </profiles>
+      <costs>
+        <cost name="pts" typeId="${PTS_TYPE_ID}" value="60"/>
+      </costs>
+    </selectionEntry>
+  </selectionEntries>
+</catalogue>`
+
+  it('extracts repeatCost from comment marker', () => {
+    const { units } = parseBSDataXml(REPEAT_COST_XML, 'Test')
+    const champ = units.find((u) => u.id === 'unit-rep')!
+    expect(champ.repeatCost).toEqual({ threshold: 2, delta: 15 })
+  })
+
+  it('leaves repeatCost undefined when no repeat-cost modifier is present', () => {
+    const { units } = parseBSDataXml(REPEAT_COST_XML, 'Test')
+    const plain = units.find((u) => u.id === 'unit-plain')!
+    expect(plain.repeatCost).toBeUndefined()
+  })
+})
+
 describe('parseBSDataXml — non-unit entries', () => {
   it('skips entries that are not type "unit" or "model"', () => {
     const { units } = parseBSDataXml(NON_UNIT_XML, 'Test Faction')

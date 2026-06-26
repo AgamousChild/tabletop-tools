@@ -1,7 +1,7 @@
 import type { UnitProfile, WeaponAbility, WeaponProfile } from '../../types.js'
 
 /** Bump when parser output changes in a way that invalidates previously-imported data. */
-export const PARSER_VERSION = 12
+export const PARSER_VERSION = 13
 
 /**
  * BattleScribe typeId for matched-play points (`<cost name="pts">`). Stable
@@ -647,6 +647,7 @@ function parseUnitEntry(
   const abilities = extractAbilityNames(body)
   const abilityDescriptions = extractAbilityDescriptions(body)
   const points = extractPoints(body, importingCatalogueId)
+  const repeatCost = extractRepeatCost(body)
   const invulnSave = extractInvulnerableSave(body)
   const fnp = extractFeelNoPain(body, abilityDescriptions)
 
@@ -668,6 +669,7 @@ function parseUnitEntry(
   if (invulnSave !== undefined) unit.invulnSave = invulnSave
   if (fnp !== undefined) unit.fnp = fnp
   if (Object.keys(abilityDescriptions).length > 0) unit.abilityDescriptions = abilityDescriptions
+  if (repeatCost !== undefined) unit.repeatCost = repeatCost
   if (name.includes('[Legends]')) unit.isLegends = true
 
   return unit
@@ -928,6 +930,42 @@ function extractBaseCost(body: string): number {
   const m = costPattern.exec(body)
   if (!m) return 0
   return Math.round(parseFloat(m[1] ?? '0'))
+}
+
+/**
+ * 11e encodes a per-roster repeat-cost surcharge as:
+ *
+ *   <modifier type="increment" field="<PTS_TYPE_ID>" value="<Δ>">
+ *     <comment>repeat-cost: threshold=N delta=Δ …</comment>
+ *     <conditions>
+ *       <condition type="atLeast" value="N+1" field="selections"
+ *                  scope="roster" childId="<datasheet-id>"/>
+ *     </conditions>
+ *   </modifier>
+ *
+ * Copies past the Nth each cost `points + Δ` instead of `points`. We surface
+ * `{threshold, delta}` so consumers (list-builder, brain) can compute roster
+ * totals. The threshold and delta come from the comment marker, which is the
+ * documented surface in editor/REPEAT_COST_APP_PROMPT.md.
+ */
+function extractRepeatCost(body: string): { threshold: number; delta: number } | undefined {
+  const modifierPattern = new RegExp(
+    `<modifier\\b[^>]*\\btype="increment"[^>]*\\bfield="${PTS_TYPE_ID}"[^>]*\\bvalue="([^"]+)"[^>]*>([\\s\\S]*?)</modifier>`,
+    'gi',
+  )
+  let m: RegExpExecArray | null
+  while ((m = modifierPattern.exec(body)) !== null) {
+    const delta = Math.round(parseFloat(m[1] ?? ''))
+    if (!Number.isFinite(delta)) continue
+    const modifierBody = m[2] ?? ''
+    const commentMatch = /<comment\b[^>]*>\s*repeat-cost:\s*threshold=(\d+)\s+delta=(\d+)/i.exec(
+      modifierBody,
+    )
+    if (!commentMatch) continue
+    const threshold = parseInt(commentMatch[1]!, 10)
+    return { threshold, delta }
+  }
+  return undefined
 }
 
 /**
