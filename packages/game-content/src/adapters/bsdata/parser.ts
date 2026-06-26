@@ -1,7 +1,7 @@
 import type { UnitProfile, WeaponAbility, WeaponProfile } from '../../types.js'
 
 /** Bump when parser output changes in a way that invalidates previously-imported data. */
-export const PARSER_VERSION = 13
+export const PARSER_VERSION = 14
 
 /**
  * BattleScribe typeId for matched-play points (`<cost name="pts">`). Stable
@@ -647,7 +647,7 @@ function parseUnitEntry(
   const abilities = extractAbilityNames(body)
   const abilityDescriptions = extractAbilityDescriptions(body)
   const points = extractPoints(body, importingCatalogueId)
-  const repeatCost = extractRepeatCost(body)
+  const repeatCost = extractRepeatCost(body, importingCatalogueId)
   const invulnSave = extractInvulnerableSave(body)
   const fnp = extractFeelNoPain(body, abilityDescriptions)
 
@@ -947,12 +947,25 @@ function extractBaseCost(body: string): number {
  * `{threshold, delta}` so consumers (list-builder, brain) can compute roster
  * totals. The threshold and delta come from the comment marker, which is the
  * documented surface in editor/REPEAT_COST_APP_PROMPT.md.
+ *
+ * Compound conditions: a unit may carry both a chapter-conditioned modifier
+ * (e.g. BA-only) and a default modifier on the same datasheet. The modifier
+ * is "chapter-specific" when it has a `primary-catalogue instanceOf` condition.
+ * We accept a modifier when either (a) no primary-catalogue condition is
+ * present (default), or (b) the primary-catalogue childId matches the importing
+ * catalogue. Chapter-specific matches beat the default; modifiers gated to a
+ * different chapter are skipped so a BA repeat-cost never leaks into UM.
  */
-function extractRepeatCost(body: string): { threshold: number; delta: number } | undefined {
+function extractRepeatCost(
+  body: string,
+  importingCatalogueId: string | undefined,
+): { threshold: number; delta: number } | undefined {
   const modifierPattern = new RegExp(
     `<modifier\\b[^>]*\\btype="increment"[^>]*\\bfield="${PTS_TYPE_ID}"[^>]*\\bvalue="([^"]+)"[^>]*>([\\s\\S]*?)</modifier>`,
     'gi',
   )
+  let defaultMatch: { threshold: number; delta: number } | undefined
+  let chapterMatch: { threshold: number; delta: number } | undefined
   let m: RegExpExecArray | null
   while ((m = modifierPattern.exec(body)) !== null) {
     const delta = Math.round(parseFloat(m[1] ?? ''))
@@ -963,7 +976,40 @@ function extractRepeatCost(body: string): { threshold: number; delta: number } |
     )
     if (!commentMatch) continue
     const threshold = parseInt(commentMatch[1]!, 10)
-    return { threshold, delta }
+
+    const primaryCatalogueChildId = extractPrimaryCatalogueChildId(modifierBody)
+    if (primaryCatalogueChildId === undefined) {
+      // Default modifier (no chapter gate). Keep the first one we see — there is
+      // only ever supposed to be one default per datasheet in BSData.
+      defaultMatch ??= { threshold, delta }
+      continue
+    }
+    if (importingCatalogueId && primaryCatalogueChildId === importingCatalogueId) {
+      chapterMatch = { threshold, delta }
+      // Don't break: a later chapter-specific modifier for the same chapter
+      // would be a BSData bug, but we still want to detect the case
+      // deterministically (last one wins matches the BSData evaluation order).
+    }
+    // else: modifier is gated to a different chapter — skip silently.
+  }
+  return chapterMatch ?? defaultMatch
+}
+
+/**
+ * Return the `childId` of a `primary-catalogue instanceOf` condition inside a
+ * modifier body, or undefined if the modifier has no such condition. Compound
+ * modifiers (chapter + size-tier atLeast) carry both a primary-catalogue gate
+ * and an atLeast condition; this picks the chapter gate and ignores the rest.
+ */
+function extractPrimaryCatalogueChildId(modifierBody: string): string | undefined {
+  const condPattern = /<condition\b([^/>]*)\/?>/gi
+  let c: RegExpExecArray | null
+  while ((c = condPattern.exec(modifierBody)) !== null) {
+    const attrs = c[1] ?? ''
+    const scope = /\bscope="([^"]+)"/i.exec(attrs)?.[1]
+    if (scope !== 'primary-catalogue') continue
+    const childId = /\bchildId="([^"]+)"/i.exec(attrs)?.[1]
+    if (childId) return childId
   }
   return undefined
 }
