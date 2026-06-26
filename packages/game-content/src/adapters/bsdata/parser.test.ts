@@ -184,6 +184,83 @@ describe('parseBSDataXml — abilities', () => {
   })
 })
 
+describe('parseBSDataXml — faction-specific ability typeNames', () => {
+  const FACTION_ABILITY_XML = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<gameSystem id="test-sys" name="TestGame">
+  <selectionEntries>
+    <selectionEntry id="unit-faction" name="Faction Caster" type="unit">
+      <profiles>
+        <profile id="p" name="Faction Caster" typeName="Unit">
+          <characteristics>
+            <characteristic name="M">6</characteristic>
+            <characteristic name="T">4</characteristic>
+            <characteristic name="Sv">3+</characteristic>
+            <characteristic name="W">2</characteristic>
+            <characteristic name="Ld">6</characteristic>
+            <characteristic name="OC">1</characteristic>
+          </characteristics>
+        </profile>
+        <profile id="w" name="Knife" typeName="Melee Weapons">
+          <characteristics>
+            <characteristic name="Range">Melee</characteristic>
+            <characteristic name="A">1</characteristic>
+            <characteristic name="WS">3+</characteristic>
+            <characteristic name="S">3</characteristic>
+            <characteristic name="AP">0</characteristic>
+            <characteristic name="D">1</characteristic>
+            <characteristic name="Abilities">-</characteristic>
+          </characteristics>
+        </profile>
+        <profile id="ab1" name="Order: Stand Firm" typeName="Orders">
+          <characteristics>
+            <characteristic name="Description">Hold ground.</characteristic>
+          </characteristics>
+        </profile>
+        <profile id="ab2" name="C&apos;tan Power: Time&apos;s Arrow" typeName="C&apos;tan Powers">
+          <characteristics>
+            <characteristic name="Description">Erase a target.</characteristic>
+          </characteristics>
+        </profile>
+        <profile id="ab3" name="Paragon of Hatred" typeName="Warmaster">
+          <characteristics>
+            <characteristic name="Ability">Re-roll a hit roll.</characteristic>
+          </characteristics>
+        </profile>
+        <profile id="d1" name="Battles Survived" typeName="Deed">
+          <characteristics>
+            <characteristic name="Description">Crusade tracking.</characteristic>
+          </characteristics>
+        </profile>
+      </profiles>
+      <costs>
+        <cost name="pts" typeId="points" value="100" />
+      </costs>
+    </selectionEntry>
+  </selectionEntries>
+</gameSystem>`
+
+  it('extracts ability with typeName="Orders"', () => {
+    const { units } = parseBSDataXml(FACTION_ABILITY_XML, 'Test')
+    expect(units[0]!.abilities).toContain('Order: Stand Firm')
+  })
+
+  it('extracts ability with typeName="C\'tan Powers" and decodes XML entities', () => {
+    const { units } = parseBSDataXml(FACTION_ABILITY_XML, 'Test')
+    expect(units[0]!.abilities).toContain("C'tan Power: Time's Arrow")
+  })
+
+  it('extracts ability description from characteristic name="Ability" (Warmaster)', () => {
+    const { units } = parseBSDataXml(FACTION_ABILITY_XML, 'Test')
+    expect(units[0]!.abilities).toContain('Paragon of Hatred')
+    expect(units[0]!.abilityDescriptions?.['Paragon of Hatred']).toBe('Re-roll a hit roll.')
+  })
+
+  it('excludes Crusade Deed/Quality/Threat from abilities', () => {
+    const { units } = parseBSDataXml(FACTION_ABILITY_XML, 'Test')
+    expect(units[0]!.abilities).not.toContain('Battles Survived')
+  })
+})
+
 describe('parseBSDataXml — non-unit entries', () => {
   it('skips entries that are not type "unit" or "model"', () => {
     const { units } = parseBSDataXml(NON_UNIT_XML, 'Test Faction')

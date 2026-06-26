@@ -1,7 +1,7 @@
 import type { UnitProfile, WeaponAbility, WeaponProfile } from '../../types.js'
 
 /** Bump when parser output changes in a way that invalidates previously-imported data. */
-export const PARSER_VERSION = 10
+export const PARSER_VERSION = 11
 
 /**
  * A catalog registry maps BSData catalogue IDs (from `<catalogue id="...">`)
@@ -747,34 +747,79 @@ function extractWeaponAbilityNames(profileBody: string): string[] {
 
 // ---- Ability name + description extraction ----
 
+// Profile typeNames that are NOT abilities. Everything else with a profile
+// name attribute is treated as an ability — that's what the 11e BSData
+// parsing reference recommends, so we don't have to maintain a positive list
+// that grows with every faction-specific ability category (Orders, Rituals,
+// C'tan Powers, Triarch Abilities, Force Disposition, Marks of Chaos,
+// Blessings of Khorne, epic-hero specific typeNames like Warmaster, etc.).
+const NON_ABILITY_TYPE_NAMES = new Set([
+  'unit',
+  'unit characteristics',
+  'model',
+  'model characteristics',
+  'ranged weapon',
+  'ranged weapons',
+  'melee weapon',
+  'melee weapons',
+  'weapon',
+  'transport',
+  'invulnerable save',
+  // Crusade-only metadata — not matched-play abilities.
+  'deed',
+  'quality',
+  'threat',
+  'archeotech curiosity',
+])
+
+function isAbilityTypeName(typeName: string): boolean {
+  return !NON_ABILITY_TYPE_NAMES.has(typeName.trim().toLowerCase())
+}
+
+function decodeXmlEntities(s: string): string {
+  return s
+    .replace(/&apos;/g, "'")
+    .replace(/&quot;/g, '"')
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&amp;/g, '&')
+}
+
 function extractAbilityNames(body: string): string[] {
   const names: string[] = []
   const tagPattern = /<profile\b([^>]*)>/gi
   let m: RegExpExecArray | null
   while ((m = tagPattern.exec(body)) !== null) {
     const attrs = m[1] ?? ''
-    if (!/type(?:Name)?="Abilities"/i.test(attrs)) continue
+    const typeMatch = /\btype(?:Name)?="([^"]+)"/i.exec(attrs)
+    if (!typeMatch) continue
+    if (!isAbilityTypeName(typeMatch[1]!)) continue
     const nameMatch = /\bname="([^"]+)"/i.exec(attrs)
-    if (nameMatch) names.push(nameMatch[1]!.trim())
+    if (nameMatch) names.push(decodeXmlEntities(nameMatch[1]!.trim()))
   }
   return names
 }
 
 function extractAbilityDescriptions(body: string): Record<string, string> {
   const descriptions: Record<string, string> = {}
-  const profilePattern = /<profile\b([^>]*)type(?:Name)?="Abilities"([^>]*)>([\s\S]*?)<\/profile>/gi
+  const profilePattern = /<profile\b([^>]*)>([\s\S]*?)<\/profile>/gi
   let m: RegExpExecArray | null
   while ((m = profilePattern.exec(body)) !== null) {
-    const allAttrs = (m[1] ?? '') + (m[2] ?? '')
-    const profileBody = m[3] ?? ''
-    const nameMatch = /\bname="([^"]+)"/i.exec(allAttrs)
+    const attrs = m[1] ?? ''
+    const typeMatch = /\btype(?:Name)?="([^"]+)"/i.exec(attrs)
+    if (!typeMatch) continue
+    if (!isAbilityTypeName(typeMatch[1]!)) continue
+    const profileBody = m[2] ?? ''
+    const nameMatch = /\bname="([^"]+)"/i.exec(attrs)
     if (!nameMatch) continue
-    const abilityName = nameMatch[1]!.trim()
+    const abilityName = decodeXmlEntities(nameMatch[1]!.trim())
+    // Faction-specific ability typeNames (Warmaster, Throttlerokkit Shokka Engine,
+    // …) sometimes use characteristic name="Ability" instead of "Description".
     const descPattern =
-      /<characteristic\b[^>]*name="Description"[^>]*>([\s\S]*?)<\/characteristic>/i
+      /<characteristic\b[^>]*name="(?:Description|Ability)"[^>]*>([\s\S]*?)<\/characteristic>/i
     const descMatch = descPattern.exec(profileBody)
     if (descMatch && descMatch[1]?.trim()) {
-      descriptions[abilityName] = descMatch[1].trim()
+      descriptions[abilityName] = decodeXmlEntities(descMatch[1].trim())
     }
   }
   return descriptions
