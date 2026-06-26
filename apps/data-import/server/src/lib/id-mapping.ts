@@ -280,6 +280,65 @@ export function rekeyAllWahapediaFiles(
   return result
 }
 
+export interface MfmIdMappingResult {
+  /**
+   * Key format: `${factionSlug}::${normalizedName}` → BSData datasheet id.
+   * Faction-scoped because identical unit names recur across factions (e.g.
+   * "Captain") and only the faction-scoped match is unambiguous.
+   */
+  map: Map<string, string>
+  matched: number
+  unmatched: number
+  /** Same key collided to more than one BSData id; first one wins, count it. */
+  ambiguous: number
+}
+
+/**
+ * Joins MFM units (faction-slug + name) to BSData datasheet ids. The caller
+ * pre-attaches `factionSlug` to each BSData unit using whatever alias table it
+ * already uses for catalog→canonical resolution, so this function stays pure.
+ *
+ * Mismatches are returned, not thrown — MFM ships monthly and a new unit may
+ * land before its BSData entry; surfacing `unmatched > 0` in the manifest is
+ * the regression signal.
+ */
+export function buildMfmUnitIdMapping(
+  mfmFactions: Array<{ slug: string; units: Array<{ name: string }> }>,
+  bsdataUnits: Array<{ id: string; name: string; factionSlug: string }>,
+): MfmIdMappingResult {
+  const bucket = new Map<string, string[]>()
+  for (const u of bsdataUnits) {
+    if (!u.factionSlug) continue
+    const key = mfmUnitMapKey(u.factionSlug, u.name)
+    const arr = bucket.get(key) ?? []
+    arr.push(u.id)
+    bucket.set(key, arr)
+  }
+
+  const map = new Map<string, string>()
+  let matched = 0
+  let unmatched = 0
+  let ambiguous = 0
+  for (const f of mfmFactions) {
+    for (const unit of f.units) {
+      const key = mfmUnitMapKey(f.slug, unit.name)
+      const candidates = bucket.get(key)
+      if (!candidates || candidates.length === 0) {
+        unmatched++
+        continue
+      }
+      if (candidates.length > 1) ambiguous++
+      map.set(key, candidates[0]!)
+      matched++
+    }
+  }
+  return { map, matched, unmatched, ambiguous }
+}
+
+export function mfmUnitMapKey(factionSlug: string, unitName: string): string {
+  return `${factionSlug}::${normalizeName(unitName)}`
+}
+
 export interface ContentIdValidation {
   matched: number
   unmatched: number

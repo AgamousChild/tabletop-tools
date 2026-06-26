@@ -84,8 +84,8 @@ describe('parseMfmFactionYaml', () => {
   it('parses size-tier pricing (5 vs 10 models)', () => {
     const f = parseMfmFactionYaml(SAMPLE_YAML)
     const vet = f.units.find((u) => u.name === 'Veteran Squad')!
-    expect(vet.pricing).toHaveLength(1)
-    expect(vet.pricing[0]!.costs).toEqual([
+    expect(vet.costing).toHaveLength(1)
+    expect(vet.costing[0]!.costs).toEqual([
       { models: 5, points: 90 },
       { models: 10, points: 180 },
     ])
@@ -94,11 +94,11 @@ describe('parseMfmFactionYaml', () => {
   it('parses repeat-cost via interval ranges', () => {
     const f = parseMfmFactionYaml(SAMPLE_YAML)
     const champ = f.units.find((u) => u.name === 'Honored Champion')!
-    expect(champ.pricing).toHaveLength(2)
-    expect(champ.pricing[0]!.range).toBe('[1,2]')
-    expect(champ.pricing[1]!.range).toBe('[3,)')
-    expect(champ.pricing[0]!.costs[0]!.points).toBe(75)
-    expect(champ.pricing[1]!.costs[0]!.points).toBe(90)
+    expect(champ.costing).toHaveLength(2)
+    expect(champ.costing[0]!.range).toBe('[1,2]')
+    expect(champ.costing[1]!.range).toBe('[3,)')
+    expect(champ.costing[0]!.costs[0]!.points).toBe(75)
+    expect(champ.costing[1]!.costs[0]!.points).toBe(90)
   })
 
   it('captures leader role and attachTo list', () => {

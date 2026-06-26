@@ -26,8 +26,15 @@ import {
   type SubfactionRecord,
   type WeaponRecord,
 } from './content-producer'
-import { buildIdMapping, rekeyAllWahapediaFiles, validateContentIds } from './id-mapping'
+import {
+  buildIdMapping,
+  buildMfmUnitIdMapping,
+  mfmUnitMapKey,
+  rekeyAllWahapediaFiles,
+  validateContentIds,
+} from './id-mapping'
 import { fetchAndProcessBSData } from './sources/bsdata'
+import { fetchAndProcessMFM } from './sources/mfm'
 import { fetchAndProcessMissions } from './sources/missions'
 import { fetchAndProcessWahapedia } from './sources/wahapedia'
 
@@ -507,7 +514,110 @@ export async function runSync(
     }
   }
 
-  // 4. Missions
+  // 4. MFM (Munitorum Field Manual) — tiered costing + detachment DP / objective
+  // / unique-restriction / leader-granting enhancements. Joined to BSData
+  // datasheet ids by (factionSlug, name) so consumers can look up costing
+  // without a name search. Costing re-publishes ~monthly; this whole block
+  // is overwrite-clean so a re-run just rewrites the MFM files.
+  let mfmMeta: Manifest['mfm'] = existing?.mfm
+  try {
+    const mfmResult = await fetchAndProcessMFM(
+      force ? undefined : existing?.mfm?.commitSha,
+      undefined,
+      undefined,
+      githubToken,
+    )
+    if (mfmResult.skipped) {
+      skipped.push('mfm (unchanged)')
+    } else {
+      // Need BSData units to build the id mapping. Reuse fresh result or load
+      // from R2 (mirrors the Wahapedia/BSData reload-from-R2 pattern above).
+      let unitsForMfm = bsdataUnits
+      if (unitsForMfm.length === 0) {
+        const obj = await bucket.get('data/bsdata-units.json')
+        if (obj) {
+          unitsForMfm = (await obj.json()) as Array<{
+            id: string
+            name: string
+            faction: string
+          }>
+        }
+      }
+
+      const bsdataWithSlug = unitsForMfm.map((u) => ({
+        id: u.id,
+        name: u.name,
+        factionSlug: bsdataFactionToMfmSlug(u.faction),
+      }))
+      const mfmMap = buildMfmUnitIdMapping(mfmResult.factions, bsdataWithSlug)
+
+      const mfmUnitRows: Array<{
+        datasheetId: string | null
+        factionSlug: string
+        name: string
+        costing: unknown
+        role?: 'leader' | 'support'
+        attachTo?: string[]
+        wargear?: unknown
+        legends?: true
+      }> = []
+      let detachmentCount = 0
+      const mfmDetachmentRows: Array<{
+        factionSlug: string
+        name: string
+        dp: number | null
+        objective: string | null
+        unique?: string
+        enhancements: unknown
+      }> = []
+      for (const f of mfmResult.factions) {
+        for (const unit of f.units) {
+          const key = mfmUnitMapKey(f.slug, unit.name)
+          mfmUnitRows.push({
+            datasheetId: mfmMap.map.get(key) ?? null,
+            factionSlug: f.slug,
+            name: unit.name,
+            costing: unit.costing,
+            ...(unit.role ? { role: unit.role } : {}),
+            ...(unit.attachTo ? { attachTo: unit.attachTo } : {}),
+            ...(unit.wargear ? { wargear: unit.wargear } : {}),
+            ...(unit.legends ? { legends: unit.legends as true } : {}),
+          })
+        }
+        for (const d of f.detachments) {
+          detachmentCount++
+          mfmDetachmentRows.push({
+            factionSlug: f.slug,
+            name: d.name,
+            dp: d.dp,
+            objective: d.objective,
+            ...(d.unique ? { unique: d.unique } : {}),
+            enhancements: d.enhancements,
+          })
+        }
+      }
+
+      await writeDataFile(bucket, 'mfm-unit-costing.json', mfmUnitRows)
+      await writeDataFile(bucket, 'mfm-detachments.json', mfmDetachmentRows)
+      files.add('mfm-unit-costing.json')
+      files.add('mfm-detachments.json')
+
+      mfmMeta = {
+        commitSha: mfmResult.commitSha,
+        factionCount: mfmResult.factions.length,
+        unitCount: mfmUnitRows.length,
+        detachmentCount,
+        unmappedUnitCount: mfmMap.unmatched,
+      }
+      console.log(
+        `[mfm] factions=${mfmResult.factions.length} units=${mfmUnitRows.length} detachments=${detachmentCount} mapped=${mfmMap.matched} unmapped=${mfmMap.unmatched} ambiguous=${mfmMap.ambiguous}`,
+      )
+    }
+  } catch (err) {
+    errors.push(`MFM: ${err instanceof Error ? err.message : String(err)}`)
+  }
+
+  // 5. Missions
   let missionsMeta: Manifest['missions'] = existing?.missions
   try {
     const result = await fetchAndProcessMissions(existing)
@@ -522,13 +632,14 @@ export async function runSync(
     errors.push(`Missions: ${err instanceof Error ? err.message : String(err)}`)
   }
 
-  // 5. Write manifest
+  // 6. Write manifest
   const manifest: Manifest = {
     version: (existing?.version ?? 0) + 1,
     updatedAt: new Date().toISOString(),
     wahapedia: wahapediaMeta,
     bsdata: bsdataMeta,
     missions: missionsMeta,
+    mfm: mfmMeta,
     files: [...files],
   }
   await writeManifest(bucket, manifest)
@@ -541,4 +652,17 @@ export async function runSync(
     ...(Object.keys(producer).length > 0 ? { producer } : {}),
     ...(contentIdValidation ? { contentIdValidation } : {}),
   }
+}
+
+/**
+ * Map a BSData catalog faction string to the MFM faction slug. MFM uses
+ * canonical faction slugs (`space-marines`, `chaos-knights`, `tyranids`);
+ * BSData uses per-catalog file names (`Ultramarines`, `Tyranids`). The alias
+ * table handles SM chapters + Agents of the Imperium; everything else slugs
+ * directly (`Tyranids` → `tyranids`, matching MFM's `tyranids.yaml`).
+ */
+function bsdataFactionToMfmSlug(bsdataFaction: string): string {
+  const aliased = CATALOG_FACTION_ALIASES[bsdataFaction.toLowerCase().trim()]
+  if (aliased) return aliased
+  return contentEntitySlug(bsdataFaction)
 }

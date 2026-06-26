@@ -3,9 +3,13 @@
  *
  * Pulls per-faction YAML snapshots from BSData/wh40k-11e-mfm — a daily scrape
  * of <https://mfm.warhammer-community.com/>. The YAML carries data BSData does
- * not surface cleanly: tiered pricing ({models, points} per range like `[1,2]`
+ * not surface cleanly: tiered costing ({models, points} per range like `[1,2]`
  * or `[3,)`), wargear costs, leader `attachTo` lists, and detachments with DP,
  * unique-detachment markers, and enhancement leader-grant lists.
+ *
+ * Costing churns roughly monthly (each MFM release), so MFM lands in its own
+ * R2 files keyed to BSData datasheet ids rather than embedded in UnitProfile;
+ * consumers join at read time and a re-ingest only rewrites the MFM files.
  *
  * Shape mirrors the upstream zod schema in BSData/wh40k-11e-mfm/src/model.ts;
  * we keep only the fields we actually consume.
@@ -29,7 +33,7 @@ export interface MfmCostOption {
   addon?: true
 }
 
-export interface MfmPricingTier {
+export interface MfmCostingTier {
   /** Mathematical interval over unit copies, e.g. `[1,)` (always) or `[3,)` (3rd+). */
   range: string
   /** Verbatim heading from the source page (kept for display). */
@@ -45,7 +49,7 @@ export interface MfmWargear {
 export interface MfmUnit {
   name: string
   groupTitle?: string
-  pricing: MfmPricingTier[]
+  costing: MfmCostingTier[]
   role?: 'leader' | 'support'
   attachTo?: string[]
   wargear?: MfmWargear[]
@@ -197,9 +201,12 @@ function normalizeUnits(raw: unknown): MfmUnit[] {
     if (!u || typeof u !== 'object') continue
     const r = u as Record<string, unknown>
     if (typeof r['name'] !== 'string') continue
-    const pricing = normalizePricing(r['pricing'])
-    if (pricing.length === 0) continue
-    const unit: MfmUnit = { name: r['name'], pricing }
+    // Upstream YAML key is `pricing`; we keep the internal model as `costing`
+    // (rule-of-thumb wargaming vocabulary). This is the only place the names
+    // diverge.
+    const costing = normalizeCosting(r['pricing'])
+    if (costing.length === 0) continue
+    const unit: MfmUnit = { name: r['name'], costing }
     if (typeof r['groupTitle'] === 'string') unit.groupTitle = r['groupTitle']
     if (r['role'] === 'leader' || r['role'] === 'support') unit.role = r['role']
     if (Array.isArray(r['attachTo'])) {
@@ -222,9 +229,9 @@ function normalizeUnits(raw: unknown): MfmUnit[] {
   return out
 }
 
-function normalizePricing(raw: unknown): MfmPricingTier[] {
+function normalizeCosting(raw: unknown): MfmCostingTier[] {
   if (!Array.isArray(raw)) return []
-  const out: MfmPricingTier[] = []
+  const out: MfmCostingTier[] = []
   for (const t of raw) {
     if (!t || typeof t !== 'object') continue
     const r = t as Record<string, unknown>
