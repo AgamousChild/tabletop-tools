@@ -23,5 +23,17 @@ export interface Manifest {
   missions?: {
     count: number
   }
+  mfm?: {
+    commitSha: string
+    factionCount: number
+    unitCount: number
+    detachmentCount: number
+    /**
+     * MFM units (keyed by faction-slug + name) that did not resolve to a
+     * BSData datasheet id. Non-zero is the smoke signal that name drift or a
+     * new MFM faction landed between syncs.
+     */
+    unmappedUnitCount: number
+  }
   files: string[]
 }

@@ -2,7 +2,9 @@ import { describe, expect, it } from 'vitest'
 
 import {
   buildIdMapping,
+  buildMfmUnitIdMapping,
   canonicalContentId,
+  mfmUnitMapKey,
   normalizeName,
   rekeyAllWahapediaFiles,
   rekeyFactionIds,
@@ -346,5 +348,73 @@ describe('validateContentIds — surfaces broken references instead of silently 
     expect(unmatched).toBe(1)
     expect(byType.stratagem).toEqual({ matched: 1, unmatched: 1 })
     expect(byType.ability).toEqual({ matched: 1, unmatched: 0 })
+  })
+})
+
+describe('buildMfmUnitIdMapping', () => {
+  it('joins MFM (factionSlug, name) to BSData datasheet ids', () => {
+    const mfmFactions = [
+      {
+        slug: 'space-marines',
+        units: [{ name: 'Intercessor Squad' }, { name: 'Captain' }],
+      },
+      { slug: 'tyranids', units: [{ name: 'Hormagaunts' }] },
+    ]
+    const bsdataUnits = [
+      { id: 'sm-int', name: 'Intercessor Squad', factionSlug: 'space-marines' },
+      { id: 'sm-cap', name: 'Captain', factionSlug: 'space-marines' },
+      { id: 'ty-horm', name: 'Hormagaunts', factionSlug: 'tyranids' },
+    ]
+    const { map, matched, unmatched, ambiguous } = buildMfmUnitIdMapping(mfmFactions, bsdataUnits)
+    expect(matched).toBe(3)
+    expect(unmatched).toBe(0)
+    expect(ambiguous).toBe(0)
+    expect(map.get(mfmUnitMapKey('space-marines', 'Intercessor Squad'))).toBe('sm-int')
+    expect(map.get(mfmUnitMapKey('tyranids', 'Hormagaunts'))).toBe('ty-horm')
+  })
+
+  it('counts unmatched MFM units instead of throwing', () => {
+    const mfmFactions = [{ slug: 'space-marines', units: [{ name: 'Brand New Unit' }] }]
+    const bsdataUnits: Array<{ id: string; name: string; factionSlug: string }> = []
+    const { map, matched, unmatched } = buildMfmUnitIdMapping(mfmFactions, bsdataUnits)
+    expect(matched).toBe(0)
+    expect(unmatched).toBe(1)
+    expect(map.size).toBe(0)
+  })
+
+  it('does not cross-match identical names across factions', () => {
+    const mfmFactions = [
+      { slug: 'space-marines', units: [{ name: 'Captain' }] },
+      { slug: 'chaos-space-marines', units: [{ name: 'Captain' }] },
+    ]
+    const bsdataUnits = [
+      { id: 'sm-cap', name: 'Captain', factionSlug: 'space-marines' },
+      { id: 'csm-cap', name: 'Captain', factionSlug: 'chaos-space-marines' },
+    ]
+    const { map, matched, ambiguous } = buildMfmUnitIdMapping(mfmFactions, bsdataUnits)
+    expect(matched).toBe(2)
+    expect(ambiguous).toBe(0)
+    expect(map.get(mfmUnitMapKey('space-marines', 'Captain'))).toBe('sm-cap')
+    expect(map.get(mfmUnitMapKey('chaos-space-marines', 'Captain'))).toBe('csm-cap')
+  })
+
+  it('flags ambiguous matches when same key collides on multiple BSData ids', () => {
+    const mfmFactions = [{ slug: 'space-marines', units: [{ name: 'Captain' }] }]
+    const bsdataUnits = [
+      { id: 'sm-cap-a', name: 'Captain', factionSlug: 'space-marines' },
+      { id: 'sm-cap-b', name: 'Captain', factionSlug: 'space-marines' },
+    ]
+    const { matched, ambiguous } = buildMfmUnitIdMapping(mfmFactions, bsdataUnits)
+    expect(matched).toBe(1)
+    expect(ambiguous).toBe(1)
+  })
+
+  it('uses the same name normalization as the Wahapedia mapper', () => {
+    // Curly apostrophe in MFM vs straight in BSData should still match.
+    const mfmFactions = [{ slug: 'death-guard', units: [{ name: 'Mortarion’s Anvil' }] }]
+    const bsdataUnits = [{ id: 'dg-anvil', name: "Mortarion's Anvil", factionSlug: 'death-guard' }]
+    const { matched, map } = buildMfmUnitIdMapping(mfmFactions, bsdataUnits)
+    expect(matched).toBe(1)
+    expect(map.get(mfmUnitMapKey('death-guard', 'Mortarion’s Anvil'))).toBe('dg-anvil')
   })
 })

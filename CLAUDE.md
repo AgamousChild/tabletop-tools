@@ -1,6 +1,8 @@
 # CLAUDE.md — Tabletop Tools Platform
 
-> Read SOUL.md first. Every decision here flows from it.
+> Read SOUL.md first. SOUL.md is the platform's "why" — vision, values, and the
+> long-term shape of the thing. This file is the "how." Every decision here
+> flows from SOUL.md.
 
 ---
 
@@ -11,6 +13,13 @@ Each app deploys independently and does exactly one thing.
 
 Each app has its own `CLAUDE.md` with architecture and implementation detail.
 
+### Repo layout
+
+- `apps/` — independently deployable apps (brain, versus, list-builder, tournament, study, physics, gateway).
+- `packages/` — shared code (`ui`, `game-content`, `server-core`, `game-data-store`, etc.). Imported by apps.
+- `scripts/` — one-off shell scripts for ingestion bridges and admin chores. Not load-bearing for the running system (see Rule 4).
+- `docs/` — long-form plans, design notes, and references.
+
 ---
 
 ## Project Rules
@@ -18,6 +27,15 @@ Each app has its own `CLAUDE.md` with architecture and implementation detail.
 ### 1. One data source per entity
 Don't build parallel implementations of the same data for different apps. If units exist in one
 store, every app reads from that store. No copies, no sync, no "this app's version."
+
+Concrete instances of this rule:
+
+- **Tournaments and meta analytics share one data model.** A tournament you run and a tournament
+  scraped from BCP are the same thing in the database. One set of tables for events, players,
+  pairings, results. No import/export pipeline between apps.
+- **One canonical entity registry.** Factions, subfactions, detachments — one set of tables,
+  queried by everything. No app maintains its own lookup map. If the registry needs a new entry,
+  it goes in the database.
 
 ### 2. Shared UI components
 Same card, same widget across all apps. If the brain app has a unit card, versus uses the same
@@ -33,10 +51,15 @@ cleanup, and setup is a repeatable function callable from the server layer. One-
 scripts in `scripts/` are allowed for ingestion bridges and admin chores, but anything the
 running system depends on must be importable code.
 
-### 5. 11th edition is the active edition
-11th edition is the only edition under development. 10th edition content is preserved and
-tagged as legacy in the brain but is not updated. New features, parsers, rules logic, and
-data sync target 11th edition exclusively.
+### 5. 11th edition is the target edition
+11th edition is the only edition under development. New features, parsers, rules logic, and
+data sync target 11th edition exclusively. 10th edition content is preserved and tagged as
+legacy in the brain but is not updated.
+
+The full 10e→11e migration is in progress; see
+`docs/superpowers/plans/2026-06-12-brain-11e-edition-migration.md` for current state. Until
+that plan completes, parts of the brain still serve 10e by default — the rule is the direction,
+not yet the runtime.
 
 ### 6. Data lives in datastores, not source code
 No hardcoded lookup tables in `.ts` files. Faction maps, detachment lists, source registries —
@@ -50,14 +73,6 @@ environments only. E2E tests clean up after themselves. No test setup function c
 Separate data/logic from presentation. Components take props and render. Hooks and state
 management handle what to show. Swapping the component layer gives you a new skin without
 touching logic.
-
-### 9. Tournament and meta analytics share one data model
-A tournament you run and a tournament scraped from BCP are the same thing in the database.
-One set of tables for events, players, pairings, results. No import/export pipeline between apps.
-
-### 10. One canonical entity registry
-Factions, subfactions, detachments — one set of tables, queried by everything. No app maintains
-its own lookup map. If the registry needs a new entry, it goes in the database.
 
 ---
 
@@ -82,6 +97,9 @@ The `GameContentDisclaimer` component surfaces the data source to users.
 | ORM | Drizzle | Lightweight, type-safe, SQLite-native |
 | Auth | Better Auth | TypeScript-first, self-hosted |
 | Deploy | Cloudflare Workers + Pages | Free tier, near-zero cost |
+| Package manager | pnpm (workspaces) | Monorepo-native, fast installs |
+| Build / bundler | Vite | Fast dev server, ESM-first |
+| Test runner | Vitest | Vite-native, ESM-compatible, fast |
 
 ---
 
@@ -104,13 +122,16 @@ is worse than no test.
 **Prettier** for formatting. **ESLint + oxlint** for code rules. **TypeScript strict** for
 type safety. **Pre-commit hooks** run all three — code that doesn't pass doesn't land.
 
+When a hook fails, fix the underlying issue. Never `git commit --no-verify` to bypass it.
+The hook is there because someone got burned by skipping the check; you don't get to opt out.
+
 ---
 
 ## Rules for Every Session
 
 - Scope before you start — understand what you're touching and what depends on it.
 - No features that aren't needed yet.
-- Validate statistically before claiming anything.
+- Before claiming anything about data, run a query. Don't eyeball it, don't reason from memory.
 - Keep the stack shallow. Don't add layers.
 - Stop when it works. Don't polish what doesn't need polishing.
 - Don't try to prove you're right. State your reasoning once, briefly; then defer or verify. Don't re-litigate, justify, or argue the point.
@@ -124,10 +145,12 @@ type safety. **Pre-commit hooks** run all three — code that doesn't pass doesn
 These are caltrops people have stepped on. Always honor them.
 
 - **`wrangler r2 object put` defaults to LOCAL.** Always pass `--remote` for
-  production R2. Always prefix wrangler commands with empty `CF_API_TOKEN=`
-  + `CLOUDFLARE_API_TOKEN=$CF_FULL_API_TOKEN` to override deprecated env
-  vars, OR ensure the new `CLOUDFLARE_API_TOKEN` is set in the calling
-  environment.
+  production R2. Otherwise the upload silently lands in the local emulator
+  and "everything looks fine" until you check prod.
+- **Wrangler env var override.** Prefix wrangler commands with empty
+  `CF_API_TOKEN=` + `CLOUDFLARE_API_TOKEN=$CF_FULL_API_TOKEN` to override
+  deprecated env vars, OR ensure the new `CLOUDFLARE_API_TOKEN` is set in
+  the calling environment.
 - **Purge CDN cache after every deploy.** `deploy-gateway.sh` does this
   automatically using `CLOUDFLARE_API_TOKEN`. After any brain data upload
   + Worker deploy, also purge cache. When Micah says something is broken

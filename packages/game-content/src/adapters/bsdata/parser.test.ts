@@ -184,6 +184,376 @@ describe('parseBSDataXml — abilities', () => {
   })
 })
 
+describe('parseBSDataXml — faction-specific ability typeNames', () => {
+  const FACTION_ABILITY_XML = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<gameSystem id="test-sys" name="TestGame">
+  <selectionEntries>
+    <selectionEntry id="unit-faction" name="Faction Caster" type="unit">
+      <profiles>
+        <profile id="p" name="Faction Caster" typeName="Unit">
+          <characteristics>
+            <characteristic name="M">6</characteristic>
+            <characteristic name="T">4</characteristic>
+            <characteristic name="Sv">3+</characteristic>
+            <characteristic name="W">2</characteristic>
+            <characteristic name="Ld">6</characteristic>
+            <characteristic name="OC">1</characteristic>
+          </characteristics>
+        </profile>
+        <profile id="w" name="Knife" typeName="Melee Weapons">
+          <characteristics>
+            <characteristic name="Range">Melee</characteristic>
+            <characteristic name="A">1</characteristic>
+            <characteristic name="WS">3+</characteristic>
+            <characteristic name="S">3</characteristic>
+            <characteristic name="AP">0</characteristic>
+            <characteristic name="D">1</characteristic>
+            <characteristic name="Abilities">-</characteristic>
+          </characteristics>
+        </profile>
+        <profile id="ab1" name="Order: Stand Firm" typeName="Orders">
+          <characteristics>
+            <characteristic name="Description">Hold ground.</characteristic>
+          </characteristics>
+        </profile>
+        <profile id="ab2" name="C&apos;tan Power: Time&apos;s Arrow" typeName="C&apos;tan Powers">
+          <characteristics>
+            <characteristic name="Description">Erase a target.</characteristic>
+          </characteristics>
+        </profile>
+        <profile id="ab3" name="Paragon of Hatred" typeName="Warmaster">
+          <characteristics>
+            <characteristic name="Ability">Re-roll a hit roll.</characteristic>
+          </characteristics>
+        </profile>
+        <profile id="d1" name="Battles Survived" typeName="Deed">
+          <characteristics>
+            <characteristic name="Description">Crusade tracking.</characteristic>
+          </characteristics>
+        </profile>
+      </profiles>
+      <costs>
+        <cost name="pts" typeId="points" value="100" />
+      </costs>
+    </selectionEntry>
+  </selectionEntries>
+</gameSystem>`
+
+  it('extracts ability with typeName="Orders"', () => {
+    const { units } = parseBSDataXml(FACTION_ABILITY_XML, 'Test')
+    expect(units[0]!.abilities).toContain('Order: Stand Firm')
+  })
+
+  it('extracts ability with typeName="C\'tan Powers" and decodes XML entities', () => {
+    const { units } = parseBSDataXml(FACTION_ABILITY_XML, 'Test')
+    expect(units[0]!.abilities).toContain("C'tan Power: Time's Arrow")
+  })
+
+  it('extracts ability description from characteristic name="Ability" (Warmaster)', () => {
+    const { units } = parseBSDataXml(FACTION_ABILITY_XML, 'Test')
+    expect(units[0]!.abilities).toContain('Paragon of Hatred')
+    expect(units[0]!.abilityDescriptions?.['Paragon of Hatred']).toBe('Re-roll a hit roll.')
+  })
+
+  it('excludes Crusade Deed/Quality/Threat from abilities', () => {
+    const { units } = parseBSDataXml(FACTION_ABILITY_XML, 'Test')
+    expect(units[0]!.abilities).not.toContain('Battles Survived')
+  })
+})
+
+describe('parseBSDataXml — chapter-cost overrides', () => {
+  const PTS_TYPE_ID = '51b2-306e-1021-d207'
+  const CHAPTER_A_ID = 'chapter-a-id'
+  const CHAPTER_B_ID = 'chapter-b-id'
+  const SM_LIBRARY_XML = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<catalogue id="sm-library-id" name="SM Library">
+  <selectionEntries>
+    <selectionEntry id="unit-marine" name="Battle Sister Squad" type="unit">
+      <profiles>
+        <profile id="p" name="Battle Sister" typeName="Unit">
+          <characteristics>
+            <characteristic name="M">6</characteristic>
+            <characteristic name="T">4</characteristic>
+            <characteristic name="Sv">3+</characteristic>
+            <characteristic name="W">1</characteristic>
+            <characteristic name="Ld">6</characteristic>
+            <characteristic name="OC">2</characteristic>
+          </characteristics>
+        </profile>
+        <profile id="w" name="Bolter" typeName="Ranged Weapons">
+          <characteristics>
+            <characteristic name="Range">24</characteristic>
+            <characteristic name="A">2</characteristic>
+            <characteristic name="BS">3+</characteristic>
+            <characteristic name="S">4</characteristic>
+            <characteristic name="AP">0</characteristic>
+            <characteristic name="D">1</characteristic>
+            <characteristic name="Abilities">-</characteristic>
+          </characteristics>
+        </profile>
+      </profiles>
+      <modifiers>
+        <modifier type="set" field="${PTS_TYPE_ID}" value="80">
+          <comment>chapter-cost: Chapter A premium</comment>
+          <conditions>
+            <condition type="instanceOf" value="1" field="selections" scope="primary-catalogue" childId="${CHAPTER_A_ID}"/>
+          </conditions>
+        </modifier>
+        <modifier type="set" field="${PTS_TYPE_ID}" value="60">
+          <comment>chapter-cost: Chapter B discount</comment>
+          <conditions>
+            <condition type="instanceOf" value="1" field="selections" scope="primary-catalogue" childId="${CHAPTER_B_ID}"/>
+          </conditions>
+        </modifier>
+      </modifiers>
+      <costs>
+        <cost name="pts" typeId="${PTS_TYPE_ID}" value="70"/>
+      </costs>
+    </selectionEntry>
+  </selectionEntries>
+</catalogue>`
+
+  const CHAPTER_A_XML = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<catalogue id="${CHAPTER_A_ID}" name="Chapter A">
+  <catalogueLinks>
+    <catalogueLink id="cl-a" name="SM Library" targetId="sm-library-id" type="catalogue" importRootEntries="true"/>
+  </catalogueLinks>
+</catalogue>`
+
+  const CHAPTER_B_XML = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<catalogue id="${CHAPTER_B_ID}" name="Chapter B">
+  <catalogueLinks>
+    <catalogueLink id="cl-b" name="SM Library" targetId="sm-library-id" type="catalogue" importRootEntries="true"/>
+  </catalogueLinks>
+</catalogue>`
+
+  const registry = new Map([
+    ['sm-library-id', { name: 'SM Library', xml: SM_LIBRARY_XML }],
+    [CHAPTER_A_ID, { name: 'Chapter A', xml: CHAPTER_A_XML }],
+    [CHAPTER_B_ID, { name: 'Chapter B', xml: CHAPTER_B_XML }],
+  ])
+
+  it('falls back to base cost when parsing the library directly', () => {
+    const { units } = parseBSDataXml(SM_LIBRARY_XML, 'Library', registry)
+    expect(units[0]!.points).toBe(70)
+  })
+
+  it('applies chapter-A override when parsing chapter A', () => {
+    const { units } = parseBSDataXml(CHAPTER_A_XML, 'Chapter A', registry)
+    expect(units[0]!.points).toBe(80)
+  })
+
+  it('applies chapter-B override when parsing chapter B', () => {
+    const { units } = parseBSDataXml(CHAPTER_B_XML, 'Chapter B', registry)
+    expect(units[0]!.points).toBe(60)
+  })
+
+  it('falls back to base cost when no registry is provided', () => {
+    const { units } = parseBSDataXml(SM_LIBRARY_XML, 'Library')
+    expect(units[0]!.points).toBe(70)
+  })
+})
+
+describe('parseBSDataXml — repeat-cost', () => {
+  const PTS_TYPE_ID = '51b2-306e-1021-d207'
+  const REPEAT_COST_XML = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<catalogue id="cat" name="cat">
+  <selectionEntries>
+    <selectionEntry id="unit-rep" name="Honored Champion" type="unit">
+      <profiles>
+        <profile id="p" name="Honored Champion" typeName="Unit">
+          <characteristics>
+            <characteristic name="M">6</characteristic>
+            <characteristic name="T">4</characteristic>
+            <characteristic name="Sv">3+</characteristic>
+            <characteristic name="W">2</characteristic>
+            <characteristic name="Ld">6</characteristic>
+            <characteristic name="OC">1</characteristic>
+          </characteristics>
+        </profile>
+        <profile id="w" name="Sword" typeName="Melee Weapons">
+          <characteristics>
+            <characteristic name="Range">Melee</characteristic>
+            <characteristic name="A">2</characteristic>
+            <characteristic name="WS">3+</characteristic>
+            <characteristic name="S">4</characteristic>
+            <characteristic name="AP">-1</characteristic>
+            <characteristic name="D">1</characteristic>
+            <characteristic name="Abilities">-</characteristic>
+          </characteristics>
+        </profile>
+      </profiles>
+      <modifiers>
+        <modifier type="increment" field="${PTS_TYPE_ID}" value="15">
+          <comment>repeat-cost: threshold=2 delta=15 (surcout par exemplaire au-dela du Neme)</comment>
+          <conditions>
+            <condition type="atLeast" value="3" field="selections" scope="roster" childId="unit-rep"/>
+          </conditions>
+        </modifier>
+      </modifiers>
+      <costs>
+        <cost name="pts" typeId="${PTS_TYPE_ID}" value="80"/>
+      </costs>
+    </selectionEntry>
+    <selectionEntry id="unit-plain" name="Vanilla Squad" type="unit">
+      <profiles>
+        <profile id="p2" name="Vanilla Squad" typeName="Unit">
+          <characteristics>
+            <characteristic name="M">6</characteristic>
+            <characteristic name="T">4</characteristic>
+            <characteristic name="Sv">3+</characteristic>
+            <characteristic name="W">1</characteristic>
+            <characteristic name="Ld">6</characteristic>
+            <characteristic name="OC">2</characteristic>
+          </characteristics>
+        </profile>
+        <profile id="w2" name="Rifle" typeName="Ranged Weapons">
+          <characteristics>
+            <characteristic name="Range">24</characteristic>
+            <characteristic name="A">2</characteristic>
+            <characteristic name="BS">3+</characteristic>
+            <characteristic name="S">4</characteristic>
+            <characteristic name="AP">0</characteristic>
+            <characteristic name="D">1</characteristic>
+            <characteristic name="Abilities">-</characteristic>
+          </characteristics>
+        </profile>
+      </profiles>
+      <costs>
+        <cost name="pts" typeId="${PTS_TYPE_ID}" value="60"/>
+      </costs>
+    </selectionEntry>
+  </selectionEntries>
+</catalogue>`
+
+  it('extracts repeatCost from comment marker', () => {
+    const { units } = parseBSDataXml(REPEAT_COST_XML, 'Test')
+    const champ = units.find((u) => u.id === 'unit-rep')!
+    expect(champ.repeatCost).toEqual({ threshold: 2, delta: 15 })
+  })
+
+  it('leaves repeatCost undefined when no repeat-cost modifier is present', () => {
+    const { units } = parseBSDataXml(REPEAT_COST_XML, 'Test')
+    const plain = units.find((u) => u.id === 'unit-plain')!
+    expect(plain.repeatCost).toBeUndefined()
+  })
+})
+
+describe('parseBSDataXml — repeat-cost compound conditions', () => {
+  const PTS_TYPE_ID = '51b2-306e-1021-d207'
+  const compoundXml = (importingCatalogueId: string) =>
+    `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<catalogue id="${importingCatalogueId}" name="Chapter">
+  <selectionEntries>
+    <selectionEntry id="sang" name="Sanguinary Guard" type="unit">
+      <profiles>
+        <profile id="p" name="Sanguinary Guard" typeName="Unit">
+          <characteristics>
+            <characteristic name="M">7</characteristic>
+            <characteristic name="T">4</characteristic>
+            <characteristic name="Sv">2+</characteristic>
+            <characteristic name="W">2</characteristic>
+            <characteristic name="Ld">6</characteristic>
+            <characteristic name="OC">1</characteristic>
+          </characteristics>
+        </profile>
+        <profile id="w" name="Blade" typeName="Melee Weapons">
+          <characteristics>
+            <characteristic name="Range">Melee</characteristic>
+            <characteristic name="A">3</characteristic>
+            <characteristic name="WS">2+</characteristic>
+            <characteristic name="S">5</characteristic>
+            <characteristic name="AP">-2</characteristic>
+            <characteristic name="D">2</characteristic>
+            <characteristic name="Abilities">-</characteristic>
+          </characteristics>
+        </profile>
+      </profiles>
+      <modifiers>
+        <!-- BA-specific repeat-cost (compound: chapter gate + size tier) -->
+        <modifier type="increment" field="${PTS_TYPE_ID}" value="20">
+          <comment>repeat-cost: threshold=1 delta=20 (BA only, 2nd+)</comment>
+          <conditions>
+            <condition type="instanceOf" scope="primary-catalogue" field="selections" childId="cat-ba"/>
+            <condition type="atLeast" value="2" field="selections" scope="roster" childId="sang"/>
+          </conditions>
+        </modifier>
+        <!-- Default repeat-cost (no chapter gate) -->
+        <modifier type="increment" field="${PTS_TYPE_ID}" value="10">
+          <comment>repeat-cost: threshold=2 delta=10 (default)</comment>
+          <conditions>
+            <condition type="atLeast" value="3" field="selections" scope="roster" childId="sang"/>
+          </conditions>
+        </modifier>
+      </modifiers>
+      <costs>
+        <cost name="pts" typeId="${PTS_TYPE_ID}" value="120"/>
+      </costs>
+    </selectionEntry>
+  </selectionEntries>
+</catalogue>`
+
+  it('picks the chapter-specific modifier when the importing catalogue matches', () => {
+    const { units } = parseBSDataXml(compoundXml('cat-ba'), 'Blood Angels')
+    const sang = units.find((u) => u.id === 'sang')!
+    expect(sang.repeatCost).toEqual({ threshold: 1, delta: 20 })
+  })
+
+  it('falls back to the default modifier when the importing catalogue is a different chapter', () => {
+    const { units } = parseBSDataXml(compoundXml('cat-um'), 'Ultramarines')
+    const sang = units.find((u) => u.id === 'sang')!
+    // BA modifier is gated to cat-ba, not cat-um → skip; default kicks in.
+    expect(sang.repeatCost).toEqual({ threshold: 2, delta: 10 })
+  })
+
+  it('returns undefined when only a non-matching chapter-gated modifier exists', () => {
+    const ONLY_BA_XML = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<catalogue id="cat-um" name="Ultramarines">
+  <selectionEntries>
+    <selectionEntry id="sang" name="Sanguinary Guard" type="unit">
+      <profiles>
+        <profile id="p" name="Sanguinary Guard" typeName="Unit">
+          <characteristics>
+            <characteristic name="M">7</characteristic>
+            <characteristic name="T">4</characteristic>
+            <characteristic name="Sv">2+</characteristic>
+            <characteristic name="W">2</characteristic>
+            <characteristic name="Ld">6</characteristic>
+            <characteristic name="OC">1</characteristic>
+          </characteristics>
+        </profile>
+        <profile id="w" name="Blade" typeName="Melee Weapons">
+          <characteristics>
+            <characteristic name="Range">Melee</characteristic>
+            <characteristic name="A">3</characteristic>
+            <characteristic name="WS">2+</characteristic>
+            <characteristic name="S">5</characteristic>
+            <characteristic name="AP">-2</characteristic>
+            <characteristic name="D">2</characteristic>
+            <characteristic name="Abilities">-</characteristic>
+          </characteristics>
+        </profile>
+      </profiles>
+      <modifiers>
+        <modifier type="increment" field="${PTS_TYPE_ID}" value="20">
+          <comment>repeat-cost: threshold=1 delta=20</comment>
+          <conditions>
+            <condition type="instanceOf" scope="primary-catalogue" field="selections" childId="cat-ba"/>
+          </conditions>
+        </modifier>
+      </modifiers>
+      <costs>
+        <cost name="pts" typeId="${PTS_TYPE_ID}" value="120"/>
+      </costs>
+    </selectionEntry>
+  </selectionEntries>
+</catalogue>`
+    const { units } = parseBSDataXml(ONLY_BA_XML, 'Ultramarines')
+    const sang = units.find((u) => u.id === 'sang')!
+    expect(sang.repeatCost).toBeUndefined()
+  })
+})
+
 describe('parseBSDataXml — non-unit entries', () => {
   it('skips entries that are not type "unit" or "model"', () => {
     const { units } = parseBSDataXml(NON_UNIT_XML, 'Test Faction')

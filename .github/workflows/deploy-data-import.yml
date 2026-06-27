@@ -1,0 +1,101 @@
+# deploy-data-import.yml — Auto-deploy the data-import Worker on push to main
+#
+# Triggers a Cloudflare Worker deploy whenever the data-import server or its
+# shared dependencies change, then kicks the deployed Worker's /sync endpoint
+# so R2 picks up parser/output changes immediately (rather than waiting for the
+# weekly Worker cron on Monday 3am UTC).
+#
+# Brain (apps/brain/server) is NOT auto-deployed here: its graph build reads
+# source files outside the repo (GW markdown), so the rebuild remains manual
+# per apps/brain/DEPLOY.md.
+#
+# Prerequisites (org / repo secrets):
+#   - CLOUDFLARE_API_TOKEN: Cloudflare API token with Workers Scripts: Edit
+#   - CLOUDFLARE_ACCOUNT_ID: Cloudflare account id
+#   - SYNC_SECRET:           Bearer token matching the data-import Worker
+
+name: Deploy data-import
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'apps/data-import/server/**'
+      - 'packages/game-content/**'
+      - '.github/workflows/deploy-data-import.yml'
+  workflow_dispatch:
+    inputs:
+      force_sync:
+        description: 'Trigger /sync with force=true after deploy'
+        type: boolean
+        default: false
+
+concurrency:
+  group: deploy-data-import
+  cancel-in-progress: false
+
+env:
+  SYNC_URL: https://tabletop-tools-data-import.micah-ec2.workers.dev/sync
+  MANIFEST_URL: https://tabletop-tools-data-import.micah-ec2.workers.dev/manifest.json
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'pnpm'
+
+      - name: Install workspace dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Test data-import server
+        run: pnpm -F data-import-server test
+
+      - name: Test game-content (BSData parser)
+        run: pnpm -F @tabletop-tools/game-content test
+
+      - name: Deploy data-import Worker
+        uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          workingDirectory: apps/data-import/server
+          command: deploy
+
+      - name: Trigger /sync (refresh R2 outputs against the just-deployed code)
+        env:
+          SYNC_SECRET: ${{ secrets.SYNC_SECRET }}
+          FORCE: ${{ inputs.force_sync && 'true' || 'false' }}
+        run: |
+          echo "POST $SYNC_URL (force=$FORCE)"
+          RESPONSE=$(curl -sf -X POST "$SYNC_URL" \
+            -H "Authorization: Bearer ${SYNC_SECRET}" \
+            -H "Content-Type: application/json" \
+            -d "{\"force\": $FORCE}" \
+            -w "\n%{http_code}" \
+            --max-time 300)
+          HTTP_CODE=$(echo "$RESPONSE" | tail -1)
+          BODY=$(echo "$RESPONSE" | head -n -1)
+          echo "HTTP $HTTP_CODE"
+          echo "$BODY" | jq . 2>/dev/null || echo "$BODY"
+          if [ "$HTTP_CODE" -ne 200 ]; then
+            echo "Sync failed with HTTP $HTTP_CODE"
+            exit 1
+          fi
+
+      - name: Verify manifest
+        run: |
+          echo "Fetching $MANIFEST_URL"
+          curl -sf "$MANIFEST_URL" | jq '{version, updatedAt, mfm, wahapedia: .wahapedia.recordCounts | length, bsdata: .bsdata.unitCount}'

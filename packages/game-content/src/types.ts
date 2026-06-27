@@ -58,6 +58,14 @@ export interface UnitProfile {
   abilities: string[] // free-text ability names; mapped to typed rules separately
   abilityDescriptions?: Record<string, string> // ability name -> rule text
   points: number
+  /**
+   * 11e repeat-cost rule: copies of this datasheet past `threshold` each
+   * cost `points + delta` instead of `points`. Encoded in BSData as a
+   * conditional `<modifier type="increment">` keyed `atLeast N+1` at roster
+   * scope on the datasheet's own id. Undefined when the datasheet has no
+   * repeat-cost override.
+   */
+  repeatCost?: { threshold: number; delta: number }
   isLegends?: boolean // true if unit name contains [Legends]
 }
 

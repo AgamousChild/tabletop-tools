@@ -1,7 +1,23 @@
 import type { UnitProfile, WeaponAbility, WeaponProfile } from '../../types.js'
 
 /** Bump when parser output changes in a way that invalidates previously-imported data. */
-export const PARSER_VERSION = 8
+export const PARSER_VERSION = 14
+
+/**
+ * BattleScribe typeId for matched-play points (`<cost name="pts">`). Stable
+ * across the wh40k-10e / wh40k-11e BSData catalogs.
+ */
+const PTS_TYPE_ID = '51b2-306e-1021-d207'
+
+/**
+ * A catalog registry maps BSData catalogue IDs (from `<catalogue id="...">`)
+ * to the catalog's XML content. Pass to {@link parseBSDataXml} to enable
+ * cross-file resolution of `<catalogueLink importRootEntries="true">`, which is
+ * how 11e splits faction content between a sub-faction file (e.g. Craftworlds)
+ * and a parent library (e.g. Aeldari Library). Without the registry, sub-faction
+ * files parse to zero units.
+ */
+export type CatalogRegistry = Map<string, { name: string; xml: string }>
 
 // ============================================================
 // BSData XML → UnitProfile parser
@@ -57,24 +73,45 @@ const SUBFACTION_GROUP_NAMES = [
 
 /**
  * Parse a BSData XML string (from a .cat or .gst file) into UnitProfile[].
+ *
+ * When `registry` is supplied, `<catalogueLink importRootEntries="true">` is
+ * followed transitively (with cycle detection) so units defined in a parent
+ * library catalog are extracted as members of `faction`.
  */
-export function parseBSDataXml(xml: string, faction: string): ParseResult {
+export function parseBSDataXml(
+  xml: string,
+  faction: string,
+  registry?: CatalogRegistry,
+): ParseResult {
   const units: UnitProfile[] = []
+  // Subfactions are extracted only from the local file — parent libraries don't
+  // own the subfaction grouping for the consuming catalog.
   const subfactions: Subfaction[] = extractSubfactions(xml, faction)
   const errors: string[] = []
+
+  // The local catalogue's id is the one that primary-catalogue conditions are
+  // evaluated against — chapter-cost modifiers in the SM library use the
+  // chapter's catalogue id as the condition childId.
+  const importingCatalogueId = extractCatalogueId(xml)
+
+  // If a registry is provided, merge in the XML of every catalog reached by
+  // catalogueLink importRootEntries="true" (transitively, with cycle detection).
+  // The downstream extraction passes then see units and shared definitions from
+  // both the local file and its imported libraries in a single namespace.
+  const effectiveXml = registry ? resolveCatalogueImports(xml, registry, new Set()) : xml
 
   // Build reference maps for resolving <infoLink> and <entryLink> references.
   // BSData XML uses these to point to shared definitions (profiles, weapons, models)
   // defined elsewhere in the file (e.g. in <sharedProfiles> or <sharedSelectionEntries>).
-  const profileMap = buildProfileMap(xml)
-  const entryMap = buildEntryMap(xml)
-  const selectionEntryGroupMap = buildSelectionEntryGroupMap(xml)
-  const infoGroupMap = buildInfoGroupMap(xml)
+  const profileMap = buildProfileMap(effectiveXml)
+  const entryMap = buildEntryMap(effectiveXml)
+  const selectionEntryGroupMap = buildSelectionEntryGroupMap(effectiveXml)
+  const infoGroupMap = buildInfoGroupMap(effectiveXml)
 
   // Stack-based extraction of <selectionEntry> to handle nested entries correctly.
   // The regex approach fails when <selectionEntry> elements are nested (the non-greedy
   // match captures the inner closing tag instead of the outer one).
-  for (const entry of extractSelectionEntries(xml)) {
+  for (const entry of extractSelectionEntries(effectiveXml)) {
     const type = extractAttr(entry.attrs, 'type')
     if (type !== 'unit' && type !== 'model') continue
     // Skip shared sub-models — these are components referenced by units via entryLink,
@@ -98,7 +135,14 @@ export function parseBSDataXml(xml: string, faction: string): ParseResult {
         infoGroupMap,
       )
       const enrichedStripped = stripNestedSelectionEntries(enrichedBody)
-      const unit = parseUnitEntry(id, name, faction, enrichedStripped, enrichedBody)
+      const unit = parseUnitEntry(
+        id,
+        name,
+        faction,
+        enrichedStripped,
+        enrichedBody,
+        importingCatalogueId,
+      )
       // Validate parsed data and add warnings for suspicious values
       validateUnit(unit, errors)
       units.push(unit)
@@ -108,6 +152,47 @@ export function parseBSDataXml(xml: string, faction: string): ParseResult {
   }
 
   return { units, subfactions, errors }
+}
+
+function extractCatalogueId(xml: string): string | undefined {
+  const m = /<catalogue\b[^>]*?\bid="([^"]+)"/i.exec(xml)
+  return m?.[1]
+}
+
+/** Find every `<catalogueLink importRootEntries="true">` and return its targetId. */
+function findRootEntryImports(xml: string): string[] {
+  const ids: string[] = []
+  const pattern = /<catalogueLink\b[^>]*>/gi
+  let m: RegExpExecArray | null
+  while ((m = pattern.exec(xml)) !== null) {
+    const tag = m[0]
+    if (!/\bimportRootEntries="true"/i.test(tag)) continue
+    const targetId = /\btargetId="([^"]+)"/i.exec(tag)?.[1]
+    if (targetId) ids.push(targetId)
+  }
+  return ids
+}
+
+/**
+ * Transitively concatenate `xml` with every catalog reached via
+ * `catalogueLink importRootEntries="true"`. `visited` carries catalog IDs already
+ * pulled in to break import cycles.
+ */
+function resolveCatalogueImports(
+  xml: string,
+  registry: CatalogRegistry,
+  visited: Set<string>,
+): string {
+  const localId = extractCatalogueId(xml)
+  if (localId) visited.add(localId)
+  let merged = xml
+  for (const targetId of findRootEntryImports(xml)) {
+    if (visited.has(targetId)) continue
+    const target = registry.get(targetId)
+    if (!target) continue
+    merged += '\n' + resolveCatalogueImports(target.xml, registry, visited)
+  }
+  return merged
 }
 
 /**
@@ -209,8 +294,7 @@ function buildEntryMap(xml: string): Map<string, string> {
 
   let m: RegExpExecArray | null
   while ((m = openTag.exec(xml)) !== null) {
-    const fullMatch = xml.slice(m.index, m.index + m[0].length + 1)
-    if (fullMatch.endsWith('/>')) continue
+    if (m[0].endsWith('/>')) continue
     tags.push({ type: 'open', index: m.index, end: m.index + m[0].length, attrs: m[1] ?? '' })
   }
   while ((m = closeTag.exec(xml)) !== null) {
@@ -252,8 +336,7 @@ function buildSelectionEntryGroupMap(xml: string): Map<string, string> {
 
   let m: RegExpExecArray | null
   while ((m = openTag.exec(xml)) !== null) {
-    const fullMatch = xml.slice(m.index, m.index + m[0].length + 1)
-    if (fullMatch.endsWith('/>')) continue
+    if (m[0].endsWith('/>')) continue
     tags.push({ type: 'open', index: m.index, end: m.index + m[0].length, attrs: m[1] ?? '' })
   }
   while ((m = closeTag.exec(xml)) !== null) {
@@ -294,8 +377,7 @@ function buildInfoGroupMap(xml: string): Map<string, string> {
 
   let m: RegExpExecArray | null
   while ((m = openTag.exec(xml)) !== null) {
-    const fullMatch = xml.slice(m.index, m.index + m[0].length + 1)
-    if (fullMatch.endsWith('/>')) continue
+    if (m[0].endsWith('/>')) continue
     tags.push({ type: 'open', index: m.index, end: m.index + m[0].length, attrs: m[1] ?? '' })
   }
   while ((m = closeTag.exec(xml)) !== null) {
@@ -448,8 +530,7 @@ function extractSelectionEntries(
   let m: RegExpExecArray | null
   while ((m = openTag.exec(xml)) !== null) {
     // Skip self-closing tags like <selectionEntry ... />
-    const fullMatch = xml.slice(m.index, m.index + m[0].length + 1)
-    if (fullMatch.endsWith('/>')) continue
+    if (m[0].endsWith('/>')) continue
     tags.push({ type: 'open', index: m.index, end: m.index + m[0].length, attrs: m[1] ?? '' })
   }
   while ((m = closeTag.exec(xml)) !== null) {
@@ -501,8 +582,7 @@ function stripNestedSelectionEntries(body: string): string {
 
   let m: RegExpExecArray | null
   while ((m = openTag.exec(body)) !== null) {
-    const fullMatch = body.slice(m.index, m.index + m[0].length + 1)
-    if (fullMatch.endsWith('/>')) continue
+    if (m[0].endsWith('/>')) continue
     tags.push({ type: 'open', index: m.index, end: m.index + m[0].length })
   }
   while ((m = closeTag.exec(body)) !== null) {
@@ -547,6 +627,7 @@ function parseUnitEntry(
   faction: string,
   body: string,
   fullBody: string,
+  importingCatalogueId?: string,
 ): UnitProfile {
   // Extract characteristics from fullBody (includes nested model entries).
   // Real BSData XML puts the unit profile inside nested <selectionEntry type="model"> blocks,
@@ -565,7 +646,8 @@ function parseUnitEntry(
   }
   const abilities = extractAbilityNames(body)
   const abilityDescriptions = extractAbilityDescriptions(body)
-  const points = extractPoints(body)
+  const points = extractPoints(body, importingCatalogueId)
+  const repeatCost = extractRepeatCost(body, importingCatalogueId)
   const invulnSave = extractInvulnerableSave(body)
   const fnp = extractFeelNoPain(body, abilityDescriptions)
 
@@ -587,6 +669,7 @@ function parseUnitEntry(
   if (invulnSave !== undefined) unit.invulnSave = invulnSave
   if (fnp !== undefined) unit.fnp = fnp
   if (Object.keys(abilityDescriptions).length > 0) unit.abilityDescriptions = abilityDescriptions
+  if (repeatCost !== undefined) unit.repeatCost = repeatCost
   if (name.includes('[Legends]')) unit.isLegends = true
 
   return unit
@@ -685,34 +768,79 @@ function extractWeaponAbilityNames(profileBody: string): string[] {
 
 // ---- Ability name + description extraction ----
 
+// Profile typeNames that are NOT abilities. Everything else with a profile
+// name attribute is treated as an ability — that's what the 11e BSData
+// parsing reference recommends, so we don't have to maintain a positive list
+// that grows with every faction-specific ability category (Orders, Rituals,
+// C'tan Powers, Triarch Abilities, Force Disposition, Marks of Chaos,
+// Blessings of Khorne, epic-hero specific typeNames like Warmaster, etc.).
+const NON_ABILITY_TYPE_NAMES = new Set([
+  'unit',
+  'unit characteristics',
+  'model',
+  'model characteristics',
+  'ranged weapon',
+  'ranged weapons',
+  'melee weapon',
+  'melee weapons',
+  'weapon',
+  'transport',
+  'invulnerable save',
+  // Crusade-only metadata — not matched-play abilities.
+  'deed',
+  'quality',
+  'threat',
+  'archeotech curiosity',
+])
+
+function isAbilityTypeName(typeName: string): boolean {
+  return !NON_ABILITY_TYPE_NAMES.has(typeName.trim().toLowerCase())
+}
+
+function decodeXmlEntities(s: string): string {
+  return s
+    .replace(/&apos;/g, "'")
+    .replace(/&quot;/g, '"')
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&amp;/g, '&')
+}
+
 function extractAbilityNames(body: string): string[] {
   const names: string[] = []
   const tagPattern = /<profile\b([^>]*)>/gi
   let m: RegExpExecArray | null
   while ((m = tagPattern.exec(body)) !== null) {
     const attrs = m[1] ?? ''
-    if (!/type(?:Name)?="Abilities"/i.test(attrs)) continue
+    const typeMatch = /\btype(?:Name)?="([^"]+)"/i.exec(attrs)
+    if (!typeMatch) continue
+    if (!isAbilityTypeName(typeMatch[1]!)) continue
     const nameMatch = /\bname="([^"]+)"/i.exec(attrs)
-    if (nameMatch) names.push(nameMatch[1]!.trim())
+    if (nameMatch) names.push(decodeXmlEntities(nameMatch[1]!.trim()))
   }
   return names
 }
 
 function extractAbilityDescriptions(body: string): Record<string, string> {
   const descriptions: Record<string, string> = {}
-  const profilePattern = /<profile\b([^>]*)type(?:Name)?="Abilities"([^>]*)>([\s\S]*?)<\/profile>/gi
+  const profilePattern = /<profile\b([^>]*)>([\s\S]*?)<\/profile>/gi
   let m: RegExpExecArray | null
   while ((m = profilePattern.exec(body)) !== null) {
-    const allAttrs = (m[1] ?? '') + (m[2] ?? '')
-    const profileBody = m[3] ?? ''
-    const nameMatch = /\bname="([^"]+)"/i.exec(allAttrs)
+    const attrs = m[1] ?? ''
+    const typeMatch = /\btype(?:Name)?="([^"]+)"/i.exec(attrs)
+    if (!typeMatch) continue
+    if (!isAbilityTypeName(typeMatch[1]!)) continue
+    const profileBody = m[2] ?? ''
+    const nameMatch = /\bname="([^"]+)"/i.exec(attrs)
     if (!nameMatch) continue
-    const abilityName = nameMatch[1]!.trim()
+    const abilityName = decodeXmlEntities(nameMatch[1]!.trim())
+    // Faction-specific ability typeNames (Warmaster, Throttlerokkit Shokka Engine,
+    // …) sometimes use characteristic name="Ability" instead of "Description".
     const descPattern =
-      /<characteristic\b[^>]*name="Description"[^>]*>([\s\S]*?)<\/characteristic>/i
+      /<characteristic\b[^>]*name="(?:Description|Ability)"[^>]*>([\s\S]*?)<\/characteristic>/i
     const descMatch = descPattern.exec(profileBody)
     if (descMatch && descMatch[1]?.trim()) {
-      descriptions[abilityName] = descMatch[1].trim()
+      descriptions[abilityName] = decodeXmlEntities(descMatch[1].trim())
     }
   }
   return descriptions
@@ -790,11 +918,152 @@ function extractFeelNoPain(
 
 // ---- Points extraction ----
 
-function extractPoints(body: string): number {
+function extractPoints(body: string, importingCatalogueId?: string): number {
+  const basePts = extractBaseCost(body)
+  if (!importingCatalogueId) return basePts
+  const override = extractChapterCostOverride(body, importingCatalogueId)
+  return override ?? basePts
+}
+
+function extractBaseCost(body: string): number {
   const costPattern = /<cost\b[^>]*name="pts"[^>]*value="([^"]+)"/i
   const m = costPattern.exec(body)
   if (!m) return 0
   return Math.round(parseFloat(m[1] ?? '0'))
+}
+
+/**
+ * 11e encodes a per-roster repeat-cost surcharge as:
+ *
+ *   <modifier type="increment" field="<PTS_TYPE_ID>" value="<Δ>">
+ *     <comment>repeat-cost: threshold=N delta=Δ …</comment>
+ *     <conditions>
+ *       <condition type="atLeast" value="N+1" field="selections"
+ *                  scope="roster" childId="<datasheet-id>"/>
+ *     </conditions>
+ *   </modifier>
+ *
+ * Copies past the Nth each cost `points + Δ` instead of `points`. We surface
+ * `{threshold, delta}` so consumers (list-builder, brain) can compute roster
+ * totals. The threshold and delta come from the comment marker, which is the
+ * documented surface in editor/REPEAT_COST_APP_PROMPT.md.
+ *
+ * Compound conditions: a unit may carry both a chapter-conditioned modifier
+ * (e.g. BA-only) and a default modifier on the same datasheet. The modifier
+ * is "chapter-specific" when it has a `primary-catalogue instanceOf` condition.
+ * We accept a modifier when either (a) no primary-catalogue condition is
+ * present (default), or (b) the primary-catalogue childId matches the importing
+ * catalogue. Chapter-specific matches beat the default; modifiers gated to a
+ * different chapter are skipped so a BA repeat-cost never leaks into UM.
+ */
+function extractRepeatCost(
+  body: string,
+  importingCatalogueId: string | undefined,
+): { threshold: number; delta: number } | undefined {
+  const modifierPattern = new RegExp(
+    `<modifier\\b[^>]*\\btype="increment"[^>]*\\bfield="${PTS_TYPE_ID}"[^>]*\\bvalue="([^"]+)"[^>]*>([\\s\\S]*?)</modifier>`,
+    'gi',
+  )
+  let defaultMatch: { threshold: number; delta: number } | undefined
+  let chapterMatch: { threshold: number; delta: number } | undefined
+  let m: RegExpExecArray | null
+  while ((m = modifierPattern.exec(body)) !== null) {
+    const delta = Math.round(parseFloat(m[1] ?? ''))
+    if (!Number.isFinite(delta)) continue
+    const modifierBody = m[2] ?? ''
+    const commentMatch = /<comment\b[^>]*>\s*repeat-cost:\s*threshold=(\d+)\s+delta=(\d+)/i.exec(
+      modifierBody,
+    )
+    if (!commentMatch) continue
+    const threshold = parseInt(commentMatch[1]!, 10)
+
+    const primaryCatalogueChildId = extractPrimaryCatalogueChildId(modifierBody)
+    if (primaryCatalogueChildId === undefined) {
+      // Default modifier (no chapter gate). Keep the first one we see — there is
+      // only ever supposed to be one default per datasheet in BSData.
+      defaultMatch ??= { threshold, delta }
+      continue
+    }
+    if (importingCatalogueId && primaryCatalogueChildId === importingCatalogueId) {
+      chapterMatch = { threshold, delta }
+      // Don't break: a later chapter-specific modifier for the same chapter
+      // would be a BSData bug, but we still want to detect the case
+      // deterministically (last one wins matches the BSData evaluation order).
+    }
+    // else: modifier is gated to a different chapter — skip silently.
+  }
+  return chapterMatch ?? defaultMatch
+}
+
+/**
+ * Return the `childId` of a `primary-catalogue instanceOf` condition inside a
+ * modifier body, or undefined if the modifier has no such condition. Compound
+ * modifiers (chapter + size-tier atLeast) carry both a primary-catalogue gate
+ * and an atLeast condition; this picks the chapter gate and ignores the rest.
+ */
+function extractPrimaryCatalogueChildId(modifierBody: string): string | undefined {
+  const condPattern = /<condition\b([^/>]*)\/?>/gi
+  let c: RegExpExecArray | null
+  while ((c = condPattern.exec(modifierBody)) !== null) {
+    const attrs = c[1] ?? ''
+    const scope = /\bscope="([^"]+)"/i.exec(attrs)?.[1]
+    if (scope !== 'primary-catalogue') continue
+    const childId = /\bchildId="([^"]+)"/i.exec(attrs)?.[1]
+    if (childId) return childId
+  }
+  return undefined
+}
+
+/**
+ * 11e SM library uses chapter-cost modifiers to override a unit's base points
+ * when the army's primary catalogue is a specific chapter:
+ *
+ *   <modifier type="set" field="<PTS_TYPE_ID>" value="80">
+ *     <comment>chapter-cost: BA …</comment>
+ *     <conditions>
+ *       <condition type="instanceOf" scope="primary-catalogue"
+ *                  field="selections" childId="<chapter-catalogue-id>"/>
+ *     </conditions>
+ *   </modifier>
+ *
+ * If exactly one such modifier on the unit has a single primary-catalogue
+ * condition whose childId equals our importing catalogue id, return its
+ * value as the effective cost. Skip modifiers with compound conditions —
+ * those require full modifier evaluation we don't do yet.
+ */
+function extractChapterCostOverride(
+  body: string,
+  importingCatalogueId: string,
+): number | undefined {
+  const modifierPattern = new RegExp(
+    `<modifier\\b[^>]*\\btype="set"[^>]*\\bfield="${PTS_TYPE_ID}"[^>]*\\bvalue="([^"]+)"[^>]*>([\\s\\S]*?)</modifier>`,
+    'gi',
+  )
+  let m: RegExpExecArray | null
+  while ((m = modifierPattern.exec(body)) !== null) {
+    const value = parseFloat(m[1] ?? '')
+    if (!Number.isFinite(value)) continue
+    const modifierBody = m[2] ?? ''
+
+    const conditions: Array<{ scope: string; childId: string }> = []
+    const condPattern = /<condition\b([^/>]*)\/?>/gi
+    let c: RegExpExecArray | null
+    while ((c = condPattern.exec(modifierBody)) !== null) {
+      const attrs = c[1] ?? ''
+      const scope = /\bscope="([^"]+)"/i.exec(attrs)?.[1] ?? ''
+      const childId = /\bchildId="([^"]+)"/i.exec(attrs)?.[1] ?? ''
+      if (scope && childId) conditions.push({ scope, childId })
+    }
+
+    if (
+      conditions.length === 1 &&
+      conditions[0]!.scope === 'primary-catalogue' &&
+      conditions[0]!.childId === importingCatalogueId
+    ) {
+      return Math.round(value)
+    }
+  }
+  return undefined
 }
 
 // ---- Ability mapping ----
