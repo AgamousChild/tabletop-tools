@@ -16,19 +16,19 @@ export function CollapsibleSection({ title, count, children, defaultOpen = false
   const [open, setOpen] = useState(defaultOpen)
 
   return (
-    <div className="rounded-lg bg-slate-900 border border-slate-800 overflow-hidden">
+    <div className="rounded-lg bg-surface border border-border overflow-hidden">
       <button
         type="button"
         onClick={() => setOpen(!open)}
-        className="w-full flex items-center justify-between px-3 py-2 text-xs font-semibold text-slate-400 uppercase tracking-wider hover:text-slate-200 transition-colors"
+        className="w-full flex items-center justify-between px-3 py-2 text-xs font-semibold text-foreground-subtle uppercase tracking-wider hover:text-foreground-secondary transition-colors"
       >
         <span>
           {title}
           {count !== undefined && (
-            <span className="ml-1.5 text-[10px] font-normal text-slate-500">({count})</span>
+            <span className="ml-1.5 text-[10px] font-normal text-foreground-faint">({count})</span>
           )}
         </span>
-        <span className="text-slate-600 text-[10px]">{open ? '▲' : '▼'}</span>
+        <span className="text-foreground-disabled text-[10px]">{open ? '▲' : '▼'}</span>
       </button>
       {open && <div className="px-3 pb-3 pt-0">{children}</div>}
     </div>
