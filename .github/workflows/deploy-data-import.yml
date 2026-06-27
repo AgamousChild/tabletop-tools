@@ -54,7 +54,7 @@ jobs:
 
       - uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 22
           cache: 'pnpm'
 
       - name: Install workspace dependencies
@@ -67,12 +67,13 @@ jobs:
         run: pnpm -F @tabletop-tools/game-content test
 
       - name: Deploy data-import Worker
-        uses: cloudflare/wrangler-action@v3
-        with:
-          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-          workingDirectory: apps/data-import/server
-          command: deploy
+        # Use the workspace's own wrangler via pnpm — the cloudflare/wrangler-action
+        # tries to `npm i` wrangler at the workspace root, which chokes on the
+        # `workspace:*` protocol used throughout this monorepo.
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: pnpm --filter data-import-server exec wrangler deploy
 
       - name: Trigger /sync (refresh R2 outputs against the just-deployed code)
         env:
