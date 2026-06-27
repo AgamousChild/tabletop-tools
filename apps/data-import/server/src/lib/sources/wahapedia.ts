@@ -175,13 +175,20 @@ export async function fetchAndProcessWahapedia(
     description: r['description'] ?? '',
   }))
 
-  // unit_keywords
-  data['unit_keywords'] = (csvData['Datasheets_keywords'] ?? []).map((r) => ({
-    id: r['id'] ?? '',
-    datasheetId: r['datasheet_id'] ?? '',
-    keyword: r['keyword'] ?? '',
-    isFactionKeyword: r['is_faction_keyword'] === 'true',
-  }))
+  // unit_keywords — Wahapedia's Datasheets_keywords ships some rows with an
+  // empty keyword cell (notably some Aeldari Asuryani / Harlequins entries
+  // carry a blank isFactionKeyword=true row alongside the real one). Drop
+  // them at the source so downstream consumers don't surface "Faction
+  // Keywords: , Harlequins" or accidentally match an empty SUBFACTION_KEYWORDS
+  // entry.
+  data['unit_keywords'] = (csvData['Datasheets_keywords'] ?? [])
+    .map((r) => ({
+      id: r['id'] ?? '',
+      datasheetId: r['datasheet_id'] ?? '',
+      keyword: (r['keyword'] ?? '').trim(),
+      isFactionKeyword: r['is_faction_keyword'] === 'true',
+    }))
+    .filter((r) => r.keyword.length > 0)
 
   // unit_abilities — JOIN to abilities table to resolve Core/Faction ability names
   data['unit_abilities'] = convertDescriptions(

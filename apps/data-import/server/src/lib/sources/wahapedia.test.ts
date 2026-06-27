@@ -146,6 +146,29 @@ describe('fetchAndProcessWahapedia', () => {
     expect(abilities[0]!.description).toBe('Can be attached')
   })
 
+  it('drops unit_keywords rows with an empty or whitespace-only keyword', async () => {
+    // Wahapedia's CSV ships a blank-keyword row alongside real ones on a few
+    // Aeldari datasheets (the symptom we saw in the brain: "Faction Keywords:
+    // , Harlequins"). Confirm those rows never reach the rekeyed output.
+    const csv = makeCsvData()
+    csv['Datasheets_keywords'] =
+      'id|datasheet_id|keyword|is_faction_keyword\n' +
+      'k1|ds1|Infantry|false\n' +
+      'kblank|ds1||true\n' +
+      'kws|ds1|   |true\n' +
+      'k2|ds1|Adeptus Astartes|true'
+
+    mockFetch.mockImplementation(async (url: string) => {
+      const name = url.split('/').pop()?.replace('.csv', '') ?? ''
+      if (csv[name]) return csvResponse(csv[name]!)
+      return csvResponse('')
+    })
+
+    const result = await fetchAndProcessWahapedia()
+    const kw = result.data['unit_keywords'] as Array<Record<string, unknown>>
+    expect(kw.map((k) => k.keyword)).toEqual(['Infantry', 'Adeptus Astartes'])
+  })
+
   it('throws on fetch failure', async () => {
     mockFetch.mockResolvedValueOnce({ ok: false, status: 503 })
 
