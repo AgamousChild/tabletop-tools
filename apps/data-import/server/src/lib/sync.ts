@@ -120,6 +120,8 @@ export interface SyncResult {
   manifest: Manifest
   errors: string[]
   skipped: string[]
+  /** Per-stage wall-clock milliseconds for the stages that actually ran. */
+  stageTimings: Record<string, number>
   /** Canonical content production counts (per type). Empty when no producer ran. */
   producer?: Record<string, { r2DocsWritten: number; contentEntityUpserts: number }>
   /**
@@ -159,6 +161,12 @@ export interface RunSyncOptions {
    * the goal is refreshing the raw R2 outputs.
    */
   skipProducers?: boolean
+  /**
+   * Restrict to a subset of sources. When set, sources not in the set are
+   * skipped entirely. Used by the CI workflow to chunk a long sync into
+   * smaller per-source invocations that each stay under the Worker CPU cap.
+   */
+  sources?: Set<'wahapedia' | 'bsdata' | 'mfm' | 'missions'>
 }
 
 export async function runSync(
@@ -169,6 +177,17 @@ export async function runSync(
   options: RunSyncOptions = {},
 ): Promise<SyncResult> {
   const skipProducers = options.skipProducers === true
+  const wantSource = (s: 'wahapedia' | 'bsdata' | 'mfm' | 'missions') =>
+    !options.sources || options.sources.has(s)
+  const stageTimings: Record<string, number> = {}
+  const timeStage = async <T>(label: string, fn: () => Promise<T>): Promise<T> => {
+    const t = Date.now()
+    try {
+      return await fn()
+    } finally {
+      stageTimings[label] = Date.now() - t
+    }
+  }
   const errors: string[] = []
   const skipped: string[] = []
   const producer: SyncResult['producer'] = {}
@@ -179,25 +198,28 @@ export async function runSync(
   // 1. Wahapedia
   let wahapediaData: Record<string, unknown[]> | null = null
   let wahapediaMeta: Manifest['wahapedia'] = existing?.wahapedia
-  try {
-    const result = await fetchAndProcessWahapedia(
-      force ? undefined : existing?.wahapedia?.lastUpdate,
-    )
-    if (result.skipped) {
-      skipped.push('wahapedia (unchanged)')
-    } else {
-      wahapediaData = result.data
-      wahapediaMeta = {
-        lastUpdate: result.lastUpdate,
-        recordCounts: {},
+  if (!wantSource('wahapedia')) {
+    skipped.push('wahapedia (filtered)')
+  } else
+    try {
+      const result = await timeStage('wahapedia', () =>
+        fetchAndProcessWahapedia(force ? undefined : existing?.wahapedia?.lastUpdate),
+      )
+      if (result.skipped) {
+        skipped.push('wahapedia (unchanged)')
+      } else {
+        wahapediaData = result.data
+        wahapediaMeta = {
+          lastUpdate: result.lastUpdate,
+          recordCounts: {},
+        }
+        for (const [name, records] of Object.entries(result.data)) {
+          wahapediaMeta.recordCounts[name] = records.length
+        }
       }
-      for (const [name, records] of Object.entries(result.data)) {
-        wahapediaMeta.recordCounts[name] = records.length
-      }
+    } catch (err) {
+      errors.push(`Wahapedia: ${err instanceof Error ? err.message : String(err)}`)
     }
-  } catch (err) {
-    errors.push(`Wahapedia: ${err instanceof Error ? err.message : String(err)}`)
-  }
 
   // 2. BSData — keep raw subfactions (catalog faction string) here; the
   // catalog→canonical resolution happens once below, against the Wahapedia
@@ -210,31 +232,36 @@ export async function runSync(
     groupName: string
   }> = []
   let bsdataMeta: Manifest['bsdata'] = existing?.bsdata
-  try {
-    const result = await fetchAndProcessBSData(
-      force ? undefined : existing?.bsdata?.commitSha,
-      undefined,
-      undefined,
-      githubToken,
-    )
-    if (result.skipped) {
-      skipped.push('bsdata (unchanged)')
-    } else {
-      bsdataUnits = result.units.map((u) => ({ id: u.id, name: u.name, faction: u.faction }))
-      rawBsdataSubfactions = result.subfactions
-      bsdataMeta = {
-        commitSha: result.commitSha,
-        unitCount: result.units.length,
-        factionCount: new Set(result.units.map((u) => u.faction)).size,
+  if (!wantSource('bsdata')) {
+    skipped.push('bsdata (filtered)')
+  } else
+    try {
+      const result = await timeStage('bsdata', () =>
+        fetchAndProcessBSData(
+          force ? undefined : existing?.bsdata?.commitSha,
+          undefined,
+          undefined,
+          githubToken,
+        ),
+      )
+      if (result.skipped) {
+        skipped.push('bsdata (unchanged)')
+      } else {
+        bsdataUnits = result.units.map((u) => ({ id: u.id, name: u.name, faction: u.faction }))
+        rawBsdataSubfactions = result.subfactions
+        bsdataMeta = {
+          commitSha: result.commitSha,
+          unitCount: result.units.length,
+          factionCount: new Set(result.units.map((u) => u.faction)).size,
+        }
+        await writeDataFile(bucket, 'bsdata-units.json', result.units)
+        await writeDataFile(bucket, 'bsdata-subfactions.json', result.subfactions)
+        files.add('bsdata-units.json')
+        files.add('bsdata-subfactions.json')
       }
-      await writeDataFile(bucket, 'bsdata-units.json', result.units)
-      await writeDataFile(bucket, 'bsdata-subfactions.json', result.subfactions)
-      files.add('bsdata-units.json')
-      files.add('bsdata-subfactions.json')
+    } catch (err) {
+      errors.push(`BSData: ${err instanceof Error ? err.message : String(err)}`)
     }
-  } catch (err) {
-    errors.push(`BSData: ${err instanceof Error ? err.message : String(err)}`)
-  }
 
   // 3. ID mapping + write Wahapedia files (if either source changed)
   if (wahapediaData) {
@@ -541,117 +568,125 @@ export async function runSync(
   // without a name search. Costing re-publishes ~monthly; this whole block
   // is overwrite-clean so a re-run just rewrites the MFM files.
   let mfmMeta: Manifest['mfm'] = existing?.mfm
-  try {
-    const mfmResult = await fetchAndProcessMFM(
-      force ? undefined : existing?.mfm?.commitSha,
-      undefined,
-      undefined,
-      githubToken,
-    )
-    if (mfmResult.skipped) {
-      skipped.push('mfm (unchanged)')
-    } else {
-      // Need BSData units to build the id mapping. Reuse fresh result or load
-      // from R2 (mirrors the Wahapedia/BSData reload-from-R2 pattern above).
-      let unitsForMfm = bsdataUnits
-      if (unitsForMfm.length === 0) {
-        const obj = await bucket.get('data/bsdata-units.json')
-        if (obj) {
-          unitsForMfm = (await obj.json()) as Array<{
-            id: string
-            name: string
-            faction: string
-          }>
-        }
-      }
-
-      const bsdataWithSlug = unitsForMfm.map((u) => ({
-        id: u.id,
-        name: u.name,
-        factionSlug: bsdataFactionToMfmSlug(u.faction),
-      }))
-      const mfmMap = buildMfmUnitIdMapping(mfmResult.factions, bsdataWithSlug)
-
-      const mfmUnitRows: Array<{
-        datasheetId: string | null
-        factionSlug: string
-        name: string
-        costing: unknown
-        role?: 'leader' | 'support'
-        attachTo?: string[]
-        wargear?: unknown
-        legends?: true
-      }> = []
-      let detachmentCount = 0
-      const mfmDetachmentRows: Array<{
-        factionSlug: string
-        name: string
-        dp: number | null
-        objective: string | null
-        unique?: string
-        enhancements: unknown
-      }> = []
-      for (const f of mfmResult.factions) {
-        for (const unit of f.units) {
-          const key = mfmUnitMapKey(f.slug, unit.name)
-          mfmUnitRows.push({
-            datasheetId: mfmMap.map.get(key) ?? null,
-            factionSlug: f.slug,
-            name: unit.name,
-            costing: unit.costing,
-            ...(unit.role ? { role: unit.role } : {}),
-            ...(unit.attachTo ? { attachTo: unit.attachTo } : {}),
-            ...(unit.wargear ? { wargear: unit.wargear } : {}),
-            ...(unit.legends ? { legends: unit.legends as true } : {}),
-          })
-        }
-        for (const d of f.detachments) {
-          detachmentCount++
-          mfmDetachmentRows.push({
-            factionSlug: f.slug,
-            name: d.name,
-            dp: d.dp,
-            objective: d.objective,
-            ...(d.unique ? { unique: d.unique } : {}),
-            enhancements: d.enhancements,
-          })
-        }
-      }
-
-      await writeDataFile(bucket, 'mfm-unit-costing.json', mfmUnitRows)
-      await writeDataFile(bucket, 'mfm-detachments.json', mfmDetachmentRows)
-      files.add('mfm-unit-costing.json')
-      files.add('mfm-detachments.json')
-
-      mfmMeta = {
-        commitSha: mfmResult.commitSha,
-        factionCount: mfmResult.factions.length,
-        unitCount: mfmUnitRows.length,
-        detachmentCount,
-        unmappedUnitCount: mfmMap.unmatched,
-      }
-      console.log(
-        `[mfm] factions=${mfmResult.factions.length} units=${mfmUnitRows.length} detachments=${detachmentCount} mapped=${mfmMap.matched} unmapped=${mfmMap.unmatched} ambiguous=${mfmMap.ambiguous}`,
+  if (!wantSource('mfm')) {
+    skipped.push('mfm (filtered)')
+  } else
+    try {
+      const mfmResult = await timeStage('mfm', () =>
+        fetchAndProcessMFM(
+          force ? undefined : existing?.mfm?.commitSha,
+          undefined,
+          undefined,
+          githubToken,
+        ),
       )
+      if (mfmResult.skipped) {
+        skipped.push('mfm (unchanged)')
+      } else {
+        // Need BSData units to build the id mapping. Reuse fresh result or load
+        // from R2 (mirrors the Wahapedia/BSData reload-from-R2 pattern above).
+        let unitsForMfm = bsdataUnits
+        if (unitsForMfm.length === 0) {
+          const obj = await bucket.get('data/bsdata-units.json')
+          if (obj) {
+            unitsForMfm = (await obj.json()) as Array<{
+              id: string
+              name: string
+              faction: string
+            }>
+          }
+        }
+
+        const bsdataWithSlug = unitsForMfm.map((u) => ({
+          id: u.id,
+          name: u.name,
+          factionSlug: bsdataFactionToMfmSlug(u.faction),
+        }))
+        const mfmMap = buildMfmUnitIdMapping(mfmResult.factions, bsdataWithSlug)
+
+        const mfmUnitRows: Array<{
+          datasheetId: string | null
+          factionSlug: string
+          name: string
+          costing: unknown
+          role?: 'leader' | 'support'
+          attachTo?: string[]
+          wargear?: unknown
+          legends?: true
+        }> = []
+        let detachmentCount = 0
+        const mfmDetachmentRows: Array<{
+          factionSlug: string
+          name: string
+          dp: number | null
+          objective: string | null
+          unique?: string
+          enhancements: unknown
+        }> = []
+        for (const f of mfmResult.factions) {
+          for (const unit of f.units) {
+            const key = mfmUnitMapKey(f.slug, unit.name)
+            mfmUnitRows.push({
+              datasheetId: mfmMap.map.get(key) ?? null,
+              factionSlug: f.slug,
+              name: unit.name,
+              costing: unit.costing,
+              ...(unit.role ? { role: unit.role } : {}),
+              ...(unit.attachTo ? { attachTo: unit.attachTo } : {}),
+              ...(unit.wargear ? { wargear: unit.wargear } : {}),
+              ...(unit.legends ? { legends: unit.legends as true } : {}),
+            })
+          }
+          for (const d of f.detachments) {
+            detachmentCount++
+            mfmDetachmentRows.push({
+              factionSlug: f.slug,
+              name: d.name,
+              dp: d.dp,
+              objective: d.objective,
+              ...(d.unique ? { unique: d.unique } : {}),
+              enhancements: d.enhancements,
+            })
+          }
+        }
+
+        await writeDataFile(bucket, 'mfm-unit-costing.json', mfmUnitRows)
+        await writeDataFile(bucket, 'mfm-detachments.json', mfmDetachmentRows)
+        files.add('mfm-unit-costing.json')
+        files.add('mfm-detachments.json')
+
+        mfmMeta = {
+          commitSha: mfmResult.commitSha,
+          factionCount: mfmResult.factions.length,
+          unitCount: mfmUnitRows.length,
+          detachmentCount,
+          unmappedUnitCount: mfmMap.unmatched,
+        }
+        console.log(
+          `[mfm] factions=${mfmResult.factions.length} units=${mfmUnitRows.length} detachments=${detachmentCount} mapped=${mfmMap.matched} unmapped=${mfmMap.unmatched} ambiguous=${mfmMap.ambiguous}`,
+        )
+      }
+    } catch (err) {
+      errors.push(`MFM: ${err instanceof Error ? err.message : String(err)}`)
     }
-  } catch (err) {
-    errors.push(`MFM: ${err instanceof Error ? err.message : String(err)}`)
-  }
 
   // 5. Missions
   let missionsMeta: Manifest['missions'] = existing?.missions
-  try {
-    const result = await fetchAndProcessMissions(existing)
-    if (result.skipped) {
-      skipped.push('missions (unchanged)')
-    } else {
-      await writeDataFile(bucket, 'missions.json', result.missions)
-      files.add('missions.json')
-      missionsMeta = { count: result.missions.length }
+  if (!wantSource('missions')) {
+    skipped.push('missions (filtered)')
+  } else
+    try {
+      const result = await timeStage('missions', () => fetchAndProcessMissions(existing))
+      if (result.skipped) {
+        skipped.push('missions (unchanged)')
+      } else {
+        await writeDataFile(bucket, 'missions.json', result.missions)
+        files.add('missions.json')
+        missionsMeta = { count: result.missions.length }
+      }
+    } catch (err) {
+      errors.push(`Missions: ${err instanceof Error ? err.message : String(err)}`)
     }
-  } catch (err) {
-    errors.push(`Missions: ${err instanceof Error ? err.message : String(err)}`)
-  }
 
   // 6. Write manifest
   const manifest: Manifest = {
@@ -670,6 +705,7 @@ export async function runSync(
     manifest,
     errors,
     skipped,
+    stageTimings,
     ...(Object.keys(producer).length > 0 ? { producer } : {}),
     ...(contentIdValidation ? { contentIdValidation } : {}),
   }
