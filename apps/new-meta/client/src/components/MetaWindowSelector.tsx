@@ -5,14 +5,21 @@ interface Props {
   onChange: (value: string | undefined) => void
 }
 
-export function MetaWindowSelector({ value, onChange }: Props) {
-  const { data: frames = [] } = trpc.meta.frames.useQuery()
+function formatEndDate(endDate: number | null): string {
+  if (endDate == null) return ''
+  const d = new Date(endDate)
+  if (Number.isNaN(d.getTime())) return ''
+  return d.toISOString().slice(0, 10)
+}
 
-  // Group frames by type
-  const quarters = frames.filter((f) => f.typeId === 4)
-  const months = frames.filter((f) => f.typeId === 3)
-  const years = frames.filter((f) => f.typeId === 5)
-  const dataslates = frames.filter((f) => f.typeId === 6)
+export function MetaWindowSelector({ value, onChange }: Props) {
+  const { data } = trpc.meta.availableFilters.useQuery()
+
+  const types = data?.types ?? []
+  const framesByType = data?.framesByType ?? {}
+
+  // Show types that have at least one populated frame, in dim order.
+  const populatedTypes = types.filter((t) => t.framesWithData > 0)
 
   return (
     <select
@@ -21,36 +28,22 @@ export function MetaWindowSelector({ value, onChange }: Props) {
       className="bg-slate-900 border border-slate-800 rounded px-3 py-1.5 text-slate-100 text-sm"
     >
       <option value="">Latest Quarter</option>
-      <optgroup label="Quarters">
-        {quarters.map((f) => (
-          <option key={f.id} value={f.id}>
-            {f.label}
-          </option>
-        ))}
-      </optgroup>
-      <optgroup label="Months">
-        {months.map((f) => (
-          <option key={f.id} value={f.id}>
-            {f.label}
-          </option>
-        ))}
-      </optgroup>
-      <optgroup label="Years">
-        {years.map((f) => (
-          <option key={f.id} value={f.id}>
-            {f.label}
-          </option>
-        ))}
-      </optgroup>
-      {dataslates.length > 0 && (
-        <optgroup label="Balance Dataslates">
-          {dataslates.map((f) => (
-            <option key={f.id} value={f.id}>
-              {f.label}
-            </option>
-          ))}
-        </optgroup>
-      )}
+      {populatedTypes.map((type) => {
+        const frames = (framesByType[type.id] ?? []).filter((f) => f.hasData)
+        if (frames.length === 0) return null
+        return (
+          <optgroup key={type.id} label={`${type.name}s`}>
+            {frames.map((f) => {
+              const suffix = formatEndDate(f.endDate)
+              return (
+                <option key={f.id} value={f.id}>
+                  {suffix ? `${f.label} (through ${suffix})` : f.label}
+                </option>
+              )
+            })}
+          </optgroup>
+        )
+      })}
     </select>
   )
 }

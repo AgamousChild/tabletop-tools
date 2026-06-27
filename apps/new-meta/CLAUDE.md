@@ -88,14 +88,31 @@ apps/new-meta/
 ### meta (public)
 
 ```typescript
-meta.factions({ metaWindow?, format?, minGames? })          -> FactionStat[]
-meta.faction({ faction, metaWindow?, format? })              -> FactionDetail
-meta.detachments({ faction?, metaWindow?, format? })         -> DetachmentStat[]
-meta.matchups({ metaWindow?, format?, minGames? })           -> MatchupCell[]
-meta.lists({ faction?, detachment?, metaWindow?, limit? })   -> ListResult[]
-meta.timeline({ faction?, metaWindow? })                     -> WeeklyPoint[]
-meta.windows()                                               -> string[]
+meta.factions({ frame?, granularityId?, granularity?, minGames? })   -> FactionStat[]
+meta.faction({ factionId, frame?, granularityId?, granularity? })    -> FactionDetail
+meta.matchups({ frame?, minGames? })                                 -> MatchupCell[]
+meta.frames({ granularityId?, granularity? })                        -> FrameRow[]
+meta.availableFilters({ granularityId?, granularity? })              -> {
+  granularityId, types, granularities, framesByType
+}
+meta.windows({ granularityId?, granularity? })                       -> string[]
 ```
+
+All meta procedures derive type ids (Quarter, Month, …) and granularity ids
+(Faction, SubFaction, Detachment) from `dim_for_type` and `dim_granularity`
+at request time. Source code never embeds those numeric ids (Rule 6).
+
+- `frame` — the `meta_for.id` to scope the query (e.g. `"quarter:2026:3"`).
+  When omitted, the server resolves it to the most-recent **populated**
+  frame at the chosen granularity, preferring the configured default type
+  (Quarter) and falling back to any populated frame of any type.
+- `granularityId` / `granularity` — pass either the numeric id from
+  `dim_granularity` or the dim name (`"Faction"`, `"SubFaction"`,
+  `"Detachment"`). Default: `"Faction"`.
+- `availableFilters` — discovery endpoint for the filter UI. Returns the
+  available types (with per-type counts of populated frames), the
+  populated granularities, and frames grouped by type with a `hasData`
+  flag. Use this to build optgroups without hardcoding type ids.
 
 ### player (public)
 
@@ -143,27 +160,20 @@ mismatches create anonymous entries. Admins link them via `admin.linkPlayer`.
 
 ## Testing
 
-**128 tests** (57 server + 71 client), all passing.
-
-### Server Tests
-
-```
-lib/glicko2.test.ts     9 tests -- Glickman 2012 worked example, inactivity, edge cases
-lib/aggregate.test.ts  23 tests -- faction stats, win rates, draws, timeline, getWeekStart
-lib/playerMatch.test.ts 11 tests -- case-insensitive, displayUsername, no partial/fuzzy
-lib/detachment.test.ts  8 tests -- BattleScribe, New Recruit, dash format, null fallback
-server.test.ts          6 tests -- HTTP session integration
-Total server: 57 tests
-```
-
-### Client Tests
-
-```
-71 tests across pages and components
-Total client: 71 tests
-```
+Server + client suites run independently; both must pass before deploys.
 
 ```bash
-cd apps/new-meta/server && pnpm test   # 57 server tests
-cd apps/new-meta/client && pnpm test   # 71 client tests
+pnpm -F new-meta-server test
+pnpm -F new-meta-client test
+```
+
+Server lib coverage of note:
+
+```
+lib/glicko2.test.ts       — Glickman 2012 worked example, inactivity, edge cases
+lib/aggregate.test.ts     — faction stats, win rates, draws, timeline, getWeekStart
+lib/playerMatch.test.ts   — case-insensitive, displayUsername, no partial/fuzzy
+lib/detachment.test.ts    — BattleScribe, New Recruit, dash format, null fallback
+lib/frameFilters.test.ts  — dim-driven type/granularity discovery, default frame resolution
+server.test.ts            — HTTP session integration (admin + public endpoints)
 ```

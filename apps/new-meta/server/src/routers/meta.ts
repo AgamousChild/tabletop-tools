@@ -1,25 +1,71 @@
 import { sql } from 'drizzle-orm'
 import { z } from 'zod'
 
+import {
+  getFramesWithData,
+  getFrameTypeSummaries,
+  getGranularityIdByName,
+  getPopulatedGranularities,
+  getTypeIdByName,
+  resolveDefaultFrame,
+} from '../lib/frameFilters.js'
 import { publicProcedure, router } from '../trpc.js'
 
 const FrameSchema = z.string().optional()
+const GranularityIdSchema = z.number().int().positive().optional()
+const GranularityNameSchema = z.string().optional()
+
+// Defaults expressed by name, not by literal id. The id is resolved
+// from dim_granularity at request time so we don't need to know the
+// numeric key in source code (Rule 6).
+const DEFAULT_GRANULARITY_NAME = 'Faction'
+// When the client doesn't specify a frame, prefer the most recent
+// populated frame of this type. If the type has no populated frames,
+// frameFilters falls back to the most recent populated frame of any
+// type, so a missing preferred type is not a hard failure.
+const DEFAULT_PREFERRED_TYPE = 'Quarter'
+// Per-faction timeline aggregates over Month-typed frames. The type
+// name is mapped to an id at request time.
+const TIMELINE_TYPE_NAME = 'Month'
+
+/**
+ * Resolve the granularity id from either an explicit id, an explicit
+ * name, or the configured default name. Throws a useful error if the
+ * default isn't present in the database.
+ */
+async function resolveGranularityId(
+  ctx: { db: { all: (q: ReturnType<typeof sql>) => Promise<unknown[]> } },
+  input: { granularityId?: number; granularity?: string } | undefined,
+): Promise<number> {
+  if (input?.granularityId != null) return input.granularityId
+  const name = input?.granularity ?? DEFAULT_GRANULARITY_NAME
+  const id = await getGranularityIdByName(ctx.db, name)
+  if (id == null) {
+    throw new Error(
+      `Granularity "${name}" not found in dim_granularity — populate the dim before querying.`,
+    )
+  }
+  return id
+}
 
 export const metaRouter = router({
   factions: publicProcedure
     .input(
-      z.object({ frame: FrameSchema, minGames: z.number().int().min(1).default(5) }).optional(),
+      z
+        .object({
+          frame: FrameSchema,
+          granularityId: GranularityIdSchema,
+          granularity: GranularityNameSchema,
+          minGames: z.number().int().min(1).default(5),
+        })
+        .optional(),
     )
     .query(async ({ ctx, input }) => {
-      // Resolve frame: use given frame or latest quarter
-      let frameId = input?.frame
-      if (!frameId) {
-        const latest = await ctx.db.all(
-          sql`SELECT id FROM meta_for WHERE type_id = 4 ORDER BY date DESC LIMIT 1`,
-        )
-        frameId = (latest[0] as any)?.id ?? null
-        if (!frameId) return []
-      }
+      const granularityId = await resolveGranularityId(ctx, input)
+
+      const frameId =
+        input?.frame ?? (await resolveDefaultFrame(ctx.db, granularityId, DEFAULT_PREFERRED_TYPE))
+      if (!frameId) return []
 
       const rows = await ctx.db.all(sql`
         SELECT mt.faction_id, df.name AS faction, df.allegiance,
@@ -28,7 +74,7 @@ export const metaRouter = router({
                mt.player_pop_pct, mt.wins, mt.losses, mt.draws, mt.games, mt.players
         FROM meta_top mt
         JOIN dim_faction df ON mt.faction_id = df.id
-        WHERE mt.meta_for_id = ${frameId} AND mt.granularity_id = 1
+        WHERE mt.meta_for_id = ${frameId} AND mt.granularity_id = ${granularityId}
         ORDER BY mt.win_rate DESC
       `)
 
@@ -58,15 +104,18 @@ export const metaRouter = router({
     }),
 
   faction: publicProcedure
-    .input(z.object({ factionId: z.string(), frame: FrameSchema }))
+    .input(
+      z.object({
+        factionId: z.string(),
+        frame: FrameSchema,
+        granularityId: GranularityIdSchema,
+        granularity: GranularityNameSchema,
+      }),
+    )
     .query(async ({ ctx, input }) => {
-      let frameId = input.frame
-      if (!frameId) {
-        const latest = await ctx.db.all(
-          sql`SELECT id FROM meta_for WHERE type_id = 4 ORDER BY date DESC LIMIT 1`,
-        )
-        frameId = (latest[0] as any)?.id ?? null
-      }
+      const granularityId = await resolveGranularityId(ctx, input)
+      const frameId =
+        input.frame ?? (await resolveDefaultFrame(ctx.db, granularityId, DEFAULT_PREFERRED_TYPE))
 
       // Faction stats
       let stat = null
@@ -74,7 +123,9 @@ export const metaRouter = router({
         const statRows = await ctx.db.all(sql`
           SELECT mt.*, df.name AS faction FROM meta_top mt
           JOIN dim_faction df ON mt.faction_id = df.id
-          WHERE mt.faction_id = ${input.factionId} AND mt.meta_for_id = ${frameId} AND mt.granularity_id = 1
+          WHERE mt.faction_id = ${input.factionId}
+            AND mt.meta_for_id = ${frameId}
+            AND mt.granularity_id = ${granularityId}
         `)
         const r = (statRows as any[])[0]
         if (r) {
@@ -121,13 +172,21 @@ export const metaRouter = router({
         players: r.players,
       }))
 
-      // Timeline (weekly)
-      const tlRows = await ctx.db.all(sql`
-        SELECT mf.date, mt.win_rate, mt.games, mt.wins, mt.losses, mt.draws
-        FROM meta_top mt JOIN meta_for mf ON mt.meta_for_id = mf.id
-        WHERE mt.faction_id = ${input.factionId} AND mt.granularity_id = 1 AND mf.type_id = 2
-        ORDER BY mf.date
-      `)
+      // Timeline — aggregate across the per-month rollup frames. Resolve
+      // the type id from dim_for_type by name rather than baking the
+      // integer into the query.
+      const timelineTypeId = await getTypeIdByName(ctx.db, TIMELINE_TYPE_NAME)
+      const tlRows =
+        timelineTypeId == null
+          ? []
+          : await ctx.db.all(sql`
+              SELECT mf.date, mt.win_rate, mt.games, mt.wins, mt.losses, mt.draws
+              FROM meta_top mt JOIN meta_for mf ON mt.meta_for_id = mf.id
+              WHERE mt.faction_id = ${input.factionId}
+                AND mt.granularity_id = ${granularityId}
+                AND mf.type_id = ${timelineTypeId}
+              ORDER BY mf.date
+            `)
       const timeline = (tlRows as any[]).map((r) => ({
         date: r.date,
         week: new Date(r.date).toISOString().slice(0, 10),
@@ -194,38 +253,97 @@ export const metaRouter = router({
       }))
     }),
 
-  frames: publicProcedure.query(async ({ ctx }) => {
-    const rows = await ctx.db.all(sql`
-      SELECT mf.id, mf.type_id, dft.name AS type_name, mf.date, mf.end_date, mf.month, mf.quarter, mf.year
-      FROM meta_for mf JOIN dim_for_type dft ON mf.type_id = dft.id
-      WHERE mf.type_id IN (1, 3, 4, 5, 6) ORDER BY mf.date DESC
-    `)
-    return (rows as any[]).map((r) => ({
-      id: r.id,
-      typeId: r.type_id,
-      typeName: r.type_name,
-      date: r.date,
-      endDate: r.end_date,
-      month: r.month,
-      quarter: r.quarter,
-      year: r.year,
-      label:
-        r.type_id === 4
-          ? `${r.year} Q${r.quarter}`
-          : r.type_id === 3
-            ? `${r.year}-${String(r.month).padStart(2, '0')}`
-            : r.type_id === 5
-              ? `${r.year}`
-              : r.type_id === 6
-                ? r.id.replace('dataslate:', 'Dataslate: ')
-                : r.id.replace('event:', ''),
-    }))
-  }),
-
-  windows: publicProcedure.query(async ({ ctx }) => {
-    const rows = await ctx.db.all(
-      sql`SELECT DISTINCT id FROM meta_for WHERE type_id = 4 ORDER BY date DESC`,
+  /**
+   * Returns all frames in the database joined with their type, plus a
+   * hasData flag for the requested granularity. Use this when you want
+   * the whole list (e.g. an admin view). For the selector UI, prefer
+   * `availableFilters` which packages types + granularities + frames
+   * together.
+   */
+  frames: publicProcedure
+    .input(
+      z
+        .object({
+          granularityId: GranularityIdSchema,
+          granularity: GranularityNameSchema,
+        })
+        .optional(),
     )
-    return (rows as any[]).map((r) => r.id as string)
-  }),
+    .query(async ({ ctx, input }) => {
+      const granularityId = await resolveGranularityId(ctx, input)
+      const frames = await getFramesWithData(ctx.db, granularityId)
+      return frames.map((f) => ({
+        id: f.id,
+        typeId: f.typeId,
+        typeName: f.typeName,
+        date: f.date,
+        endDate: f.endDate,
+        month: f.month,
+        quarter: f.quarter,
+        year: f.year,
+        label: f.label,
+        hasData: f.hasData,
+      }))
+    }),
+
+  /**
+   * Discovery endpoint for filter UI. Returns the available types,
+   * granularities, and per-type frame lists — all derived from the
+   * dim tables, no hardcoded ids.
+   */
+  availableFilters: publicProcedure
+    .input(
+      z
+        .object({
+          granularityId: GranularityIdSchema,
+          granularity: GranularityNameSchema,
+        })
+        .optional(),
+    )
+    .query(async ({ ctx, input }) => {
+      const granularityId = await resolveGranularityId(ctx, input)
+      const [types, granularities, frames] = await Promise.all([
+        getFrameTypeSummaries(ctx.db, granularityId),
+        getPopulatedGranularities(ctx.db),
+        getFramesWithData(ctx.db, granularityId),
+      ])
+
+      const framesByType: Record<number, typeof frames> = {}
+      for (const f of frames) {
+        if (!framesByType[f.typeId]) framesByType[f.typeId] = []
+        framesByType[f.typeId].push(f)
+      }
+
+      return {
+        granularityId,
+        types,
+        granularities,
+        framesByType,
+      }
+    }),
+
+  windows: publicProcedure
+    .input(
+      z
+        .object({
+          granularityId: GranularityIdSchema,
+          granularity: GranularityNameSchema,
+        })
+        .optional(),
+    )
+    .query(async ({ ctx, input }) => {
+      const granularityId = await resolveGranularityId(ctx, input)
+      const preferredTypeId = await getTypeIdByName(ctx.db, DEFAULT_PREFERRED_TYPE)
+      if (preferredTypeId == null) return []
+
+      const rows = await ctx.db.all(sql`
+        SELECT DISTINCT mf.id
+        FROM meta_for mf
+        JOIN meta_top mt ON mt.meta_for_id = mf.id
+        WHERE mf.type_id = ${preferredTypeId}
+          AND mt.granularity_id = ${granularityId}
+        ORDER BY mf.date DESC
+      `)
+      return (rows as any[]).map((r) => r.id as string)
+    }),
 })
