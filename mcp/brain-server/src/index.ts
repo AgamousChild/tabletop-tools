@@ -14,9 +14,9 @@
 
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js'
-import { z } from 'zod'
-import { readFileSync, existsSync } from 'fs'
+import { existsSync, readFileSync } from 'fs'
 import { join } from 'path'
+import { z } from 'zod'
 
 // ── Load all nodes from local build output ───────────────────────────────────
 
@@ -41,18 +41,30 @@ interface Node {
 }
 
 let allNodes: Node[] = []
+// Last-loaded manifest signature. When build-graph.ts rebuilds the brain we
+// want a long-running MCP host to pick up the new nodes without a restart —
+// otherwise queries return a snapshot frozen at first load.
+let loadedUpdatedAt: string | null = null
 
 function loadNodes(): void {
-  if (allNodes.length > 0) return
-
   const manifestPath = join(BRAIN_DIR, 'manifest.json')
   if (!existsSync(manifestPath)) {
-    console.error(`Brain data not found at ${BRAIN_DIR}. Run build-graph.ts first.`)
+    if (allNodes.length === 0) {
+      console.error(`Brain data not found at ${BRAIN_DIR}. Run build-graph.ts first.`)
+    }
     return
   }
 
-  const manifest = JSON.parse(readFileSync(manifestPath, 'utf-8')) as { files: Record<string, string> }
+  const manifest = JSON.parse(readFileSync(manifestPath, 'utf-8')) as {
+    files: Record<string, string>
+    updatedAt?: string
+  }
+  // Cache hit only when the manifest hasn't been rewritten since the last load.
+  // `updatedAt` changes on every rebuild; using it avoids re-reading 64MB of
+  // node JSON on every query while still picking up new builds automatically.
+  if (allNodes.length > 0 && manifest.updatedAt === loadedUpdatedAt) return
 
+  allNodes = []
   for (const file of Object.keys(manifest.files)) {
     if (!file.startsWith('nodes/')) continue
     const filePath = join(BRAIN_DIR, file)
@@ -60,8 +72,9 @@ function loadNodes(): void {
     const nodes = JSON.parse(readFileSync(filePath, 'utf-8')) as Node[]
     allNodes.push(...nodes)
   }
+  loadedUpdatedAt = manifest.updatedAt ?? null
 
-  console.error(`Loaded ${allNodes.length} brain nodes`)
+  console.error(`Loaded ${allNodes.length} brain nodes (updatedAt=${loadedUpdatedAt})`)
 }
 
 // ── Search ───────────────────────────────────────────────────────────────────
@@ -69,11 +82,11 @@ function loadNodes(): void {
 function searchNodes(query: string, limit: number = 10): Node[] {
   loadNodes()
   const q = query.toLowerCase()
-  const terms = q.split(/\s+/).filter(t => t.length > 1)
+  const terms = q.split(/\s+/).filter((t) => t.length > 1)
 
   // Score each node by how many terms match in title/content/keywords
   const scored = allNodes
-    .map(node => {
+    .map((node) => {
       const text = `${node.title} ${node.summary} ${node.keywords.join(' ')}`.toLowerCase()
       let score = 0
 
@@ -108,7 +121,9 @@ function searchNodes(query: string, limit: number = 10): Node[] {
 function formatNode(node: Node, verbose: boolean = false): string {
   const lines: string[] = []
   lines.push(`## ${node.title}`)
-  lines.push(`**Category:** ${node.category} | **Faction:** ${node.factionName || node.factionId || 'none'} | **Layer:** ${node.layer}`)
+  lines.push(
+    `**Category:** ${node.category} | **Faction:** ${node.factionName || node.factionId || 'none'} | **Layer:** ${node.layer}`,
+  )
 
   if (node.phase) lines.push(`**Phase:** ${node.phase}`)
   if (node.subfaction) lines.push(`**Subfaction:** ${node.subfaction}`)
@@ -153,8 +168,19 @@ server.tool(
     if (results.length === 0) {
       return { content: [{ type: 'text' as const, text: `No results for "${query}"` }] }
     }
-    const text = results.map((n, i) => `### ${i + 1}. ${n.title} (${n.category})\n${n.factionName || ''}\n${n.summary}`).join('\n\n')
-    return { content: [{ type: 'text' as const, text: `Found ${results.length} results for "${query}":\n\n${text}` }] }
+    const text = results
+      .map(
+        (n, i) => `### ${i + 1}. ${n.title} (${n.category})\n${n.factionName || ''}\n${n.summary}`,
+      )
+      .join('\n\n')
+    return {
+      content: [
+        {
+          type: 'text' as const,
+          text: `Found ${results.length} results for "${query}":\n\n${text}`,
+        },
+      ],
+    }
   },
 )
 
@@ -167,15 +193,23 @@ server.tool(
   async ({ name }) => {
     loadNodes()
     const lower = name.toLowerCase()
-    const node = allNodes.find(n =>
-      n.title.toLowerCase() === lower &&
-      !['weapon', 'unit-ability', 'wargear-option', 'leader-attachment', 'unit-composition'].includes(n.category)
+    const node = allNodes.find(
+      (n) =>
+        n.title.toLowerCase() === lower &&
+        ![
+          'weapon',
+          'unit-ability',
+          'wargear-option',
+          'leader-attachment',
+          'unit-composition',
+        ].includes(n.category),
     )
     if (!node) {
       // Try partial match
-      const partial = allNodes.find(n =>
-        n.title.toLowerCase().includes(lower) &&
-        !['weapon', 'unit-ability', 'wargear-option'].includes(n.category)
+      const partial = allNodes.find(
+        (n) =>
+          n.title.toLowerCase().includes(lower) &&
+          !['weapon', 'unit-ability', 'wargear-option'].includes(n.category),
       )
       if (partial) {
         return { content: [{ type: 'text' as const, text: formatNode(partial, true) }] }
@@ -196,25 +230,38 @@ server.tool(
   async ({ name, faction }) => {
     loadNodes()
     const lower = name.toLowerCase()
-    let datasheet = allNodes.find(n =>
-      n.category === 'datasheet' &&
-      n.title.toLowerCase() === lower &&
-      (!faction || n.factionId === faction)
+    let datasheet = allNodes.find(
+      (n) =>
+        n.category === 'datasheet' &&
+        n.title.toLowerCase() === lower &&
+        (!faction || n.factionId === faction),
     )
     if (!datasheet) {
-      datasheet = allNodes.find(n =>
-        n.category === 'datasheet' &&
-        n.title.toLowerCase().includes(lower) &&
-        (!faction || n.factionId === faction)
+      datasheet = allNodes.find(
+        (n) =>
+          n.category === 'datasheet' &&
+          n.title.toLowerCase().includes(lower) &&
+          (!faction || n.factionId === faction),
       )
     }
     if (!datasheet) {
-      return { content: [{ type: 'text' as const, text: `Unit "${name}" not found${faction ? ` in ${faction}` : ''}` }] }
+      return {
+        content: [
+          {
+            type: 'text' as const,
+            text: `Unit "${name}" not found${faction ? ` in ${faction}` : ''}`,
+          },
+        ],
+      }
     }
 
     // Get weapons and abilities
-    const weapons = allNodes.filter(n => n.datasheetId === datasheet!.id && n.category === 'weapon')
-    const abilities = allNodes.filter(n => n.datasheetId === datasheet!.id && n.category === 'unit-ability')
+    const weapons = allNodes.filter(
+      (n) => n.datasheetId === datasheet!.id && n.category === 'weapon',
+    )
+    const abilities = allNodes.filter(
+      (n) => n.datasheetId === datasheet!.id && n.category === 'unit-ability',
+    )
 
     const lines: string[] = [formatNode(datasheet, true), '']
 
@@ -250,68 +297,102 @@ server.tool(
     loadNodes()
 
     const filters: Record<string, (n: Node) => boolean> = {
-      'core-rules': n => n.layer === 'core' && !['faq', 'commentary', 'challenger', 'primary-mission', 'secondary-mission', 'twist', 'deployment-zone', 'terrain-layout'].includes(n.category) && !n.id.startsWith('tc:'),
-      'errata': n => n.layer === 'errata' || n.category === 'faq' || n.category === 'commentary',
-      'army-rules': n => n.category === 'faction-ability' && !n.detachmentId && !n.summary?.endsWith(' faction.') && !/\(.+\)\s*$/.test(n.title),
-      'detachments': n => n.category === 'detachment-rule',
-      'enhancements': n => n.category === 'enhancement' && !/^[\d\-\u2011]/.test(n.title),
-      'units': n => n.category === 'datasheet',
-      'community': n => n.layer === 'community',
-      'ca-primary-missions': n => n.category === 'primary-mission',
-      'ca-secondary-missions': n => n.category === 'secondary-mission' && !n.id.startsWith('tc:'),
-      'ca-twists': n => n.category === 'twist',
-      'ca-challengers': n => n.category === 'challenger',
-      'ca-deployments': n => n.category === 'deployment-zone',
-      'ca-terrain': n => n.category === 'terrain-layout',
+      'core-rules': (n) =>
+        n.layer === 'core' &&
+        ![
+          'faq',
+          'commentary',
+          'challenger',
+          'primary-mission',
+          'secondary-mission',
+          'twist',
+          'deployment-zone',
+          'terrain-layout',
+        ].includes(n.category) &&
+        !n.id.startsWith('tc:'),
+      errata: (n) => n.layer === 'errata' || n.category === 'faq' || n.category === 'commentary',
+      'army-rules': (n) =>
+        n.category === 'faction-ability' &&
+        !n.detachmentId &&
+        !n.summary?.endsWith(' faction.') &&
+        !/\(.+\)\s*$/.test(n.title),
+      detachments: (n) => n.category === 'detachment-rule',
+      enhancements: (n) => n.category === 'enhancement' && !/^[\d\-\u2011]/.test(n.title),
+      units: (n) => n.category === 'datasheet',
+      community: (n) => n.layer === 'community',
+      'ca-primary-missions': (n) => n.category === 'primary-mission',
+      'ca-secondary-missions': (n) => n.category === 'secondary-mission' && !n.id.startsWith('tc:'),
+      'ca-twists': (n) => n.category === 'twist',
+      'ca-challengers': (n) => n.category === 'challenger',
+      'ca-deployments': (n) => n.category === 'deployment-zone',
+      'ca-terrain': (n) => n.category === 'terrain-layout',
     }
 
     const filter = filters[category]
     if (!filter) {
-      return { content: [{ type: 'text' as const, text: `Unknown category "${category}". Available: ${Object.keys(filters).join(', ')}` }] }
+      return {
+        content: [
+          {
+            type: 'text' as const,
+            text: `Unknown category "${category}". Available: ${Object.keys(filters).join(', ')}`,
+          },
+        ],
+      }
     }
 
     let nodes = allNodes.filter(filter)
-    if (faction) nodes = nodes.filter(n => n.factionId === faction)
+    if (faction) nodes = nodes.filter((n) => n.factionId === faction)
     nodes.sort((a, b) => a.title.localeCompare(b.title))
 
     const total = nodes.length
     const start = (page - 1) * pageSize
     const paged = nodes.slice(start, start + pageSize)
 
-    const lines = paged.map((n, i) => `${start + i + 1}. **${n.title}** (${n.factionName || n.factionId || ''}) — ${n.summary.substring(0, 80)}`)
+    const lines = paged.map(
+      (n, i) =>
+        `${start + i + 1}. **${n.title}** (${n.factionName || n.factionId || ''}) — ${n.summary.substring(0, 80)}`,
+    )
     const header = `**${category}** — ${total} items (page ${page}/${Math.ceil(total / pageSize)})`
 
     return { content: [{ type: 'text' as const, text: `${header}\n\n${lines.join('\n')}` }] }
   },
 )
 
-server.tool(
-  'brain_factions',
-  'List all factions with their unit counts.',
-  {},
-  async () => {
-    loadNodes()
-    const counts = new Map<string, { name: string; units: number; armyRules: number; detachments: number }>()
+server.tool('brain_factions', 'List all factions with their unit counts.', {}, async () => {
+  loadNodes()
+  const counts = new Map<
+    string,
+    { name: string; units: number; armyRules: number; detachments: number }
+  >()
 
-    for (const node of allNodes) {
-      if (!node.factionId) continue
-      if (!counts.has(node.factionId)) {
-        counts.set(node.factionId, { name: node.factionName || node.factionId, units: 0, armyRules: 0, detachments: 0 })
-      }
-      const entry = counts.get(node.factionId)!
-      if (node.category === 'datasheet') entry.units++
-      if (node.category === 'faction-ability' && !node.detachmentId) entry.armyRules++
-      if (node.category === 'detachment-rule') entry.detachments++
+  for (const node of allNodes) {
+    if (!node.factionId) continue
+    if (!counts.has(node.factionId)) {
+      counts.set(node.factionId, {
+        name: node.factionName || node.factionId,
+        units: 0,
+        armyRules: 0,
+        detachments: 0,
+      })
     }
+    const entry = counts.get(node.factionId)!
+    if (node.category === 'datasheet') entry.units++
+    if (node.category === 'faction-ability' && !node.detachmentId) entry.armyRules++
+    if (node.category === 'detachment-rule') entry.detachments++
+  }
 
-    const sorted = [...counts.entries()].sort((a, b) => b[1].units - a[1].units)
-    const lines = sorted.map(([, data]) =>
-      `**${data.name}** — ${data.units} units, ${data.armyRules} army rules, ${data.detachments} detachments`
-    )
+  const sorted = [...counts.entries()].sort((a, b) => b[1].units - a[1].units)
+  const lines = sorted.map(
+    ([, data]) =>
+      `**${data.name}** — ${data.units} units, ${data.armyRules} army rules, ${data.detachments} detachments`,
+  )
 
-    return { content: [{ type: 'text' as const, text: `## Factions (${sorted.length})\n\n${lines.join('\n')}` }] }
-  },
-)
+  return {
+    content: [
+      { type: 'text' as const, text: `## Factions (${sorted.length})\n\n${lines.join('\n')}` },
+    ],
+  }
+})
 
 // ── Start ────────────────────────────────────────────────────────────────────
 
