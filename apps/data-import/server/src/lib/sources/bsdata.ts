@@ -8,7 +8,7 @@ import {
 } from '@tabletop-tools/game-content/src/adapters/bsdata/parser'
 import type { UnitProfile } from '@tabletop-tools/game-content/src/types'
 
-const DEFAULT_REPO = 'BSData/wh40k-10e'
+const DEFAULT_REPO = 'fmoraldo-mithraw/wh40k-11e'
 const DEFAULT_BRANCH = 'main'
 
 interface GitHubTreeItem {

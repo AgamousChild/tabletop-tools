@@ -1,6 +1,24 @@
-import { describe, expect, it } from 'vitest'
+import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 
+import { _setFactionCodesForTesting, resetFactionCodes } from '../faction-codes'
 import { parseFactionPack } from './faction-pack'
+
+beforeAll(() => {
+  _setFactionCodesForTesting(
+    new Map<string, string>([
+      ['space-marines', 'space-marines'],
+      ['blood-angels', 'blood-angels'],
+      ['aoi', 'imperial-agents'],
+      ['imperial-agents', 'imperial-agents'],
+      ['dru', 'drukhari'],
+      ['drukhari', 'drukhari'],
+      ['gc', 'genestealer-cults'],
+      ['genestealer-cults', 'genestealer-cults'],
+    ]),
+    new Set(['space-marines', 'blood-angels', 'imperial-agents', 'drukhari', 'genestealer-cults']),
+  )
+})
+afterAll(() => resetFactionCodes())
 
 // Matches the actual structure produced by the gw-sync structured PDF parser:
 // ## = detachment, ##### = rules/enhancements, *...STRATAGEM* = stratagem labels
@@ -45,7 +63,11 @@ A hail of fire drives back the foe.
 `.trim()
 
 describe('parseFactionPack', () => {
-  const result = parseFactionPack(SAMPLE_FACTION, 'space-marines', '2026-04-08')
+  // Lazy so top-level beforeAll primes faction codes before parsing runs.
+  let result: ReturnType<typeof parseFactionPack>
+  beforeAll(() => {
+    result = parseFactionPack(SAMPLE_FACTION, 'space-marines', '2026-04-08')
+  })
 
   it('extracts detachment rule node', () => {
     const detRules = result.nodes.filter((n) => n.category === 'detachment-rule')

@@ -52,3 +52,16 @@ export function resetFactionCodes(): void {
   cachedCodeToSlug = null
   cachedSlugs = null
 }
+
+/**
+ * Prime the cache directly without going through a DB. Test-only — lets
+ * parser tests that don't spin up an in-memory libsql use `normalizeFactionId`
+ * without throwing.
+ */
+export function _setFactionCodesForTesting(
+  codeToSlug: Map<string, string>,
+  slugs: Set<string>,
+): void {
+  cachedCodeToSlug = codeToSlug
+  cachedSlugs = slugs
+}
