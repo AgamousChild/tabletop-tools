@@ -1,10 +1,9 @@
-# finish-deploy.ps1 — run everything *after* SYNC_SECRET rotation to land
-# today's data-import + brain changes in production.
+# finish-deploy.ps1 — run everything the auto-deploy CI can't, to land the
+# latest data-import + brain changes in production.
 #
 # Steps:
-#   1. Trigger the deploy-data-import workflow (force=true) and wait for it.
-#      This is the path the auto-deploy CI takes; we just kick it manually so
-#      R2 picks up the new MFM / blank-keyword / repeat-cost outputs now.
+#   1. Trigger the sync-data workflow (CI-runner sync → R2) and wait for it.
+#      This refreshes the data-import R2 outputs (Wahapedia + BSData + MFM).
 #   2. Rebuild the brain graph locally (build-graph.ts reads GW markdown and
 #      Wahapedia JSON from disk — can't run in CI).
 #   3. Upload the rebuilt brain graph to R2 (upload-graph.ts).
@@ -48,17 +47,17 @@ if (-not $env:BRAIN_SYNC_SECRET) {
 $buildVersion = Get-Date -Format 'yyyyMMdd-HHmmss'
 Write-Host "Build version: $buildVersion" -ForegroundColor Cyan
 
-# ── 1. trigger data-import workflow and wait ──────────────────────────────────
+# ── 1. trigger sync-data workflow and wait ────────────────────────────────────
 Write-Host ''
-Write-Host '═══ 1/5  Trigger data-import workflow (force=true) ═══' -ForegroundColor Yellow
-gh workflow run deploy-data-import.yml --ref main -f force_sync=true
+Write-Host '═══ 1/5  Trigger sync-data workflow ═══' -ForegroundColor Yellow
+gh workflow run sync-data.yml --ref main
 if ($LASTEXITCODE -ne 0) { throw 'gh workflow run failed' }
 
 Start-Sleep -Seconds 5
-$runId = (gh run list --workflow=deploy-data-import.yml --limit 1 --json databaseId -q '.[0].databaseId').Trim()
+$runId = (gh run list --workflow=sync-data.yml --limit 1 --json databaseId -q '.[0].databaseId').Trim()
 Write-Host "Watching run $runId..." -ForegroundColor Cyan
 gh run watch $runId --exit-status
-if ($LASTEXITCODE -ne 0) { throw "deploy-data-import workflow failed — gh run view $runId" }
+if ($LASTEXITCODE -ne 0) { throw "sync-data workflow failed — gh run view $runId" }
 
 # ── 2. rebuild brain graph ────────────────────────────────────────────────────
 Write-Host ''

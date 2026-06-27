@@ -10,14 +10,7 @@ bucket_name = "tabletop-tools-game-data"
 [vars]
 CORS_ORIGIN = "https://tabletop-tools.net"
 
-# /sync runs the full ingest chain (Wahapedia CSV + BSData XML + MFM YAML +
-# producers) in one invocation. The Paid-plan default of 30s CPU is too tight
-# once 11e parsing and the canonical-content producers are in play — sync was
-# returning Cloudflare 1102 (CPU exceeded). 5 min is the Paid-plan max.
-[limits]
-cpu_ms = 300000
-
-# Secrets — set via: wrangler secret put SYNC_SECRET
-
-[triggers]
-crons = ["0 3 * * 1"]
+# The Worker is a read-only proxy in front of R2 (/manifest.json and
+# /data/:file). The sync pipeline runs in GitHub Actions
+# (.github/workflows/sync-data.yml) — see CLAUDE.md Rule 9. No /sync
+# endpoint, no cron, no elevated CPU cap required here.

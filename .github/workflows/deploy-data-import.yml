@@ -1,18 +1,11 @@
 # deploy-data-import.yml — Auto-deploy the data-import Worker on push to main
 #
-# Triggers a Cloudflare Worker deploy whenever the data-import server or its
-# shared dependencies change, then kicks the deployed Worker's /sync endpoint
-# so R2 picks up parser/output changes immediately (rather than waiting for the
-# weekly Worker cron on Monday 3am UTC).
-#
-# Brain (apps/brain/server) is NOT auto-deployed here: its graph build reads
-# source files outside the repo (GW markdown), so the rebuild remains manual
-# per apps/brain/DEPLOY.md.
+# The Worker is a read-only proxy in front of R2 (manifest + per-file JSON).
+# The sync pipeline lives in sync-data.yml (GH Actions runner), not here.
 #
 # Prerequisites (org / repo secrets):
 #   - CLOUDFLARE_API_TOKEN: Cloudflare API token with Workers Scripts: Edit
 #   - CLOUDFLARE_ACCOUNT_ID: Cloudflare account id
-#   - SYNC_SECRET:           Bearer token matching the data-import Worker
 
 name: Deploy data-import
 
@@ -24,18 +17,12 @@ on:
       - 'packages/game-content/**'
       - '.github/workflows/deploy-data-import.yml'
   workflow_dispatch:
-    inputs:
-      force_sync:
-        description: 'Trigger /sync with force=true after deploy'
-        type: boolean
-        default: false
 
 concurrency:
   group: deploy-data-import
   cancel-in-progress: false
 
 env:
-  SYNC_URL: https://tabletop-tools-data-import.micah-ec2.workers.dev/sync
   MANIFEST_URL: https://tabletop-tools-data-import.micah-ec2.workers.dev/manifest.json
 
 jobs:
@@ -75,28 +62,5 @@ jobs:
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
         run: pnpm --filter data-import-server exec wrangler deploy
 
-      - name: Trigger /sync (refresh R2 outputs against the just-deployed code)
-        env:
-          SYNC_SECRET: ${{ secrets.SYNC_SECRET }}
-          FORCE: ${{ inputs.force_sync && 'true' || 'false' }}
-        run: |
-          echo "POST $SYNC_URL (force=$FORCE)"
-          RESPONSE=$(curl -sf -X POST "$SYNC_URL" \
-            -H "Authorization: Bearer ${SYNC_SECRET}" \
-            -H "Content-Type: application/json" \
-            -d "{\"force\": $FORCE}" \
-            -w "\n%{http_code}" \
-            --max-time 300)
-          HTTP_CODE=$(echo "$RESPONSE" | tail -1)
-          BODY=$(echo "$RESPONSE" | head -n -1)
-          echo "HTTP $HTTP_CODE"
-          echo "$BODY" | jq . 2>/dev/null || echo "$BODY"
-          if [ "$HTTP_CODE" -ne 200 ]; then
-            echo "Sync failed with HTTP $HTTP_CODE"
-            exit 1
-          fi
-
-      - name: Verify manifest
-        run: |
-          echo "Fetching $MANIFEST_URL"
-          curl -sf "$MANIFEST_URL" | jq '{version, updatedAt, mfm, wahapedia: .wahapedia.recordCounts | length, bsdata: .bsdata.unitCount}'
+      - name: Verify manifest still responds
+        run: curl -sf "$MANIFEST_URL" | jq '{version, updatedAt}'
