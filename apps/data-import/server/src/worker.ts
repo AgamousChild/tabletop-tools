@@ -1,35 +1,35 @@
 /**
+ * Read-only proxy in front of the data-import R2 bucket. Serves the manifest
+ * and per-file JSON to the data-import client and any consumer that reads
+ * raw game data from R2.
+ *
+ * The sync pipeline (Wahapedia + BSData + MFM + producers) runs in GitHub
+ * Actions, not here — see .github/workflows/sync-data.yml and
+ * apps/data-import/server/src/sync-cli.ts. Cloudflare Workers can't fit the
+ * full sync in one invocation's CPU budget, and per CLAUDE.md Rule 9 that's
+ * not the right place for offline batch work anyway.
+ *
  * @see docs/etl-data-pipelines.md — ETL diagram and function reference
  * @see docs/schema-indexeddb-game-data.md — IndexedDB game data schema
  */
-import { createDb, type Db } from '@tabletop-tools/db'
 import { Hono } from 'hono'
 import { cors } from 'hono/cors'
 
-import { runSync } from './lib/sync'
 import type { Env } from './types'
 
 type HonoEnv = { Bindings: Env }
 
 const app = new Hono<HonoEnv>()
 
-/** Returns a db client when both secrets are present; undefined otherwise (R2-only mode). */
-function dbFromEnv(env: Env): Db | undefined {
-  if (env.TURSO_DB_URL && env.TURSO_AUTH_TOKEN) {
-    return createDb({ url: env.TURSO_DB_URL, authToken: env.TURSO_AUTH_TOKEN })
-  }
-  return undefined
-}
-
 app.use('*', async (c, next) => {
   const origin = c.env.CORS_ORIGIN || 'https://tabletop-tools.net'
-  return cors({ origin, allowMethods: ['GET', 'POST'] })(c, next)
+  return cors({ origin, allowMethods: ['GET'] })(c, next)
 })
 
 app.get('/manifest.json', async (c) => {
   const obj = await c.env.GAME_DATA_BUCKET.get('manifest.json')
   if (!obj) {
-    return c.json({ error: 'No manifest found — run sync first' }, 404)
+    return c.json({ error: 'No manifest found — sync workflow has not run yet' }, 404)
   }
   c.header('Cache-Control', 'public, max-age=300')
   return c.json(await obj.json())
@@ -49,66 +49,6 @@ app.get('/data/:file', async (c) => {
   return c.body(await obj.text())
 })
 
-app.post('/sync', async (c) => {
-  const secret = c.env.SYNC_SECRET
-  if (secret) {
-    const auth = c.req.header('Authorization')
-    if (auth !== `Bearer ${secret}`) {
-      return c.json({ error: 'Unauthorized' }, 401)
-    }
-  }
-
-  let force = false
-  let skipProducers = false
-  let sourcesParam: string | undefined
-  try {
-    const body = await c.req.json<{
-      force?: boolean
-      skipProducers?: boolean
-      sources?: string | string[]
-    }>()
-    force = body.force === true
-    skipProducers = body.skipProducers === true
-    if (Array.isArray(body.sources)) sourcesParam = body.sources.join(',')
-    else if (typeof body.sources === 'string') sourcesParam = body.sources
-  } catch {
-    /* no body or not JSON — that's fine */
-  }
-  // Also honor query params so workflows can curl /sync?... without a JSON body.
-  if (c.req.query('skipProducers') === 'true') skipProducers = true
-  if (c.req.query('force') === 'true') force = true
-  const querySources = c.req.query('sources')
-  if (querySources) sourcesParam = querySources
-
-  type Source = 'wahapedia' | 'bsdata' | 'mfm' | 'missions'
-  let sources: Set<Source> | undefined
-  if (sourcesParam) {
-    const valid: Source[] = ['wahapedia', 'bsdata', 'mfm', 'missions']
-    sources = new Set(
-      sourcesParam
-        .split(',')
-        .map((s) => s.trim())
-        .filter((s): s is Source => (valid as string[]).includes(s)),
-    )
-  }
-
-  const result = await runSync(
-    c.env.GAME_DATA_BUCKET,
-    c.env.GITHUB_TOKEN,
-    force,
-    dbFromEnv(c.env),
-    {
-      skipProducers,
-      sources,
-    },
-  )
-  return c.json(result)
-})
-
 export default {
   fetch: app.fetch,
-
-  async scheduled(_event: ScheduledEvent, env: Env, ctx: ExecutionContext) {
-    ctx.waitUntil(runSync(env.GAME_DATA_BUCKET, env.GITHUB_TOKEN, false, dbFromEnv(env)))
-  },
 }
