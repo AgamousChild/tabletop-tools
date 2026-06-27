@@ -314,6 +314,7 @@ export function convertGameData(input: GameDataInput, retrievedAt?: string): Gam
   }
 
   const SUBFACTION_KEYWORDS = [
+    // Space Marines chapters
     'Blood Angels',
     'Dark Angels',
     'Space Wolves',
@@ -327,9 +328,20 @@ export function convertGameData(input: GameDataInput, retrievedAt?: string): Gam
     'White Scars',
     'Crimson Fists',
     'Blood Ravens',
+    // Aeldari
     'Ynnari',
     'Harlequins',
     'Asuryani',
+    // Chaos Space Marines cult legions — these are independent factions in
+    // their own right, but Wahapedia files some of their datasheets under the
+    // CSM faction with the cult name as a faction keyword (e.g. Plague Marines
+    // shows up under CSM tagged Death Guard). Tagging the subfaction keeps
+    // those units filterable for a cult-focused army.
+    'Death Guard',
+    'Thousand Sons',
+    'World Eaters',
+    'Emperor’s Children',
+    // Chaos Daemons greater-daemon legions
     'Plague Legions',
     'Scintillating Legions',
     'Legions of Excess',
