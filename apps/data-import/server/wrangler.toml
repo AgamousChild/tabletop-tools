@@ -10,6 +10,13 @@ bucket_name = "tabletop-tools-game-data"
 [vars]
 CORS_ORIGIN = "https://tabletop-tools.net"
 
+# /sync runs the full ingest chain (Wahapedia CSV + BSData XML + MFM YAML +
+# producers) in one invocation. The Paid-plan default of 30s CPU is too tight
+# once 11e parsing and the canonical-content producers are in play — sync was
+# returning Cloudflare 1102 (CPU exceeded). 5 min is the Paid-plan max.
+[limits]
+cpu_ms = 300000
+
 # Secrets — set via: wrangler secret put SYNC_SECRET
 
 [triggers]
