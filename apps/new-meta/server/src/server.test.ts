@@ -75,6 +75,17 @@ beforeAll(async () => {
       registered_at INTEGER NOT NULL
     );
   `)
+
+  // Seed the dim tables so frame-filter procedures can resolve names
+  // to ids (Rule 6: source code reads from data, doesn't contain it).
+  // Ids match production.
+  await client.executeMultiple(`
+    INSERT INTO dim_for_type (id, name) VALUES
+      (1, 'Event'), (2, 'Weekend'), (3, 'Month'), (4, 'Quarter'),
+      (5, 'Year'), (6, 'DataSlate'), (7, 'TournamentPack'), (8, 'Edition');
+    INSERT INTO dim_granularity (id, name) VALUES
+      (1, 'Faction'), (2, 'SubFaction'), (3, 'Detachment');
+  `)
 })
 
 afterAll(() => client.close())

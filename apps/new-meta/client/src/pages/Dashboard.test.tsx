@@ -43,8 +43,17 @@ vi.mock('../lib/trpc', () => ({
       matchups: {
         useQuery: () => ({ data: mockMatchups, isLoading: false }),
       },
-      frames: {
-        useQuery: () => ({ data: [] }),
+      availableFilters: {
+        useQuery: () => ({
+          data: {
+            granularityId: 1,
+            types: [],
+            // Single granularity hides the GranularitySelector — keeps
+            // the test focused on dashboard layout, not the picker.
+            granularities: [{ id: 1, name: 'Faction' }],
+            framesByType: {},
+          },
+        }),
       },
     },
   },

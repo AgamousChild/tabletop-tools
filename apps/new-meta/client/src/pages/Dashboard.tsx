@@ -1,6 +1,7 @@
 import { useState } from 'react'
 
 import { FactionTable } from '../components/FactionTable'
+import { GranularitySelector } from '../components/GranularitySelector'
 import { MatchupMatrix } from '../components/MatchupMatrix'
 import { MetaWindowSelector } from '../components/MetaWindowSelector'
 import { trpc } from '../lib/trpc'
@@ -11,9 +12,11 @@ interface Props {
 
 export function Dashboard({ onFactionSelect }: Props) {
   const [frame, setFrame] = useState<string | undefined>()
+  const [granularityId, setGranularityId] = useState<number | undefined>()
 
   const { data: factions = [], isLoading: loadingFactions } = trpc.meta.factions.useQuery({
     frame,
+    granularityId,
     minGames: 5,
   })
 
@@ -23,7 +26,10 @@ export function Dashboard({ onFactionSelect }: Props) {
     <div className="space-y-8">
       <div className="flex items-center justify-between">
         <h1 className="text-2xl font-semibold text-slate-100">Meta Dashboard</h1>
-        <MetaWindowSelector value={frame} onChange={setFrame} />
+        <div className="flex items-center gap-2">
+          <GranularitySelector value={granularityId} onChange={setGranularityId} />
+          <MetaWindowSelector value={frame} onChange={setFrame} />
+        </div>
       </div>
       <p className="text-xs text-slate-500 mb-4">
         Faction win rates, event placements, and head-to-head matchups from{' '}
