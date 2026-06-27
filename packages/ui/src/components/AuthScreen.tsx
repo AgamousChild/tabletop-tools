@@ -59,10 +59,10 @@ export function AuthScreen({ title, subtitle, onAuthenticated, authClient }: Aut
   }
 
   return (
-    <div className="min-h-screen bg-slate-950 text-slate-100 flex items-center justify-center p-4">
+    <div className="min-h-screen bg-background text-foreground flex items-center justify-center p-4">
       <div className="w-full max-w-sm">
-        <h1 className="text-4xl font-bold text-amber-400 mb-1 text-center">{title}</h1>
-        {subtitle && <p className="text-slate-400 text-center mb-8">{subtitle}</p>}
+        <h1 className="text-4xl font-bold text-accent mb-1 text-center">{title}</h1>
+        {subtitle && <p className="text-foreground-subtle text-center mb-8">{subtitle}</p>}
 
         <form onSubmit={handleSubmit} className="space-y-4">
           {mode === 'register' && (
@@ -72,7 +72,7 @@ export function AuthScreen({ title, subtitle, onAuthenticated, authClient }: Aut
               onChange={(e) => setName(e.target.value)}
               placeholder="Name"
               required
-              className="w-full px-3 py-2 rounded-lg bg-slate-900 border border-slate-800 text-slate-100 placeholder-slate-500 focus:outline-none focus:border-amber-400"
+              className="w-full px-3 py-2 rounded-lg bg-surface border border-border text-foreground placeholder-foreground-faint focus:outline-none focus:border-accent"
             />
           )}
           <input
@@ -81,7 +81,7 @@ export function AuthScreen({ title, subtitle, onAuthenticated, authClient }: Aut
             onChange={(e) => setEmail(e.target.value)}
             placeholder="Email"
             required
-            className="w-full px-3 py-2 rounded-lg bg-slate-900 border border-slate-800 text-slate-100 placeholder-slate-500 focus:outline-none focus:border-amber-400"
+            className="w-full px-3 py-2 rounded-lg bg-surface border border-border text-foreground placeholder-foreground-faint focus:outline-none focus:border-accent"
           />
           <input
             type="password"
@@ -89,21 +89,21 @@ export function AuthScreen({ title, subtitle, onAuthenticated, authClient }: Aut
             onChange={(e) => setPassword(e.target.value)}
             placeholder="Password"
             required
-            className="w-full px-3 py-2 rounded-lg bg-slate-900 border border-slate-800 text-slate-100 placeholder-slate-500 focus:outline-none focus:border-amber-400"
+            className="w-full px-3 py-2 rounded-lg bg-surface border border-border text-foreground placeholder-foreground-faint focus:outline-none focus:border-accent"
           />
 
-          {error && <p className="text-red-400 text-sm">{error}</p>}
+          {error && <p className="text-danger text-sm">{error}</p>}
 
           <button
             type="submit"
             disabled={loading}
-            className="w-full py-2 rounded-lg bg-amber-400 text-slate-950 font-semibold hover:bg-amber-300 transition-colors disabled:opacity-50"
+            className="w-full py-2 rounded-lg bg-accent text-background font-semibold hover:bg-accent-hover transition-colors disabled:opacity-50"
           >
             {loading ? 'Please wait…' : mode === 'login' ? 'Sign in' : 'Create account'}
           </button>
         </form>
 
-        <p className="text-slate-400 text-center mt-4 text-sm">
+        <p className="text-foreground-subtle text-center mt-4 text-sm">
           {mode === 'login' ? (
             <>
               No account?{' '}
@@ -112,7 +112,7 @@ export function AuthScreen({ title, subtitle, onAuthenticated, authClient }: Aut
                   setMode('register')
                   setError(null)
                 }}
-                className="text-amber-400 hover:underline"
+                className="text-accent hover:underline"
               >
                 Register
               </button>
@@ -125,7 +125,7 @@ export function AuthScreen({ title, subtitle, onAuthenticated, authClient }: Aut
                   setMode('login')
                   setError(null)
                 }}
-                className="text-amber-400 hover:underline"
+                className="text-accent hover:underline"
               >
                 Sign in
               </button>

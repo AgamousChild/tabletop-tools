@@ -8,12 +8,12 @@ type AppShellProps = {
 
 export function AppShell({ title, onSignOut, children }: AppShellProps) {
   return (
-    <div className="min-h-screen bg-slate-950 text-slate-100">
-      <header className="border-b border-slate-800 px-4 py-2 flex items-center justify-between">
+    <div className="min-h-screen bg-background text-foreground">
+      <header className="border-b border-border px-4 py-2 flex items-center justify-between">
         <div className="flex items-center gap-3">
           <a
             href="/"
-            className="flex items-center gap-1 text-slate-400 hover:text-slate-200 transition-colors text-xs"
+            className="flex items-center gap-1 text-foreground-subtle hover:text-foreground-secondary transition-colors text-xs"
             title="Back to Home"
           >
             <svg
@@ -30,11 +30,11 @@ export function AppShell({ title, onSignOut, children }: AppShellProps) {
             </svg>
             Home
           </a>
-          <h1 className="text-lg font-bold text-amber-400">{title}</h1>
+          <h1 className="text-lg font-bold text-accent">{title}</h1>
         </div>
         <button
           onClick={onSignOut}
-          className="text-xs text-slate-400 hover:text-slate-200 transition-colors"
+          className="text-xs text-foreground-subtle hover:text-foreground-secondary transition-colors"
         >
           Sign out
         </button>

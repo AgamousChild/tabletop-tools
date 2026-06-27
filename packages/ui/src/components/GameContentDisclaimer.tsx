@@ -6,13 +6,13 @@
  */
 export function GameContentDisclaimer() {
   return (
-    <p className="text-xs text-slate-400 leading-relaxed">
+    <p className="text-xs text-foreground-subtle leading-relaxed">
       Unit data sourced from{' '}
       <a
         href="https://github.com/BSData"
         target="_blank"
         rel="noopener noreferrer"
-        className="underline hover:text-slate-300"
+        className="underline hover:text-foreground-muted"
       >
         BSData
       </a>

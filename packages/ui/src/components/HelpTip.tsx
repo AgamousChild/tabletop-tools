@@ -16,19 +16,19 @@ export function HelpTip({ text }: Props) {
       <button
         type="button"
         onClick={() => setOpen(!open)}
-        className="ml-1 inline-flex h-3.5 w-3.5 items-center justify-center rounded-full bg-slate-700 text-[9px] font-bold text-slate-400 hover:bg-slate-600 hover:text-slate-300 transition-colors"
+        className="ml-1 inline-flex h-3.5 w-3.5 items-center justify-center rounded-full bg-surface-overlay text-[9px] font-bold text-foreground-subtle hover:bg-surface-overlay-hover hover:text-foreground-muted transition-colors"
         title={text}
         aria-label="Help"
       >
         ?
       </button>
       {open && (
-        <span className="absolute left-5 top-0 z-10 w-48 rounded bg-slate-800 border border-slate-700 px-2 py-1.5 text-[11px] text-slate-300 leading-tight shadow-lg">
+        <span className="absolute left-5 top-0 z-10 w-48 rounded bg-surface-raised border border-border-strong px-2 py-1.5 text-[11px] text-foreground-muted leading-tight shadow-lg">
           {text}
           <button
             type="button"
             onClick={() => setOpen(false)}
-            className="ml-1 text-slate-500 hover:text-slate-300"
+            className="ml-1 text-foreground-faint hover:text-foreground-muted"
           >
             ×
           </button>

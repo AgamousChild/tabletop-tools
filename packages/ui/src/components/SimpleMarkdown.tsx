@@ -27,7 +27,7 @@ export function renderMarkdown(text: string): string {
       const content = inlineFormat(headerMatch[2]!)
       const sizes = ['text-lg font-bold', 'text-base font-semibold', 'text-sm font-semibold']
       result.push(
-        `<h${level} class="${sizes[level - 1]} text-slate-200 mt-3 mb-1">${content}</h${level}>`,
+        `<h${level} class="${sizes[level - 1]} text-foreground-secondary mt-3 mb-1">${content}</h${level}>`,
       )
       continue
     }
@@ -36,7 +36,7 @@ export function renderMarkdown(text: string): string {
     const listMatch = line.match(/^[-*]\s+(.+)/)
     if (listMatch) {
       if (!inList) {
-        result.push('<ul class="list-disc list-inside space-y-0.5 text-slate-300 text-sm">')
+        result.push('<ul class="list-disc list-inside space-y-0.5 text-foreground-muted text-sm">')
         inList = true
       }
       result.push(`<li>${inlineFormat(listMatch[1]!)}</li>`)
@@ -56,7 +56,7 @@ export function renderMarkdown(text: string): string {
     }
 
     // Regular paragraph
-    result.push(`<p class="text-slate-300 text-sm">${inlineFormat(line)}</p>`)
+    result.push(`<p class="text-foreground-muted text-sm">${inlineFormat(line)}</p>`)
   }
 
   if (inList) result.push('</ul>')
@@ -70,13 +70,13 @@ function inlineFormat(text: string): string {
   // Links: [text](url)
   text = text.replace(
     /\[([^\]]+)\]\(([^)]+)\)/g,
-    '<a href="$2" class="text-amber-400 underline hover:text-amber-300" target="_blank" rel="noopener noreferrer">$1</a>',
+    '<a href="$2" class="text-accent underline hover:text-accent-hover" target="_blank" rel="noopener noreferrer">$1</a>',
   )
 
   // Bold: **text**
   text = text.replace(
     /\*\*([^*]+)\*\*/g,
-    '<strong class="font-semibold text-slate-100">$1</strong>',
+    '<strong class="font-semibold text-foreground">$1</strong>',
   )
 
   // Italic: *text*
@@ -85,7 +85,7 @@ function inlineFormat(text: string): string {
   // Inline code: `text`
   text = text.replace(
     /`([^`]+)`/g,
-    '<code class="px-1 py-0.5 rounded bg-slate-800 text-amber-300 text-xs font-mono">$1</code>',
+    '<code class="px-1 py-0.5 rounded bg-surface-raised text-accent-hover text-xs font-mono">$1</code>',
   )
 
   return text
