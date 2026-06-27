@@ -414,10 +414,16 @@ function enrichBody(
   selectionEntryGroupMap: Map<string, string>,
   infoGroupMap: Map<string, string>,
   depth = 0,
+  // Shared across the recursion so an id resolved at any depth is never
+  // re-expanded. Pre-11e the entryMap held one chapter and the fan-out was
+  // modest; after 1ae2952 it includes the whole imported library (SM, Aeldari,
+  // …) and shared entries cross-reference each other heavily — without a
+  // shared resolved set the body string explodes (N^depth) and runSync hits
+  // the Worker CPU/wall-clock cap deterministically at ~12s.
+  resolved: Set<string> = new Set(),
 ): string {
   if (depth > 5) return body // prevent infinite recursion
 
-  const resolved = new Set<string>() // track resolved IDs to avoid cycles
   let extra = ''
 
   // Resolve <infoLink type="profile" targetId="X"> → inject the profile XML
@@ -450,6 +456,7 @@ function enrichBody(
           selectionEntryGroupMap,
           infoGroupMap,
           depth + 1,
+          resolved,
         )
         extra += '\n' + enrichedGroup
       }
@@ -473,6 +480,7 @@ function enrichBody(
           selectionEntryGroupMap,
           infoGroupMap,
           depth + 1,
+          resolved,
         )
         extra += '\n' + enrichedEntry
       }
