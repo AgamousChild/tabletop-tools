@@ -712,14 +712,141 @@ export async function runSync(
 }
 
 /**
- * Map a BSData catalog faction string to the MFM faction slug. MFM uses
- * canonical faction slugs (`space-marines`, `chaos-knights`, `tyranids`);
- * BSData uses per-catalog file names (`Ultramarines`, `Tyranids`). The alias
- * table handles SM chapters + Agents of the Imperium; everything else slugs
- * directly (`Tyranids` → `tyranids`, matching MFM's `tyranids.yaml`).
+ * MFM faction slugs that exist in the upstream `BSData/wh40k-11e-mfm` repo as
+ * standalone YAML files. Determines which SM chapter / sub-faction BSData
+ * catalogs keep their own slug versus rolling up to the parent faction.
+ *
+ * Hardcoded from the actual MFM repo listing (data/*.yaml minus meta.yaml).
+ * Update when MFM adds or removes a faction file. Source registry rule (Rule
+ * 1) is upheld because this is presentation-only ID mapping logic — the data
+ * still lives in MFM upstream.
+ */
+const MFM_FACTION_SLUGS: ReadonlySet<string> = new Set([
+  'adepta-sororitas',
+  'adeptus-custodes',
+  'adeptus-mechanicus',
+  'aeldari',
+  'astra-militarum',
+  'black-templars',
+  'blood-angels',
+  'chaos-daemons',
+  'chaos-knights',
+  'chaos-space-marines',
+  'chaos-titan-legions',
+  'dark-angels',
+  'death-guard',
+  'deathwatch',
+  'drukhari',
+  'emperors-children',
+  'genestealer-cults',
+  'grey-knights',
+  'imperial-agents',
+  'imperial-knights',
+  'leagues-of-votann',
+  'necrons',
+  'orks',
+  'space-marines',
+  'space-wolves',
+  'tau-empire',
+  'thousand-sons',
+  'titan-legions',
+  'tyranids',
+  'world-eaters',
+])
+
+/** SM chapters that have no dedicated MFM YAML — they roll up to `space-marines`. */
+const SM_CHAPTERS_WITHOUT_MFM: ReadonlySet<string> = new Set([
+  'imperial-fists',
+  'iron-hands',
+  'raven-guard',
+  'salamanders',
+  'ultramarines',
+  'white-scars',
+])
+
+/**
+ * String drift between BSData catalog naming and MFM faction slugs that the
+ * generic suffix-strip + slugify can't bridge.
+ */
+const BSDATA_TO_MFM_NAME_ALIASES: Record<string, string> = {
+  'agents of the imperium': 'imperial-agents',
+}
+
+/**
+ * Map a BSData catalog faction string to the MFM faction slug.
+ *
+ * MFM uses canonical per-faction slugs (`space-marines`, `aeldari`,
+ * `drukhari`, `chaos-knights`). BSData uses compound catalog names that mix
+ * parent + sub-faction (`Aeldari - Craftworlds`, `Aeldari - Drukhari`,
+ * `Imperium - Astra Militarum - Library`). The naive slugify (`aeldari-
+ * craftworlds`) misses every MFM faction lookup.
+ *
+ * Resolution rules (first match wins):
+ *   1. Strip `Library - ` prefix and ` Library` suffix — these are
+ *      shared-definition wrapper catalogs whose units belong to the parent.
+ *   2. Take the first segment of a ` - `-split compound name, so
+ *      `Aeldari - Craftworlds` → `Aeldari`. Source-layer already strips
+ *      `Imperium - ` / `Chaos - ` prefixes so the first segment is the
+ *      MFM-facing faction.
+ *   3. Apply explicit name aliases (`agents of the imperium` →
+ *      `imperial-agents`).
+ *   4. Slugify and check against the MFM faction set. If matched, return.
+ *   5. SM-chapter rollup: chapters with no dedicated MFM YAML
+ *      (`Ultramarines`, `Iron Hands`, etc.) roll up to `space-marines`.
+ *      Chapters that DO have their own MFM file (`Black Templars`,
+ *      `Blood Angels`, `Dark Angels`, `Deathwatch`, `Space Wolves`) keep
+ *      their own slug — caught by rule 4 above before reaching this rule.
+ *   6. Fall back to the slugified string (lets unknown factions still
+ *      attempt a join; misses are counted as `unmatched`).
+ *
+ * Pure: string in, string out. No DB, no async.
  */
 function bsdataFactionToMfmSlug(bsdataFaction: string): string {
-  const aliased = CATALOG_FACTION_ALIASES[bsdataFaction.toLowerCase().trim()]
-  if (aliased) return aliased
-  return contentEntitySlug(bsdataFaction)
+  // 1. Strip Library wrapper-catalog markers — units in `Aeldari - Aeldari
+  //    Library` belong to `Aeldari`, in `Chaos Daemons Library` to
+  //    `Chaos Daemons`, and so on.
+  let s = bsdataFaction.trim()
+  s = s.replace(/^Library\s*-\s*/i, '')
+  s = s.replace(/\s+Library$/i, '')
+
+  // 2. Split on ` - ` to expose parent + optional sub-faction segments.
+  //    Source layer already stripped the leading `Imperium - ` / `Chaos - `
+  //    so segment[0] is the MFM-facing parent.
+  const segments = s
+    .split(/\s+-\s+/)
+    .map((seg) => seg.trim())
+    .filter((seg) => seg.length > 0)
+  const parent = segments[0] ?? s
+  const sub = segments[1]
+
+  // 3. Sub-faction takes precedence ONLY when MFM has a dedicated file for it
+  //    (`Aeldari - Drukhari` → `drukhari`). Sub-factions like
+  //    `Aeldari - Craftworlds` / `Aeldari - Ynnari` have no MFM file and fall
+  //    through to the parent so they map to `aeldari`.
+  if (sub) {
+    const subAliased = BSDATA_TO_MFM_NAME_ALIASES[sub.toLowerCase()]
+    if (subAliased && MFM_FACTION_SLUGS.has(subAliased)) return subAliased
+    const subSlug = contentEntitySlug(sub)
+    if (MFM_FACTION_SLUGS.has(subSlug)) return subSlug
+  }
+
+  // 4. Parent: name aliases first, then direct slugify against the MFM set.
+  const parentAliased = BSDATA_TO_MFM_NAME_ALIASES[parent.toLowerCase()]
+  if (parentAliased) return parentAliased
+
+  const parentSlug = contentEntitySlug(parent)
+  if (MFM_FACTION_SLUGS.has(parentSlug)) return parentSlug
+
+  // 5. SM-chapter rollup for chapters that have no dedicated MFM file. Chapters
+  //    that DO have a dedicated MFM YAML (`Black Templars`, `Blood Angels`,
+  //    `Dark Angels`, `Deathwatch`, `Space Wolves`) are already caught by rule
+  //    4 and keep their own slug.
+  if (SM_CHAPTERS_WITHOUT_MFM.has(parentSlug)) return 'space-marines'
+
+  // 6. Fall through to the slugified parent — caller's `buildMfmUnitIdMapping`
+  //    counts this as `unmatched` if the slug doesn't appear in any MFM
+  //    faction.
+  return parentSlug
 }
+
+export { bsdataFactionToMfmSlug }
