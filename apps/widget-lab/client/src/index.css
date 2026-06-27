@@ -1,0 +1,40 @@
+/* PrimeReact theme.
+ *
+ * Chose `lara-dark-amber` because the existing platform accent is
+ * amber-400 (#fbbf24) — see packages/ui/tailwind-preset.ts. Lara dark amber
+ * is the closest pre-built theme; its primary highlight comes in around
+ * #FCD34D (amber-300) so it stays in-family with the platform.
+ *
+ * `aura-dark-amber` was the runner-up but its surface palette is grayer and
+ * mismatches the slate-950 / slate-800 background used everywhere else.
+ *
+ * @imports must come before @tailwind for CSS spec ordering.
+ */
+@import 'primereact/resources/themes/lara-dark-amber/theme.css';
+@import 'primeicons/primeicons.css';
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  font-family: 'Geist', system-ui, sans-serif;
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+body {
+  margin: 0;
+  background-color: #0f172a;
+  color: #f1f5f9;
+}
+
+/* Nudge PrimeReact surfaces toward the platform's slate background so the
+ * side-by-side comparison isn't dominated by Lara's default surface tone.
+ * (Lara dark amber defaults to a near-black neutral; slate-950 is bluer.)
+ */
+.p-component {
+  font-family: 'Geist', system-ui, sans-serif;
+}
