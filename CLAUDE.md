@@ -88,6 +88,15 @@ pipeline reaches more than a couple of upstream sources or operates on more than
 records of work, the first design question is "how does the caller orchestrate this in
 chunks," not "how big can I make this handler."
 
+### 10. Background agents work on isolated worktrees
+Any subagent dispatched for non-trivial work — refactors, new apps, sweeps,
+investigations longer than a few minutes — runs in its own git worktree via
+the agent tool's `isolation: "worktree"` mode. Agents on the shared working
+tree race each other: stashes get swapped, edits get clobbered, PRs land
+half-merged. Today's session lost the `factionId`-normalize edits twice and
+the BSData-repo edit once to exactly this. Use worktree isolation
+whenever an agent will touch files for more than a quick read.
+
 ---
 
 ## Data Boundary
