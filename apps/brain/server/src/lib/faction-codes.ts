@@ -12,11 +12,17 @@ import { slugify } from './slugify'
 /** alias/code → canonical slug (e.g. 'SM' → 'space-marines', 'Adepta Sororitas' → 'adepta-sororitas') */
 let cachedCodeToSlug: Map<string, string> | null = null
 
+/** lowercase(alias) → canonical slug for case-insensitive fallback */
+let cachedLowerCodeToSlug: Map<string, string> | null = null
+
 /** canonical slug set for fast "is this already a slug?" checks */
 let cachedSlugs: Set<string> | null = null
 
 /**
  * Load faction alias map from DB. Must be called before normalizeFactionId().
+ *
+ * Both the canonical map and the lowercase index are built once and read
+ * thousands of times per build — keep them O(1) at lookup time.
  */
 export async function loadFactionCodes(db: Db): Promise<void> {
   cachedCodeToSlug = await getFactionAliasMap(db)
@@ -26,6 +32,13 @@ export async function loadFactionCodes(db: Db): Promise<void> {
   for (const slug of cachedSlugs) {
     cachedCodeToSlug.set(slug, slug)
   }
+  // Lowercase index so Wahapedia's mixed-case short codes (`AoI`, `Dru`, `GC`)
+  // resolve against the same alias rows as their lowercase variants. dim_faction_alias
+  // owns the canonical mapping; this index just makes the lookup case-tolerant.
+  cachedLowerCodeToSlug = new Map()
+  for (const [code, slug] of cachedCodeToSlug) {
+    cachedLowerCodeToSlug.set(code.toLowerCase(), slug)
+  }
 }
 
 /**
@@ -33,13 +46,13 @@ export async function loadFactionCodes(db: Db): Promise<void> {
  * Requires loadFactionCodes() to have been called first.
  */
 export function normalizeFactionId(code: string): string {
-  if (!cachedCodeToSlug || !cachedSlugs) {
+  if (!cachedCodeToSlug || !cachedSlugs || !cachedLowerCodeToSlug) {
     throw new Error('Faction codes not loaded — call loadFactionCodes(db) first')
   }
   // Direct slug match
   if (cachedSlugs.has(code)) return code
-  // Alias/code lookup
-  const slug = cachedCodeToSlug.get(code)
+  // Alias/code lookup (case-sensitive first, then case-insensitive)
+  const slug = cachedCodeToSlug.get(code) ?? cachedLowerCodeToSlug.get(code.toLowerCase())
   if (slug) return slug
   // Fallback: slugify unknown codes
   return slugify(code)
@@ -50,6 +63,7 @@ export function normalizeFactionId(code: string): string {
  */
 export function resetFactionCodes(): void {
   cachedCodeToSlug = null
+  cachedLowerCodeToSlug = null
   cachedSlugs = null
 }
 
@@ -64,4 +78,6 @@ export function _setFactionCodesForTesting(
 ): void {
   cachedCodeToSlug = codeToSlug
   cachedSlugs = slugs
+  cachedLowerCodeToSlug = new Map()
+  for (const [k, v] of codeToSlug) cachedLowerCodeToSlug.set(k.toLowerCase(), v)
 }
