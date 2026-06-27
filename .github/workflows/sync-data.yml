@@ -62,14 +62,15 @@ jobs:
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
         run: |
           set -euo pipefail
-          out=".local/data-import-output"
+          # Absolute paths so `pnpm --filter data-import-server exec wrangler`
+          # — which runs with cwd=apps/data-import/server — still finds the
+          # output files written to the repo root.
+          out="$GITHUB_WORKSPACE/.local/data-import-output"
           if [ ! -d "$out" ]; then
             echo "no output dir at $out — sync produced nothing?"
             exit 1
           fi
           count=0
-          # `find` because `pnpm wrangler` startup overhead is meaningful per
-          # call; we batch the env once and loop tightly.
           while IFS= read -r -d '' f; do
             key="${f#$out/}"
             pnpm --filter data-import-server exec wrangler r2 object put \
