@@ -64,7 +64,10 @@ async function main() {
     const localPath = join(OUTPUT_DIR, file)
     try {
       execSync(
-        `npx wrangler r2 object put "${BUCKET}/${file}" --file "${localPath}" --content-type "application/json"`,
+        // --remote is critical: without it wrangler writes to the LOCAL R2
+        // emulator (a sqlite file under .wrangler/) and prod stays stale. The
+        // caltrop is documented in the root CLAUDE.md under environment gotchas.
+        `npx wrangler r2 object put "${BUCKET}/${file}" --remote --file "${localPath}" --content-type "application/json"`,
         { stdio: 'pipe' },
       )
       uploaded++
