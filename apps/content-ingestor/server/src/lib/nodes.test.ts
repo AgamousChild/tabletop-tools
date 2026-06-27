@@ -106,6 +106,34 @@ describe('writeNodesToBrain', () => {
     expect(written).toHaveLength(2) // 1 existing + 1 new
   })
 
+  it("defaults edition to '11th' when LLM omits it (CLAUDE.md Rule 5)", async () => {
+    const untaggedNode: ExtractedNode = {
+      title: 'Precision Attack Timing',
+      category: 'tactic',
+      content: 'Precision attacks resolve before character look-out-sirs...',
+      summary: 'Tactical note on attack ordering.',
+      keywords: ['precision', 'character', 'attack'],
+      // factionId and edition deliberately omitted — simulates LLM output
+    }
+    const bucket = mockR2Bucket()
+    const vectorize = mockVectorize()
+    const ai = mockAi()
+
+    await writeNodesToBrain({
+      nodes: [untaggedNode],
+      sourceUrl: 'https://example.com',
+      sourceName: 'Test',
+      bucket: bucket as any,
+      vectorize: vectorize as any,
+      ai: ai as any,
+    })
+
+    const written = JSON.parse(bucket._stored.get('nodes/community.json')!)
+    expect(written).toHaveLength(1)
+    expect(written[0].edition).toBe('11th')
+    expect(written[0].factionId).toBeUndefined()
+  })
+
   it('returns 0 when all nodes are duplicates', async () => {
     const existing = [{ id: 'community:gladius-task-force' }, { id: 'community:oath-of-moment' }]
     const bucket = mockR2Bucket(existing)

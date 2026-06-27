@@ -41,8 +41,8 @@ function toBrainNode(extracted: ExtractedNode, sourceUrl: string, sourceName: st
     title: extracted.title,
     content: extracted.content,
     summary: extracted.summary,
-    factionId: extracted.factionId,
-    edition: extracted.edition,
+    factionId: extracted.factionId ?? undefined,
+    edition: extracted.edition ?? '11th', // default to target edition per CLAUDE.md Rule 5
     sources: [
       {
         type: sourceUrl.includes('youtube') ? 'youtube' : 'manual',
