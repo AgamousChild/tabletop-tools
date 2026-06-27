@@ -19,7 +19,7 @@ For each distinct rule, ability, detachment, stratagem, enhancement, or tactical
 - summary: 1-2 sentence summary
 - keywords: Array of relevant search terms
 - factionId: Faction slug if faction-specific (e.g., "space-marines", "orks", "world-eaters")
-- edition: Determine from context. 11th edition indicators: mentions of "new edition", "detachment points", "multi-detachment", "cleave" ability, content dated 2026 or later, "faction focus" reveals, references to changes from 10th. 10th edition indicators: current competitive meta discussion, existing codex rules, tournament results. If unclear, default to "10th".
+- edition: Determine from context. 11th edition indicators: mentions of "new edition", "detachment points", "multi-detachment", "cleave" ability, content dated 2026 or later, "faction focus" reveals, references to changes from 10th. 10th edition indicators: current competitive meta discussion, existing codex rules, tournament results. If unclear, default to "11th".
 
 Return a JSON array of nodes. Only include nodes with concrete, specific information — not vague commentary.
 
