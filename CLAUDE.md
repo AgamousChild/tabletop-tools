@@ -74,6 +74,20 @@ Separate data/logic from presentation. Components take props and render. Hooks a
 management handle what to show. Swapping the component layer gives you a new skin without
 touching logic.
 
+### 9. Worker invocations are bounded — chunk by design, not retrofit
+Every Cloudflare Worker entry point lives under a fixed CPU budget (50 ms on Free, 30 s
+default on Paid, 5 min absolute max via `[limits] cpu_ms`). HTTP handlers have a wall-clock
+ceiling on top of that. Any pipeline that approaches the budget MUST be chunked at design
+time — split into per-source / per-batch / per-resource endpoints that the caller
+orchestrates and that each comfortably fit under ~10 s of CPU.
+
+Do not write a long-running synchronous handler and discover the cap when it breaks in
+prod. The data-import `/sync` failures (BSData parsing accumulating CPU across 30 catalogs
+in one invocation, then hitting 1102) were a direct cost of skipping this rule. When a new
+pipeline reaches more than a couple of upstream sources or operates on more than ~10 k
+records of work, the first design question is "how does the caller orchestrate this in
+chunks," not "how big can I make this handler."
+
 ---
 
 ## Data Boundary
