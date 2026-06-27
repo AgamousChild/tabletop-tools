@@ -59,13 +59,28 @@ app.post('/sync', async (c) => {
   }
 
   let force = false
+  let skipProducers = false
   try {
-    const body = await c.req.json<{ force?: boolean }>()
+    const body = await c.req.json<{ force?: boolean; skipProducers?: boolean }>()
     force = body.force === true
+    skipProducers = body.skipProducers === true
   } catch {
     /* no body or not JSON — that's fine */
   }
-  const result = await runSync(c.env.GAME_DATA_BUCKET, c.env.GITHUB_TOKEN, force, dbFromEnv(c.env))
+  // Also honor query params so workflows can curl /sync?skipProducers=true
+  // without a JSON body.
+  if (c.req.query('skipProducers') === 'true') skipProducers = true
+  if (c.req.query('force') === 'true') force = true
+
+  const result = await runSync(
+    c.env.GAME_DATA_BUCKET,
+    c.env.GITHUB_TOKEN,
+    force,
+    dbFromEnv(c.env),
+    {
+      skipProducers,
+    },
+  )
   return c.json(result)
 })
 

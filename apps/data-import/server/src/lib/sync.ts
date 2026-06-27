@@ -148,12 +148,27 @@ async function writeDataFile(bucket: R2Bucket, filename: string, data: unknown):
   await bucket.put(`data/${filename}`, JSON.stringify(data))
 }
 
+export interface RunSyncOptions {
+  /**
+   * Skip the canonical-content producer chain (writes per-type R2 docs and,
+   * when DB is configured, upserts content_entity). The producer chain runs
+   * 9 stages over ~17K entities with sequential JSON serialization — heavy
+   * enough that on the Workers Paid plan /sync was hitting CF error 1102
+   * during the producer phase. Brain ingest reads the rekeyed Wahapedia
+   * files directly, not content/{type}.json, so this is safe to skip when
+   * the goal is refreshing the raw R2 outputs.
+   */
+  skipProducers?: boolean
+}
+
 export async function runSync(
   bucket: R2Bucket,
   githubToken?: string,
   force = false,
   db?: Db,
+  options: RunSyncOptions = {},
 ): Promise<SyncResult> {
+  const skipProducers = options.skipProducers === true
   const errors: string[] = []
   const skipped: string[] = []
   const producer: SyncResult['producer'] = {}
@@ -293,6 +308,9 @@ export async function runSync(
           contentEntityUpserts: number
         } | null>,
       ) => {
+        // Short-circuit when the caller opted out of the producer chain so
+        // the heavy JSON serialization across ~17K entities is skipped.
+        if (skipProducers) return
         try {
           const r = await fn()
           if (r)
@@ -474,11 +492,12 @@ export async function runSync(
       // content_can_lead — leader → bodyguard datasheet relationships from
       // Wahapedia's leader_attachments. Already rekeyed by the rekey step, so
       // leaderId and attachedId resolve to canonical content_entity ids. Skip
-      // when DB isn't available.
+      // when DB isn't available — and when the caller opted out of the
+      // producer chain entirely.
       try {
         const leaderAttachments =
           (rekeyed['leader_attachments'] as LeaderAttachmentRecord[] | undefined) ?? []
-        if (leaderAttachments.length > 0 && db) {
+        if (!skipProducers && leaderAttachments.length > 0 && db) {
           const r = await produceCanLead(db, leaderAttachments, canonicalDatasheetIdsFiltered)
           producer[r.type] = { r2DocsWritten: 0, contentEntityUpserts: r.rowsWritten }
           if (r.dropped > 0) {
@@ -499,10 +518,12 @@ export async function runSync(
       // lands, pass supportAttachments here — rows write with role='support' and
       // are immediately queryable by role-aware endpoints (no code change needed).
       try {
-        const supportAttachments: LeaderAttachmentRecord[] = []
-        const r = await produceCanSupport(db, supportAttachments, canonicalDatasheetIdsFiltered)
-        if (r.rowsWritten > 0) {
-          producer['can_support'] = { r2DocsWritten: 0, contentEntityUpserts: r.rowsWritten }
+        if (!skipProducers) {
+          const supportAttachments: LeaderAttachmentRecord[] = []
+          const r = await produceCanSupport(db, supportAttachments, canonicalDatasheetIdsFiltered)
+          if (r.rowsWritten > 0) {
+            producer['can_support'] = { r2DocsWritten: 0, contentEntityUpserts: r.rowsWritten }
+          }
         }
       } catch (err) {
         errors.push(
