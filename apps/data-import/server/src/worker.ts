@@ -60,17 +60,37 @@ app.post('/sync', async (c) => {
 
   let force = false
   let skipProducers = false
+  let sourcesParam: string | undefined
   try {
-    const body = await c.req.json<{ force?: boolean; skipProducers?: boolean }>()
+    const body = await c.req.json<{
+      force?: boolean
+      skipProducers?: boolean
+      sources?: string | string[]
+    }>()
     force = body.force === true
     skipProducers = body.skipProducers === true
+    if (Array.isArray(body.sources)) sourcesParam = body.sources.join(',')
+    else if (typeof body.sources === 'string') sourcesParam = body.sources
   } catch {
     /* no body or not JSON — that's fine */
   }
-  // Also honor query params so workflows can curl /sync?skipProducers=true
-  // without a JSON body.
+  // Also honor query params so workflows can curl /sync?... without a JSON body.
   if (c.req.query('skipProducers') === 'true') skipProducers = true
   if (c.req.query('force') === 'true') force = true
+  const querySources = c.req.query('sources')
+  if (querySources) sourcesParam = querySources
+
+  type Source = 'wahapedia' | 'bsdata' | 'mfm' | 'missions'
+  let sources: Set<Source> | undefined
+  if (sourcesParam) {
+    const valid: Source[] = ['wahapedia', 'bsdata', 'mfm', 'missions']
+    sources = new Set(
+      sourcesParam
+        .split(',')
+        .map((s) => s.trim())
+        .filter((s): s is Source => (valid as string[]).includes(s)),
+    )
+  }
 
   const result = await runSync(
     c.env.GAME_DATA_BUCKET,
@@ -79,6 +99,7 @@ app.post('/sync', async (c) => {
     dbFromEnv(c.env),
     {
       skipProducers,
+      sources,
     },
   )
   return c.json(result)
