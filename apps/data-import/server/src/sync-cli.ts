@@ -17,8 +17,11 @@
  */
 import { mkdirSync, writeFileSync } from 'node:fs'
 import { dirname, join, resolve } from 'node:path'
+import { fileURLToPath } from 'node:url'
 
 import { runSync } from './lib/sync'
+
+const __dirname = dirname(fileURLToPath(import.meta.url))
 
 interface BufferedR2 {
   put(key: string, value: string | ArrayBuffer): Promise<unknown>
