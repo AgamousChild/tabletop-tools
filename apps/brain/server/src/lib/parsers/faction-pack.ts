@@ -1,3 +1,4 @@
+import { normalizeFactionId } from '../faction-codes'
 import { detectChapterFromText, truncate } from '../filters'
 import type { GamePhase, Node, NodeRef, Source } from '../model'
 import { slugify } from '../slugify'
@@ -193,7 +194,7 @@ export function parseFactionPack(
       content: body,
       summary,
       phase,
-      factionId: factionSlug,
+      factionId: normalizeFactionId(factionSlug),
       subfaction: chapterLock,
       detachmentId: currentDetachment ? slugify(currentDetachment) : undefined,
       sources: [source],
@@ -240,7 +241,7 @@ export function parseFactionPack(
         content: entry.trim(),
         summary: truncate(entry, 150),
         phase: undefined,
-        factionId: fSlug,
+        factionId: normalizeFactionId(fSlug),
         sources: [nodeSource],
         refs: [],
         version: 1,
@@ -277,7 +278,7 @@ export function parseFactionPack(
         content: entry.trim(),
         summary: truncate(entry, 150),
         phase: undefined,
-        factionId: fSlug,
+        factionId: normalizeFactionId(fSlug),
         sources: [source],
         refs: [],
         version: 1,

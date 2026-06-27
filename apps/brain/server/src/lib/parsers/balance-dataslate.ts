@@ -1,3 +1,4 @@
+import { normalizeFactionId } from '../faction-codes'
 import { truncate } from '../filters'
 import type { Node, NodeRef, Source } from '../model'
 import { balanceId, slugify } from '../slugify'
@@ -65,7 +66,7 @@ export function parseBalanceDataslate(
       title: isCoreChange ? title : `${currentFaction}: ${title}`,
       content: body,
       summary: truncate(body, 150),
-      factionId: fSlug || undefined,
+      factionId: fSlug ? normalizeFactionId(fSlug) : undefined,
       sources: [source],
       refs: [],
       version: 1,

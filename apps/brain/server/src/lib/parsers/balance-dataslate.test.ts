@@ -1,6 +1,20 @@
-import { describe, expect, it } from 'vitest'
+import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 
+import { _setFactionCodesForTesting, resetFactionCodes } from '../faction-codes'
 import { parseBalanceDataslate } from './balance-dataslate'
+
+beforeAll(() => {
+  _setFactionCodesForTesting(
+    new Map<string, string>([
+      ['space-marines', 'space-marines'],
+      ['blood-angels', 'blood-angels'],
+      ['aoi', 'imperial-agents'],
+      ['imperial-agents', 'imperial-agents'],
+    ]),
+    new Set(['space-marines', 'blood-angels', 'imperial-agents']),
+  )
+})
+afterAll(() => resetFactionCodes())
 
 const SAMPLE_DATASLATE = `
 ## BALANCE DATASLATE
@@ -41,7 +55,13 @@ Strands of Fate: Change to read: At the start of each turn, roll 4 D6.
 `.trim()
 
 describe('parseBalanceDataslate', () => {
-  const result = parseBalanceDataslate(SAMPLE_DATASLATE, '2026-04-08')
+  // Parse lazily so the top-level beforeAll primes faction codes first.
+  // Top-of-describe expressions run during vitest's collection phase,
+  // before any beforeAll fires.
+  let result: ReturnType<typeof parseBalanceDataslate>
+  beforeAll(() => {
+    result = parseBalanceDataslate(SAMPLE_DATASLATE, '2026-04-08')
+  })
 
   it('creates balance-change nodes for core rules entries', () => {
     const core = result.nodes.filter((n) => !n.factionId)
