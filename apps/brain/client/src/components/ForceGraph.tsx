@@ -13,7 +13,8 @@ import {
 } from '@xyflow/react'
 import { useCallback, useRef, useState } from 'react'
 
-const API_BASE = import.meta.env.VITE_BRAIN_API_URL || '/brain/api'
+import { brainFetch } from '../lib/api'
+import type { Edition } from '../lib/edition'
 
 const LAYER_COLORS: Record<string, string> = {
   core: '#f59e0b',
@@ -270,7 +271,12 @@ const CATEGORY_FILTERS = [
   { key: 'faction-ability', label: 'Faction Abilities' },
 ] as const
 
-export function ForceGraph() {
+export interface ForceGraphProps {
+  /** Active rules edition — threaded into /graph-data so the server pre-filters. */
+  edition?: Edition
+}
+
+export function ForceGraph({ edition }: ForceGraphProps = {}) {
   const [searchQuery, setSearchQuery] = useState('')
   const [rfNodes, setRfNodes] = useState<RFNode[]>([])
   const [rfEdges, setRfEdges] = useState<RFEdge[]>([])
@@ -280,113 +286,121 @@ export function ForceGraph() {
   const [categoryFilters, setCategoryFilters] = useState<Set<string>>(new Set())
   const [editionFilter, setEditionFilter] = useState<string>('all')
 
-  const loadGraph = useCallback(async (query: string) => {
-    if (!query.trim()) return
-    setLoading(true)
+  const loadGraph = useCallback(
+    async (query: string) => {
+      if (!query.trim()) return
+      setLoading(true)
 
-    try {
-      const res = await fetch(`${API_BASE}/graph-data`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ query, limit: 10 }),
-      })
-      if (!res.ok) throw new Error('API error')
-      const data = await res.json()
-      const allNodes: GraphNode[] = data.nodes || []
-      const allEdges: GraphEdge[] = data.edges || []
+      try {
+        const res = await brainFetch(`/graph-data`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ query, limit: 10 }),
+          edition,
+        })
+        if (!res.ok) throw new Error('API error')
+        const data = await res.json()
+        const allNodes: GraphNode[] = data.nodes || []
+        const allEdges: GraphEdge[] = data.edges || []
 
-      if (allNodes.length === 0) {
+        if (allNodes.length === 0) {
+          setRfNodes([])
+          setRfEdges([])
+          graphState.current = null
+          return
+        }
+
+        const center = allNodes[0]!
+        const nodeMap = new Map<string, GraphNode>()
+        for (const n of allNodes) nodeMap.set(n.id, n)
+
+        const depthMap = computeDepths(center.id, allEdges, 3)
+
+        const state: GraphState = {
+          focusId: center.id,
+          allNodes: nodeMap,
+          allEdges: allEdges,
+          depthMap,
+        }
+        graphState.current = state
+
+        const { nodes, edges } = layoutFromState(state, categoryFilters, editionFilter)
+        setRfNodes(nodes)
+        setRfEdges(edges)
+        setSelectedNode(null)
+      } catch {
         setRfNodes([])
         setRfEdges([])
         graphState.current = null
-        return
+      } finally {
+        setLoading(false)
+      }
+    },
+    [edition, categoryFilters, editionFilter],
+  )
+
+  const refocusOnNode = useCallback(
+    async (nodeId: string) => {
+      if (!graphState.current) return
+      const state = graphState.current
+      const node = state.allNodes.get(nodeId)
+      if (!node) return
+
+      // Always fetch — the original query only returned edges for the center node,
+      // not for connected nodes. We need this node's own connections.
+      setLoading(true)
+      try {
+        const res = await brainFetch(`/graph-data`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ query: node.title, limit: 10 }),
+          edition,
+        })
+        if (!res.ok) throw new Error('API error')
+        const data = await res.json()
+        const newNodes: GraphNode[] = data.nodes || []
+        const newEdges: GraphEdge[] = data.edges || []
+
+        // Merge new data into existing state
+        for (const n of newNodes) {
+          if (!state.allNodes.has(n.id)) state.allNodes.set(n.id, n)
+        }
+        const existingEdgeKeys = new Set(
+          state.allEdges.map((e) => `${e.source}|${e.target}|${e.rel}`),
+        )
+        for (const e of newEdges) {
+          const key = `${e.source}|${e.target}|${e.rel}`
+          if (!existingEdgeKeys.has(key)) {
+            state.allEdges.push(e)
+            existingEdgeKeys.add(key)
+          }
+        }
+      } catch {
+        // Continue with existing data
+      } finally {
+        setLoading(false)
       }
 
-      const center = allNodes[0]!
-      const nodeMap = new Map<string, GraphNode>()
-      for (const n of allNodes) nodeMap.set(n.id, n)
+      // Recompute depths from new focus — keep max 2 hops
+      const newDepths = computeDepths(nodeId, state.allEdges, 2)
 
-      const depthMap = computeDepths(center.id, allEdges, 3)
+      // Prune nodes that are >2 hops from the new focus
+      const keepIds = new Set(newDepths.keys())
+      state.focusId = nodeId
+      state.depthMap = newDepths
 
-      const state: GraphState = {
-        focusId: center.id,
-        allNodes: nodeMap,
-        allEdges: allEdges,
-        depthMap,
+      // Remove nodes that are too far away to keep memory bounded
+      for (const id of state.allNodes.keys()) {
+        if (!keepIds.has(id)) state.allNodes.delete(id)
       }
-      graphState.current = state
 
       const { nodes, edges } = layoutFromState(state, categoryFilters, editionFilter)
       setRfNodes(nodes)
       setRfEdges(edges)
       setSelectedNode(null)
-    } catch {
-      setRfNodes([])
-      setRfEdges([])
-      graphState.current = null
-    } finally {
-      setLoading(false)
-    }
-  }, [])
-
-  const refocusOnNode = useCallback(async (nodeId: string) => {
-    if (!graphState.current) return
-    const state = graphState.current
-    const node = state.allNodes.get(nodeId)
-    if (!node) return
-
-    // Always fetch — the original query only returned edges for the center node,
-    // not for connected nodes. We need this node's own connections.
-    setLoading(true)
-    try {
-      const res = await fetch(`${API_BASE}/graph-data`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ query: node.title, limit: 10 }),
-      })
-      if (!res.ok) throw new Error('API error')
-      const data = await res.json()
-      const newNodes: GraphNode[] = data.nodes || []
-      const newEdges: GraphEdge[] = data.edges || []
-
-      // Merge new data into existing state
-      for (const n of newNodes) {
-        if (!state.allNodes.has(n.id)) state.allNodes.set(n.id, n)
-      }
-      const existingEdgeKeys = new Set(
-        state.allEdges.map((e) => `${e.source}|${e.target}|${e.rel}`),
-      )
-      for (const e of newEdges) {
-        const key = `${e.source}|${e.target}|${e.rel}`
-        if (!existingEdgeKeys.has(key)) {
-          state.allEdges.push(e)
-          existingEdgeKeys.add(key)
-        }
-      }
-    } catch {
-      // Continue with existing data
-    } finally {
-      setLoading(false)
-    }
-
-    // Recompute depths from new focus — keep max 2 hops
-    const newDepths = computeDepths(nodeId, state.allEdges, 2)
-
-    // Prune nodes that are >2 hops from the new focus
-    const keepIds = new Set(newDepths.keys())
-    state.focusId = nodeId
-    state.depthMap = newDepths
-
-    // Remove nodes that are too far away to keep memory bounded
-    for (const id of state.allNodes.keys()) {
-      if (!keepIds.has(id)) state.allNodes.delete(id)
-    }
-
-    const { nodes, edges } = layoutFromState(state, categoryFilters, editionFilter)
-    setRfNodes(nodes)
-    setRfEdges(edges)
-    setSelectedNode(null)
-  }, [])
+    },
+    [edition, categoryFilters, editionFilter],
+  )
 
   const toggleCategory = useCallback((cat: string) => {
     setCategoryFilters((prev) => {
