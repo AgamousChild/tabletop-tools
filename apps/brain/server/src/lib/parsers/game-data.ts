@@ -26,6 +26,7 @@ import {
 } from '../filters'
 import type { Node, NodeRef, Source } from '../model'
 import { slugify } from '../slugify'
+import { bsdataSubfactionKey } from './bsdata-subfactions'
 
 // ── Input types (matching game-data-store) ──────────────────────────────────
 
@@ -240,6 +241,24 @@ export interface GameDataParseResult {
   refs: NodeRef[]
 }
 
+/**
+ * Optional knobs for `convertGameData`. Additive — every field defaults to "no
+ * effect" so existing callers don't need to change.
+ */
+export interface ConvertGameDataOptions {
+  /**
+   * BSData-derived subfaction lookup. Key shape:
+   * `${factionSlug}::${normalizedName}` (see
+   * `apps/brain/server/src/lib/parsers/bsdata-subfactions.ts`).
+   *
+   * When a datasheet's `(factionSlug, name)` matches an entry here, the
+   * resulting node's `subfaction` field uses BSData's value in preference to
+   * any Wahapedia-keyword-derived subfaction — BSData chapter catalogs are
+   * the authoritative source for chapter membership.
+   */
+  bsdataSubfactionByKey?: Map<string, string>
+}
+
 const wahapediaSource: Source = {
   type: 'wahapedia',
   title: 'Wahapedia 10th Edition',
@@ -257,7 +276,11 @@ function mapPhase(phase: string): Node['phase'] {
   return undefined
 }
 
-export function convertGameData(input: GameDataInput, retrievedAt?: string): GameDataParseResult {
+export function convertGameData(
+  input: GameDataInput,
+  retrievedAt?: string,
+  options: ConvertGameDataOptions = {},
+): GameDataParseResult {
   const nodes: Node[] = []
   const refs: NodeRef[] = []
   const source: Source = {
@@ -359,6 +382,26 @@ export function convertGameData(input: GameDataInput, retrievedAt?: string): Gam
       if (match) {
         dsSubfactionMap.set(dsId, match.toLowerCase())
         break
+      }
+    }
+  }
+
+  // Pull subfaction from BSData chapter catalogs. PR #46 made
+  // `rollupChapterFaction()` emit `subfaction: 'ultramarines'` on every unit in
+  // a chapter catalog — that's a much higher-quality signal than Wahapedia's
+  // per-unit keyword list, which only tags chapter-iconic units. Where both
+  // sources fire, BSData wins (the SM keyword loop above used `match.toLowerCase()`
+  // so its values are equivalent for chapter subfactions, but BSData is the
+  // canonical chapter-membership source).
+  //
+  // See docs/superpowers/plans/2026-06-27-data-problems-followup.md step 7.
+  if (options.bsdataSubfactionByKey && options.bsdataSubfactionByKey.size > 0) {
+    for (const ds of filteredDatasheets) {
+      const factionSlug = normalizeFactionId(ds.factionId)
+      const key = bsdataSubfactionKey(factionSlug, ds.name)
+      const sub = options.bsdataSubfactionByKey.get(key)
+      if (sub) {
+        dsSubfactionMap.set(ds.id, sub)
       }
     }
   }
