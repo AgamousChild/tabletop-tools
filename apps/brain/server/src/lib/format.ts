@@ -1,5 +1,43 @@
-import type { Node } from './model'
+import type { Node, Source } from './model'
 import { stripFlavorText } from './strip-flavor'
+
+// ── Source attribution ─────────────────────────────────────────────────────
+//
+// Per-node attribution line for the LLM context. The brain pulls from multiple
+// upstream sources (Wahapedia for 10e, BSData + MFM for 11e). The model needs
+// to know which fact came from where so it can correctly cite editions — the
+// answer "the unit costs 200 points" is wrong without "per MFM 11th edition
+// costing" because Wahapedia still shows 10e points.
+
+const SOURCE_LABELS: Record<string, string> = {
+  wahapedia: 'Wahapedia',
+  bsdata: 'BSData',
+  pdf: 'Core Rules PDF',
+  faq: 'GW FAQ',
+  errata: 'GW Errata',
+  'balance-dataslate': 'GW Balance Dataslate',
+  reddit: 'Reddit',
+  youtube: 'YouTube',
+  manual: 'manual entry',
+}
+
+/**
+ * Build a one-line source attribution sentence for a node. Combines the
+ * upstream source label with the edition tag so the LLM can cite both.
+ * Examples:
+ *   "Source: Wahapedia 10th edition"
+ *   "Source: BSData 11th edition — MFM costing"
+ *   "Source: Core Rules PDF, p.42"
+ */
+export function buildSourceAttribution(node: { edition?: string; sources: Source[] }): string {
+  const primary = node.sources[0]
+  if (!primary) return ''
+  const label = SOURCE_LABELS[primary.type] ?? primary.type
+  const editionPart = node.edition ? ` ${node.edition} edition` : ''
+  const sourceTitle = primary.title && primary.title !== label ? ` — ${primary.title}` : ''
+  const pagePart = primary.page ? `, p.${primary.page}` : ''
+  return `Source: ${label}${editionPart}${sourceTitle}${pagePart}`
+}
 
 // ── Impact tier ordering ─────────────────────────────────────────────────────
 
@@ -270,12 +308,9 @@ export function assembleContext(
   for (const node of primaryNodes) {
     parts.push(`## ${node.title} [${node.layer}/${node.category}]`)
     parts.push(node.content)
-    if (node.sources.length > 0) {
-      const srcText = node.sources
-        .map((s) => `${s.title}${s.page ? `, p.${s.page}` : ''}`)
-        .join('; ')
-      parts.push(`(Source: ${srcText})`)
-    }
+    // Per-node source attribution — the LLM needs to know edition + upstream
+    // source so it can correctly cite 10e Wahapedia vs 11e BSData/MFM.
+    parts.push(`(${buildSourceAttribution(node)})`)
     parts.push('')
   }
 
@@ -393,6 +428,9 @@ function renderNodeGroup(nodes: Node[], parentMap: Map<string, string>, parts: s
         parts.push(`### ${n.title} [${n.category}]`)
         parts.push(n.summary)
       }
+      // Per-node source attribution so the LLM cites edition + upstream.
+      const attribution = buildSourceAttribution(n)
+      if (attribution) parts.push(`(${attribution})`)
       parts.push('')
     }
   }

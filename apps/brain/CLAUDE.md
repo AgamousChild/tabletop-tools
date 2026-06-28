@@ -58,14 +58,15 @@ apps/brain/
 
 ```typescript
 interface Env {
-  BRAIN_BUCKET: R2Bucket        // tabletop-tools-brain — nodes, refs, manifest, cache
-  BRAIN_INDEX: VectorizeIndex   // bge-base-en-v1.5 embeddings (768-dim)
-  AI: Ai                        // Workers AI (embedding + LLM)
-  SYNC_SECRET?: string          // Bearer token for /index-vectors, /sync
-  CORS_ORIGIN?: string          // Default: https://tabletop-tools.net
-  ANTHROPIC_API_KEY?: string    // Claude for /ask (optional, ?model=claude)
-  GEMINI_API_KEY?: string       // Gemini with Google Search grounding (optional)
-  BUILD_VERSION?: string        // Injected at deploy time
+  BRAIN_BUCKET: R2Bucket            // tabletop-tools-brain — nodes, refs, manifest, cache
+  BRAIN_INDEX: VectorizeIndex       // bge-base-en-v1.5 embeddings (768-dim)
+  AI: Ai                            // Workers AI (embedding + LLM)
+  SYNC_SECRET?: string              // Bearer token for /index-vectors, /sync
+  CORS_ORIGIN?: string              // Default: https://tabletop-tools.net
+  ANTHROPIC_API_KEY?: string        // Claude for /ask (optional, ?model=claude)
+  GEMINI_API_KEY?: string           // Gemini with Google Search grounding (optional)
+  BUILD_VERSION?: string            // Injected at deploy time
+  BRAIN_DEFAULT_EDITION?: string    // '11th' | '10th' | '9th' | 'any'. Unset → 'any'.
 }
 ```
 
@@ -77,18 +78,52 @@ interface Env {
 |---|---|---|
 | GET | /version | Build version |
 | GET | /browse/layers | Category list with counts |
-| GET | /browse/nodes?layer=&page=&pageSize= | Paginated browse |
-| GET | /browse/node/:id | Single node by ID |
-| GET | /browse/unit/:id | Unit + weapons + abilities |
-| GET | /browse/detachment/:id | Detachment + stratagems + enhancements |
+| GET | /browse/nodes?layer=&page=&pageSize=&edition= | Paginated browse |
+| GET | /browse/node/:id?edition= | Single node by ID |
+| GET | /browse/unit/:id?edition= | Unit + weapons + abilities |
+| GET | /browse/detachment/:id?edition= | Detachment + stratagems + enhancements |
 | GET | /manifest.json | R2 manifest (node file list + hashes) |
 | GET | /data/:path | Raw node JSON from R2 |
 | GET | /pages/:path | PDF page images (PNG) from R2 |
-| POST | /search | Vectorize semantic search → aggregated records |
-| POST | /ask | RAG: Vectorize → R2 → Gemini + Brain context → LLM answer |
-| POST | /graph-data | Search + connected nodes + edges for force graph |
+| POST | /search?edition= | Vectorize semantic search → aggregated records |
+| POST | /ask?edition= | RAG: Vectorize → R2 → Gemini + Brain context → LLM answer |
+| POST | /graph-data?edition= | Search + connected nodes + edges for force graph |
 | POST | /index-vectors | Re-index all nodes into Vectorize (auth required) |
 | POST | /sync | Placeholder (build locally, upload to R2) |
+
+### Switchable edition filter (`?edition=`)
+
+Wahapedia is the 10e source-of-truth; BSData + MFM are the 11e source-of-truth.
+Every retrieval/browse endpoint accepts an `edition` query param:
+
+| Value | Behaviour |
+|---|---|
+| `11th` | Return only 11e nodes. If empty, soft-fall-back to `any` and tag response with `fallback: true`, `fallbackFrom: '11th'`. |
+| `10th` | Return only 10e nodes. No fallback (explicit historical query). |
+| `9th`  | Return only 9e nodes. No fallback. |
+| `any`  | No filter (current default). |
+
+When `?edition=` is omitted, the Worker uses `BRAIN_DEFAULT_EDITION` (env var,
+optional). When that's also unset, the default is `any`. Flip it to `11th` via
+`wrangler secret put BRAIN_DEFAULT_EDITION` once 11e coverage is good enough.
+
+Nodes without an `edition` tag are treated as `11th` (matches PR #54's
+content-ingestor default, per Rule 5).
+
+For direct-fetch endpoints (`/browse/unit/:id`, `/browse/detachment/:id`,
+`/browse/node/:id`), when the requested node exists in a different edition the
+response is `404` with header `X-Available-Editions: <comma-list>` so the caller
+can offer an edition switcher.
+
+Per-node source attribution lives in `lib/format.ts::buildSourceAttribution` —
+each LLM-context entry now carries a line like `Source: BSData 11th edition`
+or `Source: Wahapedia 10th edition` so the model cites where each fact came
+from.
+
+The filter is a **post-Vectorize** filter on the fetched node objects, not a
+Vectorize metadata filter. Pushing it upstream would require re-indexing all
+~25k nodes (the index-vectors metadata schema doesn't include `edition` yet).
+That's tracked as a future optimisation.
 
 ---
 
