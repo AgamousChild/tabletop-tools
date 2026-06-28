@@ -24,6 +24,10 @@ const FACTIONS = [
   ['astra-militarum', 'Astra Militarum', 'imperium'],
   ['grey-knights', 'Grey Knights', 'imperium'],
   ['necrons', 'Necrons', 'xenos'],
+  ['imperial-knights', 'Imperial Knights', 'imperium'],
+  ['chaos-knights', 'Chaos Knights', 'chaos'],
+  ['emperors-children', "Emperor's Children", 'chaos'],
+  ['tau-empire', "T'au Empire", 'xenos'],
 ]
 
 const ALIASES = [
@@ -33,6 +37,14 @@ const ALIASES = [
   ['AM', 'astra-militarum'],
   ['GK', 'grey-knights'],
   ['NEC', 'necrons'],
+  // Shadow-id aliases added 2026-06-27 to collapse the remaining
+  // qi/qt/emperor-s-children shadows at merge time.
+  ['qi', 'imperial-knights'],
+  ['QI', 'imperial-knights'],
+  ['qt', 'chaos-knights'],
+  ['QT', 'chaos-knights'],
+  ['emperor-s-children', 'emperors-children'],
+  ['t-au-empire', 'tau-empire'],
 ]
 
 async function createTestDb(): Promise<Db> {
@@ -90,5 +102,23 @@ describe('normalizeFactionId', () => {
   it('throws if loadFactionCodes was not called', () => {
     resetFactionCodes()
     expect(() => normalizeFactionId('SM')).toThrow('Faction codes not loaded')
+  })
+
+  // Shadow-id regression: census/deep-dive 2026-06-27 found qi/qt/
+  // emperor-s-children leaking through to brain nodes. Aliases now collapse
+  // these at merge-sources step 1. The factionSlug emitted by parsers may be
+  // upper- or lower-case (Wahapedia ships codes as `QI`/`QT`; gw-sync writes
+  // filename slugs in lowercase) — both must resolve.
+  it('collapses Wahapedia QI/QT short codes to knight canonicals', () => {
+    expect(normalizeFactionId('QI')).toBe('imperial-knights')
+    expect(normalizeFactionId('qi')).toBe('imperial-knights')
+    expect(normalizeFactionId('QT')).toBe('chaos-knights')
+    expect(normalizeFactionId('qt')).toBe('chaos-knights')
+  })
+
+  it("collapses apostrophe-stripped Emperor's Children filename slug", () => {
+    expect(normalizeFactionId('emperor-s-children')).toBe('emperors-children')
+    // The existing t-au-empire alias should still work — pin its behaviour.
+    expect(normalizeFactionId('t-au-empire')).toBe('tau-empire')
   })
 })

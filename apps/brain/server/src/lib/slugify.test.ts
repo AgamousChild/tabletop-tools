@@ -26,6 +26,20 @@ describe('slugify', () => {
     expect(slugify('Emperor\u2019s Shield')).toBe('emperors-shield')
   })
 
+  // Faction-name regression: any path that runs raw faction strings through
+  // slugify must collapse the apostrophe BEFORE the non-alnum\u2192hyphen replace,
+  // otherwise `T'au Empire` slugs to `t-au-empire` and `Emperor's Children`
+  // slugs to `emperor-s-children` \u2014 both shadow ids that the brain has had to
+  // clean up after with dim_faction_alias rows. The brain's own slugify gets
+  // this right; this test pins the behaviour.
+  it("collapses apostrophes in faction names (T'au, Emperor's)", () => {
+    expect(slugify("T'au Empire")).toBe('tau-empire')
+    expect(slugify("Emperor's Children")).toBe('emperors-children')
+    // Smart-quote variants too \u2014 gw-sync occasionally emits these.
+    expect(slugify('T\u2019au Empire')).toBe('tau-empire')
+    expect(slugify('Emperor\u2019s Children')).toBe('emperors-children')
+  })
+
   it('collapses multiple hyphens', () => {
     expect(slugify('Fights First -- Edge Case')).toBe('fights-first-edge-case')
   })
