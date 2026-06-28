@@ -67,4 +67,16 @@ describe('ResultCard', () => {
     render(<ResultCard {...baseProps} phase="shooting" />)
     expect(screen.getByText('shooting')).toBeInTheDocument()
   })
+
+  it('shows edition badge when edition is provided', () => {
+    render(<ResultCard {...baseProps} edition="11th" />)
+    const badge = screen.getByTestId('result-card-edition')
+    expect(badge).toBeInTheDocument()
+    expect(badge.textContent).toBe('11th')
+  })
+
+  it('does not render edition badge when edition is undefined', () => {
+    render(<ResultCard {...baseProps} />)
+    expect(screen.queryByTestId('result-card-edition')).not.toBeInTheDocument()
+  })
 })

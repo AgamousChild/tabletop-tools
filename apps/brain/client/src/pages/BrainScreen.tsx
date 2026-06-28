@@ -3,6 +3,7 @@ declare const __APP_VERSION__: string
 import { useCallback, useEffect, useRef, useState } from 'react'
 
 import { deriveUnitType } from '../../../shared/derive-unit-type'
+import { ActiveEditionChip } from '../components/ActiveEditionChip'
 import { BalanceCard } from '../components/cards/BalanceCard'
 import { ChallengerCard } from '../components/cards/ChallengerCard'
 import { CommunityCard } from '../components/cards/CommunityCard'
@@ -91,6 +92,8 @@ interface ResultNode {
   phase?: string
   parentUnit?: string
   detachmentId?: string
+  /** Per-node edition tag from the Worker (`'11th' | '10th' | '9th'`). */
+  edition?: string
   sources: any[]
   keywords: string[]
 }
@@ -702,7 +705,10 @@ function AskTab({ onOpenCard, activeFilters, onFilterChange, edition }: AskTabPr
 
           {answer.reference && answer.reference.length > 0 && (
             <div className="mt-4">
-              <h4 className="text-sm font-medium text-slate-400 uppercase mb-2">Reference</h4>
+              <div className="flex items-center gap-2 mb-2">
+                <h4 className="text-sm font-medium text-slate-400 uppercase">Reference</h4>
+                <ActiveEditionChip edition={edition} />
+              </div>
               {answer.reference.map((r, i) => (
                 <div key={r.id + '-' + i} className="mb-2">
                   <button onClick={() => onOpenCard(r)} className="w-full text-left">
@@ -717,6 +723,7 @@ function AskTab({ onOpenCard, activeFilters, onFilterChange, edition }: AskTabPr
                       subfaction={r.subfaction}
                       phase={r.phase}
                       parentUnit={r.parentUnit}
+                      edition={r.edition}
                     />
                   </button>
                   {entityMap.size > 0 && r.summary && (
@@ -961,7 +968,10 @@ function SearchTab({
 
       {/* Total count */}
       {response?.total != null && response.total > 0 && (
-        <p className="text-xs text-slate-500">{response.total} results</p>
+        <div className="flex items-center gap-2">
+          <p className="text-xs text-slate-500">{response.total} results</p>
+          <ActiveEditionChip edition={edition} />
+        </div>
       )}
 
       {/* Record-based results (new format) */}
@@ -995,6 +1005,7 @@ function SearchTab({
                     subfaction={r.subfaction}
                     phase={r.phase}
                     parentUnit={r.parentUnit}
+                    edition={r.edition}
                   />
                 </button>
                 {matchedChildTitles.length > 0 && (
@@ -1042,6 +1053,7 @@ function SearchTab({
                   subfaction={r.subfaction}
                   phase={r.phase}
                   parentUnit={r.parentUnit}
+                  edition={r.edition}
                 />
               </button>
               {entityMap.size > 0 && r.summary && (
@@ -1153,6 +1165,11 @@ function BrowseTab({ onOpenCard, edition }: BrowseTabProps) {
   return (
     <div className="flex">
       <aside className="w-48 border-r border-slate-800 p-4 shrink-0">
+        {edition !== 'any' && (
+          <div className="mb-3">
+            <ActiveEditionChip edition={edition} />
+          </div>
+        )}
         <nav className="space-y-1">
           {layersLoading && <p className="text-xs text-slate-500">Loading...</p>}
           {layers.map((layer) => (
@@ -1195,6 +1212,7 @@ function BrowseTab({ onOpenCard, edition }: BrowseTabProps) {
                     score={0}
                     factionId={node.factionId}
                     subfaction={node.subfaction}
+                    edition={node.edition}
                   />
                 </button>
               ))}

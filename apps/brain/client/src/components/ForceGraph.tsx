@@ -140,7 +140,6 @@ function computeDepths(focusId: string, edges: GraphEdge[], maxDepth: number): M
 function layoutFromState(
   state: GraphState,
   categoryFilters?: Set<string>,
-  editionFilter?: string,
 ): { nodes: RFNode[]; edges: RFEdge[] } {
   const nodes: RFNode[] = []
   const rfEdges: RFEdge[] = []
@@ -186,9 +185,6 @@ function layoutFromState(
     if (!n) continue
     // Apply category filter (if any toggles are active)
     if (categoryFilters && categoryFilters.size > 0 && !categoryFilters.has(n.category)) continue
-    // Apply edition filter
-    if (editionFilter && editionFilter !== 'all' && n.edition && n.edition !== editionFilter)
-      continue
     connected.push(n)
   }
 
@@ -284,7 +280,6 @@ export function ForceGraph({ edition }: ForceGraphProps = {}) {
   const [selectedNode, setSelectedNode] = useState<BrainNodeData | null>(null)
   const graphState = useRef<GraphState | null>(null)
   const [categoryFilters, setCategoryFilters] = useState<Set<string>>(new Set())
-  const [editionFilter, setEditionFilter] = useState<string>('all')
 
   const loadGraph = useCallback(
     async (query: string) => {
@@ -324,7 +319,7 @@ export function ForceGraph({ edition }: ForceGraphProps = {}) {
         }
         graphState.current = state
 
-        const { nodes, edges } = layoutFromState(state, categoryFilters, editionFilter)
+        const { nodes, edges } = layoutFromState(state, categoryFilters)
         setRfNodes(nodes)
         setRfEdges(edges)
         setSelectedNode(null)
@@ -336,7 +331,7 @@ export function ForceGraph({ edition }: ForceGraphProps = {}) {
         setLoading(false)
       }
     },
-    [edition, categoryFilters, editionFilter],
+    [edition, categoryFilters],
   )
 
   const refocusOnNode = useCallback(
@@ -394,12 +389,12 @@ export function ForceGraph({ edition }: ForceGraphProps = {}) {
         if (!keepIds.has(id)) state.allNodes.delete(id)
       }
 
-      const { nodes, edges } = layoutFromState(state, categoryFilters, editionFilter)
+      const { nodes, edges } = layoutFromState(state, categoryFilters)
       setRfNodes(nodes)
       setRfEdges(edges)
       setSelectedNode(null)
     },
-    [edition, categoryFilters, editionFilter],
+    [edition, categoryFilters],
   )
 
   const toggleCategory = useCallback((cat: string) => {
@@ -412,14 +407,11 @@ export function ForceGraph({ edition }: ForceGraphProps = {}) {
   }, [])
 
   // Apply filters whenever they change
-  const prevFiltersRef = useRef({ categoryFilters, editionFilter })
-  if (
-    prevFiltersRef.current.categoryFilters !== categoryFilters ||
-    prevFiltersRef.current.editionFilter !== editionFilter
-  ) {
-    prevFiltersRef.current = { categoryFilters, editionFilter }
+  const prevFiltersRef = useRef({ categoryFilters })
+  if (prevFiltersRef.current.categoryFilters !== categoryFilters) {
+    prevFiltersRef.current = { categoryFilters }
     if (graphState.current) {
-      const { nodes, edges } = layoutFromState(graphState.current, categoryFilters, editionFilter)
+      const { nodes, edges } = layoutFromState(graphState.current, categoryFilters)
       setRfNodes(nodes)
       setRfEdges(edges)
     }
@@ -478,22 +470,21 @@ export function ForceGraph({ edition }: ForceGraphProps = {}) {
               {f.label}
             </button>
           ))}
-          <span className="text-slate-700 mx-1">|</span>
-          <select
-            value={editionFilter}
-            onChange={(e) => setEditionFilter(e.target.value)}
-            className="text-[10px] bg-slate-800 border border-slate-700 rounded px-1.5 py-0.5 text-slate-300"
-          >
-            <option value="all">All Editions</option>
-            <option value="10th">10th Only</option>
-            <option value="11th">11th Only</option>
-          </select>
-          {(categoryFilters.size > 0 || editionFilter !== 'all') && (
+          {edition && edition !== 'any' && (
+            <>
+              <span className="text-slate-700 mx-1">|</span>
+              <span
+                data-testid="forcegraph-edition-chip"
+                className="text-[10px] px-1.5 py-0.5 rounded border border-slate-700 bg-slate-800/50 text-slate-400"
+                title="Edition is set via the picker in the header"
+              >
+                Edition: {edition}
+              </span>
+            </>
+          )}
+          {categoryFilters.size > 0 && (
             <button
-              onClick={() => {
-                setCategoryFilters(new Set())
-                setEditionFilter('all')
-              }}
+              onClick={() => setCategoryFilters(new Set())}
               className="text-[10px] text-slate-500 hover:text-slate-300 underline ml-1"
             >
               Clear filters
