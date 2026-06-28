@@ -97,6 +97,15 @@ half-merged. Today's session lost the `factionId`-normalize edits twice and
 the BSData-repo edit once to exactly this. Use worktree isolation
 whenever an agent will touch files for more than a quick read.
 
+**First action on an isolated worktree:** every agent runs
+`bash scripts/agent-worktree-init.sh` (or `pwsh scripts/agent-worktree-init.ps1`)
+to print its `WORKTREE_ROOT` banner. The Edit/Write tools accept absolute
+paths and write wherever told — agents that mentally default to
+`C:\R\tabletop-tools\...` end up editing the main checkout even when their
+git operations correctly target the worktree. Six of seven agents in the
+2026-06-27 batch hit this and recovered via `git status`. Reading the script
+output before any Edit makes the boundary explicit.
+
 ---
 
 ## Data Boundary
