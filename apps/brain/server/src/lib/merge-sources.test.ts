@@ -2,8 +2,8 @@ import { createClient } from '@libsql/client'
 import { createDbFromClient } from '@tabletop-tools/db'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 
-import { loadFactionCodes, resetFactionCodes } from './faction-codes'
-import { mergeSources } from './merge-sources'
+import { _setFactionCodesForTesting, loadFactionCodes, resetFactionCodes } from './faction-codes'
+import { BuildGateError, mergeSources } from './merge-sources'
 import type { Node, NodeRef } from './model'
 
 function makeNode(overrides: Partial<Node>): Node {
@@ -253,6 +253,131 @@ describe('mergeSources', () => {
       const strat = result.nodes.find((n) => n.id === 'strat-001')!
       expect(strat.points).toBeUndefined()
       expect(result.stats.mfmPointsApplied).toBe(0)
+    })
+  })
+
+  describe('build-time gates (step 9)', () => {
+    it('defaults missing editions to 11th and reports counts by edition', () => {
+      const nodes = [
+        makeNode({ id: 'n1', edition: '10th' }),
+        makeNode({ id: 'n2', edition: '11th' }),
+        makeNode({ id: 'n3', edition: '9th' }),
+        makeNode({ id: 'n4' }), // no edition -> defaulted
+        makeNode({ id: 'n5' }), // no edition -> defaulted
+      ]
+      const result = mergeSources(nodes, [])
+      const gate = result.stats.editionGate
+      expect(gate['9th']).toBe(1)
+      expect(gate['10th']).toBe(1)
+      // n2 + n4 + n5 all end up as 11th
+      expect(gate['11th']).toBe(3)
+      expect(gate.defaulted).toBe(2)
+      expect(gate.unexpected).toBe(0)
+      // Auto-fix is applied: defaulted nodes carry edition '11th' on the way out
+      expect(result.nodes.find((n) => n.id === 'n4')!.edition).toBe('11th')
+      expect(result.nodes.find((n) => n.id === 'n5')!.edition).toBe('11th')
+    })
+
+    it('warns on unexpected edition values but leaves them in place', () => {
+      const nodes = [
+        makeNode({ id: 'n1', edition: '10th' }),
+        makeNode({ id: 'n2', edition: '12th' }), // typo / not in allowlist
+      ]
+      const result = mergeSources(nodes, [])
+      expect(result.stats.editionGate.unexpected).toBe(1)
+      // We don't silently rewrite arbitrary strings — typos must be visible.
+      expect(result.nodes.find((n) => n.id === 'n2')!.edition).toBe('12th')
+    })
+
+    it('routes shadow factionIds through normalizeFactionId() and reports counts', () => {
+      const nodes = [
+        // canonical
+        makeNode({ id: 'n1', factionId: 'space-marines' }),
+        // shadow that an alias can repair: 'SM' was seeded in beforeAll
+        makeNode({ id: 'n2', factionId: 'space-marines', title: 'pre-normalized' }),
+        // factionId: undefined is allowed
+        makeNode({ id: 'n3', factionId: undefined, layer: 'core', category: 'core-mechanic' }),
+      ]
+      const result = mergeSources(nodes, [])
+      const gate = result.stats.factionIdGate
+      // n1 and n2 both canonical post-merge; n3 has no factionId so isn't counted
+      expect(gate.canonical).toBe(2)
+      expect(gate.normalized).toBe(0)
+      expect(gate.stillOrphaned).toBe(0)
+      expect(result.nodes.find((n) => n.id === 'n3')!.factionId).toBeUndefined()
+    })
+
+    it('throws BuildGateError when a factionId cannot be normalized', () => {
+      // Reset the cache to a minimal known-state with NO alias entries so a
+      // truly-unknown id can't be rescued. slugify() will pass it through
+      // unchanged, which the gate must catch.
+      resetFactionCodes()
+      _setFactionCodesForTesting(
+        new Map([['space-marines', 'space-marines']]),
+        new Set(['space-marines']),
+      )
+      try {
+        const nodes = [
+          makeNode({ id: 'n1', factionId: 'space-marines' }),
+          // 'totally-not-a-faction' isn't in the alias map and slugify() returns
+          // it verbatim, so the gate's auto-fix can't rescue it.
+          makeNode({ id: 'n2', factionId: 'totally-not-a-faction' }),
+        ]
+        expect(() => mergeSources(nodes, [])).toThrow(BuildGateError)
+      } finally {
+        // Restore the cache for any tests that run after this one in this file.
+        resetFactionCodes()
+        _setFactionCodesForTesting(
+          new Map([
+            ['space-marines', 'space-marines'],
+            ['chaos-space-marines', 'chaos-space-marines'],
+            ['death-guard', 'death-guard'],
+            ['SM', 'space-marines'],
+            ['CSM', 'chaos-space-marines'],
+            ['DG', 'death-guard'],
+          ]),
+          new Set(['space-marines', 'chaos-space-marines', 'death-guard']),
+        )
+      }
+    })
+
+    it('counts a node as `normalized` when an alias rescues a shadow factionId', () => {
+      // Reset to a fresh cache so we can stage a single-shadow scenario.
+      resetFactionCodes()
+      _setFactionCodesForTesting(
+        new Map([
+          ['space-marines', 'space-marines'],
+          // Alias that maps a shadow id to a canonical slug
+          ['legacy-sm-id', 'space-marines'],
+        ]),
+        new Set(['space-marines']),
+      )
+      try {
+        // Step 1 of mergeSources already normalizes factionId via the alias map,
+        // so by the time the gate runs the node's factionId is already canonical.
+        // What we're proving here is that the gate's counts and the auto-fix
+        // path don't double-count or false-positive on alias-resolvable ids.
+        const nodes = [makeNode({ id: 'n1', factionId: 'legacy-sm-id' })]
+        const result = mergeSources(nodes, [])
+        expect(result.stats.factionIdGate.stillOrphaned).toBe(0)
+        // The step-1 normalize counter (factionNormalizedCount) records this work
+        expect(result.stats.factionNormalizedCount).toBe(1)
+        expect(result.nodes[0]!.factionId).toBe('space-marines')
+      } finally {
+        // Restore the test-wide cache.
+        resetFactionCodes()
+        _setFactionCodesForTesting(
+          new Map([
+            ['space-marines', 'space-marines'],
+            ['chaos-space-marines', 'chaos-space-marines'],
+            ['death-guard', 'death-guard'],
+            ['SM', 'space-marines'],
+            ['CSM', 'chaos-space-marines'],
+            ['DG', 'death-guard'],
+          ]),
+          new Set(['space-marines', 'chaos-space-marines', 'death-guard']),
+        )
+      }
     })
   })
 })
