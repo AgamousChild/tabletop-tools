@@ -1,5 +1,6 @@
 import { normalizeFactionId } from './faction-codes'
 import type { Node, NodeRef } from './model'
+import type { MfmCostingForDatasheet } from './parsers/mfm-costing'
 
 /** Slug → preferred English display name (ALL CAPS). */
 const FACTION_DISPLAY_NAMES: Record<string, string> = {
@@ -36,12 +37,54 @@ export interface MergeStats {
   factionNormalizedCount: number
   refsDeduped: number
   summaryTagged: number
+  /** Datasheet nodes whose `points` array was overridden by MFM 11e costing. */
+  mfmPointsApplied: number
 }
 
 export interface MergeResult {
   nodes: Node[]
   refs: NodeRef[]
   stats: MergeStats
+}
+
+/**
+ * Optional auxiliary data sources consulted while merging. Each layer is
+ * applied with the priority documented in `applyPointsPriority` below.
+ */
+export interface MergeOptions {
+  /** MFM 11e costing, datasheet GUID → derived points info. */
+  mfmCostingByDatasheetId?: Map<string, MfmCostingForDatasheet>
+}
+
+/**
+ * Resolve the authoritative `points` array for a datasheet node.
+ *
+ * Priority order (per `docs/superpowers/plans/2026-06-27-data-problems-followup.md`
+ * step 5 — "MFM as the 11e points source of truth"):
+ *
+ *   1. MFM (Munitorum Field Manual) when the datasheet has an MFM row. MFM is
+ *      the GW-published 11e points source and refreshes ~monthly.
+ *   2. BSData 11e (placeholder — the brain does not yet read BSData unit data,
+ *      but the slot is here so the next migration step plugs in cleanly).
+ *   3. Wahapedia (10e). Only used as a fallback. Wahapedia has not yet
+ *      shipped 11e points; nodes that consume it should be tagged
+ *      `edition: '10th'`.
+ *
+ * The existing `node.points` array on a datasheet was emitted by the
+ * Wahapedia parser (`game-data.ts`), so it's already at priority 3 in this
+ * scheme. We overwrite it whenever priority 1 has data.
+ */
+function applyPointsPriority(
+  node: Node,
+  mfmCostingByDatasheetId: Map<string, MfmCostingForDatasheet> | undefined,
+): boolean {
+  if (node.category !== 'datasheet') return false
+  if (!node.datasheetId) return false
+  if (!mfmCostingByDatasheetId) return false
+  const mfm = mfmCostingByDatasheetId.get(node.datasheetId)
+  if (!mfm) return false
+  node.points = mfm.pointsArray
+  return true
 }
 
 /** Convert a kebab-case slug to Title Case for display. */
@@ -64,7 +107,11 @@ function slugToTitleCase(slug: string): string {
  * 5. Deduplicate refs by sourceId + targetId + rel
  * 6. Remove orphan refs where either endpoint is absent from the final node set
  */
-export function mergeSources(allNodes: Node[], allRefs: NodeRef[]): MergeResult {
+export function mergeSources(
+  allNodes: Node[],
+  allRefs: NodeRef[],
+  options: MergeOptions = {},
+): MergeResult {
   const stats: MergeStats = {
     inputNodes: allNodes.length,
     outputNodes: 0,
@@ -72,6 +119,7 @@ export function mergeSources(allNodes: Node[], allRefs: NodeRef[]): MergeResult 
     factionNormalizedCount: 0,
     refsDeduped: 0,
     summaryTagged: 0,
+    mfmPointsApplied: 0,
   }
 
   // Step 1: Normalize factionIds and assign factionName (mutates a working copy)
@@ -263,6 +311,15 @@ export function mergeSources(allNodes: Node[], allRefs: NodeRef[]): MergeResult 
         node.summary = `${node.summary} (${tag})`
         stats.summaryTagged++
       }
+    }
+  }
+
+  // Step 4c: Apply points-source priority (MFM → BSData → Wahapedia 10e).
+  // The Wahapedia parser already populated `node.points` from 10e data; we
+  // overwrite it on datasheets that have an MFM 11e row.
+  for (const node of nodeMap.values()) {
+    if (applyPointsPriority(node, options.mfmCostingByDatasheetId)) {
+      stats.mfmPointsApplied++
     }
   }
 

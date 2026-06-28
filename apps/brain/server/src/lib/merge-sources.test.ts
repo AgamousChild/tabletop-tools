@@ -165,4 +165,94 @@ describe('mergeSources', () => {
     const result = mergeSources(nodes, refs)
     expect(result.refs).toHaveLength(1)
   })
+
+  describe('MFM points override', () => {
+    it('replaces Wahapedia points with MFM points when MFM has the datasheet', () => {
+      const nodes = [
+        makeNode({
+          id: 'ds-001',
+          category: 'datasheet',
+          datasheetId: 'ds-001',
+          title: 'Intercessor Squad',
+          points: [
+            { models: '5 models', cost: 90 }, // Wahapedia 10e value
+            { models: '10 models', cost: 180 },
+          ],
+        }),
+      ]
+      const mfmCostingByDatasheetId = new Map([
+        [
+          'ds-001',
+          {
+            pointsArray: [
+              { models: '5 models', cost: 80 }, // MFM 11e cheaper
+              { models: '10 models', cost: 160 },
+            ],
+            minCost: 80,
+            tiers: [
+              {
+                range: '[1,)',
+                label: 'Your Unit Costs',
+                costs: [
+                  { models: 5, points: 80 },
+                  { models: 10, points: 160 },
+                ],
+              },
+            ],
+          },
+        ],
+      ])
+      const result = mergeSources(nodes, [], { mfmCostingByDatasheetId })
+      const intercessor = result.nodes.find((n) => n.id === 'ds-001')!
+      expect(intercessor.points).toEqual([
+        { models: '5 models', cost: 80 },
+        { models: '10 models', cost: 160 },
+      ])
+      expect(result.stats.mfmPointsApplied).toBe(1)
+    })
+
+    it('keeps Wahapedia points when MFM has no row for the datasheet (fallback)', () => {
+      const nodes = [
+        makeNode({
+          id: 'ds-002',
+          category: 'datasheet',
+          datasheetId: 'ds-002',
+          title: 'Legacy Unit',
+          points: [{ models: '1 model', cost: 75 }],
+        }),
+      ]
+      // Empty MFM map — falls back to the Wahapedia value already on the node.
+      const mfmCostingByDatasheetId = new Map()
+      const result = mergeSources(nodes, [], { mfmCostingByDatasheetId })
+      const legacy = result.nodes.find((n) => n.id === 'ds-002')!
+      expect(legacy.points).toEqual([{ models: '1 model', cost: 75 }])
+      expect(result.stats.mfmPointsApplied).toBe(0)
+    })
+
+    it('does not touch non-datasheet nodes', () => {
+      const nodes = [
+        makeNode({
+          id: 'strat-001',
+          category: 'stratagem',
+          title: 'Rapid Ingress',
+          // Stratagems do not carry `points`, but make sure the override doesn't
+          // somehow leak across categories even if the same id is in the map.
+        }),
+      ]
+      const mfmCostingByDatasheetId = new Map([
+        [
+          'strat-001',
+          {
+            pointsArray: [{ models: '1 model', cost: 999 }],
+            minCost: 999,
+            tiers: [],
+          },
+        ],
+      ])
+      const result = mergeSources(nodes, [], { mfmCostingByDatasheetId })
+      const strat = result.nodes.find((n) => n.id === 'strat-001')!
+      expect(strat.points).toBeUndefined()
+      expect(result.stats.mfmPointsApplied).toBe(0)
+    })
+  })
 })
