@@ -965,4 +965,76 @@ describe('retrieve with edition filter', () => {
     expect(ids).toContain(node11.id)
     expect(result.edition).toBe('any')
   })
+
+  // ── Vectorize pre-filter for edition ──────────────────────────────────────
+  // Step 1 of the perf follow-up to PR #56. The post-filter inside retrieve()
+  // stays as defence in depth; these tests verify the metadata filter is
+  // pushed into BRAIN_INDEX.query so candidates get shed before the R2 fetch.
+
+  it('passes edition as a Vectorize metadata filter when edition="11th"', async () => {
+    const ai = createMockAI()
+    const vectorize = createMockVectorize([
+      { id: node11.id, score: 0.9, metadata: { layer: 'core', category: 'core-mechanic' } },
+    ])
+    const bucket = makeBucket([node11])
+
+    const env: RetrieveEnv = { ai, vectorize, bucket }
+    await retrieve({ query: 'advance move rules', edition: '11th' }, env)
+
+    const queryCall = (vectorize.query as ReturnType<typeof vi.fn>).mock.calls[0]
+    const opts = queryCall[1] as { filter?: Record<string, unknown> }
+    expect(opts.filter).toBeDefined()
+    expect(opts.filter!.edition).toBe('11th')
+  })
+
+  it('passes edition as a Vectorize metadata filter when edition="10th"', async () => {
+    const ai = createMockAI()
+    const vectorize = createMockVectorize([
+      { id: node10.id, score: 0.9, metadata: { layer: 'core', category: 'core-mechanic' } },
+    ])
+    const bucket = makeBucket([node10])
+
+    const env: RetrieveEnv = { ai, vectorize, bucket }
+    await retrieve({ query: 'advance move rules', edition: '10th' }, env)
+
+    const queryCall = (vectorize.query as ReturnType<typeof vi.fn>).mock.calls[0]
+    const opts = queryCall[1] as { filter?: Record<string, unknown> }
+    expect(opts.filter).toBeDefined()
+    expect(opts.filter!.edition).toBe('10th')
+  })
+
+  it('does NOT pass edition filter to Vectorize when edition="any"', async () => {
+    const ai = createMockAI()
+    const vectorize = createMockVectorize([
+      { id: node10.id, score: 0.9, metadata: { layer: 'core', category: 'core-mechanic' } },
+    ])
+    const bucket = makeBucket([node10])
+
+    const env: RetrieveEnv = { ai, vectorize, bucket }
+    await retrieve({ query: 'advance move rules', edition: 'any' }, env)
+
+    const queryCall = (vectorize.query as ReturnType<typeof vi.fn>).mock.calls[0]
+    const opts = queryCall[1] as { filter?: Record<string, unknown> }
+    // Filter object may be absent entirely, or present but without edition
+    if (opts.filter) {
+      expect(opts.filter.edition).toBeUndefined()
+    }
+  })
+
+  it('does NOT pass edition filter to Vectorize when edition option is omitted', async () => {
+    const ai = createMockAI()
+    const vectorize = createMockVectorize([
+      { id: node10.id, score: 0.9, metadata: { layer: 'core', category: 'core-mechanic' } },
+    ])
+    const bucket = makeBucket([node10])
+
+    const env: RetrieveEnv = { ai, vectorize, bucket }
+    await retrieve({ query: 'advance move rules' }, env)
+
+    const queryCall = (vectorize.query as ReturnType<typeof vi.fn>).mock.calls[0]
+    const opts = queryCall[1] as { filter?: Record<string, unknown> }
+    if (opts.filter) {
+      expect(opts.filter.edition).toBeUndefined()
+    }
+  })
 })
