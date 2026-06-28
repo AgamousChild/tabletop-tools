@@ -2337,3 +2337,320 @@ describe('parseBSDataXml — top-level entryLink resolution', () => {
     expect(units).toHaveLength(0)
   })
 })
+
+// ---- catalogueLink resolution: lookup-only imports + library-import filtering ----
+// Models the Drukhari + Chaos Knights defect: a faction wrapper that
+// `catalogueLink`s a parent library without `importRootEntries="true"` (Drukhari
+// → Aeldari Library) must still be able to resolve its top-level `<entryLink>`
+// targets via that library; and a wrapper that imports a `library="true"`
+// catalog with `importRootEntries="true"` (Chaos Knights → CK / Daemons / Titans
+// Libraries) must NOT pour those libraries' roster entries into its own faction
+// (each library is parsed independently under its own faction).
+
+describe('parseBSDataXml — catalogueLink resolution for siblings of a shared library', () => {
+  // Shared library that defines two faction-flavored units. Both Craftworlds and
+  // Drukhari wrappers want to surface a subset of these as their own roster
+  // picks via top-level entryLinks; only Craftworlds inherits the lot via
+  // `importRootEntries="true"`. Mirrors `Aeldari - Aeldari Library.cat`.
+  const SHARED_LIBRARY_XML = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<catalogue id="aeldari-library-id" name="Aeldari Library" library="true">
+  <sharedSelectionEntries>
+    <selectionEntry type="unit" import="true" name="Kabalite Spearman" hidden="false" id="lib-kabalite">
+      <profiles>
+        <profile id="p-kab" name="Kabalite Spearman" typeName="Unit">
+          <characteristics>
+            <characteristic name="M">7</characteristic>
+            <characteristic name="T">3</characteristic>
+            <characteristic name="Sv">5+</characteristic>
+            <characteristic name="W">1</characteristic>
+            <characteristic name="Ld">7</characteristic>
+            <characteristic name="OC">2</characteristic>
+          </characteristics>
+        </profile>
+        <profile id="w-kab" name="Splinter Rifle" typeName="Ranged Weapons">
+          <characteristics>
+            <characteristic name="Range">24</characteristic>
+            <characteristic name="A">1</characteristic>
+            <characteristic name="BS">3+</characteristic>
+            <characteristic name="S">3</characteristic>
+            <characteristic name="AP">0</characteristic>
+            <characteristic name="D">1</characteristic>
+            <characteristic name="Abilities">-</characteristic>
+          </characteristics>
+        </profile>
+      </profiles>
+      <costs>
+        <cost name="pts" typeId="points" value="70"/>
+      </costs>
+    </selectionEntry>
+    <selectionEntry type="unit" import="true" name="Guardian Defender" hidden="false" id="lib-guardian">
+      <profiles>
+        <profile id="p-gd" name="Guardian Defender" typeName="Unit">
+          <characteristics>
+            <characteristic name="M">6</characteristic>
+            <characteristic name="T">3</characteristic>
+            <characteristic name="Sv">5+</characteristic>
+            <characteristic name="W">1</characteristic>
+            <characteristic name="Ld">7</characteristic>
+            <characteristic name="OC">2</characteristic>
+          </characteristics>
+        </profile>
+        <profile id="w-gd" name="Shuriken Catapult" typeName="Ranged Weapons">
+          <characteristics>
+            <characteristic name="Range">12</characteristic>
+            <characteristic name="A">2</characteristic>
+            <characteristic name="BS">3+</characteristic>
+            <characteristic name="S">4</characteristic>
+            <characteristic name="AP">-1</characteristic>
+            <characteristic name="D">1</characteristic>
+            <characteristic name="Abilities">-</characteristic>
+          </characteristics>
+        </profile>
+      </profiles>
+      <costs>
+        <cost name="pts" typeId="points" value="80"/>
+      </costs>
+    </selectionEntry>
+  </sharedSelectionEntries>
+</catalogue>`
+
+  // The Drukhari-shaped wrapper. catalogueLink without importRootEntries (defaults
+  // to false), and a single top-level entryLink referencing the Kabalite target.
+  const DRUKHARI_WRAPPER_XML = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<catalogue id="drukhari-id" name="Drukhari" library="false">
+  <entryLinks>
+    <entryLink import="true" name="Kabalite Spearman" type="selectionEntry" id="dr-link-kab" targetId="lib-kabalite"/>
+  </entryLinks>
+  <catalogueLinks>
+    <catalogueLink name="Aeldari Library" id="dr-cl" targetId="aeldari-library-id" type="catalogue"/>
+  </catalogueLinks>
+</catalogue>`
+
+  // The Craftworlds-shaped wrapper. catalogueLink with importRootEntries=true so
+  // the whole library still flows through (this preserves the existing behavior
+  // for catalogs that genuinely inherit a parent's roster).
+  const CRAFTWORLDS_WRAPPER_XML = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<catalogue id="craftworlds-id" name="Craftworlds" library="false">
+  <entryLinks>
+    <entryLink import="true" name="Guardian Defender" type="selectionEntry" id="cw-link-gd" targetId="lib-guardian"/>
+  </entryLinks>
+  <catalogueLinks>
+    <catalogueLink name="Aeldari Library" id="cw-cl" targetId="aeldari-library-id" type="catalogue" importRootEntries="true"/>
+  </catalogueLinks>
+</catalogue>`
+
+  const registry = new Map([
+    ['aeldari-library-id', { name: 'Aeldari Library', xml: SHARED_LIBRARY_XML }],
+    ['drukhari-id', { name: 'Drukhari', xml: DRUKHARI_WRAPPER_XML }],
+    ['craftworlds-id', { name: 'Craftworlds', xml: CRAFTWORLDS_WRAPPER_XML }],
+  ])
+
+  it('resolves a top-level entryLink whose target lives in a catalogueLinked library without importRootEntries', () => {
+    // Drukhari pre-fix: 0 units because Aeldari Library wasn't visited at all.
+    const { units } = parseBSDataXml(DRUKHARI_WRAPPER_XML, 'Drukhari', registry)
+    const kab = units.find((u) => u.name === 'Kabalite Spearman')
+    expect(kab).toBeDefined()
+    expect(kab!.id).toBe('dr-link-kab')
+    expect(kab!.faction).toBe('Drukhari')
+    expect(kab!.weapons.some((w) => w.name === 'Splinter Rifle')).toBe(true)
+  })
+
+  it('does not pull library roots into the wrapper when the wrapper has no top-level entryLink for them', () => {
+    // Drukhari only entryLinks the Kabalite target. The Guardian Defender lives in
+    // the library too but Drukhari did not opt in — it must not appear under
+    // the Drukhari faction.
+    const { units } = parseBSDataXml(DRUKHARI_WRAPPER_XML, 'Drukhari', registry)
+    expect(units.find((u) => u.name === 'Guardian Defender')).toBeUndefined()
+    // And the library's own selectionEntry id must not leak through as a Drukhari unit.
+    expect(units.find((u) => u.id === 'lib-kabalite')).toBeUndefined()
+  })
+
+  it('parses the library directly under its own faction without spilling into wrappers', () => {
+    // The library is its own catalog: both units belong to it.
+    const { units } = parseBSDataXml(SHARED_LIBRARY_XML, 'Aeldari Library', registry)
+    const names = units.map((u) => u.name).sort()
+    expect(names).toEqual(['Guardian Defender', 'Kabalite Spearman'])
+  })
+
+  it('preserves the chapter-inherits-library pattern when the importRootEntries target is NOT library="true"', () => {
+    // Mirrors SM chapter → `Imperium - Space Marines` (library="false"). The
+    // wrapper has zero local units of its own; it inherits the parent's roster
+    // through importRootEntries=true. The new library-only exclusion must not
+    // strip non-library parents.
+    const SM_PARENT_XML = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<catalogue id="sm-parent-id" name="Space Marines" library="false">
+  <selectionEntries>
+    <selectionEntry type="unit" name="Intercessor Squad" id="sm-intercessor">
+      <profiles>
+        <profile id="p-int" name="Intercessor" typeName="Unit">
+          <characteristics>
+            <characteristic name="M">6</characteristic>
+            <characteristic name="T">4</characteristic>
+            <characteristic name="Sv">3+</characteristic>
+            <characteristic name="W">2</characteristic>
+            <characteristic name="Ld">6</characteristic>
+            <characteristic name="OC">2</characteristic>
+          </characteristics>
+        </profile>
+        <profile id="w-int" name="Bolt Rifle" typeName="Ranged Weapons">
+          <characteristics>
+            <characteristic name="Range">24</characteristic>
+            <characteristic name="A">2</characteristic>
+            <characteristic name="BS">3+</characteristic>
+            <characteristic name="S">4</characteristic>
+            <characteristic name="AP">-1</characteristic>
+            <characteristic name="D">1</characteristic>
+            <characteristic name="Abilities">-</characteristic>
+          </characteristics>
+        </profile>
+      </profiles>
+    </selectionEntry>
+  </selectionEntries>
+</catalogue>`
+    const ULTRAMARINES_XML = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<catalogue id="ultramarines-id" name="Ultramarines" library="false">
+  <catalogueLinks>
+    <catalogueLink name="Space Marines" id="um-cl" targetId="sm-parent-id" type="catalogue" importRootEntries="true"/>
+  </catalogueLinks>
+</catalogue>`
+    const reg = new Map([
+      ['sm-parent-id', { name: 'Space Marines', xml: SM_PARENT_XML }],
+      ['ultramarines-id', { name: 'Ultramarines', xml: ULTRAMARINES_XML }],
+    ])
+    const { units } = parseBSDataXml(ULTRAMARINES_XML, 'Ultramarines', reg)
+    const intercessor = units.find((u) => u.name === 'Intercessor Squad')
+    expect(intercessor).toBeDefined()
+    expect(intercessor!.faction).toBe('Ultramarines')
+  })
+})
+
+describe('parseBSDataXml — wrapper that importRootEntries multiple libraries', () => {
+  // Models the `Chaos - Chaos Knights.cat` defect: the wrapper imports three
+  // separate library catalogs (CK Library + Daemons Library + Titans Library)
+  // all with importRootEntries=true. Without the fix, every library's roster
+  // entries flow through and the wrapper's faction string ends up containing
+  // a mix of unrelated faction units. The fix keeps libraries scoped to their
+  // own direct-parse faction.
+
+  const CK_LIB_XML = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<catalogue id="ck-lib-id" name="Chaos Knights Library" library="true">
+  <selectionEntries>
+    <selectionEntry type="unit" name="War Dog" id="ck-war-dog">
+      <profiles>
+        <profile id="p-wd" name="War Dog" typeName="Unit">
+          <characteristics>
+            <characteristic name="M">10</characteristic>
+            <characteristic name="T">10</characteristic>
+            <characteristic name="Sv">3+</characteristic>
+            <characteristic name="W">12</characteristic>
+            <characteristic name="Ld">6</characteristic>
+            <characteristic name="OC">3</characteristic>
+          </characteristics>
+        </profile>
+        <profile id="w-wd" name="Avenger Chaincannon" typeName="Ranged Weapons">
+          <characteristics>
+            <characteristic name="Range">24</characteristic>
+            <characteristic name="A">8</characteristic>
+            <characteristic name="BS">3+</characteristic>
+            <characteristic name="S">6</characteristic>
+            <characteristic name="AP">-1</characteristic>
+            <characteristic name="D">1</characteristic>
+            <characteristic name="Abilities">-</characteristic>
+          </characteristics>
+        </profile>
+      </profiles>
+    </selectionEntry>
+  </selectionEntries>
+</catalogue>`
+
+  const DAEMONS_LIB_XML = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<catalogue id="daemons-lib-id" name="Daemons Library" library="true">
+  <selectionEntries>
+    <selectionEntry type="unit" name="Bloodletters" id="daemons-bloodletters">
+      <profiles>
+        <profile id="p-bl" name="Bloodletter" typeName="Unit">
+          <characteristics>
+            <characteristic name="M">7</characteristic>
+            <characteristic name="T">4</characteristic>
+            <characteristic name="Sv">7+</characteristic>
+            <characteristic name="W">1</characteristic>
+            <characteristic name="Ld">7</characteristic>
+            <characteristic name="OC">2</characteristic>
+          </characteristics>
+        </profile>
+        <profile id="w-bl" name="Hellblade" typeName="Melee Weapons">
+          <characteristics>
+            <characteristic name="Range">Melee</characteristic>
+            <characteristic name="A">2</characteristic>
+            <characteristic name="WS">3+</characteristic>
+            <characteristic name="S">5</characteristic>
+            <characteristic name="AP">-2</characteristic>
+            <characteristic name="D">1</characteristic>
+            <characteristic name="Abilities">-</characteristic>
+          </characteristics>
+        </profile>
+      </profiles>
+    </selectionEntry>
+  </selectionEntries>
+</catalogue>`
+
+  // The Chaos Knights wrapper: pure passthrough — no own selectionEntries, just
+  // catalogueLinks to both libraries with importRootEntries=true. With the fix
+  // neither library's roots leak through.
+  const CK_WRAPPER_XML = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<catalogue id="ck-wrapper-id" name="Chaos Knights" library="false">
+  <catalogueLinks>
+    <catalogueLink name="Chaos Knights Library" id="ck-cl-ck" targetId="ck-lib-id" type="catalogue" importRootEntries="true"/>
+    <catalogueLink name="Daemons Library" id="ck-cl-da" targetId="daemons-lib-id" type="catalogue" importRootEntries="true"/>
+  </catalogueLinks>
+</catalogue>`
+
+  const registry = new Map([
+    ['ck-lib-id', { name: 'Chaos Knights Library', xml: CK_LIB_XML }],
+    ['daemons-lib-id', { name: 'Daemons Library', xml: DAEMONS_LIB_XML }],
+    ['ck-wrapper-id', { name: 'Chaos Knights', xml: CK_WRAPPER_XML }],
+  ])
+
+  it('does not surface Daemons Library roots under the Chaos Knights wrapper faction', () => {
+    const { units } = parseBSDataXml(CK_WRAPPER_XML, 'Chaos Knights', registry)
+    expect(units.find((u) => u.name === 'Bloodletters')).toBeUndefined()
+  })
+
+  it('does not double-emit the matching library either — the library is parsed independently', () => {
+    const { units } = parseBSDataXml(CK_WRAPPER_XML, 'Chaos Knights', registry)
+    // Without local entries or top-level entryLinks, the CK wrapper produces
+    // zero units of its own. The 20-odd real CK units arrive via the library's
+    // direct parse (under faction "Chaos Knights Library").
+    expect(units).toHaveLength(0)
+  })
+
+  it('emits the library units under the library faction when parsed directly', () => {
+    const ck = parseBSDataXml(CK_LIB_XML, 'Chaos Knights Library', registry)
+    expect(ck.units.find((u) => u.name === 'War Dog')).toBeDefined()
+    const daemons = parseBSDataXml(DAEMONS_LIB_XML, 'Daemons Library', registry)
+    expect(daemons.units.find((u) => u.name === 'Bloodletters')).toBeDefined()
+  })
+
+  it('still surfaces top-level entryLinks declared on the wrapper itself', () => {
+    // Wrappers that DO entryLink specific library targets (e.g. the Drukhari
+    // case from the sibling describe block, or Chaos Knights allies like Dark
+    // Commune) emit those units under the wrapper's faction. Verify with a
+    // wrapper that entryLinks a CK Library unit explicitly.
+    const wrapperWithEntryLink = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<catalogue id="ck-detachment-id" name="CK Detachment" library="false">
+  <entryLinks>
+    <entryLink import="true" name="War Dog" type="selectionEntry" id="ckd-link-wd" targetId="ck-war-dog"/>
+  </entryLinks>
+  <catalogueLinks>
+    <catalogueLink name="Chaos Knights Library" id="ckd-cl" targetId="ck-lib-id" type="catalogue" importRootEntries="true"/>
+  </catalogueLinks>
+</catalogue>`
+    const reg = new Map(registry)
+    reg.set('ck-detachment-id', { name: 'CK Detachment', xml: wrapperWithEntryLink })
+    const { units } = parseBSDataXml(wrapperWithEntryLink, 'CK Detachment', reg)
+    const wd = units.find((u) => u.id === 'ckd-link-wd')
+    expect(wd).toBeDefined()
+    expect(wd!.name).toBe('War Dog')
+    expect(wd!.faction).toBe('CK Detachment')
+  })
+})
