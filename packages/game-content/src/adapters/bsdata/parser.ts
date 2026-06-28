@@ -1,7 +1,7 @@
 import type { UnitProfile, WeaponAbility, WeaponProfile } from '../../types.js'
 
 /** Bump when parser output changes in a way that invalidates previously-imported data. */
-export const PARSER_VERSION = 14
+export const PARSER_VERSION = 15
 
 /**
  * BattleScribe typeId for matched-play points (`<cost name="pts">`). Stable
@@ -104,9 +104,11 @@ export function parseBSDataXml(
   // BSData XML uses these to point to shared definitions (profiles, weapons, models)
   // defined elsewhere in the file (e.g. in <sharedProfiles> or <sharedSelectionEntries>).
   const profileMap = buildProfileMap(effectiveXml)
-  const entryMap = buildEntryMap(effectiveXml)
+  const { entryMap, entryAttrsMap } = buildEntryMaps(effectiveXml)
   const selectionEntryGroupMap = buildSelectionEntryGroupMap(effectiveXml)
   const infoGroupMap = buildInfoGroupMap(effectiveXml)
+
+  const emittedIds = new Set<string>()
 
   // Stack-based extraction of <selectionEntry> to handle nested entries correctly.
   // The regex approach fails when <selectionEntry> elements are nested (the non-greedy
@@ -146,8 +148,63 @@ export function parseBSDataXml(
       // Validate parsed data and add warnings for suspicious values
       validateUnit(unit, errors)
       units.push(unit)
+      emittedIds.add(id)
     } catch (err) {
       errors.push(`Failed to parse unit "${name}" (${id}): ${String(err)}`)
+    }
+  }
+
+  // 11e chapter catalogs (Imperium - Ultramarines.cat etc.) declare characters as
+  // top-level `<entryLink type="selectionEntry" targetId="…">` that resolves into a
+  // `<selectionEntry type="model">` in `<sharedSelectionEntries>` of the chapter
+  // catalog or its imported library. Those targets are filtered out above by the
+  // "shared sub-model" rule, so without this pass every chapter-defined character
+  // (Captain Sicarius, Captain Titus, Chaplain Cassius, …) is dropped.
+  //
+  // We treat each top-level entryLink as a synthetic unit: the entryLink's `name`
+  // is the display name (the link can override the target's name, e.g. Lieutenant
+  // Titus → Captain Titus), the entryLink's `id` is the unit id (locally scoped
+  // to this catalog), and the target's body is the source of stats/weapons.
+  for (const link of extractTopLevelEntryLinks(effectiveXml)) {
+    if (link.type !== 'selectionEntry') continue
+    if (!link.id || !link.targetId) continue
+    if (emittedIds.has(link.id)) continue
+
+    const targetAttrs = entryAttrsMap.get(link.targetId)
+    const targetBody = entryMap.get(link.targetId)
+    if (!targetAttrs || targetBody === undefined) continue
+
+    const targetType = extractAttr(targetAttrs, 'type')
+    if (targetType !== 'unit' && targetType !== 'model') continue
+
+    // Display name: prefer the entryLink's name attribute (the link can override
+    // the target's name); fall back to the target's name when the link has none.
+    const displayName = link.name || extractAttr(targetAttrs, 'name')
+    if (!displayName) continue
+    if (displayName.includes('[Crucible]')) continue
+
+    try {
+      const enrichedBody = enrichBody(
+        targetBody,
+        profileMap,
+        entryMap,
+        selectionEntryGroupMap,
+        infoGroupMap,
+      )
+      const enrichedStripped = stripNestedSelectionEntries(enrichedBody)
+      const unit = parseUnitEntry(
+        link.id,
+        displayName,
+        faction,
+        enrichedStripped,
+        enrichedBody,
+        importingCatalogueId,
+      )
+      validateUnit(unit, errors)
+      units.push(unit)
+      emittedIds.add(link.id)
+    } catch (err) {
+      errors.push(`Failed to parse entryLink unit "${displayName}" (${link.id}): ${String(err)}`)
     }
   }
 
@@ -278,12 +335,22 @@ function buildProfileMap(xml: string): Map<string, string> {
 }
 
 /**
- * Build a map of all <selectionEntry> bodies by ID from the full XML.
- * Uses stack-based matching to correctly handle nesting.
- * Maps entry ID → inner body content (between open/close tags).
+ * Build maps of all <selectionEntry> bodies + opening attributes by ID from the
+ * full XML. Uses stack-based matching to correctly handle nesting.
+ *
+ * - `entryMap`: entry ID → inner body content (between open/close tags)
+ * - `entryAttrsMap`: entry ID → opening-tag attribute string (so callers that
+ *   need to inspect the entry's `type`/`name` can do so without re-scanning)
+ *
+ * Both maps treat the first occurrence of an id as canonical (matches the
+ * BSData convention where shared entries are unique by id).
  */
-function buildEntryMap(xml: string): Map<string, string> {
-  const map = new Map<string, string>()
+function buildEntryMaps(xml: string): {
+  entryMap: Map<string, string>
+  entryAttrsMap: Map<string, string>
+} {
+  const entryMap = new Map<string, string>()
+  const entryAttrsMap = new Map<string, string>()
   const openTag = /<selectionEntry\b([^>]*)>/g
   const closeTag = /<\/selectionEntry>/g
 
@@ -310,13 +377,14 @@ function buildEntryMap(xml: string): Map<string, string> {
     } else if (tag.type === 'close' && stack.length > 0) {
       const entry = stack.pop()!
       const id = extractAttr(entry.attrs, 'id')
-      if (id && !map.has(id)) {
-        map.set(id, xml.slice(entry.bodyStart, tag.index))
+      if (id && !entryMap.has(id)) {
+        entryMap.set(id, xml.slice(entry.bodyStart, tag.index))
+        entryAttrsMap.set(id, entry.attrs)
       }
     }
   }
 
-  return map
+  return { entryMap, entryAttrsMap }
 }
 
 /**
@@ -573,6 +641,87 @@ function extractSelectionEntries(
   }
 
   return results
+}
+
+/**
+ * Extract every `<entryLink ...>` that lives at the top level of the catalog —
+ * i.e. NOT nested inside a `<selectionEntry>` body (those are already followed
+ * by {@link enrichBody}). 11e chapter catalogs declare characters this way:
+ *
+ *   <entryLink import="true" name="Captain Sicarius" type="selectionEntry"
+ *              id="<local-id>" targetId="<shared-model-id>"/>
+ *
+ * The link's `name` can override the target's name (e.g. Lieutenant Titus links
+ * the Captain Titus body), so we surface it alongside the link id and targetId.
+ */
+function extractTopLevelEntryLinks(xml: string): Array<{
+  id: string
+  name: string
+  type: string
+  targetId: string
+}> {
+  const results: Array<{ id: string; name: string; type: string; targetId: string }> = []
+
+  // Build the set of byte ranges occupied by top-level (and nested) selectionEntry
+  // bodies. Any entryLink whose start index falls inside one of these ranges is
+  // nested-inside-a-selectionEntry and must be skipped — enrichBody handles it.
+  const selectionEntryRanges = findSelectionEntryRanges(xml)
+
+  const entryLinkPattern = /<entryLink\b([^>]*)\/?>/gi
+  let m: RegExpExecArray | null
+  while ((m = entryLinkPattern.exec(xml)) !== null) {
+    // Skip if this entryLink sits inside any selectionEntry body.
+    if (selectionEntryRanges.some((r) => m!.index >= r.start && m!.index < r.end)) continue
+
+    const attrs = m[1] ?? ''
+    const type = extractAttr(attrs, 'type')
+    const id = extractAttr(attrs, 'id')
+    const name = extractAttr(attrs, 'name')
+    const targetId = extractAttr(attrs, 'targetId')
+    results.push({ id, name, type, targetId })
+  }
+
+  return results
+}
+
+/**
+ * Find every `<selectionEntry>...</selectionEntry>` byte range in `xml`. Ranges
+ * cover the inner body (between the open-tag end and close-tag start). Used to
+ * decide whether an entryLink is "top-level" (outside every range) or nested
+ * inside a selectionEntry body.
+ */
+function findSelectionEntryRanges(xml: string): Array<{ start: number; end: number }> {
+  const ranges: Array<{ start: number; end: number }> = []
+  const openTag = /<selectionEntry\b[^>]*>/g
+  const closeTag = /<\/selectionEntry>/g
+
+  type TagPos =
+    | { type: 'open'; index: number; end: number }
+    | { type: 'close'; index: number; end: number }
+  const tags: TagPos[] = []
+
+  let m: RegExpExecArray | null
+  while ((m = openTag.exec(xml)) !== null) {
+    if (m[0].endsWith('/>')) continue
+    tags.push({ type: 'open', index: m.index, end: m.index + m[0].length })
+  }
+  while ((m = closeTag.exec(xml)) !== null) {
+    tags.push({ type: 'close', index: m.index, end: m.index + m[0].length })
+  }
+
+  tags.sort((a, b) => a.index - b.index)
+
+  const stack: Array<{ bodyStart: number }> = []
+  for (const tag of tags) {
+    if (tag.type === 'open') {
+      stack.push({ bodyStart: tag.end })
+    } else if (tag.type === 'close' && stack.length > 0) {
+      const entry = stack.pop()!
+      ranges.push({ start: entry.bodyStart, end: tag.index })
+    }
+  }
+
+  return ranges
 }
 
 /**
