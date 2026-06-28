@@ -4,6 +4,12 @@ import { cors } from 'hono/cors'
 import { filterBrowseNodes } from './lib/browse'
 import { buildDatasheetLayout } from './lib/card-layout'
 import { buildCrossRefs, loadIndexes } from './lib/cross-refs'
+import {
+  editionsAvailableForId,
+  filterByEdition,
+  nodeMatchesEdition,
+  resolveEdition,
+} from './lib/edition'
 import { type EntityMap, getEntityIndex, linkEntitiesInContent } from './lib/entity-linker'
 import { findErrataForNode } from './lib/errata-linker'
 import { assembleContext, formatConversationalAnswer } from './lib/format'
@@ -16,6 +22,14 @@ let cachedErrataNodes: Node[] | null = null
 let cachedEntityIndex: EntityMap | null = null
 let cachedAllNodes: Node[] | null = null
 let cacheManifestHash: string | null = null
+
+/** Reset module-scope caches. Used in tests to ensure isolation between runs. */
+export function resetWorkerCaches(): void {
+  cachedErrataNodes = null
+  cachedEntityIndex = null
+  cachedAllNodes = null
+  cacheManifestHash = null
+}
 
 async function getManifestHash(bucket: any): Promise<string> {
   const obj = await bucket.get('manifest.json')
@@ -219,17 +233,20 @@ app.get('/browse/nodes', async (c) => {
 
   const page = Math.max(1, parseInt(c.req.query('page') || '1'))
   const pageSize = Math.min(Math.max(1, parseInt(c.req.query('pageSize') || '20')), 100)
+  const edition = resolveEdition(c.req.query('edition'), c.env.BRAIN_DEFAULT_EDITION)
 
   const allCached = await getAllNodes(c.env.BRAIN_BUCKET)
-  if (!allCached.length) return c.json({ nodes: [], total: 0, page, pageSize, totalPages: 0 })
+  if (!allCached.length)
+    return c.json({ nodes: [], total: 0, page, pageSize, totalPages: 0, edition })
 
   const catDef = BROWSE_CATEGORIES.find((cat) => cat.id === layer)
   const allNodes = catDef
     ? allCached.filter(catDef.filter)
     : allCached.filter((n) => n.layer === layer)
 
-  // Filter to top-level records only
-  const filtered = filterBrowseNodes(allNodes)
+  // Filter to top-level records only, then apply edition filter (post-filter
+  // because edition isn't yet in any upstream index — see retrieve.ts).
+  const filtered = filterByEdition(filterBrowseNodes(allNodes), edition)
 
   // Sort by category then title
   filtered.sort((a, b) => {
@@ -241,28 +258,37 @@ app.get('/browse/nodes', async (c) => {
   const totalPages = Math.ceil(total / pageSize)
   const paged = filtered.slice((page - 1) * pageSize, page * pageSize)
 
-  return c.json({ nodes: paged, total, page, pageSize, totalPages })
+  return c.json({ nodes: paged, total, page, pageSize, totalPages, edition })
 })
 
 app.get('/browse/node/:id', async (c) => {
   const id = decodeURIComponent(c.req.param('id'))
+  const edition = resolveEdition(c.req.query('edition'), c.env.BRAIN_DEFAULT_EDITION)
   const allNodes = await getAllNodes(c.env.BRAIN_BUCKET)
-  const found = allNodes.find((n) => n.id === id)
-  if (found) return c.json({ node: found })
-  return c.json({ error: 'Node not found' }, 404)
+  const matches = allNodes.filter((n) => n.id === id)
+  if (matches.length === 0) return c.json({ error: 'Node not found' }, 404)
+
+  const editionMatch = matches.find((n) => nodeMatchesEdition(n, edition))
+  if (!editionMatch) {
+    const available = editionsAvailableForId(allNodes, id)
+    if (available.length > 0) c.header('X-Available-Editions', available.join(','))
+    return c.json({ error: 'Node not found for requested edition', edition, available }, 404)
+  }
+  return c.json({ node: editionMatch, edition })
 })
 
 app.get('/browse/unit/:id', async (c) => {
   const id = decodeURIComponent(c.req.param('id'))
+  const edition = resolveEdition(c.req.query('edition'), c.env.BRAIN_DEFAULT_EDITION)
   const allNodes = await getAllNodes(c.env.BRAIN_BUCKET)
 
-  let datasheet: Node | null = null
+  const datasheetCandidates: Node[] = []
   const weapons: Node[] = []
   const abilities: Node[] = []
 
   for (const n of allNodes) {
     if (n.id === id && n.category === 'datasheet') {
-      datasheet = n
+      datasheetCandidates.push(n)
     } else if (n.datasheetId === id && n.category === 'weapon') {
       weapons.push(n)
     } else if (n.datasheetId === id && n.category === 'unit-ability') {
@@ -270,27 +296,50 @@ app.get('/browse/unit/:id', async (c) => {
     }
   }
 
-  if (!datasheet) return c.json({ error: 'Unit not found' }, 404)
+  if (datasheetCandidates.length === 0) return c.json({ error: 'Unit not found' }, 404)
+
+  const datasheet = datasheetCandidates.find((n) => nodeMatchesEdition(n, edition))
+  if (!datasheet) {
+    const available = editionsAvailableForId(allNodes, id)
+    if (available.length > 0) c.header('X-Available-Editions', available.join(','))
+    return c.json({ error: 'Unit not found for requested edition', edition, available }, 404)
+  }
+
+  // Filter children to matching edition (weapons/abilities inherit datasheet edition normally,
+  // but the build may produce per-edition variants — keep the filter for safety).
+  const filteredWeapons = filterByEdition(weapons, edition)
+  const filteredAbilities = filterByEdition(abilities, edition)
 
   // Build a server-driven layout descriptor for datasheet cards.
   // The client uses this to render via LayoutRenderer without category-specific code.
-  const layout = buildDatasheetLayout({ datasheet, weapons, abilities })
+  const layout = buildDatasheetLayout({
+    datasheet,
+    weapons: filteredWeapons,
+    abilities: filteredAbilities,
+  })
 
-  return c.json({ datasheet, weapons, abilities, layout })
+  return c.json({
+    datasheet,
+    weapons: filteredWeapons,
+    abilities: filteredAbilities,
+    layout,
+    edition,
+  })
 })
 
 app.get('/browse/detachment/:id', async (c) => {
   const id = decodeURIComponent(c.req.param('id'))
+  const edition = resolveEdition(c.req.query('edition'), c.env.BRAIN_DEFAULT_EDITION)
   const allNodes = await getAllNodes(c.env.BRAIN_BUCKET)
 
-  let detachment: Node | null = null
+  const detachmentCandidates: Node[] = []
   const stratagems: Node[] = []
   const enhancements: Node[] = []
   const abilities: Node[] = []
 
   for (const n of allNodes) {
     if (n.id === id && n.category === 'detachment-rule') {
-      detachment = n
+      detachmentCandidates.push(n)
     } else if (n.detachmentId === id || n.detachmentId === id.split(':').pop()) {
       if (n.category === 'stratagem') stratagems.push(n)
       else if (n.category === 'enhancement') enhancements.push(n)
@@ -298,9 +347,22 @@ app.get('/browse/detachment/:id', async (c) => {
     }
   }
 
-  if (!detachment) return c.json({ error: 'Detachment not found' }, 404)
+  if (detachmentCandidates.length === 0) return c.json({ error: 'Detachment not found' }, 404)
 
-  return c.json({ detachment, stratagems, enhancements, abilities })
+  const detachment = detachmentCandidates.find((n) => nodeMatchesEdition(n, edition))
+  if (!detachment) {
+    const available = editionsAvailableForId(allNodes, id)
+    if (available.length > 0) c.header('X-Available-Editions', available.join(','))
+    return c.json({ error: 'Detachment not found for requested edition', edition, available }, 404)
+  }
+
+  return c.json({
+    detachment,
+    stratagems: filterByEdition(stratagems, edition),
+    enhancements: filterByEdition(enhancements, edition),
+    abilities: filterByEdition(abilities, edition),
+    edition,
+  })
 })
 
 app.get('/browse/army-rule/:id', async (c) => {
@@ -384,6 +446,7 @@ app.post('/search', async (c) => {
 
   const page = Math.max(1, body.page ?? 1)
   const pageSize = Math.min(Math.max(1, body.pageSize ?? 10), 50)
+  const edition = resolveEdition(c.req.query('edition'), c.env.BRAIN_DEFAULT_EDITION)
 
   const env = {
     ai: c.env.AI,
@@ -395,6 +458,9 @@ app.post('/search', async (c) => {
     detected,
     results,
     records: rawRecords,
+    edition: appliedEdition,
+    fallback,
+    fallbackFrom,
   } = await retrieve(
     {
       query: body.query,
@@ -403,12 +469,23 @@ app.post('/search', async (c) => {
       includeConnected: false,
       dualEmbedding: false,
       returnRecords: true,
+      edition,
     },
     env,
   )
 
   if (!rawRecords) {
-    return c.json({ detected, records: [], total: 0, page, pageSize, totalPages: 0, results })
+    return c.json({
+      detected,
+      records: [],
+      total: 0,
+      page,
+      pageSize,
+      totalPages: 0,
+      results,
+      edition: appliedEdition,
+      ...(fallback ? { fallback, fallbackFrom } : {}),
+    })
   }
 
   // Use module-scope cached errata + entity index (loaded once per isolate)
@@ -461,7 +538,17 @@ app.post('/search', async (c) => {
   const totalPages = Math.ceil(total / pageSize)
   const paginatedRecords = records.slice((page - 1) * pageSize, page * pageSize)
 
-  return c.json({ detected, records: paginatedRecords, total, page, pageSize, totalPages, results })
+  return c.json({
+    detected,
+    records: paginatedRecords,
+    total,
+    page,
+    pageSize,
+    totalPages,
+    results,
+    edition: appliedEdition,
+    ...(fallback ? { fallback, fallbackFrom } : {}),
+  })
 })
 
 // ── Gemini cache helpers ────────────────────────────────────────────────────
@@ -573,6 +660,7 @@ app.post('/ask', async (c) => {
 
   const anthropicKey = c.env.ANTHROPIC_API_KEY
   const geminiKey = c.env.GEMINI_API_KEY
+  const edition = resolveEdition(c.req.query('edition'), c.env.BRAIN_DEFAULT_EDITION)
 
   const env = {
     ai: c.env.AI,
@@ -596,6 +684,7 @@ app.post('/ask', async (c) => {
         limit: 10,
         includeConnected: true,
         dualEmbedding: true,
+        edition,
       },
       env,
     ),
@@ -927,6 +1016,10 @@ Rules:
       ...(retrieveError ? { retrieve: retrieveError } : {}),
       ...(geminiError ? { gemini: geminiError } : {}),
     },
+    edition: retrieveResult?.edition ?? edition,
+    ...(retrieveResult?.fallback
+      ? { fallback: retrieveResult.fallback, fallbackFrom: retrieveResult.fallbackFrom }
+      : {}),
     debug: {
       retrieveHasResult: !!retrieveResult,
       retrieveResultCount: results.length,
@@ -957,6 +1050,7 @@ app.post('/graph-data', async (c) => {
   }
 
   const bucket = c.env.BRAIN_BUCKET
+  const edition = resolveEdition(c.req.query('edition'), c.env.BRAIN_DEFAULT_EDITION)
 
   const env = {
     ai: c.env.AI,
@@ -964,13 +1058,21 @@ app.post('/graph-data', async (c) => {
     bucket,
   }
 
-  const { detected, results, connected } = await retrieve(
+  const {
+    detected,
+    results,
+    connected,
+    edition: appliedEdition,
+    fallback,
+    fallbackFrom,
+  } = await retrieve(
     {
       query: body.query,
       limit: body.limit || 20,
       filter: body.filter,
       includeConnected: true,
       dualEmbedding: true,
+      edition,
     },
     env,
   )
@@ -1093,7 +1195,13 @@ app.post('/graph-data', async (c) => {
     errata: findErrataForNode(n as unknown as Node, graphErrataNodes),
   }))
 
-  return c.json({ detected, nodes: nodesWithErrata, edges })
+  return c.json({
+    detected,
+    nodes: nodesWithErrata,
+    edges,
+    edition: appliedEdition,
+    ...(fallback ? { fallback, fallbackFrom } : {}),
+  })
 })
 
 // ── Index vectors endpoint ──────────────────────────────────────────────────
@@ -1198,6 +1306,9 @@ app.post('/sync', async (c) => {
     message: 'Brain sync via HTTP not yet implemented - use build-graph.ts CLI and upload to R2',
   })
 })
+
+// Exported for tests — direct access to the Hono app for in-process request.
+export { app }
 
 export default {
   fetch: app.fetch,

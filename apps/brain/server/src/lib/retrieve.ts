@@ -1,3 +1,4 @@
+import { type EditionFilter, nodeMatchesEdition } from './edition'
 import {
   detectFactions,
   extractMechanicKeywords,
@@ -27,6 +28,8 @@ export interface RetrieveOptions {
   returnRecords?: boolean // Search wants aggregated AggregatedRecord[]; Ask/Graph don't
   page?: number // 1-based page number (used by callers, not by retrieve itself)
   pageSize?: number // page size (used by callers, not by retrieve itself)
+  /** Switchable edition filter. Defaults to 'any' (no filter). */
+  edition?: EditionFilter
 }
 
 export interface EnrichedNode {
@@ -42,6 +45,7 @@ export interface EnrichedNode {
   subfaction?: string
   phase?: string
   datasheetId?: string
+  edition?: string
   parentUnit?: string // resolved from parentMap
   sources: Array<{
     type: string
@@ -67,6 +71,12 @@ export interface RetrieveResult {
   parentMap: Map<string, string>
   /** Populated when RetrieveOptions.returnRecords is true. Undefined otherwise. */
   records?: AggregatedRecord[]
+  /** The edition filter that was actually applied (after any fallback). */
+  edition?: EditionFilter
+  /** True when the requested edition produced no results and we widened the filter. */
+  fallback?: boolean
+  /** The edition originally requested when a fallback was applied. */
+  fallbackFrom?: EditionFilter
 }
 
 // Environment dependencies (injected for testability)
@@ -140,10 +150,12 @@ export async function retrieve(
     // Try to find the faction root node first — if it exists, return it as the
     // single result with its direct connections. Much cleaner than dumping 1000+ nodes.
     const factionRootResult = await factionRootBrowse(detected, env)
-    if (factionRootResult) return factionRootResult
+    if (factionRootResult) {
+      return applyEditionToResult(factionRootResult, options.edition ?? 'any', query)
+    }
 
     // Fallback: old-style faction browse (for factions without a root node)
-    return await factionBrowse(
+    const browseResult = await factionBrowse(
       detected,
       strippedQuery,
       keywords,
@@ -154,6 +166,7 @@ export async function retrieve(
       query,
       options.returnRecords,
     )
+    return applyEditionToResult(browseResult, options.edition ?? 'any', query)
   }
 
   // ── Semantic search mode (normal path) ───────────────────────────────────
@@ -286,7 +299,8 @@ export async function retrieve(
   const nodesById = new Map<string, Node>(nodes.map((n) => [n.id, n]))
 
   // Step 12: Enrich results — merge Vectorize metadata (score) with full node content
-  const results: EnrichedNode[] = limitedMatches
+  // (let, not const — edition post-filter may reassign at end of pipeline)
+  let results: EnrichedNode[] = limitedMatches
     .map((m) => {
       const originalId = (m.metadata?.originalId as string) || m.id
       const node = nodesById.get(originalId)
@@ -386,6 +400,31 @@ export async function retrieve(
     records = await buildRecords(allResultNodes, env.bucket)
   }
 
+  // ── Edition post-filter (Step 10 of 2026-06-27-data-problems-followup) ──
+  // Wahapedia is stuck on 10e; BSData+MFM are the 11e source. Apply the filter
+  // here (post-Vectorize) because edition isn't yet in Vectorize metadata —
+  // pushing it upstream would require re-indexing all ~25k nodes.
+  const editionFilter: EditionFilter = options.edition ?? 'any'
+  const filteredOut = applyEditionFilter({ results, connected, records }, editionFilter)
+
+  let appliedEdition: EditionFilter = editionFilter
+  let fallback = false
+  let fallbackFrom: EditionFilter | undefined
+
+  if (editionFilter === '11th' && filteredOut.results.length === 0 && results.length > 0) {
+    // Soft-fallback: 11e returned nothing but we had pre-filter hits. Widen to
+    // any-edition and tag the response so the caller can show a banner.
+    // Don't fall back for 10e/9e — those are explicit historical queries.
+    console.warn(`[retrieve] edition=11th returned 0 results for "${query}"; falling back to any`)
+    fallback = true
+    fallbackFrom = '11th'
+    appliedEdition = 'any'
+  } else {
+    results = filteredOut.results
+    connected = filteredOut.connected
+    records = filteredOut.records
+  }
+
   return {
     detected: {
       factions: detected.factions,
@@ -397,6 +436,72 @@ export async function retrieve(
     connected,
     parentMap,
     records,
+    edition: appliedEdition,
+    ...(fallback ? { fallback, fallbackFrom } : {}),
+  }
+}
+
+/**
+ * Wrap a RetrieveResult from the faction-browse paths with edition filtering +
+ * soft-fallback semantics. Mirrors the inline filter in the semantic-search
+ * path so every retrieval-mode return value honours `options.edition`.
+ */
+function applyEditionToResult(
+  result: RetrieveResult,
+  edition: EditionFilter,
+  query: string,
+): RetrieveResult {
+  if (edition === 'any') {
+    return { ...result, edition: 'any' }
+  }
+  const filtered = applyEditionFilter(
+    { results: result.results, connected: result.connected, records: result.records },
+    edition,
+  )
+
+  if (edition === '11th' && filtered.results.length === 0 && result.results.length > 0) {
+    console.warn(
+      `[retrieve] edition=11th returned 0 results for "${query}" (faction-browse); falling back to any`,
+    )
+    return {
+      ...result,
+      edition: 'any',
+      fallback: true,
+      fallbackFrom: '11th',
+    }
+  }
+
+  return {
+    ...result,
+    results: filtered.results,
+    connected: filtered.connected,
+    records: filtered.records,
+    edition,
+  }
+}
+
+/**
+ * Filter a retrieval bundle by edition. `any` returns the input unchanged.
+ * Records are filtered by their primaryNode's edition — children carry their
+ * parent's edition by construction, so we don't need to drill in further.
+ */
+function applyEditionFilter(
+  bundle: {
+    results: EnrichedNode[]
+    connected: EnrichedNode[]
+    records: AggregatedRecord[] | undefined
+  },
+  edition: EditionFilter,
+): {
+  results: EnrichedNode[]
+  connected: EnrichedNode[]
+  records: AggregatedRecord[] | undefined
+} {
+  if (edition === 'any') return bundle
+  return {
+    results: bundle.results.filter((r) => nodeMatchesEdition({ edition: r.edition }, edition)),
+    connected: bundle.connected.filter((r) => nodeMatchesEdition({ edition: r.edition }, edition)),
+    records: bundle.records?.filter((rec) => nodeMatchesEdition(rec.primaryNode, edition)),
   }
 }
 
@@ -721,6 +826,7 @@ function enrichNode(node: Node, score: number, parentMap: Map<string, string>): 
     subfaction: node.subfaction,
     phase: node.phase,
     datasheetId: node.datasheetId,
+    edition: node.edition,
     parentUnit: parentMap.get(node.id),
     sources: node.sources,
     keywords: node.keywords,

@@ -7,6 +7,12 @@ export interface Env {
   ANTHROPIC_API_KEY?: string
   GEMINI_API_KEY?: string
   BUILD_VERSION?: string
+  /**
+   * Default edition filter when a caller doesn't pass ?edition=.
+   * Accepted: '11th' | '10th' | '9th' | 'any'. Unset → 'any' (preserves
+   * historical behaviour; flip to '11th' once 11e coverage is good enough).
+   */
+  BRAIN_DEFAULT_EDITION?: string
 }
 
 export interface BrainManifest {

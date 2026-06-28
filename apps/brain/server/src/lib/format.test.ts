@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
-import { assembleContext, formatConversationalAnswer } from './format'
+import { assembleContext, buildSourceAttribution, formatConversationalAnswer } from './format'
 import type { Node } from './model'
 
 const makeNode = (overrides: Partial<Node>): Node => ({
@@ -348,5 +348,83 @@ describe('assembleContext', () => {
     ]
     const result = assembleContext(primary, [], new Map())
     expect(result).toContain('[faction/faction-ability]')
+  })
+})
+
+// ── buildSourceAttribution ────────────────────────────────────────────────────
+
+describe('buildSourceAttribution', () => {
+  it('formats Wahapedia 10e attribution', () => {
+    const attr = buildSourceAttribution({
+      edition: '10th',
+      sources: [{ type: 'wahapedia', title: 'Wahapedia', retrievedAt: '2026-01-01' }],
+    })
+    expect(attr).toBe('Source: Wahapedia 10th edition')
+  })
+
+  it('formats BSData 11e attribution', () => {
+    const attr = buildSourceAttribution({
+      edition: '11th',
+      sources: [{ type: 'bsdata', title: 'BSData', retrievedAt: '2026-01-01' }],
+    })
+    expect(attr).toBe('Source: BSData 11th edition')
+  })
+
+  it('includes the source title when it differs from the label (e.g. MFM costing)', () => {
+    const attr = buildSourceAttribution({
+      edition: '11th',
+      sources: [{ type: 'bsdata', title: 'BSData wh40k-11e + MFM', retrievedAt: '2026-01-01' }],
+    })
+    expect(attr).toContain('Source: BSData 11th edition')
+    expect(attr).toContain('BSData wh40k-11e + MFM')
+  })
+
+  it('omits the edition fragment when the node has no edition tag', () => {
+    const attr = buildSourceAttribution({
+      sources: [{ type: 'pdf', title: 'Core Rules', retrievedAt: '2026-01-01' }],
+    })
+    expect(attr).toBe('Source: Core Rules PDF — Core Rules')
+  })
+
+  it('returns empty string when there are no sources', () => {
+    expect(buildSourceAttribution({ edition: '11th', sources: [] })).toBe('')
+  })
+})
+
+// ── assembleContext: source attribution per node ──────────────────────────────
+
+describe('assembleContext source attribution', () => {
+  it('emits an attribution line for each primary node with its edition', () => {
+    const primary = [
+      makeNode({
+        id: 'p:wahapedia',
+        title: 'Old Stratagem',
+        edition: '10th',
+        sources: [{ type: 'wahapedia', title: 'Wahapedia', retrievedAt: '2026-01-01' }],
+      }),
+      makeNode({
+        id: 'p:bsdata',
+        title: 'New Stratagem',
+        edition: '11th',
+        sources: [{ type: 'bsdata', title: 'BSData 11e', retrievedAt: '2026-01-01' }],
+      }),
+    ]
+    const result = assembleContext(primary, [], new Map())
+    expect(result).toContain('Source: Wahapedia 10th edition')
+    expect(result).toContain('Source: BSData 11th edition')
+  })
+
+  it('emits an attribution line for each connected node', () => {
+    const connected = [
+      makeNode({
+        id: 'c:1',
+        category: 'stratagem',
+        title: 'Some Stratagem',
+        edition: '11th',
+        sources: [{ type: 'bsdata', title: 'BSData', retrievedAt: '2026-01-01' }],
+      }),
+    ]
+    const result = assembleContext([], connected, new Map())
+    expect(result).toContain('Source: BSData 11th edition')
   })
 })

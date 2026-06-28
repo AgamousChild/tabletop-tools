@@ -820,3 +820,149 @@ describe('retrieve with returnRecords', () => {
     expect(result.records).toBeDefined()
   })
 })
+
+// ── edition filter tests ──────────────────────────────────────────────────────
+
+describe('retrieve with edition filter', () => {
+  beforeEach(() => {
+    resetManifestCache()
+  })
+
+  const node10 = makeNode({
+    id: 'core:advance-10',
+    title: 'Advance (10th)',
+    edition: '10th',
+    keywords: ['advance'],
+  })
+  const node11 = makeNode({
+    id: 'core:advance-11',
+    title: 'Advance (11th)',
+    edition: '11th',
+    keywords: ['advance'],
+  })
+
+  it('keeps only 11th nodes when edition="11th"', async () => {
+    const ai = createMockAI()
+    const vectorize = createMockVectorize([
+      { id: node10.id, score: 0.9, metadata: { layer: 'core', category: 'core-mechanic' } },
+      { id: node11.id, score: 0.85, metadata: { layer: 'core', category: 'core-mechanic' } },
+    ])
+    const bucket = makeBucket([node10, node11])
+
+    const env: RetrieveEnv = { ai, vectorize, bucket }
+    const result = await retrieve({ query: 'advance move rules', edition: '11th' }, env)
+
+    const ids = result.results.map((r) => r.id)
+    expect(ids).toContain(node11.id)
+    expect(ids).not.toContain(node10.id)
+    expect(result.edition).toBe('11th')
+    expect(result.fallback).toBeUndefined()
+  })
+
+  it('keeps only 10th nodes when edition="10th"', async () => {
+    const ai = createMockAI()
+    const vectorize = createMockVectorize([
+      { id: node10.id, score: 0.9, metadata: { layer: 'core', category: 'core-mechanic' } },
+      { id: node11.id, score: 0.85, metadata: { layer: 'core', category: 'core-mechanic' } },
+    ])
+    const bucket = makeBucket([node10, node11])
+
+    const env: RetrieveEnv = { ai, vectorize, bucket }
+    const result = await retrieve({ query: 'advance move rules', edition: '10th' }, env)
+
+    const ids = result.results.map((r) => r.id)
+    expect(ids).toContain(node10.id)
+    expect(ids).not.toContain(node11.id)
+    expect(result.edition).toBe('10th')
+  })
+
+  it('returns both editions when edition="any"', async () => {
+    const ai = createMockAI()
+    const vectorize = createMockVectorize([
+      { id: node10.id, score: 0.9, metadata: { layer: 'core', category: 'core-mechanic' } },
+      { id: node11.id, score: 0.85, metadata: { layer: 'core', category: 'core-mechanic' } },
+    ])
+    const bucket = makeBucket([node10, node11])
+
+    const env: RetrieveEnv = { ai, vectorize, bucket }
+    const result = await retrieve({ query: 'advance move rules', edition: 'any' }, env)
+
+    const ids = result.results.map((r) => r.id)
+    expect(ids).toContain(node10.id)
+    expect(ids).toContain(node11.id)
+    expect(result.edition).toBe('any')
+  })
+
+  it('soft-falls-back from 11th to any when 11th yields nothing', async () => {
+    // Only 10e nodes available
+    const ai = createMockAI()
+    const vectorize = createMockVectorize([
+      { id: node10.id, score: 0.9, metadata: { layer: 'core', category: 'core-mechanic' } },
+    ])
+    const bucket = makeBucket([node10])
+
+    const env: RetrieveEnv = { ai, vectorize, bucket }
+    const result = await retrieve({ query: 'advance move rules', edition: '11th' }, env)
+
+    // Fallback returns the 10e content
+    const ids = result.results.map((r) => r.id)
+    expect(ids).toContain(node10.id)
+    expect(result.fallback).toBe(true)
+    expect(result.fallbackFrom).toBe('11th')
+    expect(result.edition).toBe('any')
+  })
+
+  it('does NOT fall back for 10th (explicit historical query)', async () => {
+    // Only 11e nodes available
+    const ai = createMockAI()
+    const vectorize = createMockVectorize([
+      { id: node11.id, score: 0.9, metadata: { layer: 'core', category: 'core-mechanic' } },
+    ])
+    const bucket = makeBucket([node11])
+
+    const env: RetrieveEnv = { ai, vectorize, bucket }
+    const result = await retrieve({ query: 'advance move rules', edition: '10th' }, env)
+
+    expect(result.results).toHaveLength(0)
+    expect(result.fallback).toBeUndefined()
+    expect(result.edition).toBe('10th')
+  })
+
+  it('treats nodes with no edition tag as 11th', async () => {
+    const untagged = makeNode({
+      id: 'core:advance-untagged',
+      title: 'Advance (untagged)',
+      keywords: ['advance'],
+      // no edition
+    })
+    const ai = createMockAI()
+    const vectorize = createMockVectorize([
+      { id: untagged.id, score: 0.9, metadata: { layer: 'core', category: 'core-mechanic' } },
+    ])
+    const bucket = makeBucket([untagged])
+
+    const env: RetrieveEnv = { ai, vectorize, bucket }
+    const result = await retrieve({ query: 'advance move rules', edition: '11th' }, env)
+
+    const ids = result.results.map((r) => r.id)
+    expect(ids).toContain(untagged.id)
+  })
+
+  it('omits edition field by default (preserves behaviour)', async () => {
+    const ai = createMockAI()
+    const vectorize = createMockVectorize([
+      { id: node10.id, score: 0.9, metadata: { layer: 'core', category: 'core-mechanic' } },
+      { id: node11.id, score: 0.85, metadata: { layer: 'core', category: 'core-mechanic' } },
+    ])
+    const bucket = makeBucket([node10, node11])
+
+    const env: RetrieveEnv = { ai, vectorize, bucket }
+    const result = await retrieve({ query: 'advance move rules' }, env)
+
+    // No edition option → default 'any' → both editions present
+    const ids = result.results.map((r) => r.id)
+    expect(ids).toContain(node10.id)
+    expect(ids).toContain(node11.id)
+    expect(result.edition).toBe('any')
+  })
+})
