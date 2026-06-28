@@ -2005,3 +2005,335 @@ describe('subfaction extraction', () => {
     expect(subfactions).toEqual([])
   })
 })
+
+// ---- Top-level entryLink resolution ----
+// 11e chapter catalogs declare characters as <entryLink type="selectionEntry">
+// at catalog scope, with the target body living either in this catalog's
+// sharedSelectionEntries or in a library catalog imported via catalogueLink.
+// Without this resolution, every character in 11e chapter catalogs is dropped.
+
+describe('parseBSDataXml — top-level entryLink resolution', () => {
+  const LOCAL_TARGET_XML = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<catalogue id="cat" name="Chapter">
+  <entryLinks>
+    <entryLink import="true" name="Hero Captain" hidden="false" type="selectionEntry" id="link-hero" targetId="target-hero"/>
+  </entryLinks>
+  <sharedSelectionEntries>
+    <selectionEntry type="model" import="true" name="Hero Captain" hidden="false" id="target-hero">
+      <profiles>
+        <profile id="p-hero" name="Hero Captain" typeName="Unit">
+          <characteristics>
+            <characteristic name="M">6</characteristic>
+            <characteristic name="T">4</characteristic>
+            <characteristic name="Sv">3+</characteristic>
+            <characteristic name="W">5</characteristic>
+            <characteristic name="Ld">6</characteristic>
+            <characteristic name="OC">1</characteristic>
+          </characteristics>
+        </profile>
+        <profile id="w-hero" name="Power Fist" typeName="Melee Weapons">
+          <characteristics>
+            <characteristic name="Range">Melee</characteristic>
+            <characteristic name="A">4</characteristic>
+            <characteristic name="WS">2+</characteristic>
+            <characteristic name="S">8</characteristic>
+            <characteristic name="AP">-2</characteristic>
+            <characteristic name="D">2</characteristic>
+            <characteristic name="Abilities">-</characteristic>
+          </characteristics>
+        </profile>
+      </profiles>
+      <costs>
+        <cost name="pts" typeId="points" value="95"/>
+      </costs>
+    </selectionEntry>
+  </sharedSelectionEntries>
+</catalogue>`
+
+  it('emits a unit for a top-level entryLink whose target lives in the same catalog', () => {
+    const { units, errors } = parseBSDataXml(LOCAL_TARGET_XML, 'Test')
+    const hero = units.find((u) => u.name === 'Hero Captain')
+    expect(hero).toBeDefined()
+    expect(hero!.id).toBe('link-hero')
+    expect(hero!.toughness).toBe(4)
+    expect(hero!.save).toBe(3)
+    expect(hero!.wounds).toBe(5)
+    expect(hero!.weapons.some((w) => w.name === 'Power Fist')).toBe(true)
+    expect(hero!.points).toBe(95)
+    // Shared `type="model"` entry must not also surface as a separate unit
+    // under the target's own id — the entryLink owns the emission.
+    expect(units.filter((u) => u.name === 'Hero Captain')).toHaveLength(1)
+    expect(errors.filter((e) => e.includes('Hero Captain'))).toHaveLength(0)
+  })
+
+  it('resolves an entryLink whose target lives in a registered library catalog', () => {
+    const LIBRARY_XML = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<catalogue id="library-id" name="Library">
+  <sharedSelectionEntries>
+    <selectionEntry type="model" import="true" name="Library Hero" hidden="false" id="library-hero">
+      <profiles>
+        <profile id="p-lh" name="Library Hero" typeName="Unit">
+          <characteristics>
+            <characteristic name="M">7</characteristic>
+            <characteristic name="T">5</characteristic>
+            <characteristic name="Sv">2+</characteristic>
+            <characteristic name="W">6</characteristic>
+            <characteristic name="Ld">6</characteristic>
+            <characteristic name="OC">1</characteristic>
+          </characteristics>
+        </profile>
+        <profile id="w-lh" name="Library Blade" typeName="Melee Weapons">
+          <characteristics>
+            <characteristic name="Range">Melee</characteristic>
+            <characteristic name="A">5</characteristic>
+            <characteristic name="WS">2+</characteristic>
+            <characteristic name="S">6</characteristic>
+            <characteristic name="AP">-3</characteristic>
+            <characteristic name="D">2</characteristic>
+            <characteristic name="Abilities">-</characteristic>
+          </characteristics>
+        </profile>
+      </profiles>
+      <costs>
+        <cost name="pts" typeId="points" value="110"/>
+      </costs>
+    </selectionEntry>
+  </sharedSelectionEntries>
+</catalogue>`
+    const CHAPTER_XML = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<catalogue id="chapter-id" name="Chapter">
+  <entryLinks>
+    <entryLink import="true" name="Library Hero" hidden="false" type="selectionEntry" id="link-lib-hero" targetId="library-hero"/>
+  </entryLinks>
+  <catalogueLinks>
+    <catalogueLink name="Library" id="cl-lib" targetId="library-id" type="catalogue" importRootEntries="true"/>
+  </catalogueLinks>
+</catalogue>`
+    const registry = new Map([
+      ['library-id', { name: 'Library', xml: LIBRARY_XML }],
+      ['chapter-id', { name: 'Chapter', xml: CHAPTER_XML }],
+    ])
+    const { units } = parseBSDataXml(CHAPTER_XML, 'Chapter', registry)
+    const hero = units.find((u) => u.name === 'Library Hero')
+    expect(hero).toBeDefined()
+    expect(hero!.id).toBe('link-lib-hero')
+    expect(hero!.toughness).toBe(5)
+    expect(hero!.weapons.some((w) => w.name === 'Library Blade')).toBe(true)
+  })
+
+  it('uses the entryLink name when it overrides the target body name', () => {
+    const xml = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<catalogue id="cat" name="Chapter">
+  <entryLinks>
+    <entryLink import="true" name="Captain Titus" hidden="false" type="selectionEntry" id="link-titus" targetId="target-titus"/>
+  </entryLinks>
+  <sharedSelectionEntries>
+    <selectionEntry type="model" import="true" name="Lieutenant Titus" hidden="false" id="target-titus">
+      <profiles>
+        <profile id="p-t" name="Lieutenant Titus" typeName="Unit">
+          <characteristics>
+            <characteristic name="M">6</characteristic>
+            <characteristic name="T">4</characteristic>
+            <characteristic name="Sv">3+</characteristic>
+            <characteristic name="W">4</characteristic>
+            <characteristic name="Ld">6</characteristic>
+            <characteristic name="OC">1</characteristic>
+          </characteristics>
+        </profile>
+        <profile id="w-t" name="Bolt Rifle" typeName="Ranged Weapons">
+          <characteristics>
+            <characteristic name="Range">24</characteristic>
+            <characteristic name="A">2</characteristic>
+            <characteristic name="BS">3+</characteristic>
+            <characteristic name="S">4</characteristic>
+            <characteristic name="AP">-1</characteristic>
+            <characteristic name="D">1</characteristic>
+            <characteristic name="Abilities">-</characteristic>
+          </characteristics>
+        </profile>
+      </profiles>
+    </selectionEntry>
+  </sharedSelectionEntries>
+</catalogue>`
+    const { units } = parseBSDataXml(xml, 'Test')
+    // The entryLink renames Lieutenant Titus → Captain Titus.
+    expect(units.find((u) => u.name === 'Captain Titus')).toBeDefined()
+    expect(units.find((u) => u.name === 'Lieutenant Titus')).toBeUndefined()
+  })
+
+  it('emits both a direct selectionEntry unit and an unrelated top-level entryLink', () => {
+    const xml = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<catalogue id="cat" name="Chapter">
+  <entryLinks>
+    <entryLink import="true" name="Linked Hero" hidden="false" type="selectionEntry" id="link-hero" targetId="target-linked"/>
+  </entryLinks>
+  <selectionEntries>
+    <selectionEntry type="unit" name="Direct Squad" id="unit-direct">
+      <profiles>
+        <profile id="p-d" name="Direct Squad" typeName="Unit">
+          <characteristics>
+            <characteristic name="M">6</characteristic>
+            <characteristic name="T">4</characteristic>
+            <characteristic name="Sv">3+</characteristic>
+            <characteristic name="W">2</characteristic>
+            <characteristic name="Ld">6</characteristic>
+            <characteristic name="OC">2</characteristic>
+          </characteristics>
+        </profile>
+        <profile id="w-d" name="Bolter" typeName="Ranged Weapons">
+          <characteristics>
+            <characteristic name="Range">24</characteristic>
+            <characteristic name="A">2</characteristic>
+            <characteristic name="BS">3+</characteristic>
+            <characteristic name="S">4</characteristic>
+            <characteristic name="AP">0</characteristic>
+            <characteristic name="D">1</characteristic>
+            <characteristic name="Abilities">-</characteristic>
+          </characteristics>
+        </profile>
+      </profiles>
+    </selectionEntry>
+  </selectionEntries>
+  <sharedSelectionEntries>
+    <selectionEntry type="model" import="true" name="Linked Hero" id="target-linked">
+      <profiles>
+        <profile id="p-lh" name="Linked Hero" typeName="Unit">
+          <characteristics>
+            <characteristic name="M">7</characteristic>
+            <characteristic name="T">4</characteristic>
+            <characteristic name="Sv">3+</characteristic>
+            <characteristic name="W">5</characteristic>
+            <characteristic name="Ld">6</characteristic>
+            <characteristic name="OC">1</characteristic>
+          </characteristics>
+        </profile>
+        <profile id="w-lh" name="Master Blade" typeName="Melee Weapons">
+          <characteristics>
+            <characteristic name="Range">Melee</characteristic>
+            <characteristic name="A">4</characteristic>
+            <characteristic name="WS">2+</characteristic>
+            <characteristic name="S">6</characteristic>
+            <characteristic name="AP">-2</characteristic>
+            <characteristic name="D">2</characteristic>
+            <characteristic name="Abilities">-</characteristic>
+          </characteristics>
+        </profile>
+      </profiles>
+    </selectionEntry>
+  </sharedSelectionEntries>
+</catalogue>`
+    const { units } = parseBSDataXml(xml, 'Test')
+    const direct = units.find((u) => u.id === 'unit-direct')
+    const linked = units.find((u) => u.id === 'link-hero')
+    expect(direct).toBeDefined()
+    expect(direct!.name).toBe('Direct Squad')
+    expect(linked).toBeDefined()
+    expect(linked!.name).toBe('Linked Hero')
+    // No double emission of either: each id appears exactly once.
+    expect(units.filter((u) => u.id === 'unit-direct')).toHaveLength(1)
+    expect(units.filter((u) => u.id === 'link-hero')).toHaveLength(1)
+  })
+
+  it('ignores entryLinks nested inside a <selectionEntry> (enrichBody handles those)', () => {
+    // Two entryLinks: one top-level pointing at the unit body, one nested inside
+    // a selectionEntry (the latter is a weapon ref that enrichBody already follows).
+    // We expect exactly ONE synthetic entryLink unit, not two.
+    const xml = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<catalogue id="cat" name="Chapter">
+  <entryLinks>
+    <entryLink import="true" name="Surface Hero" hidden="false" type="selectionEntry" id="link-surface" targetId="target-surface"/>
+  </entryLinks>
+  <selectionEntries>
+    <selectionEntry type="unit" name="Inner Squad" id="unit-inner">
+      <profiles>
+        <profile id="p-i" name="Inner Squad" typeName="Unit">
+          <characteristics>
+            <characteristic name="M">6</characteristic>
+            <characteristic name="T">4</characteristic>
+            <characteristic name="Sv">3+</characteristic>
+            <characteristic name="W">2</characteristic>
+            <characteristic name="Ld">6</characteristic>
+            <characteristic name="OC">1</characteristic>
+          </characteristics>
+        </profile>
+      </profiles>
+      <entryLinks>
+        <!-- Nested entryLink pointing at a weapon — must NOT be treated as
+             a top-level unit-producing link. -->
+        <entryLink import="true" name="Bolter" type="selectionEntry" id="nested-link" targetId="weapon-bolter"/>
+      </entryLinks>
+    </selectionEntry>
+  </selectionEntries>
+  <sharedSelectionEntries>
+    <selectionEntry type="model" import="true" name="Surface Hero" id="target-surface">
+      <profiles>
+        <profile id="p-sh" name="Surface Hero" typeName="Unit">
+          <characteristics>
+            <characteristic name="M">6</characteristic>
+            <characteristic name="T">4</characteristic>
+            <characteristic name="Sv">3+</characteristic>
+            <characteristic name="W">5</characteristic>
+            <characteristic name="Ld">6</characteristic>
+            <characteristic name="OC">1</characteristic>
+          </characteristics>
+        </profile>
+        <profile id="w-sh" name="Sword" typeName="Melee Weapons">
+          <characteristics>
+            <characteristic name="Range">Melee</characteristic>
+            <characteristic name="A">3</characteristic>
+            <characteristic name="WS">3+</characteristic>
+            <characteristic name="S">4</characteristic>
+            <characteristic name="AP">-1</characteristic>
+            <characteristic name="D">1</characteristic>
+            <characteristic name="Abilities">-</characteristic>
+          </characteristics>
+        </profile>
+      </profiles>
+    </selectionEntry>
+    <selectionEntry type="upgrade" name="Bolter" id="weapon-bolter">
+      <profiles>
+        <profile name="Bolter" typeName="Ranged Weapons" id="wp-bolter">
+          <characteristics>
+            <characteristic name="Range">24</characteristic>
+            <characteristic name="A">2</characteristic>
+            <characteristic name="BS">3+</characteristic>
+            <characteristic name="S">4</characteristic>
+            <characteristic name="AP">0</characteristic>
+            <characteristic name="D">1</characteristic>
+            <characteristic name="Keywords">-</characteristic>
+          </characteristics>
+        </profile>
+      </profiles>
+    </selectionEntry>
+  </sharedSelectionEntries>
+</catalogue>`
+    const { units } = parseBSDataXml(xml, 'Test')
+    // We get: Inner Squad (direct) + Surface Hero (top-level entryLink).
+    // The nested entryLink with id="nested-link" must NOT produce a unit.
+    expect(units.find((u) => u.id === 'nested-link')).toBeUndefined()
+    expect(units.find((u) => u.id === 'unit-inner')).toBeDefined()
+    expect(units.find((u) => u.id === 'link-surface')).toBeDefined()
+  })
+
+  it('skips top-level entryLinks whose target is not a unit/model body', () => {
+    const xml = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<catalogue id="cat" name="Chapter">
+  <entryLinks>
+    <entryLink import="true" name="Some Wargear" type="selectionEntry" id="link-wargear" targetId="target-wargear"/>
+  </entryLinks>
+  <sharedSelectionEntries>
+    <selectionEntry type="upgrade" name="Some Wargear" id="target-wargear">
+      <profiles>
+        <profile name="Some Wargear" typeName="Ranged Weapons" id="wp-w">
+          <characteristics>
+            <characteristic name="Range">12</characteristic>
+          </characteristics>
+        </profile>
+      </profiles>
+    </selectionEntry>
+  </sharedSelectionEntries>
+</catalogue>`
+    const { units } = parseBSDataXml(xml, 'Test')
+    expect(units).toHaveLength(0)
+  })
+})
