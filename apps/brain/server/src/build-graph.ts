@@ -32,6 +32,7 @@ import { parseFactionPack } from './lib/parsers/faction-pack'
 import type { GameDataInput } from './lib/parsers/game-data'
 import { convertGameData } from './lib/parsers/game-data'
 import { loadMfmCostingFromFile, type MfmCostingParseResult } from './lib/parsers/mfm-costing'
+import { loadMfmDetachmentsFromFile } from './lib/parsers/mfm-detachments'
 import { parseRulesCommentary } from './lib/parsers/rules-commentary'
 import { parseTournamentCompanion } from './lib/parsers/tournament-companion'
 import { mapNodesToPages } from './lib/pdf-positions'
@@ -47,6 +48,11 @@ const RETRIEVED_AT = new Date().toISOString()
 // R2; the brain build expects it copied to `<repo>/.local/brain-input/`. If
 // missing the build still runs and falls back to Wahapedia points (10e).
 const MFM_COSTING_PATH = '.local/brain-input/mfm-unit-costing.json'
+
+// MFM 11e detachments + enhancements — same local-cache convention as the
+// costing file. Loaded ahead of the merge so MFM detachment nodes flow through
+// the same dedup/normalize pipeline as every other source.
+const MFM_DETACHMENTS_PATH = '.local/brain-input/mfm-detachments.json'
 
 // Known publication dates for GW source documents
 const SOURCE_DATES: Record<string, string> = {
@@ -523,6 +529,32 @@ async function main() {
     }
   } catch (err) {
     console.log(`   WARN: could not load MFM costing, continuing without it: ${err}`)
+  }
+
+  // ── MFM 11e detachments + enhancements ─────────────────────────────────────
+  // Same local-cache convention as the costing file above. The 10e
+  // detachments emitted by `convertGameData` stay (Rule 5: 10e legacy
+  // preserved); MFM detachments join the graph as 11th-edition nodes.
+  try {
+    const mfmDetResult = loadMfmDetachmentsFromFile(
+      MFM_DETACHMENTS_PATH,
+      RETRIEVED_AT,
+      SOURCE_DATES['wahapedia'], // Best-available 11e publication date proxy.
+    )
+    if (mfmDetResult.totalDetachments > 0) {
+      console.log(
+        `\n5b. MFM detachments: ${mfmDetResult.nodes.length} nodes ` +
+          `(${mfmDetResult.totalDetachments} detachments, ` +
+          `${mfmDetResult.totalEnhancements} enhancements), ` +
+          `${mfmDetResult.refs.length} refs`,
+      )
+      allNodes.push(...mfmDetResult.nodes)
+      allRefs.push(...mfmDetResult.refs)
+    } else {
+      console.log(`\n5b. MFM detachments: skipped (no file at ${MFM_DETACHMENTS_PATH})`)
+    }
+  } catch (err) {
+    console.log(`   WARN: could not load MFM detachments, continuing without them: ${err}`)
   }
 
   // ── Merge and deduplicate nodes from all sources ──────────────────────────
