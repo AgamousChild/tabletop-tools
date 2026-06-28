@@ -19,20 +19,23 @@ import { TerrainLayoutCard } from '../components/cards/TerrainLayoutCard'
 import { TwistCard } from '../components/cards/TwistCard'
 import type { CardContext, CardData, ErrataEntry, UnitCardData } from '../components/cards/types'
 import { UnitCard } from '../components/cards/UnitCard'
+import { EditionFallbackBanner } from '../components/EditionFallbackBanner'
+import { EditionNotAvailableNotice } from '../components/EditionNotAvailableNotice'
+import { EditionPicker } from '../components/EditionPicker'
 import { FactionBanner } from '../components/FactionBanner'
 import { ForceGraph } from '../components/ForceGraph'
 import { LinkedText } from '../components/LinkedText'
 import { Overlay } from '../components/Overlay'
 import { Pagination } from '../components/Pagination'
 import { ResultCard } from '../components/ResultCard'
+import { brainFetch, parseAvailableEditions } from '../lib/api'
 import { resolveCardView } from '../lib/card-display'
+import { type Edition, parseEditionFromHash, writeEditionToHash } from '../lib/edition'
 import { type EntityMap } from '../lib/entity-linker'
 import { LayoutRenderer } from '../lib/server-cards/Renderer'
 import type { CardLayout } from '../lib/server-cards/types'
 import type { DetachmentPageProps } from './DetachmentPage'
 import { DetachmentPage } from './DetachmentPage'
-
-const API_BASE = import.meta.env.VITE_BRAIN_API_URL || '/brain/api'
 
 /** Simple markdown to HTML — handles ##, **, -, `, and brain: entity links */
 function renderMarkdown(text: string): string {
@@ -328,11 +331,24 @@ interface UnitEndpointResponse {
 async function fetchFullUnitData(
   nodeId: string,
   node: ResultNode,
-): Promise<{ unitData: UnitCardData; layout: CardLayout | null }> {
+  edition: Edition,
+): Promise<{
+  unitData: UnitCardData
+  layout: CardLayout | null
+  /** When the unit exists but not in the requested edition (404 + X-Available-Editions). */
+  unavailable?: { available: Edition[] }
+}> {
   const base = buildUnitData(node)
 
   try {
-    const res = await fetch(`${API_BASE}/browse/unit/${encodeURIComponent(nodeId)}`)
+    const res = await brainFetch(`/browse/unit/${encodeURIComponent(nodeId)}`, { edition })
+    if (res.status === 404) {
+      const available = parseAvailableEditions(res.headers.get('X-Available-Editions'))
+      if (available.length > 0) {
+        return { unitData: base, layout: null, unavailable: { available } }
+      }
+      return { unitData: base, layout: null }
+    }
     if (!res.ok) return { unitData: base, layout: null }
 
     const data = (await res.json()) as UnitEndpointResponse
@@ -499,50 +515,59 @@ interface QAResponse {
   sources: QASource[]
   connectedCount: number
   webSources?: WebSource[]
+  fallback?: boolean
+  fallbackFrom?: Edition
 }
 
 interface AskTabProps {
   onOpenCard: (node: ResultNode) => void
   activeFilters: string[]
   onFilterChange: (filters: string[]) => void
+  edition: Edition
 }
 
-function AskTab({ onOpenCard, activeFilters, onFilterChange }: AskTabProps) {
+function AskTab({ onOpenCard, activeFilters, onFilterChange, edition }: AskTabProps) {
   const [question, setQuestion] = useState('')
   const [answer, setAnswer] = useState<QAResponse | null>(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [factionFilter, setFactionFilter] = useState(true)
+  const [fallbackDismissed, setFallbackDismissed] = useState(false)
   const [entityMap, setEntityMap] = useState<EntityMap>(new Map())
 
-  const doAsk = useCallback(async (q: string) => {
-    if (!q.trim()) return
-    setLoading(true)
-    setError(null)
-    setAnswer(null)
-    setFactionFilter(true)
+  const doAsk = useCallback(
+    async (q: string) => {
+      if (!q.trim()) return
+      setLoading(true)
+      setError(null)
+      setAnswer(null)
+      setFactionFilter(true)
+      setFallbackDismissed(false)
 
-    try {
-      const res = await fetch(`${API_BASE}/ask`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ question: q }),
-      })
+      try {
+        const res = await brainFetch(`/ask`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ question: q }),
+          edition,
+        })
 
-      if (!res.ok) {
-        const err = await res.json()
-        throw new Error(err.error || `HTTP ${res.status}`)
+        if (!res.ok) {
+          const err = await res.json()
+          throw new Error(err.error || `HTTP ${res.status}`)
+        }
+
+        const data = (await res.json()) as QAResponse
+        setAnswer(data)
+        setEntityMap(buildEntityMap(data.reference || [], data.detected?.keywords))
+      } catch (err) {
+        setError(err instanceof Error ? err.message : 'Failed to get answer')
+      } finally {
+        setLoading(false)
       }
-
-      const data = (await res.json()) as QAResponse
-      setAnswer(data)
-      setEntityMap(buildEntityMap(data.reference || [], data.detected?.keywords))
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to get answer')
-    } finally {
-      setLoading(false)
-    }
-  }, [])
+    },
+    [edition],
+  )
 
   // Re-query when filters change (only if we have a question)
   useEffect(() => {
@@ -616,6 +641,13 @@ function AskTab({ onOpenCard, activeFilters, onFilterChange }: AskTabProps) {
             />
           )}
 
+          {!fallbackDismissed && answer.fallback && answer.fallbackFrom && (
+            <EditionFallbackBanner
+              fallbackFrom={answer.fallbackFrom}
+              onDismiss={() => setFallbackDismissed(true)}
+            />
+          )}
+
           <div
             className="bg-slate-900 border border-slate-700 rounded p-4 overflow-auto max-h-[70vh]"
             onClick={async (e) => {
@@ -630,7 +662,9 @@ function AskTab({ onOpenCard, activeFilters, onFilterChange }: AskTabProps) {
               }
               // Fetch from API if not in reference
               try {
-                const res = await fetch(`${API_BASE}/browse/node/${encodeURIComponent(nodeId)}`)
+                const res = await brainFetch(`/browse/node/${encodeURIComponent(nodeId)}`, {
+                  edition,
+                })
                 if (res.ok) {
                   const data = (await res.json()) as { node: ResultNode }
                   if (data.node) onOpenCard(data.node)
@@ -694,8 +728,9 @@ function AskTab({ onOpenCard, activeFilters, onFilterChange }: AskTabProps) {
                           const info = entityMap.get(name.toLowerCase())
                           if (info) {
                             try {
-                              const res = await fetch(
-                                `${API_BASE}/browse/node/${encodeURIComponent(info.nodeId)}`,
+                              const res = await brainFetch(
+                                `/browse/node/${encodeURIComponent(info.nodeId)}`,
+                                { edition },
                               )
                               if (res.ok) {
                                 const data = (await res.json()) as { node: ResultNode }
@@ -774,6 +809,8 @@ interface SearchResponse {
   totalPages?: number
   // Legacy flat format (backward compat)
   results?: ResultNode[]
+  fallback?: boolean
+  fallbackFrom?: Edition
 }
 
 interface SearchTabProps {
@@ -781,40 +818,53 @@ interface SearchTabProps {
   onOpenRecord?: (record: SearchRecord) => void
   activeFilters: string[]
   onFilterChange: (filters: string[]) => void
+  edition: Edition
 }
 
-function SearchTab({ onOpenCard, onOpenRecord, activeFilters, onFilterChange }: SearchTabProps) {
+function SearchTab({
+  onOpenCard,
+  onOpenRecord,
+  activeFilters,
+  onFilterChange,
+  edition,
+}: SearchTabProps) {
   const [query, setQuery] = useState('')
   const [response, setResponse] = useState<SearchResponse | null>(null)
   const [loading, setLoading] = useState(false)
   const [factionFilter, setFactionFilter] = useState(true)
+  const [fallbackDismissed, setFallbackDismissed] = useState(false)
   const [entityMap, setEntityMap] = useState<EntityMap>(new Map())
   const [page, setPage] = useState(1)
   // Track the last query string used so page-change re-fetches use the correct query
   const lastQueryRef = useRef('')
 
-  const doSearch = useCallback(async (q: string, p: number) => {
-    if (!q.trim()) return
-    lastQueryRef.current = q
-    setLoading(true)
-    setFactionFilter(true)
-    try {
-      const res = await fetch(`${API_BASE}/search`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ query: q, page: p, pageSize: 10 }),
-      })
-      const data = (await res.json()) as SearchResponse
-      setResponse(data)
-      // Build entity map from whichever node list is available
-      const nodes = data.records ? data.records.map((r) => r.primaryNode) : (data.results ?? [])
-      setEntityMap(buildEntityMap(nodes, data.detected?.keywords))
-    } catch {
-      setResponse(null)
-    } finally {
-      setLoading(false)
-    }
-  }, [])
+  const doSearch = useCallback(
+    async (q: string, p: number) => {
+      if (!q.trim()) return
+      lastQueryRef.current = q
+      setLoading(true)
+      setFactionFilter(true)
+      setFallbackDismissed(false)
+      try {
+        const res = await brainFetch(`/search`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ query: q, page: p, pageSize: 10 }),
+          edition,
+        })
+        const data = (await res.json()) as SearchResponse
+        setResponse(data)
+        // Build entity map from whichever node list is available
+        const nodes = data.records ? data.records.map((r) => r.primaryNode) : (data.results ?? [])
+        setEntityMap(buildEntityMap(nodes, data.detected?.keywords))
+      } catch {
+        setResponse(null)
+      } finally {
+        setLoading(false)
+      }
+    },
+    [edition],
+  )
 
   // Re-fetch when page changes (only when there's an active query)
   useEffect(() => {
@@ -899,6 +949,13 @@ function SearchTab({ onOpenCard, onOpenRecord, activeFilters, onFilterChange }: 
           factions={detected.factions}
           subfaction={detected.subfaction}
           onDismiss={() => setFactionFilter(false)}
+        />
+      )}
+
+      {!fallbackDismissed && response?.fallback && response.fallbackFrom && (
+        <EditionFallbackBanner
+          fallbackFrom={response.fallbackFrom}
+          onDismiss={() => setFallbackDismissed(true)}
         />
       )}
 
@@ -1014,6 +1071,7 @@ interface BrowseLayer {
 
 interface BrowseTabProps {
   onOpenCard: (node: ResultNode) => void | Promise<void>
+  edition: Edition
 }
 
 interface BrowsePaginatedResponse {
@@ -1024,7 +1082,7 @@ interface BrowsePaginatedResponse {
   totalPages: number
 }
 
-function BrowseTab({ onOpenCard }: BrowseTabProps) {
+function BrowseTab({ onOpenCard, edition }: BrowseTabProps) {
   const [layers, setLayers] = useState<BrowseLayer[]>([])
   const [selectedLayer, setSelectedLayer] = useState<string | null>(null)
   const [browseResponse, setBrowseResponse] = useState<BrowsePaginatedResponse | null>(null)
@@ -1035,7 +1093,7 @@ function BrowseTab({ onOpenCard }: BrowseTabProps) {
 
   // Load layers on mount
   useEffect(() => {
-    fetch(`${API_BASE}/browse/layers`)
+    brainFetch(`/browse/layers`)
       .then((r) => r.json())
       .then((data) => {
         setLayers(data.layers || [])
@@ -1044,19 +1102,21 @@ function BrowseTab({ onOpenCard }: BrowseTabProps) {
       .catch(() => setLayersLoading(false))
   }, [])
 
-  // Reset page when layer changes
+  // Reset page when layer or edition changes
   useEffect(() => {
     setPage(1)
-  }, [selectedLayer])
+  }, [selectedLayer, edition])
 
-  // Load nodes when layer or page changes
+  // Load nodes when layer, page, or edition changes
   useEffect(() => {
     if (!selectedLayer) {
       setBrowseResponse(null)
       return
     }
     setLoading(true)
-    fetch(`${API_BASE}/browse/nodes?layer=${selectedLayer}&page=${page}&pageSize=${pageSize}`)
+    brainFetch(`/browse/nodes?layer=${selectedLayer}&page=${page}&pageSize=${pageSize}`, {
+      edition,
+    })
       .then((r) => r.json())
       .then((data: BrowsePaginatedResponse) => {
         setBrowseResponse({
@@ -1069,11 +1129,11 @@ function BrowseTab({ onOpenCard }: BrowseTabProps) {
         setLoading(false)
       })
       .catch(() => setLoading(false))
-  }, [selectedLayer, page])
+  }, [selectedLayer, page, edition])
 
   // Load full node detail and open card
   function viewNode(nodeId: string) {
-    fetch(`${API_BASE}/browse/node/${encodeURIComponent(nodeId)}`)
+    brainFetch(`/browse/node/${encodeURIComponent(nodeId)}`, { edition })
       .then((r) => r.json())
       .then((data) => {
         if (data.node) {
@@ -1162,6 +1222,16 @@ export function BrainScreen() {
   const [activeLayout, setActiveLayout] = useState<CardLayout | null>(null)
   const [activeFilters, setActiveFilters] = useState<string[]>([])
   const [detachmentView, setDetachmentView] = useState<DetachmentPageProps | null>(null)
+  const [edition, setEditionState] = useState<Edition>(() =>
+    typeof window === 'undefined' ? '11th' : parseEditionFromHash(window.location.hash),
+  )
+  /** When a direct-fetch (e.g. /browse/unit/:id) returned 404 with X-Available-Editions. */
+  const [editionUnavailable, setEditionUnavailable] = useState<{
+    subject: string
+    requested: Edition
+    available: Edition[]
+    retry: (nextEdition: Edition) => Promise<void> | void
+  } | null>(null)
   const [pdfView, setPdfView] = useState<{
     pdfName: string
     page: number
@@ -1172,24 +1242,79 @@ export function BrainScreen() {
     widthPct?: number
   } | null>(null)
 
+  // Sync edition state back into window.location.hash so it survives reload + share.
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+    const next = writeEditionToHash(window.location.hash, edition)
+    if (window.location.hash.replace(/^#/, '') !== next) {
+      // Replace hash without scrolling.
+      const url = `${window.location.pathname}${window.location.search}#${next}`
+      window.history.replaceState(null, '', url)
+    }
+  }, [edition])
+
+  // Listen for hash changes from elsewhere (back/forward, manual edit, deep link)
+  // so the picker stays in sync.
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+    function onHashChange() {
+      const next = parseEditionFromHash(window.location.hash)
+      setEditionState((prev) => (prev === next ? prev : next))
+    }
+    window.addEventListener('hashchange', onHashChange)
+    return () => window.removeEventListener('hashchange', onHashChange)
+  }, [])
+
+  function setEdition(next: Edition) {
+    setEditionState(next)
+    // Clear any stale "this entry isn't available" notice — the user just
+    // changed editions, so the next render's fetch will produce a fresh state.
+    setEditionUnavailable(null)
+  }
+
   async function handleOpenRecord(record: SearchRecord) {
     const node = record.primaryNode
 
     // For unit cards — delegate to fetchFullUnitData to get the layout descriptor too
     if (record.type === 'unit' || node.category === 'datasheet') {
-      const { unitData, layout } = await fetchFullUnitData(node.id, node)
+      const result = await fetchFullUnitData(node.id, node, edition)
+      if (result.unavailable) {
+        setEditionUnavailable({
+          subject: 'This unit',
+          requested: edition,
+          available: result.unavailable.available,
+          retry: async (next) => {
+            const retried = await fetchFullUnitData(node.id, node, next)
+            setActiveCard({
+              type: 'unit',
+              data: { ...retried.unitData, errata: record.errata },
+            })
+            setActiveLayout(retried.layout)
+            setEdition(next)
+          },
+        })
+        // Still show whatever fallback unit card we built from the search hit.
+        setActiveCard({
+          type: 'unit',
+          data: { ...result.unitData, errata: record.errata },
+        })
+        setActiveLayout(result.layout)
+        return
+      }
       setActiveCard({
         type: 'unit',
-        data: { ...unitData, errata: record.errata },
+        data: { ...result.unitData, errata: record.errata },
       })
-      setActiveLayout(layout)
+      setActiveLayout(result.layout)
       return
     }
 
     // For army rules, fetch sub-abilities from API
     if (node.category === 'army-rule') {
       try {
-        const res = await fetch(`${API_BASE}/browse/army-rule/${encodeURIComponent(node.id)}`)
+        const res = await brainFetch(`/browse/army-rule/${encodeURIComponent(node.id)}`, {
+          edition,
+        })
         const data = (await res.json()) as { armyRule: ResultNode; subAbilities: ResultNode[] }
         const subRules = data.subAbilities.map((a) => ({
           name: a.title.replace(/\s*\(.*\)\s*$/, ''),
@@ -1225,9 +1350,22 @@ export function BrainScreen() {
   async function handleOpenCard(node: ResultNode) {
     // For unit cards, fetch full data (weapons + abilities) from API
     if (node.category === 'datasheet') {
-      const { unitData, layout } = await fetchFullUnitData(node.id, node)
-      setActiveCard({ type: 'unit', data: unitData })
-      setActiveLayout(layout)
+      const result = await fetchFullUnitData(node.id, node, edition)
+      if (result.unavailable) {
+        setEditionUnavailable({
+          subject: 'This unit',
+          requested: edition,
+          available: result.unavailable.available,
+          retry: async (next) => {
+            const retried = await fetchFullUnitData(node.id, node, next)
+            setActiveCard({ type: 'unit', data: retried.unitData })
+            setActiveLayout(retried.layout)
+            setEdition(next)
+          },
+        })
+      }
+      setActiveCard({ type: 'unit', data: result.unitData })
+      setActiveLayout(result.layout)
       return
     }
 
@@ -1236,7 +1374,23 @@ export function BrainScreen() {
       const { card } = resolveCardView(node)
       if (card.type === 'detachment') {
         try {
-          const res = await fetch(`${API_BASE}/browse/detachment/${encodeURIComponent(node.id)}`)
+          const res = await brainFetch(`/browse/detachment/${encodeURIComponent(node.id)}`, {
+            edition,
+          })
+          if (res.status === 404) {
+            const available = parseAvailableEditions(res.headers.get('X-Available-Editions'))
+            if (available.length > 0) {
+              setEditionUnavailable({
+                subject: 'This detachment',
+                requested: edition,
+                available,
+                retry: async (next) => {
+                  await handleOpenCard(node)
+                  setEdition(next)
+                },
+              })
+            }
+          }
           const data = (await res.json()) as {
             detachment: ResultNode
             stratagems: ResultNode[]
@@ -1256,7 +1410,9 @@ export function BrainScreen() {
     // For army rules, fetch sub-abilities from API
     if (node.category === 'army-rule') {
       try {
-        const res = await fetch(`${API_BASE}/browse/army-rule/${encodeURIComponent(node.id)}`)
+        const res = await brainFetch(`/browse/army-rule/${encodeURIComponent(node.id)}`, {
+          edition,
+        })
         const data = (await res.json()) as { armyRule: ResultNode; subAbilities: ResultNode[] }
         const subRules = data.subAbilities.map((a) => ({
           name: a.title.replace(/\s*\(.*\)\s*$/, ''),
@@ -1292,10 +1448,11 @@ export function BrainScreen() {
     onContentClick: async (term: string) => {
       // Try to find and open the rule card for this term
       try {
-        const res = await fetch(`${API_BASE}/search`, {
+        const res = await brainFetch(`/search`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ query: term, pageSize: 5 }),
+          edition,
         })
         if (res.ok) {
           const data = (await res.json()) as SearchResponse
@@ -1362,26 +1519,29 @@ export function BrainScreen() {
               {__APP_VERSION__}
             </span>
           </div>
-          <div className="flex gap-1">
-            {(['ask', 'search', 'browse', 'graph'] as const).map((t) => (
-              <button
-                key={t}
-                onClick={() => handleTabSwitch(t)}
-                className={`px-3 py-1.5 text-sm rounded ${
-                  tab === t
-                    ? 'bg-amber-500 text-slate-950 font-medium'
-                    : 'text-slate-400 hover:text-slate-200'
-                }`}
-              >
-                {t === 'ask'
-                  ? 'Ask'
-                  : t === 'search'
-                    ? 'Search'
-                    : t === 'browse'
-                      ? 'Browse'
-                      : 'Graph'}
-              </button>
-            ))}
+          <div className="flex items-center gap-3">
+            <EditionPicker value={edition} onChange={setEdition} />
+            <div className="flex gap-1">
+              {(['ask', 'search', 'browse', 'graph'] as const).map((t) => (
+                <button
+                  key={t}
+                  onClick={() => handleTabSwitch(t)}
+                  className={`px-3 py-1.5 text-sm rounded ${
+                    tab === t
+                      ? 'bg-amber-500 text-slate-950 font-medium'
+                      : 'text-slate-400 hover:text-slate-200'
+                  }`}
+                >
+                  {t === 'ask'
+                    ? 'Ask'
+                    : t === 'search'
+                      ? 'Search'
+                      : t === 'browse'
+                        ? 'Browse'
+                        : 'Graph'}
+                </button>
+              ))}
+            </div>
           </div>
         </div>
       </header>
@@ -1389,9 +1549,9 @@ export function BrainScreen() {
       {detachmentView ? (
         <DetachmentPage {...detachmentView} />
       ) : tab === 'browse' ? (
-        <BrowseTab onOpenCard={handleOpenCard} />
+        <BrowseTab onOpenCard={handleOpenCard} edition={edition} />
       ) : tab === 'graph' ? (
-        <ForceGraph />
+        <ForceGraph edition={edition} />
       ) : (
         <main className="flex-1 p-4 max-w-4xl mx-auto">
           {tab === 'ask' && (
@@ -1399,6 +1559,7 @@ export function BrainScreen() {
               onOpenCard={handleOpenCard}
               activeFilters={activeFilters}
               onFilterChange={setActiveFilters}
+              edition={edition}
             />
           )}
           {tab === 'search' && (
@@ -1407,6 +1568,7 @@ export function BrainScreen() {
               onOpenRecord={handleOpenRecord}
               activeFilters={activeFilters}
               onFilterChange={setActiveFilters}
+              edition={edition}
             />
           )}
         </main>
@@ -1417,8 +1579,23 @@ export function BrainScreen() {
         onDismiss={() => {
           setActiveCard(null)
           setActiveLayout(null)
+          setEditionUnavailable(null)
         }}
       >
+        {editionUnavailable && (
+          <div className="mb-3">
+            <EditionNotAvailableNotice
+              requested={editionUnavailable.requested}
+              available={editionUnavailable.available}
+              subject={editionUnavailable.subject}
+              onSwitch={async (next) => {
+                const action = editionUnavailable.retry
+                setEditionUnavailable(null)
+                await Promise.resolve(action(next))
+              }}
+            />
+          </div>
+        )}
         {activeCard?.type === 'unit' &&
           (activeLayout ? (
             <LayoutRenderer layout={activeLayout} />
