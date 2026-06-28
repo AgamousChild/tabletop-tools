@@ -45,6 +45,13 @@ export type WeaponAbility =
 export interface UnitProfile {
   id: string // stable content ID (e.g. BSData entry ID)
   faction: string // operator-defined faction string
+  /**
+   * Optional subfaction slug, set when a BSData chapter catalog rolls up to a
+   * canonical parent faction. Example: an Ultramarines catalog unit lands with
+   * `faction: "Space Marines"` and `subfaction: "ultramarines"`. Consumers that
+   * don't care about subfaction ignore the field — additive, no schema break.
+   */
+  subfaction?: string
   name: string // unit name
   move: number
   toughness: number

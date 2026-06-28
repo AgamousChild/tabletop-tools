@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
-import { fetchAndProcessBSData } from './bsdata'
+import { fetchAndProcessBSData, rollupChapterFaction } from './bsdata'
 
 const mockFetch = vi.fn()
 vi.stubGlobal('fetch', mockFetch)
@@ -47,6 +47,30 @@ const SAMPLE_XML = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 
 beforeEach(() => {
   mockFetch.mockReset()
+})
+
+describe('rollupChapterFaction', () => {
+  it.each([
+    ['Ultramarines', 'ultramarines'],
+    ['Imperial Fists', 'imperial-fists'],
+    ['Iron Hands', 'iron-hands'],
+    ['Raven Guard', 'raven-guard'],
+    ['Salamanders', 'salamanders'],
+    ['White Scars', 'white-scars'],
+    ['Space Wolves', 'space-wolves'],
+    ['Black Templars', 'black-templars'],
+    ['Blood Angels', 'blood-angels'],
+    ['Dark Angels', 'dark-angels'],
+    ['Deathwatch', 'deathwatch'],
+  ])('rolls %s up to Space Marines + subfaction %s', (chapter, subfaction) => {
+    expect(rollupChapterFaction(chapter)).toEqual({ faction: 'Space Marines', subfaction })
+  })
+
+  it('leaves non-chapter factions unchanged with no subfaction', () => {
+    expect(rollupChapterFaction('Tyranids')).toEqual({ faction: 'Tyranids' })
+    expect(rollupChapterFaction('Chaos Daemons')).toEqual({ faction: 'Chaos Daemons' })
+    expect(rollupChapterFaction('Space Marines')).toEqual({ faction: 'Space Marines' })
+  })
 })
 
 describe('fetchAndProcessBSData', () => {
@@ -101,6 +125,65 @@ describe('fetchAndProcessBSData', () => {
     mockFetch.mockResolvedValueOnce({ ok: false, status: 403 })
 
     await expect(fetchAndProcessBSData()).rejects.toThrow('HTTP 403')
+  })
+
+  it('rolls up Ultramarines chapter catalog into Space Marines + subfaction', async () => {
+    mockFetch
+      .mockResolvedValueOnce({ ok: true, json: () => Promise.resolve({ sha: 'um1' }) })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: () =>
+          Promise.resolve({
+            tree: [{ path: 'Imperium - Ultramarines.cat', type: 'blob', url: '', sha: '' }],
+          }),
+      })
+      .mockResolvedValueOnce({ ok: true, text: () => Promise.resolve(SAMPLE_XML) })
+
+    const result = await fetchAndProcessBSData()
+    expect(result.skipped).toBe(false)
+    expect(result.units.length).toBeGreaterThan(0)
+
+    const unit = result.units[0]!
+    expect(unit.faction).toBe('Space Marines')
+    expect(unit.subfaction).toBe('ultramarines')
+  })
+
+  it('rolls up Space Wolves chapter catalog into Space Marines + subfaction', async () => {
+    mockFetch
+      .mockResolvedValueOnce({ ok: true, json: () => Promise.resolve({ sha: 'sw1' }) })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: () =>
+          Promise.resolve({
+            tree: [{ path: 'Imperium - Space Wolves.cat', type: 'blob', url: '', sha: '' }],
+          }),
+      })
+      .mockResolvedValueOnce({ ok: true, text: () => Promise.resolve(SAMPLE_XML) })
+
+    const result = await fetchAndProcessBSData()
+    expect(result.skipped).toBe(false)
+    const unit = result.units[0]!
+    expect(unit.faction).toBe('Space Marines')
+    expect(unit.subfaction).toBe('space-wolves')
+  })
+
+  it('leaves non-Space-Marines factions unchanged (no subfaction field)', async () => {
+    mockFetch
+      .mockResolvedValueOnce({ ok: true, json: () => Promise.resolve({ sha: 'ty1' }) })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: () =>
+          Promise.resolve({
+            tree: [{ path: 'Tyranids.cat', type: 'blob', url: '', sha: '' }],
+          }),
+      })
+      .mockResolvedValueOnce({ ok: true, text: () => Promise.resolve(SAMPLE_XML) })
+
+    const result = await fetchAndProcessBSData()
+    expect(result.skipped).toBe(false)
+    const unit = result.units[0]!
+    expect(unit.faction).toBe('Tyranids')
+    expect(unit.subfaction).toBeUndefined()
   })
 
   it('continues on individual catalog parse errors', async () => {
