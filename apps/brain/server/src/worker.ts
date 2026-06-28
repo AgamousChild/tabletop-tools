@@ -1268,6 +1268,11 @@ app.post('/index-vectors', async (c) => {
             factionId: node.factionId ?? '',
             subfaction: node.subfaction ?? '',
             phase: node.phase ?? '',
+            // Edition is a Vectorize metadata filter target (see retrieve.ts).
+            // Vectorize $eq is exact-match — a missing field never matches, so
+            // emit 'unknown' sentinel for untagged nodes. The retrieve.ts
+            // post-filter still applies as defence in depth.
+            edition: node.edition ?? 'unknown',
           },
         }))
 

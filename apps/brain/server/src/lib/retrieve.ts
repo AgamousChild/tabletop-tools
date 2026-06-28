@@ -198,11 +198,18 @@ export async function retrieve(
   // Vectorize caps topK at 50 when returnMetadata='all'
   const topK = 50 // always fetch max to give category boosting the best pool
   const vectorizeOpts: any = { topK, returnMetadata: 'all' }
-  if (detected.factions.length > 0 || filter) {
+  // Edition pre-filter: when caller asked for a specific edition, push it into
+  // Vectorize so candidates get shed before the R2 fetch. Skip for 'any'.
+  // The post-`applyEditionFilter` step below stays in place as defence in depth
+  // (catches mis-indexed nodes and the 'unknown' sentinel from /index-vectors).
+  const editionPreFilter: EditionFilter = options.edition ?? 'any'
+  const hasEditionPreFilter = editionPreFilter !== 'any'
+  if (detected.factions.length > 0 || filter || hasEditionPreFilter) {
     const filterObj: Record<string, any> = {}
     if (filter?.layer) filterObj.layer = filter.layer
     if (filter?.category) filterObj.category = filter.category
     if (filter?.phase) filterObj.phase = filter.phase
+    if (hasEditionPreFilter) filterObj.edition = editionPreFilter
     // Don't pre-filter by factionId in Vectorize — we do post-filtering to keep generic nodes
     vectorizeOpts.filter = filterObj
   }
