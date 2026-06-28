@@ -4,6 +4,28 @@ import type { GamePhase, Node, NodeRef, Source } from '../model'
 import { slugify } from '../slugify'
 import type { ParseResult } from './core-rules'
 
+/**
+ * Detect the edition of a GW faction-pack PDF from its asset URL.
+ *
+ * GW's PDF asset filenames begin with a version tag like `eng_11-02_*` (the
+ * 11th-edition Feb 2026 launch wave) or `eng_07-01_*` (the second 11e wave,
+ * July 2026). Any URL that doesn't match a known 11e prefix is treated as
+ * 10th edition (the catch-all default).
+ *
+ * Pass an empty string when the URL is unknown — the function returns '10th'
+ * so the caller and downstream stamping behave the same as before this fn
+ * was introduced.
+ */
+export function detectFactionPackEdition(assetUrl: string): '10th' | '11th' {
+  // 11e launch wave prefixes seen on warhammer-community.com so far.
+  // Add more here as GW publishes additional 11e revisions.
+  const elevenPrefixes = ['eng_11-02_', 'eng_07-01_']
+  for (const prefix of elevenPrefixes) {
+    if (assetUrl.includes(prefix)) return '11th'
+  }
+  return '10th'
+}
+
 /** Detect phase from stratagem WHEN clause. */
 function detectPhaseFromWhen(whenText: string): GamePhase | undefined {
   const lower = whenText.toLowerCase()
@@ -63,11 +85,18 @@ function extractKeywords(title: string, content: string): string[] {
  * - ##### RULE_NAME          → individual rules, enhancements, detachment rules
  * - *DET — TYPE STRATAGEM*   → stratagem label (italic line)
  * - Body text with **WHEN:** **TARGET:** **EFFECT:** for stratagems
+ *
+ * Optional `edition` (e.g. '10th', '11th') is stamped onto every emitted node
+ * — including the UPDATES & ERRATA and FAQs sub-blocks. Without it, callers
+ * fall back to the default edition stamping in build-graph.ts (currently 10th).
+ * Pass '11th' for faction packs published on or after the 11e launch (URLs
+ * matching `eng_11-02_*` and later versions).
  */
 export function parseFactionPack(
   normalizedMarkdown: string,
   factionSlug: string,
   retrievedAt: string,
+  edition?: '10th' | '11th',
 ): ParseResult {
   const nodes: Node[] = []
   const refs: NodeRef[] = []
@@ -201,6 +230,7 @@ export function parseFactionPack(
       refs: [],
       version: 1,
       keywords: extractKeywords(title, body),
+      edition,
     }
     nodes.push(node)
 
@@ -246,6 +276,7 @@ export function parseFactionPack(
         refs: [],
         version: 1,
         keywords: extractKeywords(title, entry),
+        edition,
       })
 
       // Try to create a supersedes ref to the relevant Wahapedia node
@@ -283,6 +314,7 @@ export function parseFactionPack(
         refs: [],
         version: 1,
         keywords: extractKeywords(question, entry),
+        edition,
       })
     }
   }

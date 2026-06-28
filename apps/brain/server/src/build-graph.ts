@@ -33,7 +33,7 @@ import {
 import { parseSecondaryMissions, parseTwistCards } from './lib/parsers/chapter-approved'
 import { parseCoreRules } from './lib/parsers/core-rules'
 import { buildDeploymentZoneNodes } from './lib/parsers/deployment-zones'
-import { parseFactionPack } from './lib/parsers/faction-pack'
+import { detectFactionPackEdition, parseFactionPack } from './lib/parsers/faction-pack'
 import {
   buildForceDispositionNodes,
   buildPrimaryMissionNodes,
@@ -157,15 +157,43 @@ async function main() {
   const mdFiles = readdirSync(MD_DIR).filter(
     (f) => f.startsWith('faction-pack-') && f.endsWith('.md'),
   )
+  // Look up the source URL for each faction pack from gw-sync metadata so we
+  // can detect 11th edition packs (URLs starting `eng_11-02_` for the Feb 2026
+  // launch wave, `eng_07-01_` for the July 2026 wave). Everything else falls
+  // back to 10th (the default at the bottom of this file).
+  let fpMetadata: Record<string, { url: string; markdownFile: string }> = {}
+  try {
+    const metaRaw = readFileSync('C:/R/sync-data/tools/gw-sync/.local/gw/metadata.json', 'utf-8')
+    const meta = JSON.parse(metaRaw) as {
+      pdfs: Record<string, { url: string; markdownFile: string }>
+    }
+    fpMetadata = meta.pdfs
+  } catch (err) {
+    console.log(`   WARN: could not read gw-sync metadata, defaulting all packs to 10th: ${err}`)
+  }
+  // Build a markdownFile → url lookup so we can match the file we're reading.
+  const mdFileToUrl = new Map<string, string>()
+  for (const entry of Object.values(fpMetadata)) {
+    if (entry.markdownFile) mdFileToUrl.set(entry.markdownFile, entry.url)
+  }
+
   let fpNodes = 0,
     fpRefs = 0,
-    fpErrors = 0
+    fpErrors = 0,
+    fpEleventh = 0
   for (const file of mdFiles) {
     const factionSlug = file.replace('faction-pack-', '').replace('.md', '')
     try {
       const raw = readFileSync(join(MD_DIR, file), 'utf-8')
-      const result = parseFactionPack(raw, factionSlug, RETRIEVED_AT)
-      stampPublishedAt(result.nodes, SOURCE_DATES['core-rules']!) // Faction packs released with 10th edition
+      const url = mdFileToUrl.get(file) ?? ''
+      const edition = detectFactionPackEdition(url)
+      if (edition === '11th') fpEleventh++
+      const result = parseFactionPack(raw, factionSlug, RETRIEVED_AT, edition)
+      // Faction packs published with the 10e launch use the 10e core-rules
+      // date; 11e packs were published Feb 2026 (eng_11-02_*) or Jul 2026
+      // (eng_07-01_*). Stamp the appropriate publishedAt.
+      const publishedAt = edition === '11th' ? '2026-02-11' : SOURCE_DATES['core-rules']!
+      stampPublishedAt(result.nodes, publishedAt)
       allNodes.push(...result.nodes)
       allRefs.push(...result.refs)
       fpNodes += result.nodes.length
@@ -176,7 +204,7 @@ async function main() {
     }
   }
   console.log(
-    `   ${mdFiles.length} faction packs → ${fpNodes} nodes, ${fpRefs} refs, ${fpErrors} errors`,
+    `   ${mdFiles.length} faction packs → ${fpNodes} nodes, ${fpRefs} refs, ${fpErrors} errors (${fpEleventh} packs as 11th edition)`,
   )
 
   // ── 5. Wahapedia/BSData Game Data ──────────────────────────────────────────
