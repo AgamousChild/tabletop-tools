@@ -31,6 +31,7 @@ import { parseCoreRules } from './lib/parsers/core-rules'
 import { parseFactionPack } from './lib/parsers/faction-pack'
 import type { GameDataInput } from './lib/parsers/game-data'
 import { convertGameData } from './lib/parsers/game-data'
+import { loadMfmCostingFromFile, type MfmCostingParseResult } from './lib/parsers/mfm-costing'
 import { parseRulesCommentary } from './lib/parsers/rules-commentary'
 import { parseTournamentCompanion } from './lib/parsers/tournament-companion'
 import { mapNodesToPages } from './lib/pdf-positions'
@@ -40,6 +41,12 @@ const MD_DIR = 'C:/R/sync-data/tools/gw-sync/.local/gw/markdown'
 const GAME_DATA_DIR = '../../data-import/client/public/wahapedia'
 const OUTPUT_DIR = '.local/brain'
 const RETRIEVED_AT = new Date().toISOString()
+
+// MFM 11e costing — read from a local cache so the build is deterministic and
+// offline-capable. The data-import worker publishes `mfm-unit-costing.json` to
+// R2; the brain build expects it copied to `<repo>/.local/brain-input/`. If
+// missing the build still runs and falls back to Wahapedia points (10e).
+const MFM_COSTING_PATH = '.local/brain-input/mfm-unit-costing.json'
 
 // Known publication dates for GW source documents
 const SOURCE_DATES: Record<string, string> = {
@@ -500,9 +507,30 @@ async function main() {
     allRefs.push(...caTc.refs)
   }
 
+  // ── MFM 11e costing (optional source) ──────────────────────────────────────
+  // Loaded ahead of merge so we can override Wahapedia 10e points with MFM 11e
+  // points on every datasheet MFM has mapped. See docs/superpowers/plans/
+  // 2026-06-27-data-problems-followup.md step 5.
+  let mfmResult: MfmCostingParseResult = { byDatasheetId: new Map(), totalRows: 0, mappedRows: 0 }
+  try {
+    mfmResult = loadMfmCostingFromFile(MFM_COSTING_PATH)
+    if (mfmResult.totalRows > 0) {
+      console.log(
+        `\n5. MFM unit costing: ${mfmResult.mappedRows}/${mfmResult.totalRows} rows mapped to datasheets`,
+      )
+    } else {
+      console.log(`\n5. MFM unit costing: skipped (no file at ${MFM_COSTING_PATH})`)
+    }
+  } catch (err) {
+    console.log(`   WARN: could not load MFM costing, continuing without it: ${err}`)
+  }
+
   // ── Merge and deduplicate nodes from all sources ──────────────────────────
-  const mergeResult = mergeSources(allNodes, allRefs)
+  const mergeResult = mergeSources(allNodes, allRefs, {
+    mfmCostingByDatasheetId: mfmResult.byDatasheetId,
+  })
   console.log(`   Merged: ${mergeResult.stats.inputNodes} → ${mergeResult.stats.outputNodes} nodes`)
+  console.log(`   MFM points applied to ${mergeResult.stats.mfmPointsApplied} datasheets`)
   console.log(
     `   ${mergeResult.stats.mergedByIdCount} deduped, ${mergeResult.stats.factionNormalizedCount} factions normalized`,
   )

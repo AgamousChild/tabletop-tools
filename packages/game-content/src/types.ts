@@ -64,6 +64,21 @@ export interface UnitProfile {
   weapons: WeaponProfile[]
   abilities: string[] // free-text ability names; mapped to typed rules separately
   abilityDescriptions?: Record<string, string> // ability name -> rule text
+  /**
+   * **Minimum-tier cost** — the cheapest baseline price for one purchase of
+   * this datasheet. MFM (the 11e source of truth) publishes points as a
+   * `pricing` array of tiers (e.g. `[1,)` always-on, `[1,2]` 1st-2nd copy,
+   * `[3,)` 3rd+ copy) where each tier has one or more `{models, points}`
+   * options. The convention is: `points` here is the lowest `points` from
+   * the always-on baseline tier (range starting at `1`). Repeat-cost rules
+   * and squad-size upgrades are conveyed separately via `repeatCost` (below)
+   * and the brain's tiered `points[]` array on a datasheet node.
+   *
+   * Brain merge priority (apps/brain/server/src/lib/merge-sources.ts):
+   *   1. MFM 11e (when the datasheet has an MFM row)
+   *   2. BSData 11e (placeholder slot for the next migration step)
+   *   3. Wahapedia 10e (only for `edition: '10th'` nodes)
+   */
   points: number
   /**
    * 11e repeat-cost rule: copies of this datasheet past `threshold` each
