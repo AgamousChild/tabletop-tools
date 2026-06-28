@@ -613,4 +613,131 @@ describe('convertGameData', () => {
     expect(nodes).toHaveLength(0)
     expect(refs).toHaveLength(0)
   })
+
+  describe('BSData chapter subfaction tagging', () => {
+    it('applies BSData subfaction to a datasheet whose (faction,name) matches', () => {
+      const input = makeInput({
+        datasheets: [
+          {
+            id: 'inter-1',
+            name: 'Intercessor Squad',
+            factionId: 'SM',
+            role: 'Battleline',
+            legend: '',
+            transport: '',
+            loadout: '',
+            damagedW: '',
+            damagedDescription: '',
+          },
+        ],
+        // Wahapedia has no chapter keyword for generic Intercessors — only
+        // chapter-iconic units (Calgar, Astorath, etc.) get that tag. BSData
+        // covers the rest.
+        unitKeywords: [
+          { id: 'k1', datasheetId: 'inter-1', keyword: 'Adeptus Astartes', isFactionKeyword: true },
+        ],
+      })
+      const bsdataSubfactionByKey = new Map<string, string>([
+        ['space-marines::intercessor squad', 'ultramarines'],
+      ])
+      const { nodes } = convertGameData(input, '2026-04-08', { bsdataSubfactionByKey })
+      const ds = nodes.find((n) => n.id === 'inter-1')
+      expect(ds).toBeDefined()
+      expect(ds!.subfaction).toBe('ultramarines')
+    })
+
+    it('leaves subfaction undefined when BSData has no entry and Wahapedia tags nothing', () => {
+      const input = makeInput({
+        datasheets: [
+          {
+            id: 'generic-1',
+            name: 'Generic Squad',
+            factionId: 'SM',
+            role: 'Battleline',
+            legend: '',
+            transport: '',
+            loadout: '',
+            damagedW: '',
+            damagedDescription: '',
+          },
+        ],
+      })
+      const { nodes } = convertGameData(input, '2026-04-08', {
+        bsdataSubfactionByKey: new Map(),
+      })
+      const ds = nodes.find((n) => n.id === 'generic-1')
+      expect(ds).toBeDefined()
+      expect(ds!.subfaction).toBeUndefined()
+    })
+
+    it('BSData subfaction beats a conflicting Wahapedia faction-keyword tag', () => {
+      // Edge case: Wahapedia ships a chapter keyword that disagrees with BSData's
+      // chapter catalog. BSData is the authoritative source for chapter
+      // membership, so its value wins.
+      const input = makeInput({
+        datasheets: [
+          {
+            id: 'conflicted-1',
+            name: 'Conflicted Captain',
+            factionId: 'SM',
+            role: 'Character',
+            legend: '',
+            transport: '',
+            loadout: '',
+            damagedW: '',
+            damagedDescription: '',
+          },
+        ],
+        unitKeywords: [
+          {
+            id: 'k1',
+            datasheetId: 'conflicted-1',
+            keyword: 'Imperial Fists',
+            isFactionKeyword: true,
+          },
+        ],
+      })
+      const bsdataSubfactionByKey = new Map<string, string>([
+        ['space-marines::conflicted captain', 'ultramarines'],
+      ])
+      const { nodes } = convertGameData(input, '2026-04-08', { bsdataSubfactionByKey })
+      const ds = nodes.find((n) => n.id === 'conflicted-1')
+      expect(ds).toBeDefined()
+      expect(ds!.subfaction).toBe('ultramarines')
+    })
+
+    it('keeps Wahapedia-keyword subfaction when BSData has no entry', () => {
+      // Calgar-style: Wahapedia ships the chapter keyword, BSData lookup is
+      // empty for this unit. Wahapedia's value is kept.
+      const input = makeInput({
+        datasheets: [
+          {
+            id: 'calgar-1',
+            name: 'Marneus Calgar',
+            factionId: 'SM',
+            role: 'Character',
+            legend: '',
+            transport: '',
+            loadout: '',
+            damagedW: '',
+            damagedDescription: '',
+          },
+        ],
+        unitKeywords: [
+          {
+            id: 'k1',
+            datasheetId: 'calgar-1',
+            keyword: 'Ultramarines',
+            isFactionKeyword: true,
+          },
+        ],
+      })
+      const { nodes } = convertGameData(input, '2026-04-08', {
+        bsdataSubfactionByKey: new Map(),
+      })
+      const ds = nodes.find((n) => n.id === 'calgar-1')
+      expect(ds).toBeDefined()
+      expect(ds!.subfaction).toBe('ultramarines')
+    })
+  })
 })

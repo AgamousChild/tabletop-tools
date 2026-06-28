@@ -26,6 +26,10 @@ import { mergeSources } from './lib/merge-sources'
 import type { Node, NodeRef } from './lib/model'
 import { normalizeMarkdown } from './lib/normalize/normalize'
 import { parseBalanceDataslate } from './lib/parsers/balance-dataslate'
+import {
+  type BsdataSubfactionParseResult,
+  loadBsdataSubfactionsFromFile,
+} from './lib/parsers/bsdata-subfactions'
 import { parseSecondaryMissions, parseTwistCards } from './lib/parsers/chapter-approved'
 import { parseCoreRules } from './lib/parsers/core-rules'
 import { parseFactionPack } from './lib/parsers/faction-pack'
@@ -53,6 +57,13 @@ const MFM_COSTING_PATH = '.local/brain-input/mfm-unit-costing.json'
 // costing file. Loaded ahead of the merge so MFM detachment nodes flow through
 // the same dedup/normalize pipeline as every other source.
 const MFM_DETACHMENTS_PATH = '.local/brain-input/mfm-detachments.json'
+
+// BSData 11e units — same staging convention. Used here purely to pick up the
+// `subfaction` field that `rollupChapterFaction()` (PR #46) puts on every
+// chapter-catalog unit, so brain datasheets get a chapter tag even when
+// Wahapedia keywords don't carry one (per
+// docs/superpowers/plans/2026-06-27-data-problems-followup.md step 7).
+const BSDATA_UNITS_PATH = '.local/brain-input/bsdata-units.json'
 
 // Known publication dates for GW source documents
 const SOURCE_DATES: Record<string, string> = {
@@ -181,7 +192,31 @@ async function main() {
     datasheetEnhancements: loadJson('datasheet_enhancements.json'),
     datasheetDetachmentAbilities: loadJson('datasheet_detachment_abilities.json'),
   }
-  const gameResult = convertGameData(gameData, RETRIEVED_AT)
+
+  // BSData chapter-catalog subfactions (optional source) — load before
+  // convertGameData so chapter membership lands on every brain datasheet that
+  // matches a BSData unit, not just the chapter-iconic ones Wahapedia tags.
+  let bsdataSubfactionResult: BsdataSubfactionParseResult = {
+    byKey: new Map(),
+    totalRows: 0,
+    taggedRows: 0,
+  }
+  try {
+    bsdataSubfactionResult = loadBsdataSubfactionsFromFile(BSDATA_UNITS_PATH)
+    if (bsdataSubfactionResult.totalRows > 0) {
+      console.log(
+        `   BSData subfactions: ${bsdataSubfactionResult.taggedRows}/${bsdataSubfactionResult.totalRows} rows carry a subfaction tag`,
+      )
+    } else {
+      console.log(`   BSData subfactions: skipped (no file at ${BSDATA_UNITS_PATH})`)
+    }
+  } catch (err) {
+    console.log(`   WARN: could not load BSData subfactions, continuing without: ${err}`)
+  }
+
+  const gameResult = convertGameData(gameData, RETRIEVED_AT, {
+    bsdataSubfactionByKey: bsdataSubfactionResult.byKey,
+  })
   stampPublishedAt(gameResult.nodes, SOURCE_DATES['wahapedia']!)
   allNodes.push(...gameResult.nodes)
   allRefs.push(...gameResult.refs)
