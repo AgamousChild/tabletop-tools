@@ -30,6 +30,55 @@ function normalizeFactionName(name: string): string {
   return name.replace(/^(Imperium|Chaos)\s*-\s*/, '')
 }
 
+/**
+ * BSData ships 11 Space Marines chapter catalogs as separate factions:
+ * Ultramarines, Imperial Fists, Iron Hands, Raven Guard, Salamanders,
+ * White Scars, Space Wolves, Black Templars, Blood Angels, Dark Angels,
+ * Deathwatch. Downstream consumers (versus, list-builder via game-data-store)
+ * see those 11 names as distinct factions — but per the brain's existing
+ * SUBFACTION_KEYWORDS rule and the `sync.ts` `CATALOG_FACTION_ALIASES` table,
+ * they all roll up to `Space Marines` + a `subfaction` slug.
+ *
+ * This table mirrors the parent rollup keys used by `sync.ts`'s
+ * `CATALOG_FACTION_ALIASES` — kept here instead of imported because the
+ * BSData source layer maps catalog-name → human-readable parent faction
+ * ("Space Marines"), while sync.ts maps catalog-name → canonical slug
+ * ("space-marines"). One change per layer; don't conflate them.
+ */
+const SM_CHAPTER_TO_SUBFACTION: Record<string, string> = {
+  'Black Templars': 'black-templars',
+  'Blood Angels': 'blood-angels',
+  'Dark Angels': 'dark-angels',
+  Deathwatch: 'deathwatch',
+  'Imperial Fists': 'imperial-fists',
+  'Iron Hands': 'iron-hands',
+  'Raven Guard': 'raven-guard',
+  Salamanders: 'salamanders',
+  'Space Wolves': 'space-wolves',
+  Ultramarines: 'ultramarines',
+  'White Scars': 'white-scars',
+}
+
+const SPACE_MARINES_FACTION_NAME = 'Space Marines'
+
+/**
+ * Roll up BSData chapter catalogs to `Space Marines` + a `subfaction` slug.
+ * For non-chapter catalogs returns `{ faction: <input>, subfaction: undefined }`.
+ *
+ * Exported so the sync.ts and tests can verify chapter handling without
+ * re-implementing the table.
+ */
+export function rollupChapterFaction(faction: string): {
+  faction: string
+  subfaction?: string
+} {
+  const subfaction = SM_CHAPTER_TO_SUBFACTION[faction]
+  if (subfaction) {
+    return { faction: SPACE_MARINES_FACTION_NAME, subfaction }
+  }
+  return { faction }
+}
+
 export async function fetchAndProcessBSData(
   previousCommitSha?: string,
   repo = DEFAULT_REPO,
@@ -113,11 +162,28 @@ export async function fetchAndProcessBSData(
   }
 
   // Phase 3: parse each file with the registry, so catalogueLinks resolve.
+  // Chapter-catalog rollup happens here too — Ultramarines / Imperial Fists /
+  // … rewrite to `faction: "Space Marines"` + `subfaction: <slug>` so
+  // downstream consumers (versus, list-builder) don't see 11 SM factions.
   for (const f of fetched) {
     try {
       const { units, subfactions, errors: parseErrors } = parseBSDataXml(f.xml, f.faction, registry)
-      allUnits.push(...units)
-      allSubfactions.push(...subfactions)
+      for (const u of units) {
+        const { faction: rolled, subfaction } = rollupChapterFaction(u.faction)
+        if (subfaction) {
+          allUnits.push({ ...u, faction: rolled, subfaction })
+        } else {
+          allUnits.push(u)
+        }
+      }
+      for (const s of subfactions) {
+        const { faction: rolled } = rollupChapterFaction(s.faction)
+        if (rolled !== s.faction) {
+          allSubfactions.push({ ...s, faction: rolled })
+        } else {
+          allSubfactions.push(s)
+        }
+      }
       errors.push(...parseErrors)
     } catch (err) {
       errors.push(`${f.faction}: ${err instanceof Error ? err.message : String(err)}`)
