@@ -21,4 +21,24 @@ describe('EditionFallbackBanner', () => {
     fireEvent.click(screen.getByLabelText(/dismiss/i))
     expect(onDismiss).toHaveBeenCalledTimes(1)
   })
+
+  it('renders nothing when fallbackFrom is "any"', () => {
+    const { container } = render(<EditionFallbackBanner fallbackFrom="any" />)
+    expect(container.firstChild).toBeNull()
+    expect(screen.queryByTestId('edition-fallback-banner')).not.toBeInTheDocument()
+  })
+
+  it('renders nothing when fallbackFrom is undefined', () => {
+    const { container } = render(<EditionFallbackBanner fallbackFrom={undefined} />)
+    expect(container.firstChild).toBeNull()
+    expect(screen.queryByTestId('edition-fallback-banner')).not.toBeInTheDocument()
+  })
+
+  it('renders for 10th and 9th editions', () => {
+    const { unmount } = render(<EditionFallbackBanner fallbackFrom="10th" />)
+    expect(screen.getByText(/No 10th edition results/)).toBeInTheDocument()
+    unmount()
+    render(<EditionFallbackBanner fallbackFrom="9th" />)
+    expect(screen.getByText(/No 9th edition results/)).toBeInTheDocument()
+  })
 })

@@ -6,27 +6,36 @@
  * on `/search`, `/ask`, and `/graph-data` responses.
  *
  * Copy is intentionally calm — this isn't an error, it's an explanation.
+ *
+ * Only renders when `fallbackFrom` is a specific edition (`11th` / `10th` /
+ * `9th`). When `fallbackFrom` is `'any'` or otherwise non-specific the copy
+ * has no useful subject ("No the selected edition results."), so the banner
+ * suppresses itself — the absence of results is already self-evident.
  */
 
 import type { Edition } from '../lib/edition'
 
 export interface EditionFallbackBannerProps {
-  fallbackFrom: Edition
+  fallbackFrom: Edition | undefined
   onDismiss?: () => void
 }
 
-function editionLabel(e: Edition): string {
-  return e === 'any' ? 'the selected edition' : `${e} edition`
+const SPECIFIC_EDITIONS: ReadonlyArray<Edition> = ['11th', '10th', '9th']
+
+function isSpecificEdition(e: Edition | undefined): e is '11th' | '10th' | '9th' {
+  return e != null && (SPECIFIC_EDITIONS as ReadonlyArray<Edition>).includes(e)
 }
 
 export function EditionFallbackBanner({ fallbackFrom, onDismiss }: EditionFallbackBannerProps) {
+  if (!isSpecificEdition(fallbackFrom)) return null
+
   return (
     <div
       role="status"
       data-testid="edition-fallback-banner"
       className="bg-slate-800/60 border border-slate-700 rounded px-3 py-2 flex items-center justify-between gap-3 text-xs text-slate-300"
     >
-      <span>No {editionLabel(fallbackFrom)} results. Showing all editions.</span>
+      <span>No {fallbackFrom} edition results. Showing all editions.</span>
       {onDismiss && (
         <button
           onClick={onDismiss}

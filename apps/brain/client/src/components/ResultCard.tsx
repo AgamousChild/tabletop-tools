@@ -21,6 +21,12 @@ export interface ResultCardProps {
   factionName?: string
   subfaction?: string
   phase?: string
+  /**
+   * Per-node edition tag (e.g. `'11th'`, `'10th'`). Rendered as a dim pill near
+   * category / faction so it's visible *why* a given hit came back. When
+   * undefined the pill renders nothing — we don't display "Unknown".
+   */
+  edition?: string
 }
 
 export function ResultCard({
@@ -35,6 +41,7 @@ export function ResultCard({
   factionName,
   subfaction,
   phase,
+  edition,
 }: ResultCardProps) {
   const pct = score ? Math.round(score * 100) : 0
 
@@ -63,6 +70,14 @@ export function ResultCard({
           <span className="text-xs text-slate-400">{factionDisplayName(subfaction)}</span>
         )}
         {phase && <span className="text-xs text-slate-400">{phase}</span>}
+        {edition && (
+          <span
+            data-testid="result-card-edition"
+            className="text-[10px] px-1.5 py-0.5 rounded border border-slate-700 bg-slate-800/50 text-slate-400"
+          >
+            {edition}
+          </span>
+        )}
       </div>
       <p className="text-sm text-slate-300 line-clamp-2">{summary}</p>
     </div>
