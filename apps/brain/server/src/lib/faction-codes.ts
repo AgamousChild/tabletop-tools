@@ -59,6 +59,20 @@ export function normalizeFactionId(code: string): string {
 }
 
 /**
+ * Read-only snapshot of the canonical factionId slugs loaded into the cache.
+ *
+ * Used by post-merge invariant gates (e.g. `mergeSources`) to detect shadow
+ * factionIds — values that survived `normalizeFactionId()` but still aren't
+ * in `dim_faction`. Throws if called before `loadFactionCodes()`.
+ */
+export function getCanonicalFactionIds(): ReadonlySet<string> {
+  if (!cachedSlugs) {
+    throw new Error('Faction codes not loaded — call loadFactionCodes(db) first')
+  }
+  return cachedSlugs
+}
+
+/**
  * Reset cached maps (for testing).
  */
 export function resetFactionCodes(): void {

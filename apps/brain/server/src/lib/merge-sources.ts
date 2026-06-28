@@ -1,6 +1,10 @@
-import { normalizeFactionId } from './faction-codes'
+import { getCanonicalFactionIds, normalizeFactionId } from './faction-codes'
 import type { Node, NodeRef } from './model'
 import type { MfmCostingForDatasheet } from './parsers/mfm-costing'
+
+/** Editions accepted by the brain. Per Rule 5, 11th is the target edition. */
+const ALLOWED_EDITIONS: ReadonlySet<string> = new Set(['9th', '10th', '11th'])
+const DEFAULT_EDITION = '11th'
 
 /** Slug → preferred English display name (ALL CAPS). */
 const FACTION_DISPLAY_NAMES: Record<string, string> = {
@@ -39,6 +43,29 @@ export interface MergeStats {
   summaryTagged: number
   /** Datasheet nodes whose `points` array was overridden by MFM 11e costing. */
   mfmPointsApplied: number
+  /** Edition gate counts. See {@link runEditionGate}. */
+  editionGate: EditionGateReport
+  /** FactionId gate counts. See {@link runFactionIdGate}. */
+  factionIdGate: FactionIdGateReport
+}
+
+export interface EditionGateReport {
+  '9th': number
+  '10th': number
+  '11th': number
+  /** Nodes that arrived missing `edition` and were defaulted to {@link DEFAULT_EDITION}. */
+  defaulted: number
+  /** Nodes whose `edition` was set to an unexpected value (e.g. typo). */
+  unexpected: number
+}
+
+export interface FactionIdGateReport {
+  /** Nodes whose `factionId` is already in `dim_faction`. */
+  canonical: number
+  /** Nodes whose shadow `factionId` was rewritten via `normalizeFactionId()`. */
+  normalized: number
+  /** Nodes whose `factionId` is still not in `dim_faction` after normalization. */
+  stillOrphaned: number
 }
 
 export interface MergeResult {
@@ -87,6 +114,144 @@ function applyPointsPriority(
   return true
 }
 
+/**
+ * Thrown by `mergeSources` when a post-merge invariant gate detects regressions
+ * that the auto-fix step couldn't repair (e.g. a shadow factionId that's neither
+ * canonical nor resolvable via `normalizeFactionId`).
+ *
+ * Surfaces the regression with a non-zero exit code when build-graph.ts hits it
+ * uncaught — matches the CI-like build context described in
+ * docs/superpowers/plans/2026-06-27-data-problems-followup.md step 9.
+ */
+export class BuildGateError extends Error {
+  readonly gate: 'edition' | 'factionId'
+  readonly orphans: ReadonlyArray<{ id: string; value: string }>
+  constructor(
+    gate: 'edition' | 'factionId',
+    orphans: ReadonlyArray<{ id: string; value: string }>,
+  ) {
+    super(`${gate} gate: ${orphans.length} node(s) failed auto-fix and remain orphaned`)
+    this.name = 'BuildGateError'
+    this.gate = gate
+    this.orphans = orphans
+  }
+}
+
+/**
+ * Edition gate — every node must carry `edition: '9th' | '10th' | '11th'`.
+ *
+ * Default behaviour is **warn + auto-fix** (per step 9): missing editions are
+ * defaulted to `'11th'` per Rule 5; unexpected values are warned but left
+ * alone (we don't silently rewrite arbitrary strings — that hides bugs).
+ *
+ * Mutates `nodes` in place and returns the count breakdown.
+ */
+function runEditionGate(nodes: Node[]): EditionGateReport {
+  const report: EditionGateReport = {
+    '9th': 0,
+    '10th': 0,
+    '11th': 0,
+    defaulted: 0,
+    unexpected: 0,
+  }
+  const unexpectedSamples = new Map<string, number>() // edition value → count
+
+  for (const node of nodes) {
+    if (!node.edition) {
+      node.edition = DEFAULT_EDITION
+      report.defaulted++
+    }
+    if (ALLOWED_EDITIONS.has(node.edition)) {
+      report[node.edition as '9th' | '10th' | '11th']++
+    } else {
+      report.unexpected++
+      unexpectedSamples.set(node.edition, (unexpectedSamples.get(node.edition) ?? 0) + 1)
+    }
+  }
+
+  if (report.defaulted > 0) {
+    console.warn(
+      `   [edition gate] WARN: ${report.defaulted} node(s) had no edition tag; defaulted to '${DEFAULT_EDITION}' (Rule 5)`,
+    )
+  }
+  if (report.unexpected > 0) {
+    const samples = [...unexpectedSamples.entries()].map(([v, c]) => `'${v}' x${c}`).join(', ')
+    console.warn(
+      `   [edition gate] WARN: ${report.unexpected} node(s) with unexpected edition: ${samples}`,
+    )
+  }
+  console.log(
+    `   [edition gate] 9th=${report['9th']} 10th=${report['10th']} 11th=${report['11th']} defaulted=${report.defaulted}`,
+  )
+
+  return report
+}
+
+/**
+ * FactionId gate — every node whose `factionId` is set must reference a
+ * canonical slug from `dim_faction`. `factionId: undefined` is fine
+ * (faction-agnostic nodes are normal).
+ *
+ * Default behaviour is **warn + auto-fix**: shadow factionIds get one more
+ * pass through `normalizeFactionId()`. Anything that still isn't canonical
+ * is collected into the report and the function throws a `BuildGateError`,
+ * which propagates a non-zero exit when build-graph.ts surfaces it.
+ *
+ * Requires `loadFactionCodes()` to have been called (build-graph.ts and the
+ * test fixture both do this).
+ */
+function runFactionIdGate(nodes: Node[]): FactionIdGateReport {
+  const canonicalSlugs = getCanonicalFactionIds()
+  const report: FactionIdGateReport = {
+    canonical: 0,
+    normalized: 0,
+    stillOrphaned: 0,
+  }
+  const shadowCounts = new Map<string, number>() // shadow id → count seen
+  const orphanCounts = new Map<string, number>() // still-orphan id → count seen
+  const orphanSamples: Array<{ id: string; value: string }> = []
+
+  for (const node of nodes) {
+    if (!node.factionId) continue // faction-agnostic — allowed
+    if (canonicalSlugs.has(node.factionId)) {
+      report.canonical++
+      continue
+    }
+    // Shadow: try a last-ditch normalization pass
+    shadowCounts.set(node.factionId, (shadowCounts.get(node.factionId) ?? 0) + 1)
+    const fixed = normalizeFactionId(node.factionId)
+    if (canonicalSlugs.has(fixed)) {
+      node.factionId = fixed
+      report.normalized++
+    } else {
+      report.stillOrphaned++
+      orphanCounts.set(node.factionId, (orphanCounts.get(node.factionId) ?? 0) + 1)
+      if (orphanSamples.length < 10) orphanSamples.push({ id: node.id, value: node.factionId })
+    }
+  }
+
+  if (shadowCounts.size > 0) {
+    const samples = [...shadowCounts.entries()]
+      .slice(0, 10)
+      .map(([id, c]) => `'${id}' x${c}`)
+      .join(', ')
+    console.warn(
+      `   [factionId gate] WARN: ${shadowCounts.size} shadow factionId(s) seen pre-normalize: ${samples}`,
+    )
+  }
+  console.log(
+    `   [factionId gate] canonical=${report.canonical} normalized=${report.normalized} still-orphaned=${report.stillOrphaned}`,
+  )
+
+  if (report.stillOrphaned > 0) {
+    const samples = [...orphanCounts.entries()].map(([id, c]) => `'${id}' x${c}`).join(', ')
+    console.warn(`   [factionId gate] FAIL: still-orphaned factionIds: ${samples}`)
+    throw new BuildGateError('factionId', orphanSamples)
+  }
+
+  return report
+}
+
 /** Convert a kebab-case slug to Title Case for display. */
 function slugToTitleCase(slug: string): string {
   return slug
@@ -120,6 +285,8 @@ export function mergeSources(
     refsDeduped: 0,
     summaryTagged: 0,
     mfmPointsApplied: 0,
+    editionGate: { '9th': 0, '10th': 0, '11th': 0, defaulted: 0, unexpected: 0 },
+    factionIdGate: { canonical: 0, normalized: 0, stillOrphaned: 0 },
   }
 
   // Step 1: Normalize factionIds and assign factionName (mutates a working copy)
@@ -343,6 +510,15 @@ export function mergeSources(
     refKeySet.add(key)
     dedupedRefs.push(ref)
   }
+
+  // Step 7: Post-merge invariant gates. Two regressions today caused weeks of
+  // silent damage — untagged-edition nodes and shadow factionIds — so the gates
+  // run on every build. Default to warn + auto-fix; the factionId gate throws
+  // a `BuildGateError` only when auto-fix can't repair a node (still-orphaned
+  // > 0), which surfaces as a non-zero exit in build-graph.ts.
+  // See docs/superpowers/plans/2026-06-27-data-problems-followup.md step 9.
+  stats.editionGate = runEditionGate(nodes)
+  stats.factionIdGate = runFactionIdGate(nodes)
 
   return { nodes, refs: dedupedRefs, stats }
 }
