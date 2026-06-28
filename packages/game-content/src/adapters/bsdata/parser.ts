@@ -1,7 +1,7 @@
 import type { UnitProfile, WeaponAbility, WeaponProfile } from '../../types.js'
 
 /** Bump when parser output changes in a way that invalidates previously-imported data. */
-export const PARSER_VERSION = 15
+export const PARSER_VERSION = 16
 
 /**
  * BattleScribe typeId for matched-play points (`<cost name="pts">`). Stable
@@ -94,26 +94,48 @@ export function parseBSDataXml(
   // chapter's catalogue id as the condition childId.
   const importingCatalogueId = extractCatalogueId(xml)
 
-  // If a registry is provided, merge in the XML of every catalog reached by
-  // catalogueLink importRootEntries="true" (transitively, with cycle detection).
-  // The downstream extraction passes then see units and shared definitions from
-  // both the local file and its imported libraries in a single namespace.
-  const effectiveXml = registry ? resolveCatalogueImports(xml, registry, new Set()) : xml
+  // Split catalog-import resolution into two streams:
+  //
+  // - `lookupXml` includes the local file plus every catalog transitively
+  //   reachable via catalogueLink (regardless of `importRootEntries`). This is
+  //   the source of `<profile>`, `<selectionEntry>`, `<infoGroup>`, and
+  //   `<selectionEntryGroup>` lookup maps used by `enrichBody` and the
+  //   `extractTopLevelEntryLinks` resolver. Without the full set, faction
+  //   wrappers that catalogueLink a parent library *without* `importRootEntries`
+  //   (e.g. `Aeldari - Drukhari.cat`, which top-level-entryLinks Drukhari units
+  //   defined inside `Aeldari - Aeldari Library.cat`) cannot resolve their
+  //   roster entries and emit zero units.
+  //
+  // - `emissionXml` includes the local file plus catalogs reached via
+  //   `catalogueLink importRootEntries="true"` — BUT excludes catalogs declared
+  //   `library="true"`. Library catalogs are independently parsed under their
+  //   own faction string (e.g. `Chaos - Chaos Knights Library.cat` already
+  //   emits the 20 real CK units under faction "Chaos Knights Library"), so
+  //   re-emitting their roots into the importing wrapper's faction produces
+  //   double-counts and, for wrappers that import multiple libraries (e.g.
+  //   `Chaos - Chaos Knights.cat` imports CK Library + Daemons Library +
+  //   Titans Library), cross-faction pollution: the "Chaos Knights" output
+  //   ends up dominated by Chaos Daemons unit names with no real CK content.
+  //   The SM chapter pattern is preserved because `Imperium - Space Marines`
+  //   (the catalog SM chapter wrappers importRootEntries=true) is itself
+  //   `library="false"`, so its roots still flow to each chapter.
+  const lookupXml = registry ? mergeAllCatalogueImports(xml, registry, new Set()) : xml
+  const emissionXml = registry ? mergeRootEntryImports(xml, registry, new Set()) : xml
 
   // Build reference maps for resolving <infoLink> and <entryLink> references.
   // BSData XML uses these to point to shared definitions (profiles, weapons, models)
   // defined elsewhere in the file (e.g. in <sharedProfiles> or <sharedSelectionEntries>).
-  const profileMap = buildProfileMap(effectiveXml)
-  const { entryMap, entryAttrsMap } = buildEntryMaps(effectiveXml)
-  const selectionEntryGroupMap = buildSelectionEntryGroupMap(effectiveXml)
-  const infoGroupMap = buildInfoGroupMap(effectiveXml)
+  const profileMap = buildProfileMap(lookupXml)
+  const { entryMap, entryAttrsMap } = buildEntryMaps(lookupXml)
+  const selectionEntryGroupMap = buildSelectionEntryGroupMap(lookupXml)
+  const infoGroupMap = buildInfoGroupMap(lookupXml)
 
   const emittedIds = new Set<string>()
 
   // Stack-based extraction of <selectionEntry> to handle nested entries correctly.
   // The regex approach fails when <selectionEntry> elements are nested (the non-greedy
   // match captures the inner closing tag instead of the outer one).
-  for (const entry of extractSelectionEntries(effectiveXml)) {
+  for (const entry of extractSelectionEntries(emissionXml)) {
     const type = extractAttr(entry.attrs, 'type')
     if (type !== 'unit' && type !== 'model') continue
     // Skip shared sub-models — these are components referenced by units via entryLink,
@@ -165,7 +187,7 @@ export function parseBSDataXml(
   // is the display name (the link can override the target's name, e.g. Lieutenant
   // Titus → Captain Titus), the entryLink's `id` is the unit id (locally scoped
   // to this catalog), and the target's body is the source of stats/weapons.
-  for (const link of extractTopLevelEntryLinks(effectiveXml)) {
+  for (const link of extractTopLevelEntryLinks(emissionXml)) {
     if (link.type !== 'selectionEntry') continue
     if (!link.id || !link.targetId) continue
     if (emittedIds.has(link.id)) continue
@@ -230,12 +252,73 @@ function findRootEntryImports(xml: string): string[] {
   return ids
 }
 
+/** Find every `<catalogueLink>` regardless of `importRootEntries` and return its targetId. */
+function findAllCatalogueImports(xml: string): string[] {
+  const ids: string[] = []
+  const pattern = /<catalogueLink\b[^>]*>/gi
+  let m: RegExpExecArray | null
+  while ((m = pattern.exec(xml)) !== null) {
+    const targetId = /\btargetId="([^"]+)"/i.exec(m[0])?.[1]
+    if (targetId) ids.push(targetId)
+  }
+  return ids
+}
+
+/** Whether the catalogue declared in `xml` has `library="true"` on its opening tag. */
+function isLibraryCatalogue(xml: string): boolean {
+  const m = /<catalogue\b[^>]*>/i.exec(xml)
+  if (!m) return false
+  return /\blibrary="true"/i.test(m[0])
+}
+
+/**
+ * Transitively concatenate `xml` with every catalog reached via any
+ * `<catalogueLink>` (regardless of `importRootEntries`). Used to build the
+ * lookup XML — entry/profile/group maps see definitions in every reachable
+ * catalog so top-level `<entryLink>` resolution and `enrichBody` work even when
+ * the wrapper imports a parent library without setting `importRootEntries="true"`
+ * (the `Aeldari - Drukhari.cat` / `Aeldari - Aeldari Library.cat` pairing).
+ *
+ * `visited` carries catalog IDs already pulled in to break import cycles.
+ */
+function mergeAllCatalogueImports(
+  xml: string,
+  registry: CatalogRegistry,
+  visited: Set<string>,
+): string {
+  const localId = extractCatalogueId(xml)
+  if (localId) visited.add(localId)
+  let merged = xml
+  for (const targetId of findAllCatalogueImports(xml)) {
+    if (visited.has(targetId)) continue
+    const target = registry.get(targetId)
+    if (!target) continue
+    merged += '\n' + mergeAllCatalogueImports(target.xml, registry, visited)
+  }
+  return merged
+}
+
 /**
  * Transitively concatenate `xml` with every catalog reached via
- * `catalogueLink importRootEntries="true"`. `visited` carries catalog IDs already
- * pulled in to break import cycles.
+ * `<catalogueLink importRootEntries="true">`, EXCLUDING catalogs declared
+ * `library="true"`. Used to build the emission XML — `extractSelectionEntries`
+ * and `extractTopLevelEntryLinks` only see the wrapper plus non-library
+ * parent catalogs.
+ *
+ * Library catalogs are parsed independently under their own faction string, so
+ * re-emitting their `<selectionEntries>` roots into every importing wrapper
+ * produces duplicates and (for wrappers that import multiple unrelated
+ * libraries — `Chaos - Chaos Knights.cat`, `Chaos - Chaos Daemons.cat`)
+ * cross-faction pollution where one faction's wrapper output is dominated by
+ * another faction's units. Excluding library catalogs from the emission stream
+ * keeps the wrapper's faction string honest. Non-library imports (e.g.
+ * `Imperium - Space Marines` imported by chapter wrappers) still flow through
+ * unchanged so the established SM chapter-inherits-roster pattern keeps
+ * working.
+ *
+ * `visited` carries catalog IDs already pulled in to break import cycles.
  */
-function resolveCatalogueImports(
+function mergeRootEntryImports(
   xml: string,
   registry: CatalogRegistry,
   visited: Set<string>,
@@ -247,7 +330,14 @@ function resolveCatalogueImports(
     if (visited.has(targetId)) continue
     const target = registry.get(targetId)
     if (!target) continue
-    merged += '\n' + resolveCatalogueImports(target.xml, registry, visited)
+    if (isLibraryCatalogue(target.xml)) {
+      // Mark as visited so transitive importRootEntries cycles still terminate,
+      // but don't merge the body — its units belong to its own faction parse.
+      const skipId = extractCatalogueId(target.xml)
+      if (skipId) visited.add(skipId)
+      continue
+    }
+    merged += '\n' + mergeRootEntryImports(target.xml, registry, visited)
   }
   return merged
 }
