@@ -46,9 +46,12 @@ if (-not $shell) {
   throw 'No pwsh or powershell.exe on PATH.'
 }
 
+# -WindowStyle Hidden + Settings.Hidden + LogonType S4U together mean no window
+# ever appears: S4U runs the task detached from the interactive desktop so
+# console processes have nowhere to render.
 $action = New-ScheduledTaskAction `
   -Execute $shell `
-  -Argument "-NoLogo -NoProfile -ExecutionPolicy Bypass -File `"$ScriptPath`"" `
+  -Argument "-NoLogo -NoProfile -NonInteractive -WindowStyle Hidden -ExecutionPolicy Bypass -File `"$ScriptPath`"" `
   -WorkingDirectory $RepoRoot
 
 # Start at the next aligned interval boundary (so two runs don't pile up
@@ -72,7 +75,8 @@ $settings = New-ScheduledTaskSettingsSet `
   -AllowStartIfOnBatteries `
   -DontStopIfGoingOnBatteries `
   -StartWhenAvailable `
-  -ExecutionTimeLimit (New-TimeSpan -Hours 2)
+  -ExecutionTimeLimit (New-TimeSpan -Hours 2) `
+  -Hidden
 
 if (Get-ScheduledTask -TaskName $TaskName -ErrorAction SilentlyContinue) {
   Write-Host "Updating existing task '$TaskName'..."
