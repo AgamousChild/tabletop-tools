@@ -8,13 +8,15 @@
  *
  * Source files (all local-only, NEVER committed):
  *   - C:/R/twists.pdf
- *   - C:/Users/micah/OneDrive/Documents/2026_06_29/IMG_0001.txt  (deployment zone names)
  *   - C:/Users/micah/OneDrive/Documents/2026_06_29/IMG_0006.pdf  (secondary mission bodies)
  *
  * Outputs (all gitignored under apps/brain/server/.local/):
  *   - .local/brain-input/cards/twists.txt
- *   - .local/brain-input/cards/deployment-zone-names.txt
  *   - .local/brain-input/cards/secondary-mission-bodies.txt
+ *
+ * Deployment-zone cards are NOT staged here — they're image-only nodes that
+ * mirror the 10e shape. See `scripts/crop-deployment-zone-images.ts` +
+ * `scripts/upload-deployment-zone-images.ts`.
  *
  * The build (build-graph.ts) silent-skips when these files are absent, so
  * other contributors can run a brain build without Micah's local sources.
@@ -42,11 +44,6 @@ export const DEFAULT_CARD_SOURCES: CardSourceSpec[] = [
     srcAbs: 'C:/R/twists.pdf',
     destRel: '.local/brain-input/cards/twists.txt',
     mode: 'pdftotext',
-  },
-  {
-    srcAbs: 'C:/Users/micah/OneDrive/Documents/2026_06_29/IMG_0001.txt',
-    destRel: '.local/brain-input/cards/deployment-zone-names.txt',
-    mode: 'copy',
   },
   {
     srcAbs: 'C:/Users/micah/OneDrive/Documents/2026_06_29/IMG_0006.pdf',
