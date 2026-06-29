@@ -32,6 +32,7 @@ import {
 } from './lib/parsers/bsdata-subfactions'
 import { parseSecondaryMissions, parseTwistCards } from './lib/parsers/chapter-approved'
 import { parseCoreRules } from './lib/parsers/core-rules'
+import { loadDeploymentZonesFromFile } from './lib/parsers/deployment-zones'
 import { parseFactionPack } from './lib/parsers/faction-pack'
 import type { GameDataInput } from './lib/parsers/game-data'
 import { convertGameData } from './lib/parsers/game-data'
@@ -39,7 +40,9 @@ import { loadMfmCostingFromFile, type MfmCostingParseResult } from './lib/parser
 import { loadMfmDetachmentsFromFile } from './lib/parsers/mfm-detachments'
 import { loadMissionCardOcr, parseMissionCards } from './lib/parsers/mission-cards'
 import { parseRulesCommentary } from './lib/parsers/rules-commentary'
+import { loadSecondaryBodiesFromFile } from './lib/parsers/secondary-mission-bodies'
 import { parseTournamentCompanion } from './lib/parsers/tournament-companion'
+import { loadTwistsFromFile } from './lib/parsers/twists'
 import { mapNodesToPages } from './lib/pdf-positions'
 import { buildManifest, partitionNodes, partitionRefs } from './lib/sync'
 
@@ -524,17 +527,67 @@ async function main() {
   // `apps/brain/server/scripts/`) and ingest the resulting `ocr.json` here.
   // The build is silent-skip when the OCR manifest isn't present — Micah's
   // local cache may not be populated on every machine.
+  //
+  // Secondary mission body text: when a higher-fidelity Canon transcript is
+  // staged (`secondary-mission-bodies.txt` from Micah's local PDF, see
+  // `scripts/stage-card-sources.ts`), it overrides the per-image OCR text so
+  // each merged secondary node carries the cleaner body.
   const MISSION_CARDS_OCR = '.local/brain-input/mission-cards/11th/ocr.json'
+  const SECONDARY_BODIES_PATH = '.local/brain-input/cards/secondary-mission-bodies.txt'
   const missionCardsManifest = loadMissionCardOcr(MISSION_CARDS_OCR)
   if (missionCardsManifest) {
-    const mcResult = parseMissionCards(missionCardsManifest)
+    const secondaryBodies = loadSecondaryBodiesFromFile(SECONDARY_BODIES_PATH)
+    const mcResult = parseMissionCards(missionCardsManifest, {
+      secondaryBodyBySlug: secondaryBodies?.bodyBySlug,
+    })
     allNodes.push(...mcResult.nodes)
+    const sbNote = secondaryBodies
+      ? `, secondary bodies: ${secondaryBodies.recognized.length}/18 matched (${secondaryBodies.missing.length} missing, ${secondaryBodies.unmatchedChunks} unmatched chunks)`
+      : `, secondary bodies: skipped (no ${SECONDARY_BODIES_PATH})`
     console.log(
-      `\n--- 11e mission cards (gdmissions.app OCR) ---\n  ${mcResult.primaries} primary, ${mcResult.secondaries} secondary, ${mcResult.skipped} skipped`,
+      `\n--- 11e mission cards (gdmissions.app OCR) ---\n  ${mcResult.primaries} primary, ${mcResult.secondaries} secondary, ${mcResult.skipped} skipped${sbNote}`,
     )
   } else {
     console.warn(
       `\n--- 11e mission cards: skipped (no ${MISSION_CARDS_OCR}; run download-mission-cards.ts + ocr-mission-cards.ts) ---`,
+    )
+  }
+
+  // ── 7c. 11e Chapter Approved Twist cards (from local PDF transcript) ───────
+  // Micah's local-only twists PDF (`C:/R/twists.pdf`) is staged into
+  // `.local/brain-input/cards/twists.txt` by `stage-card-sources.ts`. Silent-
+  // skip when absent.
+  const TWISTS_PATH = '.local/brain-input/cards/twists.txt'
+  const twistsResult = loadTwistsFromFile(TWISTS_PATH)
+  if (twistsResult) {
+    allNodes.push(...twistsResult.nodes)
+    const missingNote =
+      twistsResult.missing.length > 0 ? ` (missing: ${twistsResult.missing.join(', ')})` : ''
+    console.log(`\n--- 11e twist cards ---\n  ${twistsResult.nodes.length}/6 nodes${missingNote}`)
+  } else {
+    console.warn(
+      `\n--- 11e twist cards: skipped (no ${TWISTS_PATH}; run stage-card-sources.ts) ---`,
+    )
+  }
+
+  // ── 7d. 11e Chapter Approved Deployment Zones ─────────────────────────────
+  // Names from Canon's OCR sidecar (`deployment-zone-names.txt`). Body text
+  // is currently absent — the source image OCRs badly for body copy. Nodes
+  // get a placeholder body that surfaces the gap in the UI; the PR body
+  // tracks this.
+  const DEPLOYMENT_ZONES_PATH = '.local/brain-input/cards/deployment-zone-names.txt'
+  const dzResult = loadDeploymentZonesFromFile(DEPLOYMENT_ZONES_PATH)
+  if (dzResult) {
+    allNodes.push(...dzResult.nodes)
+    const bodyNote = dzResult.bodyPlaceholderUsed ? ' (body text pending)' : ''
+    const missingNote =
+      dzResult.missing.length > 0 ? ` (missing: ${dzResult.missing.join(', ')})` : ''
+    console.log(
+      `\n--- 11e deployment zones ---\n  ${dzResult.nodes.length}/6 nodes${bodyNote}${missingNote}`,
+    )
+  } else {
+    console.warn(
+      `\n--- 11e deployment zones: skipped (no ${DEPLOYMENT_ZONES_PATH}; run stage-card-sources.ts) ---`,
     )
   }
 

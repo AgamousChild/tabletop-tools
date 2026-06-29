@@ -210,6 +210,11 @@ export const NodeSchema = z.object({
   // Edition (e.g., '10th', '11th')
   edition: z.string().optional(),
 
+  // Card-side eligibility — used by 11e secondary-mission cards which are
+  // identical in attacker + defender decks. Rather than emitting two nodes
+  // we emit one and tag it `usableBy: ['attacker', 'defender']`.
+  usableBy: z.array(z.string()).optional(),
+
   // Search
   keywords: z.array(z.string()),
 

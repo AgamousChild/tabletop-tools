@@ -62,6 +62,14 @@ export interface ParseMissionCardsResult {
 }
 
 /**
+ * Optional secondary mission body text keyed by slug. Surfaced as the canonical
+ * body when the OCR'd text from a per-side card image is too noisy. When both
+ * the OCR text AND this map carry text for the same slug, the entry from this
+ * map wins (it comes from a higher-fidelity Canon transcription).
+ */
+export type SecondaryBodyBySlug = Map<string, string>
+
+/**
  * Title-case a kebab-cased card slug: `secure-no-man-s-land` → `Secure No Man S Land`.
  * (We don't try to reconstruct apostrophes — the slug shape loses them.)
  */
@@ -95,8 +103,19 @@ export function loadMissionCardOcr(path: string): MissionCardOcrManifest | null 
  * body text is appended onto the front card's content as a separate
  * `**Back:**` block. This keeps the brain's record-per-card invariant
  * (one logical card == one node) intact.
+ *
+ * Secondary missions: the 11e attacker and defender Secondary Mission decks
+ * are identical — the same 18 cards appear in both. We emit ONE node per
+ * secondary slug, tagged `usableBy: ['attacker', 'defender']`, rather than two
+ * duplicate nodes. If the OCR text for the two sides disagrees we prefer the
+ * longer text (the OCR confidence proxy). When `secondaryBodyBySlug` is
+ * provided, those entries override the OCR text entirely (higher-fidelity
+ * source).
  */
-export function parseMissionCards(manifest: MissionCardOcrManifest): ParseMissionCardsResult {
+export function parseMissionCards(
+  manifest: MissionCardOcrManifest,
+  options: { secondaryBodyBySlug?: SecondaryBodyBySlug } = {},
+): ParseMissionCardsResult {
   const nodes: Node[] = []
   let skipped = 0
   let primaries = 0
@@ -114,7 +133,41 @@ export function parseMissionCards(manifest: MissionCardOcrManifest): ParseMissio
     if (entry.kind === 'primary') {
       backsById.set(`ca11:primary:${entry.group}:${entry.slug}`, body)
     } else if (entry.kind === 'secondary') {
-      backsById.set(`ca11:secondary:${entry.group}:${entry.slug}`, body)
+      // Secondaries are merged across sides; key on slug only.
+      backsById.set(`ca11:secondary:${entry.slug}`, body)
+    }
+  }
+
+  // Coalesce secondary entries by slug (attacker + defender → one entry).
+  // We keep both front-side OCR entries and pick the better one (longer body).
+  interface SecondaryAcc {
+    slug: string
+    bestEntry: MissionCardOcrEntry
+    sides: Set<string>
+    sourceUrls: string[]
+  }
+  const secondariesBySlug = new Map<string, SecondaryAcc>()
+
+  for (const entry of manifest.cards) {
+    if (entry.back) continue
+    if (entry.kind !== 'secondary') continue
+    const body = entry.body?.trim() ?? ''
+
+    const prior = secondariesBySlug.get(entry.slug)
+    if (!prior) {
+      secondariesBySlug.set(entry.slug, {
+        slug: entry.slug,
+        bestEntry: entry,
+        sides: new Set([entry.group]),
+        sourceUrls: [entry.sourceUrl],
+      })
+    } else {
+      prior.sides.add(entry.group)
+      prior.sourceUrls.push(entry.sourceUrl)
+      const priorBody = prior.bestEntry.body?.trim() ?? ''
+      if (body.length > priorBody.length) {
+        prior.bestEntry = entry
+      }
     }
   }
 
@@ -126,6 +179,9 @@ export function parseMissionCards(manifest: MissionCardOcrManifest): ParseMissio
       skipped++
       continue
     }
+    // Secondaries are handled in the dedicated loop below — skip here so we
+    // don't emit a node per side.
+    if (entry.kind === 'secondary') continue
 
     const body = entry.body?.trim() ?? ''
     if (!body) {
@@ -149,63 +205,83 @@ export function parseMissionCards(manifest: MissionCardOcrManifest): ParseMissio
       retrievedAt: entry.ocrAt,
     }
 
-    if (entry.kind === 'primary') {
-      const id = `ca11:primary:${entry.group}:${entry.slug}`
-      const backText = backsById.get(id)
-      const contentBlocks = [body]
-      if (backText) contentBlocks.push(`**Back:**\n${backText}`)
-      const content = contentBlocks.join('\n\n')
+    const id = `ca11:primary:${entry.group}:${entry.slug}`
+    const backText = backsById.get(id)
+    const contentBlocks = [body]
+    if (backText) contentBlocks.push(`**Back:**\n${backText}`)
+    const content = contentBlocks.join('\n\n')
 
-      nodes.push({
-        id,
-        layer: 'core',
-        category: 'primary-mission',
-        title,
-        // `subfaction` is reused as the deck name per task spec — this lets
-        // the existing browse filters slice by deck without adding a new field.
-        subfaction: entry.group,
-        edition: '11th',
-        content,
-        summary: makeSummary(body),
-        sources: [source],
-        refs: [],
-        version: 1,
-        keywords: [
-          'primary mission',
-          '11th edition',
-          entry.slug.replace(/-/g, ' '),
-          entry.group.replace(/-/g, ' '),
-        ],
-      })
-      primaries++
-    } else {
-      // secondary
-      const id = `ca11:secondary:${entry.group}:${entry.slug}`
-      const backText = backsById.get(id)
-      const contentBlocks = [body]
-      if (backText) contentBlocks.push(`**Back:**\n${backText}`)
-      const content = contentBlocks.join('\n\n')
+    nodes.push({
+      id,
+      layer: 'core',
+      category: 'primary-mission',
+      title,
+      // `subfaction` is reused as the deck name per task spec — this lets
+      // the existing browse filters slice by deck without adding a new field.
+      subfaction: entry.group,
+      edition: '11th',
+      content,
+      summary: makeSummary(body),
+      sources: [source],
+      refs: [],
+      version: 1,
+      keywords: [
+        'primary mission',
+        '11th edition',
+        entry.slug.replace(/-/g, ' '),
+        entry.group.replace(/-/g, ' '),
+      ],
+    })
+    primaries++
+  }
 
-      nodes.push({
-        id,
-        layer: 'core',
-        category: 'secondary-mission',
-        title,
-        edition: '11th',
-        content,
-        summary: makeSummary(body),
-        sources: [source],
-        refs: [],
-        version: 1,
-        keywords: [
-          'secondary mission',
-          '11th edition',
-          entry.group, // 'attacker' | 'defender'
-          entry.slug.replace(/-/g, ' '),
-        ],
-      })
-      secondaries++
+  // Emit merged secondary mission nodes — one per slug, usableBy both sides.
+  for (const acc of secondariesBySlug.values()) {
+    const ocrBody = acc.bestEntry.body?.trim() ?? ''
+    const overrideBody = options.secondaryBodyBySlug?.get(acc.slug)?.trim() ?? ''
+    const body = overrideBody.length > 0 ? overrideBody : ocrBody
+
+    if (!body) {
+      skipped++
+      continue
     }
+
+    const titleFromOcr = acc.bestEntry.title?.trim() ?? ''
+    const titleFromSlug = slugToTitle(acc.slug).toUpperCase()
+    const title =
+      titleFromOcr.length >= 2 && titleFromOcr.length <= 60 ? titleFromOcr : titleFromSlug
+
+    const id = `ca11:secondary:${acc.slug}`
+    const backText = backsById.get(id)
+    const contentBlocks = [body]
+    if (backText) contentBlocks.push(`**Back:**\n${backText}`)
+    const content = contentBlocks.join('\n\n')
+
+    // Use the first URL as canonical; both attacker and defender images point
+    // at the same card art so the choice is informational only.
+    const source: Source = {
+      type: 'community',
+      title: 'gdmissions.app (community-cached image of GW Chapter Approved 11e mission deck)',
+      url: acc.sourceUrls[0],
+      retrievedAt: acc.bestEntry.ocrAt,
+    }
+
+    nodes.push({
+      id,
+      layer: 'core',
+      category: 'secondary-mission',
+      title,
+      edition: '11th',
+      content,
+      summary: makeSummary(body),
+      sources: [source],
+      refs: [],
+      version: 1,
+      // Sort sides for deterministic output regardless of OCR iteration order.
+      usableBy: [...acc.sides].sort(),
+      keywords: ['secondary mission', '11th edition', acc.slug.replace(/-/g, ' '), ...acc.sides],
+    })
+    secondaries++
   }
 
   return { nodes, primaries, secondaries, skipped }
