@@ -92,11 +92,23 @@ function extractKeywords(title: string, content: string): string[] {
  * Pass '11th' for faction packs published on or after the 11e launch (URLs
  * matching `eng_11-02_*` and later versions).
  */
+/**
+ * MFM lookup map keyed by `${factionSlug}::${slugify(detachmentName)}` →
+ * the detachment's structured fields from `mfm-detachments.json`. The
+ * faction-pack parser doesn't have DP or Force Disposition in its
+ * markdown source — those live in MFM — so build-graph builds this map
+ * after parsing MFM and passes it here. When a detachment heading is
+ * emitted, the parser stamps `dp` and `forceDisposition` onto the node
+ * from this map. Pass `undefined` and the parser simply doesn't stamp.
+ */
+export type FactionPackMfmLookup = Map<string, { dp?: number; forceDisposition?: string }>
+
 export function parseFactionPack(
   normalizedMarkdown: string,
   factionSlug: string,
   retrievedAt: string,
   edition?: '10th' | '11th',
+  mfmLookup?: FactionPackMfmLookup,
 ): ParseResult {
   const nodes: Node[] = []
   const refs: NodeRef[] = []
@@ -123,9 +135,17 @@ export function parseFactionPack(
   // State machine: collect sections between headings
   let sectionTitle = ''
   let sectionBody: string[] = []
-  let sectionType: 'detachment' | 'rule' | 'stratagem' | 'enhancement' | 'faq' | 'errata' | 'skip' =
-    'skip'
+  let sectionType:
+    | 'detachment'
+    | 'rule'
+    | 'stratagem'
+    | 'enhancement'
+    | 'army-rule'
+    | 'faq'
+    | 'errata'
+    | 'skip' = 'skip'
   let inEnhancementZone = false
+  let inArmyRulesZone = false
   let inFaqZone = false
   let inErrataZone = false
   let pendingStratagemName = '' // Name extracted from trailing ALL-CAPS in previous stratagem's effect
@@ -169,7 +189,7 @@ export function parseFactionPack(
 
     let category: Node['category']
     let phase: GamePhase | undefined
-    const layer: Node['layer'] = 'faction'
+    const layer: Node['layer'] = sectionType === 'army-rule' ? 'faction' : 'faction'
 
     // Stratagem structured fields (promoted from body regex onto Node)
     let stratagemWhen: string | undefined
@@ -209,6 +229,9 @@ export function parseFactionPack(
         if (costMatch) enhancementCost = parseInt(costMatch[1]!, 10)
         break
       }
+      case 'army-rule':
+        category = 'army-rule'
+        break
       default:
         category = 'faction-ability'
         break
@@ -261,6 +284,19 @@ export function parseFactionPack(
       version: 1,
       keywords: extractKeywords(title, body),
       edition,
+    }
+    // When emitting the detachment's own node, copy structured fields from
+    // MFM if the caller provided a lookup map. DP cost + Force Disposition
+    // (objective) live in mfm-detachments.json, not in the faction-pack
+    // markdown — but they belong on the same detachment node so card
+    // consumers can read them off one record.
+    if (sectionType === 'detachment' && mfmLookup) {
+      const key = `${normalizeFactionId(factionSlug)}::${slugify(title)}`
+      const mfm = mfmLookup.get(key)
+      if (mfm) {
+        if (typeof mfm.dp === 'number') node.dp = mfm.dp
+        if (mfm.forceDisposition) node.forceDisposition = mfm.forceDisposition
+      }
     }
     nodes.push(node)
 
@@ -364,6 +400,7 @@ export function parseFactionPack(
         inFaqZone = true
         inErrataZone = false
         inEnhancementZone = false
+        inArmyRulesZone = false
         sectionType = 'skip'
         continue
       }
@@ -371,6 +408,7 @@ export function parseFactionPack(
         inErrataZone = true
         inFaqZone = false
         inEnhancementZone = false
+        inArmyRulesZone = false
         sectionType = 'skip'
         continue
       }
@@ -379,6 +417,7 @@ export function parseFactionPack(
       inFaqZone = false
       inErrataZone = false
       inEnhancementZone = false
+      inArmyRulesZone = false
 
       currentDetachment = heading
       const detBaseId = `det:${factionSlug}:${slugify(heading)}`
@@ -420,6 +459,7 @@ export function parseFactionPack(
         inFaqZone = true
         inErrataZone = false
         inEnhancementZone = false
+        inArmyRulesZone = false
         sectionType = 'skip'
         continue
       }
@@ -427,11 +467,13 @@ export function parseFactionPack(
         inErrataZone = true
         inFaqZone = false
         inEnhancementZone = false
+        inArmyRulesZone = false
         sectionType = 'skip'
         continue
       }
       if (upper === 'ENHANCEMENTS' || upper.startsWith('ENHANCEMENT')) {
         inEnhancementZone = true
+        inArmyRulesZone = false
         sectionType = 'skip'
         continue
       }
@@ -439,6 +481,19 @@ export function parseFactionPack(
         sectionTitle = heading
         sectionBody = []
         sectionType = 'rule'
+        continue
+      }
+      // 11e faction packs include faction-wide "ARMY RULES" updates as a
+      // dedicated ##### section (e.g., T'au's For-the-Greater-Good rewrite
+      // at faction-pack-t-au-empire.md:369). Treat it like errata-zone:
+      // accumulate body text until the next heading; emit each entry as a
+      // `category: 'army-rule'` node.
+      if (upper === 'ARMY RULES' || upper === 'ARMY RULE') {
+        inArmyRulesZone = true
+        inFaqZone = false
+        inErrataZone = false
+        inEnhancementZone = false
+        sectionType = 'skip'
         continue
       }
 
@@ -449,6 +504,8 @@ export function parseFactionPack(
         sectionType = 'faq'
       } else if (inErrataZone) {
         sectionType = 'errata'
+      } else if (inArmyRulesZone) {
+        sectionType = 'army-rule'
       } else if (inEnhancementZone) {
         sectionType = 'enhancement'
       } else {
@@ -532,10 +589,18 @@ export function parseFactionPack(
     // Accumulate body — if we're in a zone without a section title, create one
     if (sectionTitle) {
       sectionBody.push(line)
-    } else if ((inErrataZone || inFaqZone) && line.trim()) {
-      // Body text in errata/faq zone without a heading — accumulate directly
-      sectionTitle = inFaqZone ? 'FAQ entries' : 'Errata entries'
-      sectionType = inFaqZone ? 'faq' : 'errata'
+    } else if ((inErrataZone || inFaqZone || inArmyRulesZone) && line.trim()) {
+      // Body text in errata/faq/army-rules zone without a heading — accumulate directly
+      if (inFaqZone) {
+        sectionTitle = 'FAQ entries'
+        sectionType = 'faq'
+      } else if (inErrataZone) {
+        sectionTitle = 'Errata entries'
+        sectionType = 'errata'
+      } else {
+        sectionTitle = `${factionDisplayName(factionSlug)} Army Rule Update`
+        sectionType = 'army-rule'
+      }
       sectionBody = [line]
     }
   }

@@ -159,6 +159,12 @@ export const NodeSchema = z.object({
   modelRestriction: z.string().optional(), // Enhancement model restriction (e.g., "PHOBOS model only")
   isUpgrade: z.boolean().optional(), // Enhancement is a unit upgrade (not character-only)
   isEpicHero: z.boolean().optional(), // Unit is a named character — cannot take enhancements
+  // Detachment-specific structured fields (11e Munitorum Field Manual).
+  // dp = Detachment Points cost (1–3). forceDisposition is the disposition
+  // category the detachment is tagged with — one of PRIORITY ASSETS,
+  // PURGE THE FOE, DISRUPTION, RECONNAISSANCE, TAKE AND HOLD.
+  dp: z.number().int().min(0).optional(),
+  forceDisposition: z.string().optional(),
   points: z
     .array(
       z.object({

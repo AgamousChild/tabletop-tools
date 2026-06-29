@@ -176,6 +176,8 @@ function buildDetachmentNode(
       `${row.name} — 11th Edition ${factionId} detachment${dpFragment}${uniqueFragment}.${objectiveFragment}`.trim(),
     factionId,
     edition: '11th',
+    ...(typeof row.dp === 'number' ? { dp: row.dp } : {}),
+    ...(row.objective ? { forceDisposition: row.objective } : {}),
     ...(row.unique ? { subfaction: row.unique } : {}),
     sources: [source],
     refs: [],

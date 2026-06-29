@@ -20,7 +20,7 @@ import {
   buildFactionNodes,
 } from './lib/combo-detection'
 import { extractStructuredFields } from './lib/extract-fields'
-import { loadFactionCodes } from './lib/faction-codes'
+import { loadFactionCodes, normalizeFactionId } from './lib/faction-codes'
 import { massage } from './lib/massage'
 import { mergeSources } from './lib/merge-sources'
 import type { Node, NodeRef } from './lib/model'
@@ -48,6 +48,7 @@ import { loadSecondaryBodiesFromFile } from './lib/parsers/secondary-mission-bod
 import { parseTournamentCompanion } from './lib/parsers/tournament-companion'
 import { loadTwistsFromFile } from './lib/parsers/twists'
 import { mapNodesToPages } from './lib/pdf-positions'
+import { slugify } from './lib/slugify'
 import { buildManifest, partitionNodes, partitionRefs } from './lib/sync'
 
 const MD_DIR = 'C:/R/sync-data/tools/gw-sync/.local/gw/markdown'
@@ -177,6 +178,37 @@ async function main() {
     if (entry.markdownFile) mdFileToUrl.set(entry.markdownFile, entry.url)
   }
 
+  // Build the MFM detachment → {dp, forceDisposition} lookup map for the
+  // faction-pack parser. MFM is the 11e source of truth for DP cost and
+  // Force Disposition; faction-pack markdown doesn't carry these. The
+  // parser stamps them on its emitted detachment-rule node by matching
+  // `${factionId}::${slugify(name)}`. Step 5b emits the standalone MFM
+  // detachment nodes separately — this map is just for the field copy.
+  const mfmDetachmentLookup = new Map<string, { dp?: number; forceDisposition?: string }>()
+  try {
+    if (existsSync(MFM_DETACHMENTS_PATH)) {
+      const mfmRaw = JSON.parse(readFileSync(MFM_DETACHMENTS_PATH, 'utf-8')) as Array<{
+        factionSlug?: string
+        name?: string
+        dp?: number | null
+        objective?: string | null
+      }>
+      for (const row of mfmRaw) {
+        if (!row?.factionSlug || !row?.name) continue
+        const key = `${normalizeFactionId(row.factionSlug)}::${slugify(row.name)}`
+        mfmDetachmentLookup.set(key, {
+          ...(typeof row.dp === 'number' ? { dp: row.dp } : {}),
+          ...(row.objective ? { forceDisposition: row.objective } : {}),
+        })
+      }
+      console.log(`   MFM detachment lookup: ${mfmDetachmentLookup.size} entries`)
+    } else {
+      console.log(`   MFM detachment lookup: skipped (no file at ${MFM_DETACHMENTS_PATH})`)
+    }
+  } catch (err) {
+    console.log(`   WARN: could not build MFM detachment lookup, continuing without: ${err}`)
+  }
+
   let fpNodes = 0,
     fpRefs = 0,
     fpErrors = 0,
@@ -188,7 +220,7 @@ async function main() {
       const url = mdFileToUrl.get(file) ?? ''
       const edition = detectFactionPackEdition(url)
       if (edition === '11th') fpEleventh++
-      const result = parseFactionPack(raw, factionSlug, RETRIEVED_AT, edition)
+      const result = parseFactionPack(raw, factionSlug, RETRIEVED_AT, edition, mfmDetachmentLookup)
       // Faction packs published with the 10e launch use the 10e core-rules
       // date; 11e packs were published Feb 2026 (eng_11-02_*) or Jul 2026
       // (eng_07-01_*). Stamp the appropriate publishedAt.
