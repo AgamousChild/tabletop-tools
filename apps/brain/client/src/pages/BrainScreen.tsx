@@ -34,6 +34,7 @@ import { brainFetch, parseAvailableEditions } from '../lib/api'
 import { resolveCardView } from '../lib/card-display'
 import { type Edition, parseEditionFromHash, writeEditionToHash } from '../lib/edition'
 import { type EntityMap } from '../lib/entity-linker'
+import { linkBrainHtml } from '../lib/render-markdown'
 import { LayoutRenderer } from '../lib/server-cards/Renderer'
 import type { CardLayout } from '../lib/server-cards/types'
 import type { DetachmentPageProps } from './DetachmentPage'
@@ -41,13 +42,9 @@ import { DetachmentPage } from './DetachmentPage'
 
 /** Simple markdown to HTML — handles ##, **, -, `, and brain: entity links */
 function renderMarkdown(text: string): string {
-  // Convert [text](brain:nodeId) to clickable entity links
-  const linkBrain = (s: string) =>
-    s.replace(
-      /\[([^\]]+)\]\(brain:([^)]+)\)/g,
-      (_m, label, nodeId) =>
-        `<button class="text-amber-400 hover:text-amber-300 underline decoration-amber-400/30 hover:decoration-amber-400 cursor-pointer" data-brain-node="${nodeId}">${label}</button>`,
-    )
+  // `linkBrainHtml` is the shared helper that emits the canonical
+  // `brain-entity-link` class — keep it in lockstep with LinkedText.
+  const linkBrain = linkBrainHtml
 
   return text
     .split('\n')

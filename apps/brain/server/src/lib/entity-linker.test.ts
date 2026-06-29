@@ -50,6 +50,41 @@ describe('linkEntitiesInContent', () => {
     expect(result).not.toContain('[Hits](brain:core:hits)')
   })
 
+  // Regression for the "Captain in Terminator Armour" bug: shorter "Captain"
+  // datasheet was winning over the longer "Captain In Terminator Armour" entry.
+  // Map insertion order puts the shorter title first — the matcher must still
+  // pick the longer title because its title length is greater.
+  it('longest title wins even when shorter title was inserted first', () => {
+    const entityMap: EntityMap = new Map([
+      ['captain', { nodeId: '000000073', title: 'Captain' }],
+      [
+        'captain in terminator armour',
+        { nodeId: '000000135', title: 'Captain In Terminator Armour' },
+      ],
+    ])
+    const text = 'Bring a Captain in Terminator Armour for the bodyguard rule.'
+    const result = linkEntitiesInContent(text, entityMap)
+    expect(result).toContain('[Captain in Terminator Armour](brain:000000135)')
+    // Critical: the shorter "Captain" datasheet must not also be emitted as a
+    // nested link inside the longer span.
+    expect(result).not.toContain('[Captain](brain:000000073)')
+    expect(result).not.toContain('brain:000000073')
+  })
+
+  it('does not re-link a substring inside a longer match', () => {
+    // Both "Land Raider" and "Land Raider Crusader" exist; the longer one wins.
+    const entityMap: EntityMap = new Map([
+      ['land raider', { nodeId: 'lr', title: 'Land Raider' }],
+      ['land raider crusader', { nodeId: 'lrc', title: 'Land Raider Crusader' }],
+    ])
+    const text = 'Bring a Land Raider Crusader.'
+    const result = linkEntitiesInContent(text, entityMap)
+    expect(result).toContain('[Land Raider Crusader](brain:lrc)')
+    expect(result).not.toContain('brain:lr)')
+    // No nested brackets — output must be a clean single link, not [[Land Raider](brain:lr) Crusader](...).
+    expect(result).not.toMatch(/\[\[/)
+  })
+
   it('returns text unchanged when entityMap is empty', () => {
     const text = 'No entities here.'
     const result = linkEntitiesInContent(text, new Map())

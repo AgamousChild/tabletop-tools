@@ -23,7 +23,7 @@ describe('LinkedText', () => {
     expect(screen.getByText('This is plain text with no entities.')).toBeInTheDocument()
   })
 
-  it('renders entity name as an amber-colored clickable button', () => {
+  it('renders entity name as a clickable button with the shared brain-entity-link class', () => {
     render(
       <LinkedText
         text="The Infernus Squad is a unit."
@@ -33,7 +33,8 @@ describe('LinkedText', () => {
     )
     const link = screen.getByRole('button', { name: /Infernus Squad/i })
     expect(link).toBeInTheDocument()
-    expect(link).toHaveClass('text-amber-400')
+    // Single shared class for every linked entity span (server markdown + LinkedText).
+    expect(link).toHaveClass('brain-entity-link')
   })
 
   it('calls onEntityClick with correct name, type, nodeId when clicked', () => {

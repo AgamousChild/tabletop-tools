@@ -14,3 +14,14 @@ body {
   margin: 0;
   @apply bg-surface text-foreground;
 }
+
+/*
+ * Brain entity link — every matched entity span (server-side /ask markdown
+ * and client-side card content via LinkedText) renders with this class so
+ * the underline/hover/cursor styling is consistent. Previously the markdown
+ * path used `underline` while LinkedText used `hover:underline`, which read
+ * as "spotty underlining" in the wild.
+ */
+.brain-entity-link {
+  @apply cursor-pointer text-amber-400 underline decoration-amber-400/40 underline-offset-2 transition-colors hover:text-amber-300 hover:decoration-amber-400;
+}

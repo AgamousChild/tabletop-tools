@@ -104,6 +104,39 @@ describe('linkEntities', () => {
     expect(linked[0].entity?.nodeId).toBe('node-csm')
   })
 
+  // Regression for the "Captain in Terminator Armour" bug: the shorter
+  // "Captain" datasheet was being chosen over the longer
+  // "Captain in Terminator Armour" because the matcher iterated the entity
+  // index in insertion order. Insertion order here puts the shorter title
+  // first; the longer one must still win.
+  it('longest title wins even when shorter title was inserted first', () => {
+    const entities = makeMap([
+      ['Captain', 'unit', '000000073'],
+      ['Captain In Terminator Armour', 'unit', '000000135'],
+    ])
+    const result = linkEntities(
+      'Bring a Captain in Terminator Armour for the bodyguard rule.',
+      entities,
+    )
+    const linked = result.filter((s) => s.entity)
+    // Exactly one linked span — the long one — not two (long + short inside).
+    expect(linked).toHaveLength(1)
+    expect(linked[0].text).toBe('Captain in Terminator Armour')
+    expect(linked[0].entity?.nodeId).toBe('000000135')
+  })
+
+  it('a long match consumes its range so a substring entity cannot re-link inside it', () => {
+    const entities = makeMap([
+      ['Land Raider', 'unit', 'lr'],
+      ['Land Raider Crusader', 'unit', 'lrc'],
+    ])
+    const result = linkEntities('Field a Land Raider Crusader against them.', entities)
+    const linked = result.filter((s) => s.entity)
+    expect(linked).toHaveLength(1)
+    expect(linked[0].text).toBe('Land Raider Crusader')
+    expect(linked[0].entity?.nodeId).toBe('lrc')
+  })
+
   it('handles weapon ability tags [DEVASTATING WOUNDS] — strips brackets for lookup', () => {
     const entities = makeMap([['DEVASTATING WOUNDS', 'mechanic', 'node-dw']])
     const result = linkEntities('This weapon has [DEVASTATING WOUNDS] on a 6.', entities)
