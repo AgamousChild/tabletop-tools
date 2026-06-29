@@ -49,41 +49,135 @@ export async function getEntityIndex(bucket: any): Promise<EntityMap> {
 }
 
 /**
- * Replace entity names in text with [Name](brain:nodeId) links.
- * Only links the first occurrence of each entity. Case-insensitive matching.
- * Longest names matched first (greedy). Skips replacement inside existing brain: links.
+ * Replace entity names in text with `[Name](brain:nodeId)` markdown links.
+ *
+ * Each successful match consumes its span — a long match like "Captain in
+ * Terminator Armour" prevents the substring "Captain" from being relinked
+ * inside it (the 2026-06-29 bug where the shorter Captain datasheet was
+ * picked over the longer one). The walker also skips ranges already occupied
+ * by an existing `[label](brain:...)` link in the input so it never emits
+ * nested markdown brackets.
+ *
+ * Only the first occurrence of each entity (per node id) is linked, matching
+ * the prior contract of this function.
  */
 export function linkEntitiesInContent(text: string, entityMap: EntityMap): string {
-  if (entityMap.size === 0) return text
+  if (entityMap.size === 0 || !text) return text
 
-  // Sort names longest-first for greedy matching
-  const names = Array.from(entityMap.keys()).sort((a, b) => b.length - a.length)
+  // Sort entity names longest-first — at every position we want the longest
+  // candidate to win, regardless of the order they were inserted into the map.
+  // Tie-break alphabetically so output is deterministic.
+  const names = Array.from(entityMap.keys()).sort((a, b) => {
+    if (b.length !== a.length) return b.length - a.length
+    return a.localeCompare(b)
+  })
 
-  // Escape regex special chars in names
-  const escaped = names.map((n) => n.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'))
-  const pattern = new RegExp(`\\b(${escaped.join('|')})\\b`, 'gi')
-
-  // Track which entity IDs we've already linked (only link first occurrence)
-  const linked = new Set<string>()
-
-  // Build a set of ranges that are already inside brain: links — skip those
-  const skipRanges: Array<[number, number]> = []
+  // Pre-compute the ranges of existing brain links in the text — those ranges
+  // are "claimed" and must be skipped by the walker so we don't nest brackets.
+  const claimed: Array<[number, number]> = []
   const existingLinkPattern = /\[[^\]]+\]\(brain:[^)]+\)/g
-  let m: RegExpExecArray | null
-  while ((m = existingLinkPattern.exec(text)) !== null) {
-    skipRanges.push([m.index, m.index + m[0].length])
+  let em: RegExpExecArray | null
+  while ((em = existingLinkPattern.exec(text)) !== null) {
+    claimed.push([em.index, em.index + em[0].length])
   }
 
-  return text.replace(pattern, (match, _group, offset: number) => {
-    // Skip if this match falls inside an existing brain: link
-    for (const [start, end] of skipRanges) {
-      if (offset >= start && offset + match.length <= end) return match
+  const linkedIds = new Set<string>()
+
+  // Track existing links' node IDs so subsequent occurrences of the same
+  // entity remain unlinked (the same first-occurrence-only rule applies even
+  // when the first occurrence was already authored as a brain: link).
+  const existingIdPattern = /\]\(brain:([^)]+)\)/g
+  let idm: RegExpExecArray | null
+  while ((idm = existingIdPattern.exec(text)) !== null) {
+    linkedIds.add(idm[1]!)
+  }
+
+  // Position-by-position walker. At each cursor, try each candidate longest-first;
+  // on a hit, emit the bracket form and jump past the matched span so a shorter
+  // entity nested inside it cannot fire.
+  const out: string[] = []
+  const lower = text.toLowerCase()
+  let pos = 0
+  while (pos < text.length) {
+    // If we're sitting inside an already-claimed brain link span, copy it verbatim.
+    const claim = claimed.find(([s, e]) => pos >= s && pos < e)
+    if (claim) {
+      out.push(text.slice(pos, claim[1]))
+      pos = claim[1]
+      continue
     }
 
-    const key = match.toLowerCase()
-    const entity = entityMap.get(key)
-    if (!entity || linked.has(entity.nodeId)) return match
-    linked.add(entity.nodeId)
-    return `[${match}](brain:${entity.nodeId})`
-  })
+    const match = findLongestMatchAt(text, lower, pos, names, entityMap, linkedIds, claimed)
+    if (match) {
+      out.push(`[${match.raw}](brain:${match.nodeId})`)
+      linkedIds.add(match.nodeId)
+      pos = match.end
+      continue
+    }
+
+    out.push(text[pos]!)
+    pos += 1
+  }
+
+  return out.join('')
+}
+
+interface ServerMatch {
+  end: number
+  raw: string
+  nodeId: string
+}
+
+function findLongestMatchAt(
+  text: string,
+  lower: string,
+  pos: number,
+  sortedNames: string[],
+  entityMap: EntityMap,
+  linkedIds: Set<string>,
+  claimed: Array<[number, number]>,
+): ServerMatch | null {
+  // Enforce a word boundary before pos — matches the prior `\b` regex semantics
+  // and prevents matching mid-word (e.g. "Hits" inside "Lethals").
+  if (!isLeftBoundary(text, pos)) return null
+
+  for (const name of sortedNames) {
+    const end = pos + name.length
+    if (end > text.length) continue
+    if (lower.slice(pos, end) !== name) continue
+    if (!isRightBoundary(text, end)) continue
+    // The matched span must not overlap any claimed (existing-link) range.
+    if (claimed.some(([s, e]) => pos < e && end > s)) continue
+
+    const entity = entityMap.get(name)
+    if (!entity) continue
+    if (linkedIds.has(entity.nodeId)) continue // already linked first occurrence
+
+    return { end, raw: text.slice(pos, end), nodeId: entity.nodeId }
+  }
+  return null
+}
+
+function isLeftBoundary(text: string, pos: number): boolean {
+  if (pos === 0) return true
+  const prev = text.charCodeAt(pos - 1)
+  const cur = text.charCodeAt(pos)
+  return isWordChar(prev) !== isWordChar(cur)
+}
+
+function isRightBoundary(text: string, pos: number): boolean {
+  if (pos === text.length) return true
+  const prev = text.charCodeAt(pos - 1)
+  const cur = text.charCodeAt(pos)
+  return isWordChar(prev) !== isWordChar(cur)
+}
+
+function isWordChar(code: number): boolean {
+  // [A-Za-z0-9_] — JS regex \w semantics for ASCII.
+  return (
+    (code >= 48 && code <= 57) || // 0-9
+    (code >= 65 && code <= 90) || // A-Z
+    (code >= 97 && code <= 122) || // a-z
+    code === 95 // _
+  )
 }

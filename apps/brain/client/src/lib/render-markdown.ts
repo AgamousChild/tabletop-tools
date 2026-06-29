@@ -1,4 +1,24 @@
 /**
+ * Replace `[label](brain:nodeId)` markdown links in raw text/HTML with
+ * `<button>` elements carrying the shared `brain-entity-link` class.
+ *
+ * The class lives in `index.css` and is the single source of truth for the
+ * underline/hover/color styling of every linked entity span — both the
+ * server-side /ask answer path and the client-side `LinkedText` component
+ * use it, so a given matched entity reads the same wherever it appears.
+ *
+ * Exported so callers can rewrite brain: links inside arbitrary markdown
+ * snippets without re-deriving the class list.
+ */
+export function linkBrainHtml(s: string): string {
+  return s.replace(
+    /\[([^\]]+)\]\(brain:([^)]+)\)/g,
+    (_m, label, nodeId) =>
+      `<button class="brain-entity-link" data-brain-node="${nodeId}">${label}</button>`,
+  )
+}
+
+/**
  * Convert markdown text to styled HTML for card rendering.
  * Handles: **bold**, - bullets, ## headings, section headers, examples, designer's notes.
  */

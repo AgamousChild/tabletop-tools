@@ -15,7 +15,10 @@ export function LinkedText({ text, entities, onEntityClick }: LinkedTextProps) {
         segment.entity ? (
           <button
             key={i}
-            className="text-amber-400 hover:text-amber-300 hover:underline cursor-pointer"
+            // `brain-entity-link` carries the canonical underline/hover styling
+            // shared with the server-rendered markdown link path so every
+            // matched entity reads the same.
+            className="brain-entity-link"
             role="button"
             tabIndex={0}
             onClick={() =>
