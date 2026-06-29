@@ -110,7 +110,11 @@ echo ""
 echo "=== Step 7: Build + deploy gateway (bundles all client SPAs) ==="
 rm -rf "$GATEWAY_DIR/dist"
 bash "$GATEWAY_DIR/build.sh"
-pnpm --dir "$GATEWAY_DIR" exec wrangler pages deploy dist --project-name tabletop-tools --branch main --commit-dirty=true
+# apps/gateway has no package.json (not a pnpm workspace member), so
+# `pnpm --dir apps/gateway exec` fails with ERR_PNPM_RECURSIVE_EXEC_NO_PACKAGE.
+# Run wrangler directly from the gateway dir via a subshell — wrangler is
+# resolved from the root node_modules.
+(cd "$GATEWAY_DIR" && npx wrangler pages deploy dist --project-name tabletop-tools --branch main --commit-dirty=true)
 
 echo ""
 echo "=== Step 8: Purge CDN cache ==="
