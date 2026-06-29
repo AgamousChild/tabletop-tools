@@ -2,7 +2,7 @@ import { useState } from 'react'
 
 import { factionDisplayName } from '../../lib/faction-names'
 import { ErrataSection } from './ErrataSection'
-import type { CardContext, UnitCardData, WeaponProfile } from './types'
+import type { AttachmentChip, CardContext, UnitCardData, WeaponProfile } from './types'
 
 // Universal Special Rules — these are core rules, not unit-specific abilities.
 // Displayed as collapsible badges rather than expanded ability boxes.
@@ -362,6 +362,51 @@ function WeaponTable({
   )
 }
 
+/**
+ * Collapsed `<details>` panel listing attachment-related units.
+ *
+ * Used for the four 11e attachment roles surfaced by /browse/unit/:id:
+ *   - character datasheet: "Can lead" and "Can support" panels (forward refs).
+ *   - non-character datasheet: "Leaders" and "Support models" panels (reverse).
+ *
+ * Each chip calls `onContentClick(title)` — same pattern as the existing
+ * Eligible Leaders strip — which triggers the brain's search-by-name and
+ * opens the matched card. Don't reach for entity-linker here; the chip is
+ * authored data from the server, not free-form text.
+ */
+function AttachmentPanel({
+  label,
+  chips,
+  onContentClick,
+  testId,
+}: {
+  label: string
+  chips: AttachmentChip[]
+  onContentClick: (term: string) => void
+  testId: string
+}) {
+  if (chips.length === 0) return null
+  return (
+    <details className="mt-1.5 border-t border-slate-800 pt-1.5" data-testid={testId}>
+      <summary className="cursor-pointer text-[10px] font-semibold uppercase tracking-widest text-slate-500 hover:text-slate-300 transition-colors">
+        {label} ({chips.length})
+      </summary>
+      <div className="mt-1.5 flex flex-wrap gap-1">
+        {chips.map((chip) => (
+          <Clickable
+            key={chip.id}
+            term={chip.title}
+            onClick={onContentClick}
+            className="text-[11px] text-blue-300 bg-blue-900/30 border border-blue-800 px-1.5 py-0.5 rounded hover:text-blue-200 hover:bg-blue-900/50 transition-colors"
+          >
+            {chip.title}
+          </Clickable>
+        ))}
+      </div>
+    </details>
+  )
+}
+
 export function UnitCard({ data, context }: UnitCardProps) {
   const { highlightTerms, onContentClick } = context
   const stats = data.stats
@@ -637,6 +682,38 @@ export function UnitCard({ data, context }: UnitCardProps) {
             ))}
           </div>
         )}
+
+        {/*
+         * 11e attachment panels. Labels depend on whether the datasheet is
+         * itself a CHARACTER:
+         *   - character → forward refs: "Can lead" / "Can support"
+         *   - non-character → reverse refs: "Leaders" / "Support models"
+         * Both panels collapse by default and stay hidden when their chip
+         * list is empty (typical for non-attachable units).
+         */}
+        {(() => {
+          const isCharacter = data.keywords.some(
+            (k) => k.toLowerCase() === 'character' || k.toLowerCase() === 'characters',
+          )
+          const leaderLabel = isCharacter ? 'Can lead' : 'Leaders'
+          const supportLabel = isCharacter ? 'Can support' : 'Support models'
+          return (
+            <>
+              <AttachmentPanel
+                label={leaderLabel}
+                chips={data.leaderChips ?? []}
+                onContentClick={onContentClick}
+                testId="attachment-leaders"
+              />
+              <AttachmentPanel
+                label={supportLabel}
+                chips={data.supportChips ?? []}
+                onContentClick={onContentClick}
+                testId="attachment-support"
+              />
+            </>
+          )
+        })()}
       </div>
     </div>
   )

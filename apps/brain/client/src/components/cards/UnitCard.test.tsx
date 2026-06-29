@@ -295,4 +295,100 @@ describe('UnitCard', () => {
     expect(screen.getByText('INV')).toBeInTheDocument()
     expect(screen.getByText('4+')).toBeInTheDocument()
   })
+
+  // ── 11e attachment panels (PR #76 SUPPORT extraction wiring) ─────────────
+  describe('leaderChips / supportChips attachment panels', () => {
+    it('does not render attachment panels when both chip arrays are empty/missing', () => {
+      render(<UnitCard data={mockUnit} context={makeContext()} />)
+      expect(screen.queryByTestId('attachment-leaders')).not.toBeInTheDocument()
+      expect(screen.queryByTestId('attachment-support')).not.toBeInTheDocument()
+    })
+
+    it('character datasheet — renders "Can lead (N)" panel from leaderChips', () => {
+      const data: UnitCardData = {
+        ...mockUnit,
+        keywords: ['Character', 'Infantry'],
+        leaderChips: [
+          { id: 'datasheet:squad-a', title: 'Test Squad A' },
+          { id: 'datasheet:squad-b', title: 'Test Squad B' },
+        ],
+      }
+      render(<UnitCard data={data} context={makeContext()} />)
+      const panel = screen.getByTestId('attachment-leaders')
+      expect(panel).toBeInTheDocument()
+      expect(panel.textContent).toMatch(/Can lead \(2\)/)
+    })
+
+    it('character datasheet — renders "Can support (N)" panel from supportChips', () => {
+      const data: UnitCardData = {
+        ...mockUnit,
+        keywords: ['Character'],
+        supportChips: [{ id: 'datasheet:tanks', title: 'Test Tanks' }],
+      }
+      render(<UnitCard data={data} context={makeContext()} />)
+      const panel = screen.getByTestId('attachment-support')
+      expect(panel).toBeInTheDocument()
+      expect(panel.textContent).toMatch(/Can support \(1\)/)
+    })
+
+    it('non-character datasheet — renders "Leaders (N)" panel from leaderChips', () => {
+      const data: UnitCardData = {
+        ...mockUnit,
+        keywords: ['Infantry'],
+        leaderChips: [{ id: 'datasheet:cap', title: 'Test Captain' }],
+      }
+      render(<UnitCard data={data} context={makeContext()} />)
+      const panel = screen.getByTestId('attachment-leaders')
+      expect(panel).toBeInTheDocument()
+      expect(panel.textContent).toMatch(/Leaders \(1\)/)
+      expect(panel.textContent).not.toMatch(/Can lead/)
+    })
+
+    it('non-character datasheet — renders "Support models (N)" panel from supportChips', () => {
+      const data: UnitCardData = {
+        ...mockUnit,
+        keywords: ['Vehicle'],
+        supportChips: [{ id: 'datasheet:lt', title: 'Test Lieutenant' }],
+      }
+      render(<UnitCard data={data} context={makeContext()} />)
+      const panel = screen.getByTestId('attachment-support')
+      expect(panel).toBeInTheDocument()
+      expect(panel.textContent).toMatch(/Support models \(1\)/)
+    })
+
+    it('panel chips render the title and call onContentClick(title) when clicked', () => {
+      const onContentClick = vi.fn()
+      const data: UnitCardData = {
+        ...mockUnit,
+        keywords: ['Character'],
+        leaderChips: [{ id: 'datasheet:squad-x', title: 'Synthetic Squad X' }],
+      }
+      render(<UnitCard data={data} context={makeContext({ onContentClick })} />)
+      const chip = screen.getByText('Synthetic Squad X')
+      fireEvent.click(chip)
+      expect(onContentClick).toHaveBeenCalledWith('Synthetic Squad X')
+    })
+
+    it('treats plural "characters" keyword the same as singular for label flip', () => {
+      const data: UnitCardData = {
+        ...mockUnit,
+        keywords: ['Characters'],
+        leaderChips: [{ id: 'a', title: 'A' }],
+      }
+      render(<UnitCard data={data} context={makeContext()} />)
+      expect(screen.getByTestId('attachment-leaders').textContent).toMatch(/Can lead/)
+    })
+
+    it('does not render an empty panel when only one of the two chip arrays is populated', () => {
+      const data: UnitCardData = {
+        ...mockUnit,
+        keywords: ['Character'],
+        leaderChips: [{ id: 'a', title: 'Solo Lead Target' }],
+        // supportChips intentionally omitted
+      }
+      render(<UnitCard data={data} context={makeContext()} />)
+      expect(screen.getByTestId('attachment-leaders')).toBeInTheDocument()
+      expect(screen.queryByTestId('attachment-support')).not.toBeInTheDocument()
+    })
+  })
 })

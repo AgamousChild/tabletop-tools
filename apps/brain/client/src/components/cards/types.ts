@@ -56,6 +56,28 @@ export interface UnitCardData {
   transport?: string
   damaged?: { threshold: string; description: string }
   errata?: ErrataEntry[]
+  /**
+   * 11e attachment refs surfaced as collapsed panels on the unit card.
+   *
+   * For a character datasheet (has the `character` keyword) these list the
+   * units the character can attach to via LEADER (`leaderChips`) or SUPPORT
+   * (`supportChips`) — i.e. forward `can_lead` / `can_support` refs.
+   *
+   * For a non-character datasheet these list the characters that can attach
+   * to THIS unit via either role — reverse refs of the same types.
+   *
+   * Populated by the brain server's `/browse/unit/:id` endpoint
+   * (`leaders[]` and `support[]` arrays). Each entry is a chip rendered as a
+   * Clickable that triggers `onContentClick(title)`.
+   */
+  leaderChips?: AttachmentChip[]
+  supportChips?: AttachmentChip[]
+}
+
+export interface AttachmentChip {
+  id: string
+  title: string
+  factionId?: string
 }
 
 export interface WeaponProfile {
