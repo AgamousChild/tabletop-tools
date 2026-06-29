@@ -93,13 +93,17 @@ export function massage(nodes: Node[]): MassageResult {
     }
   }
 
-  // Pass 3 — duplicate summaries within category+factionId
+  // Pass 3 — duplicate summaries within category+factionId+edition
+  // Edition is part of the key so the 10e/11e parallel datasets (PR #81) don't
+  // collapse — every Wahapedia 10e node has an `11e:`-prefixed twin with the
+  // same category/factionId/summary; without edition in the key the 11e copy
+  // gets dropped here as a "duplicate."
   const seen = new Set<string>()
   const afterPass3: Node[] = []
   for (const node of afterPass2) {
     // factionId may be undefined — treat undefined as the empty string so
     // nodes without a faction form their own dedup group
-    const key = `${node.category}\0${node.factionId ?? ''}\0${node.summary}`
+    const key = `${node.category}\0${node.factionId ?? ''}\0${node.edition ?? ''}\0${node.summary}`
     if (seen.has(key)) {
       droppedDuplicateSummary++
     } else {
