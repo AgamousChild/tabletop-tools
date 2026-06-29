@@ -47,7 +47,7 @@ describe('parseMissionCards', () => {
     expect(node.keywords).toContain('take and hold')
   })
 
-  it('emits secondary nodes with attacker/defender in keywords', () => {
+  it('merges attacker + defender secondaries into one node with usableBy both', () => {
     const manifest = makeManifest([
       {
         slug: 'assassination',
@@ -76,15 +76,70 @@ describe('parseMissionCards', () => {
     ])
     const result = parseMissionCards(manifest)
 
-    expect(result.secondaries).toBe(2)
-    const atk = result.nodes.find((n) => n.id === 'ca11:secondary:attacker:assassination')
-    const def = result.nodes.find((n) => n.id === 'ca11:secondary:defender:assassination')
-    expect(atk).toBeDefined()
-    expect(def).toBeDefined()
-    expect(atk!.keywords).toContain('attacker')
-    expect(def!.keywords).toContain('defender')
-    expect(atk!.category).toBe('secondary-mission')
-    expect(atk!.edition).toBe('11th')
+    // Attacker + defender collapse to a single node.
+    expect(result.secondaries).toBe(1)
+    expect(result.nodes).toHaveLength(1)
+    const node = result.nodes[0]!
+    expect(node.id).toBe('ca11:secondary:assassination')
+    expect(node.category).toBe('secondary-mission')
+    expect(node.edition).toBe('11th')
+    expect(node.usableBy).toEqual(['attacker', 'defender'])
+    expect(node.keywords).toContain('attacker')
+    expect(node.keywords).toContain('defender')
+    expect(node.keywords).toContain('secondary mission')
+  })
+
+  it('prefers the longer-body OCR text when attacker + defender disagree', () => {
+    const manifest = makeManifest([
+      {
+        slug: 'cleanse',
+        kind: 'secondary',
+        group: 'attacker',
+        back: false,
+        title: '',
+        body: 'short',
+        sourceUrl: 'https://gdmissions.app/assets/11th/secondary-missions/attacker/cleanse.png',
+        ocrAt: OCR_AT,
+        relPath: 'secondary-missions/attacker/cleanse.png',
+      },
+      {
+        slug: 'cleanse',
+        kind: 'secondary',
+        group: 'defender',
+        back: false,
+        title: 'CLEANSE',
+        body: 'A much longer body with more rules detail captured.',
+        sourceUrl: 'https://gdmissions.app/assets/11th/secondary-missions/defender/cleanse.png',
+        ocrAt: OCR_AT,
+        relPath: 'secondary-missions/defender/cleanse.png',
+      },
+    ])
+    const result = parseMissionCards(manifest)
+    expect(result.secondaries).toBe(1)
+    expect(result.nodes[0]!.content).toContain('much longer body')
+  })
+
+  it('overrides OCR body with secondaryBodyBySlug when provided', () => {
+    const manifest = makeManifest([
+      {
+        slug: 'plunder',
+        kind: 'secondary',
+        group: 'attacker',
+        back: false,
+        title: 'PLUNDER',
+        body: 'noisy OCR text',
+        sourceUrl: 'https://gdmissions.app/assets/11th/secondary-missions/attacker/plunder.png',
+        ocrAt: OCR_AT,
+        relPath: 'secondary-missions/attacker/plunder.png',
+      },
+    ])
+    const result = parseMissionCards(manifest, {
+      secondaryBodyBySlug: new Map([
+        ['plunder', 'CLEAN canonical body text from Canon transcript'],
+      ]),
+    })
+    expect(result.nodes[0]!.content).toContain('CLEAN canonical body text')
+    expect(result.nodes[0]!.content).not.toContain('noisy OCR text')
   })
 
   it('attaches back-of-card text as a Back: block on the front node', () => {
