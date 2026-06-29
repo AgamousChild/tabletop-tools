@@ -604,12 +604,12 @@ async function callGemini(
   apiKey: string,
 ): Promise<{ answer: string; sources: GeminiSource[] }> {
   const res = await fetch(
-    `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`,
+    `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`,
     {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        contents: [{ parts: [{ text: `Warhammer 40,000 10th Edition: ${question}` }] }],
+        contents: [{ parts: [{ text: `Warhammer 40,000: ${question}` }] }],
         tools: [{ google_search: {} }],
       }),
     },
