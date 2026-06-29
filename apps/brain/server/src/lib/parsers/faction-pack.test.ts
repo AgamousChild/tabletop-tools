@@ -151,6 +151,16 @@ describe('parseFactionPack', () => {
       if (m) expect(m[1]).not.toBe(m[2])
     }
   })
+
+  it('populates structured stratagem when/target/effect fields', () => {
+    const strats = result.nodes.filter((n) => n.category === 'stratagem')
+    expect(strats.length).toBeGreaterThanOrEqual(1)
+    const shooting = strats.find((n) => n.phase === 'shooting')
+    expect(shooting).toBeDefined()
+    expect(shooting!.when).toMatch(/Shooting phase/i)
+    expect(shooting!.target).toMatch(/Space Marines/i)
+    expect(shooting!.effect).toMatch(/Armour Penetration/i)
+  })
 })
 
 // 11e UPDATES & ERRATA + FAQS structure, extracted from the real Feb 2026

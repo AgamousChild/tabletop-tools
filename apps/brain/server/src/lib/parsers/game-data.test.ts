@@ -740,4 +740,209 @@ describe('convertGameData', () => {
       expect(ds!.subfaction).toBe('ultramarines')
     })
   })
+
+  describe('structured Node fields (card-display promotion)', () => {
+    it('populates structured wargearOptions on datasheet nodes', () => {
+      const input = makeInput({
+        datasheets: [
+          {
+            id: 'ds-w-1',
+            name: 'Warlord Squad',
+            factionId: 'SM',
+            role: 'Infantry',
+            legend: '',
+            transport: '',
+            loadout: '',
+            damagedW: '',
+            damagedDescription: '',
+          },
+        ],
+        wargearOptions: [
+          {
+            id: 'wo-1',
+            datasheetId: 'ds-w-1',
+            line: '1',
+            description: 'Champion: may replace its bolt rifle with a chainsword.',
+          },
+          {
+            id: 'wo-2',
+            datasheetId: 'ds-w-1',
+            line: '2',
+            description: 'Free-form line without name prefix.',
+          },
+        ],
+      })
+      const { nodes } = convertGameData(input, '2026-04-08')
+      const ds = nodes.find((n) => n.id === 'ds-w-1')
+      expect(ds).toBeDefined()
+      expect(ds!.wargearOptions).toBeDefined()
+      expect(ds!.wargearOptions!.length).toBe(2)
+      expect(ds!.wargearOptions![0]).toEqual({
+        name: 'Champion',
+        description: 'may replace its bolt rifle with a chainsword.',
+      })
+      expect(ds!.wargearOptions![1]!.name).toContain('Free-form line')
+    })
+
+    it('omits wargearOptions when none are present', () => {
+      const input = makeInput({
+        datasheets: [
+          {
+            id: 'ds-w-empty',
+            name: 'Empty',
+            factionId: 'SM',
+            role: 'Infantry',
+            legend: '',
+            transport: '',
+            loadout: '',
+            damagedW: '',
+            damagedDescription: '',
+          },
+        ],
+      })
+      const { nodes } = convertGameData(input, '2026-04-08')
+      const ds = nodes.find((n) => n.id === 'ds-w-empty')
+      expect(ds!.wargearOptions).toBeUndefined()
+    })
+
+    it('populates structured damaged block when threshold + effect present', () => {
+      const input = makeInput({
+        datasheets: [
+          {
+            id: 'ds-dmg-1',
+            name: 'Bracket Tank',
+            factionId: 'SM',
+            role: 'Vehicle',
+            legend: '',
+            transport: '',
+            loadout: '',
+            damagedW: '1-4 wounds remaining',
+            damagedDescription:
+              'While this model has 1-4 wounds remaining, subtract 1 from its Hit rolls.',
+          },
+        ],
+      })
+      const { nodes } = convertGameData(input, '2026-04-08')
+      const ds = nodes.find((n) => n.id === 'ds-dmg-1')
+      expect(ds!.damaged).toEqual({
+        threshold: '1-4 wounds remaining',
+        effect: 'While this model has 1-4 wounds remaining, subtract 1 from its Hit rolls.',
+      })
+    })
+
+    it('omits damaged block when no degradation data exists', () => {
+      const input = makeInput({
+        datasheets: [
+          {
+            id: 'ds-no-dmg',
+            name: 'Infantry Squad',
+            factionId: 'SM',
+            role: 'Battleline',
+            legend: '',
+            transport: '',
+            loadout: '',
+            damagedW: '',
+            damagedDescription: '',
+          },
+        ],
+      })
+      const { nodes } = convertGameData(input, '2026-04-08')
+      const ds = nodes.find((n) => n.id === 'ds-no-dmg')
+      expect(ds!.damaged).toBeUndefined()
+    })
+
+    it('populates structured stratagem when/target/effect/cpCost/turn', () => {
+      const input = makeInput({
+        detachments: [
+          {
+            id: 'det-strat',
+            factionId: 'SM',
+            name: 'Test Detachment',
+            legend: '',
+            type: 'Standard',
+          },
+        ],
+        stratagems: [
+          {
+            id: 'str-1',
+            factionId: 'SM',
+            detachmentId: 'det-strat',
+            name: 'Tactical Reserves',
+            type: 'Battle Tactic',
+            cpCost: '2',
+            turn: 'Your',
+            phase: 'Movement',
+            legend: '',
+            description:
+              '**WHEN:** Your Movement phase.\n\n**TARGET:** One Adeptus Astartes unit from your army.\n\n**EFFECT:** Until the end of the phase, that unit can move as if Advancing.',
+          },
+        ],
+      })
+      const { nodes } = convertGameData(input, '2026-04-08')
+      const strat = nodes.find((n) => n.category === 'stratagem')
+      expect(strat).toBeDefined()
+      expect(strat!.cpCost).toBe(2)
+      expect(strat!.turn).toBe('Your')
+      expect(strat!.when).toContain('Movement phase')
+      expect(strat!.target).toContain('Adeptus Astartes')
+      expect(strat!.effect).toContain('Advancing')
+    })
+
+    it('populates enhancement cost as integer points', () => {
+      const input = makeInput({
+        detachments: [
+          {
+            id: 'det-enh',
+            factionId: 'SM',
+            name: 'Test Detachment',
+            legend: '',
+            type: 'Standard',
+          },
+        ],
+        enhancements: [
+          {
+            id: 'enh-1',
+            factionId: 'SM',
+            detachmentId: 'det-enh',
+            name: 'Hammer of Wrath',
+            legend: '',
+            description: 'Improve AP by 1.',
+            cost: '25',
+          },
+        ],
+      })
+      const { nodes } = convertGameData(input, '2026-04-08')
+      const enh = nodes.find((n) => n.category === 'enhancement')
+      expect(enh).toBeDefined()
+      expect(enh!.cost).toBe(25)
+    })
+
+    it('leaves enhancement.cost undefined when Wahapedia cost is non-numeric', () => {
+      const input = makeInput({
+        detachments: [
+          {
+            id: 'det-enh-2',
+            factionId: 'SM',
+            name: 'Test Detachment',
+            legend: '',
+            type: 'Standard',
+          },
+        ],
+        enhancements: [
+          {
+            id: 'enh-2',
+            factionId: 'SM',
+            detachmentId: 'det-enh-2',
+            name: 'Mystery Enhancement',
+            legend: '',
+            description: 'Cost is hidden.',
+            cost: '',
+          },
+        ],
+      })
+      const { nodes } = convertGameData(input, '2026-04-08')
+      const enh = nodes.find((n) => n.category === 'enhancement')
+      expect(enh!.cost).toBeUndefined()
+    })
+  })
 })

@@ -480,6 +480,35 @@ export function convertGameData(
           }
         : undefined
 
+    // Structured wargear options — lift the wargear_options rows onto the
+    // datasheet Node so cards don't have to re-parse the markdown block.
+    // The Wahapedia row format is "{name}: {description}" or just a free-form
+    // description; treat the substring before the first ':' as the name when
+    // present so the card can render a definition list.
+    const structuredWargearOptions =
+      wargearOpts.length > 0
+        ? wargearOpts.map((w) => {
+            const clean = stripHtml(w.description ?? '').trim()
+            const colonIdx = clean.indexOf(':')
+            if (colonIdx > 0 && colonIdx < 60) {
+              return {
+                name: clean.slice(0, colonIdx).trim(),
+                description: clean.slice(colonIdx + 1).trim() || undefined,
+              }
+            }
+            return { name: clean }
+          })
+        : undefined
+
+    // Structured damaged block — Wahapedia exposes the threshold and the
+    // ability text on every datasheet that bracket-degrades.
+    const damagedThreshold = (ds.damagedW ?? '').trim()
+    const damagedEffectText = stripHtml(ds.damagedDescription ?? '').trim()
+    const structuredDamaged =
+      damagedThreshold && damagedEffectText
+        ? { threshold: damagedThreshold, effect: damagedEffectText }
+        : undefined
+
     const node: Node = {
       id: ds.id, // BSData GUID
       layer: 'unit',
@@ -492,6 +521,8 @@ export function convertGameData(
       datasheetId: ds.id,
       ...(unitStats ? { stats: unitStats } : {}),
       ...(unitPoints ? { points: unitPoints } : {}),
+      ...(structuredWargearOptions ? { wargearOptions: structuredWargearOptions } : {}),
+      ...(structuredDamaged ? { damaged: structuredDamaged } : {}),
       sources: [source],
       refs: [],
       version: 1,
@@ -1205,6 +1236,22 @@ export function convertGameData(
         ? detChapterMap.get(det.id)!.toLowerCase()
         : undefined
 
+      // Try to extract WHEN/TARGET/EFFECT blocks from Wahapedia's description.
+      // Wahapedia ships them as <b>WHEN:</b> in HTML, which stripHtml() reduces
+      // to a plain "WHEN:" label. Match against the cleaned text so both raw
+      // markdown (**WHEN:**) and the HTML-stripped form work.
+      const matchSection = (label: string) => {
+        const re = new RegExp(
+          `\\b${label}:\\s*([\\s\\S]*?)(?=\\n\\s*(?:WHEN|TARGET|EFFECT|RESTRICTIONS?):|$)`,
+          'i',
+        )
+        return (cleanStratDesc.match(re)?.[1] ?? '').trim()
+      }
+      const stratWhen = matchSection('WHEN')
+      const stratTarget = matchSection('TARGET')
+      const stratEffect = matchSection('EFFECT')
+      const stratCpNumber = Number.parseInt(strat.cpCost ?? '', 10)
+
       nodes.push({
         id: stratNodeId,
         layer: 'faction',
@@ -1216,6 +1263,11 @@ export function convertGameData(
         subfaction: stratSubfaction,
         detachmentId: detNodeId,
         phase: mapPhase(strat.phase),
+        ...(Number.isFinite(stratCpNumber) ? { cpCost: stratCpNumber } : {}),
+        ...(strat.turn ? { turn: strat.turn } : {}),
+        ...(stratWhen ? { when: stratWhen } : {}),
+        ...(stratTarget ? { target: stratTarget } : {}),
+        ...(stratEffect ? { effect: stratEffect } : {}),
         sources: [source],
         refs: [],
         version: 1,
@@ -1246,6 +1298,8 @@ export function convertGameData(
         ? detChapterMap.get(det.id)!.toLowerCase()
         : undefined
 
+      const enhCostNumber = Number.parseInt(enh.cost ?? '', 10)
+
       nodes.push({
         id: enhNodeId,
         layer: 'faction',
@@ -1256,6 +1310,7 @@ export function convertGameData(
         factionId: normalizeFactionId(det.factionId),
         subfaction: enhSubfaction,
         detachmentId: detNodeId,
+        ...(Number.isFinite(enhCostNumber) ? { cost: enhCostNumber } : {}),
         sources: [source],
         refs: [],
         version: 1,
