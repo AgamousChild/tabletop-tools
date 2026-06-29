@@ -897,6 +897,10 @@ app.post('/ask', async (c) => {
 
 CRITICAL: Focus on the question. If they ask "how does Oath of Moment work?" — explain Oath of Moment. Do NOT list every stratagem, enhancement, and ability the faction has.
 
+USE ONLY THE PROVIDED CONTEXT. The BRAIN KNOWLEDGE GRAPH below is the source of truth. If a fact is not in the context, do not state it. Do not fall back on your training data.
+
+USE EXACT TERMS. When you name a datasheet, character, unit, ability, stratagem, enhancement, or detachment, use its FULL name exactly as it appears in the context. Never abbreviate or paraphrase (e.g. write "Captain in Terminator Armour" — NOT "Captain"; write "Terminator Assault Squad" — NOT "Terminator Squad"; write "Lord of Contagion" — NOT "Chaos Lord").
+
 Sources (in priority order):
 1. BRAIN KNOWLEDGE GRAPH — official rules data (prefer this)
 2. WEB SEARCH RESULTS — supplementary context
@@ -957,7 +961,13 @@ Rules:
       .map((c) => c.text)
       .join('\n')
   } else {
-    const MAX_LLM_CONTEXT = 40000
+    // Llama 3.3 70B on Workers AI has a 128k token context window (~400k chars).
+    // The 40k cap was set for an earlier, smaller model and was triggering the
+    // deterministic fallback for normal "who can lead X" queries (which load
+    // the unit + every connected character + their stratagems + abilities).
+    // 150k chars (~38k tokens) leaves comfortable headroom for the model's
+    // response while letting big queries actually reach the LLM.
+    const MAX_LLM_CONTEXT = 150000
 
     if (userMessage.length <= MAX_LLM_CONTEXT) {
       answerPath = 'llm'
