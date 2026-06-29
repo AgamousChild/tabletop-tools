@@ -96,6 +96,11 @@ export const SourceTypeSchema = z.enum([
   'reddit',
   'youtube',
   'manual',
+  // Community-cached image scans (e.g. gdmissions.app's PNGs of GW's CA 11e
+  // mission deck). GW publishes no PDF for 11e missions; the community site
+  // is the only practical source. OCR text gets ingested under this type so
+  // attribution surfaces the provenance to LLM context + UI.
+  'community',
 ])
 export type SourceType = z.infer<typeof SourceTypeSchema>
 
