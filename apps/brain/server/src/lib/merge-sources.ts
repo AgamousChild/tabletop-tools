@@ -444,10 +444,16 @@ export function mergeSources(
   //   - single `category: 'detachment'`
   //   - sources[] union (preserves both provenances)
   //   - canonical id `det:<faction>:<slug>` (drop the `mfm:` prefix)
+  //
+  // Edition is part of the key so the 10e Wahapedia detachment-rule never
+  // collapses onto the 11e MFM/faction-pack detachment. Each edition gets
+  // its own merged record. Without this, the parallel-10e-11e dataset built
+  // by `duplicateEleventh()` would lose its 10e detachment-rule survivors
+  // to the 11e MFM nodes that share a title.
   const detachmentMergesByKey = new Map<string, { mfm?: Node; pack?: Node }>()
   for (const node of nodeMap.values()) {
     if (node.category !== 'detachment' && node.category !== 'detachment-rule') continue
-    const key = `${node.factionId ?? ''}|${node.title.toLowerCase().trim()}`
+    const key = `${node.edition ?? ''}|${node.factionId ?? ''}|${node.title.toLowerCase().trim()}`
     const bucket = detachmentMergesByKey.get(key) ?? {}
     if (node.category === 'detachment') bucket.mfm = node
     else bucket.pack = node
@@ -496,7 +502,10 @@ export function mergeSources(
       node.category === 'detachment-rule'
         ? '' // title-only dedup for detachments
         : node.subfaction || SUBFACTION_ALIASES[node.factionId ?? ''] || node.factionId || ''
-    const key = `${node.category}|${node.title.toLowerCase().trim()}|${faction}`
+    // Edition is part of the key so the 10e and 11e copies of the same
+    // detachment-rule / stratagem / enhancement / faction-ability stay
+    // distinct. Parallel datasets — see duplicate-eleventh.ts.
+    const key = `${node.edition ?? ''}|${node.category}|${node.title.toLowerCase().trim()}|${faction}`
     if (!byTitleFaction.has(key)) byTitleFaction.set(key, [])
     byTitleFaction.get(key)!.push(node)
   }

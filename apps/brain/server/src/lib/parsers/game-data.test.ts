@@ -1299,6 +1299,288 @@ describe('convertGameData', () => {
       expect(ds.stats!.LD).toBe('6+')
     })
 
+    // ── Parallel 10e/11e dataset support (see lib/duplicate-eleventh.ts) ──
+
+    it('uses wahapediaId as the surface node id when present, ds.id as fallback', () => {
+      // Wahapedia JSON now carries a stable numeric id on `wahapediaId` —
+      // that's what bookmarks and Vectorize index entries pin to. The
+      // surface node id MUST be that numeric, not the BSData hash, so old
+      // brain:000000135 links survive. When `wahapediaId` is missing (test
+      // fixtures, older snapshots), fall back to `ds.id`.
+      const input = makeInput({
+        datasheets: [
+          {
+            id: '5e35-ae82-23e4-bcef',
+            wahapediaId: '000000135',
+            name: 'Captain in Terminator Armour',
+            factionId: 'SM',
+            role: 'Character',
+            legend: '',
+            transport: '',
+            loadout: '',
+            damagedW: '',
+            damagedDescription: '',
+          },
+          // Fixture without wahapediaId — fallback to ds.id.
+          {
+            id: 'no-waha-id',
+            name: 'Test Unit',
+            factionId: 'SM',
+            role: 'Battleline',
+            legend: '',
+            transport: '',
+            loadout: '',
+            damagedW: '',
+            damagedDescription: '',
+          },
+        ],
+      })
+      const { nodes } = convertGameData(input, '2026-06-29')
+
+      const captain = nodes.find((n) => n.title === 'Captain in Terminator Armour')
+      expect(captain).toBeDefined()
+      expect(captain!.id).toBe('000000135')
+      expect(captain!.datasheetId).toBe('000000135')
+
+      const fallback = nodes.find((n) => n.title === 'Test Unit')
+      expect(fallback).toBeDefined()
+      expect(fallback!.id).toBe('no-waha-id')
+      expect(fallback!.datasheetId).toBe('no-waha-id')
+    })
+
+    it('tags every Wahapedia-emitted node with edition: "10th"', () => {
+      // The previous deploy regressed by leaving edition unset on Wahapedia
+      // nodes and letting the merge-sources default-to-11th gate flip them
+      // to 11e — destroying the 10e tag entirely. The parser now stamps
+      // '10th' explicitly so the gate never has a chance to default-fix.
+      const input = makeInput({
+        datasheets: [
+          {
+            id: 'ds-1',
+            name: 'Tac Marine',
+            factionId: 'SM',
+            role: 'Battleline',
+            legend: '',
+            transport: '',
+            loadout: '',
+            damagedW: '',
+            damagedDescription: '',
+          },
+        ],
+        datasheetWargear: [
+          {
+            id: 1,
+            datasheetId: 'ds-1',
+            name: 'Bolter',
+            description: 'rapid fire 1',
+            range: '24"',
+            type: 'Ranged',
+            attacks: '2',
+            skill: '3+',
+            strength: '4',
+            ap: '0',
+            damage: '1',
+          },
+        ],
+        unitAbilities: [
+          {
+            id: 'ua-1',
+            datasheetId: 'ds-1',
+            name: 'Combat Squads',
+            description: 'Split this squad before deployment.',
+            type: 'Faction',
+          },
+        ],
+        detachments: [
+          {
+            id: 'det-1',
+            factionId: 'SM',
+            name: 'Gladius',
+            legend: '',
+            type: 'Standard',
+          },
+        ],
+        detachmentAbilities: [
+          {
+            id: 'da-1',
+            detachmentId: 'det-1',
+            factionId: 'SM',
+            name: 'Combat Doctrines',
+            legend: '',
+            description: 'Pick a doctrine.',
+          },
+        ],
+        stratagems: [
+          {
+            id: 'str-1',
+            factionId: 'SM',
+            detachmentId: 'det-1',
+            name: 'Adaptive Strategy',
+            type: 'Battle Tactic',
+            cpCost: '1',
+            turn: 'Either',
+            phase: 'Any',
+            legend: '',
+            description: 'EFFECT: ...',
+          },
+        ],
+        enhancements: [
+          {
+            id: 'enh-1',
+            factionId: 'SM',
+            detachmentId: 'det-1',
+            name: 'Hammer of Wrath',
+            legend: '',
+            description: 'Improve AP by 1.',
+            cost: '15',
+          },
+        ],
+        abilities: [
+          {
+            id: 'ab-1',
+            name: 'Oath of Moment',
+            legend: '',
+            factionId: 'SM',
+            description: 'Re-roll hits.',
+          },
+        ],
+      })
+      const { nodes } = convertGameData(input, '2026-06-29')
+      for (const n of nodes) {
+        expect(n.edition, `${n.category} "${n.title}" should be tagged 10th`).toBe('10th')
+      }
+    })
+
+    it('rewrites internal join refs (weapon→datasheet, ability→datasheet) to use the surface id', () => {
+      // When wahapediaId is present, the weapon and ability nodes' part_of
+      // refs must point at the surface id, not the BSData hash. Otherwise
+      // the refs become orphans during merge.
+      const input = makeInput({
+        datasheets: [
+          {
+            id: '5e35-hash',
+            wahapediaId: '000000135',
+            name: 'Captain',
+            factionId: 'SM',
+            role: 'Character',
+            legend: '',
+            transport: '',
+            loadout: '',
+            damagedW: '',
+            damagedDescription: '',
+          },
+        ],
+        datasheetWargear: [
+          {
+            id: 1,
+            datasheetId: '5e35-hash',
+            name: 'Power Sword',
+            description: '',
+            range: 'Melee',
+            type: 'Melee',
+            attacks: '5',
+            skill: '2+',
+            strength: '5',
+            ap: '-2',
+            damage: '1',
+          },
+        ],
+        unitAbilities: [
+          {
+            id: 'ua-1',
+            datasheetId: '5e35-hash',
+            name: 'Rites of Battle',
+            description: 'Aura ability.',
+            type: 'Faction',
+          },
+        ],
+      })
+      const { nodes, refs } = convertGameData(input, '2026-06-29')
+
+      // Weapon node id is built off the surface id.
+      const weapon = nodes.find((n) => n.category === 'weapon')!
+      expect(weapon.id).toBe('weapon:000000135:power-sword')
+      expect(weapon.datasheetId).toBe('000000135')
+
+      // Weapon → datasheet part_of ref uses surface id.
+      const weaponPartOf = refs.find(
+        (r) => r.rel === 'part_of' && r.sourceId === 'weapon:000000135:power-sword',
+      )!
+      expect(weaponPartOf.targetId).toBe('000000135')
+
+      // Ability node + part_of ref both translated.
+      const ability = nodes.find((n) => n.category === 'unit-ability')!
+      expect(ability.id).toBe('ability:000000135:rites-of-battle')
+      expect(ability.datasheetId).toBe('000000135')
+      const abilityPartOf = refs.find(
+        (r) => r.rel === 'part_of' && r.sourceId === 'ability:000000135:rites-of-battle',
+      )!
+      expect(abilityPartOf.targetId).toBe('000000135')
+    })
+
+    it('rewrites leader_attachment refs to use surface ids', () => {
+      const input = makeInput({
+        datasheets: [
+          {
+            id: 'led-hash',
+            wahapediaId: '000001234',
+            name: 'Captain',
+            factionId: 'SM',
+            role: 'Character',
+            legend: '',
+            transport: '',
+            loadout: '',
+            damagedW: '',
+            damagedDescription: '',
+          },
+          {
+            id: 'unit-hash',
+            wahapediaId: '000005678',
+            name: 'Intercessors',
+            factionId: 'SM',
+            role: 'Battleline',
+            legend: '',
+            transport: '',
+            loadout: '',
+            damagedW: '',
+            damagedDescription: '',
+          },
+        ],
+        leaderAttachments: [
+          {
+            id: 'la-1',
+            leaderId: 'led-hash',
+            attachedId: 'unit-hash',
+          },
+        ],
+      })
+      const { refs } = convertGameData(input, '2026-06-29')
+      const ref = refs.find((r) => r.rel === 'can_lead')!
+      expect(ref.sourceId).toBe('000001234')
+      expect(ref.targetId).toBe('000005678')
+    })
+
+    it('exposes bsdataIdToSurfaceId for downstream consumers (MFM, duplicate-eleventh)', () => {
+      const input = makeInput({
+        datasheets: [
+          {
+            id: '5e35-hash',
+            wahapediaId: '000000135',
+            name: 'Captain',
+            factionId: 'SM',
+            role: 'Character',
+            legend: '',
+            transport: '',
+            loadout: '',
+            damagedW: '',
+            damagedDescription: '',
+          },
+        ],
+      })
+      const result = convertGameData(input, '2026-06-29')
+      expect(result.bsdataIdToSurfaceId.get('5e35-hash')).toBe('000000135')
+    })
+
     it('populates attachesTo on enhancement nodes (sniffed from description)', () => {
       const input = makeInput({
         detachments: [
