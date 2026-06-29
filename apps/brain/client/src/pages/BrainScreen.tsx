@@ -695,9 +695,11 @@ function AskTab({ onOpenCard, activeFilters, onFilterChange, edition }: AskTabPr
           </div>
 
           {answer.webSources && answer.webSources.length > 0 && (
-            <div className="bg-slate-900/50 border border-slate-800 rounded p-3">
-              <h4 className="text-xs font-medium text-slate-400 uppercase mb-2">Web Sources</h4>
-              <div className="flex flex-wrap gap-2">
+            <details className="bg-slate-900/50 border border-slate-800 rounded p-3">
+              <summary className="text-xs font-medium text-slate-400 uppercase cursor-pointer select-none hover:text-slate-300">
+                Sources ({answer.webSources.length})
+              </summary>
+              <div className="flex flex-wrap gap-2 mt-2">
                 {answer.webSources.map((s, i) => (
                   <a
                     key={i}
@@ -711,7 +713,7 @@ function AskTab({ onOpenCard, activeFilters, onFilterChange, edition }: AskTabPr
                   </a>
                 ))}
               </div>
-            </div>
+            </details>
           )}
 
           {answer.reference && answer.reference.length > 0 && (
