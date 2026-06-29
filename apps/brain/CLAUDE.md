@@ -86,7 +86,7 @@ interface Env {
 | GET | /data/:path | Raw node JSON from R2 |
 | GET | /pages/:path | PDF page images (PNG) from R2 |
 | POST | /search?edition= | Vectorize semantic search → aggregated records |
-| POST | /ask?edition= | RAG: Vectorize → R2 → Gemini + Brain context → LLM answer |
+| POST | /ask?edition=&model= | RAG: retrieve → assemble brain context → LLM answer. See `## /ask routing` below. |
 | POST | /graph-data?edition= | Search + connected nodes + edges for force graph |
 | POST | /index-vectors | Re-index all nodes into Vectorize (auth required) |
 | POST | /sync | Placeholder (build locally, upload to R2) |
@@ -124,6 +124,27 @@ The filter is a **post-Vectorize** filter on the fetched node objects, not a
 Vectorize metadata filter. Pushing it upstream would require re-indexing all
 ~25k nodes (the index-vectors metadata schema doesn't include `edition` yet).
 That's tracked as a future optimisation.
+
+---
+
+## /ask routing
+
+`/ask` runs RAG and picks the answering model based on `?model=` and context
+size. The actual answerer is selected at `worker.ts` around the
+`useClaude` / `MAX_LLM_CONTEXT` branch:
+
+| Condition | Model | Notes |
+|---|---|---|
+| `?model=claude` AND `ANTHROPIC_API_KEY` | Anthropic Claude Sonnet | Direct API call |
+| default (context ≤ 40000 chars) | `@cf/meta/llama-3.3-70b-instruct-fp8-fast` on Workers AI | `env.AI.run(...)` |
+| context > 40000 chars | deterministic `formatConversationalAnswer` | No LLM |
+| Llama call throws | deterministic `formatConversationalAnswer` | No LLM |
+
+Gemini is **not** the answering model. It runs in parallel with `retrieve()`
+and provides web-search-grounded context (via Google Search), which is
+appended as a `WEB SEARCH RESULTS` block to the user message before the
+answering model reads it. Results are R2-cached per question. Set
+`GEMINI_API_KEY` to enable the grounding hop; omit to skip it.
 
 ---
 
