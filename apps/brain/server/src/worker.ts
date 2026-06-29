@@ -325,15 +325,92 @@ app.get('/browse/unit/:id', async (c) => {
   const errataNodes = await getErrataNodes(c.env.BRAIN_BUCKET)
   const errata = findErrataForNode(datasheet, errataNodes)
 
+  // Walk can_lead / can_support refs in the appropriate direction.
+  //   Character → forward refs (this character can lead/support X).
+  //   Non-character → reverse refs (X can lead/support this unit).
+  // Both arrays carry resolved { id, title, factionId } chips so the client
+  // can render Can Lead / Can Support (character) or Leaders / Support Models
+  // (non-character) panels without a second round-trip.
+  const { leaders, support } = await buildAttachmentLinks(datasheet, allNodes, c.env.BRAIN_BUCKET)
+
   return c.json({
     datasheet,
     weapons: filteredWeapons,
     abilities: filteredAbilities,
     layout,
     errata,
+    leaders,
+    support,
     edition,
   })
 })
+
+interface AttachmentChip {
+  id: string
+  title: string
+  factionId?: string
+}
+
+/**
+ * Resolve can_lead / can_support refs to titled chips.
+ *
+ * For a character datasheet (any keyword === 'character', case-insensitive)
+ * we walk the FORWARD index: this character → unit it can lead/support.
+ *
+ * For a non-character datasheet we walk the REVERSE index: character → this
+ * unit. Either way both arrays are resolved against the loaded node set so
+ * dangling refs (target id missing from the graph) are dropped silently.
+ *
+ * Duplicates are deduplicated by target id.
+ */
+async function buildAttachmentLinks(
+  datasheet: Node,
+  allNodes: Node[],
+  bucket: unknown,
+): Promise<{ leaders: AttachmentChip[]; support: AttachmentChip[] }> {
+  const isCharacter = (datasheet.keywords ?? []).some(
+    (k) => k.toLowerCase() === 'character' || k.toLowerCase() === 'characters',
+  )
+
+  const { fwd, rev } = await loadIndexes(bucket)
+
+  const nodeById = new Map<string, Node>()
+  for (const n of allNodes) nodeById.set(n.id, n)
+
+  const leaderIds = new Set<string>()
+  const supportIds = new Set<string>()
+
+  if (isCharacter) {
+    for (const ref of fwd[datasheet.id] ?? []) {
+      if (ref.rel === 'can_lead') leaderIds.add(ref.targetId)
+      else if (ref.rel === 'can_support') supportIds.add(ref.targetId)
+    }
+  } else {
+    for (const ref of rev[datasheet.id] ?? []) {
+      if (ref.rel === 'can_lead') leaderIds.add(ref.sourceId)
+      else if (ref.rel === 'can_support') supportIds.add(ref.sourceId)
+    }
+  }
+
+  function resolve(ids: Set<string>): AttachmentChip[] {
+    const chips: AttachmentChip[] = []
+    for (const id of ids) {
+      const node = nodeById.get(id)
+      if (!node) continue // dangling ref — drop silently
+      chips.push({
+        id: node.id,
+        title: node.title,
+        ...(node.factionId ? { factionId: node.factionId } : {}),
+      })
+    }
+    return chips
+  }
+
+  return {
+    leaders: resolve(leaderIds),
+    support: resolve(supportIds),
+  }
+}
 
 app.get('/browse/detachment/:id', async (c) => {
   const id = decodeURIComponent(c.req.param('id'))

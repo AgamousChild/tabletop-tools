@@ -333,6 +333,18 @@ interface UnitEndpointResponse {
     content: string
     source: { type: string; title: string; page?: number }
   }>
+  /**
+   * 11e attachment refs surfaced by the server (PR #76 SUPPORT extraction).
+   *
+   * - For a character datasheet: forward `can_lead` / `can_support` refs
+   *   (units the character can attach to).
+   * - For a non-character: reverse refs (characters that can attach to it).
+   *
+   * The card renders these as collapsed panels — labels swap depending on
+   * whether the datasheet itself is a character.
+   */
+  leaders?: Array<{ id: string; title: string; factionId?: string }>
+  support?: Array<{ id: string; title: string; factionId?: string }>
 }
 
 /** Fetch full unit data (datasheet + weapons + abilities) from API */
@@ -415,6 +427,10 @@ async function fetchFullUnitData(
         // Surface linked errata onto the card. Server attaches via
         // errata-linker (see worker.ts /browse/unit handler).
         ...(data.errata && data.errata.length > 0 ? { errata: data.errata } : {}),
+        // 11e attachment chips (PR #76 SUPPORT extraction wired into the
+        // /browse/unit/:id response — see UnitCardData.leaderChips/supportChips).
+        ...(data.leaders && data.leaders.length > 0 ? { leaderChips: data.leaders } : {}),
+        ...(data.support && data.support.length > 0 ? { supportChips: data.support } : {}),
       },
       layout: data.layout ?? null,
     }
