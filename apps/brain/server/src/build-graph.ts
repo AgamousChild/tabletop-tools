@@ -37,6 +37,7 @@ import type { GameDataInput } from './lib/parsers/game-data'
 import { convertGameData } from './lib/parsers/game-data'
 import { loadMfmCostingFromFile, type MfmCostingParseResult } from './lib/parsers/mfm-costing'
 import { loadMfmDetachmentsFromFile } from './lib/parsers/mfm-detachments'
+import { loadMissionCardOcr, parseMissionCards } from './lib/parsers/mission-cards'
 import { parseRulesCommentary } from './lib/parsers/rules-commentary'
 import { parseTournamentCompanion } from './lib/parsers/tournament-companion'
 import { mapNodesToPages } from './lib/pdf-positions'
@@ -515,6 +516,26 @@ async function main() {
     console.log(`  Terrain layouts: 8 nodes`)
   } else {
     console.log('\n--- Chapter Approved 2025: skipped (directory not found) ---')
+  }
+
+  // ── 7b. 11e Chapter Approved mission cards (OCR'd from gdmissions.app) ────
+  // GW publishes no PDF for the 11e mission deck; the community site renders
+  // the cards as PNG images. We download + OCR them offline (two scripts in
+  // `apps/brain/server/scripts/`) and ingest the resulting `ocr.json` here.
+  // The build is silent-skip when the OCR manifest isn't present — Micah's
+  // local cache may not be populated on every machine.
+  const MISSION_CARDS_OCR = '.local/brain-input/mission-cards/11th/ocr.json'
+  const missionCardsManifest = loadMissionCardOcr(MISSION_CARDS_OCR)
+  if (missionCardsManifest) {
+    const mcResult = parseMissionCards(missionCardsManifest)
+    allNodes.push(...mcResult.nodes)
+    console.log(
+      `\n--- 11e mission cards (gdmissions.app OCR) ---\n  ${mcResult.primaries} primary, ${mcResult.secondaries} secondary, ${mcResult.skipped} skipped`,
+    )
+  } else {
+    console.warn(
+      `\n--- 11e mission cards: skipped (no ${MISSION_CARDS_OCR}; run download-mission-cards.ts + ocr-mission-cards.ts) ---`,
+    )
   }
 
   // ── 8. Tournament Companion rules ──────────────────────────────────────────
