@@ -647,14 +647,23 @@ export function convertGameData(
         ? rawInvSv
         : `${rawInvSv}+`
       : undefined
+    // Some upstream sources hand us raw "2" and others hand us "2+" already
+    // (e.g. Terminator Armour SV via BSData). Append "+" only when missing
+    // so we don't ship "2++" / "6++" rows. Same defensive pattern as the
+    // invSv handling above. See Bug-4b in the round-2 verification report.
+    const appendPlus = (raw: string | undefined): string => {
+      const t = (raw ?? '').trim()
+      if (!t) return '-'
+      return t.endsWith('+') ? t : `${t}+`
+    }
     const unitStats =
       ds.move || ds.toughness || ds.save || ds.wounds
         ? {
             M: ds.move || '-',
             T: parseInt(ds.toughness ?? '0') || 0,
-            SV: ds.save ? `${ds.save}+` : '-',
+            SV: appendPlus(ds.save),
             W: parseInt(ds.wounds ?? '0') || 0,
-            LD: ds.leadership ? `${ds.leadership}+` : '-',
+            LD: appendPlus(ds.leadership),
             OC: parseInt(ds.oc ?? '0') || 0,
             ...(formattedInvSv ? { invSv: formattedInvSv } : {}),
           }

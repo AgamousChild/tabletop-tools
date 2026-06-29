@@ -19,7 +19,13 @@ import { RuleCard } from '../components/cards/RuleCard'
 import { StratagemCard } from '../components/cards/StratagemCard'
 import { TerrainLayoutCard } from '../components/cards/TerrainLayoutCard'
 import { TwistCard } from '../components/cards/TwistCard'
-import type { CardContext, CardData, ErrataEntry, UnitCardData } from '../components/cards/types'
+import type {
+  AttachmentChip,
+  CardContext,
+  CardData,
+  ErrataEntry,
+  UnitCardData,
+} from '../components/cards/types'
 import { UnitCard } from '../components/cards/UnitCard'
 import { EditionFallbackBanner } from '../components/EditionFallbackBanner'
 import { EditionNotAvailableNotice } from '../components/EditionNotAvailableNotice'
@@ -94,6 +100,15 @@ interface ResultNode {
   edition?: string
   sources: any[]
   keywords: string[]
+  /**
+   * Structured USR / core-ability entries promoted onto the datasheet Node
+   * by the server parser (PR #71/#76). Each entry carries the keyword and an
+   * optional value (e.g. `FIRING DECK 2`, `FEEL NO PAIN 5+`). When present
+   * the unit-card chip row should render value-bearing entries with the
+   * value appended so `FIRING DECK 2` doesn't collapse to plain `FIRING
+   * DECK` (Bug 5 in the round-2 verification report).
+   */
+  coreAbilities?: Array<{ keyword: string; value?: string }>
 }
 
 interface DetectedFactions {
@@ -275,15 +290,24 @@ function buildUnitData(node: ResultNode) {
     'fights first',
     'firing deck',
   ]
-  const coreAbilities = displayKeywords
-    .filter((k) => coreAbilityPrefixes.some((prefix) => k.toLowerCase().startsWith(prefix)))
-    .map((k) => {
-      // Title-case the ability name
-      return k
-        .split(' ')
-        .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
-        .join(' ')
-    })
+  // Prefer the server-parsed structured coreAbilities (PR #71/#76) when
+  // present — those carry the optional `value` field (e.g. `FIRING DECK 2`).
+  // Fall back to deriving from displayKeywords when the structured field is
+  // absent so legacy datasheets keep showing chips.
+  const coreAbilities: UnitCardData['coreAbilities'] =
+    node.coreAbilities && node.coreAbilities.length > 0
+      ? node.coreAbilities.map((ca) =>
+          ca.value ? { keyword: ca.keyword, value: ca.value } : { keyword: ca.keyword },
+        )
+      : displayKeywords
+          .filter((k) => coreAbilityPrefixes.some((prefix) => k.toLowerCase().startsWith(prefix)))
+          .map((k) => {
+            // Title-case the ability name
+            return k
+              .split(' ')
+              .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
+              .join(' ')
+          })
 
   // Feel No Pain — extract value from fnp-X keyword (set by server parser)
   const fnpKeyword = allKeywords.find((k) => /^fnp-\d$/.test(k))
@@ -343,8 +367,45 @@ interface UnitEndpointResponse {
    * The card renders these as collapsed panels — labels swap depending on
    * whether the datasheet itself is a character.
    */
-  leaders?: Array<{ id: string; title: string; factionId?: string }>
-  support?: Array<{ id: string; title: string; factionId?: string }>
+  leaders?: AttachmentChip[]
+  support?: AttachmentChip[]
+}
+
+/**
+ * Strip leading copies of an ability title from its description body.
+ *
+ * Wahapedia / BSData ability descriptions sometimes open with the rule name
+ * as a header ("Deep Strike\nDEEP STRIKE\n<rule text>"). UnitCard's
+ * CollapsibleUSR already prints the title above the body — leaving the
+ * leading header in the description body produces a visible duplication
+ * (or triplication when both Title Case and ALL CAPS forms are present).
+ */
+function stripLeadingAbilityTitle(description: string, title: string): string {
+  if (!description || !title) return description
+  const trimmedTitle = title.trim()
+  if (!trimmedTitle) return description
+
+  let out = description
+  let changed = true
+  let iterations = 0
+  while (changed && iterations < 3) {
+    changed = false
+    iterations++
+    const escaped = trimmedTitle.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+    const variants = [
+      new RegExp(`^\\s*\\*\\*${escaped}\\*\\*\\s*\\n?`, 'i'),
+      new RegExp(`^\\s*${escaped}\\s*\\n`, 'i'),
+    ]
+    for (const re of variants) {
+      const next = out.replace(re, '')
+      if (next !== out) {
+        out = next
+        changed = true
+        break
+      }
+    }
+  }
+  return out
 }
 
 /** Fetch full unit data (datasheet + weapons + abilities) from API */
@@ -411,10 +472,14 @@ async function fetchFullUnitData(
       }
     }
 
-    // Parse abilities from ability nodes
+    // Parse abilities from ability nodes. Strip leading title duplicates from
+    // the description so the rendered card doesn't show "Deep StrikeDeep
+    // StrikeDEEP STRIKE" — Wahapedia descriptions sometimes embed the rule
+    // name as a heading and the RenderAbility component already prints the
+    // title above the body.
     const unitAbilities = data.abilities.map((a) => ({
       name: a.title,
-      description: a.content || a.summary,
+      description: stripLeadingAbilityTitle(a.content || a.summary, a.title),
       type: a.keywords?.includes('faction') ? 'Faction' : 'Datasheet',
     }))
 
@@ -459,11 +524,18 @@ function buildStratagemData(node: ResultNode) {
 
 function buildEnhancementData(node: ResultNode) {
   const content = node.content || node.summary || ''
-  // Extract cost from "**Cost:** 10" or from summary "(10pts)"
-  const costMatch = content.match(/\*\*Cost:\*\*\s*(\d+)/) || node.summary?.match(/\((\d+)pts?\)/)
+  // Extract cost from "**Cost:** 10", "**Name** (10 pts)" header, or summary "(10pts)"
+  const costMatch =
+    content.match(/\*\*Cost:\*\*\s*(\d+)/) ||
+    content.match(/^\*\*[^*]+\*\*\s*\((\d+)\s*pts?\)/) ||
+    node.summary?.match(/\((\d+)pts?\)/)
   const cost = costMatch ? costMatch[1] : ''
-  // Extract restriction — first line of content after cost (e.g., "Infantry Warboss model only.")
+  // Strip the leading "**Name** (Npts)" header from MFM nodes (apps/brain/
+  // server/src/lib/parsers/mfm-detachments.ts buildEnhancementNode). The name
+  // and cost are already surfaced via the card props — leaving the header in
+  // the description shows literal markdown asterisks above the body text.
   const lines = content
+    .replace(/^\*\*[^*]+\*\*\s*\(\d+\s*pts?\)\s*\n?/, '')
     .replace(/\*\*Cost:\*\*\s*\d+\s*/, '')
     .split('\n')
     .map((l) => l.trim())
@@ -504,7 +576,9 @@ function buildEntityMap(nodes: ResultNode[], keywords?: string[]): EntityMap {
           ? 'stratagem'
           : node.category === 'enhancement'
             ? 'enhancement'
-            : node.category === 'faction-ability' || node.category === 'detachment-rule'
+            : node.category === 'faction-ability' ||
+                node.category === 'detachment-rule' ||
+                node.category === 'detachment'
               ? 'rule'
               : 'mechanic'
     map.set(node.title.toLowerCase(), { type, nodeId: node.id })
@@ -1452,8 +1526,11 @@ export function BrainScreen() {
       return
     }
 
-    // For detachment cards, fetch stratagems + enhancements from API
-    if (node.category === 'detachment-rule') {
+    // For detachment cards, fetch stratagems + enhancements from API.
+    // Post PR #76 merge-sources collapse, the survivor node may carry
+    // category 'detachment' instead of 'detachment-rule'. Accept both
+    // so the STRATAGEMS/ENHANCEMENTS sections populate either way.
+    if (node.category === 'detachment-rule' || node.category === 'detachment') {
       const { card } = resolveCardView(node)
       if (card.type === 'detachment') {
         try {

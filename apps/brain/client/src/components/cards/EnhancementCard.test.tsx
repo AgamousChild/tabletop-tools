@@ -126,4 +126,32 @@ describe('EnhancementCard', () => {
     render(<EnhancementCard data={mockEnhancement} context={mockContext} />)
     expect(screen.queryByTestId('enhancement-attaches-to')).not.toBeInTheDocument()
   })
+
+  // ── Bug-3 regression: literal markdown leaks into the description ────────
+  it('renders **bold** markdown segments as <strong> rather than literal asterisks', () => {
+    const data: EnhancementCardData = {
+      ...mockEnhancement,
+      description: 'The bearer gains **Lethal Hits** until the end of the phase.',
+    }
+    const { container } = render(<EnhancementCard data={data} context={mockContext} />)
+    // No literal **asterisks** in the rendered output.
+    expect(container.textContent).not.toMatch(/\*\*/)
+    // The bolded substring is wrapped in a <strong> tag.
+    const strongs = container.querySelectorAll('strong')
+    expect(Array.from(strongs).some((s) => s.textContent === 'Lethal Hits')).toBe(true)
+  })
+
+  it('does not duplicate the title in the description for MFM-shaped header content', () => {
+    // Simulate the literal header MFM nodes carry in `content`.
+    const data: EnhancementCardData = {
+      ...mockEnhancement,
+      name: 'Aquilan Eye',
+      cost: '15',
+      description: 'The bearer gains the [STEALTH] ability and may re-roll one hit roll.',
+    }
+    const { container } = render(<EnhancementCard data={data} context={mockContext} />)
+    // Title appears once in the header — not duplicated in the description body.
+    const occurrences = (container.textContent ?? '').match(/Aquilan Eye/g) ?? []
+    expect(occurrences.length).toBe(1)
+  })
 })

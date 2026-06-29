@@ -137,6 +137,50 @@ function extractContentField(content: string, field: string): string {
   return m ? m[1]!.trim() : ''
 }
 
+/**
+ * Strip a leading copy of the ability title from its description body.
+ *
+ * Wahapedia / BSData ability descriptions sometimes open with the rule name
+ * as a header (e.g. "Deep Strike\nDEEP STRIKE\n<rule text>"). When the
+ * RenderAbility renderer already prints the title above the body, leaving it
+ * inside the body produces the visible "Deep StrikeDeep StrikeDEEP STRIKE"
+ * triplication on the unit card.
+ *
+ * Matches a few common variants conservatively — exact title, uppercase
+ * title, or **bold** title — and only at the very start of the description.
+ */
+function stripLeadingTitle(description: string, title: string): string {
+  if (!description || !title) return description
+  const trimmedTitle = title.trim()
+  if (!trimmedTitle) return description
+
+  let out = description
+  let changed = true
+  // Iterate a couple of times so we strip both "Deep Strike\n" and a
+  // following "DEEP STRIKE\n" in one pass.
+  let iterations = 0
+  while (changed && iterations < 3) {
+    changed = false
+    iterations++
+    const escaped = trimmedTitle.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+    const variants = [
+      // Bolded markdown header: **Deep Strike**
+      new RegExp(`^\\s*\\*\\*${escaped}\\*\\*\\s*\\n?`, 'i'),
+      // Plain header (case-insensitive): Deep Strike / DEEP STRIKE
+      new RegExp(`^\\s*${escaped}\\s*\\n`, 'i'),
+    ]
+    for (const re of variants) {
+      const next = out.replace(re, '')
+      if (next !== out) {
+        out = next
+        changed = true
+        break
+      }
+    }
+  }
+  return out
+}
+
 // ── Datasheet layout builder ───────────────────────────────────────────────
 
 interface UnitParts {
@@ -244,7 +288,7 @@ export function buildDatasheetLayout({ datasheet, weapons, abilities }: UnitPart
     abilityColNodes.push({
       type: 'ability',
       name: ab.title,
-      description: ab.content || ab.summary,
+      description: stripLeadingTitle(ab.content || ab.summary, ab.title),
     })
   }
 

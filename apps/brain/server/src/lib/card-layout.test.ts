@@ -208,6 +208,41 @@ describe('buildDatasheetLayout', () => {
     }
   })
 
+  // ── Bug-4a regression: ability title triplicated in body ────────────────
+  it('strips a leading copy of the ability title from the description body', () => {
+    const deepStrikeAbility: Node = {
+      id: 'ability:deep-strike',
+      layer: 'unit',
+      category: 'unit-ability',
+      title: 'Deep Strike',
+      // Synthetic body — the upstream parser sometimes echoes the rule name
+      // as a heading both in Title Case and ALL CAPS before the rule text.
+      content: 'Deep Strike\nDEEP STRIKE\nDuring the Reinforcements step, set up this unit...',
+      summary: '',
+      datasheetId: warbossNode.id,
+      sources: [],
+      refs: [],
+      version: 1,
+      keywords: [],
+    }
+    const layout = buildDatasheetLayout({
+      datasheet: warbossNode,
+      weapons: [],
+      abilities: [deepStrikeAbility],
+    })
+    const abilityNodes = flattenAllNodes(layout).filter((n) => n.type === 'ability')
+    expect(abilityNodes).toHaveLength(1)
+    if (abilityNodes[0]?.type === 'ability') {
+      const node = abilityNodes[0]
+      expect(node.name).toBe('Deep Strike')
+      // Body must NOT start with "Deep Strike" or "DEEP STRIKE" any more.
+      expect(node.description.startsWith('Deep Strike')).toBe(false)
+      expect(node.description.startsWith('DEEP STRIKE')).toBe(false)
+      // The actual rule text must remain.
+      expect(node.description).toContain('During the Reinforcements step')
+    }
+  })
+
   it('emits a pill-list for keywords', () => {
     const layout = buildDatasheetLayout({
       datasheet: warbossNode,
