@@ -189,6 +189,15 @@ export interface LeaderAttachmentRecord {
   id: string
   leaderId: string
   attachedId: string
+  /**
+   * 11e introduces SUPPORT as an alternative to LEADER attachment. Wahapedia
+   * is expected to flag this either as `type: 'support'` on the row, or via
+   * a parallel datasheet-ability line "SUPPORT: <unit>". When the field is
+   * absent or 'leader', the row emits a `can_lead` ref; when 'support', a
+   * `can_support` ref. Forward-compatible with current 10e data which omits
+   * the field entirely (every row is treated as `can_lead`).
+   */
+  type?: 'leader' | 'support'
 }
 
 export interface JunctionRecord {
@@ -1745,11 +1754,14 @@ export function convertGameData(
   // ── 10. Leader attachments → interacts_with refs ──────────────────────────
 
   for (const la of filteredLeaderAttachments) {
+    const isSupport = la.type === 'support'
     refs.push({
       sourceId: la.leaderId,
       targetId: la.attachedId,
-      rel: 'can_lead',
-      context: `This leader can be attached to this unit.`,
+      rel: isSupport ? 'can_support' : 'can_lead',
+      context: isSupport
+        ? `This character can SUPPORT this unit.`
+        : `This leader can be attached to this unit.`,
       bidirectional: true,
     })
   }

@@ -1,6 +1,7 @@
 import { getCanonicalFactionIds, normalizeFactionId } from './faction-codes'
 import type { Node, NodeRef } from './model'
 import type { MfmCostingForDatasheet } from './parsers/mfm-costing'
+import { slugify } from './slugify'
 
 /** Editions accepted by the brain. Per Rule 5, 11th is the target edition. */
 const ALLOWED_EDITIONS: ReadonlySet<string> = new Set(['9th', '10th', '11th'])
@@ -43,6 +44,12 @@ export interface MergeStats {
   summaryTagged: number
   /** Datasheet nodes whose `points` array was overridden by MFM 11e costing. */
   mfmPointsApplied: number
+  /**
+   * 10e nodes that got `updatedInEleventh: true` because an 11e companion was
+   * found by `(factionId, category, slugify(title))` match. See
+   * {@link stampUpdatedInEleventh}.
+   */
+  updatedInEleventhFlagged: number
   /** Edition gate counts. See {@link runEditionGate}. */
   editionGate: EditionGateReport
   /** FactionId gate counts. See {@link runFactionIdGate}. */
@@ -252,6 +259,45 @@ function runFactionIdGate(nodes: Node[]): FactionIdGateReport {
   return report
 }
 
+/**
+ * Step 4d: set `updatedInEleventh: true` on every 10e node whose 11e
+ * companion is in the same merged graph.
+ *
+ * Match key: `(factionId, category, slugify(title))`. This is the same join
+ * `validation-delta.ts` uses; keeping the keys in sync means the in-merge
+ * bit-flag and the offline delta report agree node-for-node.
+ *
+ * Bit-flag only — the actual delta is the 11e companion node itself. UI
+ * consumers read this flag to render a "Changed in 11th" badge on a 10e
+ * card, then offer a click-through to the 11e companion. Display work is
+ * out of scope here.
+ *
+ * Mutates `nodes` in place. Returns the count of flagged 10e nodes.
+ */
+function stampUpdatedInEleventh(nodes: Node[]): number {
+  // Index the 11e side. We index *every* 11e node so any 10e companion in
+  // any category can match — the previous detachment-only check missed
+  // datasheets + datasheet-rules.
+  const elevenKeys = new Set<string>()
+  for (const n of nodes) {
+    if (n.edition !== '11th') continue
+    if (!n.factionId) continue
+    elevenKeys.add(`${n.factionId}::${n.category}::${slugify(n.title)}`)
+  }
+
+  let flagged = 0
+  for (const n of nodes) {
+    if (n.edition !== '10th') continue
+    if (!n.factionId) continue
+    const key = `${n.factionId}::${n.category}::${slugify(n.title)}`
+    if (elevenKeys.has(key)) {
+      n.updatedInEleventh = true
+      flagged++
+    }
+  }
+  return flagged
+}
+
 /** Convert a kebab-case slug to Title Case for display. */
 function slugToTitleCase(slug: string): string {
   return slug
@@ -285,6 +331,7 @@ export function mergeSources(
     refsDeduped: 0,
     summaryTagged: 0,
     mfmPointsApplied: 0,
+    updatedInEleventhFlagged: 0,
     editionGate: { '9th': 0, '10th': 0, '11th': 0, defaulted: 0, unexpected: 0 },
     factionIdGate: { canonical: 0, normalized: 0, stillOrphaned: 0 },
   }
@@ -540,6 +587,11 @@ export function mergeSources(
 
   const nodes = [...nodeMap.values()]
   stats.outputNodes = nodes.length
+
+  // Step 4d: stamp `updatedInEleventh: true` on every 10e node whose 11e
+  // companion is in the merged graph. Bit-flag for UI consumption — the
+  // actual delta lives on the 11e companion node.
+  stats.updatedInEleventhFlagged = stampUpdatedInEleventh(nodes)
 
   // Step 5 + 6: Deduplicate refs and drop orphans (either endpoint missing)
   const nodeIdSet = new Set(nodes.map((n) => n.id))
