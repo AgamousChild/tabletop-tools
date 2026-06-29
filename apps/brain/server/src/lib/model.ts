@@ -169,6 +169,35 @@ export const NodeSchema = z.object({
     )
     .optional(),
 
+  // Stratagem structured fields (promoted from regex-on-content in card-display.ts)
+  when: z.string().optional(), // Stratagem WHEN clause
+  target: z.string().optional(), // Stratagem TARGET clause
+  effect: z.string().optional(), // Stratagem EFFECT clause
+  turn: z.string().optional(), // Stratagem turn restriction (e.g., "Your turn", "Either")
+
+  // Enhancement structured field (promoted from "(N pts)" suffix regex)
+  cost: z.number().int().min(0).optional(), // Enhancement points cost
+
+  // Unit structured fields (promoted from datasheet content markdown blocks)
+  wargearOptions: z
+    .array(
+      z.object({
+        name: z.string(),
+        description: z.string().optional(),
+      }),
+    )
+    .optional(),
+  damaged: z
+    .object({
+      threshold: z.string(), // e.g., "1-4 wounds"
+      effect: z.string(), // Damaged ability text
+    })
+    .optional(),
+
+  // Mission structured fields (promoted from id pattern + keyword sniffing)
+  isFixed: z.boolean().optional(), // Secondary mission marked FIXED
+  missionSide: z.enum(['attacker', 'defender']).optional(), // Per-side secondary mission
+
   // Unit stat line (parsed from Wahapedia structured data)
   stats: z
     .object({

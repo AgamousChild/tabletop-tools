@@ -504,6 +504,8 @@ export function parseSecondaryMissions(
       title,
       content,
       summary: `${title}${isFixed ? ' (Fixed)' : ''} — Secondary Mission (${sideLabel})${maxVp ? ` (max ${maxVp})` : ''}`,
+      ...(isFixed ? { isFixed: true } : {}),
+      missionSide: side,
       sources: [source],
       refs: [],
       version: 1,

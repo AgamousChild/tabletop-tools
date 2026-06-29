@@ -171,6 +171,14 @@ export function parseFactionPack(
     let phase: GamePhase | undefined
     const layer: Node['layer'] = 'faction'
 
+    // Stratagem structured fields (promoted from body regex onto Node)
+    let stratagemWhen: string | undefined
+    let stratagemTarget: string | undefined
+    let stratagemEffect: string | undefined
+    let stratagemCpCost: number | undefined
+    // Enhancement structured field (promoted from "(N pts)" suffix)
+    let enhancementCost: number | undefined
+
     switch (sectionType) {
       case 'detachment':
         category = 'detachment-rule'
@@ -178,12 +186,29 @@ export function parseFactionPack(
       case 'stratagem': {
         category = 'stratagem'
         const whenMatch = body.match(/\*\*WHEN:\*\*\s*([^\n]+)/i)
-        if (whenMatch) phase = detectPhaseFromWhen(whenMatch[1]!)
+        if (whenMatch) {
+          stratagemWhen = whenMatch[1]!.trim()
+          phase = detectPhaseFromWhen(whenMatch[1]!)
+        }
+        const targetMatch = body.match(/\*\*TARGET:\*\*\s*([\s\S]*?)(?=\n\s*\*\*[A-Z]+:\*\*|$)/i)
+        if (targetMatch) stratagemTarget = targetMatch[1]!.trim()
+        const effectMatch = body.match(/\*\*EFFECT:\*\*\s*([\s\S]*?)(?=\n\s*\*\*[A-Z]+:\*\*|$)/i)
+        if (effectMatch) stratagemEffect = effectMatch[1]!.trim()
+        // CP cost: faction pack stratagem labels often carry "1 CP" / "2 CP"
+        // somewhere in the label line or body. The label was appended as
+        // the first line of sectionBody (see the *...STRATAGEM* branch).
+        const cpMatch = body.match(/(\d+)\s*CP\b/i)
+        if (cpMatch) stratagemCpCost = parseInt(cpMatch[1]!, 10)
         break
       }
-      case 'enhancement':
+      case 'enhancement': {
         category = 'enhancement'
+        // Enhancement cost typically appears as "(NN pts)" or "NN pts" suffix
+        // on the heading or first body line.
+        const costMatch = `${title}\n${body}`.match(/\(?(\d+)\s*pts?\)?/i)
+        if (costMatch) enhancementCost = parseInt(costMatch[1]!, 10)
         break
+      }
       default:
         category = 'faction-ability'
         break
@@ -226,6 +251,11 @@ export function parseFactionPack(
       factionId: normalizeFactionId(factionSlug),
       subfaction: chapterLock,
       detachmentId: currentDetachment ? slugify(currentDetachment) : undefined,
+      ...(stratagemWhen !== undefined ? { when: stratagemWhen } : {}),
+      ...(stratagemTarget !== undefined ? { target: stratagemTarget } : {}),
+      ...(stratagemEffect !== undefined ? { effect: stratagemEffect } : {}),
+      ...(stratagemCpCost !== undefined ? { cpCost: stratagemCpCost } : {}),
+      ...(enhancementCost !== undefined ? { cost: enhancementCost } : {}),
       sources: [source],
       refs: [],
       version: 1,

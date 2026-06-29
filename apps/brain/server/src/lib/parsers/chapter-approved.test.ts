@@ -87,6 +87,21 @@ AREA DENIAL SECONDARY MISSION WHEN: End of your turn. One or more units from you
       expect(node.category).toBe('secondary-mission')
     }
   })
+
+  it('populates structured isFixed + missionSide fields', () => {
+    const attackerNodes = parseSecondaryMissions(FIXTURE, 'attacker', '2026-04-20')
+    const assassin = attackerNodes.find((n) => n.title === 'ASSASSINATION')
+    expect(assassin!.isFixed).toBe(true)
+    expect(assassin!.missionSide).toBe('attacker')
+
+    const areaAtk = attackerNodes.find((n) => n.title === 'AREA DENIAL')
+    expect(areaAtk!.isFixed).toBeUndefined()
+    expect(areaAtk!.missionSide).toBe('attacker')
+
+    const defenderNodes = parseSecondaryMissions(FIXTURE, 'defender', '2026-04-20')
+    const areaDef = defenderNodes.find((n) => n.title === 'AREA DENIAL')
+    expect(areaDef!.missionSide).toBe('defender')
+  })
 })
 
 describe('parseTwistCards (unit)', () => {
