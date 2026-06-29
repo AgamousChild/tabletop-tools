@@ -883,7 +883,17 @@ app.post('/ask', async (c) => {
       ? `\n\nIMPORTANT FACTION SCOPE: The user is asking about ${detected.subfaction || detected.factions.join(' / ')}. ONLY discuss abilities, stratagems, enhancements, and rules that are available to this specific faction. Do NOT mention abilities from other factions or chapters unless the user explicitly asks for a comparison. If a unit or ability belongs to a different faction or chapter, do NOT include it in your answer.`
       : ''
 
-  const systemPrompt = `You are a Warhammer 40,000 10th Edition rules expert. Answer the user's SPECIFIC question using the provided context. Do NOT summarize the entire faction — only address what was asked.${factionScope}
+  // Tell the model which edition it's answering for. Without this, Llama
+  // falls back to its training (which thinks 10e is current) and dismisses
+  // 11e questions as "no rules exist yet."
+  const editionLabel =
+    edition === '10th' ? '10th Edition' : edition === '9th' ? '9th Edition' : '11th Edition'
+  const editionGuidance =
+    edition === 'any'
+      ? `Warhammer 40,000 is now in its 11th Edition (launched 2026). Treat 11e as the current edition. The provided context may include both 10e and 11e content — prefer 11e sources unless the user explicitly asks about historical 10e rules.`
+      : `Warhammer 40,000 is now in its 11th Edition. The user is querying the ${editionLabel} rules. Answer from the provided context — do NOT defer to your training, which may pre-date 11e.`
+
+  const systemPrompt = `You are a Warhammer 40,000 ${editionLabel} rules expert. ${editionGuidance} Answer the user's SPECIFIC question using the provided context. Do NOT summarize the entire faction — only address what was asked.${factionScope}
 
 CRITICAL: Focus on the question. If they ask "how does Oath of Moment work?" — explain Oath of Moment. Do NOT list every stratagem, enhancement, and ability the faction has.
 
