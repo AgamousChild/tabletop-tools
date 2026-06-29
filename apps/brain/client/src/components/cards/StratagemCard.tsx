@@ -101,6 +101,13 @@ export function StratagemCard({ data, context }: StratagemCardProps) {
 
         {/* Sections */}
         <Section
+          testId="section-cost"
+          label="COST"
+          text={data.cpCost ? `${data.cpCost} CP` : ''}
+          highlighted={false}
+          onContentClick={onContentClick}
+        />
+        <Section
           testId="section-when"
           label="WHEN"
           text={data.when}

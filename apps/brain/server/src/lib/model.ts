@@ -180,9 +180,14 @@ export const NodeSchema = z.object({
   target: z.string().optional(), // Stratagem TARGET clause
   effect: z.string().optional(), // Stratagem EFFECT clause
   turn: z.string().optional(), // Stratagem turn restriction (e.g., "Your turn", "Either")
+  stratType: z.string().optional(), // Stratagem type label (e.g., "Battle Tactic", "Epic Deed")
 
-  // Enhancement structured field (promoted from "(N pts)" suffix regex)
-  cost: z.number().int().min(0).optional(), // Enhancement points cost
+  // Enhancement structured fields
+  cost: z.number().int().min(0).optional(), // Enhancement points cost (promoted from "(N pts)" suffix regex)
+  // Whether the enhancement attaches to the leader (CHARACTER model) or to the
+  // bearer's entire unit. Populated by faction-pack.ts (sniff restriction text)
+  // and mfm-detachments.ts (leaderTo non-empty → 'leader').
+  attachesTo: z.enum(['leader', 'unit']).optional(),
 
   // Unit structured fields (promoted from datasheet content markdown blocks)
   wargearOptions: z
@@ -198,6 +203,18 @@ export const NodeSchema = z.object({
       threshold: z.string(), // e.g., "1-4 wounds"
       effect: z.string(), // Damaged ability text
     })
+    .optional(),
+  // Core/universal-special-rule keywords carried on a datasheet (LEADER,
+  // DEEP STRIKE, SCOUTS 6", FEEL NO PAIN 5+, DEADLY DEMISE D3, ...).
+  // Each entry has the keyword and an optional value string. Rendered as
+  // collapsed chips on UnitCard rather than expanded ability text.
+  coreAbilities: z
+    .array(
+      z.object({
+        keyword: z.string(),
+        value: z.string().optional(),
+      }),
+    )
     .optional(),
 
   // Mission structured fields (promoted from id pattern + keyword sniffing)

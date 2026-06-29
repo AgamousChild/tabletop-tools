@@ -234,6 +234,167 @@ function extractTargetingKeywords(text: string): string[] {
 
 /** Strip HTML tags and convert basic HTML to markdown. */
 
+/**
+ * Detect whether an enhancement attaches to the leader (the CHARACTER model)
+ * or the bearer's whole unit, sniffing the rules text.
+ *
+ * Heuristics in priority order:
+ *   - "Bearer's unit ..." / "the bearer's unit" / "models in the bearer's unit"
+ *     → 'unit'
+ *   - "model only" / "Chaplain model only" / "the bearer ..." (CHARACTER attach)
+ *     → 'leader'
+ * Returns undefined when the text doesn't carry enough signal — the card
+ * will then omit the chip.
+ */
+export function detectEnhancementAttachesTo(text: string): 'leader' | 'unit' | undefined {
+  if (!text) return undefined
+  const lower = text.toLowerCase()
+  // "model only" is the canonical leader-attach phrase. "Bearer's unit" /
+  // "models in the bearer's unit" is the canonical unit-attach phrase.
+  if (/\bmodel only\b/.test(lower)) return 'leader'
+  if (/bearer'?s\s+unit\b/.test(lower)) return 'unit'
+  if (/models? in the bearer'?s? unit\b/.test(lower)) return 'unit'
+  // Final fallback: "the bearer" alone — typically a leader attach (the
+  // enhancement modifies the bearer's stats / wargear, no unit-wide effect).
+  if (/\bthe bearer\b/.test(lower)) return 'leader'
+  return undefined
+}
+
+/** Core / Universal-Special-Rule keyword vocabulary. Match against the
+ * Wahapedia ability NAME (case-insensitive) to decide whether an ability is a
+ * core ability rendered as a collapsed chip on UnitCard or a unit-specific
+ * ability rendered with full text.
+ *
+ * Includes the unit-deployment USRs ("DEEP STRIKE", "SCOUTS"), keyword
+ * combat USRs ("FEEL NO PAIN", "DEADLY DEMISE", "FIRING DECK"), and weapon
+ * USRs that sometimes appear on the datasheet ability list ("SUSTAINED HITS",
+ * "LETHAL HITS", etc.). The set is the union of what UnitCard.tsx renders as
+ * collapsed chips plus the GW 11e USR list.
+ */
+const CORE_ABILITY_NAMES = new Set<string>(
+  [
+    'deep strike',
+    'scouts',
+    'infiltrators',
+    'lone operative',
+    'stealth',
+    'fly',
+    'leader',
+    'feel no pain',
+    'deadly demise',
+    'firing deck',
+    'sustained hits',
+    'lethal hits',
+    'devastating wounds',
+    'twin-linked',
+    'blast',
+    'ignores cover',
+    'torrent',
+    'anti',
+    'melta',
+    'rapid fire',
+    'heavy',
+    'assault',
+    'hazardous',
+    'one shot',
+    'precision',
+    'pistol',
+    'fights first',
+    'hover',
+    'smoke', // datasheet ability granting SMOKESCREEN access
+  ].map((s) => s.toLowerCase()),
+)
+
+/**
+ * Decide whether a Wahapedia ability is a core / universal special rule
+ * (renders as a collapsed chip on UnitCard) or a unit-specific ability
+ * (renders with full text). Match by name only; the description is the rules
+ * text that's universal across datasheets.
+ *
+ * Also extracts an optional value string from the keyword name itself
+ * (e.g. "FEEL NO PAIN 5+" → value "5+"; "FIRING DECK 2" → "2";
+ * "DEADLY DEMISE D3" → "D3"; "SCOUTS 6\"" → '6"'; "ANTI-INFANTRY 4+" → '4+').
+ */
+export function classifyCoreAbility(
+  name: string,
+  parameter?: string,
+): { keyword: string; value?: string } | undefined {
+  if (!name) return undefined
+  const cleaned = name.trim()
+  // Try matching against the core vocabulary. We compare the leading word(s)
+  // up to (but not including) any trailing number / D-die / inches / +.
+  const lower = cleaned.toLowerCase()
+  // Strip trailing value-ish suffix when matching the keyword. The D-die
+  // pattern MUST run before the bare-number pattern — otherwise "d3" gets
+  // truncated to "d" by the latter and the keyword lookup fails.
+  const stripped = lower
+    .replace(/\s*d\d+\s*$/i, '') // "deadly demise d3" → "deadly demise"
+    .replace(/\s*\d+\+?\s*$/, '') // "feel no pain 5+" → "feel no pain"
+    .replace(/\s*\d+["”]?\s*$/, '') // 'scouts 6"' → "scouts"
+    .replace(/-[a-z]+(?:\s+\d\+)?$/, '') // "anti-infantry 4+" → "anti"
+    .trim()
+
+  if (!CORE_ABILITY_NAMES.has(stripped)) return undefined
+
+  // Now extract the value, preferring the explicit parameter from Wahapedia
+  // (e.g. type="Core", parameter="5+" for FNP).
+  let value: string | undefined
+  const param = parameter?.trim()
+  if (param && param.length > 0) {
+    value = param
+  } else {
+    // Sniff from the keyword name itself
+    const valMatch = cleaned.match(/\s+([\dD][\d+"”-]*\+?)\s*$/i)
+    if (valMatch) value = valMatch[1]
+  }
+
+  return value ? { keyword: stripped.toUpperCase(), value } : { keyword: stripped.toUpperCase() }
+}
+
+/**
+ * Words that BSData/Wahapedia tag as a "keyword" on a datasheet but which the
+ * card-display layer wants surfaced as ABILITIES (collapsed chips), not as
+ * plain keyword chips in the KEYWORDS row. SMOKE is the canonical example:
+ * GW tags a Rhino with the `SMOKE` keyword so it gets access to the
+ * SMOKESCREEN stratagem, but visually it belongs in the abilities band.
+ *
+ * Keep this list small and explicit — most unit keywords are correct in the
+ * KEYWORDS row.
+ */
+const ABILITY_LIKE_KEYWORDS = new Set<string>(
+  ['smoke', 'scout', 'scouts', 'infiltrate', 'infiltrators', 'grenades'].map((s) =>
+    s.toLowerCase(),
+  ),
+)
+
+/**
+ * Return true when a unit-keyword string should be promoted out of the
+ * KEYWORDS chip row and into the ABILITIES section. See ABILITY_LIKE_KEYWORDS.
+ */
+export function isAbilityLikeKeyword(kw: string): boolean {
+  return ABILITY_LIKE_KEYWORDS.has(kw.trim().toLowerCase())
+}
+
+/**
+ * Deduplicate keyword chips by lowercase + trailing-`s` stripped. Keeps the
+ * first occurrence verbatim — e.g. ["dedicated transport", "dedicated transports"]
+ * → ["dedicated transport"]. Stable: preserves input order otherwise.
+ */
+export function dedupeKeywordList(kws: string[]): string[] {
+  const seen = new Set<string>()
+  const result: string[] = []
+  for (const kw of kws) {
+    const key = kw
+      .toLowerCase()
+      .replace(/s$/, '') // singularize
+      .trim()
+    if (seen.has(key)) continue
+    seen.add(key)
+    result.push(kw)
+  }
+  return result
+}
+
 // ── Converter ───────────────────────────────────────────────────────────────
 
 export interface GameDataParseResult {
@@ -466,7 +627,17 @@ export function convertGameData(
         ? costs.map((c) => ({ models: c.description || '1 model', cost: parseInt(c.cost) || 0 }))
         : undefined
 
-    // Build structured stat line from Wahapedia data
+    // Build structured stat line from Wahapedia data.
+    // `ds.invSv` is sometimes the literal "-" (no invulnerable save) — don't
+    // concatenate "+" onto a placeholder. Only include INV when the value is
+    // a real numeric save (e.g. "4" → "4+", "4+" stays "4+").
+    const rawInvSv = ds.invSv?.trim() ?? ''
+    const hasInvSv = rawInvSv.length > 0 && rawInvSv !== '-' && /\d/.test(rawInvSv)
+    const formattedInvSv = hasInvSv
+      ? rawInvSv.endsWith('+')
+        ? rawInvSv
+        : `${rawInvSv}+`
+      : undefined
     const unitStats =
       ds.move || ds.toughness || ds.save || ds.wounds
         ? {
@@ -476,7 +647,7 @@ export function convertGameData(
             W: parseInt(ds.wounds ?? '0') || 0,
             LD: ds.leadership ? `${ds.leadership}+` : '-',
             OC: parseInt(ds.oc ?? '0') || 0,
-            ...(ds.invSv ? { invSv: `${ds.invSv}+` } : {}),
+            ...(formattedInvSv ? { invSv: formattedInvSv } : {}),
           }
         : undefined
 
@@ -529,12 +700,24 @@ export function convertGameData(
       keywords: [
         ...new Set(
           [
-            ...keywords.map((k) => k.keyword.toLowerCase()),
+            // Route ability-like keywords (SMOKE, etc.) out of the chip row
+            // so they don't pollute the KEYWORDS band. They're picked up by
+            // the coreAbilities classifier below.
+            ...keywords
+              .map((k) => k.keyword.toLowerCase())
+              .filter((kw) => !isAbilityLikeKeyword(kw)),
             ...(ds.role.toLowerCase() !== 'other' ? [ds.role.toLowerCase()] : []),
           ].filter(Boolean),
         ),
       ],
     }
+
+    // Capture the routed-out ability-like keywords so coreAbilities still
+    // surfaces them (a SMOKE Rhino should still get a SMOKE chip on the
+    // abilities side of the card).
+    const abilityLikeKeywords = keywords
+      .map((k) => k.keyword)
+      .filter((kw) => isAbilityLikeKeyword(kw))
 
     // Add combat profile to keywords for combat-relevant queries
     const primaryModel = models[0]
@@ -677,8 +860,45 @@ export function convertGameData(
       node.keywords.push(`type:${slugify(derivedType)}`)
     }
 
-    // Final dedup — abilities scan may have pushed duplicates of existing keywords
-    node.keywords = [...new Set(node.keywords)]
+    // Final dedup — abilities scan may have pushed duplicates of existing keywords.
+    // Use dedupeKeywordList so chip variants like "dedicated transport" and
+    // "dedicated transports" collapse onto one entry (Set-uniq alone preserves
+    // both since they're distinct strings).
+    node.keywords = dedupeKeywordList([...new Set(node.keywords)])
+
+    // Structured core abilities — split USR / keyword-style abilities off the
+    // unit-ability list so UnitCard can render them as collapsed chips with
+    // their values. Each entry carries the keyword (uppercase) and an optional
+    // value (e.g. "5+", "D3", '6"'). Source of truth: Wahapedia ability rows
+    // tagged type==="Core" plus any name we recognise from the USR vocabulary.
+    const coreAbilityEntries: Array<{ keyword: string; value?: string }> = []
+    const seenCoreKeywords = new Set<string>()
+    for (const ab of unitAbs) {
+      // Trust Wahapedia's type column when it says Core.
+      if (ab.type !== 'Core') {
+        // Even non-Core may still match the USR vocab — fall through to the
+        // name-classifier below so e.g. SMOKE that's filed as a unit ability
+        // still gets bucketed correctly.
+      }
+      const classified = classifyCoreAbility(ab.name, ab.parameter)
+      if (!classified) continue
+      if (seenCoreKeywords.has(classified.keyword)) continue
+      seenCoreKeywords.add(classified.keyword)
+      coreAbilityEntries.push(classified)
+    }
+    // Ability-like keywords that came in via the unit_keywords table (SMOKE on
+    // a Rhino, etc.) — promote them to coreAbilities so the chip shows up
+    // under ABILITIES instead of in the KEYWORDS row.
+    for (const kw of abilityLikeKeywords) {
+      const classified = classifyCoreAbility(kw)
+      const entry = classified ?? { keyword: kw.toUpperCase() }
+      if (seenCoreKeywords.has(entry.keyword)) continue
+      seenCoreKeywords.add(entry.keyword)
+      coreAbilityEntries.push(entry)
+    }
+    if (coreAbilityEntries.length > 0) {
+      node.coreAbilities = coreAbilityEntries
+    }
 
     nodes.push(node)
 
@@ -1268,6 +1488,7 @@ export function convertGameData(
         ...(stratWhen ? { when: stratWhen } : {}),
         ...(stratTarget ? { target: stratTarget } : {}),
         ...(stratEffect ? { effect: stratEffect } : {}),
+        ...(strat.type ? { stratType: strat.type } : {}),
         sources: [source],
         refs: [],
         version: 1,
@@ -1299,6 +1520,7 @@ export function convertGameData(
         : undefined
 
       const enhCostNumber = Number.parseInt(enh.cost ?? '', 10)
+      const enhAttachesTo = detectEnhancementAttachesTo(cleanEnhDesc)
 
       nodes.push({
         id: enhNodeId,
@@ -1311,6 +1533,7 @@ export function convertGameData(
         subfaction: enhSubfaction,
         detachmentId: detNodeId,
         ...(Number.isFinite(enhCostNumber) ? { cost: enhCostNumber } : {}),
+        ...(enhAttachesTo ? { attachesTo: enhAttachesTo } : {}),
         sources: [source],
         refs: [],
         version: 1,

@@ -380,4 +380,115 @@ describe('mergeSources', () => {
       }
     })
   })
+
+  describe('MFM detachment + faction-pack detachment-rule merge', () => {
+    it('collapses MFM `category: detachment` onto faction-pack `category: detachment-rule`', () => {
+      const mfmNode = makeNode({
+        id: 'mfm:det:space-marines:gladius-task-force',
+        layer: 'faction',
+        category: 'detachment',
+        title: 'Gladius Task Force',
+        content: '**Gladius Task Force**\n**Detachment Points:** 2',
+        summary: 'MFM summary',
+        factionId: 'space-marines',
+        edition: '11th',
+        dp: 2,
+        forceDisposition: 'PRIORITY ASSETS',
+        keywords: ['gladius', 'detachment', '11th edition'],
+        sources: [
+          {
+            type: 'manual',
+            title: 'Munitorum Field Manual (11e)',
+            retrievedAt: '2026-06-01',
+          },
+        ],
+      })
+      const packNode = makeNode({
+        id: 'det:space-marines:gladius-task-force',
+        layer: 'faction',
+        category: 'detachment-rule',
+        title: 'Gladius Task Force',
+        content: 'Combat Doctrines: each turn pick a doctrine...',
+        summary: 'Faction pack rule text',
+        factionId: 'space-marines',
+        edition: '11th',
+        keywords: ['gladius', 'detachment-rule'],
+        sources: [{ type: 'pdf', title: 'Faction Pack: Space Marines', retrievedAt: '2026-06-01' }],
+      })
+      const result = mergeSources([mfmNode, packNode], [])
+      // The pack id survives — single node with category: detachment
+      const survivors = result.nodes.filter((n) => n.title === 'Gladius Task Force')
+      expect(survivors.length).toBe(1)
+      const survivor = survivors[0]!
+      expect(survivor.id).toBe('det:space-marines:gladius-task-force')
+      expect(survivor.category).toBe('detachment')
+      // Content from the faction-pack version
+      expect(survivor.content).toContain('Combat Doctrines')
+      // dp + forceDisposition lifted from MFM
+      expect(survivor.dp).toBe(2)
+      expect(survivor.forceDisposition).toBe('PRIORITY ASSETS')
+      // Both source attributions preserved
+      expect(survivor.sources.length).toBe(2)
+      const srcTypes = survivor.sources.map((s) => s.type).sort()
+      expect(srcTypes).toEqual(['manual', 'pdf'])
+    })
+
+    it('redirects refs pointing at the dropped MFM detachment id', () => {
+      const mfmNode = makeNode({
+        id: 'mfm:det:space-marines:gladius-task-force',
+        layer: 'faction',
+        category: 'detachment',
+        title: 'Gladius Task Force',
+        factionId: 'space-marines',
+        edition: '11th',
+        dp: 2,
+      })
+      const packNode = makeNode({
+        id: 'det:space-marines:gladius-task-force',
+        layer: 'faction',
+        category: 'detachment-rule',
+        title: 'Gladius Task Force',
+        factionId: 'space-marines',
+        edition: '11th',
+      })
+      const enhancement = makeNode({
+        id: 'mfm:enh:space-marines:gladius-task-force:adept-of-the-codex',
+        layer: 'faction',
+        category: 'enhancement',
+        title: 'Adept of the Codex',
+        factionId: 'space-marines',
+        edition: '11th',
+      })
+      const refs: NodeRef[] = [
+        {
+          sourceId: 'mfm:enh:space-marines:gladius-task-force:adept-of-the-codex',
+          targetId: 'mfm:det:space-marines:gladius-task-force',
+          rel: 'part_of',
+          context: 'enhancement of detachment',
+        },
+      ]
+      const result = mergeSources([mfmNode, packNode, enhancement], refs)
+      const enhRef = result.refs.find((r) => r.sourceId === enhancement.id)
+      expect(enhRef).toBeDefined()
+      // The ref's target was rewritten to the kept (pack) id
+      expect(enhRef!.targetId).toBe('det:space-marines:gladius-task-force')
+    })
+
+    it('leaves MFM node alone when no faction-pack twin exists', () => {
+      const mfmOnly = makeNode({
+        id: 'mfm:det:tyranids:assimilation-swarm',
+        layer: 'faction',
+        category: 'detachment',
+        title: 'Assimilation Swarm',
+        factionId: 'space-marines', // factionId valid for the test fixture
+        edition: '11th',
+        dp: 1,
+      })
+      const result = mergeSources([mfmOnly], [])
+      expect(result.nodes.length).toBe(1)
+      expect(result.nodes[0]!.id).toBe('mfm:det:tyranids:assimilation-swarm')
+      expect(result.nodes[0]!.category).toBe('detachment')
+      expect(result.nodes[0]!.dp).toBe(1)
+    })
+  })
 })

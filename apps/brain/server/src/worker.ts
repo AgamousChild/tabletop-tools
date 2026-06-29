@@ -274,7 +274,9 @@ app.get('/browse/node/:id', async (c) => {
     if (available.length > 0) c.header('X-Available-Editions', available.join(','))
     return c.json({ error: 'Node not found for requested edition', edition, available }, 404)
   }
-  return c.json({ node: editionMatch, edition })
+  const errataNodes = await getErrataNodes(c.env.BRAIN_BUCKET)
+  const errata = findErrataForNode(editionMatch, errataNodes)
+  return c.json({ node: editionMatch, errata, edition })
 })
 
 app.get('/browse/unit/:id', async (c) => {
@@ -318,11 +320,17 @@ app.get('/browse/unit/:id', async (c) => {
     abilities: filteredAbilities,
   })
 
+  // Attach linked errata so the client can render an Errata section without
+  // its own retrieval pass. errata-linker matches by title/content/refs.
+  const errataNodes = await getErrataNodes(c.env.BRAIN_BUCKET)
+  const errata = findErrataForNode(datasheet, errataNodes)
+
   return c.json({
     datasheet,
     weapons: filteredWeapons,
     abilities: filteredAbilities,
     layout,
+    errata,
     edition,
   })
 })
@@ -338,7 +346,9 @@ app.get('/browse/detachment/:id', async (c) => {
   const abilities: Node[] = []
 
   for (const n of allNodes) {
-    if (n.id === id && n.category === 'detachment-rule') {
+    // Accept both 'detachment-rule' (faction-pack) and 'detachment' (MFM-merged)
+    // so callers can request the canonical id whichever side emitted it.
+    if (n.id === id && (n.category === 'detachment-rule' || n.category === 'detachment')) {
       detachmentCandidates.push(n)
     } else if (n.detachmentId === id || n.detachmentId === id.split(':').pop()) {
       if (n.category === 'stratagem') stratagems.push(n)
@@ -356,11 +366,15 @@ app.get('/browse/detachment/:id', async (c) => {
     return c.json({ error: 'Detachment not found for requested edition', edition, available }, 404)
   }
 
+  const errataNodes = await getErrataNodes(c.env.BRAIN_BUCKET)
+  const errata = findErrataForNode(detachment, errataNodes)
+
   return c.json({
     detachment,
     stratagems: filterByEdition(stratagems, edition),
     enhancements: filterByEdition(enhancements, edition),
     abilities: filterByEdition(abilities, edition),
+    errata,
     edition,
   })
 })

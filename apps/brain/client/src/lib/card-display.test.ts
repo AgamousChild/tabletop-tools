@@ -404,4 +404,62 @@ describe('formatDetachmentName (via stratagem)', () => {
       expect(result.card.data.detachmentName).toBe('')
     }
   })
+
+  it('routes MFM-emitted `category: "detachment"` to DetachmentCard', () => {
+    const result = resolveCardView(
+      makeNode({
+        category: 'detachment',
+        title: 'Gladius Task Force',
+        factionId: 'space-marines',
+        dp: 2,
+        forceDisposition: 'PRIORITY ASSETS',
+      }),
+    )
+    expect(result.card.type).toBe('detachment')
+    if (result.card.type === 'detachment') {
+      expect(result.card.data.dp).toBe(2)
+      expect(result.card.data.forceDisposition).toBe('PRIORITY ASSETS')
+    }
+  })
+
+  it('reads stratType off the node onto stratagem card.type', () => {
+    const result = resolveCardView(makeNode({ category: 'stratagem', stratType: 'Battle Tactic' }))
+    if (result.card.type === 'stratagem') {
+      expect(result.card.data.type).toBe('Battle Tactic')
+    }
+  })
+
+  it('falls back to "Stratagem" when stratType is missing', () => {
+    const result = resolveCardView(makeNode({ category: 'stratagem' }))
+    if (result.card.type === 'stratagem') {
+      expect(result.card.data.type).toBe('Stratagem')
+    }
+  })
+
+  it('propagates attachesTo from node onto enhancement card', () => {
+    const result = resolveCardView(makeNode({ category: 'enhancement', attachesTo: 'leader' }))
+    if (result.card.type === 'enhancement') {
+      expect(result.card.data.attachesTo).toBe('leader')
+    }
+  })
+
+  it('reads structured node.cpCost on stratagem', () => {
+    const result = resolveCardView(makeNode({ category: 'stratagem', cpCost: 2 }))
+    if (result.card.type === 'stratagem') {
+      expect(result.card.data.cpCost).toBe('2')
+    }
+  })
+
+  it('falls back to content-extract for stratagem when cpCost is missing', () => {
+    const result = resolveCardView(
+      makeNode({
+        category: 'stratagem',
+        content: '**CP:** 3\n\nBody here.',
+      }),
+    )
+    if (result.card.type === 'stratagem') {
+      // legacy extractField regex captures "3" — value is non-empty
+      expect(result.card.data.cpCost).toBeTruthy()
+    }
+  })
 })

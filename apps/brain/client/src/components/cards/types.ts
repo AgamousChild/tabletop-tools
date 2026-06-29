@@ -36,7 +36,17 @@ export interface UnitCardData {
   rangedWeapons: WeaponProfile[]
   meleeWeapons: WeaponProfile[]
   abilities: { name: string; description: string; type: string }[]
-  coreAbilities: string[]
+  /**
+   * Core / Universal-Special-Rule chips on the datasheet. Each entry has the
+   * keyword and an optional value (e.g. `FEEL NO PAIN 5+` → `{ keyword: 'FEEL
+   * NO PAIN', value: '5+' }`; `LEADER` → `{ keyword: 'LEADER' }`). Rendered as
+   * collapsed chips with tooltip rather than expanded ability text.
+   *
+   * Backwards-compatible string entries are still accepted — old call sites
+   * pass `['LEADER', 'SCOUTS']` and the renderer falls back to no-value
+   * display.
+   */
+  coreAbilities: Array<string | { keyword: string; value?: string }>
   keywords: string[]
   factionKeywords: string[]
   composition: string
@@ -84,6 +94,8 @@ export interface EnhancementCardData {
   detachmentName: string
   factionId: string
   subfaction?: string
+  /** Whether the enhancement attaches to the leader or the bearer's unit. */
+  attachesTo?: 'leader' | 'unit'
   errata?: ErrataEntry[]
 }
 
@@ -214,6 +226,10 @@ export interface DetachmentCardData {
   stratagems: StratagemCardData[]
   enhancements: EnhancementCardData[]
   chapterBadge?: string
+  /** Detachment Points cost (11e MFM). */
+  dp?: number
+  /** Force-disposition category (11e MFM: PRIORITY ASSETS, etc.). */
+  forceDisposition?: string
   sources?: SourceRef[]
   errata?: ErrataEntry[]
   qualityFlags?: string[]

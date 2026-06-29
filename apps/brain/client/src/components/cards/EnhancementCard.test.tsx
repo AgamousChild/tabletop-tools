@@ -109,4 +109,21 @@ describe('EnhancementCard', () => {
     expect(screen.getByText('Enhancement FAQ')).toBeInTheDocument()
     expect(screen.getByText('Only applies to the bearer.')).toBeInTheDocument()
   })
+
+  it('renders LEADER chip when attachesTo is "leader"', () => {
+    const data = { ...mockEnhancement, attachesTo: 'leader' as const }
+    render(<EnhancementCard data={data} context={mockContext} />)
+    expect(screen.getByTestId('enhancement-attaches-to')).toHaveTextContent('LEADER')
+  })
+
+  it('renders UNIT chip when attachesTo is "unit"', () => {
+    const data = { ...mockEnhancement, attachesTo: 'unit' as const }
+    render(<EnhancementCard data={data} context={mockContext} />)
+    expect(screen.getByTestId('enhancement-attaches-to')).toHaveTextContent('UNIT')
+  })
+
+  it('omits attachesTo chip when not set', () => {
+    render(<EnhancementCard data={mockEnhancement} context={mockContext} />)
+    expect(screen.queryByTestId('enhancement-attaches-to')).not.toBeInTheDocument()
+  })
 })

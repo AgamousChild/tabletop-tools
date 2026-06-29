@@ -422,7 +422,12 @@ export function UnitCard({ data, context }: UnitCardProps) {
           { label: 'W', value: stats.wounds },
           { label: 'LD', value: stats.leadership },
           { label: 'OC', value: stats.oc },
-          ...(stats.invSv ? [{ label: 'INV', value: stats.invSv }] : []),
+          // Hide INV row when value is "-", "-+", or otherwise placeholder.
+          // Upstream parsers should never emit those, but a defensive check
+          // here keeps a stale build from showing "-+" on every unit.
+          ...(stats.invSv && stats.invSv !== '-' && stats.invSv !== '-+'
+            ? [{ label: 'INV', value: stats.invSv }]
+            : []),
           ...(stats.fnp ? [{ label: 'FNP', value: stats.fnp }] : []),
         ].map(({ label, value }) => {
           const isVehicle = data.keywords.some((k) => k.toLowerCase() === 'vehicle')
@@ -469,15 +474,21 @@ export function UnitCard({ data, context }: UnitCardProps) {
             ABILITIES
           </div>
 
-          {/* Core ability badges */}
+          {/* Core ability badges. Entries can be plain strings (legacy) or
+              { keyword, value } objects (PR #71). Renders the value inline
+              when present so "FEEL NO PAIN 5+" and "FIRING DECK 2" surface
+              the numeric component. */}
           {data.coreAbilities.length > 0 && (
             <div className="flex flex-wrap gap-1 mb-2">
               {data.coreAbilities.map((ca) => {
-                const highlighted = isHighlighted(ca, highlightTerms)
+                const keyword = typeof ca === 'string' ? ca : ca.keyword
+                const value = typeof ca === 'string' ? undefined : ca.value
+                const display = value ? `${keyword} ${value}` : keyword
+                const highlighted = isHighlighted(display, highlightTerms)
                 return (
                   <Clickable
-                    key={ca}
-                    term={ca}
+                    key={keyword}
+                    term={keyword}
                     onClick={onContentClick}
                     className={`text-[10px] font-semibold uppercase tracking-wide px-1.5 py-0.5 rounded border cursor-pointer transition-colors ${
                       highlighted
@@ -485,7 +496,7 @@ export function UnitCard({ data, context }: UnitCardProps) {
                         : 'bg-slate-800 border-slate-600 text-slate-300 hover:border-green-600 hover:text-green-300'
                     }`}
                   >
-                    {ca}
+                    {display}
                   </Clickable>
                 )
               })}

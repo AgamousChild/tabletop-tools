@@ -121,4 +121,62 @@ describe('DetachmentCard', () => {
     )
     expect(screen.getByText('orphan')).toBeInTheDocument()
   })
+
+  it('renders dp chip when dp is set', () => {
+    render(<DetachmentCard data={{ ...mockDetachment, dp: 2 }} context={mockContext} />)
+    expect(screen.getByTestId('detachment-dp')).toHaveTextContent('2 DP')
+  })
+
+  it('omits dp chip when dp is undefined', () => {
+    render(<DetachmentCard data={mockDetachment} context={mockContext} />)
+    expect(screen.queryByTestId('detachment-dp')).not.toBeInTheDocument()
+  })
+
+  it('renders forceDisposition chip when set', () => {
+    render(
+      <DetachmentCard
+        data={{ ...mockDetachment, forceDisposition: 'PRIORITY ASSETS' }}
+        context={mockContext}
+      />,
+    )
+    expect(screen.getByTestId('detachment-force-disposition')).toHaveTextContent('PRIORITY ASSETS')
+  })
+
+  it('renders source link when sources include a PDF page', () => {
+    let captured: { name: string; page: number } | null = null
+    const ctxWithViewSource: CardContext = {
+      ...mockContext,
+      onViewSource: (_pdf, page, name) => {
+        captured = { name, page }
+      },
+    }
+    render(
+      <DetachmentCard
+        data={{
+          ...mockDetachment,
+          sources: [{ type: 'pdf', title: 'Faction Pack: Space Marines', page: 29 }],
+        }}
+        context={ctxWithViewSource}
+      />,
+    )
+    const link = screen.getByText(/View source/i)
+    expect(link).toBeInTheDocument()
+    expect(link).toHaveTextContent('p.29')
+    fireEvent.click(link)
+    expect(captured).not.toBeNull()
+    expect(captured!.page).toBe(29)
+  })
+
+  it('falls back to a "Source:" footer when no PDF source is present', () => {
+    render(
+      <DetachmentCard
+        data={{
+          ...mockDetachment,
+          sources: [{ type: 'manual', title: 'Munitorum Field Manual (11e)' }],
+        }}
+        context={mockContext}
+      />,
+    )
+    expect(screen.getByTestId('detachment-sources')).toHaveTextContent(/Munitorum Field Manual/)
+  })
 })

@@ -154,4 +154,11 @@ describe('StratagemCard', () => {
     expect(screen.getByText('Stratagem FAQ')).toBeInTheDocument()
     expect(screen.getByText('This can only be used once per phase.')).toBeInTheDocument()
   })
+
+  it('renders the COST section showing the CP cost in body', () => {
+    render(<StratagemCard data={mockStratagem} context={baseContext} />)
+    const costSection = screen.getByTestId('section-cost')
+    expect(costSection).toHaveTextContent('COST')
+    expect(costSection).toHaveTextContent('2 CP')
+  })
 })

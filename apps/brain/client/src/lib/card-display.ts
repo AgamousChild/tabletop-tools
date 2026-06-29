@@ -20,6 +20,18 @@ export interface ResultNode {
   sources: any[]
   keywords: string[]
   qualityFlags?: string[]
+  // Structured Node fields (PR #71)
+  cpCost?: number
+  when?: string
+  target?: string
+  effect?: string
+  turn?: string
+  stratType?: string
+  cost?: number
+  attachesTo?: 'leader' | 'unit'
+  // PR #70 (detachment-only)
+  dp?: number
+  forceDisposition?: string
 }
 
 // ── PdfSource + CardView ──────────────────────────────────────────────────────
@@ -110,33 +122,48 @@ function buildCardForCategory(node: ResultNode, pdfSource?: PdfSource): CardData
         data: {
           id: node.id,
           name: node.title,
-          type: 'Stratagem',
-          cpCost: extractField(node.content, 'CP') || '1',
-          turn: '',
+          // Prefer the structured stratType (e.g. "Battle Tactic") populated
+          // by parsers. Fall back to the generic 'Stratagem' label when the
+          // parser didn't tag the row (legacy / faction-pack stratagems).
+          type: node.stratType || 'Stratagem',
+          // Structured cpCost wins (number) — render as string. Fall back to
+          // legacy regex if missing.
+          cpCost:
+            node.cpCost != null ? String(node.cpCost) : extractField(node.content, 'CP') || '1',
+          turn: node.turn || '',
           phase: node.phase || '',
-          when: extractField(node.content, 'WHEN') || '',
-          target: extractField(node.content, 'TARGET') || '',
-          effect: extractField(node.content, 'EFFECT') || node.summary,
+          when: node.when || extractField(node.content, 'WHEN') || '',
+          target: node.target || extractField(node.content, 'TARGET') || '',
+          effect: node.effect || extractField(node.content, 'EFFECT') || node.summary,
           detachmentName: formatDetachmentName(node.detachmentId),
           factionId: node.factionId || '',
           subfaction: node.subfaction,
         },
       }
 
-    case 'enhancement':
+    case 'enhancement': {
+      // Drop the duplicate summary render — body content is the source of
+      // truth (PR #71 stripped Cost: into structured `cost`). The legacy
+      // regex fallback path stays for nodes that pre-date PR #71.
+      const cost = node.cost != null ? String(node.cost) : extractInlineField(node.content, 'Cost')
+      // Description: strip the "**Cost:**" markdown line if present (legacy
+      // node content shape); otherwise the body is already clean.
+      const description = node.cost != null ? node.content : stripField(node.content, 'Cost')
       return {
         type: 'enhancement',
         data: {
           id: node.id,
           name: node.title,
-          cost: extractInlineField(node.content, 'Cost') || '',
-          description: stripField(node.content, 'Cost'),
+          cost: cost || '',
+          description,
           restriction: extractRestriction(node.content),
           detachmentName: formatDetachmentName(node.detachmentId),
           factionId: node.factionId || '',
           subfaction: node.subfaction,
+          attachesTo: node.attachesTo,
         },
       }
+    }
 
     case 'phase-sequence':
     case 'core-mechanic':
@@ -216,6 +243,7 @@ function buildCardForCategory(node: ResultNode, pdfSource?: PdfSource): CardData
         },
       }
 
+    case 'detachment':
     case 'detachment-rule':
       return {
         type: 'detachment',
@@ -228,6 +256,13 @@ function buildCardForCategory(node: ResultNode, pdfSource?: PdfSource): CardData
           abilityText: node.content || node.summary,
           stratagems: [],
           enhancements: [],
+          // PR #70 fields: detachment-points + force disposition. MFM is the
+          // source; faction-pack mfm-lookup stamps both onto the same node.
+          dp: node.dp,
+          forceDisposition: node.forceDisposition,
+          // Chapter badge — Node.subfaction carries the chapter slug for SM
+          // chapters. Render that as a small badge near the title.
+          chapterBadge: node.subfaction,
           sources: node.sources as SourceRef[],
           qualityFlags: node.qualityFlags,
         },

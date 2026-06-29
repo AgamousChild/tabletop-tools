@@ -329,6 +329,13 @@ interface UnitEndpointResponse {
   }>
   /** Server-driven layout descriptor — present when the server has a registered builder. */
   layout?: CardLayout
+  /** Errata entries linked to this datasheet (PR: card display layer). */
+  errata?: Array<{
+    nodeId: string
+    title: string
+    content: string
+    source: { type: string; title: string; page?: number }
+  }>
 }
 
 /** Fetch full unit data (datasheet + weapons + abilities) from API */
@@ -408,6 +415,9 @@ async function fetchFullUnitData(
         rangedWeapons: ranged,
         meleeWeapons: melee,
         abilities: unitAbilities,
+        // Surface linked errata onto the card. Server attaches via
+        // errata-linker (see worker.ts /browse/unit handler).
+        ...(data.errata && data.errata.length > 0 ? { errata: data.errata } : {}),
       },
       layout: data.layout ?? null,
     }
@@ -1415,9 +1425,24 @@ export function BrainScreen() {
             stratagems: ResultNode[]
             enhancements: ResultNode[]
             abilities: ResultNode[]
+            errata?: Array<{
+              nodeId: string
+              title: string
+              content: string
+              source: { type: string; title: string; page?: number }
+            }>
           }
           card.data.stratagems = (data.stratagems || []).map((n) => buildStratagemData(n))
           card.data.enhancements = (data.enhancements || []).map((n) => buildEnhancementData(n))
+          if (data.errata && data.errata.length > 0) {
+            card.data.errata = data.errata
+          }
+          // Lift MFM-merged structured fields onto the card when the server
+          // returns them (PR #70). The merge step on the worker collapses
+          // mfm:det:* into det:* so this is the canonical source now.
+          const detNode = data.detachment as any
+          if (detNode?.dp != null) card.data.dp = detNode.dp
+          if (detNode?.forceDisposition) card.data.forceDisposition = detNode.forceDisposition
         } catch {
           // Fallback: show card without stratagems/enhancements
         }

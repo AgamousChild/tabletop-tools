@@ -3,6 +3,7 @@ import { detectChapterFromText, truncate } from '../filters'
 import type { GamePhase, Node, NodeRef, Source } from '../model'
 import { slugify } from '../slugify'
 import type { ParseResult } from './core-rules'
+import { detectEnhancementAttachesTo } from './game-data'
 
 /**
  * Detect the edition of a GW faction-pack PDF from its asset URL.
@@ -196,8 +197,10 @@ export function parseFactionPack(
     let stratagemTarget: string | undefined
     let stratagemEffect: string | undefined
     let stratagemCpCost: number | undefined
-    // Enhancement structured field (promoted from "(N pts)" suffix)
+    // Enhancement structured fields (promoted from "(N pts)" suffix +
+    // restriction-text sniff for the leader-vs-unit chip).
     let enhancementCost: number | undefined
+    let enhancementAttachesTo: 'leader' | 'unit' | undefined
 
     switch (sectionType) {
       case 'detachment':
@@ -227,6 +230,8 @@ export function parseFactionPack(
         // on the heading or first body line.
         const costMatch = `${title}\n${body}`.match(/\(?(\d+)\s*pts?\)?/i)
         if (costMatch) enhancementCost = parseInt(costMatch[1]!, 10)
+        // Enhancement attaches-to chip is sniffed from the rules text.
+        enhancementAttachesTo = detectEnhancementAttachesTo(body)
         break
       }
       case 'army-rule':
@@ -279,6 +284,7 @@ export function parseFactionPack(
       ...(stratagemEffect !== undefined ? { effect: stratagemEffect } : {}),
       ...(stratagemCpCost !== undefined ? { cpCost: stratagemCpCost } : {}),
       ...(enhancementCost !== undefined ? { cost: enhancementCost } : {}),
+      ...(enhancementAttachesTo !== undefined ? { attachesTo: enhancementAttachesTo } : {}),
       sources: [source],
       refs: [],
       version: 1,
