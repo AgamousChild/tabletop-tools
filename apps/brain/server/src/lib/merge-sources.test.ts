@@ -582,4 +582,125 @@ describe('mergeSources', () => {
       expect(result.stats.updatedInEleventhFlagged).toBe(0)
     })
   })
+
+  describe('parallel 10e/11e dataset support', () => {
+    it('applies MFM points to 11e copies (keyed `11e:<wahapediaId>`), not 10e originals', () => {
+      // The build-graph re-keys the MFM map onto 11e surface ids before
+      // passing it to mergeSources. The 10e originals — keyed by the bare
+      // Wahapedia numeric — must NOT receive MFM overrides. Their points
+      // stay at the frozen Wahapedia value.
+      const tenth = makeNode({
+        id: '000000135',
+        category: 'datasheet',
+        datasheetId: '000000135',
+        title: 'Captain in Terminator Armour',
+        factionId: 'space-marines',
+        edition: '10th',
+        points: [{ models: '1 model', cost: 95 }], // Wahapedia 10e value
+      })
+      const eleventh = makeNode({
+        id: '11e:000000135',
+        category: 'datasheet',
+        datasheetId: '11e:000000135',
+        title: 'Captain in Terminator Armour',
+        factionId: 'space-marines',
+        edition: '11th',
+        points: [{ models: '1 model', cost: 95 }], // duplicated from 10e, will be overwritten
+      })
+      const mfmCostingByDatasheetId = new Map([
+        [
+          '11e:000000135',
+          {
+            pointsArray: [{ models: '1 model', cost: 105 }], // MFM 11e refresh
+            minCost: 105,
+            tiers: [],
+          },
+        ],
+      ])
+      const result = mergeSources([tenth, eleventh], [], { mfmCostingByDatasheetId })
+      const survivor10e = result.nodes.find((n) => n.id === '000000135')!
+      const survivor11e = result.nodes.find((n) => n.id === '11e:000000135')!
+      expect(survivor10e.points).toEqual([{ models: '1 model', cost: 95 }])
+      expect(survivor11e.points).toEqual([{ models: '1 model', cost: 105 }])
+      expect(result.stats.mfmPointsApplied).toBe(1)
+    })
+
+    it('keeps 10e and 11e detachment-rule copies separate (does not collapse via title dedup)', () => {
+      // Before this fix, the title-based dedup keyed only by category +
+      // title + faction, which would collapse a 10e Wahapedia detachment
+      // onto an 11e faction-pack detachment with the same name. Adding
+      // edition to the key keeps them apart.
+      const tenth = makeNode({
+        id: 'det:space-marines:gladius-task-force',
+        layer: 'faction',
+        category: 'detachment-rule',
+        title: 'Gladius Task Force',
+        content: '10e content from Wahapedia',
+        factionId: 'space-marines',
+        edition: '10th',
+      })
+      const eleventh = makeNode({
+        id: '11e:det:space-marines:gladius-task-force',
+        layer: 'faction',
+        category: 'detachment-rule',
+        title: 'Gladius Task Force',
+        content: '11e content from faction pack',
+        factionId: 'space-marines',
+        edition: '11th',
+      })
+      const result = mergeSources([tenth, eleventh], [])
+      const survivors = result.nodes.filter((n) => n.title === 'Gladius Task Force')
+      expect(survivors.length).toBe(2)
+      const tenthSurvivor = survivors.find((n) => n.edition === '10th')!
+      const eleventhSurvivor = survivors.find((n) => n.edition === '11th')!
+      expect(tenthSurvivor.content).toBe('10e content from Wahapedia')
+      expect(eleventhSurvivor.content).toBe('11e content from faction pack')
+    })
+
+    it('keeps 10e and 11e MFM/pack detachment merge buckets separate', () => {
+      // Cross-edition detachment merging is the same bug class as the
+      // detachment-rule dedup above. Test the MFM → pack collapse keeps
+      // edition fidelity.
+      const tenthPack = makeNode({
+        id: 'det:space-marines:gladius-task-force',
+        layer: 'faction',
+        category: 'detachment-rule',
+        title: 'Gladius Task Force',
+        content: '10e Wahapedia content',
+        factionId: 'space-marines',
+        edition: '10th',
+      })
+      const elevenMfm = makeNode({
+        id: 'mfm:det:space-marines:gladius-task-force',
+        layer: 'faction',
+        category: 'detachment',
+        title: 'Gladius Task Force',
+        factionId: 'space-marines',
+        edition: '11th',
+        dp: 2,
+      })
+      const elevenPack = makeNode({
+        id: 'det:space-marines:gladius-task-force-11e',
+        layer: 'faction',
+        category: 'detachment-rule',
+        title: 'Gladius Task Force',
+        content: '11e faction pack content',
+        factionId: 'space-marines',
+        edition: '11th',
+      })
+      const result = mergeSources([tenthPack, elevenMfm, elevenPack], [])
+      // 10e Wahapedia detachment-rule survives untouched (no dp from MFM —
+      // its bucket has no MFM twin).
+      const tenthSurvivor = result.nodes.find(
+        (n) => n.edition === '10th' && n.title === 'Gladius Task Force',
+      )!
+      expect(tenthSurvivor.dp).toBeUndefined()
+      expect(tenthSurvivor.content).toBe('10e Wahapedia content')
+      // 11e MFM collapses onto the 11e pack — single 11e survivor with dp.
+      const elevenSurvivor = result.nodes.find(
+        (n) => n.edition === '11th' && n.title === 'Gladius Task Force',
+      )!
+      expect(elevenSurvivor.dp).toBe(2)
+    })
+  })
 })

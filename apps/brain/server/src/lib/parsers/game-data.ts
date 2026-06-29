@@ -52,7 +52,22 @@ export interface GameDataInput {
 }
 
 export interface DatasheetRecord {
+  /**
+   * Internal join key. Wahapedia ships as a 9-digit numeric string
+   * (`"000000135"`); the BSData-aligned snapshot in
+   * `apps/data-import/client/public/wahapedia/` rewrites this to a hash GUID
+   * (`"5e35-ae82-23e4-bcef"`) and carries the original numeric on
+   * `wahapediaId`. Sibling tables (datasheet_wargear, unit_abilities, etc.)
+   * always reference this hash — it is the only join key inside this parser.
+   */
   id: string
+  /**
+   * Stable Wahapedia numeric ID. When present, this becomes the brain node's
+   * surface `id` (e.g. `"000000135"`) so bookmarks, vectorize entries, and
+   * brain:links survive future BSData re-hashings. Sources that don't carry
+   * a Wahapedia ID (e.g. test fixtures) fall back to `id`.
+   */
+  wahapediaId?: string
   name: string
   factionId: string
   role: string
@@ -409,6 +424,19 @@ export function dedupeKeywordList(kws: string[]): string[] {
 export interface GameDataParseResult {
   nodes: Node[]
   refs: NodeRef[]
+  /**
+   * Map from BSData hash GUID (the internal join key in this parser) to the
+   * surface node id (Wahapedia numeric ID when available, else fallback to the
+   * hash). Downstream consumers — most importantly `duplicateEleventh()` and
+   * the MFM-points re-keying in `build-graph.ts` — use this to translate from
+   * BSData-keyed source data (MFM rows, BSData unit lookups) into the brain's
+   * surface ID space.
+   *
+   * Only datasheet ids are populated. Detachment/stratagem/enhancement/ability
+   * ids in Wahapedia already are the Wahapedia numeric IDs, so no translation
+   * is required for those.
+   */
+  bsdataIdToSurfaceId: Map<string, string>
 }
 
 /**
@@ -457,6 +485,18 @@ export function convertGameData(
     ...wahapediaSource,
     retrievedAt: retrievedAt ?? new Date().toISOString(),
   }
+
+  // Build the BSData-hash → surface-id translation map up front so every
+  // emit site can use it without conditionals. Wahapedia rows carry the
+  // stable numeric id on `wahapediaId`; older test fixtures and any row that
+  // is missing it fall back to the hash itself. The surface id is what
+  // becomes the brain node's `id`, the `node.datasheetId` field, and the
+  // target/source of every ref that points at a datasheet.
+  const bsdataIdToSurfaceId = new Map<string, string>()
+  for (const ds of input.datasheets) {
+    bsdataIdToSurfaceId.set(ds.id, ds.wahapediaId ?? ds.id)
+  }
+  const surfaceIdOf = (bsdataId: string): string => bsdataIdToSurfaceId.get(bsdataId) ?? bsdataId
 
   // Filter out Boarding Actions — different game mode
   const boardingDetIds = new Set(input.detachments.filter(isBoardingAction).map((d) => d.id))
@@ -698,8 +738,13 @@ export function convertGameData(
         ? { threshold: damagedThreshold, effect: damagedEffectText }
         : undefined
 
+    // Wahapedia is the 10e source-of-truth (Rule 5 + the parallel-dataset
+    // restructure). The brain surfaces datasheets at their Wahapedia numeric
+    // id (e.g. "000000135"). The hash on `ds.id` stays the internal join key
+    // for sibling tables (wargear, abilities, etc.) — see surfaceIdOf above.
+    const datasheetSurfaceId = surfaceIdOf(ds.id)
     const node: Node = {
-      id: ds.id, // BSData GUID
+      id: datasheetSurfaceId,
       layer: 'unit',
       category: 'datasheet',
       title: ds.name,
@@ -707,7 +752,8 @@ export function convertGameData(
       summary: `${ds.name} — ${ds.role}${costs.length ? `, ${costText}` : ''}.`,
       factionId: normalizeFactionId(ds.factionId),
       subfaction: dsSubfactionMap.get(ds.id),
-      datasheetId: ds.id,
+      datasheetId: datasheetSurfaceId,
+      edition: '10th',
       ...(unitStats ? { stats: unitStats } : {}),
       ...(unitPoints ? { points: unitPoints } : {}),
       ...(structuredWargearOptions ? { wargearOptions: structuredWargearOptions } : {}),
@@ -922,7 +968,7 @@ export function convertGameData(
 
     // Datasheet → faction parent ref
     refs.push({
-      sourceId: ds.id,
+      sourceId: datasheetSurfaceId,
       targetId: `faction-root:${normalizeFactionId(ds.factionId)}`,
       rel: 'part_of',
       context: `${ds.name} belongs to ${normalizeFactionId(ds.factionId)}.`,
@@ -933,12 +979,13 @@ export function convertGameData(
   const seenWeaponIds = new Set<string>()
   for (const wg of filteredWargear) {
     // Differentiate melee/ranged profiles with the same name on the same datasheet
-    let weaponNodeId = `weapon:${wg.datasheetId}:${slugify(wg.name)}`
+    const parentSurfaceId = surfaceIdOf(wg.datasheetId)
+    let weaponNodeId = `weapon:${parentSurfaceId}:${slugify(wg.name)}`
     if (seenWeaponIds.has(weaponNodeId)) {
-      weaponNodeId = `weapon:${wg.datasheetId}:${slugify(wg.name)}-${slugify(wg.type)}`
+      weaponNodeId = `weapon:${parentSurfaceId}:${slugify(wg.name)}-${slugify(wg.type)}`
     }
     if (seenWeaponIds.has(weaponNodeId)) {
-      weaponNodeId = `weapon:${wg.datasheetId}:${slugify(wg.name)}-${wg.id}`
+      weaponNodeId = `weapon:${parentSurfaceId}:${slugify(wg.name)}-${wg.id}`
     }
     seenWeaponIds.add(weaponNodeId)
 
@@ -961,7 +1008,8 @@ export function convertGameData(
       summary: `${wg.name} (${wg.type}) — ${wg.range}, ${wg.attacks}A, S${wg.strength}, AP${wg.ap}, D${wg.damage}.${cleanDesc ? ` [${cleanDesc}]` : ''}`,
       factionId: dsFactionMap.get(wg.datasheetId),
       subfaction: dsSubfactionMap.get(wg.datasheetId),
-      datasheetId: wg.datasheetId,
+      datasheetId: parentSurfaceId,
+      edition: '10th',
       weaponStats: {
         range: wg.range || 'Melee',
         A: wg.attacks || '1',
@@ -997,7 +1045,7 @@ export function convertGameData(
     // part_of ref to datasheet
     refs.push({
       sourceId: weaponNodeId,
-      targetId: wg.datasheetId,
+      targetId: parentSurfaceId,
       rel: 'part_of',
       context: `${wg.name} is a weapon equipped by this unit.`,
       bidirectional: true,
@@ -1094,7 +1142,7 @@ export function convertGameData(
       const dsName = filteredDatasheets.find((d) => d.id === dsId)?.name ?? dsId
       refs.push({
         sourceId: factionAbNodeId,
-        targetId: dsId,
+        targetId: surfaceIdOf(dsId),
         rel: 'modifies',
         context: `${factionAb.name} applies to ${dsName}.`,
       })
@@ -1105,7 +1153,8 @@ export function convertGameData(
   for (const ab of filteredUnitAbilities) {
     // Skip if this is a faction ability (army rule) — handled above with refs
     if (factionAbilityNames.has(ab.name.toLowerCase())) continue
-    const baseId = `ability:${ab.datasheetId}:${slugify(ab.name)}`
+    const abilityParentSurfaceId = surfaceIdOf(ab.datasheetId)
+    const baseId = `ability:${abilityParentSurfaceId}:${slugify(ab.name)}`
     const count = seenAbilityIds.get(baseId) ?? 0
     seenAbilityIds.set(baseId, count + 1)
     const abilityNodeId = count === 0 ? baseId : `${baseId}-${count}`
@@ -1131,7 +1180,8 @@ export function convertGameData(
       summary: `${ab.name} (${ab.type}) on ${dsName} — ${truncate(preamble || cleanAbDesc, 120)}`,
       factionId: dsFactionMap.get(ab.datasheetId),
       subfaction: dsSubfactionMap.get(ab.datasheetId),
-      datasheetId: ab.datasheetId,
+      datasheetId: abilityParentSurfaceId,
+      edition: '10th',
       sources: [source],
       refs: [],
       version: 1,
@@ -1144,7 +1194,7 @@ export function convertGameData(
 
     refs.push({
       sourceId: abilityNodeId,
-      targetId: ab.datasheetId,
+      targetId: abilityParentSurfaceId,
       rel: 'part_of',
       context: `${ab.name} is a ${ab.type} ability of ${dsName}.`,
       bidirectional: true,
@@ -1164,7 +1214,8 @@ export function convertGameData(
           summary: `${sub.name}, option of ${ab.name} on ${dsName} — ${truncate(sub.text, 120)}`,
           factionId: dsFactionMap.get(ab.datasheetId),
           subfaction: dsSubfactionMap.get(ab.datasheetId),
-          datasheetId: ab.datasheetId,
+          datasheetId: abilityParentSurfaceId,
+          edition: '10th',
           sources: [source],
           refs: [],
           version: 1,
@@ -1301,6 +1352,7 @@ export function convertGameData(
       summary: `${ab.name} — army rule for ${ruleSubfaction || fSlug}. ${truncate(preamble || cleanFaDesc, 100)}`,
       factionId: fSlug,
       subfaction: ruleSubfaction,
+      edition: '10th',
       sources: [source],
       refs: [],
       version: 1,
@@ -1329,6 +1381,7 @@ export function convertGameData(
           content: sub.text,
           summary: `${sub.name}, option of ${ab.name} for ${fSlug} — ${truncate(sub.text, 120)}`,
           factionId: fSlug,
+          edition: '10th',
           sources: [source],
           refs: [],
           version: 1,
@@ -1408,6 +1461,7 @@ export function convertGameData(
       factionId: normalizeFactionId(det.factionId),
       subfaction: detChapterMap.has(det.id) ? detChapterMap.get(det.id)!.toLowerCase() : undefined,
       detachmentId: detNodeId,
+      edition: '10th',
       sources: [source],
       refs: [],
       version: 1,
@@ -1448,6 +1502,7 @@ export function convertGameData(
         factionId: normalizeFactionId(det.factionId),
         subfaction: daSubfaction,
         detachmentId: detNodeId,
+        edition: '10th',
         sources: [source],
         refs: [],
         version: 1,
@@ -1500,6 +1555,7 @@ export function convertGameData(
         factionId: normalizeFactionId(det.factionId),
         subfaction: stratSubfaction,
         detachmentId: detNodeId,
+        edition: '10th',
         phase: mapPhase(strat.phase),
         ...(Number.isFinite(stratCpNumber) ? { cpCost: stratCpNumber } : {}),
         ...(strat.turn ? { turn: strat.turn } : {}),
@@ -1550,6 +1606,7 @@ export function convertGameData(
         factionId: normalizeFactionId(det.factionId),
         subfaction: enhSubfaction,
         detachmentId: detNodeId,
+        edition: '10th',
         ...(Number.isFinite(enhCostNumber) ? { cost: enhCostNumber } : {}),
         ...(enhAttachesTo ? { attachesTo: enhAttachesTo } : {}),
         sources: [source],
@@ -1584,7 +1641,7 @@ export function convertGameData(
           const stratNodeId = `det:${normalizeFactionId(det.factionId)}:${slugify(det.name)}:${slugify(strat.name)}`
           refs.push({
             sourceId: stratNodeId,
-            targetId: j.datasheetId,
+            targetId: surfaceIdOf(j.datasheetId),
             rel: 'modifies',
             context: `${strat.name} stratagem can be used with this unit.`,
           })
@@ -1602,7 +1659,7 @@ export function convertGameData(
           const enhNodeId = `det:${normalizeFactionId(det.factionId)}:${slugify(det.name)}:${slugify(enh.name)}`
           refs.push({
             sourceId: enhNodeId,
-            targetId: j.datasheetId,
+            targetId: surfaceIdOf(j.datasheetId),
             rel: 'modifies',
             context: `${enh.name} enhancement can be given to a model in this unit.`,
           })
@@ -1639,7 +1696,7 @@ export function convertGameData(
   ]
 
   for (const wg of filteredWargear) {
-    const weaponNodeId = `weapon:${wg.datasheetId}:${slugify(wg.name)}`
+    const weaponNodeId = `weapon:${surfaceIdOf(wg.datasheetId)}:${slugify(wg.name)}`
     const desc = (wg.description ?? '').toLowerCase()
 
     for (const { pattern, coreSlug, label } of WEAPON_ABILITY_CORE_NODES) {
@@ -1678,7 +1735,7 @@ export function convertGameData(
 
   for (const ab of filteredUnitAbilities) {
     // Use the deduplicated ID from section 3
-    const baseId = `ability:${ab.datasheetId}:${slugify(ab.name)}`
+    const baseId = `ability:${surfaceIdOf(ab.datasheetId)}:${slugify(ab.name)}`
     const existingCount = seenAbilityIds.get(baseId) ?? 0
     const abilityNodeId = existingCount <= 1 ? baseId : `${baseId}-${existingCount - 1}`
 
@@ -1765,8 +1822,8 @@ export function convertGameData(
   for (const la of filteredLeaderAttachments) {
     const isSupport = la.type === 'support'
     refs.push({
-      sourceId: la.leaderId,
-      targetId: la.attachedId,
+      sourceId: surfaceIdOf(la.leaderId),
+      targetId: surfaceIdOf(la.attachedId),
       rel: isSupport ? 'can_support' : 'can_lead',
       context: isSupport
         ? `This character can SUPPORT this unit.`
@@ -1778,7 +1835,7 @@ export function convertGameData(
   // NOTE: stacks_with combo detection moved to lib/combo-detection.ts
   // It runs post-merge+massage in build-graph.ts where all nodes have final factionId/subfaction.
 
-  return { nodes, refs }
+  return { nodes, refs, bsdataIdToSurfaceId }
 }
 
 // ── Helpers ─────────────────────────────────────────────────────────────────

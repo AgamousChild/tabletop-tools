@@ -19,6 +19,7 @@ import {
   buildEligibleForRefs,
   buildFactionNodes,
 } from './lib/combo-detection'
+import { duplicateEleventh, rekeyByEleventhSurfaceId } from './lib/duplicate-eleventh'
 import { extractStructuredFields } from './lib/extract-fields'
 import { loadFactionCodes, normalizeFactionId } from './lib/faction-codes'
 import { massage } from './lib/massage'
@@ -289,6 +290,20 @@ async function main() {
   allNodes.push(...gameResult.nodes)
   allRefs.push(...gameResult.refs)
   console.log(`   ${gameResult.nodes.length} nodes, ${gameResult.refs.length} refs`)
+
+  // ── 5a. Parallel 11e duplicate of the Wahapedia 10e graph ─────────────────
+  // Per docs/superpowers/plans/parallel-10e-11e-datasets.md (and the
+  // post-mortem in the same task): a previous deploy promoted Wahapedia
+  // nodes from 10e → 11e wholesale, which broke every bookmark / brain:link
+  // pointing at a Wahapedia numeric id. The fix is to keep 10e frozen and
+  // build an 11e parallel dataset by duplicating the 10e graph with an
+  // `11e:` id prefix. The 11e duplicates are what the MFM 11e points pass
+  // and (eventually) the faction-pack unit-level patches mutate.
+  const eleventhDup = duplicateEleventh(gameResult.nodes, gameResult.refs)
+  stampPublishedAt(eleventhDup.nodes, SOURCE_DATES['wahapedia']!)
+  allNodes.push(...eleventhDup.nodes)
+  allRefs.push(...eleventhDup.refs)
+  console.log(`   ${eleventhDup.nodes.length} 11e duplicates, ${eleventhDup.refs.length} 11e refs`)
 
   // ── 6. Community Knowledge ─────────────────────────────────────────────────
   console.log('6. Community Knowledge')
@@ -735,9 +750,20 @@ async function main() {
     console.log(`   WARN: could not load MFM detachments, continuing without them: ${err}`)
   }
 
+  // Re-key the MFM costing map onto the 11e surface ids so it applies to the
+  // 11e duplicate datasheets, NOT the 10e originals. The 10e nodes keep their
+  // Wahapedia points (frozen historical snapshot, per Rule 5). MFM rows are
+  // keyed by BSData hash GUID; `bsdataIdToSurfaceId` translates that to the
+  // Wahapedia numeric (surface id); `rekeyByEleventhSurfaceId` prepends the
+  // `11e:` prefix.
+  const mfmCostingFor11e = rekeyByEleventhSurfaceId(
+    mfmResult.byDatasheetId,
+    gameResult.bsdataIdToSurfaceId,
+  )
+
   // ── Merge and deduplicate nodes from all sources ──────────────────────────
   const mergeResult = mergeSources(allNodes, allRefs, {
-    mfmCostingByDatasheetId: mfmResult.byDatasheetId,
+    mfmCostingByDatasheetId: mfmCostingFor11e,
   })
   console.log(`   Merged: ${mergeResult.stats.inputNodes} → ${mergeResult.stats.outputNodes} nodes`)
   console.log(`   MFM points applied to ${mergeResult.stats.mfmPointsApplied} datasheets`)
