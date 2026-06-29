@@ -32,7 +32,7 @@ import {
 } from './lib/parsers/bsdata-subfactions'
 import { parseSecondaryMissions, parseTwistCards } from './lib/parsers/chapter-approved'
 import { parseCoreRules } from './lib/parsers/core-rules'
-import { loadDeploymentZonesFromFile } from './lib/parsers/deployment-zones'
+import { buildDeploymentZoneNodes } from './lib/parsers/deployment-zones'
 import { parseFactionPack } from './lib/parsers/faction-pack'
 import type { GameDataInput } from './lib/parsers/game-data'
 import { convertGameData } from './lib/parsers/game-data'
@@ -571,25 +571,15 @@ async function main() {
   }
 
   // ── 7d. 11e Chapter Approved Deployment Zones ─────────────────────────────
-  // Names from Canon's OCR sidecar (`deployment-zone-names.txt`). Body text
-  // is currently absent — the source image OCRs badly for body copy. Nodes
-  // get a placeholder body that surfaces the gap in the UI; the PR body
-  // tracks this.
-  const DEPLOYMENT_ZONES_PATH = '.local/brain-input/cards/deployment-zone-names.txt'
-  const dzResult = loadDeploymentZonesFromFile(DEPLOYMENT_ZONES_PATH)
-  if (dzResult) {
-    allNodes.push(...dzResult.nodes)
-    const bodyNote = dzResult.bodyPlaceholderUsed ? ' (body text pending)' : ''
-    const missingNote =
-      dzResult.missing.length > 0 ? ` (missing: ${dzResult.missing.join(', ')})` : ''
-    console.log(
-      `\n--- 11e deployment zones ---\n  ${dzResult.nodes.length}/6 nodes${bodyNote}${missingNote}`,
-    )
-  } else {
-    console.warn(
-      `\n--- 11e deployment zones: skipped (no ${DEPLOYMENT_ZONES_PATH}; run stage-card-sources.ts) ---`,
-    )
-  }
+  // Image-only nodes, matching the 10e deployment-zone shape. The 6 cards
+  // live in R2 under `pages/ca11-deployment-zones/page-{1..6}.png`, uploaded
+  // out-of-band via `scripts/upload-deployment-zone-images.ts` after a local
+  // crop run (`scripts/crop-deployment-zone-images.ts`). No body text is
+  // ingested — the image carries the rules content. Nothing to load from
+  // disk here, the zone list is fixed.
+  const dzNodes = buildDeploymentZoneNodes({ retrievedAt: RETRIEVED_AT })
+  allNodes.push(...dzNodes)
+  console.log(`\n--- 11e deployment zones ---\n  ${dzNodes.length}/6 nodes`)
 
   // ── 8. Tournament Companion rules ──────────────────────────────────────────
   const TC_DIR = 'C:/R/sync-data/tools/gw-sync/.local/gw/markdown'
