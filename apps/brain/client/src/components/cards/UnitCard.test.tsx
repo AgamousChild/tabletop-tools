@@ -247,4 +247,52 @@ describe('UnitCard', () => {
     expect(screen.getByText('Datasheet FAQ')).toBeInTheDocument()
     expect(screen.getByText('The ability triggers once per turn.')).toBeInTheDocument()
   })
+
+  it('renders structured coreAbilities with values (FEEL NO PAIN 5+)', () => {
+    const data: UnitCardData = {
+      ...mockUnit,
+      coreAbilities: [{ keyword: 'FEEL NO PAIN', value: '5+' }, { keyword: 'LEADER' }],
+    }
+    render(<UnitCard data={data} context={makeContext()} />)
+    expect(screen.getByText('FEEL NO PAIN 5+')).toBeInTheDocument()
+    expect(screen.getByText('LEADER')).toBeInTheDocument()
+  })
+
+  it('still renders legacy string coreAbilities entries', () => {
+    const data: UnitCardData = {
+      ...mockUnit,
+      coreAbilities: ['DEEP STRIKE', 'SCOUTS 6"'],
+    }
+    render(<UnitCard data={data} context={makeContext()} />)
+    expect(screen.getByText('DEEP STRIKE')).toBeInTheDocument()
+    expect(screen.getByText('SCOUTS 6"')).toBeInTheDocument()
+  })
+
+  it('does NOT render an INV stat when invSv is the placeholder "-+"', () => {
+    const data: UnitCardData = {
+      ...mockUnit,
+      stats: { ...mockUnit.stats, invSv: '-+' },
+    }
+    render(<UnitCard data={data} context={makeContext()} />)
+    expect(screen.queryByText('INV')).not.toBeInTheDocument()
+  })
+
+  it('does NOT render an INV stat when invSv is "-"', () => {
+    const data: UnitCardData = {
+      ...mockUnit,
+      stats: { ...mockUnit.stats, invSv: '-' },
+    }
+    render(<UnitCard data={data} context={makeContext()} />)
+    expect(screen.queryByText('INV')).not.toBeInTheDocument()
+  })
+
+  it('renders INV stat when invSv is a real value', () => {
+    const data: UnitCardData = {
+      ...mockUnit,
+      stats: { ...mockUnit.stats, invSv: '4+' },
+    }
+    render(<UnitCard data={data} context={makeContext()} />)
+    expect(screen.getByText('INV')).toBeInTheDocument()
+    expect(screen.getByText('4+')).toBeInTheDocument()
+  })
 })

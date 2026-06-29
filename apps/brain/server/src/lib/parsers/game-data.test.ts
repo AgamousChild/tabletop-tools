@@ -944,5 +944,203 @@ describe('convertGameData', () => {
       const enh = nodes.find((n) => n.category === 'enhancement')
       expect(enh!.cost).toBeUndefined()
     })
+
+    it('populates stratType on stratagem nodes from Wahapedia strat.type', () => {
+      const input = makeInput({
+        detachments: [
+          {
+            id: 'det-st-type',
+            factionId: 'SM',
+            name: 'Test Detachment Type',
+            legend: '',
+            type: '',
+          },
+        ],
+        stratagems: [
+          {
+            id: 'strat-bt',
+            factionId: 'SM',
+            detachmentId: 'det-st-type',
+            name: 'Battle Tactic Strat',
+            type: 'Battle Tactic',
+            cpCost: '2',
+            turn: 'Either',
+            phase: 'Shooting',
+            legend: '',
+            description: '<b>WHEN:</b> Shooting. <b>EFFECT:</b> Re-roll hits.',
+          },
+        ],
+      })
+      const { nodes } = convertGameData(input, '2026-04-08')
+      const strat = nodes.find((n) => n.category === 'stratagem')
+      expect(strat).toBeDefined()
+      expect(strat!.stratType).toBe('Battle Tactic')
+    })
+
+    it('promotes ability-like keywords (SMOKE) to coreAbilities and out of keywords', () => {
+      const input = makeInput({
+        datasheets: [
+          {
+            id: 'rhino-1',
+            name: 'Chaos Rhino',
+            factionId: 'SM',
+            role: 'Dedicated Transport',
+            legend: '',
+            transport: '',
+            loadout: 'combi-bolter',
+            damagedW: '',
+            damagedDescription: '',
+          },
+        ],
+        datasheetModels: [
+          {
+            id: 1,
+            datasheetId: 'rhino-1',
+            name: 'Chaos Rhino',
+            move: '12"',
+            toughness: '9',
+            save: '3+',
+            wounds: '10',
+            leadership: '6+',
+            oc: '2',
+            invSv: '',
+            invSvDescription: '',
+          },
+        ],
+        unitKeywords: [
+          { id: 'k1', datasheetId: 'rhino-1', keyword: 'Vehicle', isFactionKeyword: false },
+          { id: 'k2', datasheetId: 'rhino-1', keyword: 'Smoke', isFactionKeyword: false },
+          { id: 'k3', datasheetId: 'rhino-1', keyword: 'Transport', isFactionKeyword: false },
+        ],
+      })
+      const { nodes } = convertGameData(input, '2026-04-08')
+      const ds = nodes.find((n) => n.id === 'rhino-1')!
+      // SMOKE is ability-like and must not pollute the keyword row.
+      expect(ds.keywords).not.toContain('smoke')
+      // But it should appear as a coreAbility chip.
+      expect(ds.coreAbilities).toBeDefined()
+      const smoke = ds.coreAbilities!.find((c) => c.keyword === 'SMOKE')
+      expect(smoke).toBeDefined()
+    })
+
+    it('extracts core ability values (FEEL NO PAIN 5+, DEADLY DEMISE D3)', () => {
+      const input = makeInput({
+        datasheets: [
+          {
+            id: 'fnp-unit',
+            name: 'Tough Unit',
+            factionId: 'SM',
+            role: 'Infantry',
+            legend: '',
+            transport: '',
+            loadout: '',
+            damagedW: '',
+            damagedDescription: '',
+          },
+        ],
+        unitAbilities: [
+          {
+            id: 'fnp-a',
+            datasheetId: 'fnp-unit',
+            name: 'Feel No Pain 5+',
+            description: 'Models in this unit have the Feel No Pain 5+ ability.',
+            type: 'Core',
+            parameter: '5+',
+          },
+          {
+            id: 'dd-a',
+            datasheetId: 'fnp-unit',
+            name: 'Deadly Demise D3',
+            description: 'Roll one D6.',
+            type: 'Core',
+            parameter: 'D3',
+          },
+        ],
+      })
+      const { nodes } = convertGameData(input, '2026-04-08')
+      const ds = nodes.find((n) => n.id === 'fnp-unit')!
+      expect(ds.coreAbilities).toBeDefined()
+      const fnp = ds.coreAbilities!.find((c) => c.keyword === 'FEEL NO PAIN')
+      expect(fnp).toBeDefined()
+      expect(fnp!.value).toBe('5+')
+      const dd = ds.coreAbilities!.find((c) => c.keyword === 'DEADLY DEMISE')
+      expect(dd).toBeDefined()
+      expect(dd!.value).toBe('D3')
+    })
+
+    it('dedups singular/plural keyword chips (dedicated transport vs transports)', () => {
+      const input = makeInput({
+        datasheets: [
+          {
+            id: 'dt-unit',
+            name: 'DT Vehicle',
+            factionId: 'SM',
+            role: 'Dedicated Transport',
+            legend: '',
+            transport: '',
+            loadout: '',
+            damagedW: '',
+            damagedDescription: '',
+          },
+        ],
+        unitKeywords: [
+          {
+            id: 'k1',
+            datasheetId: 'dt-unit',
+            keyword: 'Dedicated Transport',
+            isFactionKeyword: false,
+          },
+          {
+            id: 'k2',
+            datasheetId: 'dt-unit',
+            keyword: 'Dedicated Transports',
+            isFactionKeyword: false,
+          },
+        ],
+      })
+      const { nodes } = convertGameData(input, '2026-04-08')
+      const ds = nodes.find((n) => n.id === 'dt-unit')!
+      const matches = ds.keywords.filter((k) => k.toLowerCase().startsWith('dedicated transport'))
+      expect(matches.length).toBe(1)
+    })
+
+    it('populates attachesTo on enhancement nodes (sniffed from description)', () => {
+      const input = makeInput({
+        detachments: [
+          {
+            id: 'det-attach',
+            factionId: 'SM',
+            name: 'Test Det Attach',
+            legend: '',
+            type: '',
+          },
+        ],
+        enhancements: [
+          {
+            id: 'enh-leader',
+            factionId: 'SM',
+            detachmentId: 'det-attach',
+            name: 'Leader Enhancement',
+            legend: '',
+            description: 'Chaplain model only. The bearer gains +1 attack.',
+            cost: '15',
+          },
+          {
+            id: 'enh-unit',
+            factionId: 'SM',
+            detachmentId: 'det-attach',
+            name: 'Unit Enhancement',
+            legend: '',
+            description: "Models in the bearer's unit have +1 strength.",
+            cost: '20',
+          },
+        ],
+      })
+      const { nodes } = convertGameData(input, '2026-04-08')
+      const leader = nodes.find((n) => n.title === 'Leader Enhancement')
+      const unit = nodes.find((n) => n.title === 'Unit Enhancement')
+      expect(leader!.attachesTo).toBe('leader')
+      expect(unit!.attachesTo).toBe('unit')
+    })
   })
 })

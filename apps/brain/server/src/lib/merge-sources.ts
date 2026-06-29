@@ -384,6 +384,55 @@ export function mergeSources(
     }
   }
 
+  // Redirect map collects droppedId → keptId across all the dedup passes
+  // below (MFM→pack detachment merge, title-based detachment-rule dedup).
+  const redirectIds = new Map<string, string>() // droppedId → keptId
+
+  // Step 2b1: Collapse MFM-emitted `category: 'detachment'` nodes onto
+  // faction-pack `category: 'detachment-rule'` nodes that describe the same
+  // detachment. Survivor keeps:
+  //   - title from the faction-pack version (cleaner heading)
+  //   - content from the faction-pack version (the rule text)
+  //   - dp + forceDisposition + enhancement refs from the MFM version
+  //   - single `category: 'detachment'`
+  //   - sources[] union (preserves both provenances)
+  //   - canonical id `det:<faction>:<slug>` (drop the `mfm:` prefix)
+  const detachmentMergesByKey = new Map<string, { mfm?: Node; pack?: Node }>()
+  for (const node of nodeMap.values()) {
+    if (node.category !== 'detachment' && node.category !== 'detachment-rule') continue
+    const key = `${node.factionId ?? ''}|${node.title.toLowerCase().trim()}`
+    const bucket = detachmentMergesByKey.get(key) ?? {}
+    if (node.category === 'detachment') bucket.mfm = node
+    else bucket.pack = node
+    detachmentMergesByKey.set(key, bucket)
+  }
+  for (const { mfm, pack } of detachmentMergesByKey.values()) {
+    if (!mfm || !pack) continue
+    // Keep the pack node as the survivor (canonical `det:<faction>:<slug>` id).
+    // Pull dp + forceDisposition + sources off the MFM node onto it, set
+    // category to 'detachment', and drop the MFM node.
+    if (mfm.dp != null) pack.dp = mfm.dp
+    if (mfm.forceDisposition) pack.forceDisposition = mfm.forceDisposition
+    pack.category = 'detachment'
+    // Union sources (drop dupes by type+title pair)
+    const existingSrcKeys = new Set(pack.sources.map((s) => `${s.type}|${s.title}`))
+    for (const src of mfm.sources) {
+      const k = `${src.type}|${src.title}`
+      if (!existingSrcKeys.has(k)) {
+        pack.sources.push(src)
+        existingSrcKeys.add(k)
+      }
+    }
+    // Merge keywords
+    const existingKws = new Set(pack.keywords)
+    for (const kw of mfm.keywords) {
+      if (!existingKws.has(kw)) pack.keywords.push(kw)
+    }
+    // Redirect refs that pointed at the MFM id
+    redirectIds.set(mfm.id, pack.id)
+    nodeMap.delete(mfm.id)
+  }
+
   const DEDUP_CATEGORIES = new Set([
     'detachment-rule',
     'stratagem',
@@ -405,7 +454,6 @@ export function mergeSources(
     byTitleFaction.get(key)!.push(node)
   }
 
-  const redirectIds = new Map<string, string>() // droppedId → keptId
   let titleDeduped = 0
   for (const [, dupes] of byTitleFaction) {
     if (dupes.length <= 1) continue

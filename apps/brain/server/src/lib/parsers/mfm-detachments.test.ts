@@ -188,6 +188,28 @@ describe('parseMfmDetachments', () => {
     expect(result.totalEnhancements).toBe(0)
   })
 
+  it('populates attachesTo + cost on enhancement nodes', () => {
+    const sample = JSON.stringify([
+      {
+        factionSlug: 'space-marines',
+        name: 'Gladius Task Force',
+        dp: 2,
+        objective: 'Codex tactics.',
+        enhancements: [
+          { name: 'Adept of the Codex', points: 25, leaderTo: ['Captain', 'Lieutenant'] },
+          { name: 'Vox Espiritum', points: 15 },
+        ],
+      },
+    ])
+    const result = parseMfmDetachments(sample, RETRIEVED_AT)
+    const leaderEnh = result.nodes.find((n) => n.title === 'Adept of the Codex')!
+    const unitEnh = result.nodes.find((n) => n.title === 'Vox Espiritum')!
+    expect(leaderEnh.attachesTo).toBe('leader')
+    expect(unitEnh.attachesTo).toBe('unit')
+    expect(leaderEnh.cost).toBe(25)
+    expect(unitEnh.cost).toBe(15)
+  })
+
   it('omits a publishedAt source field when none is provided', () => {
     const sample = JSON.stringify([
       {

@@ -161,6 +161,14 @@ describe('parseFactionPack', () => {
     expect(shooting!.target).toMatch(/Space Marines/i)
     expect(shooting!.effect).toMatch(/Armour Penetration/i)
   })
+
+  it('sets attachesTo on enhancement nodes (model only → leader)', () => {
+    const enhancements = result.nodes.filter((n) => n.category === 'enhancement')
+    // Both IRON RESOLVE and MASTER-CRAFTED WEAPON say "Space Marines model only."
+    for (const enh of enhancements) {
+      expect(enh.attachesTo).toBe('leader')
+    }
+  })
 })
 
 // 11e UPDATES & ERRATA + FAQS structure, extracted from the real Feb 2026

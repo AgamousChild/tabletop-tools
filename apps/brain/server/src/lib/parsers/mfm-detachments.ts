@@ -211,6 +211,11 @@ function buildEnhancementNode(
     ...(enh.leaderTo ?? []).map((s) => s.toLowerCase()),
   ]
 
+  // attachesTo: MFM rows encode the leader/unit distinction via the `leaderTo`
+  // array. Non-empty array → enhancement attaches to a leader (a specific
+  // CHARACTER model). Empty/missing → attaches to the bearer's unit.
+  const attachesTo: 'leader' | 'unit' = enh.leaderTo && enh.leaderTo.length > 0 ? 'leader' : 'unit'
+
   return {
     id: enhId,
     layer: 'faction',
@@ -222,6 +227,8 @@ function buildEnhancementNode(
     factionId,
     detachmentId: detId,
     edition: '11th',
+    cost: enh.points,
+    attachesTo,
     ...(row.unique ? { subfaction: row.unique } : {}),
     sources: [source],
     refs: [],
