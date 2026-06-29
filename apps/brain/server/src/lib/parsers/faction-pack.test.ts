@@ -1,7 +1,7 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 
 import { _setFactionCodesForTesting, resetFactionCodes } from '../faction-codes'
-import { parseFactionPack } from './faction-pack'
+import { detectFactionPackEdition, parseFactionPack } from './faction-pack'
 
 beforeAll(() => {
   _setFactionCodesForTesting(
@@ -131,6 +131,12 @@ describe('parseFactionPack', () => {
     }
   })
 
+  it('does not set edition when none is supplied (caller defaults to 10th downstream)', () => {
+    for (const node of result.nodes) {
+      expect(node.edition).toBeUndefined()
+    }
+  })
+
   it('detachment-rule node id has no doubled slug (regression: det:fac:slug:slug)', () => {
     // The detachment heading "## CERAMITE SENTINELS" should produce id
     // `det:space-marines:ceramite-sentinels`, NOT
@@ -144,5 +150,110 @@ describe('parseFactionPack', () => {
       const m = n.id.match(/^det:[^:]+:([^:]+):(.+)$/)
       if (m) expect(m[1]).not.toBe(m[2])
     }
+  })
+})
+
+// 11e UPDATES & ERRATA + FAQS structure, extracted from the real Feb 2026
+// faction packs (eng_11-02_*). We keep the excerpt short but preserve the
+// exact heading + body shape the parser dispatches on. We split the Page
+// entries onto separate lines because the real PDF→markdown converter
+// emits them line-broken when the source PDF wraps them; the splitter
+// fires on entries that start a line.
+const SAMPLE_11E_ERRATA = `
+## SPACE MARINES
+
+
+#### UPDATES & ERRATA
+
+Page 107  —  Gladius Task Force, Storm of Fire Stratagem Change the Target to read: 'One Adeptus Astartes unit from your army that has not been selected to shoot this phase .'
+Page 111  —  Ironstorm Spearhead, Ancient Fury Stratagem Change the Effect to read: 'Until the start of your next Command phase, improve your model's Move, Toughness, Leadership and Objective Control characteristics by 1 and each time your model makes an attack, add 1 to the Hit roll.'
+
+
+#### FAQS
+
+Q: Which Detachments are considered to be Codex: Space Marines Detachments? A: Every Detachment printed in Codex: Space Marines and every Detachment included in the Space Marines Faction Pack. Q: While using the Gladius Task Force Detachment, does a Combat Doctrine need to be active for my army in order to use the Adaptive Strategy Stratagem? A: No.
+`.trim()
+
+describe('parseFactionPack — 11th edition errata stamping', () => {
+  let elevenResult: ReturnType<typeof parseFactionPack>
+  beforeAll(() => {
+    elevenResult = parseFactionPack(SAMPLE_11E_ERRATA, 'space-marines', '2026-06-27', '11th')
+  })
+
+  it('extracts errata nodes from UPDATES & ERRATA block', () => {
+    const errata = elevenResult.nodes.filter(
+      (n) => n.layer === 'errata' && n.category === 'commentary',
+    )
+    expect(errata.length).toBeGreaterThanOrEqual(2)
+    // Each entry should retain its page reference in the id.
+    expect(errata.some((n) => n.id.includes('p107'))).toBe(true)
+    expect(errata.some((n) => n.id.includes('p111'))).toBe(true)
+  })
+
+  it('extracts FAQ nodes from FAQS block', () => {
+    const faqs = elevenResult.nodes.filter((n) => n.layer === 'errata' && n.category === 'faq')
+    expect(faqs.length).toBeGreaterThanOrEqual(2)
+    // FAQ titles should derive from the Q: text, not the body.
+    expect(faqs.some((n) => n.title.toLowerCase().includes('codex: space marines'))).toBe(true)
+  })
+
+  it('stamps edition=11th on every errata and FAQ node', () => {
+    const errataLike = elevenResult.nodes.filter((n) => n.layer === 'errata')
+    expect(errataLike.length).toBeGreaterThan(0)
+    for (const node of errataLike) {
+      expect(node.edition).toBe('11th')
+    }
+  })
+
+  it('stamps factionId on every errata and FAQ node', () => {
+    const errataLike = elevenResult.nodes.filter((n) => n.layer === 'errata')
+    for (const node of errataLike) {
+      expect(node.factionId).toBe('space-marines')
+    }
+  })
+
+  it('omits edition when called without the parameter (legacy callers)', () => {
+    const legacy = parseFactionPack(SAMPLE_11E_ERRATA, 'space-marines', '2026-06-27')
+    const errataLike = legacy.nodes.filter((n) => n.layer === 'errata')
+    expect(errataLike.length).toBeGreaterThan(0)
+    for (const node of errataLike) {
+      expect(node.edition).toBeUndefined()
+    }
+  })
+})
+
+describe('detectFactionPackEdition', () => {
+  it('flags eng_11-02_* URLs (11e launch wave, Feb 2026) as 11th', () => {
+    expect(
+      detectFactionPackEdition(
+        'https://assets.warhammer-community.com/eng_11-02_warhammer_40000_faction_pack_space_marines-t7ypi7ib36-b5jouxnw7u.pdf',
+      ),
+    ).toBe('11th')
+  })
+
+  it('flags eng_07-01_* URLs (11e second wave, Jul 2026) as 11th', () => {
+    expect(
+      detectFactionPackEdition(
+        'https://assets.warhammer-community.com/eng_07-01_warhammer_40000_faction_pack_necrons-wgehvvo84t-ijjxadnsk6.pdf',
+      ),
+    ).toBe('11th')
+  })
+
+  it('falls back to 10th for legacy URL prefixes', () => {
+    expect(
+      detectFactionPackEdition(
+        'https://assets.warhammer-community.com/eng_22-10_warhammer40000_faction_pack_adeptus_custodes-istx2ftigx-kpxm1aho6e.pdf',
+      ),
+    ).toBe('10th')
+    expect(
+      detectFactionPackEdition(
+        'https://assets.warhammer-community.com/eng_08-10_warhammer40000_faction_pack_death_guard-q6ymklgmjr-qnqozce7k2.pdf',
+      ),
+    ).toBe('10th')
+  })
+
+  it('falls back to 10th when URL is unknown / empty', () => {
+    expect(detectFactionPackEdition('')).toBe('10th')
+    expect(detectFactionPackEdition('not-a-real-url')).toBe('10th')
   })
 })
