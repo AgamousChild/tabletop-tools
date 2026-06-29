@@ -84,6 +84,11 @@ export const RefTypeSchema = z.enum([
   // Army construction
   'eligible_for',
   'can_lead',
+  // 11e SUPPORT attachment — a character can SUPPORT a unit (alternative to
+  // LEADER). Both `LEADER:` and `SUPPORT:` blocks appear on 11e datasheets;
+  // they're mutually exclusive on a single attachment. Faction-pack +
+  // Wahapedia parsers emit a `can_support` ref when they see a SUPPORT block.
+  'can_support',
 ])
 export type RefType = z.infer<typeof RefTypeSchema>
 
@@ -262,6 +267,12 @@ export const NodeSchema = z.object({
 
   // Edition (e.g., '10th', '11th')
   edition: z.string().optional(),
+
+  // Set on a 10e node when an 11e faction pack (or other 11e source) emits a
+  // structured change targeting the same entity. Bit-flag only; the actual
+  // change is the 11e companion node. Populated by `merge-sources.ts` via the
+  // validation-delta pass after parsing all sources.
+  updatedInEleventh: z.boolean().optional(),
 
   // Card-side eligibility — used by 11e secondary-mission cards which are
   // identical in attacker + defender decks. Rather than emitting two nodes

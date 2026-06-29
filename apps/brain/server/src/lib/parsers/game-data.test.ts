@@ -428,6 +428,137 @@ describe('convertGameData', () => {
     expect(attachRef!.context).toContain('attached')
   })
 
+  // Regression: Chaos Rhino (and other dedicated-transport datasheets) were
+  // reported to come back with empty `rangedWeapons` + `meleeWeapons` arrays
+  // on the unit card. The data-layer join is straightforward
+  // (`datasheet_wargear.datasheetId === datasheet.id`) and works for any
+  // role. This test locks the join in place against the role string
+  // "Dedicated Transports" so a future filter accidentally narrowing by role
+  // (e.g., excluding transports) will trip here.
+  it('emits weapon nodes for Dedicated Transport datasheets (Chaos Rhino class)', () => {
+    const input = makeInput({
+      datasheets: [
+        {
+          id: 'transport-1',
+          name: 'Synthetic Transport',
+          factionId: 'SM',
+          role: 'Dedicated Transports',
+          legend: '',
+          transport: 'Transport capacity 10.',
+          loadout: 'one storm bolter',
+          damagedW: '',
+          damagedDescription: '',
+        },
+      ],
+      datasheetWargear: [
+        {
+          id: 1,
+          datasheetId: 'transport-1',
+          name: 'Storm bolter',
+          description: 'Standard transport gun',
+          range: '24"',
+          type: 'Ranged',
+          attacks: '2',
+          skill: '4+',
+          strength: '4',
+          ap: '0',
+          damage: '1',
+        },
+        {
+          id: 2,
+          datasheetId: 'transport-1',
+          name: 'Armoured tracks',
+          description: 'Crushes infantry underneath.',
+          range: 'Melee',
+          type: 'Melee',
+          attacks: '3',
+          skill: '4+',
+          strength: '6',
+          ap: '0',
+          damage: '1',
+        },
+      ],
+    })
+
+    const { nodes } = convertGameData(input, '2026-06-29')
+
+    const weapons = nodes.filter((n) => n.category === 'weapon' && n.datasheetId === 'transport-1')
+    expect(weapons.length).toBe(2)
+    const ranged = weapons.find((w) => w.title === 'Storm bolter')
+    expect(ranged).toBeDefined()
+    expect(ranged!.content).toMatch(/\*\*Type:\*\* Ranged/i)
+    const melee = weapons.find((w) => w.title === 'Armoured tracks')
+    expect(melee).toBeDefined()
+    expect(melee!.content).toMatch(/\*\*Type:\*\* Melee/i)
+  })
+
+  it('emits can_support refs for leader_attachments rows tagged type=support (11e)', () => {
+    const input = makeInput({
+      datasheets: [
+        {
+          id: 'char-1',
+          name: 'Sentinel Captain',
+          factionId: 'SM',
+          role: 'Character',
+          legend: '',
+          transport: '',
+          loadout: '',
+          damagedW: '',
+          damagedDescription: '',
+        },
+        {
+          id: 'sup-1',
+          name: 'Heavy Weapons Team',
+          factionId: 'SM',
+          role: 'Battleline',
+          legend: '',
+          transport: '',
+          loadout: '',
+          damagedW: '',
+          damagedDescription: '',
+        },
+        {
+          id: 'led-1',
+          name: 'Sentinel Squad',
+          factionId: 'SM',
+          role: 'Battleline',
+          legend: '',
+          transport: '',
+          loadout: '',
+          damagedW: '',
+          damagedDescription: '',
+        },
+      ],
+      leaderAttachments: [
+        // 11e SUPPORT row — emits can_support
+        {
+          id: 'la-sup',
+          leaderId: 'char-1',
+          attachedId: 'sup-1',
+          type: 'support',
+        },
+        // 11e LEADER row (explicit type) — still can_lead
+        {
+          id: 'la-led',
+          leaderId: 'char-1',
+          attachedId: 'led-1',
+          type: 'leader',
+        },
+      ],
+    })
+
+    const { refs } = convertGameData(input, '2026-06-29')
+
+    const supportRef = refs.find((r) => r.rel === 'can_support' && r.targetId === 'sup-1')
+    expect(supportRef).toBeDefined()
+    expect(supportRef!.sourceId).toBe('char-1')
+    expect(supportRef!.context).toContain('SUPPORT')
+
+    const leaderRef = refs.find((r) => r.rel === 'can_lead' && r.targetId === 'led-1')
+    expect(leaderRef).toBeDefined()
+    expect(leaderRef!.sourceId).toBe('char-1')
+  })
+
   it('extracts weapon keywords from description', () => {
     const input = makeInput({
       datasheets: [

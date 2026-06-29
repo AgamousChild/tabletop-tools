@@ -491,4 +491,95 @@ describe('mergeSources', () => {
       expect(result.nodes[0]!.dp).toBe(1)
     })
   })
+
+  describe('updatedInEleventh stamping (step 4d)', () => {
+    it('sets updatedInEleventh on 10e nodes whose 11e companion is in the graph', () => {
+      const nodes = [
+        // 10e datasheet — should get flagged because 11e companion exists below
+        makeNode({
+          id: '10e:sm:intercessor-squad',
+          category: 'datasheet',
+          title: 'Intercessor Squad',
+          factionId: 'space-marines',
+          edition: '10th',
+        }),
+        // 11e datasheet — same factionId, category, slugified title
+        makeNode({
+          id: '11e:ds:space-marines:intercessor-squad',
+          category: 'datasheet',
+          title: 'Intercessor Squad',
+          factionId: 'space-marines',
+          edition: '11th',
+        }),
+        // 10e detachment-rule — no 11e companion; should NOT get flagged
+        makeNode({
+          id: 'det:space-marines:old-detachment',
+          category: 'detachment-rule',
+          title: 'Old Detachment',
+          factionId: 'space-marines',
+          edition: '10th',
+        }),
+      ]
+
+      const result = mergeSources(nodes, [])
+      const flagged = result.nodes.find((n) => n.id === '10e:sm:intercessor-squad')
+      expect(flagged?.updatedInEleventh).toBe(true)
+
+      const unflagged = result.nodes.find((n) => n.id === 'det:space-marines:old-detachment')
+      expect(unflagged?.updatedInEleventh).toBeUndefined()
+
+      // 11e companions themselves never carry the flag — it's a 10e-only signal.
+      const elevenNode = result.nodes.find((n) => n.id === '11e:ds:space-marines:intercessor-squad')
+      expect(elevenNode?.updatedInEleventh).toBeUndefined()
+
+      expect(result.stats.updatedInEleventhFlagged).toBe(1)
+    })
+
+    it('matches across categories — datasheet on 10e + datasheet on 11e', () => {
+      const nodes = [
+        makeNode({
+          id: '10e-ds',
+          category: 'datasheet',
+          title: 'Captain',
+          factionId: 'space-marines',
+          edition: '10th',
+        }),
+        makeNode({
+          id: '11e-ds',
+          category: 'datasheet',
+          title: 'Captain',
+          factionId: 'space-marines',
+          edition: '11th',
+        }),
+      ]
+      const result = mergeSources(nodes, [])
+      expect(result.nodes.find((n) => n.id === '10e-ds')?.updatedInEleventh).toBe(true)
+      expect(result.stats.updatedInEleventhFlagged).toBe(1)
+    })
+
+    it('does NOT match across categories — same title in different category does not flag', () => {
+      const nodes = [
+        makeNode({
+          id: '10e-ds-tactical',
+          category: 'datasheet',
+          title: 'Tactical Squad',
+          factionId: 'space-marines',
+          edition: '10th',
+        }),
+        // 11e stratagem named "Tactical Squad" — different category, no flag
+        makeNode({
+          id: '11e-strat',
+          category: 'stratagem',
+          title: 'Tactical Squad',
+          factionId: 'space-marines',
+          edition: '11th',
+        }),
+      ]
+      const result = mergeSources(nodes, [])
+      expect(
+        result.nodes.find((n) => n.id === '10e-ds-tactical')?.updatedInEleventh,
+      ).toBeUndefined()
+      expect(result.stats.updatedInEleventhFlagged).toBe(0)
+    })
+  })
 })

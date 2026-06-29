@@ -144,12 +144,111 @@ export function parseFactionPack(
     | 'army-rule'
     | 'faq'
     | 'errata'
+    | 'datasheet'
     | 'skip' = 'skip'
   let inEnhancementZone = false
   let inArmyRulesZone = false
   let inFaqZone = false
   let inErrataZone = false
   let pendingStratagemName = '' // Name extracted from trailing ALL-CAPS in previous stratagem's effect
+
+  /**
+   * Emit a datasheet node from a `##### UNIT_NAME` block in a faction pack.
+   * Captures LEADER: and SUPPORT: ref blocks pointing at attached units.
+   *
+   * 11e faction packs emit datasheets in this shape:
+   *   ##### CAPTAIN
+   *   KEYWORDS: Infantry, Character ...
+   *   RANGED WEAPONS ...
+   *   LEADER: Intercessor Squad, Assault Squad
+   *   SUPPORT: Devastator Squad
+   *
+   * 10e LEGENDS datasheets use a bullet-list shape (`LEADER This model can be
+   * attached to the following units:` followed by `- Squad Name` items). The
+   * regex below recognises both shapes — the colon form for 11e, and the
+   * "LEADER This model can be attached" form for 10e LEGENDS bullets.
+   */
+  function emitDatasheet(title: string, body: string): void {
+    const id = makeId(`datasheet:${factionSlug}:${slugify(title)}`)
+    const summary = truncate(body.split(/[.!?]\s/)[0] ?? title, 150)
+
+    nodes.push({
+      id,
+      layer: 'unit',
+      category: 'datasheet',
+      title,
+      content: body,
+      summary,
+      factionId: normalizeFactionId(factionSlug),
+      subfaction: currentDetachmentChapter,
+      sources: [source],
+      refs: [],
+      version: 1,
+      keywords: extractKeywords(title, body),
+      edition,
+    })
+
+    // ── Extract LEADER: / SUPPORT: attachment refs ────────────────────────
+    // Each character→unit pair becomes one ref. We accept two shapes:
+    //   - 11e colon form: "LEADER: Squad A, Squad B"
+    //   - 10e bullet form: "LEADER This model can be attached to the following
+    //     unit(s):" followed by `- Squad A` lines.
+    extractAttachmentRefs(id, title, body, 'LEADER', 'can_lead')
+    extractAttachmentRefs(id, title, body, 'SUPPORT', 'can_support')
+  }
+
+  function extractAttachmentRefs(
+    sourceId: string,
+    sourceTitle: string,
+    body: string,
+    label: 'LEADER' | 'SUPPORT',
+    rel: 'can_lead' | 'can_support',
+  ): void {
+    const targets: string[] = []
+
+    // 11e colon form: "LEADER: Unit A, Unit B" up to the next ALL-CAPS field
+    // header (RANGED, MELEE, KEYWORDS, FACTION, SUPPORT, LEADER, WARGEAR, etc.)
+    // or end of body.
+    const colonPattern = new RegExp(
+      `(?:^|\\n)\\s*${label}:\\s*([\\s\\S]*?)(?=\\n\\s*(?:RANGED|MELEE|KEYWORDS|FACTION|WARGEAR|SUPPORT|LEADER|ABILITIES|UNIT|DAMAGED|INVULNERABLE|M\\s+T\\s+SV)\\b|$)`,
+      'i',
+    )
+    const colonMatch = body.match(colonPattern)
+    if (colonMatch && colonMatch[1]) {
+      const list = colonMatch[1].trim()
+      // Comma-, semicolon-, or newline-separated list of unit names.
+      for (const part of list.split(/[,;\n]/)) {
+        const name = part.trim().replace(/^[-•]\s*/, '')
+        if (name && name.length >= 2 && name.length <= 80) targets.push(name)
+      }
+    }
+
+    // 10e bullet form (LEGENDS datasheets): "LEADER This model can be attached
+    // to the following unit(s):" followed by `- Squad A\n- Squad B\n...`
+    if (label === 'LEADER' && targets.length === 0) {
+      const bulletPattern =
+        /LEADER\s+This model can be attached to the following units?:\s*([\s\S]*?)(?=\n\s*(?:#{2,5}\s|[A-Z]{2,}\s|$))/i
+      const bulletMatch = body.match(bulletPattern)
+      if (bulletMatch && bulletMatch[1]) {
+        for (const line of bulletMatch[1].split('\n')) {
+          const trimmed = line.trim().replace(/^[-•]\s*/, '')
+          if (trimmed && trimmed.length >= 2 && trimmed.length <= 80) {
+            targets.push(trimmed)
+          }
+        }
+      }
+    }
+
+    for (const targetName of targets) {
+      refs.push({
+        sourceId,
+        targetId: `datasheet:${factionSlug}:${slugify(targetName)}`,
+        rel,
+        context: `${sourceTitle.length > 0 ? sourceTitle : 'This character'} can ${label.toLowerCase()} ${targetName}.`,
+        bidirectional: true,
+      })
+    }
+  }
 
   function flushSection() {
     if (!sectionTitle || sectionType === 'skip') {
@@ -169,13 +268,20 @@ export function parseFactionPack(
     // that appear in the enhancement zone of faction pack PDFs but are actually datasheet fragments
     if (sectionType === 'enhancement' && /^[\d\-\u2011]/.test(title)) return
 
-    // Reject datasheets misclassified as enhancements — full unit profiles that appear
-    // in the enhancement zone (e.g., Tiger Shark in T'au, Deathwatch kill teams).
-    // Detect by: weapon stat tables, KEYWORDS: header, or FACTION KEYWORDS: header.
-    if (sectionType === 'enhancement') {
-      if (/\b(RANGED|MELEE) WEAPONS\s+(RANGE|A\b)/i.test(body)) return
-      if (/^KEYWORDS:\s/i.test(body)) return
-      if (/\bFACTION KEYWORDS?:\s/i.test(body)) return
+    // Detect datasheet bodies misclassified as enhancements — full unit profiles
+    // that appear in the enhancement zone (e.g., Tiger Shark in T'au, Deathwatch
+    // kill teams) OR 11e datasheet blocks emitted as `##### UNIT_NAME` sections.
+    // Signal: weapon stat tables, KEYWORDS: header, or FACTION KEYWORDS: header.
+    // Route to the datasheet emit path which captures LEADER:/SUPPORT: refs.
+    if (sectionType === 'enhancement' || sectionType === 'rule') {
+      const looksLikeDatasheet =
+        /\b(RANGED|MELEE) WEAPONS\s+(RANGE|A\b)/i.test(body) ||
+        /^KEYWORDS:\s/im.test(body) ||
+        /\bFACTION KEYWORDS?:\s/i.test(body)
+      if (looksLikeDatasheet) {
+        emitDatasheet(title, body)
+        return
+      }
     }
 
     // Errata and FAQ blocks need to be split into individual entries

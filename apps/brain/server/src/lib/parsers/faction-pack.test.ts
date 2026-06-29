@@ -240,6 +240,69 @@ describe('parseFactionPack — 11th edition errata stamping', () => {
   })
 })
 
+// 11e datasheet shape: ##### UNIT_NAME body with KEYWORDS + RANGED/MELEE
+// WEAPONS + LEADER:/SUPPORT: blocks. Synthetic content — names invented to
+// keep GW content out of the repo per the Data Boundary rule.
+const SAMPLE_11E_DATASHEET = `
+## CERAMITE SENTINELS
+
+##### ENHANCEMENTS
+
+##### IRON RESOLVE
+
+Space Marines model only. The bearer has a 4+ Feel No Pain.
+
+##### SENTINEL CAPTAIN
+
+KEYWORDS: Infantry, Character, Sentinel Captain
+RANGED WEAPONS RANGE A BS S AP D
+Plasma pistol 12" 1 3+ 7 -2 1
+MELEE WEAPONS RANGE A WS S AP D
+Power sword Melee 4 3+ 5 -2 2
+FACTION KEYWORDS: Adeptus Astartes, Space Marines
+LEADER: Sentinel Squad, Vanguard Squad
+SUPPORT: Heavy Weapons Team, Ceramite Walker
+ABILITIES
+Core: Leader
+`.trim()
+
+describe('parseFactionPack — 11e datasheet LEADER/SUPPORT extraction', () => {
+  let dsResult: ReturnType<typeof parseFactionPack>
+  beforeAll(() => {
+    dsResult = parseFactionPack(SAMPLE_11E_DATASHEET, 'space-marines', '2026-06-29', '11th')
+  })
+
+  it('emits a datasheet node for the unit block', () => {
+    const datasheets = dsResult.nodes.filter((n) => n.category === 'datasheet')
+    expect(datasheets.length).toBeGreaterThanOrEqual(1)
+    const captain = datasheets.find((n) => n.title === 'SENTINEL CAPTAIN')
+    expect(captain).toBeDefined()
+    expect(captain!.factionId).toBe('space-marines')
+    expect(captain!.edition).toBe('11th')
+  })
+
+  it('emits can_lead refs for each LEADER: target unit', () => {
+    const leadRefs = dsResult.refs.filter((r) => r.rel === 'can_lead')
+    expect(leadRefs.length).toBeGreaterThanOrEqual(2)
+    const targets = leadRefs.map((r) => r.targetId)
+    expect(targets).toContain('datasheet:space-marines:sentinel-squad')
+    expect(targets).toContain('datasheet:space-marines:vanguard-squad')
+  })
+
+  it('emits can_support refs for each SUPPORT: target unit', () => {
+    const supportRefs = dsResult.refs.filter((r) => r.rel === 'can_support')
+    expect(supportRefs.length).toBeGreaterThanOrEqual(2)
+    const targets = supportRefs.map((r) => r.targetId)
+    expect(targets).toContain('datasheet:space-marines:heavy-weapons-team')
+    expect(targets).toContain('datasheet:space-marines:ceramite-walker')
+  })
+
+  it('does not drop the existing enhancement when datasheet sits in the same zone', () => {
+    const enhancements = dsResult.nodes.filter((n) => n.category === 'enhancement')
+    expect(enhancements.some((n) => n.title === 'IRON RESOLVE')).toBe(true)
+  })
+})
+
 describe('detectFactionPackEdition', () => {
   it('flags eng_11-02_* URLs (11e launch wave, Feb 2026) as 11th', () => {
     expect(
