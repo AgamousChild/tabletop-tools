@@ -258,6 +258,28 @@ describe('buildCardData', () => {
       if (card?.type !== 'enhancement') return
       expect(card.data.factionId).toBe('space-marines')
     })
+
+    // ── Bug-3 regression: MFM enhancement nodes carry `**Name** (Npts)` as
+    // the first line of their content. The card surfaces name + cost from
+    // their own props, so the header must be stripped from the description.
+    it('strips the leading "**Name** (Npts)" header from description', () => {
+      const mfmEnhancementNode: BrainNode = {
+        id: 'enh:custodes:aquilan-eye',
+        title: 'Aquilan Eye',
+        summary: 'Aquilan Eye — 15 pts enhancement',
+        content: '**Aquilan Eye** (15 pts)\nThe bearer gains a 5+ invulnerable save.',
+        layer: 'faction',
+        category: 'enhancement',
+        factionId: 'adeptus-custodes',
+        keywords: ['enhancement'],
+        sources: [],
+      }
+      const card = buildCardData(mfmEnhancementNode)
+      if (card?.type !== 'enhancement') return
+      expect(card.data.description).not.toMatch(/\*\*Aquilan Eye\*\*/)
+      expect(card.data.description).not.toMatch(/\(15 pts\)/)
+      expect(card.data.description).toContain('5+ invulnerable save')
+    })
   })
 
   describe('faction-ability without detachmentId → RuleCardData (isArmyRule: true)', () => {

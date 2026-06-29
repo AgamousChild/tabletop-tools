@@ -205,11 +205,19 @@ function buildEnhancementData(node: BrainNode): EnhancementCardData {
   const cost = parseCost(content)
   const restriction = parseRestriction(content)
 
+  // Strip the leading "**Name** (Npts)" header from MFM nodes
+  // (server/lib/parsers/mfm-detachments.ts buildEnhancementNode). The card
+  // surfaces name and cost separately; leaving the header in the description
+  // shows literal markdown asterisks.
+  const description = (content || node.summary || '')
+    .replace(/^\*\*[^*]+\*\*\s*\(\d+\s*pts?\)\s*\n?/, '')
+    .trim()
+
   return {
     id: node.id,
     name: node.title,
     cost,
-    description: content || node.summary,
+    description,
     restriction,
     detachmentName: '',
     factionId: node.factionId || '',

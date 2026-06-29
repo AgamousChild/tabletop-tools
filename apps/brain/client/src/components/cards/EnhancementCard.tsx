@@ -1,4 +1,5 @@
 import { factionDisplayName } from '../../lib/faction-names'
+import { renderMarkdown } from '../../lib/render-markdown'
 import { ErrataSection } from './ErrataSection'
 import type { CardContext, EnhancementCardData } from './types'
 
@@ -7,36 +8,41 @@ interface EnhancementCardProps {
   context: CardContext
 }
 
-function highlightText(
-  text: string,
-  terms: string[],
-  onContentClick: (term: string) => void,
-): React.ReactNode {
-  if (!terms.length) return text
-
+/**
+ * Wrap highlight terms in `<mark>` tags inside a string of rendered HTML.
+ * Skips matches that fall inside existing HTML tag attributes so we don't
+ * corrupt the structure produced by `renderMarkdown`.
+ */
+function highlightHtml(html: string, terms: string[]): string {
+  if (!terms.length) return html
   const escaped = terms.map((t) => t.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'))
   const regex = new RegExp(`(${escaped.join('|')})`, 'gi')
-  const parts = text.split(regex)
 
-  return parts.map((part, i) => {
-    const matched = terms.find((t) => t.toLowerCase() === part.toLowerCase())
-    if (matched) {
-      return (
-        <mark
-          key={i}
-          className="bg-amber-400 text-slate-900 cursor-pointer rounded-sm px-0.5"
-          onClick={() => onContentClick(matched)}
-        >
-          {part}
-        </mark>
+  // Split on tag boundaries so we only highlight inside text nodes.
+  return html
+    .split(/(<[^>]+>)/g)
+    .map((segment) => {
+      if (segment.startsWith('<')) return segment
+      return segment.replace(
+        regex,
+        '<mark class="bg-amber-400 text-slate-900 cursor-pointer rounded-sm px-0.5" data-highlight-term="$1">$1</mark>',
       )
-    }
-    return part
-  })
+    })
+    .join('')
 }
 
 export function EnhancementCard({ data, context }: EnhancementCardProps) {
   const { highlightTerms, onContentClick } = context
+  const renderedHtml = highlightHtml(renderMarkdown(data.description), highlightTerms)
+
+  // Delegate highlight-term clicks via event listener — the highlightHtml
+  // helper stamps `data-highlight-term` on each <mark> so we can recover the
+  // matched text without re-parsing the DOM.
+  const handleDescriptionClick = (e: React.MouseEvent<HTMLDivElement>) => {
+    const target = e.target as HTMLElement
+    const term = target.getAttribute('data-highlight-term')
+    if (term) onContentClick(term)
+  }
 
   return (
     <div
@@ -81,10 +87,13 @@ export function EnhancementCard({ data, context }: EnhancementCardProps) {
           )}
         </div>
 
-        {/* Description */}
-        <div className="text-xs text-slate-300 leading-snug">
-          {highlightText(data.description, highlightTerms, onContentClick)}
-        </div>
+        {/* Description — rendered through renderMarkdown so MFM nodes that
+            carry **bold** markup don't surface as literal asterisks. */}
+        <div
+          className="text-xs text-slate-300 leading-snug"
+          onClick={handleDescriptionClick}
+          dangerouslySetInnerHTML={{ __html: renderedHtml }}
+        />
 
         {/* Faction — Detachment footer */}
         {(data.factionId || data.detachmentName) && (

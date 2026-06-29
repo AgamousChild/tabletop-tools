@@ -31,10 +31,18 @@ export async function getEntityIndex(bucket: any): Promise<EntityMap> {
     if (!obj) continue
     const nodes = (await obj.json()) as Node[]
     for (const n of nodes) {
+      // Post PR #76 merge-sources collapse, detachment survivors may carry
+      // category 'detachment' rather than 'detachment-rule'. Index both so
+      // entity links to detachments keep working either way.
       if (
-        ['stratagem', 'detachment-rule', 'enhancement', 'datasheet', 'faction-ability'].includes(
-          n.category,
-        )
+        [
+          'stratagem',
+          'detachment-rule',
+          'detachment',
+          'enhancement',
+          'datasheet',
+          'faction-ability',
+        ].includes(n.category)
       ) {
         const key = n.title.toLowerCase()
         if (key.length > 2 && !map.has(key)) {

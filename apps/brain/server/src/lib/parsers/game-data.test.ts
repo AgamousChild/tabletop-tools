@@ -1235,6 +1235,70 @@ describe('convertGameData', () => {
       expect(matches.length).toBe(1)
     })
 
+    // ── Bug-4b regression: SV / LD double-plus ───────────────────────────
+    it('does not produce double-plus SV / LD when upstream already includes "+"', () => {
+      const input = makeInput({
+        datasheets: [
+          {
+            id: 'termi-1',
+            name: 'Captain in Terminator Armour',
+            factionId: 'SM',
+            role: 'Character',
+            legend: '',
+            transport: '',
+            loadout: '',
+            damagedW: '',
+            damagedDescription: '',
+            // Mirror the structured Wahapedia/BSData fields onto the
+            // datasheet itself — stats are read from `ds.save` etc.
+            move: '5"',
+            toughness: '5',
+            save: '2+',
+            wounds: '5',
+            leadership: '6+',
+            oc: '1',
+            invSv: '4+',
+          },
+        ],
+      })
+      const { nodes } = convertGameData(input, '2026-04-08')
+      const ds = nodes.find((n) => n.id === 'termi-1')!
+      expect(ds.stats).toBeDefined()
+      expect(ds.stats!.SV).toBe('2+')
+      expect(ds.stats!.LD).toBe('6+')
+      expect(ds.stats!.invSv).toBe('4+')
+      expect(ds.stats!.SV).not.toMatch(/\+\+/)
+      expect(ds.stats!.LD).not.toMatch(/\+\+/)
+    })
+
+    it('still appends "+" when upstream SV / LD lack the trailing plus', () => {
+      const input = makeInput({
+        datasheets: [
+          {
+            id: 'tac-1',
+            name: 'Tac Marine',
+            factionId: 'SM',
+            role: 'Battleline',
+            legend: '',
+            transport: '',
+            loadout: '',
+            damagedW: '',
+            damagedDescription: '',
+            move: '6"',
+            toughness: '4',
+            save: '3',
+            wounds: '2',
+            leadership: '6',
+            oc: '2',
+          },
+        ],
+      })
+      const { nodes } = convertGameData(input, '2026-04-08')
+      const ds = nodes.find((n) => n.id === 'tac-1')!
+      expect(ds.stats!.SV).toBe('3+')
+      expect(ds.stats!.LD).toBe('6+')
+    })
+
     it('populates attachesTo on enhancement nodes (sniffed from description)', () => {
       const input = makeInput({
         detachments: [
