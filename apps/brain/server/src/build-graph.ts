@@ -287,8 +287,8 @@ async function main() {
     bsdataSubfactionByKey: bsdataSubfactionResult.byKey,
   })
   stampPublishedAt(gameResult.nodes, SOURCE_DATES['wahapedia']!)
-  allNodes.push(...gameResult.nodes)
-  allRefs.push(...gameResult.refs)
+  for (const n of gameResult.nodes) allNodes.push(n)
+  for (const r of gameResult.refs) allRefs.push(r)
   console.log(`   ${gameResult.nodes.length} nodes, ${gameResult.refs.length} refs`)
 
   // ── 5a. Parallel 11e duplicate of the Wahapedia 10e graph ─────────────────
@@ -301,8 +301,8 @@ async function main() {
   // and (eventually) the faction-pack unit-level patches mutate.
   const eleventhDup = duplicateEleventh(gameResult.nodes, gameResult.refs)
   stampPublishedAt(eleventhDup.nodes, SOURCE_DATES['wahapedia']!)
-  allNodes.push(...eleventhDup.nodes)
-  allRefs.push(...eleventhDup.refs)
+  for (const n of eleventhDup.nodes) allNodes.push(n)
+  for (const r of eleventhDup.refs) allRefs.push(r)
   console.log(`   ${eleventhDup.nodes.length} 11e duplicates, ${eleventhDup.refs.length} 11e refs`)
 
   // ── 6. Community Knowledge ─────────────────────────────────────────────────
@@ -774,16 +774,19 @@ async function main() {
     `   ${mergeResult.stats.summaryTagged} summaries tagged, ${mergeResult.stats.refsDeduped} refs deduped`,
   )
 
+  // Replace contents in-place. `push(...arr)` blows the stack on large arrays
+  // (V8 spread-as-call-args limit ~64k) once 10e+11e parallel data ~doubles
+  // the node + ref counts. Use loops instead.
   allNodes.length = 0
-  allNodes.push(...mergeResult.nodes)
+  for (const n of mergeResult.nodes) allNodes.push(n)
   allRefs.length = 0
-  allRefs.push(...mergeResult.refs)
+  for (const r of mergeResult.refs) allRefs.push(r)
 
   // ── Massage: clean phantom nodes, validate content, flag issues ──────────
   console.log('\n6b. Data massage')
   const massageResult = massage(allNodes)
   allNodes.length = 0
-  allNodes.push(...massageResult.nodes)
+  for (const n of massageResult.nodes) allNodes.push(n)
 
   // Fix refs that referenced re-attributed army rule nodes
   if (massageResult.renamedIds.size > 0) {
