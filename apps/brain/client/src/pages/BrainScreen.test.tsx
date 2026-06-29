@@ -50,10 +50,10 @@ describe('BrainScreen', () => {
 
   it('renders tab navigation with four tabs', () => {
     render(<BrainScreen />)
-    expect(screen.getAllByText('Ask').length).toBeGreaterThanOrEqual(1)
-    expect(screen.getByText('Search')).toBeInTheDocument()
-    expect(screen.getByText('Browse')).toBeInTheDocument()
-    expect(screen.getByText('Graph')).toBeInTheDocument()
+    expect(screen.getByTestId('tab-ask')).toBeInTheDocument()
+    expect(screen.getByTestId('tab-search')).toBeInTheDocument()
+    expect(screen.getByTestId('tab-browse')).toBeInTheDocument()
+    expect(screen.getByTestId('tab-graph')).toBeInTheDocument()
   })
 
   it('shows Ask tab by default with prompt', () => {
@@ -63,19 +63,19 @@ describe('BrainScreen', () => {
 
   it('shows Search tab when clicked', () => {
     render(<BrainScreen />)
-    fireEvent.click(screen.getByText('Search'))
+    fireEvent.click(screen.getByTestId('tab-search'))
     expect(screen.getByPlaceholderText(/Semantic search/)).toBeInTheDocument()
   })
 
   it('shows Graph tab with ForceGraph', () => {
     render(<BrainScreen />)
-    fireEvent.click(screen.getByText('Graph'))
+    fireEvent.click(screen.getByTestId('tab-graph'))
     expect(screen.getByPlaceholderText(/Search to visualize/i)).toBeInTheDocument()
   })
 
   it('shows Browse tab and fetches layers from API', async () => {
     render(<BrainScreen />)
-    fireEvent.click(screen.getByText('Browse'))
+    fireEvent.click(screen.getByTestId('tab-browse'))
     await waitFor(() => {
       expect(screen.getByText(/Core Rules/)).toBeInTheDocument()
     })
@@ -85,7 +85,7 @@ describe('BrainScreen', () => {
 
   it('Browse tab shows "Select a layer" prompt before selection', async () => {
     render(<BrainScreen />)
-    fireEvent.click(screen.getByText('Browse'))
+    fireEvent.click(screen.getByTestId('tab-browse'))
     await waitFor(() => {
       expect(screen.getByText(/Select a layer/)).toBeInTheDocument()
     })
@@ -106,7 +106,7 @@ describe('BrainScreen', () => {
 
     it('threads edition into the browse/layers fetch', async () => {
       render(<BrainScreen />)
-      fireEvent.click(screen.getByText('Browse'))
+      fireEvent.click(screen.getByTestId('tab-browse'))
       await waitFor(() => {
         expect(screen.getByText(/Core Rules/)).toBeInTheDocument()
       })
@@ -211,7 +211,7 @@ describe('BrainScreen', () => {
       })
 
       render(<BrainScreen />)
-      fireEvent.click(screen.getByText('Search'))
+      fireEvent.click(screen.getByTestId('tab-search'))
       fireEvent.change(screen.getByPlaceholderText(/Semantic search/), {
         target: { value: 'test unit' },
       })
@@ -257,6 +257,184 @@ describe('BrainScreen', () => {
         expect(screen.getByText(/Here is 11e info/)).toBeInTheDocument()
       })
       expect(screen.queryByTestId('edition-fallback-banner')).not.toBeInTheDocument()
+    })
+  })
+
+  describe('tab state persistence', () => {
+    it('keeps all four tab panels mounted in the DOM regardless of active tab', () => {
+      render(<BrainScreen />)
+      // All four panels render at mount — three are hidden via the
+      // `hidden` attribute, but their placeholder inputs are still in the DOM.
+      expect(screen.getByPlaceholderText(/Ask a 40K rules question/)).toBeInTheDocument()
+      expect(screen.getByPlaceholderText(/Semantic search/)).toBeInTheDocument()
+      expect(screen.getByPlaceholderText(/Search to visualize/i)).toBeInTheDocument()
+    })
+
+    it('preserves Ask answer across a tab switch and back', async () => {
+      mockFetch.mockReset()
+      mockFetch.mockResolvedValue(
+        mockJsonResponse({
+          detected: { factions: [], keywords: [], strippedQuery: 'test' },
+          answer: 'Persistent ask answer body.',
+          reference: [],
+          sources: [],
+          connectedCount: 0,
+        }),
+      )
+
+      render(<BrainScreen />)
+      fireEvent.change(screen.getByPlaceholderText(/Ask a 40K rules question/), {
+        target: { value: 'rule q' },
+      })
+      const askButtons = screen.getAllByRole('button', { name: 'Ask' })
+      fireEvent.click(askButtons[askButtons.length - 1]!)
+
+      await waitFor(() => {
+        expect(screen.getByText(/Persistent ask answer body/)).toBeInTheDocument()
+      })
+
+      // Switch to Search then back to Ask — answer + input value must survive
+      fireEvent.click(screen.getByTestId('tab-search'))
+      fireEvent.click(screen.getByTestId('tab-ask'))
+
+      expect(screen.getByText(/Persistent ask answer body/)).toBeInTheDocument()
+      expect(screen.getByPlaceholderText(/Ask a 40K rules question/)).toHaveValue('rule q')
+    })
+
+    it('preserves Search results across a tab switch and back', async () => {
+      mockFetch.mockReset()
+      mockFetch.mockResolvedValue(
+        mockJsonResponse({
+          detected: { factions: [], keywords: [], strippedQuery: '' },
+          records: [
+            {
+              type: 'rule',
+              primaryNode: {
+                id: 'persistent-result',
+                score: 0.9,
+                title: 'Persistent Search Hit',
+                summary: 'Summary text.',
+                content: '',
+                layer: 'core',
+                category: 'rule',
+                sources: [],
+                keywords: [],
+              },
+              childNodes: [],
+              crossRefs: [],
+              errata: [],
+              matchedChildIds: [],
+            },
+          ],
+          total: 1,
+          page: 1,
+          pageSize: 10,
+          totalPages: 1,
+        }),
+      )
+
+      render(<BrainScreen />)
+      fireEvent.click(screen.getByTestId('tab-search'))
+      fireEvent.change(screen.getByPlaceholderText(/Semantic search/), {
+        target: { value: 'persistent' },
+      })
+      const searchButtons = screen.getAllByRole('button', { name: 'Search' })
+      fireEvent.click(searchButtons[searchButtons.length - 1]!)
+
+      await waitFor(() => {
+        expect(screen.getByText('Persistent Search Hit')).toBeInTheDocument()
+      })
+
+      const searchCallCount = mockFetch.mock.calls.filter((args) =>
+        String(args[0]).includes('/search'),
+      ).length
+
+      // Switch to Ask then back — results stay, no refetch fires
+      fireEvent.click(screen.getByTestId('tab-ask'))
+      fireEvent.click(screen.getByTestId('tab-search'))
+
+      expect(screen.getByText('Persistent Search Hit')).toBeInTheDocument()
+      expect(screen.getByPlaceholderText(/Semantic search/)).toHaveValue('persistent')
+
+      const searchCallCountAfter = mockFetch.mock.calls.filter((args) =>
+        String(args[0]).includes('/search'),
+      ).length
+      expect(searchCallCountAfter).toBe(searchCallCount)
+    })
+
+    it('Ask Clear results button wipes the answer', async () => {
+      mockFetch.mockReset()
+      mockFetch.mockResolvedValue(
+        mockJsonResponse({
+          detected: { factions: [], keywords: [], strippedQuery: 'test' },
+          answer: 'Disposable ask answer.',
+          reference: [],
+          sources: [],
+          connectedCount: 0,
+        }),
+      )
+
+      render(<BrainScreen />)
+      fireEvent.change(screen.getByPlaceholderText(/Ask a 40K rules question/), {
+        target: { value: 'q' },
+      })
+      const askButtons = screen.getAllByRole('button', { name: 'Ask' })
+      fireEvent.click(askButtons[askButtons.length - 1]!)
+
+      await waitFor(() => {
+        expect(screen.getByText(/Disposable ask answer/)).toBeInTheDocument()
+      })
+
+      fireEvent.click(screen.getByTestId('ask-clear-results'))
+      expect(screen.queryByText(/Disposable ask answer/)).not.toBeInTheDocument()
+    })
+
+    it('Search Clear results button wipes the response', async () => {
+      mockFetch.mockReset()
+      mockFetch.mockResolvedValue(
+        mockJsonResponse({
+          detected: { factions: [], keywords: [], strippedQuery: '' },
+          records: [
+            {
+              type: 'rule',
+              primaryNode: {
+                id: 'disposable',
+                score: 0.5,
+                title: 'Disposable Search Hit',
+                summary: 's',
+                content: '',
+                layer: 'core',
+                category: 'rule',
+                sources: [],
+                keywords: [],
+              },
+              childNodes: [],
+              crossRefs: [],
+              errata: [],
+              matchedChildIds: [],
+            },
+          ],
+          total: 1,
+          page: 1,
+          pageSize: 10,
+          totalPages: 1,
+        }),
+      )
+
+      render(<BrainScreen />)
+      fireEvent.click(screen.getByTestId('tab-search'))
+      fireEvent.change(screen.getByPlaceholderText(/Semantic search/), {
+        target: { value: 'disposable' },
+      })
+      const searchButtons = screen.getAllByRole('button', { name: 'Search' })
+      fireEvent.click(searchButtons[searchButtons.length - 1]!)
+
+      await waitFor(() => {
+        expect(screen.getByText('Disposable Search Hit')).toBeInTheDocument()
+      })
+
+      fireEvent.click(screen.getByTestId('search-clear-results'))
+      expect(screen.queryByText('Disposable Search Hit')).not.toBeInTheDocument()
     })
   })
 })

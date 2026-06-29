@@ -549,6 +549,14 @@ function AskTab({ onOpenCard, activeFilters, onFilterChange, edition }: AskTabPr
   const [fallbackDismissed, setFallbackDismissed] = useState(false)
   const [entityMap, setEntityMap] = useState<EntityMap>(new Map())
 
+  function clearResults() {
+    setAnswer(null)
+    setError(null)
+    setEntityMap(new Map())
+    setFactionFilter(true)
+    setFallbackDismissed(false)
+  }
+
   const doAsk = useCallback(
     async (q: string) => {
       if (!q.trim()) return
@@ -602,6 +610,17 @@ function AskTab({ onOpenCard, activeFilters, onFilterChange, edition }: AskTabPr
 
   return (
     <div className="space-y-4">
+      {(answer || error) && (
+        <div className="flex justify-end">
+          <button
+            onClick={clearResults}
+            data-testid="ask-clear-results"
+            className="text-xs text-slate-400 hover:text-slate-200 underline"
+          >
+            Clear results
+          </button>
+        </div>
+      )}
       <div className="flex gap-2">
         <input
           type="text"
@@ -917,6 +936,15 @@ function SearchTab({
     // doSearch will be triggered by the page useEffect
   }
 
+  function clearResults() {
+    setResponse(null)
+    setEntityMap(new Map())
+    setPage(1)
+    setFactionFilter(true)
+    setFallbackDismissed(false)
+    lastQueryRef.current = ''
+  }
+
   const detected = response?.detected
 
   // Determine rendering mode: record-based (new) or flat (legacy)
@@ -927,6 +955,17 @@ function SearchTab({
 
   return (
     <div className="space-y-4">
+      {response && (
+        <div className="flex justify-end">
+          <button
+            onClick={clearResults}
+            data-testid="search-clear-results"
+            className="text-xs text-slate-400 hover:text-slate-200 underline"
+          >
+            Clear results
+          </button>
+        </div>
+      )}
       <div className="flex gap-2">
         <input
           type="text"
@@ -1571,6 +1610,7 @@ export function BrainScreen() {
               {(['ask', 'search', 'browse', 'graph'] as const).map((t) => (
                 <button
                   key={t}
+                  data-testid={`tab-${t}`}
                   onClick={() => handleTabSwitch(t)}
                   className={`px-3 py-1.5 text-sm rounded ${
                     tab === t
@@ -1594,21 +1634,21 @@ export function BrainScreen() {
 
       {detachmentView ? (
         <DetachmentPage {...detachmentView} />
-      ) : tab === 'browse' ? (
-        <BrowseTab onOpenCard={handleOpenCard} edition={edition} />
-      ) : tab === 'graph' ? (
-        <ForceGraph edition={edition} />
       ) : (
-        <main className="flex-1 p-4 max-w-4xl mx-auto">
-          {tab === 'ask' && (
+        <>
+          {/* All four tab panels stay mounted across tab switches so their
+              internal React state (results, queries, scroll, expanded
+              sections) survives. Visibility is toggled via `hidden` so the
+              browser hides three of them without React unmounting. */}
+          <main hidden={tab !== 'ask'} className="flex-1 p-4 max-w-4xl mx-auto">
             <AskTab
               onOpenCard={handleOpenCard}
               activeFilters={activeFilters}
               onFilterChange={setActiveFilters}
               edition={edition}
             />
-          )}
-          {tab === 'search' && (
+          </main>
+          <main hidden={tab !== 'search'} className="flex-1 p-4 max-w-4xl mx-auto">
             <SearchTab
               onOpenCard={handleOpenCard}
               onOpenRecord={handleOpenRecord}
@@ -1616,8 +1656,14 @@ export function BrainScreen() {
               onFilterChange={setActiveFilters}
               edition={edition}
             />
-          )}
-        </main>
+          </main>
+          <div hidden={tab !== 'browse'}>
+            <BrowseTab onOpenCard={handleOpenCard} edition={edition} />
+          </div>
+          <div hidden={tab !== 'graph'}>
+            <ForceGraph edition={edition} />
+          </div>
+        </>
       )}
 
       <Overlay
