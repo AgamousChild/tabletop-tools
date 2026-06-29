@@ -586,6 +586,14 @@ export function ForceGraph({ edition }: ForceGraphProps = {}) {
     setSelectedNode(data)
   }, [])
 
+  function clearResults() {
+    setRfNodes([])
+    setRfEdges([])
+    setSelectedNode(null)
+    setSelectedCard(null)
+    graphState.current = null
+  }
+
   const onNodeDoubleClick = useCallback(
     (_: any, node: RFNode) => {
       const data = node.data as unknown as BrainNodeData
@@ -615,6 +623,15 @@ export function ForceGraph({ edition }: ForceGraphProps = {}) {
         >
           {loading ? '...' : 'Visualize'}
         </button>
+        {rfNodes.length > 0 && (
+          <button
+            onClick={clearResults}
+            data-testid="graph-clear-results"
+            className="text-xs text-slate-400 hover:text-slate-200 underline self-center"
+          >
+            Clear results
+          </button>
+        )}
       </div>
 
       {/* Filter controls */}
