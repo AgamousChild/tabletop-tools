@@ -48,6 +48,7 @@ export const NodeCategorySchema = z.enum([
   'twist',
   'challenger',
   'terrain-layout',
+  'force-disposition',
 ])
 export type NodeCategory = z.infer<typeof NodeCategorySchema>
 
@@ -245,6 +246,7 @@ export const RecordTypeSchema = z.enum([
   'twist',
   'challenger',
   'terrain-layout',
+  'force-disposition',
 ])
 export type RecordType = z.infer<typeof RecordTypeSchema>
 

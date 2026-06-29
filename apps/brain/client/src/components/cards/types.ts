@@ -158,6 +158,15 @@ export interface DeploymentZoneCardData {
   qualityFlags?: string[]
 }
 
+export interface ForceDispositionCardData {
+  id: string
+  name: string
+  description: string
+  pdfImage?: { pdfName: string; page: number }
+  sources?: SourceRef[]
+  qualityFlags?: string[]
+}
+
 export interface TerrainLayoutCardData {
   id: string
   name: string
@@ -220,6 +229,7 @@ export type CardData =
   | { type: 'twist'; data: TwistCardData }
   | { type: 'challenger'; data: ChallengerCardData }
   | { type: 'deployment-zone'; data: DeploymentZoneCardData }
+  | { type: 'force-disposition'; data: ForceDispositionCardData }
   | { type: 'terrain-layout'; data: TerrainLayoutCardData }
   | { type: 'errata'; data: ErrataCardData }
   | { type: 'balance'; data: BalanceCardData }

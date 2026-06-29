@@ -313,6 +313,19 @@ function buildCardForCategory(node: ResultNode, pdfSource?: PdfSource): CardData
         },
       }
 
+    case 'force-disposition':
+      return {
+        type: 'force-disposition',
+        data: {
+          id: node.id,
+          name: node.title,
+          description: node.content || node.summary,
+          pdfImage: pdfSource ? { pdfName: pdfSource.pdfName, page: pdfSource.page } : undefined,
+          sources: node.sources as SourceRef[],
+          qualityFlags: node.qualityFlags,
+        },
+      }
+
     case 'faq':
     case 'commentary':
       return {

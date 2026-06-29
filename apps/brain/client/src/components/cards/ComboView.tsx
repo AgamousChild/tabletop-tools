@@ -6,6 +6,7 @@ import { DeploymentZoneCard } from './DeploymentZoneCard'
 import { DetachmentCard } from './DetachmentCard'
 import { EnhancementCard } from './EnhancementCard'
 import { ErrataCard } from './ErrataCard'
+import { ForceDispositionCard } from './ForceDispositionCard'
 import { MissionCard } from './MissionCard'
 import { RuleCard } from './RuleCard'
 import { StratagemCard } from './StratagemCard'
@@ -41,6 +42,8 @@ function renderCard(card: CardData, context: CardContext) {
       return <CoreRuleCard data={card.data} context={context} />
     case 'deployment-zone':
       return <DeploymentZoneCard data={card.data} context={context} />
+    case 'force-disposition':
+      return <ForceDispositionCard data={card.data} context={context} />
     case 'terrain-layout':
       return <TerrainLayoutCard data={card.data} context={context} />
     case 'errata':
