@@ -34,6 +34,10 @@ import { parseSecondaryMissions, parseTwistCards } from './lib/parsers/chapter-a
 import { parseCoreRules } from './lib/parsers/core-rules'
 import { buildDeploymentZoneNodes } from './lib/parsers/deployment-zones'
 import { parseFactionPack } from './lib/parsers/faction-pack'
+import {
+  buildForceDispositionNodes,
+  buildPrimaryMissionNodes,
+} from './lib/parsers/force-dispositions'
 import type { GameDataInput } from './lib/parsers/game-data'
 import { convertGameData } from './lib/parsers/game-data'
 import { loadMfmCostingFromFile, type MfmCostingParseResult } from './lib/parsers/mfm-costing'
@@ -580,6 +584,21 @@ async function main() {
   const dzNodes = buildDeploymentZoneNodes({ retrievedAt: RETRIEVED_AT })
   allNodes.push(...dzNodes)
   console.log(`\n--- 11e deployment zones ---\n  ${dzNodes.length}/6 nodes`)
+
+  // ── 7e. 11e Chapter Approved Force Dispositions ───────────────────────────
+  // 5 player-facing disposition cards (image-only nodes, mirrors 11e
+  // deployment-zone shape) + 25 primary-mission stubs (one per matrix cell,
+  // bodies pending — the physical primary mission cards have not been
+  // scanned yet). Cards are emitted unconditionally; the build is data-only.
+  const fdNodes = buildForceDispositionNodes({ retrievedAt: RETRIEVED_AT })
+  for (const n of fdNodes) for (const r of n.refs) allRefs.push(r)
+  allNodes.push(...fdNodes)
+  const pmStubNodes = buildPrimaryMissionNodes({ retrievedAt: RETRIEVED_AT })
+  for (const n of pmStubNodes) for (const r of n.refs) allRefs.push(r)
+  allNodes.push(...pmStubNodes)
+  console.log(
+    `\n--- 11e force dispositions ---\n  ${fdNodes.length} disposition nodes, ${pmStubNodes.length} primary-mission stub nodes`,
+  )
 
   // ── 8. Tournament Companion rules ──────────────────────────────────────────
   const TC_DIR = 'C:/R/sync-data/tools/gw-sync/.local/gw/markdown'

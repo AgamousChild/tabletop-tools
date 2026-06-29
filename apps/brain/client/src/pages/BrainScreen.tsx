@@ -12,6 +12,7 @@ import { DeploymentZoneCard } from '../components/cards/DeploymentZoneCard'
 import { DetachmentCard } from '../components/cards/DetachmentCard'
 import { EnhancementCard } from '../components/cards/EnhancementCard'
 import { ErrataCard } from '../components/cards/ErrataCard'
+import { ForceDispositionCard } from '../components/cards/ForceDispositionCard'
 import { MissionCard } from '../components/cards/MissionCard'
 import { PdfPageView } from '../components/cards/PdfPageView'
 import { RuleCard } from '../components/cards/RuleCard'
@@ -1639,6 +1640,9 @@ export function BrainScreen() {
         )}
         {activeCard?.type === 'deployment-zone' && (
           <DeploymentZoneCard data={activeCard.data} context={cardContext} />
+        )}
+        {activeCard?.type === 'force-disposition' && (
+          <ForceDispositionCard data={activeCard.data} context={cardContext} />
         )}
         {activeCard?.type === 'terrain-layout' && (
           <TerrainLayoutCard data={activeCard.data} context={cardContext} />
