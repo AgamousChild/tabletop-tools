@@ -1300,6 +1300,7 @@ function looksLikeStatToken(tok: string): boolean {
   if (/^D\d+(\+\d+)?$/.test(tok)) return true
   if (/^\d+D\d+$/.test(tok)) return true
   if (/^\d+\/\d+$/.test(tok)) return true
+  if (/^-\d+$/.test(tok)) return true
   return false
 }
 
