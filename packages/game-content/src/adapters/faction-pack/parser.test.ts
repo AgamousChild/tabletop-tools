@@ -11,7 +11,7 @@
 
 import { describe, expect, it } from 'vitest'
 
-import { parseFactionPackV2 } from './faction-pack-v2'
+import { parseFactionPackV2 } from './parser'
 
 describe('parseFactionPackV2', () => {
   it('extracts pack version + effective date from preamble', () => {
