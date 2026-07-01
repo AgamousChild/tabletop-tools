@@ -8,6 +8,7 @@
  * @see docs/schema-indexeddb-brain.md — Brain knowledge graph schema
  */
 import { createDb } from '@tabletop-tools/db'
+import { parseFactionPackV2 } from '@tabletop-tools/game-content/src/adapters/faction-pack/parser'
 import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from 'fs'
 import { join } from 'path'
 
@@ -34,7 +35,10 @@ import {
 import { parseSecondaryMissions, parseTwistCards } from './lib/parsers/chapter-approved'
 import { parseCoreRules } from './lib/parsers/core-rules'
 import { buildDeploymentZoneNodes } from './lib/parsers/deployment-zones'
-import { detectFactionPackEdition, parseFactionPack } from './lib/parsers/faction-pack'
+import {
+  convertPackExtractToNodes,
+  detectFactionPackEdition,
+} from './lib/parsers/faction-pack-v2-to-nodes'
 import {
   buildForceDispositionNodes,
   buildPrimaryMissionNodes,
@@ -221,7 +225,18 @@ async function main() {
       const url = mdFileToUrl.get(file) ?? ''
       const edition = detectFactionPackEdition(url)
       if (edition === '11th') fpEleventh++
-      const result = parseFactionPack(raw, factionSlug, RETRIEVED_AT, edition, mfmDetachmentLookup)
+      // v2 pipeline: parse markdown → structured PackExtract → convert to
+      // brain nodes with v1-compatible IDs. v2 fixes the datasheet-shaped
+      // content rejection at old faction-pack.ts:154 and adds richer typed
+      // extraction (stats, weapons, abilities per datasheet).
+      const extract = parseFactionPackV2(raw, { faction: factionSlug })
+      const result = convertPackExtractToNodes(
+        extract,
+        factionSlug,
+        RETRIEVED_AT,
+        edition,
+        mfmDetachmentLookup,
+      )
       // Faction packs published with the 10e launch use the 10e core-rules
       // date; 11e packs were published Feb 2026 (eng_11-02_*) or Jul 2026
       // (eng_07-01_*). Stamp the appropriate publishedAt.

@@ -117,7 +117,9 @@ export async function runBrainSync(
   const allRefs: NodeRef[] = []
 
   const { parseCoreRules } = await import('./parsers/core-rules')
-  const { parseFactionPack } = await import('./parsers/faction-pack')
+  const { parseFactionPackV2 } =
+    await import('@tabletop-tools/game-content/src/adapters/faction-pack/parser')
+  const { convertPackExtractToNodes } = await import('./parsers/faction-pack-v2-to-nodes')
   const { parseRulesCommentary } = await import('./parsers/rules-commentary')
   const { parseBalanceDataslate } = await import('./parsers/balance-dataslate')
 
@@ -162,7 +164,8 @@ export async function runBrainSync(
     if (!filename.startsWith('faction-pack-')) continue
     const factionSlug = filename.replace('faction-pack-', '').replace('.md', '')
     try {
-      const result = parseFactionPack(content, factionSlug, retrievedAt)
+      const extract = parseFactionPackV2(content, { faction: factionSlug })
+      const result = convertPackExtractToNodes(extract, factionSlug, retrievedAt)
       allNodes.push(...result.nodes)
       allRefs.push(...result.refs)
     } catch (err) {
