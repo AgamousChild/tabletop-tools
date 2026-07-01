@@ -13,15 +13,19 @@
  *   pnpm -F brain-server exec tsx scripts/extract-faction-packs.ts
  *
  * Per CLAUDE.md Rule 4 (everything is a callable function), the parser itself
- * lives in `src/lib/parsers/faction-pack-v2.ts`; this script is the
- * orchestration wrapper.
+ * lives in `@tabletop-tools/game-content/src/adapters/faction-pack/parser.ts`
+ * (moved from `apps/brain/server/src/lib/parsers/faction-pack-v2.ts` so
+ * data-import can share it); this script is the orchestration wrapper.
  */
 
 import fs from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 
-import { type PackExtract, parseFactionPackV2 } from '../src/lib/parsers/faction-pack-v2'
+import {
+  type PackExtract,
+  parseFactionPackV2,
+} from '@tabletop-tools/game-content/src/adapters/faction-pack/parser'
 
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
