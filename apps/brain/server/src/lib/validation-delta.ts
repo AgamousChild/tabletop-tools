@@ -17,9 +17,14 @@
 import { existsSync, readdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 
+import { parseFactionPackV2 } from '@tabletop-tools/game-content/src/adapters/faction-pack/parser'
+
 import { _setFactionCodesForTesting } from './faction-codes'
 import type { Node } from './model'
-import { type FactionPackMfmLookup, parseFactionPack } from './parsers/faction-pack'
+import {
+  convertPackExtractToNodes,
+  type FactionPackMfmLookup,
+} from './parsers/faction-pack-v2-to-nodes'
 import { slugify } from './slugify'
 
 const RETRIEVED_AT = '2026-06-29T00:00:00Z'
@@ -148,7 +153,14 @@ function parseAllFactionPacksAs11e(
     const factionSlug = file.replace('faction-pack-', '').replace('.md', '')
     const raw = readFileSync(join(packDir, file), 'utf-8')
     try {
-      const result = parseFactionPack(raw, factionSlug, RETRIEVED_AT, '11th', mfmLookup)
+      const extract = parseFactionPackV2(raw, { faction: factionSlug })
+      const result = convertPackExtractToNodes(
+        extract,
+        factionSlug,
+        RETRIEVED_AT,
+        '11th',
+        mfmLookup,
+      )
       all.push(...result.nodes)
     } catch {
       // Skip packs that fail to parse — the validator must keep running.
@@ -224,10 +236,10 @@ export function summarizeByFaction(deltas: ValidationDelta[]): FactionDeltaSumma
 
 /**
  * Test-only entry point: prime the faction-codes registry with a small
- * fixture so `parseFactionPack` can resolve faction slugs without hitting
- * the live registry loader. Call this from unit tests; production callers
- * use `loadFactionCodes(db)` from build-graph (validation CLI does this
- * itself before calling `runValidationDelta`).
+ * fixture so `convertPackExtractToNodes` can resolve faction slugs without
+ * hitting the live registry loader. Call this from unit tests; production
+ * callers use `loadFactionCodes(db)` from build-graph (validation CLI does
+ * this itself before calling `runValidationDelta`).
  */
 export function _primeFactionCodesForTesting(
   aliases: Map<string, string>,

@@ -34,6 +34,11 @@ import {
   validateContentIds,
 } from './id-mapping'
 import { fetchAndProcessBSData } from './sources/bsdata'
+import {
+  type ExistingUnitLookup,
+  type FactionPackInput,
+  processFactionPacks,
+} from './sources/faction-pack'
 import { fetchAndProcessMFM } from './sources/mfm'
 import { fetchAndProcessMissions } from './sources/missions'
 import { fetchAndProcessWahapedia } from './sources/wahapedia'
@@ -166,7 +171,7 @@ export interface RunSyncOptions {
    * skipped entirely. Used by the CI workflow to chunk a long sync into
    * smaller per-source invocations that each stay under the Worker CPU cap.
    */
-  sources?: Set<'wahapedia' | 'bsdata' | 'mfm' | 'missions'>
+  sources?: Set<'wahapedia' | 'bsdata' | 'mfm' | 'missions' | 'faction-pack'>
 }
 
 export async function runSync(
@@ -177,7 +182,7 @@ export async function runSync(
   options: RunSyncOptions = {},
 ): Promise<SyncResult> {
   const skipProducers = options.skipProducers === true
-  const wantSource = (s: 'wahapedia' | 'bsdata' | 'mfm' | 'missions') =>
+  const wantSource = (s: 'wahapedia' | 'bsdata' | 'mfm' | 'missions' | 'faction-pack') =>
     !options.sources || options.sources.has(s)
   const stageTimings: Record<string, number> = {}
   const timeStage = async <T>(label: string, fn: () => Promise<T>): Promise<T> => {
@@ -670,7 +675,67 @@ export async function runSync(
       errors.push(`MFM: ${err instanceof Error ? err.message : String(err)}`)
     }
 
-  // 5. Missions
+  // 5. Faction packs — v2 parser produces UnitProfile patches (and optionally
+  // new units) for datasheet content. Markdown files live in R2 under
+  // `faction-packs/*.md` (uploaded out-of-band from a local pull because GW
+  // publishes only PDFs). When the R2 directory is empty the stage is a
+  // no-op. Detachments/stratagems/enhancements from these packs stay
+  // brain-only for now (see plan for the game-data-store extension).
+  if (!wantSource('faction-pack')) {
+    skipped.push('faction-pack (filtered)')
+  } else
+    try {
+      await timeStage('faction-pack', async () => {
+        const list = await bucket.list({ prefix: 'faction-packs/' })
+        const md: FactionPackInput[] = []
+        for (const obj of list.objects) {
+          if (!obj.key.endsWith('.md')) continue
+          const body = await bucket.get(obj.key)
+          if (!body) continue
+          const factionSlug = obj.key
+            .replace(/^faction-packs\//, '')
+            .replace(/^faction-pack-/, '')
+            .replace(/\.md$/, '')
+          md.push({ factionSlug, markdown: await body.text() })
+        }
+        if (md.length === 0) {
+          skipped.push('faction-pack (no markdown in R2)')
+          return
+        }
+        // Existing BSData set for the match. If we have fresh BSData use it,
+        // else reload from R2.
+        let existingUnitsSource = bsdataUnits
+        const bsdataFactions: Record<string, string> = {}
+        if (existingUnitsSource.length === 0) {
+          const obj = await bucket.get('data/bsdata-units.json')
+          if (obj) {
+            existingUnitsSource = (await obj.json()) as Array<{
+              id: string
+              name: string
+              faction: string
+            }>
+          }
+        }
+        void bsdataFactions
+        const existingUnits: ExistingUnitLookup[] = existingUnitsSource.map((u) => ({
+          id: u.id,
+          name: u.name,
+          faction: u.faction,
+        }))
+        const fpResult = processFactionPacks(md, existingUnits)
+        await writeDataFile(bucket, 'faction-pack-unit-patches.json', fpResult.patches)
+        await writeDataFile(bucket, 'faction-pack-new-units.json', fpResult.newUnits)
+        files.add('faction-pack-unit-patches.json')
+        files.add('faction-pack-new-units.json')
+        console.log(
+          `[faction-pack] packs=${md.length} patches=${fpResult.patches.length} new-units=${fpResult.newUnits.length} unmatched=${fpResult.unmatched.length}`,
+        )
+      })
+    } catch (err) {
+      errors.push(`Faction pack: ${err instanceof Error ? err.message : String(err)}`)
+    }
+
+  // 6. Missions
   let missionsMeta: Manifest['missions'] = existing?.missions
   if (!wantSource('missions')) {
     skipped.push('missions (filtered)')
@@ -688,7 +753,7 @@ export async function runSync(
       errors.push(`Missions: ${err instanceof Error ? err.message : String(err)}`)
     }
 
-  // 6. Write manifest
+  // 7. Write manifest
   const manifest: Manifest = {
     version: (existing?.version ?? 0) + 1,
     updatedAt: new Date().toISOString(),

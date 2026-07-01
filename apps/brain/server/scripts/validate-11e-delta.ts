@@ -28,7 +28,7 @@ const __filename = fileURLToPath(import.meta.url)
 const __dirname = dirname(__filename)
 
 import { loadFactionCodes, normalizeFactionId } from '../src/lib/faction-codes'
-import type { FactionPackMfmLookup } from '../src/lib/parsers/faction-pack'
+import type { FactionPackMfmLookup } from '../src/lib/parsers/faction-pack-v2-to-nodes'
 import { slugify } from '../src/lib/slugify'
 import {
   runValidationDelta,
