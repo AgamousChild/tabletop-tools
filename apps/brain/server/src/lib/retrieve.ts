@@ -6,6 +6,7 @@ import {
   stripFactionFromQuery,
   SUBFACTION_TO_PARENT,
 } from './faction-detect'
+import { expandFactionsForRetrieval } from './factions'
 import { fetchConnectedNodes, fetchNodesFromR2 } from './fetch-nodes'
 import type { Node } from './model'
 import type { AggregatedRecord } from './records'
@@ -247,7 +248,17 @@ export async function retrieve(
 
   // Step 8: Post-filter by faction (keep faction-match + generic), then subfaction
   // BUT always keep datasheets whose title matches the original query (unit might be cross-faction)
-  const detectedFactionSet = new Set(detected.factions)
+  // Chapter queries expand to the parent faction's shared pool via dim_subfaction:
+  //   blood-angels → {blood-angels, space-marines} so Rhino / Intercessor Squad
+  //   (which live under factionId=space-marines post-PR-B) still show up.
+  // Explicit filter.factionId (from the /search body) joins the same expansion —
+  // callers pass the chapter slug and get the union without needing to know
+  // the join exists.
+  const factionScopeIds = [...detected.factions, ...(filter?.factionId ? [filter.factionId] : [])]
+  const detectedFactionSet =
+    factionScopeIds.length > 0
+      ? await expandFactionsForRetrieval(factionScopeIds, env.bucket)
+      : new Set<string>()
   const queryLowerForFilter = query.toLowerCase().trim()
 
   let filtered = allMatches
@@ -256,7 +267,7 @@ export async function retrieve(
       const mFaction = m.metadata?.factionId
       // Keep nodes with no faction (generic)
       if (!mFaction) return true
-      // Keep nodes matching detected faction
+      // Keep nodes matching detected faction (or its expanded parent pool)
       if (detectedFactionSet.has(mFaction)) return true
       // Keep datasheets whose title matches the original query (cross-faction units)
       if (
@@ -280,6 +291,7 @@ export async function retrieve(
 
   // Step 9: Sort — exact title match first, then by score
   const queryLower = query.toLowerCase().trim()
+  const factionRankList = [...detectedFactionSet]
   const sortedMatches = filtered.sort((a, b) => {
     const aTitle = (a.metadata?.title as string)?.toLowerCase() ?? ''
     const bTitle = (b.metadata?.title as string)?.toLowerCase() ?? ''
@@ -289,9 +301,10 @@ export async function retrieve(
     const bTitleExact = bTitle === queryLower ? 1 : 0
     if (aTitleExact !== bTitleExact) return bTitleExact - aTitleExact
 
-    // Then faction/subfaction ranking
-    const rankA = matchRank(a, detected.factions, detected.subfaction)
-    const rankB = matchRank(b, detected.factions, detected.subfaction)
+    // Then faction/subfaction ranking. Use the expanded faction set so chapter
+    // nodes and parent-faction shared-pool nodes both rank as faction-matched.
+    const rankA = matchRank(a, factionRankList, detected.subfaction)
+    const rankB = matchRank(b, factionRankList, detected.subfaction)
     if (rankA !== rankB) return rankA - rankB
     return b.score - a.score
   })
@@ -723,15 +736,26 @@ async function factionBrowse(
   }
   const manifest = (await manifestObj.json()) as { files: Record<string, string> }
 
-  // Collect all nodes for this faction from both faction and unit layer files
+  // Expand chapter → chapter+parent (blood-angels → +space-marines) so a
+  // Blood Angels browse includes generic SM units (Rhino, Intercessor Squad).
+  // Detected factions may already include both chapter + parent slugs
+  // (see faction-detect.ts) — union expansions across all of them so we
+  // don't miss files whichever slug landed at index [0].
+  const factionSet = await expandFactionsForRetrieval(detected.factions, env.bucket)
   const factionFile = `nodes/faction-${factionId}.json`
+  const factionFilesToLoad = new Set<string>([factionFile])
+  for (const slug of factionSet) {
+    factionFilesToLoad.add(`nodes/faction-${slug}.json`)
+  }
+
+  // Collect all nodes for this faction from both faction and unit layer files
   const allNodes: Node[] = []
 
   for (const file of Object.keys(manifest.files)) {
     if (!file.startsWith('nodes/')) continue
-    // Load faction-specific file always
+    // Load faction-specific file(s) — expanded set includes the parent for chapters
     // Also load core.json for generic rules
-    if (file === factionFile || file === 'nodes/core.json') {
+    if (factionFilesToLoad.has(file) || file === 'nodes/core.json') {
       const obj = await env.bucket.get(file)
       if (obj) {
         const nodes = (await obj.json()) as Node[]
@@ -740,8 +764,8 @@ async function factionBrowse(
     }
   }
 
-  // Filter: keep nodes matching factionId or generic (no factionId)
-  let filtered = allNodes.filter((n) => n.factionId === factionId || !n.factionId)
+  // Filter: keep nodes matching factionId (or its expanded parent) or generic (no factionId)
+  let filtered = allNodes.filter((n) => !n.factionId || factionSet.has(n.factionId))
 
   // Subfaction filter: remove other chapters' content
   if (subfaction) {
@@ -762,11 +786,23 @@ async function factionBrowse(
     weapon: 6,
   }
 
+  const rank = (n: Node): number => {
+    // Rank order (lowest wins):
+    //   0 = legacy subfaction match (still supported for the small residue of
+    //       subfaction-tagged nodes; being removed in a later PR)
+    //   1 = chapter faction match (queried factionId directly — Lemartes)
+    //   2 = expanded parent faction (shared pool — Rhino under space-marines)
+    //   3 = generic (no factionId — core rules)
+    if (subfaction && n.subfaction === subfaction) return 0
+    if (n.factionId === factionId) return 1
+    if (n.factionId && factionSet.has(n.factionId)) return 2
+    return 3
+  }
+
   filtered.sort((a, b) => {
-    // Subfaction first
-    const aSubRank = subfaction && a.subfaction === subfaction ? 0 : !a.subfaction ? 1 : 2
-    const bSubRank = subfaction && b.subfaction === subfaction ? 0 : !b.subfaction ? 1 : 2
-    if (aSubRank !== bSubRank) return aSubRank - bSubRank
+    const rankA = rank(a)
+    const rankB = rank(b)
+    if (rankA !== rankB) return rankA - rankB
     // Then by category
     const aCat = CATEGORY_ORDER[a.category] ?? 7
     const bCat = CATEGORY_ORDER[b.category] ?? 7

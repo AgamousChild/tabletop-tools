@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
+import { resetSubfactionCache } from './factions'
 import { resetManifestCache } from './fetch-nodes'
 import type { Node } from './model'
 import { retrieve, type RetrieveEnv } from './retrieve'
@@ -1036,5 +1037,192 @@ describe('retrieve with edition filter', () => {
     if (opts.filter) {
       expect(opts.filter.edition).toBeUndefined()
     }
+  })
+})
+
+// ── Chapter → parent-faction expansion (dim_subfaction walk) ──────────────
+// See PR C of the scalar-to-ref refactor. Chapter-specific datasheets moved to
+// factionId=<chapter-slug> in PR B; the post-Vectorize filter must expand
+// chapter queries to include the parent SM shared pool so Rhino / Intercessor
+// Squad don't drop out of Blood Angels results.
+
+describe('retrieve — chapter → parent faction expansion', () => {
+  const smChapterRows = [
+    { id: 'blood-angels', name: 'Blood Angels', factionId: 'space-marines' },
+    { id: 'dark-angels', name: 'Dark Angels', factionId: 'space-marines' },
+    { id: 'space-wolves', name: 'Space Wolves', factionId: 'space-marines' },
+  ]
+
+  const lemartes = makeNode({
+    id: 'ds:lemartes',
+    layer: 'unit',
+    category: 'datasheet',
+    title: 'Lemartes',
+    factionId: 'blood-angels',
+  })
+  const rhino = makeNode({
+    id: 'ds:rhino',
+    layer: 'unit',
+    category: 'datasheet',
+    title: 'Rhino',
+    factionId: 'space-marines',
+  })
+  const orkBoyz = makeNode({
+    id: 'ds:ork-boyz',
+    layer: 'unit',
+    category: 'datasheet',
+    title: 'Ork Boyz',
+    factionId: 'orks',
+  })
+
+  function makeChapterBucket(nodes: Node[]) {
+    return createMockBucket({
+      'manifest.json': { files: { 'nodes/test.json': 'v1', 'dim/subfactions.json': 'v1' } },
+      'nodes/test.json': nodes,
+      'refs/reverse-index.json': {},
+      'refs/forward-index.json': {},
+      'dim/subfactions.json': smChapterRows,
+    })
+  }
+
+  beforeEach(() => {
+    resetManifestCache()
+    resetSubfactionCache()
+  })
+
+  it('chapter query keeps parent-faction shared pool (Blood Angels + Rhino both kept)', async () => {
+    const ai = createMockAI()
+    const vectorize = createMockVectorize([
+      {
+        id: lemartes.id,
+        score: 0.9,
+        metadata: {
+          factionId: 'blood-angels',
+          layer: 'unit',
+          category: 'datasheet',
+          title: 'Lemartes',
+        },
+      },
+      {
+        id: rhino.id,
+        score: 0.8,
+        metadata: {
+          factionId: 'space-marines',
+          layer: 'unit',
+          category: 'datasheet',
+          title: 'Rhino',
+        },
+      },
+      {
+        id: orkBoyz.id,
+        score: 0.75,
+        metadata: { factionId: 'orks', layer: 'unit', category: 'datasheet', title: 'Ork Boyz' },
+      },
+    ])
+    const bucket = makeChapterBucket([lemartes, rhino, orkBoyz])
+
+    const env: RetrieveEnv = { ai, vectorize, bucket }
+    // "assault marines blood angels" — a mechanics-y query so the code takes
+    // the semantic-search path (not the faction-browse shortcut).
+    const result = await retrieve({ query: 'assault marines blood angels', limit: 10 }, env)
+
+    const ids = result.results.map((r) => r.id)
+    expect(ids).toContain('ds:lemartes')
+    expect(ids).toContain('ds:rhino')
+    expect(ids).not.toContain('ds:ork-boyz')
+  })
+
+  it('explicit filter.factionId also triggers expansion (search body path)', async () => {
+    const ai = createMockAI()
+    const vectorize = createMockVectorize([
+      {
+        id: rhino.id,
+        score: 0.9,
+        metadata: {
+          factionId: 'space-marines',
+          layer: 'unit',
+          category: 'datasheet',
+          title: 'Rhino',
+        },
+      },
+      {
+        id: orkBoyz.id,
+        score: 0.8,
+        metadata: { factionId: 'orks', layer: 'unit', category: 'datasheet', title: 'Ork Boyz' },
+      },
+    ])
+    const bucket = makeChapterBucket([rhino, orkBoyz])
+
+    const env: RetrieveEnv = { ai, vectorize, bucket }
+    // Query text doesn't mention faction; filter.factionId does. The chapter
+    // slug expands to include the parent shared pool so Rhino stays in.
+    const result = await retrieve(
+      { query: 'transport unit', limit: 10, filter: { factionId: 'blood-angels' } },
+      env,
+    )
+
+    const ids = result.results.map((r) => r.id)
+    expect(ids).toContain('ds:rhino')
+    expect(ids).not.toContain('ds:ork-boyz')
+  })
+
+  it('non-chapter query stays scoped — orks filter does not add space-marines', async () => {
+    const ai = createMockAI()
+    const vectorize = createMockVectorize([
+      {
+        id: rhino.id,
+        score: 0.9,
+        metadata: {
+          factionId: 'space-marines',
+          layer: 'unit',
+          category: 'datasheet',
+          title: 'Rhino',
+        },
+      },
+      {
+        id: orkBoyz.id,
+        score: 0.7,
+        metadata: { factionId: 'orks', layer: 'unit', category: 'datasheet', title: 'Ork Boyz' },
+      },
+    ])
+    const bucket = makeChapterBucket([rhino, orkBoyz])
+
+    const env: RetrieveEnv = { ai, vectorize, bucket }
+    const result = await retrieve({ query: 'orks transport unit', limit: 10 }, env)
+
+    const ids = result.results.map((r) => r.id)
+    expect(ids).toContain('ds:ork-boyz')
+    expect(ids).not.toContain('ds:rhino')
+  })
+
+  it('faction-browse mode (query = just "blood angels") loads BOTH chapter + parent faction files', async () => {
+    // When the user types a bare faction name, factionBrowse takes over and
+    // loads the per-faction R2 file(s). It must load BOTH the chapter file
+    // and the parent-faction file to include the shared pool.
+    const ai = createMockAI()
+    const vectorize = createMockVectorize([])
+    const bucket = createMockBucket({
+      'manifest.json': {
+        files: {
+          'nodes/faction-blood-angels.json': 'v1',
+          'nodes/faction-space-marines.json': 'v1',
+          'nodes/core.json': 'v1',
+          'dim/subfactions.json': 'v1',
+        },
+      },
+      'nodes/faction-blood-angels.json': [lemartes],
+      'nodes/faction-space-marines.json': [rhino],
+      'nodes/core.json': [],
+      'dim/subfactions.json': smChapterRows,
+      'refs/reverse-index.json': {},
+      'refs/forward-index.json': {},
+    })
+
+    const env: RetrieveEnv = { ai, vectorize, bucket }
+    const result = await retrieve({ query: 'blood angels' }, env)
+
+    const ids = result.results.map((r) => r.id)
+    expect(ids).toContain('ds:lemartes')
+    expect(ids).toContain('ds:rhino')
   })
 })

@@ -55,6 +55,14 @@ async function main() {
     }
   }
 
+  // Dim exports (lookup tables snapshotted from the DB — see build-graph.ts)
+  const dimDir = join(OUTPUT_DIR, 'dim')
+  if (existsSync(dimDir)) {
+    for (const f of readdirSync(dimDir)) {
+      files.push(`dim/${f}`)
+    }
+  }
+
   console.log(`Found ${files.length} files to upload\n`)
 
   let uploaded = 0
