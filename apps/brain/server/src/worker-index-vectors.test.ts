@@ -119,6 +119,77 @@ describe('POST /index-vectors metadata', () => {
     expect(upserted[0]!.metadata.edition).toBe('unknown')
   })
 
+  it('composes the datasheet embedding text from datasheet + ability + weapon bodies', async () => {
+    // The datasheet-content-duplication fix strips ability + weapon bodies
+    // from `datasheet.content` (stored on their own nodes instead). At index
+    // time we re-attach them so semantic search still surfaces the datasheet
+    // for ability-text queries like "twice per battle" or "sustained hits".
+    const datasheet = baseNode({
+      id: '11e:000000020',
+      category: 'datasheet',
+      title: 'Tankbustas',
+      content: 'M T SV W LD OC: 6" 4 5+ 1 7+ 2\n\nABILITIES: Bomb Squigs',
+      summary: 'Tankbustas — Battleline.',
+      datasheetId: '11e:000000020',
+      factionId: 'orks',
+      edition: '11th',
+      keywords: ['infantry'],
+    })
+    const ability = baseNode({
+      id: '11e:ability:000000020:bomb-squigs',
+      category: 'unit-ability',
+      title: 'Bomb Squigs',
+      content: 'Twice per battle, after this unit ends a Normal move...',
+      summary: 'Bomb Squigs.',
+      datasheetId: '11e:000000020',
+      factionId: 'orks',
+      edition: '11th',
+      keywords: [],
+    })
+    const weapon = baseNode({
+      id: '11e:weapon:000000020:tankbusta-bomb',
+      category: 'weapon',
+      title: 'Tankbusta bomb',
+      content:
+        '**Range:** 12 | **Type:** Ranged\n**A:** 1 | **BS/WS:** 5+ | **S:** 8 | **AP:** -1 | **D:** D6\n\nanti-vehicle 3+, one shot',
+      summary: 'Tankbusta bomb (Ranged).',
+      datasheetId: '11e:000000020',
+      factionId: 'orks',
+      edition: '11th',
+      keywords: [],
+    })
+
+    const ai = makeAi()
+    const env = {
+      BRAIN_BUCKET: makeBucket({
+        'manifest.json': { files: { 'nodes/test.json': 'v1' } },
+        'nodes/test.json': [datasheet, ability, weapon],
+      }),
+      BRAIN_INDEX: makeIndex(),
+      AI: ai,
+    }
+
+    const res = await app.request('/index-vectors', { method: 'POST' }, env)
+    expect(res.status).toBe(200)
+
+    // The AI.run mock captures the text-to-embed passed in. The datasheet's
+    // corpus (batch index 0) must include the ability body and the weapon body.
+    const aiRun = ai.run as unknown as ReturnType<typeof vi.fn>
+    const textsPassed = aiRun.mock.calls[0]![1].text as string[]
+    // Find the datasheet corpus by title.
+    const dsCorpus = textsPassed.find((t) => t.startsWith('Tankbustas.'))
+    expect(dsCorpus).toBeDefined()
+    expect(dsCorpus).toMatch(/Twice per battle/) // ability body appended
+    expect(dsCorpus).toMatch(/anti-vehicle/) // weapon body appended
+
+    // Non-datasheet nodes use the pre-refactor formula (title + summary +
+    // keywords), so the ability body should NOT be in the ability's own
+    // corpus (its `summary` is short, its own content isn't the target).
+    const abilityCorpus = textsPassed.find((t) => t.startsWith('Bomb Squigs.'))
+    expect(abilityCorpus).toBeDefined()
+    expect(abilityCorpus).not.toMatch(/Twice per battle/)
+  })
+
   it('preserves the rest of the metadata schema alongside edition', async () => {
     const node = baseNode({
       id: 'faction:necrons:rp',

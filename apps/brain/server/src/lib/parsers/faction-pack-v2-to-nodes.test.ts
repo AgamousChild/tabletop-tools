@@ -425,3 +425,152 @@ describe('detectFactionPackEdition', () => {
     expect(detectFactionPackEdition('')).toBe('10th')
   })
 })
+
+// ─── datasheet content shape (no ability/weapon body duplication) ───────────
+//
+// The pack v2 converter used to embed each ability's full body AND each
+// weapon's full row inside the datasheet's `content` field. Ability bodies
+// then existed in two places — the datasheet content rollup AND the
+// separate `unit-ability` node emitted via a patch. `/browse/unit/:id`
+// paid for both on every request.
+//
+// The fix strips both from `content` and lets ability + weapon child nodes
+// carry the bodies. The datasheet `content` is now structural / summary
+// only. `buildDatasheetCorpus` in `../vectorize-corpus.ts` re-attaches the
+// bodies at index time so semantic search still surfaces the datasheet for
+// ability-text queries.
+describe('convertPackExtractToNodes — datasheet content does NOT embed ability/weapon bodies', () => {
+  // Construct a fake PackExtract with a datasheet + inline abilities +
+  // ranged/melee weapons. The v2 parser is not called here — we're testing
+  // the converter's `buildDatasheetContent` directly through the emit path.
+  function makeExtract(): Parameters<typeof convertPackExtractToNodes>[0] {
+    return {
+      faction: 'orks',
+      source: { sourceCharCount: 0 },
+      coverage: { extractedChars: 0, residueChars: 0, residuePercent: 0 },
+      detachments: [],
+      datasheets: [
+        {
+          name: 'TANKBUSTAS',
+          isLegends: false,
+          stats: { M: '6"', T: '4', SV: '5+', W: '1', LD: '7+', OC: '2' },
+          rangedWeapons: [
+            {
+              name: 'Tankbusta bomb',
+              range: '12"',
+              A: '1',
+              BS: '5+',
+              S: '8',
+              AP: '-1',
+              D: 'D6',
+              keywords: ['ANTI-VEHICLE 3+', 'ONE SHOT'],
+              raw: 'Tankbusta bomb [ANTI-VEHICLE 3+, ONE SHOT] 12" 1 5+ 8 -1 D6',
+            },
+          ],
+          meleeWeapons: [
+            {
+              name: 'Choppa',
+              A: '2',
+              WS: '4+',
+              S: '4',
+              AP: '0',
+              D: '1',
+              keywords: [],
+              raw: 'Choppa Melee 2 4+ 4 0 1',
+            },
+          ],
+          abilities: [
+            {
+              name: 'Bomb Squigs',
+              kind: 'unit-specific',
+              body: 'Twice per battle, after this unit ends a Normal move, you can select one enemy unit within 12" of it and roll one D6: on a 2+, that enemy unit suffers D3 mortal wounds.',
+            },
+          ],
+          wargearOptions: [],
+          unitComposition: { raw: '5 Tankbustas' },
+          keywords: ['Infantry', 'Tankbustas'],
+          factionKeywords: ['Orks'],
+          attachableLeaders: [],
+          leads: [],
+          supports: [],
+          designerNotes: [],
+          raw: 'TANKBUSTAS raw block',
+        },
+      ],
+      legendsDatasheets: [],
+      armyRules: [],
+      errata: [],
+      faqs: [],
+      extras: [],
+      unparsed: [],
+    }
+  }
+
+  it('10e: datasheet content contains NO ability body ("Twice per battle...")', () => {
+    const result = convertPackExtractToNodes(makeExtract(), 'orks', '2026-07-01T00:00:00Z', '10th')
+    const ds = result.nodes.find((n) => n.category === 'datasheet' && n.title === 'TANKBUSTAS')
+    expect(ds).toBeDefined()
+    expect(ds!.content).not.toMatch(/Twice per battle/)
+    expect(ds!.content).not.toMatch(/suffers D3 mortal wounds/)
+  })
+
+  it('10e: datasheet content contains NO full weapon rows (no `[ANTI-VEHICLE 3+, ONE SHOT] 12" 1 5+ 8 -1 D6`)', () => {
+    const result = convertPackExtractToNodes(makeExtract(), 'orks', '2026-07-01T00:00:00Z', '10th')
+    const ds = result.nodes.find((n) => n.category === 'datasheet' && n.title === 'TANKBUSTAS')
+    expect(ds).toBeDefined()
+    expect(ds!.content).not.toMatch(/\[ANTI-VEHICLE 3\+/)
+    expect(ds!.content).not.toMatch(/5\+ 8 -1 D6/)
+  })
+
+  it('10e: datasheet content STILL contains structural markers with names', () => {
+    const result = convertPackExtractToNodes(makeExtract(), 'orks', '2026-07-01T00:00:00Z', '10th')
+    const ds = result.nodes.find((n) => n.category === 'datasheet' && n.title === 'TANKBUSTAS')
+    expect(ds).toBeDefined()
+    // Section markers + names stay — they help retrieval without duplicating bodies.
+    expect(ds!.content).toMatch(/RANGED WEAPONS: Tankbusta bomb/)
+    expect(ds!.content).toMatch(/MELEE WEAPONS: Choppa/)
+    expect(ds!.content).toMatch(/ABILITIES: Bomb Squigs/)
+    // Structural / summary fields also stay.
+    expect(ds!.content).toMatch(/KEYWORDS: Infantry, Tankbustas/)
+    expect(ds!.content).toMatch(/FACTION KEYWORDS: Orks/)
+    expect(ds!.content).toMatch(/UNIT COMPOSITION/)
+  })
+
+  it('10e: emits a separate unit-ability node that DOES carry the full body', () => {
+    // Datasheet is emitted as a node in 10e mode. Wahapedia is the 10e source
+    // of truth for ability child nodes, so v2 doesn't emit unit-ability nodes
+    // in 10e mode either — it emits the datasheet with structural content.
+    // The important invariant: bodies aren't duplicated in the datasheet
+    // content. The Wahapedia parser (game-data.ts) is the sole storage of
+    // 10e ability bodies as separate nodes.
+    const result = convertPackExtractToNodes(makeExtract(), 'orks', '2026-07-01T00:00:00Z', '10th')
+    const ds = result.nodes.find((n) => n.category === 'datasheet' && n.title === 'TANKBUSTAS')
+    expect(ds!.content.length).toBeLessThan(500) // structural only, no bodies
+  })
+
+  it('11e: datasheet PATCH contentFields.content contains NO ability body', () => {
+    const result = convertPackExtractToNodes(makeExtract(), 'orks', '2026-07-01T00:00:00Z', '11th')
+    const dsPatch = result.patches.find(
+      (p) => p.category === 'datasheet' && p.targetSlug === 'tankbustas',
+    )
+    expect(dsPatch).toBeDefined()
+    expect(dsPatch!.contentFields.content).not.toMatch(/Twice per battle/)
+    expect(dsPatch!.contentFields.content).not.toMatch(/suffers D3 mortal wounds/)
+  })
+
+  it('11e: ability PATCH contentFields.content DOES carry the full body', () => {
+    // The full 11e ability body still lands — but on the unit-ability patch,
+    // NOT on the datasheet patch. This is the storage layer's single source
+    // of truth for the Bomb Squigs body.
+    const result = convertPackExtractToNodes(makeExtract(), 'orks', '2026-07-01T00:00:00Z', '11th')
+    const abPatch = result.patches.find(
+      (p) =>
+        p.category === 'unit-ability' &&
+        p.targetSlug === 'bomb-squigs' &&
+        p.parentSlug === 'tankbustas',
+    )
+    expect(abPatch).toBeDefined()
+    expect(abPatch!.contentFields.content).toMatch(/Twice per battle/)
+    expect(abPatch!.contentFields.content).toMatch(/suffers D3 mortal wounds/)
+  })
+})
