@@ -317,10 +317,19 @@ export async function retrieve(
     })
     .filter((n): n is EnrichedNode => n !== null)
 
-  // Step 12b: Direct title match — find ALL nodes whose title matches the original query
-  // and inject them at position 0 if not already present. Covers cross-faction units,
-  // army rules, CA cards, tournament companion rules, etc.
-  // Skip child categories (weapons, abilities) — they'll be aggregated into parent records.
+  // Step 12b: Direct title match — find ALL nodes whose title matches the original
+  // OR the faction-stripped query and inject them at position 0 if not already present.
+  // Covers cross-faction units, army rules, CA cards, tournament companion rules,
+  // and — critically — queries like "Orks Warboss" where the user prefixed the
+  // faction (`detected.factions=['orks']`, `strippedQuery='Warboss'`) but every
+  // datasheet is titled just "Warboss". Without the stripped-query check, the
+  // Vectorize path is the only source and the faction pre-filter can leave zero
+  // hits (see the 2026-07-03 prod QA sweep — "Orks Warboss" returned 0 records
+  // while bare "Warboss" returned both Warbosses).
+  //
+  // The faction scope from `detectedFactionSet` (chapter + parent expansion) is
+  // applied here too so we don't leak cross-faction units in a scoped query.
+  // Nodes with no factionId (generic/core) always pass.
   const CHILD_CATEGORIES = new Set([
     'weapon',
     'unit-ability',
@@ -329,7 +338,14 @@ export async function retrieve(
     'unit-composition',
   ])
   const resultIdSet = new Set(results.map((r) => r.id))
-  const queryTitleLower = query.toLowerCase().trim()
+  const titleCandidates = new Set<string>()
+  const originalTitleLower = query.toLowerCase().trim()
+  titleCandidates.add(originalTitleLower)
+  const strippedTitleLower = strippedQuery.toLowerCase().trim()
+  if (strippedTitleLower && strippedTitleLower !== originalTitleLower) {
+    titleCandidates.add(strippedTitleLower)
+  }
+  const factionScopeActive = detectedFactionSet.size > 0
 
   const manifestObj = await env.bucket.get('manifest.json')
   if (manifestObj) {
@@ -342,14 +358,15 @@ export async function retrieve(
       if (!obj) continue
       const fileNodes = (await obj.json()) as Node[]
       for (const n of fileNodes) {
-        if (
-          !CHILD_CATEGORIES.has(n.category) &&
-          n.title.toLowerCase() === queryTitleLower &&
-          !resultIdSet.has(n.id)
-        ) {
-          titleMatches.push(enrichNode(n, 1.0, new Map()))
-          resultIdSet.add(n.id)
-        }
+        if (CHILD_CATEGORIES.has(n.category)) continue
+        if (!titleCandidates.has(n.title.toLowerCase())) continue
+        if (resultIdSet.has(n.id)) continue
+        // Honour the faction scope on title-matched candidates too. Bare-query
+        // callers (`detectedFactionSet.size === 0`) still get every title match
+        // — this only kicks in when the user narrowed to a faction/chapter.
+        if (factionScopeActive && n.factionId && !detectedFactionSet.has(n.factionId)) continue
+        titleMatches.push(enrichNode(n, 1.0, new Map()))
+        resultIdSet.add(n.id)
       }
     }
 
