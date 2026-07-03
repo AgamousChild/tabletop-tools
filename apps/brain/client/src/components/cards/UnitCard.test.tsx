@@ -145,8 +145,62 @@ describe('UnitCard', () => {
 
   it('renders faction keywords', () => {
     render(<UnitCard data={mockUnit} context={makeContext()} />)
-    // Faction keywords appear in header subtitle and keywords bar (displayed as ALL CAPS)
+    // Faction keywords appear in the keywords bar (displayed as ALL CAPS).
+    // Post-PR-E the header shows factionId ("SPACE MARINES") rather than
+    // factionKeywords[0], so ADEPTUS ASTARTES surfaces once — in the bar.
     expect(screen.getAllByText('ADEPTUS ASTARTES').length).toBeGreaterThan(0)
+  })
+
+  // ── Bug 3 regression: header only renders factionId, never duplicates ────
+  //
+  // Before PR E, the header's `factionKeywords[0] || factionId` expression
+  // painted the header with the first factionKeyword. Every unit whose slug
+  // and first factionKeyword had the same display — Blightlord Terminators
+  // ("death-guard" + "Death Guard"), Lord on Juggernaut ("world-eaters" +
+  // "World Eaters"), etc. — surfaced the badge twice: once from the header,
+  // once from the keywords bar. See PR E of the 2026-07-03 scalar-to-ref
+  // refactor plan.
+  it('renders the primary faction badge exactly once for a Death Guard datasheet (Blightlord Terminators)', () => {
+    const blightlord: UnitCardData = {
+      ...mockUnit,
+      id: 'datasheet:blightlord-terminators',
+      name: 'Blightlord Terminators',
+      factionId: 'death-guard',
+      // Post-`filterRedundantFactionKeywords` the Death-Guard-duplicate
+      // keyword is stripped; only parent-faction tags remain.
+      factionKeywords: [],
+    }
+    render(<UnitCard data={blightlord} context={makeContext()} />)
+    expect(screen.getAllByText('DEATH GUARD')).toHaveLength(1)
+  })
+
+  it('renders the primary faction badge exactly once for a World Eaters datasheet (Lord on Juggernaut)', () => {
+    const lord: UnitCardData = {
+      ...mockUnit,
+      id: 'datasheet:lord-on-juggernaut',
+      name: 'Lord on Juggernaut',
+      factionId: 'world-eaters',
+      factionKeywords: [],
+    }
+    render(<UnitCard data={lord} context={makeContext()} />)
+    expect(screen.getAllByText('WORLD EATERS')).toHaveLength(1)
+  })
+
+  it('renders the header badge from factionId when factionKeywords is populated with a parent-faction tag', () => {
+    // Space Marines datasheets keep "Adeptus Astartes" as a parent tag in
+    // factionKeywords. The header still reads SPACE MARINES (from factionId),
+    // NOT ADEPTUS ASTARTES.
+    const rhino: UnitCardData = {
+      ...mockUnit,
+      id: 'datasheet:rhino',
+      name: 'Rhino',
+      factionId: 'space-marines',
+      factionKeywords: ['Adeptus Astartes'],
+    }
+    render(<UnitCard data={rhino} context={makeContext()} />)
+    expect(screen.getByText('SPACE MARINES')).toBeInTheDocument()
+    // ADEPTUS ASTARTES appears once in the keywords bar — not in the header.
+    expect(screen.getAllByText('ADEPTUS ASTARTES')).toHaveLength(1)
   })
 
   it('renders eligible leader names', () => {

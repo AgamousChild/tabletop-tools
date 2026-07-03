@@ -221,12 +221,20 @@ app.get('/browse/layers', async (c) => {
   const allNodes = await getAllNodes(c.env.BRAIN_BUCKET)
   if (!allNodes.length) return c.json({ layers: [] })
 
+  // Apply the SAME edition filter to sidebar counts as /browse/nodes does to
+  // the layer view. Otherwise sidebar shows "Units (2605)" while the layer
+  // view paginates as "1352 results" — a 2× drift where the sidebar sums 10e
+  // + 11e and the layer view respects `?edition=`. See PR E of
+  // docs/superpowers/plans/2026-07-03-scalar-to-ref-refactor.md (Bug 2).
+  const edition = resolveEdition(c.req.query('edition'), c.env.BRAIN_DEFAULT_EDITION)
+  const editionScoped = filterByEdition(allNodes, edition)
+
   const layers = BROWSE_CATEGORIES.map((cat) => {
-    const count = allNodes.filter(cat.filter).length
+    const count = editionScoped.filter(cat.filter).length
     return { id: cat.id, label: cat.label, count }
   }).filter((l) => l.count > 0)
 
-  return c.json({ layers })
+  return c.json({ layers, edition })
 })
 
 app.get('/browse/nodes', async (c) => {
@@ -242,10 +250,18 @@ app.get('/browse/nodes', async (c) => {
   if (!allCached.length)
     return c.json({ nodes: [], total: 0, page, pageSize, totalPages: 0, edition })
 
-  const catDef = BROWSE_CATEGORIES.find((cat) => cat.id === layer)
-  const allNodes = catDef
-    ? allCached.filter(catDef.filter)
-    : allCached.filter((n) => n.layer === layer)
+  // Match a defined category by id (e.g. `factions`) OR by singular category
+  // alias (e.g. `faction` → the same "Factions" bucket). The old fallback
+  // `n.layer === layer` treated `layer=faction` as the NodeLayer filter,
+  // pulling in every stratagem/enhancement/detachment-rule that lives on the
+  // faction layer — surfacing the "Factions returns tactics/rulings" bug
+  // from PR E's QA sweep. Category-filter browse now keys off NodeCategory
+  // alone. See docs/superpowers/plans/2026-07-03-scalar-to-ref-refactor.md.
+  const catDef =
+    BROWSE_CATEGORIES.find((cat) => cat.id === layer) ??
+    BROWSE_CATEGORIES.find((cat) => cat.id === `${layer}s`)
+  if (!catDef) return c.json({ error: `Unknown layer: ${layer}` }, 400)
+  const allNodes = allCached.filter(catDef.filter)
 
   // Filter to top-level records only, then apply edition filter (post-filter
   // because edition isn't yet in any upstream index — see retrieve.ts).

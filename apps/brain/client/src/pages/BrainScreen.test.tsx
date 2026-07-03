@@ -1,7 +1,7 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
-import { BrainScreen } from './BrainScreen'
+import { BrainScreen, filterRedundantFactionKeywords } from './BrainScreen'
 
 vi.mock('@xyflow/react', () => ({
   ReactFlow: (props: any) => <div data-testid="react-flow">{props.children}</div>,
@@ -435,6 +435,59 @@ describe('BrainScreen', () => {
 
       fireEvent.click(screen.getByTestId('search-clear-results'))
       expect(screen.queryByText('Disposable Search Hit')).not.toBeInTheDocument()
+    })
+  })
+
+  // ── Bug 3 regression: duplicate faction badge on unit cards ────────────────
+  //
+  // Before PR E, the FORMAL_TO_SLUG lookup only covered the eight formal names
+  // whose slug diverges from the display string (e.g. "adeptus astartes" →
+  // "space-marines"). Every other faction — Death Guard, World Eaters,
+  // Thousand Sons, and the SM chapters promoted to top-level factions in
+  // PR B — went through unfiltered. UnitCard renders factionKeywords in both
+  // the header subtitle and the keywords bar, so a Blightlord Terminator (its
+  // factionId is death-guard AND its keywords carry "Death Guard") came out as
+  // "DEATH GUARD DEATH GUARD".
+  //
+  // Fix: compare display strings, not slugs — one code path covers every
+  // faction without a hand-maintained map. See
+  // docs/superpowers/plans/2026-07-03-scalar-to-ref-refactor.md (PR E).
+  describe('filterRedundantFactionKeywords', () => {
+    it('removes a faction keyword that matches the node factionId display string (Blightlord Terminators)', () => {
+      // Death Guard is not in the legacy FORMAL_TO_SLUG map — this was the bug.
+      const result = filterRedundantFactionKeywords(['Death Guard'], 'death-guard')
+      expect(result).toEqual([])
+    })
+
+    it('removes a faction keyword for World Eaters (post-PR-B chapter as top-level faction)', () => {
+      const result = filterRedundantFactionKeywords(['World Eaters'], 'world-eaters')
+      expect(result).toEqual([])
+    })
+
+    it('keeps "Adeptus Astartes" when factionId is space-marines — the header now shows SPACE MARINES so ADEPTUS ASTARTES is a distinct parent tag', () => {
+      // Under PR E's header change (factionId only, no factionKeywords[0]
+      // fallback), the primary badge for a Space Marines datasheet is
+      // SPACE MARINES. "Adeptus Astartes" is a legitimate parent-faction
+      // keyword to surface in the bar — it's a different display string.
+      const result = filterRedundantFactionKeywords(['Adeptus Astartes'], 'space-marines')
+      expect(result).toEqual(['Adeptus Astartes'])
+    })
+
+    it('keeps parent-faction keywords that do NOT collide with the primary display', () => {
+      // Blightlord Terminators are Death Guard AND Chaos — the parent
+      // faction tag should stay so the keyword bar can surface it.
+      const result = filterRedundantFactionKeywords(['Death Guard', 'Chaos'], 'death-guard')
+      expect(result).toEqual(['Chaos'])
+    })
+
+    it('dedupes multiple copies of the same faction keyword', () => {
+      const result = filterRedundantFactionKeywords(['Chaos', 'Chaos'], 'death-guard')
+      expect(result).toEqual(['Chaos'])
+    })
+
+    it('passes keywords through untouched when nodeFactionId is empty', () => {
+      const result = filterRedundantFactionKeywords(['Death Guard'], '')
+      expect(result).toEqual(['Death Guard'])
     })
   })
 })
