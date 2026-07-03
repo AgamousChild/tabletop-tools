@@ -1,21 +1,27 @@
 /**
- * Pull subfaction tags from BSData chapter catalogs.
+ * Pull chapter-catalog membership from BSData rollups.
  *
  * The data-import worker publishes `bsdata-units.json` to R2 — each row is a
  * `UnitProfile` shape (`packages/game-content/src/types.ts`). Since PR #46
  * (`rollupChapterFaction()` in `apps/data-import/server/src/lib/sources/bsdata.ts`)
  * chapter-catalog units land with `faction: "Space Marines"` plus a
- * `subfaction: "ultramarines"` slug. Brain datasheets emitted by the Wahapedia
- * pipeline don't carry per-unit chapter keywords for most units — only
- * chapter-iconic models (e.g. Marneus Calgar = Ultramarines, Astorath = Blood
- * Angels) get the keyword. This parser fills the gap by joining BSData's
- * subfaction-tagged rows back onto brain datasheets via a normalized
- * `${factionSlug}::${normalizedName}` key.
+ * `subfaction: "ultramarines"` slug. BSData ships every SM chapter catalog with
+ * the FULL shared unit list embedded (each catalog is a self-contained army-list
+ * source), so most rows aren't actually chapter-locked — they just repeat.
  *
- * Brain `convertGameData` then prefers this BSData-derived subfaction over the
- * Wahapedia-keyword-derived one when both fire.
+ * This parser rolls up the per-(unit-name) SET of chapter catalogs each unit
+ * appears in. Downstream (see `game-data.ts`) that set is the discriminator:
  *
- * @see docs/superpowers/plans/2026-06-27-data-problems-followup.md step 7
+ *   - `size <= 2` → chapter-specific (real home). Assign the chapter as
+ *     `factionId`.
+ *   - `size >= 3` → shared across the SM pool. Keep `factionId=space-marines`,
+ *     no chapter tag.
+ *
+ * Wahapedia's own `unit_keywords.isFactionKeyword` chapter tags are a stronger
+ * signal (that's structured Wahapedia data, not a catalog-shape inference) —
+ * the caller prefers Wahapedia when both fire.
+ *
+ * @see docs/superpowers/plans/2026-07-03-scalar-to-ref-refactor.md — PR B
  * @see apps/brain/server/src/lib/parsers/mfm-costing.ts — same on-disk shape
  */
 import { existsSync, readFileSync } from 'fs'
@@ -32,12 +38,17 @@ export interface BsdataUnitRow {
 
 export interface BsdataSubfactionParseResult {
   /**
-   * Lookup key → subfaction slug. Key shape: `${factionSlug}::${normalizedName}`
-   * where `factionSlug` is the canonical brain slug (e.g. `space-marines`) and
-   * `normalizedName` is `normalizeName()` from id-mapping (lowercased, special
-   * chars stripped, whitespace collapsed).
+   * Lookup key → set of chapter catalog slugs the unit appears in.
+   * Key shape: `${factionSlug}::${normalizedName}` where `factionSlug` is the
+   * canonical brain slug (e.g. `space-marines`) and `normalizedName` is
+   * `normalizeName()` (lowercased, special chars stripped, whitespace
+   * collapsed).
+   *
+   * A unit that appears in a single chapter catalog is chapter-specific (that
+   * catalog is its home). A unit that appears in many is shared across the
+   * SM pool. See `chapterSpecificHome()` for the discriminator.
    */
-  byKey: Map<string, string>
+  byKey: Map<string, Set<string>>
   /** Total rows seen in the input. */
   totalRows: number
   /** Rows that contributed a subfaction tag to the lookup. */
@@ -59,7 +70,7 @@ export function loadBsdataSubfactionsFromFile(path: string): BsdataSubfactionPar
 
 /**
  * Parse `bsdata-units.json` text into a `(factionSlug, normalizedName) →
- * subfactionSlug` map. Only rows whose BSData row carries `subfaction` are
+ * Set<chapterSlug>` map. Only rows whose BSData row carries `subfaction` are
  * indexed — every other row is a no-op for this lookup.
  *
  * `normalizeFactionId` must be primed (`loadFactionCodes(db)`) before calling
@@ -71,7 +82,7 @@ export function parseBsdataSubfactions(jsonText: string): BsdataSubfactionParseR
     throw new Error('bsdata-units.json: expected a JSON array at root')
   }
 
-  const byKey = new Map<string, string>()
+  const byKey = new Map<string, Set<string>>()
   let taggedRows = 0
 
   for (const row of raw) {
@@ -79,16 +90,35 @@ export function parseBsdataSubfactions(jsonText: string): BsdataSubfactionParseR
     if (!row.subfaction || !row.name || !row.faction) continue
     const factionSlug = normalizeFactionId(row.faction)
     const key = bsdataSubfactionKey(factionSlug, row.name)
-    // First write wins. Chapter catalogs name the same unit in many forms only
-    // when BSData has a true duplicate — and the right answer is the same
-    // subfaction either way, so first-write is safe.
-    if (!byKey.has(key)) {
-      byKey.set(key, row.subfaction)
-      taggedRows++
+    let set = byKey.get(key)
+    if (!set) {
+      set = new Set<string>()
+      byKey.set(key, set)
     }
+    set.add(row.subfaction)
+    taggedRows++
   }
 
   return { byKey, totalRows: raw.length, taggedRows }
+}
+
+/**
+ * Given a unit's catalog-membership set, return its chapter home when the unit
+ * is chapter-specific, or `undefined` when it's shared across the SM pool.
+ *
+ * A unit appearing in one or two chapter catalogs is treated as chapter-specific
+ * (the two-catalog case covers legitimate cross-catalog duplication — e.g. a
+ * chapter-locked Legends variant filed under both the main chapter and a
+ * shared "Legends" bucket). Three or more catalogs — including every SM
+ * chapter catalog carrying the full shared list — means shared.
+ */
+export function chapterSpecificHome(catalogSet: Set<string> | undefined): string | undefined {
+  if (!catalogSet || catalogSet.size === 0) return undefined
+  if (catalogSet.size >= 3) return undefined
+  // For size 1 or 2, return the (alphabetically first) chapter as the home.
+  // Size-1 is unambiguous. Size-2 is rare enough that the first sorted entry
+  // is deterministic and equivalent to any other choice for downstream indexing.
+  return [...catalogSet].sort()[0]
 }
 
 /**
