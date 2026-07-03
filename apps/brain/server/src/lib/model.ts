@@ -262,9 +262,6 @@ export const NodeSchema = z.object({
   supersededBy: z.string().optional(),
   version: z.number().int().positive(),
 
-  // Sub-faction (chapter, legion, craftworld, etc.)
-  subfaction: z.string().optional(),
-
   // Edition (e.g., '10th', '11th')
   edition: z.string().optional(),
 

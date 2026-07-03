@@ -442,14 +442,17 @@ describe('retrieve', () => {
     expect(ability!.parentUnit).toBe('Captain [Blood Angels only]')
   })
 
-  it('applies subfaction sort: subfaction-matched first, then faction-matched, then generic', async () => {
-    const subfactionNode = makeNode({
-      id: 'faction:space-marines:blood-angels:specific',
+  it('applies faction sort: faction-matched (including chapter slug) first, then generic', async () => {
+    // Post-PR-D chapter identity lives on `factionId`. Chapter nodes carry
+    // `factionId=blood-angels`; the parent SM shared pool is unioned via
+    // `dim_subfaction` upstream (see PR C). The rank collapses to
+    // faction-matched vs generic.
+    const chapterNode = makeNode({
+      id: 'faction:blood-angels:specific',
       layer: 'faction',
       category: 'faction-ability',
       title: 'BA Specific',
-      factionId: 'space-marines',
-      subfaction: 'blood angels',
+      factionId: 'blood-angels',
     })
     const factionOnlyNode = makeNode({
       id: 'faction:space-marines:generic-sm',
@@ -459,7 +462,7 @@ describe('retrieve', () => {
       factionId: 'space-marines',
     })
     const ai = createMockAI()
-    // Generic score is highest, but subfaction should sort first
+    // Generic score is highest, but the faction-matched nodes should sort first
     const vectorize = createMockVectorize([
       { id: genericNode.id, score: 0.99, metadata: { layer: 'core', category: 'core-mechanic' } },
       {
@@ -468,30 +471,30 @@ describe('retrieve', () => {
         metadata: { factionId: 'space-marines', layer: 'faction', category: 'faction-ability' },
       },
       {
-        id: subfactionNode.id,
+        id: chapterNode.id,
         score: 0.6,
         metadata: {
-          factionId: 'space-marines',
-          subfaction: 'blood angels',
+          factionId: 'blood-angels',
           layer: 'faction',
           category: 'faction-ability',
         },
       },
     ])
-    const bucket = makeBucket([genericNode, factionOnlyNode, subfactionNode])
+    const bucket = makeBucket([genericNode, factionOnlyNode, chapterNode])
 
     const env: RetrieveEnv = { ai, vectorize, bucket }
     const result = await retrieve({ query: 'blood angels stratagems', limit: 10 }, env)
 
-    const subfactionIdx = result.results.findIndex((r) => r.id === subfactionNode.id)
+    const chapterIdx = result.results.findIndex((r) => r.id === chapterNode.id)
     const factionIdx = result.results.findIndex((r) => r.id === factionOnlyNode.id)
     const genericIdx = result.results.findIndex((r) => r.id === genericNode.id)
 
-    expect(subfactionIdx).toBeLessThan(factionIdx)
+    // Both chapter and parent SM sort before the generic core-mechanic node.
+    expect(chapterIdx).toBeLessThan(genericIdx)
     expect(factionIdx).toBeLessThan(genericIdx)
   })
 
-  it('includes factionId and subfaction in enriched results', async () => {
+  it('includes factionId in enriched results', async () => {
     const ai = createMockAI()
     const vectorize = createMockVectorize([
       {
@@ -526,12 +529,11 @@ describe('retrieve', () => {
 
   it('uses faction browse when query is just a faction name (stripped query empty)', async () => {
     const baNode = makeNode({
-      id: 'faction:space-marines:ba-detachment',
+      id: 'faction:blood-angels:ba-detachment',
       layer: 'faction',
       category: 'detachment-rule',
       title: 'Rage-cursed Onslaught',
-      factionId: 'space-marines',
-      subfaction: 'blood angels',
+      factionId: 'blood-angels',
     })
     const smNode = makeNode({
       id: 'faction:space-marines:gladius',
@@ -552,14 +554,20 @@ describe('retrieve', () => {
     const bucket = createMockBucket({
       'manifest.json': {
         files: {
+          'nodes/faction-blood-angels.json': 'h',
           'nodes/faction-space-marines.json': 'h',
           'nodes/faction-orks.json': 'h',
           'nodes/core.json': 'h',
+          'dim/subfactions.json': 'h',
         },
       },
-      'nodes/faction-space-marines.json': [baNode, smNode],
+      'nodes/faction-blood-angels.json': [baNode],
+      'nodes/faction-space-marines.json': [smNode],
       'nodes/faction-orks.json': [orkNode],
       'nodes/core.json': [coreNode],
+      'dim/subfactions.json': [
+        { id: 'blood-angels', name: 'Blood Angels', factionId: 'space-marines' },
+      ],
     })
 
     const env: RetrieveEnv = { ai, vectorize, bucket }
@@ -567,42 +575,50 @@ describe('retrieve', () => {
 
     // Should NOT call Vectorize — this is a direct R2 fetch
     expect((vectorize.query as ReturnType<typeof vi.fn>).mock.calls.length).toBe(0)
-    // Should return BA and generic SM content, not orks
+    // Should return BA (chapter faction) and generic SM content (via dim_subfaction expansion), not orks
     const ids = result.results.map((r) => r.id)
     expect(ids).toContain(baNode.id)
     expect(ids).toContain(smNode.id)
     expect(ids).not.toContain(orkNode.id)
-    // BA-specific should come before generic SM
+    // BA-specific (exact chapter faction match) should come before generic SM (expanded parent)
     const baIdx = result.results.findIndex((r) => r.id === baNode.id)
     const smIdx = result.results.findIndex((r) => r.id === smNode.id)
     expect(baIdx).toBeLessThan(smIdx)
   })
 
-  it('faction browse excludes other subfactions', async () => {
+  it('faction browse excludes other chapters', async () => {
     const baNode = makeNode({
       id: 'ba:1',
       layer: 'faction',
       category: 'detachment-rule',
       title: 'BA Detachment',
-      factionId: 'space-marines',
-      subfaction: 'blood angels',
+      factionId: 'blood-angels',
     })
     const swNode = makeNode({
       id: 'sw:1',
       layer: 'faction',
       category: 'detachment-rule',
       title: 'SW Detachment',
-      factionId: 'space-marines',
-      subfaction: 'space wolves',
+      factionId: 'space-wolves',
     })
     const ai = createMockAI()
     const vectorize = createMockVectorize([])
     const bucket = createMockBucket({
       'manifest.json': {
-        files: { 'nodes/faction-space-marines.json': 'h', 'nodes/core.json': 'h' },
+        files: {
+          'nodes/faction-blood-angels.json': 'h',
+          'nodes/faction-space-wolves.json': 'h',
+          'nodes/core.json': 'h',
+          'dim/subfactions.json': 'h',
+        },
       },
-      'nodes/faction-space-marines.json': [baNode, swNode],
+      'nodes/faction-blood-angels.json': [baNode],
+      'nodes/faction-space-wolves.json': [swNode],
       'nodes/core.json': [],
+      'dim/subfactions.json': [
+        { id: 'blood-angels', name: 'Blood Angels', factionId: 'space-marines' },
+        { id: 'space-wolves', name: 'Space Wolves', factionId: 'space-marines' },
+      ],
     })
 
     const env: RetrieveEnv = { ai, vectorize, bucket }
@@ -613,7 +629,7 @@ describe('retrieve', () => {
     expect(ids).not.toContain(swNode.id)
   })
 
-  it('faction browse still works for non-subfaction factions like necrons', async () => {
+  it('faction browse still works for non-chapter factions like necrons', async () => {
     const ai = createMockAI()
     const vectorize = createMockVectorize([])
     const bucket = createMockBucket({

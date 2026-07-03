@@ -197,7 +197,6 @@ describe('POST /index-vectors metadata', () => {
       category: 'faction-ability',
       title: 'Reanimation Protocols',
       factionId: 'necrons',
-      subfaction: 'sautekh',
       phase: 'command',
       edition: '11th',
     })
@@ -223,7 +222,6 @@ describe('POST /index-vectors metadata', () => {
     expect(meta.layer).toBe('faction')
     expect(meta.category).toBe('faction-ability')
     expect(meta.factionId).toBe('necrons')
-    expect(meta.subfaction).toBe('sautekh')
     expect(meta.phase).toBe('command')
     expect(meta.edition).toBe('11th')
   })

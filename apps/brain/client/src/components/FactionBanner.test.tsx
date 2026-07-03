@@ -9,11 +9,10 @@ describe('FactionBanner', () => {
     expect(screen.getByText(/SPACE MARINES/)).toBeInTheDocument()
   })
 
-  it('shows subfaction when present', () => {
-    render(
-      <FactionBanner factions={['space-marines']} subfaction="ultramarines" onDismiss={() => {}} />,
-    )
-    expect(screen.getByText(/ULTRAMARINES/)).toBeInTheDocument()
+  it('shows chapter faction slug when present in factions list', () => {
+    // Post-PR-D chapters are their own faction slugs (see faction-detect.ts).
+    render(<FactionBanner factions={['blood-angels']} onDismiss={() => {}} />)
+    expect(screen.getByText(/BLOOD ANGELS/)).toBeInTheDocument()
   })
 
   it('calls onDismiss when "Show all" clicked', () => {
@@ -33,11 +32,10 @@ describe('FactionBanner', () => {
     expect(screen.getByText(/SPACE MARINES, NECRONS/)).toBeInTheDocument()
   })
 
-  it('prefers subfaction over faction list in display', () => {
-    render(
-      <FactionBanner factions={['space-marines']} subfaction="iron hands" onDismiss={() => {}} />,
-    )
-    expect(screen.getByText(/IRON HANDS/)).toBeInTheDocument()
-    expect(screen.queryByText(/SPACE MARINES/)).not.toBeInTheDocument()
+  it('renders each detected faction slug as a display name', () => {
+    // Chapter slug lands in `factions` alongside its parent (see
+    // faction-detect.ts). The banner surfaces both.
+    render(<FactionBanner factions={['iron-hands', 'space-marines']} onDismiss={() => {}} />)
+    expect(screen.getByText(/IRON HANDS, SPACE MARINES/)).toBeInTheDocument()
   })
 })

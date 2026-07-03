@@ -67,14 +67,6 @@ export function RuleCard({ data, context }: RuleCardProps) {
               {subtitlePrefix} — {subtitleLabel}
             </p>
           </div>
-          {data.subfaction && (
-            <span
-              data-testid="subfaction-badge"
-              className="shrink-0 bg-amber-400/20 text-amber-400 text-[13px] font-medium px-2 py-0.5 rounded-full"
-            >
-              {data.subfaction}
-            </span>
-          )}
         </div>
       </div>
 

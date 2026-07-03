@@ -92,7 +92,6 @@ interface ResultNode {
   category: string
   factionId?: string
   factionName?: string
-  subfaction?: string
   phase?: string
   parentUnit?: string
   detachmentId?: string
@@ -113,7 +112,6 @@ interface ResultNode {
 
 interface DetectedFactions {
   factions: string[]
-  subfaction?: string
   strippedQuery: string
   keywords: string[]
 }
@@ -317,7 +315,6 @@ function buildUnitData(node: ResultNode) {
     id: node.id,
     name: node.title,
     factionId: node.factionId || '',
-    subfaction: node.subfaction,
     role,
     derivedType: role,
     points,
@@ -518,7 +515,6 @@ function buildStratagemData(node: ResultNode) {
     effect: effect || node.summary,
     detachmentName: '',
     factionId: node.factionId || '',
-    subfaction: node.subfaction,
   }
 }
 
@@ -560,7 +556,6 @@ function buildEnhancementData(node: ResultNode) {
     description,
     detachmentName: detName,
     factionId: node.factionId || '',
-    subfaction: node.subfaction,
   }
 }
 
@@ -756,7 +751,6 @@ function AskTab({ onOpenCard, activeFilters, onFilterChange, edition }: AskTabPr
           {factionFilter && answer.detected?.factions?.length > 0 && (
             <FactionBanner
               factions={answer.detected.factions}
-              subfaction={answer.detected.subfaction}
               onDismiss={() => setFactionFilter(false)}
             />
           )}
@@ -839,7 +833,6 @@ function AskTab({ onOpenCard, activeFilters, onFilterChange, edition }: AskTabPr
                       category={r.category}
                       score={r.score}
                       factionId={r.factionId}
-                      subfaction={r.subfaction}
                       phase={r.phase}
                       parentUnit={r.parentUnit}
                       edition={r.edition}
@@ -1091,11 +1084,7 @@ function SearchTab({
       )}
 
       {factionFilter && detected && detected.factions.length > 0 && (
-        <FactionBanner
-          factions={detected.factions}
-          subfaction={detected.subfaction}
-          onDismiss={() => setFactionFilter(false)}
-        />
+        <FactionBanner factions={detected.factions} onDismiss={() => setFactionFilter(false)} />
       )}
 
       {!fallbackDismissed && response?.fallback && response.fallbackFrom && (
@@ -1141,7 +1130,6 @@ function SearchTab({
                     score={r.score}
                     factionId={r.factionId}
                     factionName={r.factionName}
-                    subfaction={r.subfaction}
                     phase={r.phase}
                     parentUnit={r.parentUnit}
                     edition={r.edition}
@@ -1189,7 +1177,6 @@ function SearchTab({
                   category={r.category}
                   score={r.score}
                   factionId={r.factionId}
-                  subfaction={r.subfaction}
                   phase={r.phase}
                   parentUnit={r.parentUnit}
                   edition={r.edition}
@@ -1350,7 +1337,6 @@ function BrowseTab({ onOpenCard, edition }: BrowseTabProps) {
                     category={node.category || ''}
                     score={0}
                     factionId={node.factionId}
-                    subfaction={node.subfaction}
                     edition={node.edition}
                   />
                 </button>
@@ -1484,7 +1470,6 @@ export function BrainScreen() {
             name: node.title,
             description: node.content || node.summary || '',
             factionId: node.factionId || '',
-            subfaction: node.subfaction,
             isArmyRule: true,
             subRules: subRules.length > 0 ? subRules : undefined,
             sources: node.sources as any[],
@@ -1600,7 +1585,6 @@ export function BrainScreen() {
             name: node.title,
             description: node.content || node.summary || '',
             factionId: node.factionId || '',
-            subfaction: node.subfaction,
             isArmyRule: true,
             subRules: subRules.length > 0 ? subRules : undefined,
             sources: node.sources as any[],

@@ -19,7 +19,6 @@ export interface UnitCardData {
   id: string
   name: string
   factionId: string
-  subfaction?: string
   role: string
   derivedType: string
   points: string
@@ -103,7 +102,6 @@ export interface StratagemCardData {
   effect: string
   detachmentName: string
   factionId: string
-  subfaction?: string
   errata?: ErrataEntry[]
 }
 
@@ -115,7 +113,6 @@ export interface EnhancementCardData {
   restriction?: string
   detachmentName: string
   factionId: string
-  subfaction?: string
   /** Whether the enhancement attaches to the leader or the bearer's unit. */
   attachesTo?: 'leader' | 'unit'
   errata?: ErrataEntry[]
@@ -126,7 +123,6 @@ export interface RuleCardData {
   name: string
   description: string
   factionId: string
-  subfaction?: string
   detachmentName?: string
   isArmyRule: boolean
   isFaction?: boolean
@@ -243,7 +239,6 @@ export interface DetachmentCardData {
   name: string
   factionId: string
   factionName?: string
-  subfaction?: string
   abilityText: string
   stratagems: StratagemCardData[]
   enhancements: EnhancementCardData[]

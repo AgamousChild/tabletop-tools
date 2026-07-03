@@ -383,53 +383,14 @@ export function mergeSources(
   // Step 2b: Deduplicate detachment-rules by title + faction
   // Different sources produce the same detachment with different IDs
   // (e.g. "det:dark-angels:wrath-of-the-rock:wrath-of-the-rock" from Wahapedia
-  // vs "det:space-marines:wrath-of-the-rock" from faction packs with subfaction "dark angels")
+  // vs "det:space-marines:wrath-of-the-rock" from faction packs).
   // Keep the one with more content, redirect refs from the dropped ID to the kept ID.
-  // Map subfaction factionIds to their canonical subfaction name for dedup matching
-  const SUBFACTION_ALIASES: Record<string, string> = {
-    'blood-angels': 'blood angels',
-    'dark-angels': 'dark angels',
-    'space-wolves': 'space wolves',
-    'black-templars': 'black templars',
-    deathwatch: 'deathwatch',
-    ultramarines: 'ultramarines',
-    'iron-hands': 'iron hands',
-    'imperial-fists': 'imperial fists',
-    'raven-guard': 'raven guard',
-    salamanders: 'salamanders',
-    'white-scars': 'white scars',
-  }
 
-  // Step 2c: Normalize subfactions on SM nodes before dedup
-  // Wahapedia uses factionId: "space-marines" for chapter-specific detachments
-  // but doesn't set subfaction. The faction pack parser uses factionId: "dark-angels" etc.
-  // Unify by detecting chapter slugs in node IDs and setting subfaction.
-  const CHAPTER_SLUGS_TO_SUBFACTION: Record<string, string> = {
-    'blood-angels': 'blood angels',
-    'dark-angels': 'dark angels',
-    'space-wolves': 'space wolves',
-    'black-templars': 'black templars',
-    deathwatch: 'deathwatch',
-    ultramarines: 'ultramarines',
-    'iron-hands': 'iron hands',
-    'imperial-fists': 'imperial fists',
-    'raven-guard': 'raven guard',
-    salamanders: 'salamanders',
-    'white-scars': 'white scars',
-    'blood-ravens': 'blood ravens',
-  }
-  for (const node of nodeMap.values()) {
-    if (node.factionId === 'space-marines' && !node.subfaction) {
-      // Check if node ID or detachmentId contains a chapter slug
-      const idToCheck = node.detachmentId || node.id
-      for (const [slug, sub] of Object.entries(CHAPTER_SLUGS_TO_SUBFACTION)) {
-        if (idToCheck.includes(slug)) {
-          node.subfaction = sub
-          break
-        }
-      }
-    }
-  }
+  // The Node.subfaction scalar was deleted in PR D of the scalar-to-ref
+  // refactor — chapter identity now lives on `factionId` directly (Blood
+  // Angels units carry `factionId=blood-angels`). No pre-dedup subfaction
+  // normalization pass is needed. See
+  // docs/superpowers/plans/2026-07-03-scalar-to-ref-refactor.md.
 
   // Redirect map collects droppedId → keptId across all the dedup passes
   // below (MFM→pack detachment merge, title-based detachment-rule dedup).
@@ -498,10 +459,7 @@ export function mergeSources(
     // For detachment-rules, dedup by title only — the same detachment often appears
     // under different factionIds (e.g., "Wrath of the Rock" under both "dark-angels" and "space-marines")
     // For other categories, include faction to avoid collapsing legitimately different abilities
-    const faction =
-      node.category === 'detachment-rule'
-        ? '' // title-only dedup for detachments
-        : node.subfaction || SUBFACTION_ALIASES[node.factionId ?? ''] || node.factionId || ''
+    const faction = node.category === 'detachment-rule' ? '' : (node.factionId ?? '')
     // Edition is part of the key so the 10e and 11e copies of the same
     // detachment-rule / stratagem / enhancement / faction-ability stay
     // distinct. Parallel datasets — see duplicate-eleventh.ts.

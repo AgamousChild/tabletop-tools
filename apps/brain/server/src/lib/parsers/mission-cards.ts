@@ -216,9 +216,10 @@ export function parseMissionCards(
       layer: 'core',
       category: 'primary-mission',
       title,
-      // `subfaction` is reused as the deck name per task spec — this lets
-      // the existing browse filters slice by deck without adding a new field.
-      subfaction: entry.group,
+      // Deck-group info used to live on a repurposed `subfaction` scalar
+      // (deleted in PR D of the scalar-to-ref refactor). The group slug now
+      // rides in `keywords` — browse filters that slice by deck read the
+      // keyword rather than the scalar.
       edition: '11th',
       content,
       summary: makeSummary(body),

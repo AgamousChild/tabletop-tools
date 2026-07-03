@@ -782,7 +782,8 @@ describe('convertGameData', () => {
       const ds = nodes.find((n) => n.id === 'lemartes-1')
       expect(ds).toBeDefined()
       expect(ds!.factionId).toBe('blood-angels')
-      expect(ds!.subfaction).toBeUndefined()
+      // Node.subfaction was deleted in PR D of the scalar-to-ref refactor —
+      // chapter identity now lives on `factionId` alone.
     })
 
     it('BSData single-catalog membership rewrites factionId when Wahapedia is silent', () => {
@@ -811,7 +812,8 @@ describe('convertGameData', () => {
       const ds = nodes.find((n) => n.id === 'grimaldus-1')
       expect(ds).toBeDefined()
       expect(ds!.factionId).toBe('black-templars')
-      expect(ds!.subfaction).toBeUndefined()
+      // Node.subfaction was deleted in PR D of the scalar-to-ref refactor —
+      // chapter identity now lives on `factionId` alone.
     })
 
     it('shared units (appear in 3+ catalogs) stay factionId=space-marines with no chapter tag', () => {
@@ -842,7 +844,8 @@ describe('convertGameData', () => {
       const ds = nodes.find((n) => n.id === 'rhino-1')
       expect(ds).toBeDefined()
       expect(ds!.factionId).toBe('space-marines')
-      expect(ds!.subfaction).toBeUndefined()
+      // Node.subfaction was deleted in PR D of the scalar-to-ref refactor —
+      // chapter identity now lives on `factionId` alone.
     })
 
     it('Wahapedia chapter keyword wins over conflicting BSData catalog membership', () => {
@@ -879,7 +882,8 @@ describe('convertGameData', () => {
       const ds = nodes.find((n) => n.id === 'conflicted-1')
       expect(ds).toBeDefined()
       expect(ds!.factionId).toBe('dark-angels')
-      expect(ds!.subfaction).toBeUndefined()
+      // Node.subfaction was deleted in PR D of the scalar-to-ref refactor —
+      // chapter identity now lives on `factionId` alone.
     })
 
     it('non-chapter chapter keywords (Ultramarines, Salamanders, etc.) stay space-marines', () => {
@@ -908,7 +912,8 @@ describe('convertGameData', () => {
       const ds = nodes.find((n) => n.id === 'adrax-1')
       expect(ds).toBeDefined()
       expect(ds!.factionId).toBe('space-marines')
-      expect(ds!.subfaction).toBeUndefined()
+      // Node.subfaction was deleted in PR D of the scalar-to-ref refactor —
+      // chapter identity now lives on `factionId` alone.
     })
 
     it('non-SM datasheets are unaffected by chapter resolution', () => {
@@ -932,7 +937,8 @@ describe('convertGameData', () => {
       const { nodes } = convertGameData(input, '2026-04-08')
       const ds = nodes.find((n) => n.id === 'hive-tyrant-1')
       expect(ds).toBeDefined()
-      expect(ds!.subfaction).toBeUndefined()
+      // Node.subfaction was deleted in PR D of the scalar-to-ref refactor —
+      // chapter identity now lives on `factionId` alone.
     })
   })
 

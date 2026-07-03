@@ -11,7 +11,12 @@ const SOURCE_BASE = 'https://www.warhammer-community.com/en-gb/articles'
 interface DetachmentData {
   factionId: string
   factionName: string
-  subfaction?: string
+  /**
+   * Chapter/legion tag for chapter-specific detachments. Used only for
+   * keyword enrichment on the emitted nodes (was previously a scalar
+   * `Node.subfaction` field before PR D of the scalar-to-ref refactor).
+   */
+  chapterTag?: string
   detachmentName: string
   detachmentRule: { name: string; text: string }
   stratagems: Array<{ name: string; cp: number; when: string; target?: string; effect: string }>
@@ -97,7 +102,7 @@ const DETACHMENTS: DetachmentData[] = [
   {
     factionId: 'space-marines',
     factionName: 'SPACE MARINES',
-    subfaction: 'black templars',
+    chapterTag: 'black templars',
     detachmentName: 'Living Miracle',
     detachmentRule: {
       name: 'Anointed Champion',
@@ -116,7 +121,7 @@ const DETACHMENTS: DetachmentData[] = [
   {
     factionId: 'space-marines',
     factionName: 'SPACE MARINES',
-    subfaction: 'black templars',
+    chapterTag: 'black templars',
     detachmentName: "Marshall's Household",
     detachmentRule: {
       name: 'Sword Brethren Vanguard',
@@ -151,7 +156,7 @@ const DETACHMENTS: DetachmentData[] = [
   {
     factionId: 'space-marines',
     factionName: 'SPACE MARINES',
-    subfaction: 'black templars',
+    chapterTag: 'black templars',
     detachmentName: 'Wrathful Procession',
     detachmentRule: {
       name: 'Chaplain Shield of Faith',
@@ -180,7 +185,7 @@ const DETACHMENTS: DetachmentData[] = [
   {
     factionId: 'space-marines',
     factionName: 'SPACE MARINES',
-    subfaction: 'blood angels',
+    chapterTag: 'blood angels',
     detachmentName: 'Wrath of the Doomed',
     detachmentRule: {
       name: 'Fanatical Celerity',
@@ -217,7 +222,7 @@ const DETACHMENTS: DetachmentData[] = [
   {
     factionId: 'space-marines',
     factionName: 'SPACE MARINES',
-    subfaction: 'blood angels',
+    chapterTag: 'blood angels',
     detachmentName: 'Legacy of Grace',
     detachmentRule: {
       name: 'Angelic Fury',
@@ -238,7 +243,7 @@ const DETACHMENTS: DetachmentData[] = [
   {
     factionId: 'space-marines',
     factionName: 'SPACE MARINES',
-    subfaction: 'blood angels',
+    chapterTag: 'blood angels',
     detachmentName: 'Incarnadine Speartip',
     detachmentRule: {
       name: 'Golden Host',
@@ -261,7 +266,7 @@ const DETACHMENTS: DetachmentData[] = [
   {
     factionId: 'space-marines',
     factionName: 'SPACE MARINES',
-    subfaction: 'dark angels',
+    chapterTag: 'dark angels',
     detachmentName: 'Dark Age Arsenal',
     detachmentRule: {
       name: 'Invocations of Ancient Fury',
@@ -288,7 +293,7 @@ const DETACHMENTS: DetachmentData[] = [
   {
     factionId: 'space-marines',
     factionName: 'SPACE MARINES',
-    subfaction: 'dark angels',
+    chapterTag: 'dark angels',
     detachmentName: 'Dark Flight Pursuit',
     detachmentRule: {
       name: 'Ravenwing Vengeance',
@@ -309,7 +314,7 @@ const DETACHMENTS: DetachmentData[] = [
   {
     factionId: 'space-marines',
     factionName: 'SPACE MARINES',
-    subfaction: 'dark angels',
+    chapterTag: 'dark angels',
     detachmentName: 'Interrogation Conclave',
     detachmentRule: {
       name: 'Inquisitorial Dread',
@@ -338,7 +343,7 @@ const DETACHMENTS: DetachmentData[] = [
   {
     factionId: 'space-marines',
     factionName: 'SPACE MARINES',
-    subfaction: 'space wolves',
+    chapterTag: 'space wolves',
     detachmentName: 'Champions of Fenris',
     detachmentRule: {
       name: 'The Great Wolf Watches',
@@ -365,7 +370,7 @@ const DETACHMENTS: DetachmentData[] = [
   {
     factionId: 'space-marines',
     factionName: 'SPACE MARINES',
-    subfaction: 'space wolves',
+    chapterTag: 'space wolves',
     detachmentName: 'Legends of Saga and Song',
     detachmentRule: {
       name: 'Terminator Assault',
@@ -392,7 +397,7 @@ const DETACHMENTS: DetachmentData[] = [
   {
     factionId: 'space-marines',
     factionName: 'SPACE MARINES',
-    subfaction: 'space wolves',
+    chapterTag: 'space wolves',
     detachmentName: 'Veterans of the Fang',
     detachmentRule: {
       name: 'Grey Hunter Tactics',
@@ -632,7 +637,6 @@ export function build11thEditionNodes(): { nodes: Node[]; refs: NodeRef[] } {
       phase: 'any',
       factionId: det.factionId,
       factionName: det.factionName,
-      subfaction: det.subfaction,
       edition: '11th',
       sources: [source],
       refs: [],
@@ -643,7 +647,7 @@ export function build11thEditionNodes(): { nodes: Node[]; refs: NodeRef[] } {
         '11th edition',
         'detachment',
         det.factionName.toLowerCase(),
-        ...(det.subfaction ? [det.subfaction] : []),
+        ...(det.chapterTag ? [det.chapterTag] : []),
       ],
     })
 
@@ -666,7 +670,6 @@ export function build11thEditionNodes(): { nodes: Node[]; refs: NodeRef[] } {
         summary: `${strat.name} (${strat.cp}CP) — ${det.detachmentName} stratagem. ${strat.effect.substring(0, 120)}`,
         factionId: det.factionId,
         factionName: det.factionName,
-        subfaction: det.subfaction,
         detachmentId: detId,
         edition: '11th',
         sources: [source],
@@ -678,6 +681,7 @@ export function build11thEditionNodes(): { nodes: Node[]; refs: NodeRef[] } {
           '11th edition',
           det.detachmentName.toLowerCase(),
           det.factionName.toLowerCase(),
+          ...(det.chapterTag ? [det.chapterTag] : []),
         ],
       })
 
@@ -707,7 +711,6 @@ export function build11thEditionNodes(): { nodes: Node[]; refs: NodeRef[] } {
         summary: `${enh.name} — ${det.detachmentName} enhancement. ${enh.restriction}. ${enh.effect.substring(0, 120)}`,
         factionId: det.factionId,
         factionName: det.factionName,
-        subfaction: det.subfaction,
         detachmentId: detId,
         edition: '11th',
         sources: [source],
@@ -719,6 +722,7 @@ export function build11thEditionNodes(): { nodes: Node[]; refs: NodeRef[] } {
           '11th edition',
           det.detachmentName.toLowerCase(),
           det.factionName.toLowerCase(),
+          ...(det.chapterTag ? [det.chapterTag] : []),
         ],
       })
 

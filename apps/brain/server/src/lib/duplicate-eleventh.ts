@@ -20,9 +20,8 @@
  *   - One 11e node per input node. The new node carries `id: '11e:' + old.id`,
  *     `edition: '11th'`, `datasheetId: '11e:' + old.datasheetId` when present,
  *     `detachmentId: '11e:' + old.detachmentId` when present. Content,
- *     summary, factionId, subfaction, and every structured field copy
- *     verbatim — the 11e MFM costing pass + faction-pack overrides will
- *     mutate these copies later.
+ *     summary, factionId, and every structured field copy verbatim — the 11e
+ *     MFM costing pass + faction-pack overrides will mutate these copies later.
  *   - One 11e ref per input ref, with both endpoints rewritten:
  *       - If the ref points at an id we just duplicated, the endpoint
  *         becomes `'11e:' + originalId`.

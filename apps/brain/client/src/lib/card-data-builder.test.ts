@@ -385,16 +385,9 @@ describe('buildCardData', () => {
       expect(card.data.factionId).toBe('')
     })
 
-    it('handles missing optional fields (phase, parentUnit, subfaction)', () => {
+    it('handles missing optional fields (phase, parentUnit)', () => {
       const card = buildCardData(stratagemNode)
       expect(card).not.toBeNull()
-    })
-
-    it('preserves subfaction when present', () => {
-      const node = { ...armyRuleNode, subfaction: 'Ultramarines' }
-      const card = buildCardData(node)
-      if (card?.type !== 'rule') return
-      expect(card.data.subfaction).toBe('Ultramarines')
     })
   })
 

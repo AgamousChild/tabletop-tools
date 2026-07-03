@@ -33,10 +33,9 @@ describe('ResultCard', () => {
     expect(screen.queryByText(/on /)).not.toBeInTheDocument()
   })
 
-  it('shows faction and subfaction tags', () => {
-    render(<ResultCard {...baseProps} factionId="space-marines" subfaction="ultramarines" />)
-    expect(screen.getByText('SPACE MARINES')).toBeInTheDocument()
-    expect(screen.getByText('ULTRAMARINES')).toBeInTheDocument()
+  it('shows faction tag from factionId', () => {
+    render(<ResultCard {...baseProps} factionId="blood-angels" />)
+    expect(screen.getByText('BLOOD ANGELS')).toBeInTheDocument()
   })
 
   it('shows relevance score as percentage (85%)', () => {

@@ -133,7 +133,7 @@ export function StratagemCard({ data, context }: StratagemCardProps) {
 
         {/* Faction — Detachment footer */}
         <p className="text-[9px] text-slate-500 uppercase tracking-widest mt-1 pt-1 border-t border-slate-800">
-          {factionDisplayName(data.subfaction || data.factionId)}
+          {factionDisplayName(data.factionId)}
           {data.detachmentName ? ` — ${data.detachmentName} Detachment` : ''}
         </p>
       </div>

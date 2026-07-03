@@ -16,7 +16,6 @@ export interface BrainNode {
   layer: string
   category: string
   factionId?: string
-  subfaction?: string
   phase?: string
   parentUnit?: string
   datasheetId?: string
@@ -132,7 +131,6 @@ function buildUnitData(node: BrainNode): UnitCardData {
     id: node.id,
     name: node.title,
     factionId: node.factionId || '',
-    subfaction: node.subfaction,
     role: node.layer,
     derivedType: content.match(/\*\*Derived Type:\*\*\s*(.+)/)?.[1]?.trim() || node.layer,
     points: '',
@@ -196,7 +194,6 @@ function buildStratagemData(node: BrainNode): StratagemCardData {
     effect: effect || node.summary,
     detachmentName: '',
     factionId: node.factionId || '',
-    subfaction: node.subfaction,
   }
 }
 
@@ -221,7 +218,6 @@ function buildEnhancementData(node: BrainNode): EnhancementCardData {
     restriction,
     detachmentName: '',
     factionId: node.factionId || '',
-    subfaction: node.subfaction,
   }
 }
 
@@ -234,7 +230,6 @@ function buildRuleData(node: BrainNode, isArmyRule: boolean): RuleCardData {
     name: node.title,
     description: content,
     factionId: node.factionId || '',
-    subfaction: node.subfaction,
     detachmentName: '',
     isArmyRule,
     subRules,

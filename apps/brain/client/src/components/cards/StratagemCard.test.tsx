@@ -67,8 +67,9 @@ describe('StratagemCard', () => {
     expect(screen.getByText("SPACE MARINES — Forgefather's Seekers Detachment")).toBeInTheDocument()
   })
 
-  it('prefers subfaction over factionId in footer', () => {
-    const data = { ...mockStratagem, subfaction: 'blood angels' }
+  it('renders chapter faction directly from factionId in footer', () => {
+    // Post-PR-D chapter identity lives on `factionId` (see model.ts).
+    const data = { ...mockStratagem, factionId: 'blood-angels' }
     render(<StratagemCard data={data} context={baseContext} />)
     expect(screen.getByText("BLOOD ANGELS — Forgefather's Seekers Detachment")).toBeInTheDocument()
   })

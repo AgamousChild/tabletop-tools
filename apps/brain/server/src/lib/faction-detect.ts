@@ -1,5 +1,5 @@
 /**
- * faction-detect.ts — Single source of truth for faction/subfaction detection,
+ * faction-detect.ts — Single source of truth for faction/chapter detection,
  * query stripping, and mechanic alias expansion.
  *
  * CRITICAL: FACTION_PATTERNS order matters — more specific patterns (e.g.,
@@ -9,8 +9,9 @@
 // ── Faction patterns ──────────────────────────────────────────────────────────
 
 // FACTION_PATTERNS maps text patterns to TOP-LEVEL faction slugs only.
-// SM chapters (blood angels, dark angels, space wolves, etc.) are NOT factions —
-// they're subfactions handled by SUBFACTION_TO_PARENT. Do NOT add them here.
+// SM chapters (blood angels, dark angels, space wolves, etc.) live in
+// SUBFACTION_TO_PARENT (they're chapter aliases → parent SM faction).
+// Do NOT add them here.
 export const FACTION_PATTERNS: Array<{ pattern: string; slug: string }> = [
   { pattern: 'chaos space marine', slug: 'chaos-space-marines' },
   { pattern: 'space marine', slug: 'space-marines' },
@@ -49,21 +50,22 @@ export const FACTION_PATTERNS: Array<{ pattern: string; slug: string }> = [
   { pattern: 'admech', slug: 'adeptus-mechanicus' },
 ]
 
-// Abbreviation → subfaction mappings (resolved via SUBFACTION_TO_PARENT)
+// Abbreviation → chapter-name mappings (resolved via SUBFACTION_TO_PARENT)
 export const ABBREVIATION_TO_SUBFACTION: Record<string, string> = {
   ba: 'blood angels',
   da: 'dark angels',
   sw: 'space wolves',
   bt: 'black templars',
   dw: 'deathwatch',
-  sm: '', // plain Space Marines, no subfaction
+  sm: '', // plain Space Marines, no chapter
 }
 
-// ── Subfaction → parent faction mapping ───────────────────────────────────────
+// ── Chapter → parent faction mapping ──────────────────────────────────────────
 
 /**
- * Maps subfaction names (lowercase) to their parent faction slug.
- * Chapters resolve to 'space-marines', daemon legions to 'chaos-daemons', etc.
+ * Maps chapter/legion/craftworld names (lowercase) to their parent faction
+ * slug. Chapters resolve to 'space-marines', daemon legions to 'chaos-daemons',
+ * etc. Used to seed the `dim_subfaction` expansion at retrieval time.
  */
 export const SUBFACTION_TO_PARENT: Record<string, string> = {
   // Space Marines chapters
@@ -124,36 +126,43 @@ export const MECHANIC_ALIASES: Array<{ alias: string; canonical: string }> = [
 // ── Detection ─────────────────────────────────────────────────────────────────
 
 /**
- * Detects all factions and an optional subfaction from query text.
+ * Detects all factions from query text.
  *
- * - Subfaction names (chapters, legions, craftworlds) map to their parent
- *   faction slug and also set the `subfaction` field.
+ * - Chapter/legion/craftworld names map to their parent faction slug via
+ *   `SUBFACTION_TO_PARENT`, and the chapter slug itself is also added so
+ *   retrieval walks `dim_subfaction` to union the parent faction's shared
+ *   pool.
  * - When "chaos space marine" matches, "space marine" is suppressed (the full
  *   matched text is consumed so the substring can't also match).
  */
-export function detectFactions(query: string): { factions: string[]; subfaction?: string } {
+export function detectFactions(query: string): { factions: string[] } {
   const lower = query.toLowerCase()
   const found = new Set<string>()
-  let subfaction: string | undefined
+  let chapterMatched = false
 
   // Track consumed text ranges to prevent double-matching substrings
   const consumed: Array<[number, number]> = []
 
-  // Check abbreviation-to-subfaction first (e.g., "BA" → "blood angels")
+  // Check chapter abbreviations first (e.g., "BA" → "blood angels").
+  // Chapter slug is emitted BEFORE the parent so the chapter is the primary
+  // faction for browse rank / factionBrowse `factionId = factions[0]` — the
+  // parent-faction shared pool is still unioned via `dim_subfaction`
+  // downstream (see PR C).
   for (const [abbr, sf] of Object.entries(ABBREVIATION_TO_SUBFACTION)) {
     const re = new RegExp(`\\b${abbr}\\b`, 'i')
     const m = re.exec(lower)
     if (m) {
       if (sf) {
-        // Has a subfaction (e.g., BA → blood angels)
+        // Chapter abbreviation (e.g., BA → blood angels)
         const parent = SUBFACTION_TO_PARENT[sf]
         if (parent) {
-          found.add(parent)
-          // Also add the chapter slug so retrieve can walk dim_subfaction and
-          // union the chapter-specific datasheets (Lemartes lives under
-          // factionId=blood-angels post-PR-B).
+          // Chapter slug goes in FIRST so it's `factions[0]`.
           found.add(subfactionSlug(sf))
-          subfaction = sf
+          // Then the parent-faction slug so retrieve's dim_subfaction
+          // expansion still fires (Lemartes lives under
+          // factionId=blood-angels post-PR-B; Rhino under space-marines).
+          found.add(parent)
+          chapterMatched = true
           consumed.push([m.index, m.index + m[0].length])
         }
       } else {
@@ -165,18 +174,17 @@ export function detectFactions(query: string): { factions: string[]; subfaction?
     }
   }
 
-  // Check subfaction keywords — they imply a parent faction
+  // Check chapter/legion keywords — they imply a parent faction
   // Also consume the matched text range so FACTION_PATTERNS doesn't re-match
-  if (!subfaction) {
+  if (!chapterMatched) {
     for (const [sf, parent] of Object.entries(SUBFACTION_TO_PARENT)) {
       const idx = lower.indexOf(sf)
       if (idx !== -1) {
-        found.add(parent)
-        // Also add the chapter slug (see comment above — post-PR-B datasheets).
+        // Chapter slug first (see above); parent second for expansion.
         found.add(subfactionSlug(sf))
-        subfaction = sf
+        found.add(parent)
         consumed.push([idx, idx + sf.length])
-        break // only one subfaction
+        break // only one chapter
       }
     }
   }
@@ -200,13 +208,13 @@ export function detectFactions(query: string): { factions: string[]; subfaction?
     if (matched) found.add(slug)
   }
 
-  return { factions: [...found], subfaction }
+  return { factions: [...found] }
 }
 
 // ── Query stripping ───────────────────────────────────────────────────────────
 
 /**
- * Removes faction and subfaction names from query text so they don't pollute
+ * Removes faction and chapter names from query text so they don't pollute
  * semantic search. Uses the full FACTION_PATTERNS list (not a partial copy).
  *
  * @param query - original user query
@@ -222,7 +230,7 @@ export function stripFactionFromQuery(query: string, detectedFactions: string[])
     detectedFactions.includes(slug),
   ).map(({ pattern }) => pattern)
 
-  // Also remove subfaction names that appear in SUBFACTION_TO_PARENT
+  // Also remove chapter names that appear in SUBFACTION_TO_PARENT
   for (const [sf, parent] of Object.entries(SUBFACTION_TO_PARENT)) {
     if (detectedFactions.includes(parent)) {
       patternsToRemove.push(sf)
@@ -250,7 +258,7 @@ function escapeRegex(s: string): string {
 }
 
 /**
- * Convert a subfaction-name key (e.g. "blood angels") to its kebab-case slug
+ * Convert a chapter-name key (e.g. "blood angels") to its kebab-case slug
  * ("blood-angels"). Matches dim_subfaction.id values so retrieve can walk the
  * expansion helper.
  */

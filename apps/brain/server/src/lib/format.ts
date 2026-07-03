@@ -112,12 +112,16 @@ const TIER_HEADING: Record<ImpactTier, string> = {
  * Format nodes as conversational prose paragraphs grouped by impact tier.
  * Each group is a short paragraph, not a bullet list.
  * A structured Reference section follows all prose sections.
+ *
+ * The old chapter-split path (SM-specific vs generic-SM sections keyed on
+ * `Node.subfaction`) was removed with the field in PR D of the scalar-to-ref
+ * refactor. Chapter identity is now `factionId`; SM chapter queries expand to
+ * the parent shared pool via `dim_subfaction` before nodes reach this layer.
  */
 export function formatConversationalAnswer(
   question: string,
   nodes: Node[],
   parentMap: Map<string, string>,
-  subfaction?: string,
   combos?: string[],
 ): string {
   // Build entries with stripped content
@@ -128,44 +132,6 @@ export function formatConversationalAnswer(
     return { node, tier: getTier(node), parent, content: stripped }
   })
 
-  // When subfaction is detected, split into subfaction-specific and generic,
-  // format each as its own section
-  if (subfaction) {
-    const sfLabel = subfaction
-      .split(' ')
-      .map((w) => w[0]!.toUpperCase() + w.slice(1))
-      .join(' ')
-    const sfEntries = allEntries.filter((e) => e.node.subfaction === subfaction)
-    const genericEntries = allEntries.filter((e) => e.node.subfaction !== subfaction)
-
-    const parts: string[] = []
-    parts.push(`Results for: "${question}"\n`)
-
-    if (combos && combos.length > 0) {
-      parts.push(formatComboSection(combos))
-      parts.push('')
-    }
-
-    if (sfEntries.length > 0) {
-      parts.push(`## ${sfLabel} Specific\n`)
-      parts.push(formatEntriesAsProse(sfEntries))
-      parts.push('')
-    }
-
-    if (genericEntries.length > 0) {
-      parts.push(`## Available to All Space Marines\n`)
-      parts.push(formatEntriesAsProse(genericEntries))
-      parts.push('')
-    }
-
-    parts.push(formatReferenceSection(allEntries))
-    parts.push(
-      `\n*${nodes.length} total result${nodes.length !== 1 ? 's' : ''} from the knowledge graph. Source: Wahapedia 10th Edition, Core Rules.*`,
-    )
-    return parts.join('\n')
-  }
-
-  // No subfaction — original single-section format
   const parts: string[] = []
   parts.push(`Results for: "${question}"\n`)
   if (combos && combos.length > 0) {
@@ -295,12 +261,16 @@ function buildEntrySentence(entry: Entry): string {
  * Assemble node content into a structured context string for the LLM.
  * Primary results first with full content + source attribution.
  * Connected nodes grouped by category with impact ordering.
+ *
+ * The old chapter split (SM chapter-specific vs generic-SM sections keyed on
+ * `Node.subfaction`) was removed with the field in PR D of the scalar-to-ref
+ * refactor. Chapter-scoped queries now expand via `dim_subfaction` upstream,
+ * and every node here carries a real `factionId`.
  */
 export function assembleContext(
   primaryNodes: Node[],
   connectedNodes: Node[],
   parentMap: Map<string, string>,
-  subfaction?: string,
 ): string {
   const parts: string[] = []
 
@@ -314,57 +284,12 @@ export function assembleContext(
     parts.push('')
   }
 
-  // Connected nodes — when subfaction is detected, split into two hard sections:
-  // SECTION 1: subfaction-specific content only
-  // SECTION 2: generic content (available to all chapters/variants)
-  // Within each section, group by category in impact order.
   if (connectedNodes.length > 0) {
-    let sfSpecific: Node[]
-    let generic: Node[]
-
-    if (subfaction) {
-      sfSpecific = connectedNodes.filter((n) => n.subfaction === subfaction)
-      generic = connectedNodes.filter((n) => n.subfaction !== subfaction)
-    } else {
-      sfSpecific = []
-      generic = connectedNodes
-    }
-
-    const sfLabel = subfaction
-      ? subfaction
-          .split(' ')
-          .map((w) => w[0]!.toUpperCase() + w.slice(1))
-          .join(' ')
-      : null
-
-    if (sfLabel && sfSpecific.length > 0) {
-      parts.push(`========================================`)
-      parts.push(`SECTION 1: ${sfLabel.toUpperCase()} SPECIFIC`)
-      parts.push(
-        `These rules are ONLY available to ${sfLabel}. Present these FIRST in your answer.`,
-      )
-      parts.push(`========================================`)
-      parts.push('')
-      renderNodeGroup(sfSpecific, parentMap, parts)
-    }
-
-    if (generic.length > 0) {
-      if (sfLabel) {
-        parts.push(`========================================`)
-        parts.push(
-          `SECTION 2: GENERIC SPACE MARINES (available to all chapters including ${sfLabel})`,
-        )
-        parts.push(`Present these AFTER the ${sfLabel}-specific results above.`)
-        parts.push(`========================================`)
-        parts.push('')
-      } else {
-        parts.push(
-          '--- Connected rules (ordered by impact: army-wide → detachment → leader/unit → weapon) ---',
-        )
-        parts.push('')
-      }
-      renderNodeGroup(generic, parentMap, parts)
-    }
+    parts.push(
+      '--- Connected rules (ordered by impact: army-wide → detachment → leader/unit → weapon) ---',
+    )
+    parts.push('')
+    renderNodeGroup(connectedNodes, parentMap, parts)
   }
 
   return parts.join('\n')

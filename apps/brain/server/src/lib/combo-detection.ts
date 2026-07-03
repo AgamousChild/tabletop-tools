@@ -1,9 +1,9 @@
 /**
  * combo-detection.ts — Build stacks_with refs between complementary abilities.
  *
- * MUST run after merge + massage so all nodes have their final factionId,
- * subfaction, and detachmentId. Running earlier produces cross-faction refs
- * because nodes haven't been normalized yet.
+ * MUST run after merge + massage so all nodes have their final factionId and
+ * detachmentId. Running earlier produces cross-faction refs because nodes
+ * haven't been normalized yet.
  */
 import { classifyGrants, detectScope, detectWeaponTypes } from './filters'
 import type { Node, NodeRef } from './model'
@@ -13,7 +13,6 @@ interface BuffEntry {
   title: string
   unitName: string
   factionId: string
-  subfaction: string
   detachmentId: string
   scope: ReturnType<typeof detectScope>
   category: string
@@ -36,7 +35,6 @@ function classifyBuff(
     title,
     factionId,
     unitName: '',
-    subfaction: '',
     detachmentId: '',
     scope: 'unit' as const,
     category: '',
@@ -49,7 +47,6 @@ function classifyBuff(
  * Scan all non-weapon, non-datasheet nodes for what they grant.
  * Create stacks_with refs between complementary pairs that:
  * - Share a faction (or one is generic core)
- * - Share a subfaction (or one has none)
  * - Don't mix detachment-locked abilities from different detachments
  * - Share a weapon type (or one targets all)
  *
@@ -93,7 +90,6 @@ export function buildComboRefs(allNodes: Node[]): NodeRef[] {
         : n.detachmentId
           ? (detNameMap.get(n.detachmentId) ?? '')
           : ''
-      buff.subfaction = n.subfaction ?? ''
       buff.detachmentId = n.detachmentId ?? ''
       buff.category = n.category
       buff.scope = detectScope(n.category, n.content)
@@ -123,14 +119,11 @@ export function buildComboRefs(allNodes: Node[]): NodeRef[] {
         if (rr.factionId && ag.factionId && rr.factionId !== ag.factionId) continue
 
         // If one has a faction and the other doesn't, only allow if the
-        // factionless one is truly generic (no subfaction, no detachment)
+        // factionless one is truly generic (no detachment lock)
         if (rr.factionId !== ag.factionId) {
           const factionless = !rr.factionId ? rr : !ag.factionId ? ag : null
-          if (factionless && (factionless.subfaction || factionless.detachmentId)) continue
+          if (factionless && factionless.detachmentId) continue
         }
-
-        // Subfaction lock: if either has a subfaction, the other must match or have none
-        if (rr.subfaction && ag.subfaction && rr.subfaction !== ag.subfaction) continue
 
         // Detachment lock: stratagems/enhancements from different detachments can't combine
         if (
@@ -191,62 +184,37 @@ export function buildComboRefs(allNodes: Node[]): NodeRef[] {
 /**
  * Build faction root nodes — one per playable army.
  *
- * Flat model: subfactions (Blood Angels, Dark Angels, etc.) are top-level factions,
- * not children of Space Marines. Every army you can play is its own faction node.
- *
- * Generic SM content (no subfaction) lives under the "Space Marines" faction node.
- * Subfaction armies access generic SM content via eligible_for refs on their units,
- * not via hierarchy.
+ * Flat model: SM chapters (Blood Angels, Dark Angels, etc.) are their own
+ * top-level factions in `dim_faction` and land here as ordinary factionIds
+ * post-PR-B. Chapter access to the SM shared pool is expressed via
+ * `dim_subfaction` at retrieval time, not via a scalar tag on nodes.
  */
 export function buildFactionNodes(allNodes: Node[]): { nodes: Node[]; refs: NodeRef[] } {
   const nodes: Node[] = []
   const refs: NodeRef[] = []
 
-  // Collect all playable armies: unique factionIds + unique subfactions
-  // Each subfaction becomes its own top-level faction node
+  // Collect all playable armies: unique factionIds
   const factionIds = new Set<string>()
-  const subfactionSet = new Set<string>()
   const factionNames = new Map<string, string>()
-  const subfactionToParent = new Map<string, string>()
 
   for (const n of allNodes) {
     if (!n.factionId) continue
     factionIds.add(n.factionId)
     if (n.factionName) factionNames.set(n.factionId, n.factionName)
-    if (n.subfaction) {
-      subfactionSet.add(n.subfaction)
-      subfactionToParent.set(n.subfaction, n.factionId)
-    }
   }
 
   // Build faction nodes for each factionId
-  // For factions that are ALSO subfactions (blood-angels, dark-angels, etc.),
-  // also include content with matching subfaction from the parent faction
   for (const fid of factionIds) {
     const displayName = factionNames.get(fid) || fid.replace(/-/g, ' ').toUpperCase()
-    const fidSlug = fid // e.g. "blood-angels"
-    const matchingSubfaction = fidSlug.replace(/-/g, ' ') // e.g. "blood angels"
-    const hasMatchingSub = subfactionSet.has(matchingSubfaction)
 
-    // Collect content from both factionId match AND subfaction match
     const detachments = allNodes.filter(
-      (n) =>
-        n.category === 'detachment-rule' &&
-        ((n.factionId === fid && !n.subfaction) ||
-          (hasMatchingSub && n.subfaction === matchingSubfaction)),
+      (n) => n.category === 'detachment-rule' && n.factionId === fid,
     )
     const armyRules = allNodes.filter(
-      (n) =>
-        n.category === 'army-rule' &&
-        !n.detachmentId &&
-        ((n.factionId === fid && !n.subfaction) ||
-          (hasMatchingSub && n.subfaction === matchingSubfaction)),
+      (n) => n.category === 'army-rule' && !n.detachmentId && n.factionId === fid,
     )
     const unitCount = allNodes.filter(
-      (n) =>
-        n.category === 'datasheet' &&
-        ((n.factionId === fid && !n.subfaction) ||
-          (hasMatchingSub && n.subfaction === matchingSubfaction)),
+      (n) => n.category === 'datasheet' && n.factionId === fid,
     ).length
 
     nodes.push({
@@ -285,69 +253,6 @@ export function buildFactionNodes(allNodes: Node[]): { nodes: Node[]; refs: Node
         targetId: `faction-root:${fid}`,
         rel: 'part_of',
         context: `${det.title} is a detachment in ${displayName}.`,
-      })
-    }
-  }
-
-  // Build faction nodes for each subfaction (Blood Angels, Dark Angels, etc.)
-  for (const sub of subfactionSet) {
-    const parentFid = subfactionToParent.get(sub)!
-    const displayName = sub
-      .split(' ')
-      .map((w) => w[0]!.toUpperCase() + w.slice(1))
-      .join(' ')
-    const slug = sub.replace(/\s+/g, '-')
-    const nodeId = `faction-root:${slug}`
-
-    // Skip if a factionId already exists with this slug (e.g. "deathwatch" is both a factionId and a subfaction)
-    if (factionIds.has(slug)) continue
-
-    const detachments = allNodes.filter(
-      (n) => n.category === 'detachment-rule' && n.subfaction === sub,
-    )
-    const armyRules = allNodes.filter(
-      (n) => n.category === 'army-rule' && n.subfaction === sub && !n.detachmentId,
-    )
-    const unitCount = allNodes.filter(
-      (n) => n.category === 'datasheet' && n.subfaction === sub,
-    ).length
-
-    nodes.push({
-      id: nodeId,
-      layer: 'faction',
-      category: 'faction',
-      title: displayName.toUpperCase(),
-      content: `${displayName} faction. ${detachments.length} specific detachments, ${armyRules.length} army rules, ${unitCount} unique datasheets. Also has access to generic ${factionNames.get(parentFid) || parentFid} detachments and units.`,
-      summary: `${displayName} — ${detachments.length} detachments, ${unitCount} unique units`,
-      factionId: parentFid,
-      factionName: displayName.toUpperCase(),
-      subfaction: sub,
-      sources: [
-        {
-          type: 'manual' as const,
-          title: 'Auto-generated faction node',
-          retrievedAt: new Date().toISOString(),
-        },
-      ],
-      refs: [],
-      version: 1,
-      keywords: [sub, slug, displayName.toLowerCase(), 'faction'],
-    })
-
-    for (const det of detachments) {
-      refs.push({
-        sourceId: `detachment:${det.id}`,
-        targetId: nodeId,
-        rel: 'part_of',
-        context: `${det.title} is a ${displayName} detachment.`,
-      })
-    }
-    for (const rule of armyRules) {
-      refs.push({
-        sourceId: rule.id,
-        targetId: nodeId,
-        rel: 'part_of',
-        context: `${rule.title} is a ${displayName} army rule.`,
       })
     }
   }
@@ -406,7 +311,6 @@ export function buildDetachmentNodes(allNodes: Node[]): { nodes: Node[]; refs: N
       summary: containerSummary,
       factionId: rule.factionId,
       factionName: rule.factionName,
-      subfaction: rule.subfaction,
       edition: rule.edition,
       sources: rule.sources,
       refs: [],
@@ -446,9 +350,10 @@ export function buildDetachmentNodes(allNodes: Node[]): { nodes: Node[]; refs: N
 /**
  * Build eligible_for refs connecting datasheets to detachments they can be used in.
  *
- * A unit is eligible for a detachment if:
- * 1. Same factionId
- * 2. Same subfaction, OR the detachment has no subfaction (generic to the faction)
+ * A unit is eligible for a detachment if it shares a factionId with the
+ * detachment. Chapter access to the SM shared pool is handled at retrieval
+ * time via the `dim_subfaction` expansion (see `factions.ts`), not by a
+ * scalar tag matched here.
  *
  * This gives every unit direct connections to the detachments it can legally join.
  */
@@ -474,11 +379,6 @@ export function buildEligibleForRefs(allNodes: Node[]): NodeRef[] {
     for (const det of detachments) {
       if (!det.factionId) continue
       if (det.factionId !== unit.factionId) continue
-
-      // Subfaction check: detachment with a subfaction only accepts units of that subfaction
-      if (det.subfaction && unit.subfaction && det.subfaction !== unit.subfaction) continue
-      // A subfaction-locked detachment doesn't accept units from a different subfaction
-      if (det.subfaction && !unit.subfaction) continue
 
       // Compute keyword affinity: how many of the detachment's target keywords
       // match the unit's keywords?

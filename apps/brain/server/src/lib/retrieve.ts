@@ -43,7 +43,6 @@ export interface EnrichedNode {
   category: string
   factionId?: string
   factionName?: string // Preferred display name (e.g., "SPACE MARINES")
-  subfaction?: string
   phase?: string
   datasheetId?: string
   edition?: string
@@ -63,7 +62,6 @@ export interface EnrichedNode {
 export interface RetrieveResult {
   detected: {
     factions: string[]
-    subfaction?: string
     strippedQuery: string
     keywords: string[]
   }
@@ -279,16 +277,6 @@ export async function retrieve(
     })
   }
 
-  // Subfaction post-filter: keep subfaction-match + generic (no subfaction)
-  if (detected.subfaction) {
-    const sub = detected.subfaction
-    filtered = filtered.filter((m) => {
-      const mSub = m.metadata?.subfaction
-      if (!mSub) return true
-      return mSub === sub
-    })
-  }
-
   // Step 9: Sort — exact title match first, then by score
   const queryLower = query.toLowerCase().trim()
   const factionRankList = [...detectedFactionSet]
@@ -301,10 +289,10 @@ export async function retrieve(
     const bTitleExact = bTitle === queryLower ? 1 : 0
     if (aTitleExact !== bTitleExact) return bTitleExact - aTitleExact
 
-    // Then faction/subfaction ranking. Use the expanded faction set so chapter
+    // Then faction ranking. Use the expanded faction set so chapter
     // nodes and parent-faction shared-pool nodes both rank as faction-matched.
-    const rankA = matchRank(a, factionRankList, detected.subfaction)
-    const rankB = matchRank(b, factionRankList, detected.subfaction)
+    const rankA = matchRank(a, factionRankList)
+    const rankB = matchRank(b, factionRankList)
     if (rankA !== rankB) return rankA - rankB
     return b.score - a.score
   })
@@ -376,9 +364,7 @@ export async function retrieve(
 
   if (includeConnected && nodeIds.length > 0) {
     const factionFilter =
-      detected.factions.length > 0
-        ? { factionId: detected.factions[0], subfaction: detected.subfaction }
-        : undefined
+      detected.factions.length > 0 ? { factionId: detected.factions[0] } : undefined
 
     const connectedResult = await fetchConnectedNodes(
       env.bucket,
@@ -448,7 +434,6 @@ export async function retrieve(
   return {
     detected: {
       factions: detected.factions,
-      subfaction: detected.subfaction,
       strippedQuery,
       keywords,
     },
@@ -592,18 +577,14 @@ async function buildRecords(
 
 /**
  * Returns a sort rank for a Vectorize match:
- * 0 = subfaction-matched, 1 = faction-matched, 2 = generic
+ * 0 = faction-matched, 1 = generic
  */
-function matchRank(match: VectorizeMatch, detectedFactions: string[], subfaction?: string): number {
+function matchRank(match: VectorizeMatch, detectedFactions: string[]): number {
   const mFaction = match.metadata?.factionId
-  const mSub = match.metadata?.subfaction
-
-  // Subfaction-matched (most specific)
-  if (subfaction && mSub === subfaction) return 0
   // Faction-matched
-  if (mFaction && detectedFactions.includes(mFaction)) return 1
+  if (mFaction && detectedFactions.includes(mFaction)) return 0
   // Generic (no faction)
-  return 2
+  return 1
 }
 
 // ── Faction root browse ─────────────────────────────────────────────────────
@@ -612,20 +593,18 @@ function matchRank(match: VectorizeMatch, detectedFactions: string[], subfaction
  * When the user searches a faction name, find the faction root node and return
  * it as the single result with its direct connections (army rules, detachments).
  * Returns null if no faction root node exists for this faction.
+ *
+ * Post-PR-D of the scalar-to-ref refactor: SM chapters are their own factions,
+ * so the root ID keys off `detected.factions[0]` alone — the previous
+ * chapter-slug branch was collapsed.
  */
 async function factionRootBrowse(
-  detected: { factions: string[]; subfaction?: string },
+  detected: { factions: string[] },
   env: RetrieveEnv,
 ): Promise<RetrieveResult | null> {
   const factionId = detected.factions[0]!
-  const subfaction = detected.subfaction
 
-  // Determine the faction root node ID
-  // Subfactions use their slug directly: faction-root:blood-angels
-  // Regular factions: faction-root:orks
-  const rootId = subfaction
-    ? `faction-root:${subfaction.replace(/\s+/g, '-')}`
-    : `faction-root:${factionId}`
+  const rootId = `faction-root:${factionId}`
 
   // Load all nodes to find the root and its connections
   const manifestObj = await env.bucket.get('manifest.json')
@@ -691,7 +670,6 @@ async function factionRootBrowse(
   return {
     detected: {
       factions: detected.factions,
-      subfaction,
       strippedQuery: '',
       keywords: [],
     },
@@ -707,10 +685,10 @@ async function factionRootBrowse(
 /**
  * When the user typed just a faction name with no mechanic query,
  * fetch all nodes for that faction from R2 directly.
- * Sort: subfaction-specific first, then generic, grouped by category impact.
+ * Sort: exact faction match first, then expanded parent pool, then generic.
  */
 async function factionBrowse(
-  detected: { factions: string[]; subfaction?: string },
+  detected: { factions: string[] },
   strippedQuery: string,
   keywords: string[],
   limit: number,
@@ -721,14 +699,13 @@ async function factionBrowse(
   returnRecords?: boolean,
 ): Promise<RetrieveResult> {
   const factionId = detected.factions[0]!
-  const subfaction = detected.subfaction
 
   // Load the faction's node file from R2 via the manifest
   // Faction nodes are stored as nodes/faction-{slug}.json
   const manifestObj = await env.bucket.get('manifest.json')
   if (!manifestObj) {
     return {
-      detected: { factions: detected.factions, subfaction, strippedQuery, keywords },
+      detected: { factions: detected.factions, strippedQuery, keywords },
       results: [],
       connected: [],
       parentMap: new Map(),
@@ -765,17 +742,10 @@ async function factionBrowse(
   }
 
   // Filter: keep nodes matching factionId (or its expanded parent) or generic (no factionId)
-  let filtered = allNodes.filter((n) => !n.factionId || factionSet.has(n.factionId))
+  const filtered = allNodes.filter((n) => !n.factionId || factionSet.has(n.factionId))
 
-  // Subfaction filter: remove other chapters' content
-  if (subfaction) {
-    filtered = filtered.filter((n) => {
-      if (!n.subfaction) return true // generic — keep
-      return n.subfaction === subfaction // same subfaction — keep; other subfactions — drop
-    })
-  }
-
-  // Sort: subfaction first, then faction, then generic. Within each: datasheets before abilities before weapons.
+  // Sort: exact chapter match first, then expanded parent, then generic.
+  // Within each: datasheets before abilities before weapons.
   const CATEGORY_ORDER: Record<string, number> = {
     'detachment-rule': 0,
     'faction-ability': 1,
@@ -788,15 +758,12 @@ async function factionBrowse(
 
   const rank = (n: Node): number => {
     // Rank order (lowest wins):
-    //   0 = legacy subfaction match (still supported for the small residue of
-    //       subfaction-tagged nodes; being removed in a later PR)
-    //   1 = chapter faction match (queried factionId directly — Lemartes)
-    //   2 = expanded parent faction (shared pool — Rhino under space-marines)
-    //   3 = generic (no factionId — core rules)
-    if (subfaction && n.subfaction === subfaction) return 0
-    if (n.factionId === factionId) return 1
-    if (n.factionId && factionSet.has(n.factionId)) return 2
-    return 3
+    //   0 = chapter faction match (queried factionId directly — Lemartes)
+    //   1 = expanded parent faction (shared pool — Rhino under space-marines)
+    //   2 = generic (no factionId — core rules)
+    if (n.factionId === factionId) return 0
+    if (n.factionId && factionSet.has(n.factionId)) return 1
+    return 2
   }
 
   filtered.sort((a, b) => {
@@ -847,7 +814,7 @@ async function factionBrowse(
   }
 
   return {
-    detected: { factions: detected.factions, subfaction, strippedQuery, keywords },
+    detected: { factions: detected.factions, strippedQuery, keywords },
     results,
     connected: [],
     parentMap: new Map(),
@@ -866,7 +833,6 @@ function enrichNode(node: Node, score: number, parentMap: Map<string, string>): 
     category: node.category,
     factionId: node.factionId,
     factionName: node.factionName,
-    subfaction: node.subfaction,
     phase: node.phase,
     datasheetId: node.datasheetId,
     edition: node.edition,

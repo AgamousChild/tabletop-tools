@@ -36,7 +36,8 @@ describe('parseMissionCards', () => {
     expect(node.layer).toBe('core')
     expect(node.category).toBe('primary-mission')
     expect(node.edition).toBe('11th')
-    expect(node.subfaction).toBe('take-and-hold')
+    // Deck-group slug rides in keywords now (see mission-cards.ts comment).
+    expect(node.keywords).toContain('take and hold')
     expect(node.title).toBe('BATTLEFIELD DOMINANCE')
     expect(node.content).toContain('5 VP')
     expect(node.sources[0]!.type).toBe('community')

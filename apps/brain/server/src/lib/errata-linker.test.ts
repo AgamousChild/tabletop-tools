@@ -22,7 +22,6 @@ function makeNode(overrides: Partial<Node> & { id: string; title: string }): Nod
     effectiveDate: undefined,
     supersededBy: undefined,
     version: 1,
-    subfaction: undefined,
     keywords: [],
   }
   return { ...defaults, ...overrides }

@@ -65,7 +65,8 @@ describe('parseMfmDetachments', () => {
     ])
     const result = parseMfmDetachments(sample, RETRIEVED_AT, PUBLISHED_AT)
     const det = findNode(result.nodes, 'mfm:det:space-marines:unforgiven-task-force')
-    expect(det.subfaction).toBe('Dark Angels')
+    // Chapter lock used to land on `Node.subfaction` (deleted in PR D). It
+    // now rides through content + keywords only.
     expect(det.content).toContain('**Unique to:** Dark Angels')
     expect(det.summary).toContain('restricted to Dark Angels')
     expect(det.keywords).toContain('dark angels')

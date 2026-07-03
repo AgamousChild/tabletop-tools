@@ -60,8 +60,6 @@ export function buildCrossRefs(
   rev: Record<string, RevEntry[]>,
   factionScope?: string[],
   nodeFactionMap?: Map<string, string>,
-  nodeSubfactionMap?: Map<string, string>,
-  subfactionScope?: string,
 ): AggregatedRecord[] {
   // When factionScope is set, only include cross-refs to nodes that share
   // a faction or are generic (no faction). Uses the nodeFactionMap (nodeId → factionId)
@@ -74,11 +72,6 @@ export function buildCrossRefs(
     const nodeFaction = nodeFactionMap.get(nodeId)
     if (!nodeFaction) return true // no faction = generic/core, always allowed
     if (!factionSet.has(nodeFaction)) return false
-    // Subfaction check: if we have a subfaction scope, reject other subfactions
-    if (subfactionScope && nodeSubfactionMap) {
-      const nodeSub = nodeSubfactionMap.get(nodeId)
-      if (nodeSub && nodeSub !== subfactionScope) return false
-    }
     return true
   }
   // nodeId → owning record's primaryNode.id

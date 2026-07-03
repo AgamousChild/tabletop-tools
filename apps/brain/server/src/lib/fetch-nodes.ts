@@ -88,16 +88,17 @@ type FwdEntry = { targetId: string; rel: string; context: string }
  * Reverse index: find what points TO these nodes.
  * Forward index: resolve part_of parents (ability → datasheet name).
  *
- * The factionFilter.subfaction field is used to filter connected nodes:
- * only nodes whose subfaction matches (or is empty/undefined — generic content)
- * are kept. This fixes the bug where "blood angels sustained hits" would
- * return space wolves content.
+ * The optional `factionFilter.factionId` restricts connected nodes to that
+ * faction (or generic — nodes with no factionId). Chapter identity now lives
+ * on `factionId` directly (PR D of the scalar-to-ref refactor); the caller
+ * must pass the chapter slug it wants (or the expanded parent-faction pool)
+ * — there's no side-channel subfaction filter here anymore.
  */
 export async function fetchConnectedNodes(
   bucket: R2Bucket,
   nodeIds: string[],
   depth: number,
-  factionFilter?: { factionId?: string; subfaction?: string },
+  factionFilter?: { factionId?: string },
 ): Promise<{ nodes: Node[]; parentMap: Map<string, string> }> {
   if (depth <= 0) return { nodes: [], parentMap: new Map() }
 
@@ -187,27 +188,7 @@ export async function fetchConnectedNodes(
     (id) => !known.has(id),
   )
 
-  let nodes = await fetchNodesFromR2(bucket, allToFetch)
-
-  // Step 5: Subfaction filtering (THE MAIN BUG FIX)
-  // If a subfaction filter is set, only keep nodes whose subfaction matches
-  // OR is empty/undefined (generic content applicable to all).
-  const subfactionFilter = factionFilter?.subfaction
-  if (subfactionFilter) {
-    // Determine which IDs are parents (needed for parentMap resolution) — keep them always
-    const parentNodeIds = new Set<string>(parentIdsToFetch)
-
-    nodes = nodes.filter((node) => {
-      // Always keep parent nodes (they're needed for title resolution, not returned as content)
-      if (parentNodeIds.has(node.id)) return true
-      // Keep nodes with matching subfaction
-      if (node.subfaction === subfactionFilter) return true
-      // Keep generic nodes (no subfaction set)
-      if (!node.subfaction) return true
-      // Exclude nodes with a different subfaction
-      return false
-    })
-  }
+  const nodes = await fetchNodesFromR2(bucket, allToFetch)
 
   const selectedIdSet = new Set(selectedIds)
 
@@ -256,11 +237,10 @@ export async function fetchConnectedNodes(
 
   if (comboIds.size > 0) {
     const comboNodes = await fetchNodesFromR2(bucket, [...comboIds])
-    // Filter combos by faction/subfaction
+    // Filter combos by faction
     const filteredCombos = comboNodes.filter((n) => {
       if (factionFilter?.factionId && n.factionId && n.factionId !== factionFilter.factionId)
         return false
-      if (subfactionFilter && n.subfaction && n.subfaction !== subfactionFilter) return false
       return true
     })
     nodes.push(...filteredCombos)
