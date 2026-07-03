@@ -40,6 +40,7 @@ import { brainFetch, parseAvailableEditions } from '../lib/api'
 import { resolveCardView } from '../lib/card-display'
 import { type Edition, parseEditionFromHash, writeEditionToHash } from '../lib/edition'
 import { type EntityMap } from '../lib/entity-linker'
+import { factionDisplayName } from '../lib/faction-names'
 import { linkBrainHtml } from '../lib/render-markdown'
 import { LayoutRenderer } from '../lib/server-cards/Renderer'
 import type { CardLayout } from '../lib/server-cards/types'
@@ -235,27 +236,38 @@ function filterDisplayKeywords(keywords: string[]): { display: string[]; faction
   return { display, faction: factionKw }
 }
 
-/** Formal faction names that map to their slug — used to filter redundant faction keywords */
-const FORMAL_TO_SLUG: Record<string, string> = {
-  'adeptus astartes': 'space-marines',
-  'heretic astartes': 'chaos-space-marines',
-  "t'au empire": 't-au-empire',
-  'astra militarum': 'astra-militarum',
-  'adepta sororitas': 'adepta-sororitas',
-  'adeptus custodes': 'adeptus-custodes',
-  'adeptus mechanicus': 'adeptus-mechanicus',
-  'agents of the imperium': 'imperial-agents',
-}
-
-/** Remove faction keywords that are just the formal name of the node's own factionId */
-function filterRedundantFactionKeywords(
+/**
+ * Remove faction keywords whose display string collides with the node's own
+ * factionId display string, and dedupe entries whose displays repeat within
+ * the list.
+ *
+ * The old FORMAL_TO_SLUG map only covered the eight formal names whose slug
+ * diverges from the display (e.g. "adeptus astartes" → "space-marines"). Any
+ * chapter promoted to a top-level faction in PR B (Death Guard, World Eaters,
+ * Thousand Sons, Blood Angels, ...) fell through unfiltered, so their cards
+ * came out as "DEATH GUARD DEATH GUARD" (once in the header, once in the
+ * keyword bar). PR E also drops the header's `factionKeywords[0]` fallback in
+ * UnitCard so the primary badge is always the factionId display — that makes
+ * this dedupe against the factionId one line rather than a circular case.
+ *
+ * See PR E of docs/superpowers/plans/2026-07-03-scalar-to-ref-refactor.md
+ * (Bug 3).
+ */
+export function filterRedundantFactionKeywords(
   factionKeywords: string[],
   nodeFactionId: string,
 ): string[] {
-  return factionKeywords.filter((kw) => {
-    const slug = FORMAL_TO_SLUG[kw.toLowerCase()]
-    return slug !== nodeFactionId
-  })
+  if (!factionKeywords.length) return factionKeywords
+  const seen = new Set<string>()
+  if (nodeFactionId) seen.add(factionDisplayName(nodeFactionId).toUpperCase())
+  const result: string[] = []
+  for (const kw of factionKeywords) {
+    const display = factionDisplayName(kw).toUpperCase()
+    if (seen.has(display)) continue
+    seen.add(display)
+    result.push(kw)
+  }
+  return result
 }
 
 function buildUnitData(node: ResultNode) {
@@ -1229,16 +1241,20 @@ function BrowseTab({ onOpenCard, edition }: BrowseTabProps) {
   const [page, setPage] = useState(1)
   const pageSize = 20
 
-  // Load layers on mount
+  // Load layers whenever the edition changes. Sidebar counts and layer-view
+  // counts must respect the same edition filter — otherwise the sidebar shows
+  // "Units (2605)" while the layer view shows "1352 results" under
+  // `?edition=11th`. See PR E of the 2026-07-03 scalar-to-ref refactor plan.
   useEffect(() => {
-    brainFetch(`/browse/layers`)
+    setLayersLoading(true)
+    brainFetch(`/browse/layers`, { edition })
       .then((r) => r.json())
       .then((data) => {
         setLayers(data.layers || [])
         setLayersLoading(false)
       })
       .catch(() => setLayersLoading(false))
-  }, [])
+  }, [edition])
 
   // Reset page when layer or edition changes
   useEffect(() => {

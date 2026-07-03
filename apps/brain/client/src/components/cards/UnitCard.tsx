@@ -430,13 +430,19 @@ export function UnitCard({ data, context }: UnitCardProps) {
           </h2>
           <div className="text-[13px] text-blue-200 mt-0.5 uppercase tracking-wide">
             {(() => {
-              // Post-PR-D of the scalar-to-ref refactor: the badge reads
-              // `factionId` (the unit's home faction) directly. Chapter
-              // identity now lives on `factionId` for chapter-specific units
-              // (Lemartes → blood-angels). The optional factionKeywords[0]
-              // fallback handles nodes that haven't gone through the
-              // structured-data pipeline yet.
-              const raw = data.factionKeywords[0] || data.factionId
+              // Post-PR-D of the scalar-to-ref refactor: the header badge
+              // reads `factionId` (the unit's home faction) directly.
+              // Chapter identity now lives on `factionId` for chapter-specific
+              // units (Lemartes → blood-angels).
+              //
+              // PR E dropped the `factionKeywords[0]` fallback: it produced
+              // "DEATH GUARD DEATH GUARD" when the first factionKeyword and
+              // factionId had the same display, and made dedupe circular
+              // (the primary depended on the list we were deduping). Nodes
+              // without factionId simply omit the header badge — the
+              // datasheet's parent faction still surfaces through the
+              // keywords bar below.
+              const raw = data.factionId
               if (!raw) return null
               const label = factionDisplayName(raw)
               return (
