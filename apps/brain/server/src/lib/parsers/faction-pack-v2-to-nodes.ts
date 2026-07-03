@@ -204,9 +204,30 @@ function buildStratagemContent(s: {
 
 /**
  * Build datasheet body. v2 gives us structured stats + weapons + abilities.
- * Concatenate a Wahapedia-flavoured markdown block so retrieve.ts embedding
- * has textual content to index. `raw` is available on the datasheet, but it's
- * the messy PDF-flattened source; the reconstructed block is cleaner.
+ *
+ * The body is intentionally **structural / summary only**. Ability bodies live
+ * on `unit-ability` nodes; weapon detail lives on `weapon` nodes. Embedding
+ * either here doubles the payload on every `/browse/unit/:id` fetch and
+ * duplicates the same text in the graph. See the datasheet-content-duplication
+ * fix (PR follow-up to #88).
+ *
+ * What stays:
+ *   - Header stats line (so simple queries can hit it without loading
+ *     weapon/ability children).
+ *   - Section markers ("RANGED WEAPONS:", "MELEE WEAPONS:", "ABILITIES:")
+ *     followed by NAMES only — enough for search matching and structural
+ *     hints, without the body text.
+ *   - Keywords, faction keywords, LEADER/SUPPORT lists, wargear options,
+ *     unit composition, damaged profile, transport.
+ *
+ * What is stripped:
+ *   - Full weapon rows (`- Big Choppa 24" A4 BS3+ ...`) → weapon child nodes.
+ *   - Full ability bodies (`- Bomb Squigs: Twice per battle...`) → ability
+ *     child nodes.
+ *
+ * The Vectorize index-time composer (`buildDatasheetCorpus`) re-attaches
+ * ability + weapon bodies at index time so semantic search still finds the
+ * datasheet for ability-related queries.
  */
 function buildDatasheetContent(ds: PackExtract['datasheets'][number]): string {
   const parts: string[] = []
@@ -217,17 +238,16 @@ function buildDatasheetContent(ds: PackExtract['datasheets'][number]): string {
     .join(' ')
   if (statLine)
     parts.push(`M T SV W LD OC: ${statLine}${stats.invSv ? ` (Inv ${stats.invSv})` : ''}`)
+  // Weapon names only — bodies live on weapon child nodes.
   if (ds.rangedWeapons.length > 0) {
-    parts.push('RANGED WEAPONS:')
-    for (const w of ds.rangedWeapons) parts.push(`- ${w.raw}`)
+    parts.push(`RANGED WEAPONS: ${ds.rangedWeapons.map((w) => w.name).join(', ')}`)
   }
   if (ds.meleeWeapons.length > 0) {
-    parts.push('MELEE WEAPONS:')
-    for (const w of ds.meleeWeapons) parts.push(`- ${w.raw}`)
+    parts.push(`MELEE WEAPONS: ${ds.meleeWeapons.map((w) => w.name).join(', ')}`)
   }
+  // Ability names only — bodies live on unit-ability child nodes.
   if (ds.abilities.length > 0) {
-    parts.push('ABILITIES:')
-    for (const a of ds.abilities) parts.push(`- ${a.name}: ${a.body}`)
+    parts.push(`ABILITIES: ${ds.abilities.map((a) => a.name).join(', ')}`)
   }
   if (ds.keywords.length > 0) parts.push(`KEYWORDS: ${ds.keywords.join(', ')}`)
   if (ds.factionKeywords.length > 0)

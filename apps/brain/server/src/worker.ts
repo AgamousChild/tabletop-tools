@@ -15,6 +15,7 @@ import { findErrataForNode } from './lib/errata-linker'
 import { assembleContext, formatConversationalAnswer } from './lib/format'
 import type { Node } from './lib/model'
 import { retrieve } from './lib/retrieve'
+import { buildCorpusForNode } from './lib/vectorize-corpus'
 import type { Env } from './types'
 
 // ── Module-scope caches (persist across requests in the same Worker isolate) ──
@@ -1358,9 +1359,19 @@ app.post('/index-vectors', async (c) => {
         ? allNodes.slice(offset, limit > 0 ? offset + limit : undefined)
         : allNodes
 
+    // Compose the text-to-embed per node. For `datasheet`-category nodes we
+    // include the child ability + weapon bodies so ability-text queries
+    // ("sustained hits", "twice per battle") still resolve to the parent
+    // datasheet. The storage layer keeps those bodies on their own nodes to
+    // avoid the datasheet-content duplication that existed pre-fix.
+    //
+    // Children (`unit-ability`, `weapon` with `datasheetId === parent.id`) are
+    // colocated in the same faction file as their parent datasheet (see
+    // partitionNodes in sync.ts), so a within-file lookup is sufficient.
+    // See lib/vectorize-corpus.ts for the composer implementation + tests.
     for (let i = 0; i < nodes.length; i += BATCH_SIZE) {
       const batch = nodes.slice(i, i + BATCH_SIZE)
-      const texts = batch.map((n) => `${n.title}. ${n.summary}. ${n.keywords.join(', ')}`)
+      const texts = batch.map((n) => buildCorpusForNode(n, allNodes))
 
       try {
         const embResult = (await c.env.AI.run('@cf/baai/bge-base-en-v1.5', {
