@@ -134,20 +134,34 @@ export const MECHANIC_ALIASES: Array<{ alias: string; canonical: string }> = [
  *   pool.
  * - When "chaos space marine" matches, "space marine" is suppressed (the full
  *   matched text is consumed so the substring can't also match).
+ *
+ * Ordering (PR F, 2026-07-03-scalar-to-ref-refactor):
+ *   1. Parent factions the user EXPLICITLY named (e.g. "Space Marines" in
+ *      "How does the Space Marines Rhino work?") come first — they're the
+ *      broader scope the user asked for, and `factions[0]` drives the browse /
+ *      Ask auto-filter chip.
+ *   2. Chapter slugs come next (e.g. "Blood Angels" in "Blood Angels tactics").
+ *   3. Implied parents (added only because a chapter word was found) come last.
+ *
+ * All matching is whole-word (word-boundary `\b`) to prevent chapter aliases
+ * like "damned" or "salamanders" from firing on substrings inside unrelated
+ * text.
  */
 export function detectFactions(query: string): { factions: string[] } {
   const lower = query.toLowerCase()
-  const found = new Set<string>()
-  let chapterMatched = false
 
   // Track consumed text ranges to prevent double-matching substrings
   const consumed: Array<[number, number]> = []
 
+  // Slugs matched by category, so we can order the final list per the rules
+  // in the docstring above.
+  const explicitParents = new Set<string>()
+  const chapters = new Set<string>()
+  const impliedParents = new Set<string>()
+
+  let chapterMatched = false
+
   // Check chapter abbreviations first (e.g., "BA" → "blood angels").
-  // Chapter slug is emitted BEFORE the parent so the chapter is the primary
-  // faction for browse rank / factionBrowse `factionId = factions[0]` — the
-  // parent-faction shared pool is still unioned via `dim_subfaction`
-  // downstream (see PR C).
   for (const [abbr, sf] of Object.entries(ABBREVIATION_TO_SUBFACTION)) {
     const re = new RegExp(`\\b${abbr}\\b`, 'i')
     const m = re.exec(lower)
@@ -156,34 +170,35 @@ export function detectFactions(query: string): { factions: string[] } {
         // Chapter abbreviation (e.g., BA → blood angels)
         const parent = SUBFACTION_TO_PARENT[sf]
         if (parent) {
-          // Chapter slug goes in FIRST so it's `factions[0]`.
-          found.add(subfactionSlug(sf))
-          // Then the parent-faction slug so retrieve's dim_subfaction
-          // expansion still fires (Lemartes lives under
-          // factionId=blood-angels post-PR-B; Rhino under space-marines).
-          found.add(parent)
+          chapters.add(subfactionSlug(sf))
+          impliedParents.add(parent)
           chapterMatched = true
           consumed.push([m.index, m.index + m[0].length])
         }
       } else {
         // Plain faction abbreviation (e.g., SM → space-marines)
-        found.add('space-marines')
+        explicitParents.add('space-marines')
         consumed.push([m.index, m.index + m[0].length])
       }
       break
     }
   }
 
-  // Check chapter/legion keywords — they imply a parent faction
-  // Also consume the matched text range so FACTION_PATTERNS doesn't re-match
+  // Check chapter/legion keywords — they imply a parent faction.
+  // WHOLE-WORD matching only: "damned" must appear as a token, not as a
+  // substring of "damnedly" or "goddamned". Same for shorter aliases like
+  // "asuryani" or "salamanders" if they ever grew a substring collision.
   if (!chapterMatched) {
     for (const [sf, parent] of Object.entries(SUBFACTION_TO_PARENT)) {
-      const idx = lower.indexOf(sf)
-      if (idx !== -1) {
-        // Chapter slug first (see above); parent second for expansion.
-        found.add(subfactionSlug(sf))
-        found.add(parent)
-        consumed.push([idx, idx + sf.length])
+      // Whole-word match only. SUBFACTION_TO_PARENT keys are already listed
+      // in their canonical form (e.g. "blood angels", not "blood angel"), so
+      // no trailing-plural allowance is needed here.
+      const re = new RegExp(`\\b${escapeRegex(sf)}\\b`, 'i')
+      const m = re.exec(lower)
+      if (m) {
+        chapters.add(subfactionSlug(sf))
+        impliedParents.add(parent)
+        consumed.push([m.index, m.index + m[0].length])
         break // only one chapter
       }
     }
@@ -205,10 +220,26 @@ export function detectFactions(query: string): { factions: string[] } {
         matched = true
       }
     }
-    if (matched) found.add(slug)
+    if (matched) explicitParents.add(slug)
   }
 
-  return { factions: [...found] }
+  // Assemble the final ordered list:
+  //   explicit parents → chapters → implied parents (dedup preserved).
+  // Rationale: when a user says "Space Marines Rhino" they want SM scope. When
+  // they say "Blood Angels tactics" they want BA (chapter) scope, with the SM
+  // shared pool folded in via dim_subfaction downstream.
+  const factions: string[] = []
+  const seen = new Set<string>()
+  const push = (slug: string) => {
+    if (seen.has(slug)) return
+    seen.add(slug)
+    factions.push(slug)
+  }
+  for (const slug of explicitParents) push(slug)
+  for (const slug of chapters) push(slug)
+  for (const slug of impliedParents) push(slug)
+
+  return { factions }
 }
 
 // ── Query stripping ───────────────────────────────────────────────────────────
