@@ -36,7 +36,9 @@ import { parseSecondaryMissions, parseTwistCards } from './lib/parsers/chapter-a
 import { parseCoreRules } from './lib/parsers/core-rules'
 import { buildDeploymentZoneNodes } from './lib/parsers/deployment-zones'
 import {
+  applyFactionPackPatches,
   convertPackExtractToNodes,
+  type DatasheetPatch,
   detectFactionPackEdition,
 } from './lib/parsers/faction-pack-v2-to-nodes'
 import {
@@ -178,9 +180,25 @@ async function main() {
     console.log(`   WARN: could not read gw-sync metadata, defaulting all packs to 10th: ${err}`)
   }
   // Build a markdownFile → url lookup so we can match the file we're reading.
+  // A single markdown file can be referenced by multiple PDFs (gw-sync stores
+  // every URL that ever mapped to the same content-addressed markdown, so the
+  // Orks pack has 4 entries — 3 legacy 10e URLs and 1 current 11e URL). Naive
+  // last-write-wins would let a stale 10e URL clobber the 11e one and force
+  // `detectFactionPackEdition` back to 10th even when the markdown content is
+  // already the 11e pack. Prefer any URL that carries an 11e prefix
+  // (`eng_11-02_`, `eng_07-01_`) so the edition tag matches the actual body.
   const mdFileToUrl = new Map<string, string>()
+  const ELEVEN_URL_PREFIXES = ['eng_11-02_', 'eng_07-01_']
+  const isElevenUrl = (u: string): boolean => ELEVEN_URL_PREFIXES.some((p) => u.includes(p))
   for (const entry of Object.values(fpMetadata)) {
-    if (entry.markdownFile) mdFileToUrl.set(entry.markdownFile, entry.url)
+    if (!entry.markdownFile) continue
+    const existing = mdFileToUrl.get(entry.markdownFile)
+    // If we already have an 11e URL for this file, keep it — a later 10e URL
+    // must not win. Otherwise take whatever comes in; the last non-11e URL
+    // wins over earlier non-11e URLs (same behaviour as before) until an 11e
+    // URL shows up and locks it in.
+    if (existing && isElevenUrl(existing) && !isElevenUrl(entry.url)) continue
+    mdFileToUrl.set(entry.markdownFile, entry.url)
   }
 
   // Build the MFM detachment → {dp, forceDisposition} lookup map for the
@@ -214,10 +232,16 @@ async function main() {
     console.log(`   WARN: could not build MFM detachment lookup, continuing without: ${err}`)
   }
 
+  // 11e faction-pack overlays land on the Wahapedia 11e duplicate (see step
+  // 5a below) — collect them here and apply once `duplicateEleventh` has
+  // produced the twin nodes we're patching into.
+  const elevenPackPatches: DatasheetPatch[] = []
+  const elevenPackPublishedAt = '2026-02-11'
   let fpNodes = 0,
     fpRefs = 0,
     fpErrors = 0,
-    fpEleventh = 0
+    fpEleventh = 0,
+    fpPatches = 0
   for (const file of mdFiles) {
     const factionSlug = file.replace('faction-pack-', '').replace('.md', '')
     try {
@@ -226,9 +250,12 @@ async function main() {
       const edition = detectFactionPackEdition(url)
       if (edition === '11th') fpEleventh++
       // v2 pipeline: parse markdown → structured PackExtract → convert to
-      // brain nodes with v1-compatible IDs. v2 fixes the datasheet-shaped
-      // content rejection at old faction-pack.ts:154 and adds richer typed
-      // extraction (stats, weapons, abilities per datasheet).
+      // brain nodes with v1-compatible IDs. In 11e mode overlapping shapes
+      // (datasheets, detachment rules, stratagems, enhancements) come back
+      // as `DatasheetPatch[]` — we accumulate them and apply them onto the
+      // 11e Wahapedia twin after step 5a below. Non-overlapping shapes
+      // (army-rules, errata, FAQs, Legends) still emit as nodes at
+      // `11e:*`-prefixed IDs.
       const extract = parseFactionPackV2(raw, { faction: factionSlug })
       const result = convertPackExtractToNodes(
         extract,
@@ -240,19 +267,23 @@ async function main() {
       // Faction packs published with the 10e launch use the 10e core-rules
       // date; 11e packs were published Feb 2026 (eng_11-02_*) or Jul 2026
       // (eng_07-01_*). Stamp the appropriate publishedAt.
-      const publishedAt = edition === '11th' ? '2026-02-11' : SOURCE_DATES['core-rules']!
+      const publishedAt = edition === '11th' ? elevenPackPublishedAt : SOURCE_DATES['core-rules']!
       stampPublishedAt(result.nodes, publishedAt)
       allNodes.push(...result.nodes)
       allRefs.push(...result.refs)
       fpNodes += result.nodes.length
       fpRefs += result.refs.length
+      if (edition === '11th' && result.patches.length > 0) {
+        elevenPackPatches.push(...result.patches)
+        fpPatches += result.patches.length
+      }
     } catch (err) {
       fpErrors++
       errors.push(`Faction ${factionSlug}: ${err}`)
     }
   }
   console.log(
-    `   ${mdFiles.length} faction packs → ${fpNodes} nodes, ${fpRefs} refs, ${fpErrors} errors (${fpEleventh} packs as 11th edition)`,
+    `   ${mdFiles.length} faction packs → ${fpNodes} nodes, ${fpRefs} refs, ${fpErrors} errors (${fpEleventh} packs as 11th edition, ${fpPatches} overlays queued)`,
   )
 
   // ── 5. Wahapedia/BSData Game Data ──────────────────────────────────────────
@@ -319,6 +350,40 @@ async function main() {
   for (const n of eleventhDup.nodes) allNodes.push(n)
   for (const r of eleventhDup.refs) allRefs.push(r)
   console.log(`   ${eleventhDup.nodes.length} 11e duplicates, ${eleventhDup.refs.length} 11e refs`)
+
+  // ── 5b. Apply v2 faction-pack overlays onto the 11e duplicates ─────────────
+  // The 11e faction packs are the source of truth for 11e content on
+  // datasheets, abilities, weapons, detachments, stratagems, enhancements.
+  // We overlay their patches onto the Wahapedia twin so every 11e entity
+  // lives at exactly ONE node — the twin — and no parallel slug node is
+  // emitted for the same shape.
+  if (elevenPackPatches.length > 0) {
+    const patchResult = applyFactionPackPatches(
+      eleventhDup.nodes,
+      elevenPackPatches,
+      elevenPackPublishedAt,
+    )
+    for (const r of patchResult.extraRefs) allRefs.push(r)
+    // Unmatched patches are brand-new 11e entities that don't exist in the
+    // 10e Wahapedia snapshot (e.g. Sororitas Chorus of Condemnation
+    // detachment). Emit their fallback nodes at `11e:*`-prefixed ids so the
+    // content still lands.
+    for (const n of patchResult.fallbackNodes) allNodes.push(n)
+    for (const r of patchResult.fallbackRefs) allRefs.push(r)
+    console.log(
+      `   Applied ${patchResult.applied}/${elevenPackPatches.length} 11e faction-pack overlays ` +
+        `(${patchResult.unmatched.length} unmatched → ${patchResult.fallbackNodes.length} fallback nodes)`,
+    )
+    if (patchResult.unmatched.length > 0) {
+      // Surface the first 20 unmatched keys so the operator can see which
+      // slug lookups the twin index is missing. `patchResult.unmatched`
+      // holds `${category}::${factionId}::${parentSlug ?? '_'}::${targetSlug}`.
+      const preview = patchResult.unmatched.slice(0, 20).join(', ')
+      const more =
+        patchResult.unmatched.length > 20 ? ` ... (+${patchResult.unmatched.length - 20} more)` : ''
+      console.log(`   WARN unmatched 11e overlays: ${preview}${more}`)
+    }
+  }
 
   // ── 6. Community Knowledge ─────────────────────────────────────────────────
   console.log('6. Community Knowledge')

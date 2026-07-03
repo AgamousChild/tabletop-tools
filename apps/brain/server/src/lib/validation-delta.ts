@@ -130,13 +130,17 @@ function loadBrainNodes(brainNodesDir: string): Node[] {
 }
 
 /**
- * Parse every faction-pack-*.md in `packDir` with the 11e edition flag set
- * and return the union of emitted nodes.
+ * Parse every faction-pack-*.md in `packDir` and return the union of
+ * emitted nodes as though they were 11e material.
  *
- * The validator forces edition='11th' on the parser so that every emitted
- * node represents the "if this pack were 11e, what would the parser say"
- * shape. The actual edition detection (URL prefix) is a separate concern
- * handled by `build-graph.ts`.
+ * The validator is an offline diagnostic: it compares 10e brain nodes to
+ * what the same faction pack would say if reinterpreted as 11e. Since
+ * `convertPackExtractToNodes` in 11e mode emits mostly `DatasheetPatch`
+ * entries (which don't carry ids), we parse in 10e mode — which emits
+ * full nodes at v1 slug ids — and then re-tag the resulting nodes as
+ * 11th edition so the join key + delta output are unchanged. This keeps
+ * the validator's key match (`factionId::category::slug(title)`) working
+ * with no changes to its comparison logic.
  */
 function parseAllFactionPacksAs11e(
   packDir: string,
@@ -158,10 +162,16 @@ function parseAllFactionPacksAs11e(
         extract,
         factionSlug,
         RETRIEVED_AT,
-        '11th',
+        // 10th mode → full-emission with v1 slug ids. We overlay 11th on
+        // the edition tag below so the caller's downstream logic (which
+        // filters by edition) behaves as it always did.
+        '10th',
         mfmLookup,
       )
-      all.push(...result.nodes)
+      for (const node of result.nodes) {
+        node.edition = '11th'
+        all.push(node)
+      }
     } catch {
       // Skip packs that fail to parse — the validator must keep running.
     }
