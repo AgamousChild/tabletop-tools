@@ -23,7 +23,6 @@ interface UnitEntry {
   id: string
   title: string
   factionId: string
-  subfaction?: string
 }
 
 interface FactionUnitEntry {

@@ -19,7 +19,6 @@ export interface ResultCardProps {
   parentUnit?: string
   factionId?: string
   factionName?: string
-  subfaction?: string
   phase?: string
   /**
    * Per-node edition tag (e.g. `'11th'`, `'10th'`). Rendered as a dim pill near
@@ -39,7 +38,6 @@ export function ResultCard({
   parentUnit,
   factionId,
   factionName,
-  subfaction,
   phase,
   edition,
 }: ResultCardProps) {
@@ -65,9 +63,6 @@ export function ResultCard({
           <span className="text-xs text-slate-400">
             {factionName || factionDisplayName(factionId)}
           </span>
-        )}
-        {subfaction && (
-          <span className="text-xs text-slate-400">{factionDisplayName(subfaction)}</span>
         )}
         {phase && <span className="text-xs text-slate-400">{phase}</span>}
         {edition && (

@@ -19,7 +19,6 @@ interface Node {
   summary: string
   factionId?: string
   factionName?: string
-  subfaction?: string
   datasheetId?: string
   detachmentId?: string
   keywords: string[]
@@ -183,7 +182,7 @@ function validate() {
     const factionKws = n.keywords.filter((k) => FACTION_KW_LIST.includes(k))
     if (factionKws.length > 2) {
       multiFactionCount++
-      // Only warn for >2 (one parent + one subfaction is ok)
+      // Only warn for >2 (one parent + one chapter keyword is ok)
     }
   }
   console.log(`  Datasheets with >2 faction keywords: ${multiFactionCount}`)

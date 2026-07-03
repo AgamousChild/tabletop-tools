@@ -13,7 +13,6 @@ export interface ResultNode {
   category: string
   factionId?: string
   factionName?: string
-  subfaction?: string
   phase?: string
   parentUnit?: string
   detachmentId?: string
@@ -137,7 +136,6 @@ function buildCardForCategory(node: ResultNode, pdfSource?: PdfSource): CardData
           effect: node.effect || extractField(node.content, 'EFFECT') || node.summary,
           detachmentName: formatDetachmentName(node.detachmentId),
           factionId: node.factionId || '',
-          subfaction: node.subfaction,
         },
       }
 
@@ -159,7 +157,6 @@ function buildCardForCategory(node: ResultNode, pdfSource?: PdfSource): CardData
           restriction: extractRestriction(node.content),
           detachmentName: formatDetachmentName(node.detachmentId),
           factionId: node.factionId || '',
-          subfaction: node.subfaction,
           attachesTo: node.attachesTo,
         },
       }
@@ -222,7 +219,6 @@ function buildCardForCategory(node: ResultNode, pdfSource?: PdfSource): CardData
             name: node.title,
             description: mainDesc,
             factionId: node.factionId || '',
-            subfaction: node.subfaction,
             isArmyRule: true,
             subRules: subRules.length > 0 ? subRules : undefined,
             sources: node.sources as SourceRef[],
@@ -236,7 +232,6 @@ function buildCardForCategory(node: ResultNode, pdfSource?: PdfSource): CardData
           name: node.title,
           description: node.content || node.summary,
           factionId: node.factionId || '',
-          subfaction: node.subfaction,
           isArmyRule: false,
           detachmentName: formatDetachmentName(node.detachmentId),
           sources: node.sources as SourceRef[],
@@ -252,7 +247,6 @@ function buildCardForCategory(node: ResultNode, pdfSource?: PdfSource): CardData
           name: node.title,
           factionId: node.factionId || '',
           factionName: node.factionName,
-          subfaction: node.subfaction,
           abilityText: node.content || node.summary,
           stratagems: [],
           enhancements: [],
@@ -260,9 +254,10 @@ function buildCardForCategory(node: ResultNode, pdfSource?: PdfSource): CardData
           // source; faction-pack mfm-lookup stamps both onto the same node.
           dp: node.dp,
           forceDisposition: node.forceDisposition,
-          // Chapter badge — Node.subfaction carries the chapter slug for SM
-          // chapters. Render that as a small badge near the title.
-          chapterBadge: node.subfaction,
+          // Chapter badge — the Node.subfaction scalar that used to feed this
+          // was deleted in PR D of the scalar-to-ref refactor. Chapter
+          // identity now lives on `factionId`; a follow-up PR will re-derive
+          // the badge from that when needed.
           sources: node.sources as SourceRef[],
           qualityFlags: node.qualityFlags,
         },

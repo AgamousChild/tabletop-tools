@@ -7,7 +7,7 @@ import { DetachmentPage } from './DetachmentPage'
 const baseProps: DetachmentPageProps = {
   detachmentName: 'Anvil Siege Force',
   factionId: 'SM',
-  subfaction: undefined,
+  chapterBadge: undefined,
   ability: undefined,
   stratagems: [],
   enhancements: [],
@@ -79,13 +79,13 @@ describe('DetachmentPage', () => {
     expect(onBack).toHaveBeenCalledOnce()
   })
 
-  it('shows chapter badge when subfaction is set', () => {
-    render(<DetachmentPage {...baseProps} subfaction="Blood Angels" />)
+  it('shows chapter badge when chapterBadge is set', () => {
+    render(<DetachmentPage {...baseProps} chapterBadge="Blood Angels" />)
     expect(screen.getByText('Blood Angels only')).toBeInTheDocument()
   })
 
-  it('does not show chapter badge when subfaction is not set', () => {
-    render(<DetachmentPage {...baseProps} subfaction={undefined} />)
+  it('does not show chapter badge when chapterBadge is not set', () => {
+    render(<DetachmentPage {...baseProps} chapterBadge={undefined} />)
     expect(screen.queryByText(/only/)).not.toBeInTheDocument()
   })
 

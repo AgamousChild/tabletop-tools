@@ -178,7 +178,9 @@ function buildDetachmentNode(
     edition: '11th',
     ...(typeof row.dp === 'number' ? { dp: row.dp } : {}),
     ...(row.objective ? { forceDisposition: row.objective } : {}),
-    ...(row.unique ? { subfaction: row.unique } : {}),
+    // MFM `row.unique` used to land on a repurposed `subfaction` scalar
+    // (deleted in PR D of the scalar-to-ref refactor). The value already
+    // rides in `keywords` above — downstream browse filters key off there.
     sources: [source],
     refs: [],
     version: 1,
@@ -229,7 +231,9 @@ function buildEnhancementNode(
     edition: '11th',
     cost: enh.points,
     attachesTo,
-    ...(row.unique ? { subfaction: row.unique } : {}),
+    // MFM `row.unique` used to land on a repurposed `subfaction` scalar
+    // (deleted in PR D of the scalar-to-ref refactor). The value already
+    // rides in `keywords` above — downstream browse filters key off there.
     sources: [source],
     refs: [],
     version: 1,

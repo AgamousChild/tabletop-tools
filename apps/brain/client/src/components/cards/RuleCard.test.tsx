@@ -30,7 +30,6 @@ const mockDetRule: RuleCardData = {
   name: "Vulkan's Quest",
   description: 'Ranged weapons have [ASSAULT]. Within 12", add 1 to Strength.',
   factionId: 'space-marines',
-  subfaction: 'salamanders',
   detachmentName: "Forgefather's Seekers",
   isArmyRule: false,
 }
@@ -126,17 +125,6 @@ describe('RuleCard', () => {
     render(<RuleCard data={mockArmyRule} context={context} />)
     fireEvent.click(screen.getByTestId('applies-to'))
     expect(onContentClick).toHaveBeenCalledWith('Blessings of Khorne')
-  })
-
-  it('shows chapter badge when subfaction is set', () => {
-    render(<RuleCard data={mockDetRule} context={baseContext} />)
-    expect(screen.getByTestId('subfaction-badge')).toBeInTheDocument()
-    expect(screen.getByText('salamanders')).toBeInTheDocument()
-  })
-
-  it('does not show chapter badge when subfaction is absent', () => {
-    render(<RuleCard data={mockArmyRule} context={baseContext} />)
-    expect(screen.queryByTestId('subfaction-badge')).not.toBeInTheDocument()
   })
 
   it('calls onContentClick when a bracket keyword in description is clicked', () => {

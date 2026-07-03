@@ -430,7 +430,13 @@ export function UnitCard({ data, context }: UnitCardProps) {
           </h2>
           <div className="text-[13px] text-blue-200 mt-0.5 uppercase tracking-wide">
             {(() => {
-              const raw = data.subfaction || data.factionKeywords[0] || data.factionId
+              // Post-PR-D of the scalar-to-ref refactor: the badge reads
+              // `factionId` (the unit's home faction) directly. Chapter
+              // identity now lives on `factionId` for chapter-specific units
+              // (Lemartes → blood-angels). The optional factionKeywords[0]
+              // fallback handles nodes that haven't gone through the
+              // structured-data pipeline yet.
+              const raw = data.factionKeywords[0] || data.factionId
               if (!raw) return null
               const label = factionDisplayName(raw)
               return (

@@ -73,7 +73,7 @@ describe('FACTION_PATTERNS', () => {
   })
 })
 
-// ── SUBFACTION_TO_PARENT structure ──────────────────────────────────────────
+// ── SUBFACTION_TO_PARENT (chapter → parent-faction map) structure ──────────
 
 describe('SUBFACTION_TO_PARENT', () => {
   it('maps all SM chapters to space-marines', () => {
@@ -97,7 +97,7 @@ describe('SUBFACTION_TO_PARENT', () => {
     }
   })
 
-  it('maps aeldari subfactions to aeldari', () => {
+  it('maps aeldari chapters to aeldari', () => {
     expect(SUBFACTION_TO_PARENT['ynnari']).toBe('aeldari')
     expect(SUBFACTION_TO_PARENT['harlequins']).toBe('aeldari')
     expect(SUBFACTION_TO_PARENT['asuryani']).toBe('aeldari')
@@ -110,7 +110,7 @@ describe('SUBFACTION_TO_PARENT', () => {
     expect(SUBFACTION_TO_PARENT['blood legions']).toBe('chaos-daemons')
   })
 
-  it('maps CSM subfaction to chaos-space-marines', () => {
+  it('maps CSM legion to chaos-space-marines', () => {
     expect(SUBFACTION_TO_PARENT['damned']).toBe('chaos-space-marines')
   })
 })
@@ -154,14 +154,15 @@ describe('detectFactions — top-level factions', () => {
       for (const faction of expected) {
         expect(result.factions, `Expected ${faction} in results for "${query}"`).toContain(faction)
       }
-      expect(result.subfaction).toBeUndefined()
+      // No `subfaction` field is emitted post-PR-D; presence of the chapter
+      // slug in `result.factions` is the discriminator.
     })
   }
 })
 
-// ── detectFactions — every subfaction ───────────────────────────────────────
+// ── detectFactions — chapters/legions ───────────────────────────────────────
 
-describe('detectFactions — subfactions', () => {
+describe('detectFactions — chapters', () => {
   // SM chapters
   const smChapters: Array<[string, string]> = [
     ['blood angels death company', 'blood angels'],
@@ -180,45 +181,38 @@ describe('detectFactions — subfactions', () => {
   ]
 
   for (const [query, expectedSf] of smChapters) {
-    it(`"${query}" → space-marines + chapter slug + subfaction="${expectedSf}"`, () => {
+    it(`"${query}" → space-marines + chapter slug (${expectedSf})`, () => {
       const result = detectFactions(query)
       expect(result.factions).toContain('space-marines')
       // Chapter slug is now also included so retrieve can walk dim_subfaction
       // and union chapter-specific datasheets (Lemartes lives under
       // factionId=blood-angels post-PR-B of the scalar-to-ref refactor).
       expect(result.factions).toContain(expectedSf.replace(/ /g, '-'))
-      expect(result.subfaction).toBe(expectedSf)
     })
   }
 
-  // Aeldari subfactions
-  const aeldariSubs: Array<[string, string]> = [
-    ['ynnari abilities', 'ynnari'],
-    ['harlequins troupe', 'harlequins'],
-    ['asuryani craftworld', 'asuryani'],
-  ]
+  // Aeldari chapters/subfactions expand to the parent faction only
+  const aeldariSubs: string[] = ['ynnari abilities', 'harlequins troupe', 'asuryani craftworld']
 
-  for (const [query, expectedSf] of aeldariSubs) {
-    it(`"${query}" → aeldari + subfaction="${expectedSf}"`, () => {
+  for (const query of aeldariSubs) {
+    it(`"${query}" → aeldari`, () => {
       const result = detectFactions(query)
       expect(result.factions).toContain('aeldari')
-      expect(result.subfaction).toBe(expectedSf)
     })
   }
 
-  // Chaos daemon legions
-  const daemonLegions: Array<[string, string]> = [
-    ['plague legions abilities', 'plague legions'],
-    ['scintillating legions stratagems', 'scintillating legions'],
-    ['legions of excess enhancements', 'legions of excess'],
-    ['blood legions detachment', 'blood legions'],
+  // Chaos daemon legions expand to the parent faction only
+  const daemonLegions: string[] = [
+    'plague legions abilities',
+    'scintillating legions stratagems',
+    'legions of excess enhancements',
+    'blood legions detachment',
   ]
 
-  for (const [query, expectedSf] of daemonLegions) {
-    it(`"${query}" → chaos-daemons + subfaction="${expectedSf}"`, () => {
+  for (const query of daemonLegions) {
+    it(`"${query}" → chaos-daemons`, () => {
       const result = detectFactions(query)
       expect(result.factions).toContain('chaos-daemons')
-      expect(result.subfaction).toBe(expectedSf)
     })
   }
 })
@@ -229,7 +223,6 @@ describe('detectFactions — edge cases', () => {
   it('returns empty for generic question with no faction', () => {
     const result = detectFactions('how does cover work in 10th edition')
     expect(result.factions).toEqual([])
-    expect(result.subfaction).toBeUndefined()
   })
 
   it('detects multiple factions', () => {
@@ -262,7 +255,7 @@ describe('detectFactions — edge cases', () => {
   it('"in blood angels" phrasing works', () => {
     const result = detectFactions('who has sustained hits in blood angels')
     expect(result.factions).toContain('space-marines')
-    expect(result.subfaction).toBe('blood angels')
+    expect(result.factions).toContain('blood-angels')
   })
 
   it('ork does not match in "work" or "cork"', () => {
@@ -286,7 +279,7 @@ describe('stripFactionFromQuery', () => {
     expect(result).toContain('who has sustained hits')
   })
 
-  it('removes subfaction name when parent faction detected', () => {
+  it('removes chapter name when parent faction detected', () => {
     const result = stripFactionFromQuery('blood angels death company', ['space-marines'])
     expect(result.toLowerCase()).not.toContain('blood angel')
     expect(result).toContain('death company')

@@ -10,7 +10,13 @@ import type {
 export interface DetachmentPageProps {
   detachmentName: string
   factionId: string
-  subfaction?: string
+  /**
+   * Chapter/legion display label rendered as a badge next to the title
+   * (e.g. "Blood Angels only"). Callers pass in whatever chapter tag they
+   * have — the Node.subfaction scalar that used to feed this was deleted
+   * in PR D of the scalar-to-ref refactor.
+   */
+  chapterBadge?: string
   ability?: RuleCardData
   stratagems: StratagemCardData[]
   enhancements: EnhancementCardData[]
@@ -20,7 +26,7 @@ export interface DetachmentPageProps {
 
 export function DetachmentPage({
   detachmentName,
-  subfaction,
+  chapterBadge,
   ability,
   stratagems,
   enhancements,
@@ -51,12 +57,12 @@ export function DetachmentPage({
           {detachmentName}
         </h1>
 
-        {subfaction && (
+        {chapterBadge && (
           <span
             data-testid="chapter-badge"
             className="shrink-0 bg-amber-400/20 text-amber-400 text-xs font-medium px-2 py-1 rounded-full border border-amber-400/30"
           >
-            {subfaction} only
+            {chapterBadge} only
           </span>
         )}
       </div>

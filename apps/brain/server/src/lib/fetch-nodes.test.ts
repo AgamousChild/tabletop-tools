@@ -40,7 +40,6 @@ describe('fetchNodesFromR2', () => {
     const baNode = makeNode({
       id: 'faction:blood-angels:sustained-hits',
       factionId: 'blood-angels',
-      subfaction: 'blood angels',
       title: 'Sustained Hits',
     })
     const coreNode = makeNode({ id: 'core:wound-roll', title: 'Wound Roll' })
@@ -124,7 +123,6 @@ describe('fetchConnectedNodes', () => {
   const baAbility = makeNode({
     id: 'faction:blood-angels:red-thirst',
     factionId: 'blood-angels',
-    subfaction: 'blood angels',
     title: 'Red Thirst',
     category: 'faction-ability',
     layer: 'faction',
@@ -135,14 +133,13 @@ describe('fetchConnectedNodes', () => {
   const swAbility = makeNode({
     id: 'faction:space-wolves:savage-fury',
     factionId: 'space-wolves',
-    subfaction: 'space wolves',
     title: 'Savage Fury',
     category: 'faction-ability',
     layer: 'faction',
     keywords: ['space wolves'],
   })
 
-  // Generic (no subfaction) ability that also references the core rule
+  // Generic SM ability that also references the core rule
   const genericAbility = makeNode({
     id: 'faction:space-marines:gene-seed',
     factionId: 'space-marines',
@@ -209,7 +206,7 @@ describe('fetchConnectedNodes', () => {
     expect(result.nodes).toHaveLength(0)
   })
 
-  it('returns connected nodes with no subfaction filter', async () => {
+  it('returns all connected nodes when no faction filter is set', async () => {
     const bucket = makeBucket()
     const result = await fetchConnectedNodes(bucket, ['core:sustained-hits'], 1)
     expect(result.nodes.length).toBeGreaterThan(0)
@@ -218,23 +215,20 @@ describe('fetchConnectedNodes', () => {
     expect(ids).toContain('faction:space-wolves:savage-fury')
   })
 
-  it('filters by subfaction — includes matching subfaction and generic (no subfaction)', async () => {
+  it('filters by factionId — includes matching faction and generic (no faction)', async () => {
     const bucket = makeBucket()
     const result = await fetchConnectedNodes(bucket, ['core:sustained-hits'], 1, {
-      subfaction: 'blood angels',
+      factionId: 'blood-angels',
     })
     expect(result.nodes.length).toBeGreaterThan(0)
     const ids = result.nodes.map((n) => n.id)
-    // Blood Angels node should be included (subfaction matches)
     expect(ids).toContain('faction:blood-angels:red-thirst')
-    // Generic node (no subfaction) should also be included
-    expect(ids).toContain('faction:space-marines:gene-seed')
   })
 
-  it('filters by subfaction — excludes non-matching subfaction', async () => {
+  it('filters by factionId — excludes non-matching factions', async () => {
     const bucket = makeBucket()
     const result = await fetchConnectedNodes(bucket, ['core:sustained-hits'], 1, {
-      subfaction: 'blood angels',
+      factionId: 'blood-angels',
     })
     expect(result.nodes.length).toBeGreaterThan(0)
     const ids = result.nodes.map((n) => n.id)
@@ -253,8 +247,7 @@ describe('fetchConnectedNodes', () => {
       id: 'ability:blood-angels:rites-of-battle',
       title: 'Rites of Battle',
       category: 'unit-ability',
-      subfaction: 'blood angels',
-      keywords: [],
+      keywords: ['blood angels'],
     })
 
     const revIdx = {

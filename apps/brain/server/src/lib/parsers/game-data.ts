@@ -1295,22 +1295,27 @@ export function convertGameData(
     return true
   })
 
-  // Chapter-specific rules that belong to a subfaction, not generic SM
-  const RULE_SUBFACTION: Record<string, string> = {
-    'templar-vows': 'black templars',
-    'heirs-of-sigismund': 'black templars',
-    'the-unforgiven': 'dark angels',
-    'the-ravenwing': 'dark angels',
-    'the-deathwing': 'dark angels',
-    'the-sons-of-sanguinius': 'blood angels',
-    'curse-of-the-wulfen': 'space wolves',
-    'sons-of-russ': 'space wolves',
-    sagas: 'space wolves',
-    'mission-tactics': 'deathwatch',
-    deathwatch: 'deathwatch',
-    'kill-teams': 'deathwatch',
-    'kill-team': 'deathwatch',
-  }
+  // Set of chapter-specific rule slugs — these look chapter-locked but aren't
+  // marked "construction" by the heuristic below. The set replaces the previous
+  // slug→chapter map (which was populating `node.subfaction`, deleted in PR D
+  // of the scalar-to-ref refactor). Chapter identity is now the `factionId`
+  // on chapter-scoped nodes; this set is only used to suppress the
+  // "construction rule" classification for these entries.
+  const CHAPTER_RULE_SLUGS = new Set<string>([
+    'templar-vows',
+    'heirs-of-sigismund',
+    'the-unforgiven',
+    'the-ravenwing',
+    'the-deathwing',
+    'the-sons-of-sanguinius',
+    'curse-of-the-wulfen',
+    'sons-of-russ',
+    'sagas',
+    'mission-tactics',
+    'deathwatch',
+    'kill-teams',
+    'kill-team',
+  ])
 
   const seenArmyRuleNames = new Set<string>()
   const seenFactionAbIds = new Set<string>()
@@ -1336,9 +1341,9 @@ export function convertGameData(
     // Classify: construction/mustering restrictions vs actual gameplay army rules
     const lower = cleanFaDesc.toLowerCase()
     // Chapter-specific rules override construction detection
-    const hasSubfaction = !!RULE_SUBFACTION[ruleNameKey]
+    const isChapterRule = CHAPTER_RULE_SLUGS.has(ruleNameKey)
     const isConstruction =
-      !hasSubfaction &&
+      !isChapterRule &&
       (lower.startsWith('when mustering') ||
         lower.startsWith('- your army') ||
         lower.startsWith('- if an') ||
@@ -1360,16 +1365,14 @@ export function convertGameData(
       ? cleanFaDesc.substring(0, cleanFaDesc.indexOf(subRules[0]!.name)).trim()
       : cleanFaDesc
 
-    const ruleSubfaction = RULE_SUBFACTION[ruleNameKey]
     nodes.push({
       id: factionAbId,
       layer: 'faction',
       category: categoryForRule,
       title: ab.name,
       content: hasSubRules ? preamble : cleanFaDesc,
-      summary: `${ab.name} — army rule for ${ruleSubfaction || fSlug}. ${truncate(preamble || cleanFaDesc, 100)}`,
+      summary: `${ab.name} — army rule for ${fSlug}. ${truncate(preamble || cleanFaDesc, 100)}`,
       factionId: fSlug,
-      subfaction: ruleSubfaction,
       edition: '10th',
       sources: [source],
       refs: [],

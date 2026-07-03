@@ -603,38 +603,26 @@ app.post('/search', async (c) => {
     },
   }))
 
-  // Build nodeId → factionId/subfaction maps from all cached nodes
+  // Build nodeId → factionId map from all cached nodes
   const nodeFactionMap = new Map<string, string>()
-  const nodeSubfactionMap = new Map<string, string>()
   const allCachedNodes = await getAllNodes(c.env.BRAIN_BUCKET)
   for (const n of allCachedNodes) {
     if (n.factionId) nodeFactionMap.set(n.id, n.factionId)
-    if (n.subfaction) nodeSubfactionMap.set(n.id, n.subfaction)
   }
 
-  // Infer faction + subfaction from top result if not detected from query
+  // Infer faction from top result if not detected from query
   let searchFactionScope = detected.factions
-  let searchSubfaction = detected.subfaction
   if (
     searchFactionScope.length === 0 &&
     rawRecords.length > 0 &&
     rawRecords[0].primaryNode.factionId
   ) {
     searchFactionScope = [rawRecords[0].primaryNode.factionId]
-    searchSubfaction = rawRecords[0].primaryNode.subfaction
   }
 
   // Build cross-refs using cached indexes (loaded once per Worker isolate)
   const { fwd, rev } = await loadIndexes(c.env.BRAIN_BUCKET)
-  const records = buildCrossRefs(
-    linkedRecords,
-    fwd,
-    rev,
-    searchFactionScope,
-    nodeFactionMap,
-    nodeSubfactionMap,
-    searchSubfaction,
-  )
+  const records = buildCrossRefs(linkedRecords, fwd, rev, searchFactionScope, nodeFactionMap)
 
   // Paginate
   const total = records.length
@@ -870,9 +858,7 @@ app.post('/ask', async (c) => {
     .map((s) => s.node)
 
   // Assemble Brain context
-  let brainContext = retrieveResult
-    ? assembleContext(primaryNodes, connectedNodes, parentMap, detected.subfaction)
-    : ''
+  let brainContext = retrieveResult ? assembleContext(primaryNodes, connectedNodes, parentMap) : ''
 
   // Append errata corrections to context so the LLM always cites them
   if (primaryErrata.length > 0) {
@@ -980,7 +966,7 @@ app.post('/ask', async (c) => {
   // Build the combined LLM prompt
   const factionScope =
     detected.factions.length > 0
-      ? `\n\nIMPORTANT FACTION SCOPE: The user is asking about ${detected.subfaction || detected.factions.join(' / ')}. ONLY discuss abilities, stratagems, enhancements, and rules that are available to this specific faction. Do NOT mention abilities from other factions or chapters unless the user explicitly asks for a comparison. If a unit or ability belongs to a different faction or chapter, do NOT include it in your answer.`
+      ? `\n\nIMPORTANT FACTION SCOPE: The user is asking about ${detected.factions.join(' / ')}. ONLY discuss abilities, stratagems, enhancements, and rules that are available to this specific faction. Do NOT mention abilities from other factions or chapters unless the user explicitly asks for a comparison. If a unit or ability belongs to a different faction or chapter, do NOT include it in your answer.`
       : ''
 
   // Tell the model which edition it's answering for. Without this, Llama
@@ -1082,23 +1068,11 @@ Rules:
         answer = (aiResult as any).response ?? 'No response from model'
       } catch {
         answerPath = 'deterministic-fallback'
-        answer = formatConversationalAnswer(
-          body.question,
-          connectedNodes,
-          parentMap,
-          detected.subfaction,
-          combos,
-        )
+        answer = formatConversationalAnswer(body.question, connectedNodes, parentMap, combos)
       }
     } else {
       answerPath = 'deterministic'
-      answer = formatConversationalAnswer(
-        body.question,
-        connectedNodes,
-        parentMap,
-        detected.subfaction,
-        combos,
-      )
+      answer = formatConversationalAnswer(body.question, connectedNodes, parentMap, combos)
     }
   }
 
@@ -1198,30 +1172,21 @@ app.post('/graph-data', async (c) => {
   )
 
   // Combine primary results + connected nodes for the graph
-  // Filter by faction + subfaction — infer from top result if not in query
+  // Filter by faction — infer from top result if not in query
   let factionScope = detected.factions
-  let subfactionScope = detected.subfaction
   if (factionScope.length === 0 && results.length > 0 && results[0].factionId) {
     factionScope = [results[0].factionId]
-    subfactionScope = results[0].subfaction
   }
   // Expand each factionId to include its parent-faction shared pool via
-  // dim_subfaction (e.g. blood-angels → +space-marines). Legacy subfaction
-  // scalars are folded in via the slugified form so the small residue of
-  // subfaction-tagged nodes still surfaces until PR D deletes that field.
+  // dim_subfaction (e.g. blood-angels → +space-marines).
   let factionSet: Set<string> | null = null
   if (factionScope.length > 0) {
     factionSet = await expandFactionsForRetrieval(factionScope, c.env.BRAIN_BUCKET)
-    if (subfactionScope) {
-      factionSet.add(subfactionScope.replace(/\s+/g, '-'))
-    }
   }
   const allNodes = [...results, ...connected].filter((n) => {
     if (!factionSet) return true
     if (!n.factionId) return true // generic/core — always include
     if (!factionSet.has(n.factionId)) return false
-    // If we have a subfaction scope, filter out other subfactions
-    if (subfactionScope && n.subfaction && n.subfaction !== subfactionScope) return false
     return true
   })
   const seenIds = new Set<string>()
@@ -1279,7 +1244,6 @@ app.post('/graph-data', async (c) => {
     for (const n of allCachedForGraph) {
       if (!idsToFetch.has(n.id)) continue
       if (factionSet && n.factionId && !factionSet.has(n.factionId)) continue
-      if (subfactionScope && n.subfaction && n.subfaction !== subfactionScope) continue
       dedupedNodes.push(n as any)
       nodeIdSet.add(n.id)
     }
@@ -1401,7 +1365,6 @@ app.post('/index-vectors', async (c) => {
             layer: node.layer,
             category: node.category,
             factionId: node.factionId ?? '',
-            subfaction: node.subfaction ?? '',
             phase: node.phase ?? '',
             // Edition is a Vectorize metadata filter target (see retrieve.ts).
             // Vectorize $eq is exact-match — a missing field never matches, so

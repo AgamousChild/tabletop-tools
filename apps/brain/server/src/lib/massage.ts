@@ -384,69 +384,12 @@ export function massage(nodes: Node[]): MassageResult {
     )
   }
 
-  // Pass 7e — set subfaction on SM chapter detachments and their children
-  // Some detachments can't be detected from text (e.g. "The Angelic Host" doesn't
-  // mention "Blood Angels" in its rules text). This map fills the gaps.
-  const DETACHMENT_CHAPTERS: Record<string, string> = {
-    // Blood Angels
-    'the-angelic-host': 'blood angels',
-    'the-lost-brethren': 'blood angels',
-    'rage-cursed-onslaught': 'blood angels',
-    'angelic-inheritors': 'blood angels',
-    // Dark Angels
-    'unforgiven-task-force': 'dark angels',
-    'inner-circle-task-force': 'dark angels',
-    'lions-blade-task-force': 'dark angels',
-    'wrath-of-the-rock': 'dark angels',
-    'company-of-hunters': 'dark angels',
-    // Space Wolves
-    'saga-of-the-hunter': 'space wolves',
-    'saga-of-the-beastslayer': 'space wolves',
-    'saga-of-the-bold': 'space wolves',
-    'saga-of-the-great-wolf': 'space wolves',
-    'champions-of-fenris': 'space wolves',
-    // Deathwatch
-    'black-spear-task-force': 'deathwatch',
-    // Black Templars
-    'wrathful-procession': 'black templars',
-    'companions-of-vehemence': 'black templars',
-    'vindication-task-force': 'black templars',
-    'godhammer-assault-force': 'black templars',
-    // Ultramarines
-    'blade-of-ultramar': 'ultramarines',
-    'reclamation-force': 'ultramarines',
-    'orbital-assault-force': 'ultramarines',
-    // Iron Hands
-    'hammer-of-avernii': 'iron hands',
-    // Imperial Fists
-    'emperors-shield': 'imperial fists',
-    // Raven Guard
-    'shadowmark-talon': 'raven guard',
-    // White Scars
-    'spearpoint-task-force': 'white scars',
-    // Salamanders
-    'forgefathers-seekers': 'salamanders',
-  }
-
-  let subfactionFixed = 0
-  for (const node of working) {
-    if (node.factionId !== 'space-marines' || node.subfaction) continue
-    // Extract detachment slug from the node's detachmentId or own ID
-    const detSlug = node.detachmentId
-      ? node.detachmentId.replace(/^det:space-marines:/, '').split(':')[0]!
-      : node.category === 'detachment-rule'
-        ? node.id.replace(/^det:space-marines:/, '').split(':')[0]!
-        : undefined
-    if (!detSlug) continue
-    const chapter = DETACHMENT_CHAPTERS[detSlug]
-    if (chapter) {
-      node.subfaction = chapter
-      subfactionFixed++
-    }
-  }
-  if (subfactionFixed > 0) {
-    console.log(`  Chapter subfaction fix: set subfaction on ${subfactionFixed} SM nodes`)
-  }
+  // Pass 7e — chapter membership on SM detachments used to land here as a
+  // `node.subfaction` scalar via a hardcoded detachment→chapter map. Deleted
+  // in PR D of the scalar-to-ref refactor: chapter identity now lives on
+  // `factionId` when the source data ties the detachment to a chapter, and
+  // otherwise the detachment stays chapter-agnostic. See
+  // docs/superpowers/plans/2026-07-03-scalar-to-ref-refactor.md.
 
   // Clean up — remove empty qualityFlags arrays so nodes without issues are clean
   for (const node of working) {

@@ -8,8 +8,6 @@ const API_BASE = import.meta.env.VITE_BRAIN_API_URL || '/brain/api'
 
 /** Server-sourced faction display names: factionId slug -> display name */
 const serverFactionNames = new Map<string, string>()
-/** Server-sourced subfaction display names: lowercase subfaction -> display name */
-const serverSubfactionNames = new Map<string, string>()
 
 let fetchStarted = false
 
@@ -26,16 +24,13 @@ export function initFactionNames(): void {
     .then(
       (
         data: {
-          nodes: Array<{ factionId?: string; factionName?: string; subfaction?: string }>
+          nodes: Array<{ factionId?: string; factionName?: string }>
         } | null,
       ) => {
         if (!data?.nodes) return
         for (const node of data.nodes) {
           if (node.factionId && node.factionName) {
             serverFactionNames.set(node.factionId, node.factionName)
-          }
-          if (node.subfaction && node.factionName) {
-            serverSubfactionNames.set(node.subfaction.toLowerCase(), node.factionName)
           }
         }
       },
@@ -55,10 +50,6 @@ export function factionDisplayName(slugOrName: string): string {
   // Check server-sourced faction names (by slug)
   const fromServer = serverFactionNames.get(slugOrName)
   if (fromServer) return fromServer
-
-  // Check server-sourced subfaction names (by lowercase name)
-  const fromSub = serverSubfactionNames.get(slugOrName.toLowerCase())
-  if (fromSub) return fromSub
 
   // Fallback: already looks like a display name (has spaces, no hyphens)
   if (slugOrName.includes(' ') && !slugOrName.includes('-')) return slugOrName.toUpperCase()

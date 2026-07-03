@@ -57,7 +57,6 @@ interface BrainNodeData {
   layer: string
   category: string
   factionId?: string
-  subfaction?: string
   edition?: string
   summary?: string
   content?: string
@@ -72,7 +71,6 @@ interface GraphNode {
   layer: string
   category: string
   factionId?: string
-  subfaction?: string
   edition?: string
   summary?: string
   content?: string
@@ -103,10 +101,7 @@ function BrainNode({ data }: { data: BrainNodeData }) {
         <span className="text-[10px] text-slate-500 uppercase tracking-wide">{data.category}</span>
       </div>
       <p className="text-xs font-semibold text-slate-100 leading-tight">{data.label}</p>
-      {data.subfaction && (
-        <span className="text-[10px] text-amber-400 mt-0.5 block">{data.subfaction}</span>
-      )}
-      {data.factionId && !data.subfaction && (
+      {data.factionId && (
         <span className="text-[10px] text-slate-500 mt-0.5 block">{data.factionId}</span>
       )}
       <Handle type="source" position={Position.Bottom} className="!bg-slate-500 !w-2 !h-2" />
@@ -184,7 +179,6 @@ function layoutFromState(
       layer: focusNode.layer || 'core',
       category: focusNode.category || '',
       factionId: focusNode.factionId,
-      subfaction: focusNode.subfaction,
       edition: focusNode.edition,
       summary: focusNode.summary,
       content: focusNode.content,
@@ -238,7 +232,6 @@ function layoutFromState(
           layer: n.layer || 'core',
           category: n.category || '',
           factionId: n.factionId,
-          subfaction: n.subfaction,
           edition: n.edition,
           summary: n.summary,
           content: n.content,
@@ -355,7 +348,6 @@ function brainNodeToResultNode(data: BrainNodeData, extra?: Partial<ResultNode>)
     layer: data.layer,
     category: data.category,
     factionId: data.factionId,
-    subfaction: data.subfaction,
     sources: [],
     keywords: [],
     ...extra,
