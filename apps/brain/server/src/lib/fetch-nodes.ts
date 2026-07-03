@@ -1,5 +1,30 @@
-import { CHAPTER_KEYWORDS } from './filters'
 import type { Node } from './model'
+
+/**
+ * Chapter keyword list for parent-title enrichment when a parent node's
+ * structured `keywords` field carries a chapter marker (e.g. from BSData
+ * catalog membership or Wahapedia datasheet_keywords).
+ *
+ * This is DISPLAY-side lookup against structured data — it doesn't infer
+ * chapters from text. The fuzzy text-detection variants (`CHAPTERS`,
+ * `CHAPTER_KEYWORDS` exported from `filters.ts`) were removed in PR A of the
+ * scalar-to-ref refactor. See docs/superpowers/plans/2026-07-03-scalar-to-ref-refactor.md.
+ */
+const CHAPTER_KEYWORDS = [
+  'space wolves',
+  'dark angels',
+  'blood angels',
+  'black templars',
+  'deathwatch',
+  'iron hands',
+  'ultramarines',
+  'salamanders',
+  'raven guard',
+  'imperial fists',
+  'white scars',
+  'crimson fists',
+  'any chapter',
+]
 
 // ── Module-scope manifest cache ──────────────────────────────────────────────
 
@@ -56,8 +81,6 @@ export async function fetchNodesFromR2(bucket: R2Bucket, nodeIds: string[]): Pro
 
 type RevEntry = { sourceId: string; rel: string; context: string; factionId?: string }
 type FwdEntry = { targetId: string; rel: string; context: string }
-
-// CHAPTER_KEYWORDS imported from ./filters
 
 /**
  * Walk the graph from the given node IDs using both indexes.

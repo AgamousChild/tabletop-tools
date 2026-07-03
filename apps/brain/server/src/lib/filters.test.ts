@@ -1,9 +1,7 @@
 import { describe, expect, it } from 'vitest'
 
 import {
-  buildDetachmentChapterMap,
   classifyGrants,
-  detectChapterFromText,
   detectScope,
   detectWeaponTypes,
   isBoardingAction,
@@ -39,53 +37,6 @@ describe('isLegends', () => {
 
   it('returns false for missing field', () => {
     expect(isLegends({})).toBe(false)
-  })
-})
-
-describe('detectChapterFromText', () => {
-  it('detects Blood Angels in rules text', () => {
-    expect(detectChapterFromText('Blood Angels models from your army')).toBe('blood angels')
-  })
-
-  it('detects Ultramarines in rules text', () => {
-    expect(detectChapterFromText('Ultramarines units gain the ability')).toBe('ultramarines')
-  })
-
-  it('does NOT detect chapter from flavor text only', () => {
-    // "Ultramarines rush to defend" is lore, not rules
-    expect(detectChapterFromText('The Ultramarines rush to defend the fortress')).toBeUndefined()
-  })
-
-  it('detects Space Wolves', () => {
-    expect(detectChapterFromText('Space Wolves models from your army')).toBe('space wolves')
-  })
-
-  it('returns undefined for generic SM text', () => {
-    expect(detectChapterFromText('ADEPTUS ASTARTES models from your army')).toBeUndefined()
-  })
-
-  it('detects "only" pattern', () => {
-    expect(detectChapterFromText('Deathwatch only')).toBe('deathwatch')
-  })
-})
-
-describe('buildDetachmentChapterMap', () => {
-  it('maps detachment to chapter from ability text', () => {
-    const dets = [{ id: 'det1' }]
-    const abilities = [
-      { detachmentId: 'det1', description: 'Blood Angels models from your army gain this ability' },
-    ]
-    const map = buildDetachmentChapterMap(dets, abilities)
-    expect(map.get('det1')).toBe('blood angels')
-  })
-
-  it('returns empty map for generic detachments', () => {
-    const dets = [{ id: 'det1' }]
-    const abilities = [
-      { detachmentId: 'det1', description: 'ADEPTUS ASTARTES models gain this ability' },
-    ]
-    const map = buildDetachmentChapterMap(dets, abilities)
-    expect(map.has('det1')).toBe(false)
   })
 })
 
