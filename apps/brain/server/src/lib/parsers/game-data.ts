@@ -20,7 +20,7 @@ import { normalizeFactionId } from '../faction-codes'
 import { isBoardingAction, isLegends, stripHtml, truncate } from '../filters'
 import type { Node, NodeRef, Source } from '../model'
 import { slugify } from '../slugify'
-import { bsdataSubfactionKey } from './bsdata-subfactions'
+import { bsdataSubfactionKey, chapterSpecificHome } from './bsdata-subfactions'
 
 // ── Input types (matching game-data-store) ──────────────────────────────────
 
@@ -439,16 +439,18 @@ export interface GameDataParseResult {
  */
 export interface ConvertGameDataOptions {
   /**
-   * BSData-derived subfaction lookup. Key shape:
+   * BSData-derived catalog-membership lookup. Key shape:
    * `${factionSlug}::${normalizedName}` (see
-   * `apps/brain/server/src/lib/parsers/bsdata-subfactions.ts`).
+   * `apps/brain/server/src/lib/parsers/bsdata-subfactions.ts`) → set of chapter
+   * catalog slugs the unit appears in.
    *
-   * When a datasheet's `(factionSlug, name)` matches an entry here, the
-   * resulting node's `subfaction` field uses BSData's value in preference to
-   * any Wahapedia-keyword-derived subfaction — BSData chapter catalogs are
-   * the authoritative source for chapter membership.
+   * The set is the discriminator: size ≤ 2 means chapter-specific (that
+   * catalog is the home chapter), size ≥ 3 means shared across the SM pool.
+   * `chapterSpecificHome()` encapsulates the rule. When Wahapedia's structured
+   * `unit_keywords` data provides an explicit chapter, that wins — this
+   * catalog signal only fires when Wahapedia is silent.
    */
-  bsdataSubfactionByKey?: Map<string, string>
+  bsdataSubfactionByKey?: Map<string, Set<string>>
 }
 
 const wahapediaSource: Source = {
@@ -534,80 +536,98 @@ export function convertGameData(
   const enhancementsByDetachment = groupBy(filteredEnhancements, (r) => r.detachmentId)
   const abilitiesByDetachment = groupBy(filteredDetAbilities, (r) => r.detachmentId)
 
-  // Build datasheet → factionId and subfaction lookups
+  // Build datasheet → factionId lookup. Chapter-specific SM units are rewritten
+  // to their chapter's factionId AFTER `dsChapterFactionMap` is populated
+  // below — we prime the map with the parent factionId here and overwrite it
+  // once the chapter resolver has run.
   const dsFactionMap = new Map<string, string>()
   for (const ds of filteredDatasheets) {
     dsFactionMap.set(ds.id, normalizeFactionId(ds.factionId))
   }
 
-  const SUBFACTION_KEYWORDS = [
-    // Space Marines chapters
-    'Blood Angels',
-    'Dark Angels',
-    'Space Wolves',
-    'Black Templars',
-    'Ultramarines',
-    'Deathwatch',
-    'Imperial Fists',
-    'Iron Hands',
-    'Salamanders',
-    'Raven Guard',
-    'White Scars',
-    'Crimson Fists',
-    'Blood Ravens',
-    // Aeldari
-    'Ynnari',
-    'Harlequins',
-    'Asuryani',
-    // Chaos Space Marines cult legions — these are independent factions in
-    // their own right, but Wahapedia files some of their datasheets under the
-    // CSM faction with the cult name as a faction keyword (e.g. Plague Marines
-    // shows up under CSM tagged Death Guard). Tagging the subfaction keeps
-    // those units filterable for a cult-focused army.
-    'Death Guard',
-    'Thousand Sons',
-    'World Eaters',
-    'Emperor’s Children',
-    // Chaos Daemons greater-daemon legions
-    'Plague Legions',
-    'Scintillating Legions',
-    'Legions of Excess',
-    'Blood Legions',
-    'Damned',
-  ]
-  const dsSubfactionMap = new Map<string, string>()
+  // Space Marines chapters that live as their own factions in `dim_faction`.
+  // When a datasheet resolves to one of these via structured chapter data, it
+  // becomes a chapter faction datasheet (`factionId=<chapter-slug>`) instead of
+  // staying a generic `space-marines` datasheet with a `subfaction` tag.
+  //
+  // Wahapedia's `unit_keywords.keyword` uses the display name; the slug on the
+  // right is the canonical `dim_faction.id`. Only the five chapters that are
+  // canonical factions are included — chapters like Ultramarines / Salamanders /
+  // Imperial Fists remain generic SM (no dim_faction entry yet, so they don't
+  // clear the merge-sources faction-id gate).
+  //
+  // See docs/superpowers/plans/2026-07-03-scalar-to-ref-refactor.md — PR B.
+  const CHAPTER_KEYWORD_TO_FACTION: Record<string, string> = {
+    'Blood Angels': 'blood-angels',
+    'Dark Angels': 'dark-angels',
+    'Space Wolves': 'space-wolves',
+    'Black Templars': 'black-templars',
+    Deathwatch: 'deathwatch',
+  }
+  // BSData subfaction slug → canonical faction slug. Same five chapters — the
+  // BSData row already ships lowercase-kebab slugs, so no lookup needed beyond
+  // the presence check.
+  const CHAPTER_BSDATA_SLUGS = new Set([
+    'blood-angels',
+    'dark-angels',
+    'space-wolves',
+    'black-templars',
+    'deathwatch',
+  ])
+
+  // datasheetId → resolved chapter faction slug. When set, the datasheet's
+  // `factionId` is rewritten to this slug and the node is filed under the
+  // chapter faction file instead of `faction-space-marines.json`. The
+  // `subfaction` scalar stays undefined — chapter membership is the
+  // `factionId`, not a side-tag.
+  const dsChapterFactionMap = new Map<string, string>()
+
   const keywordsByDs = groupBy(
     filteredUnitKeywords.filter((k) => k.isFactionKeyword),
     (k) => k.datasheetId,
   )
-  for (const [dsId, kws] of keywordsByDs) {
+
+  // Structured source 1 (preferred): Wahapedia `unit_keywords` marked with
+  // `isFactionKeyword` naming a canonical chapter. Only applies to datasheets
+  // whose parent faction is Space Marines — a Deathwatch keyword on a
+  // Necrons datasheet would be meaningless.
+  for (const ds of filteredDatasheets) {
+    if (normalizeFactionId(ds.factionId) !== 'space-marines') continue
+    const kws = keywordsByDs.get(ds.id) ?? []
     for (const kw of kws) {
-      const match = SUBFACTION_KEYWORDS.find((sf) => sf === kw.keyword)
-      if (match) {
-        dsSubfactionMap.set(dsId, match.toLowerCase())
+      const slug = CHAPTER_KEYWORD_TO_FACTION[kw.keyword]
+      if (slug) {
+        dsChapterFactionMap.set(ds.id, slug)
         break
       }
     }
   }
 
-  // Pull subfaction from BSData chapter catalogs. PR #46 made
-  // `rollupChapterFaction()` emit `subfaction: 'ultramarines'` on every unit in
-  // a chapter catalog — that's a much higher-quality signal than Wahapedia's
-  // per-unit keyword list, which only tags chapter-iconic units. Where both
-  // sources fire, BSData wins (the SM keyword loop above used `match.toLowerCase()`
-  // so its values are equivalent for chapter subfactions, but BSData is the
-  // canonical chapter-membership source).
+  // Structured source 2 (fallback): BSData catalog membership. Only applied
+  // when Wahapedia is silent for that datasheet. A unit that appears in a
+  // single chapter catalog is chapter-specific; a unit in every SM chapter
+  // catalog is shared (kept as generic `space-marines`).
   //
-  // See docs/superpowers/plans/2026-06-27-data-problems-followup.md step 7.
+  // See docs/superpowers/plans/2026-07-03-scalar-to-ref-refactor.md — PR B.
   if (options.bsdataSubfactionByKey && options.bsdataSubfactionByKey.size > 0) {
     for (const ds of filteredDatasheets) {
+      if (dsChapterFactionMap.has(ds.id)) continue
       const factionSlug = normalizeFactionId(ds.factionId)
+      if (factionSlug !== 'space-marines') continue
       const key = bsdataSubfactionKey(factionSlug, ds.name)
-      const sub = options.bsdataSubfactionByKey.get(key)
-      if (sub) {
-        dsSubfactionMap.set(ds.id, sub)
+      const catalogSet = options.bsdataSubfactionByKey.get(key)
+      const home = chapterSpecificHome(catalogSet)
+      if (home && CHAPTER_BSDATA_SLUGS.has(home)) {
+        dsChapterFactionMap.set(ds.id, home)
       }
     }
+  }
+
+  // Overlay chapter-faction resolutions onto the datasheet → factionId lookup.
+  // Weapons and abilities emitted downstream read from `dsFactionMap` — this
+  // keeps them aligned with their parent datasheet's chapter home.
+  for (const [dsId, chapterFaction] of dsChapterFactionMap) {
+    dsFactionMap.set(dsId, chapterFaction)
   }
 
   // ── 0. Faction parent nodes ────────────────────────────────────────────────
@@ -737,6 +757,12 @@ export function convertGameData(
     // id (e.g. "000000135"). The hash on `ds.id` stays the internal join key
     // for sibling tables (wargear, abilities, etc.) — see surfaceIdOf above.
     const datasheetSurfaceId = surfaceIdOf(ds.id)
+    // Chapter-specific SM units get their chapter's factionId (Blood Angels,
+    // Dark Angels, Space Wolves, Black Templars, Deathwatch). Everything else
+    // keeps the parent factionId. `subfaction` is left undefined across the
+    // board — chapter membership lives on `factionId`, not a side-tag.
+    // See docs/superpowers/plans/2026-07-03-scalar-to-ref-refactor.md — PR B.
+    const dsFactionId = dsFactionMap.get(ds.id) ?? normalizeFactionId(ds.factionId)
     const node: Node = {
       id: datasheetSurfaceId,
       layer: 'unit',
@@ -744,8 +770,7 @@ export function convertGameData(
       title: ds.name,
       content,
       summary: `${ds.name} — ${ds.role}${costs.length ? `, ${costText}` : ''}.`,
-      factionId: normalizeFactionId(ds.factionId),
-      subfaction: dsSubfactionMap.get(ds.id),
+      factionId: dsFactionId,
       datasheetId: datasheetSurfaceId,
       edition: '10th',
       ...(unitStats ? { stats: unitStats } : {}),
@@ -960,12 +985,14 @@ export function convertGameData(
 
     nodes.push(node)
 
-    // Datasheet → faction parent ref
+    // Datasheet → faction parent ref. Uses the resolved chapter-aware factionId
+    // so a Blood Angels datasheet points at the Blood Angels faction root, not
+    // the generic Space Marines root.
     refs.push({
       sourceId: datasheetSurfaceId,
-      targetId: `faction-root:${normalizeFactionId(ds.factionId)}`,
+      targetId: `faction-root:${dsFactionId}`,
       rel: 'part_of',
-      context: `${ds.name} belongs to ${normalizeFactionId(ds.factionId)}.`,
+      context: `${ds.name} belongs to ${dsFactionId}.`,
     })
   }
 
@@ -1001,7 +1028,6 @@ export function convertGameData(
       content,
       summary: `${wg.name} (${wg.type}) — ${wg.range}, ${wg.attacks}A, S${wg.strength}, AP${wg.ap}, D${wg.damage}.${cleanDesc ? ` [${cleanDesc}]` : ''}`,
       factionId: dsFactionMap.get(wg.datasheetId),
-      subfaction: dsSubfactionMap.get(wg.datasheetId),
       datasheetId: parentSurfaceId,
       edition: '10th',
       weaponStats: {
@@ -1173,7 +1199,6 @@ export function convertGameData(
       content: hasSubRules ? preamble : cleanAbDesc,
       summary: `${ab.name} (${ab.type}) on ${dsName} — ${truncate(preamble || cleanAbDesc, 120)}`,
       factionId: dsFactionMap.get(ab.datasheetId),
-      subfaction: dsSubfactionMap.get(ab.datasheetId),
       datasheetId: abilityParentSurfaceId,
       edition: '10th',
       sources: [source],
@@ -1207,7 +1232,6 @@ export function convertGameData(
           content: sub.text,
           summary: `${sub.name}, option of ${ab.name} on ${dsName} — ${truncate(sub.text, 120)}`,
           factionId: dsFactionMap.get(ab.datasheetId),
-          subfaction: dsSubfactionMap.get(ab.datasheetId),
           datasheetId: abilityParentSurfaceId,
           edition: '10th',
           sources: [source],

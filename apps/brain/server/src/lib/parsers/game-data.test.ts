@@ -42,6 +42,16 @@ describe('convertGameData', () => {
     const factions = [
       ['space-marines', 'Space Marines', 'imperium'],
       ['adeptus-titanicus', 'Adeptus Titanicus', 'imperium'],
+      // Chapter factions — PR B of the scalar-to-ref refactor moves
+      // chapter-specific units to their chapter's own factionId. Only the five
+      // canonical chapter factions are seeded here; other chapters
+      // (Ultramarines, Salamanders, etc.) stay generic SM by design.
+      ['blood-angels', 'Blood Angels', 'imperium'],
+      ['dark-angels', 'Dark Angels', 'imperium'],
+      ['space-wolves', 'Space Wolves', 'imperium'],
+      ['black-templars', 'Black Templars', 'imperium'],
+      ['deathwatch', 'Deathwatch', 'imperium'],
+      ['tyranids', 'Tyranids', 'chaos'],
     ]
     for (const [id, name, alleg] of factions) {
       await client.execute({
@@ -52,6 +62,7 @@ describe('convertGameData', () => {
     const aliases = [
       ['SM', 'space-marines'],
       ['AT', 'adeptus-titanicus'],
+      ['TYR', 'tyranids'],
     ]
     for (const [alias, fid] of aliases) {
       await client.execute({
@@ -745,15 +756,17 @@ describe('convertGameData', () => {
     expect(refs).toHaveLength(0)
   })
 
-  describe('BSData chapter subfaction tagging', () => {
-    it('applies BSData subfaction to a datasheet whose (faction,name) matches', () => {
+  describe('chapter faction resolution (PR B of scalar-to-ref refactor)', () => {
+    it('Wahapedia chapter keyword rewrites factionId to the chapter slug', () => {
+      // Lemartes-style: Wahapedia tags him with the Blood Angels chapter
+      // keyword, so his home faction is Blood Angels, not generic Space Marines.
       const input = makeInput({
         datasheets: [
           {
-            id: 'inter-1',
-            name: 'Intercessor Squad',
+            id: 'lemartes-1',
+            name: 'Lemartes',
             factionId: 'SM',
-            role: 'Battleline',
+            role: 'Character',
             legend: '',
             transport: '',
             loadout: '',
@@ -761,50 +774,81 @@ describe('convertGameData', () => {
             damagedDescription: '',
           },
         ],
-        // Wahapedia has no chapter keyword for generic Intercessors — only
-        // chapter-iconic units (Calgar, Astorath, etc.) get that tag. BSData
-        // covers the rest.
         unitKeywords: [
-          { id: 'k1', datasheetId: 'inter-1', keyword: 'Adeptus Astartes', isFactionKeyword: true },
+          { id: 'k1', datasheetId: 'lemartes-1', keyword: 'Blood Angels', isFactionKeyword: true },
         ],
       })
-      const bsdataSubfactionByKey = new Map<string, string>([
-        ['space-marines::intercessor squad', 'ultramarines'],
-      ])
-      const { nodes } = convertGameData(input, '2026-04-08', { bsdataSubfactionByKey })
-      const ds = nodes.find((n) => n.id === 'inter-1')
+      const { nodes } = convertGameData(input, '2026-04-08')
+      const ds = nodes.find((n) => n.id === 'lemartes-1')
       expect(ds).toBeDefined()
-      expect(ds!.subfaction).toBe('ultramarines')
-    })
-
-    it('leaves subfaction undefined when BSData has no entry and Wahapedia tags nothing', () => {
-      const input = makeInput({
-        datasheets: [
-          {
-            id: 'generic-1',
-            name: 'Generic Squad',
-            factionId: 'SM',
-            role: 'Battleline',
-            legend: '',
-            transport: '',
-            loadout: '',
-            damagedW: '',
-            damagedDescription: '',
-          },
-        ],
-      })
-      const { nodes } = convertGameData(input, '2026-04-08', {
-        bsdataSubfactionByKey: new Map(),
-      })
-      const ds = nodes.find((n) => n.id === 'generic-1')
-      expect(ds).toBeDefined()
+      expect(ds!.factionId).toBe('blood-angels')
       expect(ds!.subfaction).toBeUndefined()
     })
 
-    it('BSData subfaction beats a conflicting Wahapedia faction-keyword tag', () => {
-      // Edge case: Wahapedia ships a chapter keyword that disagrees with BSData's
-      // chapter catalog. BSData is the authoritative source for chapter
-      // membership, so its value wins.
+    it('BSData single-catalog membership rewrites factionId when Wahapedia is silent', () => {
+      // Chaplain Grimaldus appears only in the Black Templars catalog. Wahapedia
+      // has no chapter keyword for him — BSData single-catalog membership is
+      // the discriminator.
+      const input = makeInput({
+        datasheets: [
+          {
+            id: 'grimaldus-1',
+            name: 'Chaplain Grimaldus',
+            factionId: 'SM',
+            role: 'Character',
+            legend: '',
+            transport: '',
+            loadout: '',
+            damagedW: '',
+            damagedDescription: '',
+          },
+        ],
+      })
+      const bsdataSubfactionByKey = new Map<string, Set<string>>([
+        ['space-marines::chaplain grimaldus', new Set(['black-templars'])],
+      ])
+      const { nodes } = convertGameData(input, '2026-04-08', { bsdataSubfactionByKey })
+      const ds = nodes.find((n) => n.id === 'grimaldus-1')
+      expect(ds).toBeDefined()
+      expect(ds!.factionId).toBe('black-templars')
+      expect(ds!.subfaction).toBeUndefined()
+    })
+
+    it('shared units (appear in 3+ catalogs) stay factionId=space-marines with no chapter tag', () => {
+      // Rhino appears in every chapter catalog — shared across the SM pool.
+      // No chapter tag should be emitted.
+      const input = makeInput({
+        datasheets: [
+          {
+            id: 'rhino-1',
+            name: 'Rhino',
+            factionId: 'SM',
+            role: 'Dedicated Transport',
+            legend: '',
+            transport: '',
+            loadout: '',
+            damagedW: '',
+            damagedDescription: '',
+          },
+        ],
+      })
+      const bsdataSubfactionByKey = new Map<string, Set<string>>([
+        [
+          'space-marines::rhino',
+          new Set(['blood-angels', 'dark-angels', 'ultramarines', 'black-templars']),
+        ],
+      ])
+      const { nodes } = convertGameData(input, '2026-04-08', { bsdataSubfactionByKey })
+      const ds = nodes.find((n) => n.id === 'rhino-1')
+      expect(ds).toBeDefined()
+      expect(ds!.factionId).toBe('space-marines')
+      expect(ds!.subfaction).toBeUndefined()
+    })
+
+    it('Wahapedia chapter keyword wins over conflicting BSData catalog membership', () => {
+      // Wahapedia's structured chapter data is the higher-quality signal.
+      // If Wahapedia says Dark Angels but BSData files the unit under Blood
+      // Angels catalog only, trust Wahapedia.
       const input = makeInput({
         datasheets: [
           {
@@ -823,28 +867,30 @@ describe('convertGameData', () => {
           {
             id: 'k1',
             datasheetId: 'conflicted-1',
-            keyword: 'Imperial Fists',
+            keyword: 'Dark Angels',
             isFactionKeyword: true,
           },
         ],
       })
-      const bsdataSubfactionByKey = new Map<string, string>([
-        ['space-marines::conflicted captain', 'ultramarines'],
+      const bsdataSubfactionByKey = new Map<string, Set<string>>([
+        ['space-marines::conflicted captain', new Set(['blood-angels'])],
       ])
       const { nodes } = convertGameData(input, '2026-04-08', { bsdataSubfactionByKey })
       const ds = nodes.find((n) => n.id === 'conflicted-1')
       expect(ds).toBeDefined()
-      expect(ds!.subfaction).toBe('ultramarines')
+      expect(ds!.factionId).toBe('dark-angels')
+      expect(ds!.subfaction).toBeUndefined()
     })
 
-    it('keeps Wahapedia-keyword subfaction when BSData has no entry', () => {
-      // Calgar-style: Wahapedia ships the chapter keyword, BSData lookup is
-      // empty for this unit. Wahapedia's value is kept.
+    it('non-chapter chapter keywords (Ultramarines, Salamanders, etc.) stay space-marines', () => {
+      // Ultramarines / Salamanders / etc. aren't canonical factions in
+      // dim_faction — only the five canonical chapters (BA/DA/SW/BT/DW) are.
+      // Everything else stays generic SM with no chapter tag.
       const input = makeInput({
         datasheets: [
           {
-            id: 'calgar-1',
-            name: 'Marneus Calgar',
+            id: 'adrax-1',
+            name: 'Adrax Agatone',
             factionId: 'SM',
             role: 'Character',
             legend: '',
@@ -855,20 +901,38 @@ describe('convertGameData', () => {
           },
         ],
         unitKeywords: [
+          { id: 'k1', datasheetId: 'adrax-1', keyword: 'Salamanders', isFactionKeyword: true },
+        ],
+      })
+      const { nodes } = convertGameData(input, '2026-04-08')
+      const ds = nodes.find((n) => n.id === 'adrax-1')
+      expect(ds).toBeDefined()
+      expect(ds!.factionId).toBe('space-marines')
+      expect(ds!.subfaction).toBeUndefined()
+    })
+
+    it('non-SM datasheets are unaffected by chapter resolution', () => {
+      const input = makeInput({
+        datasheets: [
           {
-            id: 'k1',
-            datasheetId: 'calgar-1',
-            keyword: 'Ultramarines',
-            isFactionKeyword: true,
+            id: 'hive-tyrant-1',
+            name: 'Hive Tyrant',
+            factionId: 'TYR',
+            role: 'Character',
+            legend: '',
+            transport: '',
+            loadout: '',
+            damagedW: '',
+            damagedDescription: '',
           },
         ],
       })
-      const { nodes } = convertGameData(input, '2026-04-08', {
-        bsdataSubfactionByKey: new Map(),
-      })
-      const ds = nodes.find((n) => n.id === 'calgar-1')
+      // Use tyranids alias; the test DB doesn't have Tyranids — factionId will
+      // be slugified. What matters is subfaction stays undefined.
+      const { nodes } = convertGameData(input, '2026-04-08')
+      const ds = nodes.find((n) => n.id === 'hive-tyrant-1')
       expect(ds).toBeDefined()
-      expect(ds!.subfaction).toBe('ultramarines')
+      expect(ds!.subfaction).toBeUndefined()
     })
   })
 
