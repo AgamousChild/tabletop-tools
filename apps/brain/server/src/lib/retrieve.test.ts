@@ -1242,3 +1242,381 @@ describe('retrieve — chapter → parent faction expansion', () => {
     expect(ids).toContain('ds:rhino')
   })
 })
+
+// ── Faction-scope repros for the 2026-07-03 "Orks Warboss" / "Blood Angels Captain"
+//    zero-result bug ─────────────────────────────────────────────────────────
+//
+// Live symptom (prod 20260703-173440):
+//   POST /search?edition=11th body {"query":"Warboss"}  → 2 Ork Warbosses (correct)
+//   POST /search?edition=11th body {"query":"Orks Warboss"}
+//     → detected {factions:['orks']}, strippedQuery:'Warboss'
+//     → 0 results (BUG — the faction post-filter dropped everything)
+//
+// Any regression here means the /search + /ask faction chip has silently
+// stopped honouring a factionId match on the vectorized metadata.
+describe('retrieve — faction-scope search repros (2026-07-03)', () => {
+  const smChapterRows = [
+    { id: 'blood-angels', name: 'Blood Angels', factionId: 'space-marines' },
+    { id: 'dark-angels', name: 'Dark Angels', factionId: 'space-marines' },
+  ]
+
+  const warboss = makeNode({
+    id: '11e:datasheet:orks:warboss',
+    layer: 'unit',
+    category: 'datasheet',
+    title: 'WARBOSS',
+    factionId: 'orks',
+    edition: '11th',
+  })
+  const warbossMega = makeNode({
+    id: '11e:datasheet:orks:warboss-in-mega-armour',
+    layer: 'unit',
+    category: 'datasheet',
+    title: 'Warboss In Mega Armour',
+    factionId: 'orks',
+    edition: '11th',
+  })
+  const orkNob = makeNode({
+    id: '11e:datasheet:orks:nob',
+    layer: 'unit',
+    category: 'datasheet',
+    title: 'Nob',
+    factionId: 'orks',
+    edition: '11th',
+  })
+  const tsSorcerer = makeNode({
+    id: '11e:datasheet:thousand-sons:sorcerer',
+    layer: 'unit',
+    category: 'datasheet',
+    title: 'Sorcerer',
+    factionId: 'thousand-sons',
+    edition: '11th',
+  })
+  const cdSorcerer = makeNode({
+    id: '11e:datasheet:chaos-daemons:sorcerer',
+    layer: 'unit',
+    category: 'datasheet',
+    title: 'Sorcerer',
+    factionId: 'chaos-daemons',
+    edition: '11th',
+  })
+  const baCaptain = makeNode({
+    id: '11e:datasheet:blood-angels:captain',
+    layer: 'unit',
+    category: 'datasheet',
+    title: 'Captain',
+    factionId: 'blood-angels',
+    edition: '11th',
+  })
+  const smCaptain = makeNode({
+    id: '11e:datasheet:space-marines:captain',
+    layer: 'unit',
+    category: 'datasheet',
+    title: 'Captain',
+    factionId: 'space-marines',
+    edition: '11th',
+  })
+
+  function makeReproBucket(nodes: Node[]) {
+    return createMockBucket({
+      'manifest.json': { files: { 'nodes/test.json': 'v1', 'dim/subfactions.json': 'v1' } },
+      'nodes/test.json': nodes,
+      'refs/reverse-index.json': {},
+      'refs/forward-index.json': {},
+      'dim/subfactions.json': smChapterRows,
+    })
+  }
+
+  beforeEach(() => {
+    resetManifestCache()
+    resetSubfactionCache()
+  })
+
+  it('"Orks Warboss" → both Warboss datasheets kept (factionId=orks matches expansion set)', async () => {
+    const ai = createMockAI()
+    const vectorize = createMockVectorize([
+      {
+        id: warboss.id,
+        score: 0.9,
+        metadata: {
+          factionId: 'orks',
+          layer: 'unit',
+          category: 'datasheet',
+          title: 'WARBOSS',
+          edition: '11th',
+        },
+      },
+      {
+        id: warbossMega.id,
+        score: 0.85,
+        metadata: {
+          factionId: 'orks',
+          layer: 'unit',
+          category: 'datasheet',
+          title: 'Warboss In Mega Armour',
+          edition: '11th',
+        },
+      },
+      {
+        id: orkNob.id,
+        score: 0.5,
+        metadata: {
+          factionId: 'orks',
+          layer: 'unit',
+          category: 'datasheet',
+          title: 'Nob',
+          edition: '11th',
+        },
+      },
+    ])
+    const bucket = makeReproBucket([warboss, warbossMega, orkNob])
+
+    const env: RetrieveEnv = { ai, vectorize, bucket }
+    const result = await retrieve({ query: 'Orks Warboss', edition: '11th' }, env)
+
+    expect(result.detected.factions).toEqual(['orks'])
+    const ids = result.results.map((r) => r.id)
+    expect(ids).toContain(warboss.id)
+    expect(ids).toContain(warbossMega.id)
+  })
+
+  it('"Orks Warboss" → title-injection finds Warboss even when Vectorize returns nothing (prod repro)', async () => {
+    // The prod bug: Vectorize returned 0 matches for "Orks Warboss" with an
+    // edition prefilter, and the title-injection path only tried the ORIGINAL
+    // query "Orks Warboss" — no datasheet is titled that way. Adding the
+    // stripped-query candidate ("Warboss") lets the injection catch the unit.
+    const ai = createMockAI()
+    const vectorize = createMockVectorize([]) // Vectorize returns nothing (matches prod)
+    const bucket = makeReproBucket([warboss, warbossMega, orkNob])
+
+    const env: RetrieveEnv = { ai, vectorize, bucket }
+    const result = await retrieve({ query: 'Orks Warboss', edition: '11th' }, env)
+
+    expect(result.detected.factions).toEqual(['orks'])
+    const ids = result.results.map((r) => r.id)
+    // Title matches 'Warboss' (stripped) — inject the exact-title Warboss.
+    expect(ids).toContain(warboss.id)
+    // Should NOT inject Nob (title doesn't match) or Warboss In Mega Armour
+    // (title is longer than the stripped query).
+    expect(ids).not.toContain(orkNob.id)
+    expect(ids).not.toContain(warbossMega.id)
+  })
+
+  it('"Chaos Daemons Sorcerer" → title-injection returns only chaos-daemons Sorcerer (faction-scoped)', async () => {
+    const ai = createMockAI()
+    const vectorize = createMockVectorize([]) // matches prod
+    const bucket = makeReproBucket([cdSorcerer, tsSorcerer])
+
+    const env: RetrieveEnv = { ai, vectorize, bucket }
+    const result = await retrieve({ query: 'Chaos Daemons Sorcerer', edition: '11th' }, env)
+
+    expect(result.detected.factions).toEqual(['chaos-daemons'])
+    const ids = result.results.map((r) => r.id)
+    expect(ids).toContain(cdSorcerer.id)
+    // MUST NOT include the TS Sorcerer even though the title matches — faction
+    // scope drops it.
+    expect(ids).not.toContain(tsSorcerer.id)
+  })
+
+  it('bare "Sorcerer" with body filter.factionId → filter still scopes title-injection', async () => {
+    // Prior behaviour: passing `filter.factionId: 'thousand-sons'` in the
+    // /search body returned every Sorcerer datasheet because title injection
+    // bypassed the faction filter entirely. Regression guard.
+    const ai = createMockAI()
+    const vectorize = createMockVectorize([])
+    const bucket = makeReproBucket([cdSorcerer, tsSorcerer])
+
+    const env: RetrieveEnv = { ai, vectorize, bucket }
+    const result = await retrieve(
+      { query: 'Sorcerer', filter: { factionId: 'thousand-sons' }, edition: '11th' },
+      env,
+    )
+
+    const ids = result.results.map((r) => r.id)
+    expect(ids).toContain(tsSorcerer.id)
+    expect(ids).not.toContain(cdSorcerer.id)
+  })
+
+  it('bare "Warboss" (no faction detected) still returns nodes with matching title from any faction', async () => {
+    // Guard against over-filtering: when the user doesn't narrow the query to
+    // a faction, title matches from every faction should still surface.
+    // Uses a cross-faction title that lives in more than one faction file.
+    const ai = createMockAI()
+    const vectorize = createMockVectorize([])
+    const bucket = makeReproBucket([warboss, baCaptain, smCaptain])
+
+    const env: RetrieveEnv = { ai, vectorize, bucket }
+    const result = await retrieve({ query: 'Captain', edition: '11th' }, env)
+
+    expect(result.detected.factions).toEqual([])
+    const ids = result.results.map((r) => r.id)
+    // Both Captains (BA + SM) surface because no faction scope narrows them.
+    expect(ids).toContain(baCaptain.id)
+    expect(ids).toContain(smCaptain.id)
+    // Warboss doesn't title-match — excluded.
+    expect(ids).not.toContain(warboss.id)
+  })
+
+  it('"Thousand Sons Sorcerer" → Sorcerer datasheet with factionId=thousand-sons is kept', async () => {
+    const ai = createMockAI()
+    const vectorize = createMockVectorize([
+      {
+        id: tsSorcerer.id,
+        score: 0.9,
+        metadata: {
+          factionId: 'thousand-sons',
+          layer: 'unit',
+          category: 'datasheet',
+          title: 'Sorcerer',
+          edition: '11th',
+        },
+      },
+      {
+        id: cdSorcerer.id,
+        score: 0.85,
+        metadata: {
+          factionId: 'chaos-daemons',
+          layer: 'unit',
+          category: 'datasheet',
+          title: 'Sorcerer',
+          edition: '11th',
+        },
+      },
+    ])
+    const bucket = makeReproBucket([tsSorcerer, cdSorcerer])
+
+    const env: RetrieveEnv = { ai, vectorize, bucket }
+    const result = await retrieve({ query: 'Thousand Sons Sorcerer', edition: '11th' }, env)
+
+    expect(result.detected.factions).toEqual(['thousand-sons'])
+    const ids = result.results.map((r) => r.id)
+    expect(ids).toContain(tsSorcerer.id)
+    expect(ids).not.toContain(cdSorcerer.id)
+  })
+
+  it('"Blood Angels Captain" → BOTH BA Captain and SM Captain kept (expansion unions parent pool)', async () => {
+    const ai = createMockAI()
+    const vectorize = createMockVectorize([
+      {
+        id: baCaptain.id,
+        score: 0.9,
+        metadata: {
+          factionId: 'blood-angels',
+          layer: 'unit',
+          category: 'datasheet',
+          title: 'Captain',
+          edition: '11th',
+        },
+      },
+      {
+        id: smCaptain.id,
+        score: 0.85,
+        metadata: {
+          factionId: 'space-marines',
+          layer: 'unit',
+          category: 'datasheet',
+          title: 'Captain',
+          edition: '11th',
+        },
+      },
+    ])
+    const bucket = makeReproBucket([baCaptain, smCaptain])
+
+    const env: RetrieveEnv = { ai, vectorize, bucket }
+    const result = await retrieve({ query: 'Blood Angels Captain', edition: '11th' }, env)
+
+    // PR F ordering: explicit parent 'space-marines' would come first IF the
+    // user typed it; here they typed "Blood Angels" only, so chapter comes
+    // first and the parent is added as implied.
+    expect(result.detected.factions).toEqual(['blood-angels', 'space-marines'])
+    const ids = result.results.map((r) => r.id)
+    expect(ids).toContain(baCaptain.id)
+    expect(ids).toContain(smCaptain.id)
+  })
+})
+
+// ── Vectorize prefilter shape tests (2026-07-03) ────────────────────────────
+// Guardrails on the exact filter object passed to BRAIN_INDEX.query so the
+// Cloudflare Vectorize prefilter doesn't get a shape it can't index against.
+// The current design keeps factionId OUT of the Vectorize prefilter (post-
+// filter only, so generic nodes stay in the pool). These tests hold that line.
+describe('retrieve — Vectorize filter shape', () => {
+  const nodeOrks = makeNode({
+    id: 'ds:orks:warboss',
+    layer: 'unit',
+    category: 'datasheet',
+    title: 'Warboss',
+    factionId: 'orks',
+    edition: '11th',
+  })
+
+  function makeShapeBucket(nodes: Node[]) {
+    return createMockBucket({
+      'manifest.json': { files: { 'nodes/test.json': 'v1', 'dim/subfactions.json': 'v1' } },
+      'nodes/test.json': nodes,
+      'refs/reverse-index.json': {},
+      'refs/forward-index.json': {},
+      'dim/subfactions.json': [],
+    })
+  }
+
+  beforeEach(() => {
+    resetManifestCache()
+    resetSubfactionCache()
+  })
+
+  it('does NOT push factionId into Vectorize filter for single-faction expansion (post-filter path)', async () => {
+    const ai = createMockAI()
+    const vectorize = createMockVectorize([
+      {
+        id: nodeOrks.id,
+        score: 0.9,
+        metadata: {
+          factionId: 'orks',
+          layer: 'unit',
+          category: 'datasheet',
+          title: 'Warboss',
+          edition: '11th',
+        },
+      },
+    ])
+    const bucket = makeShapeBucket([nodeOrks])
+
+    const env: RetrieveEnv = { ai, vectorize, bucket }
+    await retrieve({ query: 'Orks Warboss', edition: '11th' }, env)
+
+    const queryCall = (vectorize.query as ReturnType<typeof vi.fn>).mock.calls[0]
+    const opts = queryCall[1] as { filter?: Record<string, unknown> }
+    // factionId must NOT appear — the post-filter step handles it so generic
+    // nodes (factionId='') survive. Pushing it here would drop them.
+    expect(opts.filter?.factionId).toBeUndefined()
+  })
+
+  it('does NOT push factionId into Vectorize filter for multi-faction expansion (chapter → parent)', async () => {
+    const ai = createMockAI()
+    const vectorize = createMockVectorize([])
+    const bucket = makeShapeBucket([])
+
+    const env: RetrieveEnv = { ai, vectorize, bucket }
+    await retrieve({ query: 'Blood Angels Captain', edition: '11th' }, env)
+
+    const queryCall = (vectorize.query as ReturnType<typeof vi.fn>).mock.calls[0]
+    const opts = queryCall[1] as { filter?: Record<string, unknown> }
+    expect(opts.filter?.factionId).toBeUndefined()
+  })
+
+  it('does NOT push factionId into Vectorize filter when no faction is detected', async () => {
+    const ai = createMockAI()
+    const vectorize = createMockVectorize([])
+    const bucket = makeShapeBucket([])
+
+    const env: RetrieveEnv = { ai, vectorize, bucket }
+    await retrieve({ query: 'wound roll modifiers', edition: '11th' }, env)
+
+    const queryCall = (vectorize.query as ReturnType<typeof vi.fn>).mock.calls[0]
+    const opts = queryCall[1] as { filter?: Record<string, unknown> }
+    if (opts.filter) {
+      expect(opts.filter.factionId).toBeUndefined()
+    }
+  })
+})
