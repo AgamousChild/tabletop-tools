@@ -149,6 +149,10 @@ export function detectFactions(query: string): { factions: string[]; subfaction?
         const parent = SUBFACTION_TO_PARENT[sf]
         if (parent) {
           found.add(parent)
+          // Also add the chapter slug so retrieve can walk dim_subfaction and
+          // union the chapter-specific datasheets (Lemartes lives under
+          // factionId=blood-angels post-PR-B).
+          found.add(subfactionSlug(sf))
           subfaction = sf
           consumed.push([m.index, m.index + m[0].length])
         }
@@ -168,6 +172,8 @@ export function detectFactions(query: string): { factions: string[]; subfaction?
       const idx = lower.indexOf(sf)
       if (idx !== -1) {
         found.add(parent)
+        // Also add the chapter slug (see comment above — post-PR-B datasheets).
+        found.add(subfactionSlug(sf))
         subfaction = sf
         consumed.push([idx, idx + sf.length])
         break // only one subfaction
@@ -241,6 +247,15 @@ export function stripFactionFromQuery(query: string, detectedFactions: string[])
 
 function escapeRegex(s: string): string {
   return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+}
+
+/**
+ * Convert a subfaction-name key (e.g. "blood angels") to its kebab-case slug
+ * ("blood-angels"). Matches dim_subfaction.id values so retrieve can walk the
+ * expansion helper.
+ */
+function subfactionSlug(name: string): string {
+  return name.replace(/\s+/g, '-')
 }
 
 // ── Mechanic keyword extraction ───────────────────────────────────────────────

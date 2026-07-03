@@ -7,7 +7,7 @@
  * @see docs/etl-data-pipelines.md — ETL diagram and function reference
  * @see docs/schema-indexeddb-brain.md — Brain knowledge graph schema
  */
-import { createDb } from '@tabletop-tools/db'
+import { createDb, getSubfactions } from '@tabletop-tools/db'
 import { parseFactionPackV2 } from '@tabletop-tools/game-content/src/adapters/faction-pack/parser'
 import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from 'fs'
 import { join } from 'path'
@@ -1018,6 +1018,18 @@ async function main() {
   for (const r of allRefs) refTypes[r.rel] = (refTypes[r.rel] || 0) + 1
   console.log('Refs by type:', refTypes)
 
+  // ── Dim exports: dump lookup tables the Worker needs at runtime ─────────
+  // The Worker has no DB binding, so we snapshot dim_subfaction to R2 and
+  // reload it lazily in lib/factions.ts (per Rule 6 — no hardcoded lookups
+  // in .ts). Blood Angels retrieval walks this file to union its parent
+  // faction's shared pool. See docs/superpowers/plans/2026-07-03-scalar-to-ref-refactor.md.
+  console.log('\nExporting dim/ lookup tables')
+  const subfactionRows = await getSubfactions(db)
+  mkdirSync(join(OUTPUT_DIR, 'dim'), { recursive: true })
+  const subfactionsJson = JSON.stringify(subfactionRows)
+  writeFileSync(join(OUTPUT_DIR, 'dim', 'subfactions.json'), subfactionsJson)
+  console.log(`   dim/subfactions.json: ${subfactionRows.length} rows`)
+
   // ── Partition and write ────────────────────────────────────────────────────
   console.log('\nPartitioning and writing files...')
 
@@ -1092,6 +1104,7 @@ async function main() {
     ...refFiles,
     'refs/reverse-index.json': reverseIndex,
     'refs/forward-index.json': forwardIndex,
+    'dim/subfactions.json': subfactionRows,
   }
   const manifest = buildManifest(allFiles, null)
   writeFileSync(join(OUTPUT_DIR, 'manifest.json'), JSON.stringify(manifest, null, 2))

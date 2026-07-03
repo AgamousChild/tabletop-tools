@@ -12,6 +12,7 @@ import {
 } from './lib/edition'
 import { type EntityMap, getEntityIndex, linkEntitiesInContent } from './lib/entity-linker'
 import { findErrataForNode } from './lib/errata-linker'
+import { expandFactionForRetrieval, expandFactionsForRetrieval } from './lib/factions'
 import { assembleContext, formatConversationalAnswer } from './lib/format'
 import type { Node } from './lib/model'
 import { retrieve } from './lib/retrieve'
@@ -235,6 +236,7 @@ app.get('/browse/nodes', async (c) => {
   const page = Math.max(1, parseInt(c.req.query('page') || '1'))
   const pageSize = Math.min(Math.max(1, parseInt(c.req.query('pageSize') || '20')), 100)
   const edition = resolveEdition(c.req.query('edition'), c.env.BRAIN_DEFAULT_EDITION)
+  const factionParam = c.req.query('faction')
 
   const allCached = await getAllNodes(c.env.BRAIN_BUCKET)
   if (!allCached.length)
@@ -247,7 +249,16 @@ app.get('/browse/nodes', async (c) => {
 
   // Filter to top-level records only, then apply edition filter (post-filter
   // because edition isn't yet in any upstream index — see retrieve.ts).
-  const filtered = filterByEdition(filterBrowseNodes(allNodes), edition)
+  let filtered = filterByEdition(filterBrowseNodes(allNodes), edition)
+
+  // Optional faction filter: chapter queries expand to include the parent
+  // faction's shared pool (e.g. blood-angels → +space-marines). Nodes with
+  // no factionId (generic/core content) are NOT included here — this endpoint
+  // is scoped to the caller's faction. See lib/factions.ts.
+  if (factionParam) {
+    const factionSet = await expandFactionForRetrieval(factionParam, c.env.BRAIN_BUCKET)
+    filtered = filtered.filter((n) => !!n.factionId && factionSet.has(n.factionId))
+  }
 
   // Sort by category then title
   filtered.sort((a, b) => {
@@ -941,6 +952,8 @@ app.post('/ask', async (c) => {
         const manifest = await c.env.BRAIN_BUCKET.get('manifest.json')
         if (manifest) {
           const manifestData = (await manifest.json()) as { files: Record<string, string> }
+          // Chapter queries expand to include the parent faction's shared pool.
+          const factionSet = await expandFactionsForRetrieval(detected.factions, c.env.BRAIN_BUCKET)
           const factionUnits: string[] = []
           for (const file of Object.keys(manifestData.files)) {
             if (!file.startsWith('nodes/faction-')) continue
@@ -948,12 +961,7 @@ app.post('/ask', async (c) => {
             if (!obj) continue
             const nodes = (await obj.json()) as Node[]
             for (const n of nodes) {
-              if (
-                n.category === 'datasheet' &&
-                detected.factions.some(
-                  (f) => n.factionId === f || n.factionId?.toLowerCase().replace(/\s+/g, '-') === f,
-                )
-              ) {
+              if (n.category === 'datasheet' && n.factionId && factionSet.has(n.factionId)) {
                 factionUnits.push(n.title)
               }
             }
@@ -1197,11 +1205,16 @@ app.post('/graph-data', async (c) => {
     factionScope = [results[0].factionId]
     subfactionScope = results[0].subfaction
   }
-  // Include both the parent faction AND the subfaction slug as allowed factionIds
-  // (Blood Angels data exists under both factionId:"space-marines" and factionId:"blood-angels")
-  const factionSet = factionScope.length > 0 ? new Set(factionScope) : null
-  if (factionSet && subfactionScope) {
-    factionSet.add(subfactionScope.replace(/\s+/g, '-'))
+  // Expand each factionId to include its parent-faction shared pool via
+  // dim_subfaction (e.g. blood-angels → +space-marines). Legacy subfaction
+  // scalars are folded in via the slugified form so the small residue of
+  // subfaction-tagged nodes still surfaces until PR D deletes that field.
+  let factionSet: Set<string> | null = null
+  if (factionScope.length > 0) {
+    factionSet = await expandFactionsForRetrieval(factionScope, c.env.BRAIN_BUCKET)
+    if (subfactionScope) {
+      factionSet.add(subfactionScope.replace(/\s+/g, '-'))
+    }
   }
   const allNodes = [...results, ...connected].filter((n) => {
     if (!factionSet) return true

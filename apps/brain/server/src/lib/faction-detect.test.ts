@@ -180,10 +180,13 @@ describe('detectFactions — subfactions', () => {
   ]
 
   for (const [query, expectedSf] of smChapters) {
-    it(`"${query}" → space-marines + subfaction="${expectedSf}"`, () => {
+    it(`"${query}" → space-marines + chapter slug + subfaction="${expectedSf}"`, () => {
       const result = detectFactions(query)
       expect(result.factions).toContain('space-marines')
-      expect(result.factions).not.toContain(`${expectedSf.replace(/ /g, '-')}`)
+      // Chapter slug is now also included so retrieve can walk dim_subfaction
+      // and union chapter-specific datasheets (Lemartes lives under
+      // factionId=blood-angels post-PR-B of the scalar-to-ref refactor).
+      expect(result.factions).toContain(expectedSf.replace(/ /g, '-'))
       expect(result.subfaction).toBe(expectedSf)
     })
   }
@@ -241,9 +244,13 @@ describe('detectFactions — edge cases', () => {
     expect(result.factions).not.toContain('space-marines')
   })
 
-  it('blood angels does NOT produce blood-angels slug', () => {
+  it('blood angels produces BOTH blood-angels chapter slug AND space-marines parent', () => {
+    // Post-PR-B chapter datasheets live under factionId=<chapter-slug>. detectFactions
+    // returns both slugs so retrieve unions the chapter's own units and the SM
+    // shared pool. dim_subfaction is the source of truth for the parent walk;
+    // this array just seeds the expander.
     const result = detectFactions('blood angels units')
-    expect(result.factions).not.toContain('blood-angels')
+    expect(result.factions).toContain('blood-angels')
     expect(result.factions).toContain('space-marines')
   })
 

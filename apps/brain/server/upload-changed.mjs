@@ -20,6 +20,7 @@ const env = Object.fromEntries(
 
 const NODES_DIR = '.local/brain/nodes'
 const REFS_DIR = '.local/brain/refs'
+const DIM_DIR = '.local/brain/dim'
 const MANIFEST = '.local/brain/manifest.json'
 
 const manifest = JSON.parse(readFileSync(MANIFEST, 'utf8'))
@@ -74,6 +75,10 @@ console.log(`Nodes: ${nr.uploaded} uploaded, ${nr.skipped} unchanged`)
 console.log('\n--- Uploading refs ---')
 const rr = processDir(REFS_DIR, 'refs')
 console.log(`Refs: ${rr.uploaded} uploaded, ${rr.skipped} unchanged`)
+
+console.log('\n--- Uploading dim ---')
+const dr = processDir(DIM_DIR, 'dim')
+console.log(`Dim: ${dr.uploaded} uploaded, ${dr.skipped} unchanged`)
 
 // Bump manifest version and upload
 manifest.version = (manifest.version || 0) + 1
