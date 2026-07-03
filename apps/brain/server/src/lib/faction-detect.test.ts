@@ -264,6 +264,128 @@ describe('detectFactions — edge cases', () => {
   })
 })
 
+// ── PR F — Ask auto-filter fix (2026-07-03-scalar-to-ref-refactor) ──────────
+// Repro queries from the 2026-07-03 QA sweep. The auto-filter chip must NOT
+// misfire on chapter aliases that share letters with the query, and the chip
+// must key off `factions[0]` — so when the user names a broader parent
+// faction explicitly, that parent goes first.
+
+describe('detectFactions — auto-filter QA repro (PR F)', () => {
+  it('"How does the Space Marines Rhino work?" → space-marines, not white-scars', () => {
+    // Repro from QA sweep: "Rhino" or another token was pulling White Scars.
+    // Whole-word matching plus explicit-parent-first ordering keeps SM primary.
+    const result = detectFactions('How does the Space Marines Rhino work?')
+    expect(result.factions).toContain('space-marines')
+    expect(result.factions).not.toContain('white-scars')
+    expect(result.factions[0]).toBe('space-marines')
+  })
+
+  it('"Grey Knights Paladin" → grey-knights only, no SM misfire', () => {
+    const result = detectFactions('Grey Knights Paladin')
+    expect(result.factions).toContain('grey-knights')
+    expect(result.factions).not.toContain('space-marines')
+    expect(result.factions).not.toContain('white-scars')
+  })
+
+  it('"Chaos Daemons Sorcerer" → chaos-daemons, no chapter misfire', () => {
+    const result = detectFactions('Chaos Daemons Sorcerer')
+    expect(result.factions).toContain('chaos-daemons')
+    expect(result.factions).not.toContain('space-marines')
+    // Sorcerer is a datasheet across factions but the query names the faction
+    // explicitly — the filter must land on chaos-daemons, not a lookalike.
+    expect(result.factions).not.toContain('thousand-sons')
+    expect(result.factions).not.toContain('chaos-space-marines')
+  })
+
+  it('"Thousand Sons Sorcerer" → thousand-sons', () => {
+    const result = detectFactions('Thousand Sons Sorcerer')
+    expect(result.factions).toContain('thousand-sons')
+    expect(result.factions[0]).toBe('thousand-sons')
+    expect(result.factions).not.toContain('chaos-space-marines')
+  })
+
+  it('"World Eaters Lord on Juggernaut" → world-eaters, no CSM misfire', () => {
+    const result = detectFactions('World Eaters Lord on Juggernaut')
+    expect(result.factions).toContain('world-eaters')
+    expect(result.factions).not.toContain('chaos-space-marines')
+    expect(result.factions).not.toContain('space-marines')
+  })
+
+  it('"Rhino" bare → no faction detected', () => {
+    // A unit name alone must not trigger any faction filter — auto-filter
+    // stays off and search shows every Rhino across factions.
+    const result = detectFactions('Rhino')
+    expect(result.factions).toEqual([])
+  })
+
+  it('"BA Captain" → blood-angels via BA abbreviation', () => {
+    const result = detectFactions('BA Captain')
+    expect(result.factions).toContain('blood-angels')
+    // Parent slug still comes along for dim_subfaction expansion downstream.
+    expect(result.factions).toContain('space-marines')
+    // Chapter is what the user typed → chapter is primary.
+    expect(result.factions[0]).toBe('blood-angels')
+  })
+})
+
+describe('detectFactions — whole-word matching (PR F substring guard)', () => {
+  it('does not match chapter alias as a substring inside a longer word', () => {
+    // A prior implementation used `String.indexOf(sf)`, which would fire on
+    // any query containing the substring. Whole-word matching guards against
+    // that: "asuryani" as a substring of "asuryanix" must not match.
+    const result = detectFactions('the asuryanix codex')
+    expect(result.factions).not.toContain('asuryani')
+    expect(result.factions).not.toContain('aeldari')
+  })
+
+  it('bare chapter token still fires as a whole word', () => {
+    // Whole-word boundary must not regress the normal case: "damned" as its
+    // own token still legitimately matches the Damned Legion alias.
+    const result = detectFactions('damned legion strategy')
+    expect(result.factions).toContain('damned')
+    expect(result.factions).toContain('chaos-space-marines')
+  })
+
+  it('"salamander" (singular) does NOT match "salamanders" chapter', () => {
+    // SUBFACTION_TO_PARENT keys are canonical (plural) forms. Word-boundary
+    // matching rejects the singular form — that's fine; users who mean the
+    // chapter type its full name.
+    const result = detectFactions('lone salamander lore')
+    expect(result.factions).not.toContain('salamanders')
+  })
+
+  it('substring inside another word does not match "iron hands"', () => {
+    // A pathological but concrete case: the alias must not fire on a partial
+    // match somewhere inside a longer word.
+    const result = detectFactions('wrought iron handshake')
+    expect(result.factions).not.toContain('iron-hands')
+  })
+})
+
+describe('detectFactions — parent-first ordering (PR F)', () => {
+  it('explicit parent + chapter → parent is primary', () => {
+    // When the user names BOTH a parent faction AND a chapter word, they've
+    // asked for the broader scope; keep the parent as `factions[0]` so the
+    // Ask auto-filter chip / factionBrowse root key off the parent.
+    const result = detectFactions('Space Marines Blood Angels tactics')
+    expect(result.factions).toContain('space-marines')
+    expect(result.factions).toContain('blood-angels')
+    expect(result.factions[0]).toBe('space-marines')
+  })
+
+  it('chapter alone → chapter is primary', () => {
+    const result = detectFactions('blood angels tactics')
+    expect(result.factions[0]).toBe('blood-angels')
+    expect(result.factions).toContain('space-marines')
+  })
+
+  it('explicit parent alone → parent is primary', () => {
+    const result = detectFactions('space marines detachments')
+    expect(result.factions[0]).toBe('space-marines')
+    expect(result.factions).not.toContain('blood-angels')
+  })
+})
+
 // ── stripFactionFromQuery ───────────────────────────────────────────────────
 
 describe('stripFactionFromQuery', () => {
