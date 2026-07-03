@@ -5,7 +5,14 @@
  * Filters:
  * - Boarding Actions (detachment type)
  * - Legends (discontinued datasheets and their weapons/abilities)
- * - Chapter locks (propagate subfaction from detachment to its children)
+ *
+ * NOTE: Fuzzy chapter-from-text detection (`detectChapterFromText`,
+ * `detectChapterFromHeading`, `buildDetachmentChapterMap`, `CHAPTERS`,
+ * `CHAPTER_KEYWORDS`) was deleted in PR A of the scalar-to-ref refactor
+ * (docs/superpowers/plans/2026-07-03-scalar-to-ref-refactor.md). It was
+ * manufacturing wrong `subfaction` tags on generic units (Rhino, Intercessor
+ * Squad → black-templars). Structured chapter data (Wahapedia
+ * datasheet_keywords, BSData catalog membership) is wired in PR B.
  */
 
 // ── Boarding Actions ────────────────────────────────────────────────────────
@@ -18,70 +25,6 @@ export function isBoardingAction(detachment: { type: string }): boolean {
 
 export function isLegends(datasheet: { isLegends?: boolean }): boolean {
   return !!datasheet.isLegends
-}
-
-// ── Chapter Detection ───────────────────────────────────────────────────────
-
-const CHAPTERS = [
-  'Ultramarines',
-  'Space Wolves',
-  'Dark Angels',
-  'Blood Angels',
-  'Black Templars',
-  'Deathwatch',
-  'Iron Hands',
-  'White Scars',
-  'Raven Guard',
-  'Salamanders',
-  'Imperial Fists',
-  'Crimson Fists',
-]
-
-/**
- * Detect chapter restriction from ability/rule text.
- * Returns lowercase chapter name or undefined if generic.
- *
- * Only matches chapter names that appear in a rules context, not flavor text.
- * Looks for patterns like "CHAPTER models from your army" or "CHAPTER units".
- */
-export function detectChapterFromText(text: string): string | undefined {
-  for (const chapter of CHAPTERS) {
-    if (!text.includes(chapter)) continue
-    // Check if the chapter name appears in a rules context, not just flavor text
-    // Rules patterns: "X models from your army", "X units", "X keyword", "X only"
-    const rulesPatterns = [
-      `${chapter} models`,
-      `${chapter} units`,
-      `${chapter} keyword`,
-      `${chapter} only`,
-      `${chapter} Character`,
-      `${chapter} Infantry`,
-      `${chapter} Vehicle`,
-      `is ${chapter}`,
-      `are ${chapter}`,
-    ]
-    if (rulesPatterns.some((p) => text.includes(p))) {
-      return chapter.toLowerCase()
-    }
-  }
-  return undefined
-}
-
-/**
- * Build a map of detachmentId → chapter name by scanning detachment ability text.
- */
-export function buildDetachmentChapterMap(
-  detachments: Array<{ id: string }>,
-  detachmentAbilities: Array<{ detachmentId: string; description: string }>,
-): Map<string, string> {
-  const map = new Map<string, string>()
-  for (const det of detachments) {
-    const abilities = detachmentAbilities.filter((a) => a.detachmentId === det.id)
-    const allText = abilities.map((a) => a.description).join(' ')
-    const chapter = detectChapterFromText(allText)
-    if (chapter) map.set(det.id, chapter)
-  }
-  return map
 }
 
 // ── Scope Detection ─────────────────────────────────────────────────────────
@@ -153,17 +96,6 @@ export function classifyGrants(content: string): GrantClassification {
   return { grantsRerolls, grantsAbility }
 }
 
-// ── PDF Chapter Detection ───────────────────────────────────────────────────
-
-/**
- * Detect chapter restriction from a faction pack section/heading.
- * Used by the PDF parser (faction-pack.ts) to set subfaction on nodes.
- */
-export function detectChapterFromHeading(heading: string, body: string): string | undefined {
-  const text = `${heading} ${body}`
-  return detectChapterFromText(text)
-}
-
 // ── Shared Utilities ────────────────────────────────────────────────────────
 
 /** Truncate text to maxLen chars, appending "..." if truncated. */
@@ -201,20 +133,3 @@ export function stripHtml(text: string): string {
     .replace(/\n{3,}/g, '\n\n')
     .trim()
 }
-
-/** Chapter keywords list for parent resolution in graph traversal. */
-export const CHAPTER_KEYWORDS = [
-  'space wolves',
-  'dark angels',
-  'blood angels',
-  'black templars',
-  'deathwatch',
-  'iron hands',
-  'ultramarines',
-  'salamanders',
-  'raven guard',
-  'imperial fists',
-  'white scars',
-  'crimson fists',
-  'any chapter',
-]

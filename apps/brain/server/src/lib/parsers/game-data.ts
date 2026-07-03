@@ -17,13 +17,7 @@
  */
 import { deriveUnitType } from '../derive-unit-type'
 import { normalizeFactionId } from '../faction-codes'
-import {
-  buildDetachmentChapterMap,
-  isBoardingAction,
-  isLegends,
-  stripHtml,
-  truncate,
-} from '../filters'
+import { isBoardingAction, isLegends, stripHtml, truncate } from '../filters'
 import type { Node, NodeRef, Source } from '../model'
 import { slugify } from '../slugify'
 import { bsdataSubfactionKey } from './bsdata-subfactions'
@@ -1426,11 +1420,10 @@ export function convertGameData(
 
   // ── 5. Detachments → faction/detachment-rule nodes ────────────────────────
 
-  // Build detachment → chapter restriction map
-  // Scan detachment ability text for chapter names to determine which are chapter-locked
-  // Build chapter lock map from shared filter module
-  const detChapterMap = buildDetachmentChapterMap(filteredDetachments, filteredDetAbilities)
-
+  // Chapter membership is no longer inferred from detachment ability text.
+  // Structured chapter data (Wahapedia datasheet_keywords, BSData catalog
+  // membership) will be wired in PR B of the scalar-to-ref refactor plan
+  // (docs/superpowers/plans/2026-07-03-scalar-to-ref-refactor.md).
   const seenDetIds = new Set<string>()
   for (const det of filteredDetachments) {
     let detNodeId = `det:${normalizeFactionId(det.factionId)}:${slugify(det.name)}`
@@ -1457,20 +1450,16 @@ export function convertGameData(
       category: 'detachment-rule',
       title: det.name,
       content,
-      summary: `${det.name} detachment for ${normalizeFactionId(det.factionId)}${detChapterMap.has(det.id) ? ` [${detChapterMap.get(det.id)} only]` : ' [any chapter]'}. ${detAbilities[0]?.name ?? ''}`,
+      summary: `${det.name} detachment for ${normalizeFactionId(det.factionId)}. ${detAbilities[0]?.name ?? ''}`,
       factionId: normalizeFactionId(det.factionId),
-      subfaction: detChapterMap.has(det.id) ? detChapterMap.get(det.id)!.toLowerCase() : undefined,
+      // subfaction inference from ability text removed in PR A of scalar-to-ref
+      // refactor. Structured chapter data lands in PR B.
       detachmentId: detNodeId,
       edition: '10th',
       sources: [source],
       refs: [],
       version: 1,
-      keywords: [
-        ...extractTerms(content),
-        ...(detChapterMap.has(det.id)
-          ? [detChapterMap.get(det.id)!.toLowerCase()]
-          : ['any chapter']),
-      ],
+      keywords: [...extractTerms(content)],
     })
 
     // Detachment → faction parent ref
@@ -1488,9 +1477,8 @@ export function convertGameData(
       const daNodeId = `det:${normalizeFactionId(det.factionId)}:${slugify(det.name)}:${slugify(da.name)}`
 
       const cleanDaDesc = stripHtml(da.description)
-      const daSubfaction = detChapterMap.has(det.id)
-        ? detChapterMap.get(det.id)!.toLowerCase()
-        : undefined
+      // subfaction inference from ability text removed in PR A of scalar-to-ref
+      // refactor. Structured chapter data lands in PR B.
 
       nodes.push({
         id: daNodeId,
@@ -1500,7 +1488,6 @@ export function convertGameData(
         content: cleanDaDesc,
         summary: `${da.name} — detachment ability for ${det.name}. ${truncate(cleanDaDesc, 100)}`,
         factionId: normalizeFactionId(det.factionId),
-        subfaction: daSubfaction,
         detachmentId: detNodeId,
         edition: '10th',
         sources: [source],
@@ -1524,10 +1511,8 @@ export function convertGameData(
       const stratNodeId = `det:${normalizeFactionId(det.factionId)}:${slugify(det.name)}:${slugify(strat.name)}`
 
       const cleanStratDesc = stripHtml(strat.description)
-      // Inherit subfaction from parent detachment (chapter lock propagates to stratagems)
-      const stratSubfaction = detChapterMap.has(det.id)
-        ? detChapterMap.get(det.id)!.toLowerCase()
-        : undefined
+      // subfaction inheritance from parent-detachment chapter lock removed
+      // in PR A of scalar-to-ref refactor. Structured chapter data lands in PR B.
 
       // Try to extract WHEN/TARGET/EFFECT blocks from Wahapedia's description.
       // Wahapedia ships them as <b>WHEN:</b> in HTML, which stripHtml() reduces
@@ -1553,7 +1538,6 @@ export function convertGameData(
         content: `**Type:** ${strat.type}\n**CP:** ${strat.cpCost}\n**Turn:** ${strat.turn}\n**Phase:** ${strat.phase}\n\n${cleanStratDesc}`,
         summary: `${strat.name} (${strat.cpCost}CP, ${strat.phase}) — ${truncate(cleanStratDesc, 100)}`,
         factionId: normalizeFactionId(det.factionId),
-        subfaction: stratSubfaction,
         detachmentId: detNodeId,
         edition: '10th',
         phase: mapPhase(strat.phase),
@@ -1589,9 +1573,8 @@ export function convertGameData(
       const enhNodeId = `det:${normalizeFactionId(det.factionId)}:${slugify(det.name)}:${slugify(enh.name)}`
 
       const cleanEnhDesc = stripHtml(enh.description)
-      const enhSubfaction = detChapterMap.has(det.id)
-        ? detChapterMap.get(det.id)!.toLowerCase()
-        : undefined
+      // subfaction inheritance from parent-detachment chapter lock removed
+      // in PR A of scalar-to-ref refactor. Structured chapter data lands in PR B.
 
       const enhCostNumber = Number.parseInt(enh.cost ?? '', 10)
       const enhAttachesTo = detectEnhancementAttachesTo(cleanEnhDesc)
@@ -1604,7 +1587,6 @@ export function convertGameData(
         content: `**Cost:** ${enh.cost}\n\n${cleanEnhDesc}`,
         summary: `${enh.name} (${enh.cost}pts) — ${truncate(cleanEnhDesc, 100)}`,
         factionId: normalizeFactionId(det.factionId),
-        subfaction: enhSubfaction,
         detachmentId: detNodeId,
         edition: '10th',
         ...(Number.isFinite(enhCostNumber) ? { cost: enhCostNumber } : {}),

@@ -37,7 +37,7 @@
 import type { PackExtract } from '@tabletop-tools/game-content/src/adapters/faction-pack/parser'
 
 import { normalizeFactionId } from '../faction-codes'
-import { detectChapterFromText, truncate } from '../filters'
+import { truncate } from '../filters'
 import type { GamePhase, Node, NodeRef, Source } from '../model'
 import { slugify } from '../slugify'
 import { detectEnhancementAttachesTo } from './game-data'
@@ -343,16 +343,16 @@ export function convertPackExtractToNodes(
   for (const det of extract.detachments) {
     const detSlug = slugify(det.name)
     const detBaseId = `det:${factionSlug}:${detSlug}`
-    const detachmentChapter = detectChapterFromText(
-      `${det.name} ${det.flavor ?? ''} ${det.detachmentRule?.body ?? ''}`,
-    )
+    // Chapter membership no longer inferred from detachment flavor/rule text.
+    // Structured chapter data (Wahapedia datasheet_keywords, BSData catalog)
+    // will be wired in PR B of the scalar-to-ref refactor plan
+    // (docs/superpowers/plans/2026-07-03-scalar-to-ref-refactor.md).
     const detBody = [det.flavor, det.detachmentRule?.body].filter(Boolean).join('\n\n').trim()
 
     const detFields: Partial<Node> = {
       title: det.name,
       content: detBody || det.name,
       summary: truncate(detBody.split(/[.!?]\s/)[0] ?? det.name, 150),
-      subfaction: detachmentChapter,
       keywords: extractKeywords(det.name, detBody),
     }
     if (mfmLookup) {
@@ -412,7 +412,6 @@ export function convertPackExtractToNodes(
           det.detachmentRule.body.split(/[.!?]\s/)[0] ?? det.detachmentRule.name,
           150,
         ),
-        subfaction: detachmentChapter,
         keywords: extractKeywords(det.detachmentRule.name, det.detachmentRule.body),
       }
       if (isEleventh) {
@@ -477,7 +476,6 @@ export function convertPackExtractToNodes(
         title: extra.name,
         content: extra.body,
         summary: truncate(extra.body.split(/[.!?]\s/)[0] ?? extra.name, 150),
-        subfaction: detachmentChapter,
         keywords: extractKeywords(extra.name, extra.body),
       }
       if (isEleventh) {
@@ -543,7 +541,6 @@ export function convertPackExtractToNodes(
         title: enh.name,
         content: enh.body,
         summary: truncate(enh.body.split(/[.!?]\s/)[0] ?? enh.name, 150),
-        subfaction: detachmentChapter,
         keywords: extractKeywords(enh.name, enh.body),
         ...(typeof enh.points === 'number' ? { cost: enh.points } : {}),
         ...(attachesTo ? { attachesTo } : {}),
@@ -609,7 +606,6 @@ export function convertPackExtractToNodes(
         title,
         content,
         summary: truncate(content.split(/[.!?]\s/)[0] ?? title, 150),
-        subfaction: detachmentChapter,
         keywords: extractKeywords(title, content),
         ...(phase ? { phase } : {}),
         ...(typeof strat.cpCost === 'number' ? { cpCost: strat.cpCost } : {}),
@@ -706,12 +702,14 @@ export function convertPackExtractToNodes(
   const emitDatasheet = (ds: PackExtract['datasheets'][number], isLegends: boolean) => {
     const dsSlug = slugify(ds.name)
     const content = buildDatasheetContent(ds)
-    const subfaction = detectChapterFromText(`${ds.name} ${content}`)
+    // Chapter membership no longer inferred from datasheet name/body text.
+    // Structured chapter data (Wahapedia datasheet_keywords, BSData catalog)
+    // will be wired in PR B of the scalar-to-ref refactor plan
+    // (docs/superpowers/plans/2026-07-03-scalar-to-ref-refactor.md).
     const dsFields: Partial<Node> = {
       title: ds.name,
       content,
       summary: truncate(content.split(/[.!?]\s/)[0] ?? ds.name, 150),
-      subfaction,
       keywords: extractKeywords(ds.name, content),
       ...(ds.stats && (ds.stats.M || ds.stats.T)
         ? {
