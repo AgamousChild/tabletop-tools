@@ -39,24 +39,39 @@ export function resolveEdition(
 }
 
 /**
+ * Categories that are inherently edition-agnostic — the entity exists across
+ * every edition and should not be filtered out when the caller picks a specific
+ * edition. Faction records are the canonical example: an Orks faction is the
+ * same identity in 10e and 11e, so the Factions browse layer must remain
+ * populated regardless of `?edition=`.
+ *
+ * Only add a category here when the entity itself is truly edition-invariant.
+ * Datasheets, abilities, stratagems, enhancements, detachments, missions,
+ * core rules, and terrain all vary by edition and MUST stay filtered.
+ */
+export const EDITION_AGNOSTIC_CATEGORIES = new Set<string>(['faction'])
+
+/**
  * Predicate that returns true when a node's edition matches the requested
- * filter. `any` is always true. Nodes without an edition tag are treated as
- * 11th per Rule 5 (matches PR #54's content-ingestor default).
+ * filter. `any` is always true. Nodes in an edition-agnostic category (e.g.
+ * `faction`) always match — they represent identities that span every edition.
+ * Nodes without an edition tag are treated as 11th per Rule 5 (matches PR #54's
+ * content-ingestor default).
  */
 export function nodeMatchesEdition(
-  node: { edition?: string | undefined },
+  node: { edition?: string | undefined; category?: string | undefined },
   edition: EditionFilter,
 ): boolean {
   if (edition === 'any') return true
+  if (node.category && EDITION_AGNOSTIC_CATEGORIES.has(node.category)) return true
   const nodeEdition = node.edition ?? '11th'
   return nodeEdition === edition
 }
 
 /** Filter an array of nodes (or node-like records) by edition. */
-export function filterByEdition<T extends { edition?: string | undefined }>(
-  nodes: T[],
-  edition: EditionFilter,
-): T[] {
+export function filterByEdition<
+  T extends { edition?: string | undefined; category?: string | undefined },
+>(nodes: T[], edition: EditionFilter): T[] {
   if (edition === 'any') return nodes
   return nodes.filter((n) => nodeMatchesEdition(n, edition))
 }

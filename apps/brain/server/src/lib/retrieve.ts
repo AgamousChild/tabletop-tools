@@ -521,8 +521,12 @@ function applyEditionFilter(
 } {
   if (edition === 'any') return bundle
   return {
-    results: bundle.results.filter((r) => nodeMatchesEdition({ edition: r.edition }, edition)),
-    connected: bundle.connected.filter((r) => nodeMatchesEdition({ edition: r.edition }, edition)),
+    results: bundle.results.filter((r) =>
+      nodeMatchesEdition({ edition: r.edition, category: r.category }, edition),
+    ),
+    connected: bundle.connected.filter((r) =>
+      nodeMatchesEdition({ edition: r.edition, category: r.category }, edition),
+    ),
     records: bundle.records?.filter((rec) => nodeMatchesEdition(rec.primaryNode, edition)),
   }
 }

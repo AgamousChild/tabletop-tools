@@ -204,22 +204,19 @@ describe('GET /browse/layers — sidebar counts share the edition filter (Bug 2)
     expect(sidebar.edition).toBe('11th')
   })
 
-  it('counts drop non-matching edition nodes across every category', async () => {
+  it('counts drop non-matching edition nodes across edition-varying categories', async () => {
+    // Datasheets vary by edition — a 10e datasheet must drop under ?edition=11th.
+    // Faction records (see the dedicated block below) are edition-agnostic and
+    // survive the filter, so this test uses datasheets to prove the drop path.
     const nodes = [
       baseNode({
-        id: 'faction-root:space-marines',
-        layer: 'faction',
-        category: 'faction',
-        title: 'Space Marines',
-        factionId: 'space-marines',
+        id: 'ds:a',
+        title: 'A',
         edition: '11th',
       }),
       baseNode({
-        id: 'faction-root:legacy',
-        layer: 'faction',
-        category: 'faction',
-        title: 'Legacy',
-        factionId: 'legacy',
+        id: 'ds:b',
+        title: 'B',
         edition: '10th',
         sources: [{ type: 'wahapedia', title: 'Wahapedia', retrievedAt: '2026-01-01' }],
       }),
@@ -229,9 +226,9 @@ describe('GET /browse/layers — sidebar counts share the edition filter (Bug 2)
     const res = await app.request('/browse/layers?edition=11th', {}, env)
     expect(res.status).toBe(200)
     const json = (await res.json()) as { layers: Array<{ id: string; count: number }> }
-    const factions = json.layers.find((l) => l.id === 'factions')
-    expect(factions).toBeDefined()
-    expect(factions!.count).toBe(1)
+    const units = json.layers.find((l) => l.id === 'units')
+    expect(units).toBeDefined()
+    expect(units!.count).toBe(1)
   })
 
   it('edition=any (default when env unset) keeps the pre-PR-E total', async () => {
@@ -254,5 +251,107 @@ describe('GET /browse/layers — sidebar counts share the edition filter (Bug 2)
     const units = json.layers.find((l) => l.id === 'units')
     expect(units!.count).toBe(2)
     expect(json.edition).toBe('any')
+  })
+})
+
+describe('Factions are edition-agnostic — never dropped by ?edition= filter', () => {
+  beforeEach(() => {
+    resetManifestCache()
+    resetWorkerCaches()
+  })
+
+  const factionNodes = (): Node[] => {
+    const ids = [
+      'space-marines',
+      'orks',
+      'aeldari',
+      'chaos-daemons',
+      'chaos-space-marines',
+      'death-guard',
+      'thousand-sons',
+      'world-eaters',
+      'emperors-children',
+      'necrons',
+      'tyranids',
+      'genestealer-cults',
+      'tau-empire',
+      'imperial-guard',
+      'imperial-knights',
+      'chaos-knights',
+      'grey-knights',
+      'adeptus-custodes',
+      'adeptus-mechanicus',
+      'adeptus-sororitas',
+      'agents-of-the-imperium',
+      'leagues-of-votann',
+      'blood-angels',
+      'dark-angels',
+      'space-wolves',
+      'deathwatch',
+      'black-templars',
+      'iron-hands',
+      'ultramarines',
+      'salamanders',
+    ]
+    // Emulate the current build output: faction nodes carry `edition: '10th'`.
+    // The category-based bypass in nodeMatchesEdition must let them through
+    // regardless of the requested edition.
+    return ids.map((fid) =>
+      baseNode({
+        id: `faction-root:${fid}`,
+        layer: 'faction',
+        category: 'faction',
+        title: fid.replace(/-/g, ' ').toUpperCase(),
+        factionId: fid,
+        edition: '10th',
+      }),
+    )
+  }
+
+  it('/browse/layers?edition=11th includes the factions layer with all 30 entries', async () => {
+    const env = makeEnv(factionNodes())
+
+    const res = await app.request('/browse/layers?edition=11th', {}, env)
+    expect(res.status).toBe(200)
+    const json = (await res.json()) as {
+      layers: Array<{ id: string; count: number }>
+      edition: string
+    }
+    const factions = json.layers.find((l) => l.id === 'factions')
+    expect(factions).toBeDefined()
+    expect(factions!.count).toBe(30)
+    expect(json.edition).toBe('11th')
+  })
+
+  it('/browse/nodes?layer=faction&edition=11th returns all 30 faction records', async () => {
+    const env = makeEnv(factionNodes())
+
+    const res = await app.request('/browse/nodes?layer=faction&edition=11th', {}, env)
+    expect(res.status).toBe(200)
+    const json = (await res.json()) as { nodes: Node[]; total: number }
+    expect(json.total).toBe(30)
+  })
+
+  it('/browse/nodes?layer=faction&edition=10th ALSO returns all 30 faction records', async () => {
+    // Even the legacy 10e view must retain the faction browse layer — the
+    // faction identity is invariant across editions.
+    const env = makeEnv(factionNodes())
+
+    const res = await app.request('/browse/nodes?layer=faction&edition=10th', {}, env)
+    expect(res.status).toBe(200)
+    const json = (await res.json()) as { nodes: Node[]; total: number }
+    expect(json.total).toBe(30)
+  })
+
+  it('faction nodes with no edition tag also survive an 11e filter (data-fix path)', async () => {
+    // Once build-graph stops stamping factions, the emitted nodes have
+    // `edition: undefined`. The category bypass keeps them visible.
+    const nodes = factionNodes().map((n) => ({ ...n, edition: undefined }))
+    const env = makeEnv(nodes)
+
+    const res = await app.request('/browse/nodes?layer=faction&edition=11th', {}, env)
+    expect(res.status).toBe(200)
+    const json = (await res.json()) as { nodes: Node[]; total: number }
+    expect(json.total).toBe(30)
   })
 })
