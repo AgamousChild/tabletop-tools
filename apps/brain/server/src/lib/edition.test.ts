@@ -90,6 +90,23 @@ describe('nodeMatchesEdition', () => {
     expect(nodeMatchesEdition({ edition: '11th' }, 'any')).toBe(true)
     expect(nodeMatchesEdition({}, 'any')).toBe(true)
   })
+
+  it('edition-agnostic categories always match — faction identity spans editions', () => {
+    // A faction node (Orks, Space Marines, etc.) exists across every edition.
+    // Filtering it out because it lacks — or carries a stale — edition tag
+    // erases the Factions browse layer whenever the user picks an edition.
+    expect(nodeMatchesEdition({ category: 'faction' }, '11th')).toBe(true)
+    expect(nodeMatchesEdition({ category: 'faction' }, '10th')).toBe(true)
+    expect(nodeMatchesEdition({ category: 'faction' }, '9th')).toBe(true)
+    expect(nodeMatchesEdition({ category: 'faction', edition: '10th' }, '11th')).toBe(true)
+    expect(nodeMatchesEdition({ category: 'faction', edition: '11th' }, '10th')).toBe(true)
+  })
+
+  it('non-agnostic categories still respect the edition filter', () => {
+    expect(nodeMatchesEdition({ category: 'datasheet', edition: '10th' }, '11th')).toBe(false)
+    expect(nodeMatchesEdition({ category: 'stratagem', edition: '10th' }, '11th')).toBe(false)
+    expect(nodeMatchesEdition({ category: 'detachment', edition: '10th' }, '11th')).toBe(false)
+  })
 })
 
 describe('filterByEdition', () => {

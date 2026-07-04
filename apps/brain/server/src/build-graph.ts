@@ -21,6 +21,7 @@ import {
   buildFactionNodes,
 } from './lib/combo-detection'
 import { duplicateEleventh, rekeyByEleventhSurfaceId } from './lib/duplicate-eleventh'
+import { EDITION_AGNOSTIC_CATEGORIES } from './lib/edition'
 import { extractStructuredFields } from './lib/extract-fields'
 import { loadFactionCodes, normalizeFactionId } from './lib/faction-codes'
 import { massage } from './lib/massage'
@@ -961,11 +962,22 @@ async function main() {
   // ── 9. Edition stamping ────────────────────────────────────────────────────
   // 10th edition launched 2024-06-01. Community nodes (YouTube, etc.) with
   // source dates before that are 9th edition. Everything else is 10th.
+  //
+  // Edition-agnostic categories (currently just `faction`) are intentionally
+  // skipped: an Orks faction identity spans every edition, so stamping it as
+  // 10e would erase the Factions browse layer whenever the user filters to
+  // 11e (30 faction nodes → 0 visible). See `EDITION_AGNOSTIC_CATEGORIES` in
+  // `lib/edition.ts` — the retrieval helper also bypasses these categories.
   const TENTH_LAUNCH = '2024-06-01'
   let stamped10th = 0,
-    stamped9th = 0
+    stamped9th = 0,
+    skippedAgnostic = 0
   for (const node of allNodes) {
     if (node.edition) continue // already set (e.g., 11th edition nodes)
+    if (EDITION_AGNOSTIC_CATEGORIES.has(node.category)) {
+      skippedAgnostic++
+      continue
+    }
 
     if (node.layer === 'community') {
       // Use the earliest source date to determine edition
@@ -986,7 +998,9 @@ async function main() {
       stamped10th++
     }
   }
-  console.log(`\n9. Edition: ${stamped10th} nodes → 10th, ${stamped9th} nodes → 9th`)
+  console.log(
+    `\n9. Edition: ${stamped10th} nodes → 10th, ${stamped9th} nodes → 9th, ${skippedAgnostic} edition-agnostic nodes left unset`,
+  )
 
   // (11th Edition detachments already added at step 6c)
   console.log(`   ${eleventhResult.nodes.length} nodes, ${eleventhResult.refs.length} refs`)
