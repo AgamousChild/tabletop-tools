@@ -44,11 +44,29 @@ const CORE_ABILITY_PREFIXES = [
   'deadly demise',
   'fights first',
   'firing deck',
+  'leader',
+  'feel no pain',
+  'hover',
 ]
 
 function isCoreAbility(kw: string): boolean {
   const lower = kw.toLowerCase()
   return CORE_ABILITY_PREFIXES.some((p) => lower.startsWith(p))
+}
+
+/**
+ * True if this ability's title matches a core / USR keyword. Used to skip
+ * emitting an expanded ability panel for a USR — the pill is already carried
+ * via coreAbilities. Wahapedia flattens per-datasheet ability rows, so every
+ * character with LEADER has a "Leader" ability node containing the full
+ * generic Leader rule body (~3kb). Rendering that inline blows out the card.
+ */
+function isUsrAbility(name: string): boolean {
+  const stripped = name
+    .toLowerCase()
+    .replace(/\s*\d+\+?\s*$/, '')
+    .trim()
+  return CORE_ABILITY_PREFIXES.some((p) => stripped === p || stripped.startsWith(p + ' '))
 }
 
 /** Internal/meta keywords that are never shown in the keyword bar. */
@@ -273,18 +291,30 @@ export function buildDatasheetLayout({ datasheet, weapons, abilities }: UnitPart
 
   const { display: displayKws, faction: factionKws, coreAbilities } = filterKeywords(datasheet)
 
+  // Merge the datasheet's structured `coreAbilities` field into the pill list.
+  // filterKeywords derives from `datasheet.keywords` — but Wahapedia often
+  // omits LEADER / GRENADES / etc. from the keyword bag while still tagging
+  // the structured field. Without this merge, USRs disappear from the card
+  // entirely once the expanded ability panel is filtered out.
+  const structuredCorePills = (datasheet.coreAbilities ?? []).map((ca) =>
+    ca.value ? `${ca.keyword} ${ca.value}` : ca.keyword,
+  )
+  const mergedCorePills = Array.from(new Set([...coreAbilities, ...structuredCorePills]))
+
   const abilityColNodes: CardLayoutNode[] = [
     { type: 'heading', text: 'ABILITIES', accentColor: 'green' },
   ]
 
-  if (coreAbilities.length > 0) {
+  if (mergedCorePills.length > 0) {
     abilityColNodes.push({
       type: 'pill-list',
-      pills: coreAbilities.map((ca) => ({ text: ca, variant: 'green' as const })),
+      pills: mergedCorePills.map((ca) => ({ text: ca, variant: 'green' as const })),
     })
   }
 
   for (const ab of abilities) {
+    // Skip USR / core abilities — already surfaced as coreAbility pills above.
+    if (isUsrAbility(ab.title)) continue
     abilityColNodes.push({
       type: 'ability',
       name: ab.title,
