@@ -3,13 +3,36 @@ import { useEffect, useMemo, useState } from 'react'
 import { PracticeExamLoader } from '@/components/PracticeExam'
 import { ResultsList } from '@/components/ResultsList'
 import { SearchBar } from '@/components/SearchBar'
+import { SlideIndex } from '@/components/SlideIndex'
 import { SlideViewer } from '@/components/SlideViewer'
 import { buildSearchEngine } from '@/lib/search'
-import type { SearchResult, SlidesManifest } from '@/types'
+import type { SearchResult, Slide, SlidesManifest } from '@/types'
 
 const BASE = import.meta.env.BASE_URL.replace(/\/$/, '')
 
 type Tab = 'search' | 'exam'
+
+/**
+ * When a user clicks a slide in the deck-browse (not from a search), synthesize
+ * a SearchResult so SlideViewer can render it. The matchedBlock is a full-slide
+ * bounding box so nothing gets falsely highlighted.
+ */
+function selectSlideAsSearchResult(
+  deckName: string,
+  s: Slide,
+  setSelected: (r: SearchResult) => void,
+) {
+  setSelected({
+    deckId: s.deckId,
+    deckName,
+    slideNum: s.slideNum,
+    slideTitle: s.title,
+    imageUrl: s.imageUrl,
+    matchedBlock: { text: '', leftPct: 0, topPct: 0, widthPct: 0, heightPct: 0 },
+    snippet: s.body,
+    score: 1,
+  })
+}
 
 export function App() {
   const [tab, setTab] = useState<Tab>('search')
@@ -68,7 +91,26 @@ export function App() {
           {!loadError && manifest && (
             <>
               <SearchBar value={query} onChange={setQuery} resultCount={results.length} />
-              <ResultsList results={results} onSelect={setSelected} query={query} />
+              {query.trim().length > 0 ? (
+                <ResultsList results={results} onSelect={setSelected} query={query} />
+              ) : (
+                <div className="decks-browse">
+                  {manifest.decks.map((deck) => (
+                    <section key={deck.id} className="deck-section">
+                      <h2 className="deck-heading">
+                        {deck.name} <span className="deck-count">{deck.slides.length} slides</span>
+                      </h2>
+                      <SlideIndex
+                        deckName={deck.name}
+                        slides={deck.slides}
+                        onSelect={(s: Slide) =>
+                          selectSlideAsSearchResult(deck.name, s, setSelected)
+                        }
+                      />
+                    </section>
+                  ))}
+                </div>
+              )}
               {selected && <SlideViewer result={selected} onClose={() => setSelected(null)} />}
             </>
           )}

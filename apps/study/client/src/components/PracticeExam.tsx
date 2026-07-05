@@ -29,6 +29,13 @@ export function QuestionCard({ q, total, onViewSource }: QuestionCardProps) {
         </span>
       </div>
       <p className="pe-question">{q.text}</p>
+      {q.questionImage && (
+        <img
+          className="pe-question-image"
+          src={`${import.meta.env.BASE_URL.replace(/\/$/, '')}/${q.questionImage.replace(/^\//, '')}`}
+          alt={`Question ${q.n} figure`}
+        />
+      )}
       <ul className="pe-options">
         {q.options.map((opt) => {
           const isSelected = q.selected === opt.letter
@@ -210,6 +217,7 @@ export function PracticeExamView({ exam }: Props) {
         <SourcePopup
           source={current.source}
           questionNum={current.n}
+          deckSlideCount={exam.deckSlideCounts?.[current.source.deckId] ?? 999}
           onClose={() => setPopupOpen(false)}
         />
       )}

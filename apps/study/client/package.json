@@ -8,6 +8,7 @@
     "build": "tsc -b && vite build",
     "preview": "vite preview",
     "slides:build": "tsx scripts/build-slides.mjs",
+    "slides:ocr": "tsx scripts/ocr-slides.mjs",
     "test": "vitest run --passWithNoTests"
   },
   "dependencies": {
@@ -20,6 +21,8 @@
     "@types/react-dom": "^18.3.1",
     "@vitejs/plugin-react": "^4.3.1",
     "pdf-to-img": "^6.0.0",
+    "sharp": "^0.34.5",
+    "tesseract.js": "^5.1.0",
     "tsx": "^4.0.0",
     "typescript": "^5.4.0",
     "vite": "^5.4.10",
