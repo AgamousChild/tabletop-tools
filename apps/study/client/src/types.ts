@@ -52,7 +52,9 @@ export interface PracticeExamHighlight {
 export interface PracticeExamSource {
   deckId: string
   slideNum: number
-  highlight: PracticeExamHighlight
+  /** Present only when the quote could be matched to a real positions block.
+   * When absent, the popup shows the slide + quote without an overlay box. */
+  highlight?: PracticeExamHighlight
   quote: string
 }
 
