@@ -36,3 +36,59 @@ export interface SearchResult {
   snippet: string
   score: number
 }
+
+export interface PracticeExamOption {
+  letter: string
+  text: string
+}
+
+export interface PracticeExamHighlight {
+  leftPct: number
+  topPct: number
+  widthPct: number
+  heightPct: number
+}
+
+export interface PracticeExamSource {
+  deckId: string
+  slideNum: number
+  highlight: PracticeExamHighlight
+  quote: string
+}
+
+export interface PracticeExamExternal {
+  url: string
+  quote?: string
+}
+
+export interface PracticeExamQuestion {
+  n: number
+  text: string
+  options: PracticeExamOption[]
+  selected: string | null
+  correctAnswer: string | null
+  correct: boolean | null
+  source: PracticeExamSource | null
+  external: PracticeExamExternal | null
+}
+
+export interface PracticeExam {
+  gradedAt: string
+  corpusSlideCount: number
+  questions: PracticeExamQuestion[]
+  stats?: {
+    inCorpus: number
+    external: number
+    ungraded: number
+    correct: number
+    wrong: number
+  }
+}
+
+export type GradeStamp = 'correct' | 'wrong' | 'ungraded'
+
+export function gradeStamp(q: PracticeExamQuestion): GradeStamp {
+  if (q.correct === true) return 'correct'
+  if (q.correct === false) return 'wrong'
+  return 'ungraded'
+}

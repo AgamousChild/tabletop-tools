@@ -186,3 +186,337 @@ mark {
   pointer-events: none;
   border-radius: 3px;
 }
+
+.source-quote {
+  padding: 0.75rem 1rem;
+  border-bottom: 1px solid #e5e7eb;
+  color: #4b5563;
+  font-size: 0.9rem;
+  font-style: italic;
+  line-height: 1.4;
+  background: #fafafa;
+}
+
+/* -- Tabs -- */
+
+.app-tabs {
+  display: flex;
+  gap: 0.25rem;
+  background: #e5e7eb;
+  padding: 0.25rem;
+  border-radius: 0.5rem;
+}
+
+.app-tab {
+  background: transparent;
+  border: none;
+  padding: 0.375rem 0.875rem;
+  border-radius: 0.375rem;
+  font-size: 0.875rem;
+  font-weight: 500;
+  color: #4b5563;
+  cursor: pointer;
+}
+
+.app-tab-active {
+  background: white;
+  color: #111827;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.06);
+}
+
+/* -- Practice exam -- */
+
+.pe-view {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.pe-card {
+  background: white;
+  border: 1px solid #e5e7eb;
+  border-radius: 0.5rem;
+  padding: 1.25rem;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
+}
+
+.pe-card-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 1rem;
+}
+
+.pe-badge {
+  display: inline-block;
+  font-size: 1.125rem;
+  font-weight: 700;
+  color: #111827;
+  background: #f3f4f6;
+  padding: 0.25rem 0.75rem;
+  border-radius: 0.375rem;
+}
+
+.pe-badge-total {
+  font-weight: 400;
+  color: #6b7280;
+  font-size: 0.875rem;
+  margin-left: 0.25rem;
+}
+
+.pe-stamp {
+  display: inline-block;
+  padding: 0.25rem 0.75rem;
+  border-radius: 0.375rem;
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+}
+
+.pe-stamp-correct {
+  background: #d1fae5;
+  color: #065f46;
+  border: 1px solid #10b981;
+}
+
+.pe-stamp-wrong {
+  background: #fee2e2;
+  color: #991b1b;
+  border: 1px solid #ef4444;
+}
+
+.pe-stamp-ungraded {
+  background: #f3f4f6;
+  color: #4b5563;
+  border: 1px solid #9ca3af;
+}
+
+.pe-question {
+  font-size: 1.0625rem;
+  color: #111827;
+  margin: 0 0 1rem;
+  line-height: 1.5;
+}
+
+.pe-options {
+  list-style: none;
+  padding: 0;
+  margin: 0 0 1rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.pe-option {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.625rem;
+  padding: 0.625rem 0.75rem;
+  border: 1px solid #e5e7eb;
+  border-radius: 0.375rem;
+  background: #fafafa;
+  color: #374151;
+  font-size: 0.9375rem;
+}
+
+.pe-option-selected {
+  border-color: #6b7280;
+  background: #f3f4f6;
+  color: #111827;
+  font-weight: 600;
+}
+
+.pe-option-correct-answer {
+  border-color: #10b981;
+  background: #ecfdf5;
+}
+
+.pe-radio {
+  flex-shrink: 0;
+  width: 1rem;
+  height: 1rem;
+  border-radius: 50%;
+  border: 2px solid #9ca3af;
+  margin-top: 2px;
+  background: white;
+}
+
+.pe-radio-filled {
+  border-color: #374151;
+  background: radial-gradient(circle, #374151 0%, #374151 45%, white 55%);
+}
+
+.pe-option-letter {
+  font-weight: 600;
+  min-width: 1.25rem;
+}
+
+.pe-option-text {
+  flex: 1;
+}
+
+.pe-correct-note {
+  padding: 0.5rem 0.75rem;
+  background: #ecfdf5;
+  border: 1px solid #10b981;
+  border-radius: 0.375rem;
+  color: #065f46;
+  font-weight: 600;
+  font-size: 0.875rem;
+  margin-bottom: 1rem;
+}
+
+.pe-view-source {
+  background: #111827;
+  color: white;
+  border: none;
+  padding: 0.5rem 1rem;
+  border-radius: 0.375rem;
+  cursor: pointer;
+  font-size: 0.875rem;
+  font-weight: 500;
+}
+
+.pe-view-source:hover {
+  background: #374151;
+}
+
+.pe-nav {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 0 0.25rem;
+}
+
+.pe-nav-btn {
+  background: white;
+  border: 1px solid #d1d5db;
+  padding: 0.5rem 1rem;
+  border-radius: 0.375rem;
+  cursor: pointer;
+  font-size: 0.9375rem;
+  color: #111827;
+  font-weight: 500;
+}
+
+.pe-nav-btn:hover:not(:disabled) {
+  background: #f3f4f6;
+}
+
+.pe-nav-btn:disabled {
+  color: #9ca3af;
+  cursor: not-allowed;
+  background: #f9fafb;
+}
+
+.pe-nav-count {
+  color: #6b7280;
+  font-size: 0.875rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.pe-jump {
+  text-align: center;
+  padding-top: 0.5rem;
+}
+
+.pe-link {
+  background: none;
+  border: none;
+  color: #2563eb;
+  cursor: pointer;
+  font-size: 0.875rem;
+  padding: 0.25rem 0.5rem;
+  text-decoration: underline;
+}
+
+.pe-link:hover {
+  color: #1d4ed8;
+}
+
+/* -- Missing answers page -- */
+
+.pe-missing {
+  background: white;
+  border: 1px solid #e5e7eb;
+  border-radius: 0.5rem;
+  padding: 1.25rem;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
+}
+
+.pe-missing-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 0.5rem;
+}
+
+.pe-missing-head h2 {
+  font-size: 1.25rem;
+  margin: 0;
+  color: #111827;
+}
+
+.pe-missing-sub {
+  color: #6b7280;
+  font-size: 0.875rem;
+  margin: 0 0 1rem;
+}
+
+.pe-missing-empty {
+  color: #6b7280;
+  font-style: italic;
+  padding: 1rem 0;
+}
+
+.pe-missing-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.pe-missing-item {
+  padding: 0.75rem;
+  border: 1px solid #e5e7eb;
+  border-radius: 0.375rem;
+  background: #fafafa;
+}
+
+.pe-missing-item-head {
+  display: flex;
+  gap: 0.5rem;
+  align-items: baseline;
+  margin-bottom: 0.375rem;
+}
+
+.pe-missing-badge {
+  font-weight: 700;
+  color: #111827;
+  font-size: 0.875rem;
+  flex-shrink: 0;
+}
+
+.pe-missing-text {
+  color: #374151;
+  font-size: 0.9375rem;
+  line-height: 1.4;
+}
+
+.pe-missing-meta {
+  font-size: 0.8125rem;
+  color: #4b5563;
+  padding-left: 1.75rem;
+}
+
+.pe-missing-meta a {
+  color: #2563eb;
+}
+
+.pe-missing-note {
+  color: #92400e;
+  font-style: italic;
+}
