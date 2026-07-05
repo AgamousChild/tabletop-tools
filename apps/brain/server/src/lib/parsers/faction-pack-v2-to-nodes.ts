@@ -8,14 +8,20 @@
  * When `edition === '10th'` (or unset) — full-emission mode, preserved from
  * v1 so the 10e Wahapedia + faction-pack graph continues to merge as before:
  *
- *   - Detachment (own node):     `det:${factionSlug}:${slug(detname)}`
- *   - Detachment rule / extra:   `det:${factionSlug}:${slug(detname)}:${slug(rulename)}`  (category=faction-ability)
- *   - Enhancement:               `det:${factionSlug}:${slug(detname)}:${slug(enhname)}`   (category=enhancement)
- *   - Stratagem:                 `det:${factionSlug}:${slug(detname)}:${slug(stratname)}` (category=stratagem)
- *   - Army rule (no detachment): `faction:${factionSlug}:${slug(name)}`                   (category=army-rule)
- *   - Datasheet:                 `datasheet:${factionSlug}:${slug(name)}`                 (category=datasheet)
- *   - Errata:                    `errata:${factionSlug}:p${page}:${slug(target)}`         (layer=errata)
- *   - FAQ:                       `faq:${factionSlug}:${slug(question.substring(0, 60))}`  (layer=errata)
+ * IDs use the **canonical** faction slug — the `factionSlug` parameter is
+ * routed through `normalizeFactionId()` to fold apostrophe drops and
+ * legacy rewrites (`emperor-s-children` → `emperors-children`,
+ * `adeptus-titanicus` → `titan-legions`) so ids never leak the raw
+ * filename slug into the graph:
+ *
+ *   - Detachment (own node):     `det:${canonical}:${slug(detname)}`
+ *   - Detachment rule / extra:   `det:${canonical}:${slug(detname)}:${slug(rulename)}`  (category=faction-ability)
+ *   - Enhancement:               `det:${canonical}:${slug(detname)}:${slug(enhname)}`   (category=enhancement)
+ *   - Stratagem:                 `det:${canonical}:${slug(detname)}:${slug(stratname)}` (category=stratagem)
+ *   - Army rule (no detachment): `faction:${canonical}:${slug(name)}`                   (category=army-rule)
+ *   - Datasheet:                 `datasheet:${canonical}:${slug(name)}`                 (category=datasheet)
+ *   - Errata:                    `errata:${canonical}:p${page}:${slug(target)}`         (layer=errata)
+ *   - FAQ:                       `faq:${canonical}:${slug(question.substring(0, 60))}`  (layer=errata)
  *
  * When `edition === '11th'` — split-emission mode. v2 is the 11e source of
  * truth, but Wahapedia's 10e→11e duplicate (`duplicate-eleventh.ts`) is what
@@ -302,6 +308,14 @@ export function convertPackExtractToNodes(
     retrievedAt,
   }
   const canonicalFactionId = normalizeFactionId(factionSlug)
+  // Use the canonical faction slug in every emitted ID prefix so the
+  // apostrophe-drop (`emperor-s-children` → `emperors-children`) and
+  // legacy-rewrite (`adeptus-titanicus` → `titan-legions`) mappings don't
+  // leak the raw filename slug into node IDs. The Wahapedia + BSData +
+  // MFM + brain-internal keyspaces all use `factionSlug === canonical`,
+  // so IDs like `det:emperors-children:*` and `datasheet:titan-legions:*`
+  // land in the same shard as their sibling nodes from other sources.
+  const idFactionSlug = canonicalFactionId
 
   /**
    * Build a fully-formed Node from a partial + a category + an ID base.
@@ -342,7 +356,7 @@ export function convertPackExtractToNodes(
   // entity), the fallback is emitted so the content still lands.
   for (const det of extract.detachments) {
     const detSlug = slugify(det.name)
-    const detBaseId = `det:${factionSlug}:${detSlug}`
+    const detBaseId = `det:${idFactionSlug}:${detSlug}`
     // Chapter membership no longer inferred from detachment flavor/rule text.
     // Structured chapter data (Wahapedia datasheet_keywords, BSData catalog)
     // will be wired in PR B of the scalar-to-ref refactor plan
@@ -671,7 +685,7 @@ export function convertPackExtractToNodes(
   // this shape. In 11e mode we still emit fresh nodes, but at `11e:*`-
   // prefixed IDs so they don't collide with any 10e slug node.
   for (const rule of extract.armyRules) {
-    const base = `${idPrefix}faction:${factionSlug}:${slugify(rule.name)}`
+    const base = `${idPrefix}faction:${idFactionSlug}:${slugify(rule.name)}`
     const id = makeId(base)
     nodes.push({
       id,
@@ -749,8 +763,8 @@ export function convertPackExtractToNodes(
       const extraRefs: NodeRef[] = []
       for (const target of ds.leads) {
         extraRefs.push({
-          sourceId: `11e:datasheet:${factionSlug}:${dsSlug}`,
-          targetId: `11e:datasheet:${factionSlug}:${slugify(target)}`,
+          sourceId: `11e:datasheet:${idFactionSlug}:${dsSlug}`,
+          targetId: `11e:datasheet:${idFactionSlug}:${slugify(target)}`,
           rel: 'can_lead',
           context: `${ds.name} can lead ${target}.`,
           bidirectional: true,
@@ -758,15 +772,15 @@ export function convertPackExtractToNodes(
       }
       for (const target of ds.supports) {
         extraRefs.push({
-          sourceId: `11e:datasheet:${factionSlug}:${dsSlug}`,
-          targetId: `11e:datasheet:${factionSlug}:${slugify(target)}`,
+          sourceId: `11e:datasheet:${idFactionSlug}:${dsSlug}`,
+          targetId: `11e:datasheet:${idFactionSlug}:${slugify(target)}`,
           rel: 'can_support',
           context: `${ds.name} can support ${target}.`,
           bidirectional: true,
         })
       }
       const dsFallbackNode = buildFallbackNode(
-        `datasheet:${factionSlug}:${dsSlug}`,
+        `datasheet:${idFactionSlug}:${dsSlug}`,
         'unit',
         'datasheet',
         dsFields,
@@ -803,7 +817,7 @@ export function convertPackExtractToNodes(
           summary: truncate(ab.body.split(/[.!?]\s/)[0] ?? ab.name, 150),
           keywords: extractKeywords(ab.name, ab.body),
         }
-        const abBaseId = `ability:${factionSlug}:${dsSlug}:${abSlug}`
+        const abBaseId = `ability:${idFactionSlug}:${dsSlug}:${abSlug}`
         const abFallbackNode = buildFallbackNode(abBaseId, 'unit', 'unit-ability', abFields, {
           datasheetId: dsFallbackNode.id,
         })
@@ -829,10 +843,10 @@ export function convertPackExtractToNodes(
     }
 
     const dsBase = isLegends
-      ? `${idPrefix}datasheet:${factionSlug}:${dsSlug}`
-      : `datasheet:${factionSlug}:${dsSlug}`
+      ? `${idPrefix}datasheet:${idFactionSlug}:${dsSlug}`
+      : `datasheet:${idFactionSlug}:${dsSlug}`
     // 10e mode (or 11e Legends) — emit a full node at the slug id.
-    const effectiveBase = isEleventh ? `${idPrefix}datasheet:${factionSlug}:${dsSlug}` : dsBase
+    const effectiveBase = isEleventh ? `${idPrefix}datasheet:${idFactionSlug}:${dsSlug}` : dsBase
     const dsId = makeId(effectiveBase)
     nodes.push({
       id: dsId,
@@ -855,8 +869,8 @@ export function convertPackExtractToNodes(
       refs.push({
         sourceId: dsId,
         targetId: isEleventh
-          ? `${idPrefix}datasheet:${factionSlug}:${slugify(target)}`
-          : `datasheet:${factionSlug}:${slugify(target)}`,
+          ? `${idPrefix}datasheet:${idFactionSlug}:${slugify(target)}`
+          : `datasheet:${idFactionSlug}:${slugify(target)}`,
         rel: 'can_lead',
         context: `${ds.name} can lead ${target}.`,
         bidirectional: true,
@@ -866,8 +880,8 @@ export function convertPackExtractToNodes(
       refs.push({
         sourceId: dsId,
         targetId: isEleventh
-          ? `${idPrefix}datasheet:${factionSlug}:${slugify(target)}`
-          : `datasheet:${factionSlug}:${slugify(target)}`,
+          ? `${idPrefix}datasheet:${idFactionSlug}:${slugify(target)}`
+          : `datasheet:${idFactionSlug}:${slugify(target)}`,
         rel: 'can_support',
         context: `${ds.name} can support ${target}.`,
         bidirectional: true,
@@ -889,7 +903,7 @@ export function convertPackExtractToNodes(
   for (const er of extract.errata) {
     const page = er.pages[0] ?? 0
     const targetName = er.target.name
-    const idBase = `${idPrefix}errata:${factionSlug}:p${page}:${slugify(targetName)}`
+    const idBase = `${idPrefix}errata:${idFactionSlug}:p${page}:${slugify(targetName)}`
     const id = makeId(idBase)
     const title = targetName
     const sourceWithPage: Source = page > 0 ? { ...source, page } : source
@@ -897,7 +911,7 @@ export function convertPackExtractToNodes(
       id,
       layer: 'errata',
       category: 'commentary',
-      title: `${factionSlug}: ${title}`,
+      title: `${idFactionSlug}: ${title}`,
       content: er.body,
       summary: truncate(er.body, 150),
       factionId: canonicalFactionId,
@@ -911,7 +925,7 @@ export function convertPackExtractToNodes(
     // shape; keep matching so downstream errata-linker keeps finding hits.
     refs.push({
       sourceId: id,
-      targetId: `${idPrefix}det:${factionSlug}:*:${slugify(targetName)}`,
+      targetId: `${idPrefix}det:${idFactionSlug}:*:${slugify(targetName)}`,
       rel: 'supersedes',
       context: `Faction pack errata for ${title}. ${truncate(er.body, 100)}`,
     })
@@ -920,7 +934,7 @@ export function convertPackExtractToNodes(
   // ── FAQs ─────────────────────────────────────────────────────────────────
   // Non-overlapping shape — same treatment as errata.
   for (const faq of extract.faqs) {
-    const idBase = `${idPrefix}faq:${factionSlug}:${slugify(faq.question.substring(0, 60))}`
+    const idBase = `${idPrefix}faq:${idFactionSlug}:${slugify(faq.question.substring(0, 60))}`
     const id = makeId(idBase)
     const title = faq.question.length > 80 ? faq.question.substring(0, 77) + '...' : faq.question
     const content = `Q: ${faq.question}\n\nA: ${faq.answer}`

@@ -16,7 +16,7 @@
  * - DatasheetStratagems/Enhancements/DetachmentAbilities → modifies refs
  */
 import { deriveUnitType } from '../derive-unit-type'
-import { normalizeFactionId } from '../faction-codes'
+import { DROPPED_FACTION_IDS, normalizeFactionId } from '../faction-codes'
 import { isBoardingAction, isLegends, stripHtml, truncate } from '../filters'
 import type { Node, NodeRef, Source } from '../model'
 import { slugify } from '../slugify'
@@ -505,22 +505,36 @@ export function convertGameData(
 
   // Filter out Legends — discontinued units not legal in matched play
   const legendsIds = new Set(input.datasheets.filter(isLegends).map((d) => d.id))
-  const filteredDatasheets = input.datasheets.filter((d) => !isLegends(d))
-  const filteredWargear = input.datasheetWargear.filter((w) => !legendsIds.has(w.datasheetId))
-  const filteredModels = input.datasheetModels.filter((m) => !legendsIds.has(m.datasheetId))
-  const filteredUnitAbilities = input.unitAbilities.filter((a) => !legendsIds.has(a.datasheetId))
-  const filteredUnitKeywords = input.unitKeywords.filter((k) => !legendsIds.has(k.datasheetId))
-  const filteredCompositions = input.unitCompositions.filter((c) => !legendsIds.has(c.datasheetId))
-  const filteredCosts = input.unitCosts.filter((c) => !legendsIds.has(c.datasheetId))
-  const filteredWargearOptions = input.wargearOptions.filter((w) => !legendsIds.has(w.datasheetId))
+  // Filter out datasheets whose faction lives in DROPPED_FACTION_IDS
+  // (`unaligned-forces`, `unbound-adversaries`). Micah's directive
+  // 2026-07-05: these are not real factions worth carrying in the brain
+  // — Wahapedia files a handful of scenery/objective sheets under them.
+  // Skipping at ingestion removes both the datasheets and their downstream
+  // weapons/abilities from every faction shard.
+  const droppedFactionDatasheetIds = new Set(
+    input.datasheets
+      .filter((d) => DROPPED_FACTION_IDS.has(normalizeFactionId(d.factionId)))
+      .map((d) => d.id),
+  )
+  const skipIds = new Set([...legendsIds, ...droppedFactionDatasheetIds])
+  const filteredDatasheets = input.datasheets.filter(
+    (d) => !isLegends(d) && !droppedFactionDatasheetIds.has(d.id),
+  )
+  // Same skip set covers legends + dropped-faction datasheets so downstream
+  // wargear/abilities/etc. don't lag behind their parent's skip decision.
+  const filteredWargear = input.datasheetWargear.filter((w) => !skipIds.has(w.datasheetId))
+  const filteredModels = input.datasheetModels.filter((m) => !skipIds.has(m.datasheetId))
+  const filteredUnitAbilities = input.unitAbilities.filter((a) => !skipIds.has(a.datasheetId))
+  const filteredUnitKeywords = input.unitKeywords.filter((k) => !skipIds.has(k.datasheetId))
+  const filteredCompositions = input.unitCompositions.filter((c) => !skipIds.has(c.datasheetId))
+  const filteredCosts = input.unitCosts.filter((c) => !skipIds.has(c.datasheetId))
+  const filteredWargearOptions = input.wargearOptions.filter((w) => !skipIds.has(w.datasheetId))
   const filteredLeaderAttachments = input.leaderAttachments.filter(
-    (l) => !legendsIds.has(l.leaderId) && !legendsIds.has(l.attachedId),
+    (l) => !skipIds.has(l.leaderId) && !skipIds.has(l.attachedId),
   )
-  const filteredDsStratagems = input.datasheetStratagems.filter(
-    (j) => !legendsIds.has(j.datasheetId),
-  )
+  const filteredDsStratagems = input.datasheetStratagems.filter((j) => !skipIds.has(j.datasheetId))
   const filteredDsEnhancements = input.datasheetEnhancements.filter(
-    (j) => !legendsIds.has(j.datasheetId),
+    (j) => !skipIds.has(j.datasheetId),
   )
   // datasheetDetachmentAbilities filtered but not yet consumed — reserved for future detachment↔unit linking
 
@@ -999,6 +1013,13 @@ export function convertGameData(
   // ── 2. Weapons → unit/weapon nodes ────────────────────────────────────────
   const seenWeaponIds = new Set<string>()
   for (const wg of filteredWargear) {
+    // Skip weapons whose parent datasheet isn't in the current graph. These
+    // are orphan rows from a Wahapedia snapshot whose datasheet was removed
+    // upstream; without a parent they'd get emitted as `factionId=undefined`
+    // and land in `faction-unknown.json` (per apps/brain/server/src/lib/sync.ts
+    // partitionNodes). Drop them at the source instead — a weapon with no
+    // datasheet has no home in the brain graph.
+    if (!dsFactionMap.has(wg.datasheetId)) continue
     // Differentiate melee/ranged profiles with the same name on the same datasheet
     const parentSurfaceId = surfaceIdOf(wg.datasheetId)
     let weaponNodeId = `weapon:${parentSurfaceId}:${slugify(wg.name)}`
@@ -1173,6 +1194,10 @@ export function convertGameData(
   for (const ab of filteredUnitAbilities) {
     // Skip if this is a faction ability (army rule) — handled above with refs
     if (factionAbilityNames.has(ab.name.toLowerCase())) continue
+    // Skip abilities whose parent datasheet isn't in the current graph. Same
+    // orphan case as the weapon loop above — without a datasheet parent the
+    // ability inherits `factionId=undefined` and drops into `faction-unknown`.
+    if (!dsFactionMap.has(ab.datasheetId)) continue
     const abilityParentSurfaceId = surfaceIdOf(ab.datasheetId)
     const baseId = `ability:${abilityParentSurfaceId}:${slugify(ab.name)}`
     const count = seenAbilityIds.get(baseId) ?? 0
@@ -1291,6 +1316,10 @@ export function convertGameData(
   const factionAbilities = input.abilities.filter((ab) => {
     const fSlug = normalizeFactionId(ab.factionId)
     if (!fSlug) return false
+    // Drop abilities filed under retired factions \u2014 otherwise a Wahapedia
+    // "Unaligned Forces" faction ability lands as `faction:unaligned-forces:*`
+    // and trips the merge factionId gate. See DROPPED_FACTION_IDS.
+    if (DROPPED_FACTION_IDS.has(fSlug)) return false
     if (/^designer['\u2019]?s?\s*note$/i.test(ab.name)) return false
     return true
   })

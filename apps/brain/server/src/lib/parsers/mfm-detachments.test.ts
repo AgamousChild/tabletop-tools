@@ -12,12 +12,15 @@ beforeAll(() => {
     new Map<string, string>([
       ['space-marines', 'space-marines'],
       ['chaos-knights', 'chaos-knights'],
-      ['tau-empire', 't-au-empire'],
-      ['t-au-empire', 't-au-empire'],
+      // MFM upstream calls the faction `tau-empire` (canonical, no
+      // apostrophe-as-hyphen); the alias catches the older `t-au-empire`
+      // spelling that gw-sync ships in filenames.
+      ['tau-empire', 'tau-empire'],
+      ['t-au-empire', 'tau-empire'],
       ['tyranids', 'tyranids'],
       ['aeldari', 'aeldari'],
     ]),
-    new Set(['space-marines', 'chaos-knights', 't-au-empire', 'tyranids', 'aeldari']),
+    new Set(['space-marines', 'chaos-knights', 'tau-empire', 'tyranids', 'aeldari']),
   )
 })
 afterAll(() => resetFactionCodes())
@@ -139,10 +142,10 @@ describe('parseMfmDetachments', () => {
     })
   })
 
-  it('normalizes faction slugs through normalizeFactionId (tau-empire → t-au-empire)', () => {
+  it('normalizes faction slugs through normalizeFactionId (t-au-empire → tau-empire)', () => {
     const sample = JSON.stringify([
       {
-        factionSlug: 'tau-empire',
+        factionSlug: 't-au-empire',
         name: 'Mont’ka',
         dp: 2,
         objective: 'Killing Blow doctrine.',
@@ -152,10 +155,10 @@ describe('parseMfmDetachments', () => {
     const result = parseMfmDetachments(sample, RETRIEVED_AT, PUBLISHED_AT)
     const det = result.nodes.find((n) => n.category === 'detachment')
     expect(det).toBeDefined()
-    expect(det!.factionId).toBe('t-au-empire')
-    expect(det!.id.startsWith('mfm:det:t-au-empire:')).toBe(true)
+    expect(det!.factionId).toBe('tau-empire')
+    expect(det!.id.startsWith('mfm:det:tau-empire:')).toBe(true)
     const enh = result.nodes.find((n) => n.category === 'enhancement')
-    expect(enh!.factionId).toBe('t-au-empire')
+    expect(enh!.factionId).toBe('tau-empire')
     expect(enh!.detachmentId).toBe(det!.id)
   })
 

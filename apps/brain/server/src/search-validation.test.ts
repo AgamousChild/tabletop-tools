@@ -87,7 +87,8 @@ describe.skipIf(!RUN_INTEGRATION)('search: unit name → #1 result is the unit d
     'adepta-sororitas',
     'adeptus-custodes',
     'adeptus-mechanicus',
-    'adeptus-titanicus',
+    // adeptus-titanicus merged into titan-legions (2026-07-05 cleanup)
+    'titan-legions',
     'aeldari',
     'astra-militarum',
     'chaos-daemons',
@@ -108,7 +109,6 @@ describe.skipIf(!RUN_INTEGRATION)('search: unit name → #1 result is the unit d
     'thousand-sons',
     'tyranids',
     'world-eaters',
-    'unaligned',
     // Short codes (BSData parser)
     'AC',
     'AdM',
@@ -133,7 +133,6 @@ describe.skipIf(!RUN_INTEGRATION)('search: unit name → #1 result is the unit d
     'TL',
     'TS',
     'TYR',
-    'UN',
     'WE',
   ]
 
@@ -233,7 +232,7 @@ describe.skipIf(!RUN_INTEGRATION)('ask: "[faction] all units" returns complete r
     'adepta-sororitas': 'Adepta Sororitas',
     'adeptus-custodes': 'Adeptus Custodes',
     'adeptus-mechanicus': 'Adeptus Mechanicus',
-    'adeptus-titanicus': 'Adeptus Titanicus',
+    'titan-legions': 'Titan Legions',
     aeldari: 'Aeldari',
     'astra-militarum': 'Astra Militarum',
     'chaos-daemons': 'Chaos Daemons',
@@ -254,7 +253,6 @@ describe.skipIf(!RUN_INTEGRATION)('ask: "[faction] all units" returns complete r
     'thousand-sons': 'Thousand Sons',
     tyranids: 'Tyranids',
     'world-eaters': 'World Eaters',
-    unaligned: 'Unaligned',
   }
 
   for (const [factionId, label] of Object.entries(factionLabels)) {

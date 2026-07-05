@@ -3,7 +3,13 @@ import type { Db } from '@tabletop-tools/db'
 import { createDbFromClient } from '@tabletop-tools/db'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 
-import { loadFactionCodes, normalizeFactionId, resetFactionCodes } from './faction-codes'
+import {
+  DROPPED_FACTION_IDS,
+  getCanonicalFactionIds,
+  loadFactionCodes,
+  normalizeFactionId,
+  resetFactionCodes,
+} from './faction-codes'
 
 const CREATE_TABLES = `
 CREATE TABLE dim_faction (
@@ -28,6 +34,12 @@ const FACTIONS = [
   ['chaos-knights', 'Chaos Knights', 'chaos'],
   ['emperors-children', "Emperor's Children", 'chaos'],
   ['tau-empire', "T'au Empire", 'xenos'],
+  // Legacy row that LEGACY_FACTION_REWRITES retires on load. Kept in the
+  // seed so we exercise the "DB still has the old row" case explicitly.
+  ['adeptus-titanicus', 'Adeptus Titanicus', 'imperium'],
+  // Retired factions the code drops from the canonical set (they exist in
+  // prod dim_faction snapshots that pre-date this PR).
+  ['unaligned-forces', 'Unaligned Forces', 'imperium'],
 ]
 
 const ALIASES = [
@@ -120,5 +132,32 @@ describe('normalizeFactionId', () => {
     expect(normalizeFactionId('emperor-s-children')).toBe('emperors-children')
     // The existing t-au-empire alias should still work — pin its behaviour.
     expect(normalizeFactionId('t-au-empire')).toBe('tau-empire')
+  })
+
+  // Faction-model cleanup 2026-07-05: Adeptus Titanicus IS Titan Legions.
+  // The DB may still carry the retired slug; the code retires it at
+  // loadFactionCodes time and normalizeFactionId maps both the retired
+  // slug and Wahapedia's short code straight onto `titan-legions`.
+  it('merges adeptus-titanicus into titan-legions', () => {
+    expect(normalizeFactionId('adeptus-titanicus')).toBe('titan-legions')
+    expect(normalizeFactionId('titan-legions')).toBe('titan-legions')
+    // The retired slug is no longer in the canonical set — the merge
+    // factionId gate depends on this so shadow nodes with the old slug
+    // get caught + rewritten.
+    expect(getCanonicalFactionIds().has('adeptus-titanicus')).toBe(false)
+    expect(getCanonicalFactionIds().has('titan-legions')).toBe(true)
+  })
+
+  it('drops retired factions from the canonical set', () => {
+    // The DB row survives — but the canonical set does not include it, so
+    // any node that lands on this slug fails the merge factionId gate.
+    for (const dropped of DROPPED_FACTION_IDS) {
+      expect(getCanonicalFactionIds().has(dropped)).toBe(false)
+    }
+    // Wahapedia numeric datasheets whose factionId is "Unaligned Forces"
+    // slugify to `unaligned-forces` — that path still returns the value
+    // (so build-graph can spot it), but the gate rejects it as orphan.
+    expect(normalizeFactionId('unaligned-forces')).toBe('unaligned-forces')
+    expect(getCanonicalFactionIds().has('unaligned-forces')).toBe(false)
   })
 })
