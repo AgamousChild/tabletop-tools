@@ -63,14 +63,32 @@ const FACTION_MAP: Record<string, { slug: string; name: string; allegiance: stri
   CTL: { slug: 'chaos-titan-legions', name: 'Chaos Titan Legions', allegiance: 'chaos' },
 }
 
-// BCP subfactions that map to a parent faction
+// BCP subfactions that map to a parent faction.
+//
+// SUBFACTIONS is the single source of truth for Space Marines chapters:
+// every entry lands as BOTH a `dim_subfaction` row (join to the shared SM
+// pool at retrieval time) AND a `dim_faction` row (so chapter-specific
+// datasheets like Marneus Calgar route to `factionId=ultramarines` instead
+// of generic `space-marines`). Chapters access the shared SM pool via the
+// `dim_subfaction` parent walk in `expandFactionForRetrieval`.
+//
+// Adding a new chapter is one line here — the loop below inserts into
+// dim_faction automatically. Per Micah's 2026-07-05 directive: match GW's
+// official 40K app, which lists all 11 First Founding chapters as their own
+// codex-supplement factions.
 const SUBFACTIONS: Array<{ slug: string; name: string; factionSlug: string }> = [
-  // SM chapters
+  // SM chapters — First Founding.
   { slug: 'blood-angels', name: 'Blood Angels', factionSlug: 'space-marines' },
   { slug: 'dark-angels', name: 'Dark Angels', factionSlug: 'space-marines' },
   { slug: 'space-wolves', name: 'Space Wolves', factionSlug: 'space-marines' },
   { slug: 'black-templars', name: 'Black Templars', factionSlug: 'space-marines' },
   { slug: 'deathwatch', name: 'Deathwatch', factionSlug: 'space-marines' },
+  { slug: 'imperial-fists', name: 'Imperial Fists', factionSlug: 'space-marines' },
+  { slug: 'iron-hands', name: 'Iron Hands', factionSlug: 'space-marines' },
+  { slug: 'raven-guard', name: 'Raven Guard', factionSlug: 'space-marines' },
+  { slug: 'salamanders', name: 'Salamanders', factionSlug: 'space-marines' },
+  { slug: 'ultramarines', name: 'Ultramarines', factionSlug: 'space-marines' },
+  { slug: 'white-scars', name: 'White Scars', factionSlug: 'space-marines' },
 ]
 
 // BCP_FACTION_TO_SLUG and SUBFACTION_PARENT removed — now in dim_faction_alias table.
@@ -225,9 +243,25 @@ async function main() {
     sql: 'INSERT OR IGNORE INTO dim_faction VALUES (?, ?, ?)',
     args: [f.slug, f.name, f.allegiance],
   }))
-  await client.batch(factionBatch)
+  // Every subfaction is ALSO its own dim_faction row — chapter-specific
+  // datasheets route to `factionId=<chapter-slug>` (e.g. Marneus Calgar →
+  // ultramarines) while still joining to the shared SM pool via
+  // dim_subfaction. Allegiance is inherited from the parent (all SM chapters
+  // are imperium today; if a subfaction ever lives under a chaos/xenos
+  // parent, this lookup carries it through).
+  const subfactionFactionRows = SUBFACTIONS.map((sf) => {
+    const parent = Object.values(FACTION_MAP).find((f) => f.slug === sf.factionSlug)
+    const allegiance = parent?.allegiance ?? 'imperium'
+    return {
+      sql: 'INSERT OR IGNORE INTO dim_faction VALUES (?, ?, ?)',
+      args: [sf.slug, sf.name, allegiance],
+    }
+  })
+  await client.batch([...factionBatch, ...subfactionFactionRows])
   console.log(
-    `  ${factionBatch.length} factions (${RETIRED_FACTION_SLUGS.length} retired rows dropped)`,
+    `  ${factionBatch.length + subfactionFactionRows.length} factions ` +
+      `(${factionBatch.length} top-level + ${subfactionFactionRows.length} chapter/subfaction; ` +
+      `${RETIRED_FACTION_SLUGS.length} retired rows dropped)`,
   )
 
   // Seed dim_subfaction

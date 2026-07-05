@@ -57,8 +57,23 @@ export const DROPPED_FACTION_IDS: ReadonlySet<string> = new Set([
  * appear in the local `dim_faction` snapshot yet. Added to the canonical
  * set returned by `getCanonicalFactionIds()` so the merge factionId-gate
  * doesn't fail while the DB catches up.
+ *
+ * The First Founding SM chapters (imperial-fists, iron-hands, raven-guard,
+ * salamanders, ultramarines, white-scars) are added here per Micah's
+ * 2026-07-05 directive matching GW's official 40K app. `seed-dimensions.ts`
+ * carries the same set — this pin lets chapter-specific characters route to
+ * `factionId=<chapter-slug>` from a build that hasn't re-run the Turso seed.
+ * Remove once dim_faction/dim_subfaction ships the six new rows in prod.
  */
-const CANONICAL_ADDITIONS: ReadonlySet<string> = new Set(['titan-legions'])
+const CANONICAL_ADDITIONS: ReadonlySet<string> = new Set([
+  'titan-legions',
+  'imperial-fists',
+  'iron-hands',
+  'raven-guard',
+  'salamanders',
+  'ultramarines',
+  'white-scars',
+])
 
 /** alias/code → canonical slug (e.g. 'SM' → 'space-marines', 'Adepta Sororitas' → 'adepta-sororitas') */
 let cachedCodeToSlug: Map<string, string> | null = null

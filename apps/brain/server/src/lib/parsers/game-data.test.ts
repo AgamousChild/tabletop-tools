@@ -43,14 +43,20 @@ describe('convertGameData', () => {
       ['space-marines', 'Space Marines', 'imperium'],
       ['adeptus-titanicus', 'Adeptus Titanicus', 'imperium'],
       // Chapter factions — PR B of the scalar-to-ref refactor moves
-      // chapter-specific units to their chapter's own factionId. Only the five
-      // canonical chapter factions are seeded here; other chapters
-      // (Ultramarines, Salamanders, etc.) stay generic SM by design.
+      // chapter-specific units to their chapter's own factionId. All eleven
+      // First Founding chapters are seeded here per Micah's 2026-07-05
+      // directive matching GW's official 40K app.
       ['blood-angels', 'Blood Angels', 'imperium'],
       ['dark-angels', 'Dark Angels', 'imperium'],
       ['space-wolves', 'Space Wolves', 'imperium'],
       ['black-templars', 'Black Templars', 'imperium'],
       ['deathwatch', 'Deathwatch', 'imperium'],
+      ['imperial-fists', 'Imperial Fists', 'imperium'],
+      ['iron-hands', 'Iron Hands', 'imperium'],
+      ['raven-guard', 'Raven Guard', 'imperium'],
+      ['salamanders', 'Salamanders', 'imperium'],
+      ['ultramarines', 'Ultramarines', 'imperium'],
+      ['white-scars', 'White Scars', 'imperium'],
       ['tyranids', 'Tyranids', 'chaos'],
     ]
     for (const [id, name, alleg] of factions) {
@@ -886,35 +892,92 @@ describe('convertGameData', () => {
       // chapter identity now lives on `factionId` alone.
     })
 
-    it('non-chapter chapter keywords (Ultramarines, Salamanders, etc.) stay space-marines', () => {
-      // Ultramarines / Salamanders / etc. aren't canonical factions in
-      // dim_faction — only the five canonical chapters (BA/DA/SW/BT/DW) are.
-      // Everything else stays generic SM with no chapter tag.
-      const input = makeInput({
-        datasheets: [
-          {
-            id: 'adrax-1',
-            name: 'Adrax Agatone',
-            factionId: 'SM',
-            role: 'Character',
-            legend: '',
-            transport: '',
-            loadout: '',
-            damagedW: '',
-            damagedDescription: '',
-          },
-        ],
-        unitKeywords: [
-          { id: 'k1', datasheetId: 'adrax-1', keyword: 'Salamanders', isFactionKeyword: true },
-        ],
-      })
-      const { nodes } = convertGameData(input, '2026-04-08')
-      const ds = nodes.find((n) => n.id === 'adrax-1')
-      expect(ds).toBeDefined()
-      expect(ds!.factionId).toBe('space-marines')
-      // Node.subfaction was deleted in PR D of the scalar-to-ref refactor —
-      // chapter identity now lives on `factionId` alone.
-    })
+    it.each([
+      ['Ultramarines', 'ultramarines', 'Marneus Calgar'],
+      ['Salamanders', 'salamanders', 'Adrax Agatone'],
+      ['Imperial Fists', 'imperial-fists', 'Tor Garadon'],
+      ['Iron Hands', 'iron-hands', 'Feirros'],
+      ['Raven Guard', 'raven-guard', 'Kayvaan Shrike'],
+      ['White Scars', 'white-scars', 'Kor’sarro Khan'],
+    ])(
+      'Wahapedia %s keyword now routes chapter-specific characters to factionId=%s',
+      (keyword, expectedSlug, characterName) => {
+        // Per Micah's 2026-07-05 directive, the six First Founding chapters
+        // that were previously "non-canonical" (Ultramarines, Salamanders,
+        // Imperial Fists, Iron Hands, Raven Guard, White Scars) are now
+        // canonical factions matching GW's official 40K app. A chapter
+        // keyword on a Space Marines datasheet now rewrites factionId.
+        const input = makeInput({
+          datasheets: [
+            {
+              id: 'chapter-char-1',
+              name: characterName,
+              factionId: 'SM',
+              role: 'Character',
+              legend: '',
+              transport: '',
+              loadout: '',
+              damagedW: '',
+              damagedDescription: '',
+            },
+          ],
+          unitKeywords: [
+            {
+              id: 'k1',
+              datasheetId: 'chapter-char-1',
+              keyword,
+              isFactionKeyword: true,
+            },
+          ],
+        })
+        const { nodes } = convertGameData(input, '2026-04-08')
+        const ds = nodes.find((n) => n.id === 'chapter-char-1')
+        expect(ds).toBeDefined()
+        expect(ds!.factionId).toBe(expectedSlug)
+      },
+    )
+
+    it.each([
+      ['imperial-fists', 'Fortress Captain'],
+      ['iron-hands', 'Iron Priest'],
+      ['raven-guard', 'Shadow Captain'],
+      ['salamanders', 'Vulkan He’stan'],
+      ['ultramarines', 'Chapter Master Calgar'],
+      ['white-scars', 'Stormseer Khan'],
+    ])(
+      'BSData single-catalog membership rewrites factionId=%s when Wahapedia is silent',
+      (chapterSlug, characterName) => {
+        // For a chapter-locked character with no Wahapedia keyword, BSData's
+        // catalog membership is the discriminator. All six First Founding
+        // chapters flow through the same code path as BA/DA/SW/BT/DW.
+        const input = makeInput({
+          datasheets: [
+            {
+              id: 'bsdata-only-1',
+              name: characterName,
+              factionId: 'SM',
+              role: 'Character',
+              legend: '',
+              transport: '',
+              loadout: '',
+              damagedW: '',
+              damagedDescription: '',
+            },
+          ],
+        })
+        const key = `space-marines::${characterName
+          .toLowerCase()
+          .replace(/[‘’′`]/g, "'")
+          .replace(/[^\w\s'-]/g, '')
+          .replace(/\s+/g, ' ')
+          .trim()}`
+        const bsdataSubfactionByKey = new Map<string, Set<string>>([[key, new Set([chapterSlug])]])
+        const { nodes } = convertGameData(input, '2026-04-08', { bsdataSubfactionByKey })
+        const ds = nodes.find((n) => n.id === 'bsdata-only-1')
+        expect(ds).toBeDefined()
+        expect(ds!.factionId).toBe(chapterSlug)
+      },
+    )
 
     it('non-SM datasheets are unaffected by chapter resolution', () => {
       const input = makeInput({
