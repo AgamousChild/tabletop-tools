@@ -105,7 +105,14 @@ export function PracticeExamView({ exam }: Props) {
   }, [goPrev, goNext, view.kind, popupOpen])
 
   const missingEntries = useMemo(
-    () => questions.filter((q) => q.source === null || q.external !== null),
+    () =>
+      questions.filter(
+        (q) =>
+          // A question is "missing" only if it has no source AND no external answer AND wasn't graded.
+          // Q48 has no source but IS graded (correctAnswer='A', correct=true) — belongs on the
+          // regular exam flow, not on the Missing Answers list.
+          q.source === null && q.external === null && q.correctAnswer === null,
+      ),
     [questions],
   )
 

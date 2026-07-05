@@ -48,7 +48,7 @@ export function SourcePopup({ source, questionNum, onClose }: Props) {
             onLoad={() => setLoaded(true)}
             onError={() => setError(true)}
           />
-          {loaded && (
+          {loaded && source.highlight && (
             <div
               className="highlight"
               style={{
