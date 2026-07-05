@@ -58,12 +58,21 @@ const brainSlugs = new Set(
 )
 
 // ── Brain dim_faction (prod snapshot) ────────────────────────────────────
-// 28-entry set after the 2026-07-05 faction-model cleanup:
-//   - dropped `adeptus-titanicus` (merged into `titan-legions`)
-//   - dropped `unaligned-forces` (not a real faction — scenery/objectives
+// 36-entry set after the 2026-07-05 First Founding chapter promotion:
+//   - added `imperial-fists`, `iron-hands`, `raven-guard`, `salamanders`,
+//     `ultramarines`, `white-scars` — the six First Founding chapters that
+//     already had dim_subfaction rows but weren't yet their own dim_faction
+//     rows. Chapter-specific characters (Marneus Calgar, Vulkan He'stan,
+//     Kayvaan Shrike, etc.) now route to `factionId=<chapter-slug>` and
+//     appear in their own faction shard. Shared SM datasheets stay under
+//     `space-marines` and reach chapter queries via the dim_subfaction
+//     parent walk in `expandFactionForRetrieval`.
+// Previous 28-entry set (2026-07-05 faction-model cleanup) dropped:
+//   - `adeptus-titanicus` (merged into `titan-legions`)
+//   - `unaligned-forces` (not a real faction — scenery/objectives
 //     that Wahapedia files under an umbrella)
-//   - dropped `unbound-adversaries` (Wahapedia-only wrapper faction)
-//   - dropped `unknown` sentinel (weapons whose parent datasheet is gone
+//   - `unbound-adversaries` (Wahapedia-only wrapper faction)
+//   - `unknown` sentinel (weapons whose parent datasheet is gone
 //     are now filtered out at ingestion instead of falling into a shard)
 const dimSlugs = new Set([
   'adepta-sororitas',
@@ -85,16 +94,22 @@ const dimSlugs = new Set([
   'genestealer-cults',
   'grey-knights',
   'imperial-agents',
+  'imperial-fists',
   'imperial-knights',
+  'iron-hands',
   'leagues-of-votann',
   'necrons',
   'orks',
+  'raven-guard',
+  'salamanders',
   'space-marines',
   'space-wolves',
   'tau-empire',
   'thousand-sons',
   'titan-legions',
   'tyranids',
+  'ultramarines',
+  'white-scars',
   'world-eaters',
 ])
 

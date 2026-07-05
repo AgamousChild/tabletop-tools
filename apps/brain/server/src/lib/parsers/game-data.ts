@@ -565,10 +565,12 @@ export function convertGameData(
   // staying a generic `space-marines` datasheet with a `subfaction` tag.
   //
   // Wahapedia's `unit_keywords.keyword` uses the display name; the slug on the
-  // right is the canonical `dim_faction.id`. Only the five chapters that are
-  // canonical factions are included — chapters like Ultramarines / Salamanders /
-  // Imperial Fists remain generic SM (no dim_faction entry yet, so they don't
-  // clear the merge-sources faction-id gate).
+  // right is the canonical `dim_faction.id`. All eleven First Founding chapters
+  // are included per Micah's 2026-07-05 directive matching GW's official 40K
+  // app: chapter-specific characters (Marneus Calgar, Vulkan He'stan, Kayvaan
+  // Shrike, etc.) route to their chapter's factionId, while every shared SM
+  // datasheet stays `space-marines` and reaches chapter queries via the
+  // dim_subfaction join in `expandFactionForRetrieval`.
   //
   // See docs/superpowers/plans/2026-07-03-scalar-to-ref-refactor.md — PR B.
   const CHAPTER_KEYWORD_TO_FACTION: Record<string, string> = {
@@ -577,8 +579,14 @@ export function convertGameData(
     'Space Wolves': 'space-wolves',
     'Black Templars': 'black-templars',
     Deathwatch: 'deathwatch',
+    'Imperial Fists': 'imperial-fists',
+    'Iron Hands': 'iron-hands',
+    'Raven Guard': 'raven-guard',
+    Salamanders: 'salamanders',
+    Ultramarines: 'ultramarines',
+    'White Scars': 'white-scars',
   }
-  // BSData subfaction slug → canonical faction slug. Same five chapters — the
+  // BSData subfaction slug → canonical faction slug. Same eleven chapters — the
   // BSData row already ships lowercase-kebab slugs, so no lookup needed beyond
   // the presence check.
   const CHAPTER_BSDATA_SLUGS = new Set([
@@ -587,6 +595,12 @@ export function convertGameData(
     'space-wolves',
     'black-templars',
     'deathwatch',
+    'imperial-fists',
+    'iron-hands',
+    'raven-guard',
+    'salamanders',
+    'ultramarines',
+    'white-scars',
   ])
 
   // datasheetId → resolved chapter faction slug. When set, the datasheet's
