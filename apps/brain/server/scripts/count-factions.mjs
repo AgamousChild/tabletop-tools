@@ -11,10 +11,21 @@ const slug = (s) =>
     .replace(/^-|-$/g, '')
 
 // ── Wahapedia ────────────────────────────────────────────────────────────
+// Canonicalize slug variants across sources so identical factions match.
+// Same faction, different spelling → collapse to one canonical slug.
+const CANONICAL_ALIAS = {
+  'emperor-s-children': 'emperors-children',
+  't-au-empire': 'tau-empire',
+  // Wahapedia / BSData / FactionPack still name the loyalist Titans by
+  // "Adeptus Titanicus"; brain canonical is `titan-legions` per Micah 2026-07-05.
+  'adeptus-titanicus': 'titan-legions',
+}
+const canonicalize = (s) => CANONICAL_ALIAS[s] ?? s
+
 const wFac = JSON.parse(
   readFileSync('apps/data-import/client/public/wahapedia/factions.json', 'utf8'),
 )
-const wSlugs = new Set(wFac.map((f) => slug(f.name)))
+const wSlugs = new Set(wFac.map((f) => canonicalize(slug(f.name))))
 
 // ── BSData ───────────────────────────────────────────────────────────────
 const bs = JSON.parse(
@@ -23,10 +34,32 @@ const bs = JSON.parse(
 const bsRaw = new Set(bs.map((u) => u.faction).filter(Boolean))
 const bsSlugs = new Set()
 const bsSubgroups = new Set()
+
+// BSData names identical factions differently than the canonical brain slug.
+// Alias here so counts compare apples to apples, per Micah 2026-07-05 —
+// same faction under different names counts as one.
+const BSDATA_TO_CANONICAL = {
+  'Agents of the Imperium': 'imperial-agents',
+  'Titanicus Traitoris': 'chaos-titan-legions',
+  // 'Aeldari - Drukhari' is NOT rolled into aeldari — Drukhari is its own
+  // faction (own codex per GW), even though BSData files it as an Aeldari
+  // sub-catalog.
+}
+const BSDATA_KEEP_AS_OWN_FACTION = new Set(['Aeldari - Drukhari'])
+
 for (const f of bsRaw) {
   if (/library/i.test(f)) continue
+  if (BSDATA_TO_CANONICAL[f]) {
+    bsSlugs.add(BSDATA_TO_CANONICAL[f])
+    continue
+  }
+  if (BSDATA_KEEP_AS_OWN_FACTION.has(f)) {
+    // Drukhari sub-catalog under Aeldari → its own drukhari faction
+    bsSlugs.add('drukhari')
+    continue
+  }
   const parent = f.split(' - ')[0].trim()
-  bsSlugs.add(slug(parent))
+  bsSlugs.add(canonicalize(slug(parent)))
   if (f.includes(' - ')) bsSubgroups.add(f)
 }
 
@@ -47,7 +80,7 @@ const mfmSlugs = new Set(
 const packSlugs = new Set(
   readdirSync('apps/brain/server/.local/faction-pack-extracts')
     .filter((f) => f.endsWith('.json') && f !== 'index.json')
-    .map((f) => f.replace('.json', '')),
+    .map((f) => canonicalize(f.replace('.json', ''))),
 )
 
 // ── Brain built graph ────────────────────────────────────────────────────
