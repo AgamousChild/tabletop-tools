@@ -1,22 +1,22 @@
 /**
  * Generate `chaos-titan-legions` (Titanicus Traitoris) variants from
- * `adeptus-titanicus` nodes.
+ * `titan-legions` nodes.
  *
  * ── The swap rule (from `imperial-armour-titans.md` +
  *    `faction-pack-adeptus-titanicus.md`) ────────────────────────────────
  *
- *   > You can use the Adeptus Titanicus datasheets in this document to
+ *   > You can use the Titan Legions datasheets in this document to
  *   > represent Titanicus Traitoris models if you wish. To do so, on those
  *   > datasheets and on this Army Rules card, replace all instances of the
  *   > Imperium keyword with Chaos, and replace all instances of the
- *   > Adeptus Titanicus Faction keyword with Titanicus Traitoris. For the
+ *   > Titan Legions Faction keyword with Titanicus Traitoris. For the
  *   > purposes of points values, use those published for the equivalent
- *   > Adeptus Titanicus models.
+ *   > Titan Legions models.
  *
  * ── What this module does ─────────────────────────────────────────────────
  *
  * Given the full brain node array, find every `factionId ===
- * 'adeptus-titanicus'` node and clone it under `factionId ===
+ * 'titan-legions'` node and clone it under `factionId ===
  * 'chaos-titan-legions'` with:
  *
  *   - `id` prefixed with `chaos-titan-legions:` (before the source-slug
@@ -25,7 +25,12 @@
  *   - Two text substitutions applied to `title`, `content`, `summary`,
  *     `keywords`, `factionName`, and matched inline strings: `Imperium →
  *     Chaos` and `Adeptus Titanicus → Titanicus Traitoris` (case-sensitive
- *     and case-insensitive variants both handled).
+ *     and case-insensitive variants both handled). Note that the SOURCE
+ *     BODY still uses the phrase "Adeptus Titanicus" as GW's original
+ *     keyword — the swap pattern targets that phrase in the text. The
+ *     brain's canonical faction slug for the loyalist side is
+ *     `titan-legions` (per dim_faction); the phrase "Adeptus Titanicus"
+ *     survives only inside prose that GW wrote.
  *   - `datasheetId` / `detachmentId` retargeted to the chaos variant's own
  *     id so weapon/ability children of a chaos datasheet resolve to that
  *     datasheet, not the loyalist twin.
@@ -50,7 +55,7 @@
  */
 import type { Node, NodeRef } from './model'
 
-const LOYALIST_FACTION_ID = 'adeptus-titanicus'
+const LOYALIST_FACTION_ID = 'titan-legions'
 const CHAOS_FACTION_ID = 'chaos-titan-legions'
 /** Prefix inserted at the front of every emitted chaos id. */
 const CHAOS_ID_PREFIX = 'chaos-titan-legions:'
@@ -95,7 +100,7 @@ function preserveCasing(sample: string, replacement: string): string {
 }
 
 /**
- * Rewrite an `adeptus-titanicus` id into its `chaos-titan-legions` variant.
+ * Rewrite a `titan-legions` id into its `chaos-titan-legions` variant.
  *
  * Strategy: prefix the entire original id with `chaos-titan-legions:`. This
  * is intentionally opaque — the id is a stable key, not a display value,
@@ -113,7 +118,7 @@ function chaosId(loyalistId: string): string {
  *
  * Callers pass the full id-map (loyalist id → chaos id) so ref endpoints
  * that already exist in the map can be translated. External refs
- * (`core:*`, `faction:adeptus-titanicus:*` faction root when it isn't in
+ * (`core:*`, `faction:titan-legions:*` faction root when it isn't in
  * the swap set, etc.) pass through unmodified — those targets are shared
  * cross-faction.
  */
@@ -168,7 +173,7 @@ export interface EmitChaosTitanLegionsResult {
 }
 
 /**
- * Scan `allNodes` + `allRefs` for `factionId === 'adeptus-titanicus'`
+ * Scan `allNodes` + `allRefs` for `factionId === 'titan-legions'`
  * entries and produce their chaos-titan-legions variants.
  *
  * This is a pure function — the input arrays are not mutated. The caller

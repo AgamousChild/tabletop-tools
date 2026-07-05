@@ -305,7 +305,11 @@ async function main() {
   // ingest bridge so if the faction pack goes away, imperial-armour still
   // supplies content.
   const IMPERIAL_ARMOUR_TITANS_FILE = 'imperial-armour-titans.md'
-  const IMPERIAL_ARMOUR_TITANS_FACTION = 'adeptus-titanicus'
+  // Micah's directive 2026-07-05: Adeptus Titanicus IS Titan Legions —
+  // route this and the Adeptus Titanicus faction-pack to `titan-legions`
+  // so both feed a single dim_faction entry (see
+  // apps/brain/server/scripts/count-factions.mjs `dimSlugs`).
+  const IMPERIAL_ARMOUR_TITANS_FACTION = 'titan-legions'
   const imperialArmourTitansPath = join(MD_DIR, IMPERIAL_ARMOUR_TITANS_FILE)
   let imperialArmourTitansNodesAdded = 0
   if (existsSync(imperialArmourTitansPath)) {
@@ -945,7 +949,7 @@ async function main() {
   //  - the swap sees the normalized, dedup'd loyalist set (10e + 11e twins);
   //  - loyalist ability/weapon child nodes are already attached and their
   //    `datasheetId` fields resolve into the swap's id-map;
-  //  - the merge factionId-gate has already validated `adeptus-titanicus`
+  //  - the merge factionId-gate has already validated `titan-legions`
   //    (so we can trust the swap's input set is real, not a shadow slug).
   //
   // The `chaos-titan-legions` id namespace is disjoint from every other

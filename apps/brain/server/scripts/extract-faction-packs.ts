@@ -27,6 +27,28 @@ import {
   parseFactionPackV2,
 } from '@tabletop-tools/game-content/src/adapters/faction-pack/parser'
 
+/**
+ * Rename the raw markdown-filename slug into the canonical faction slug
+ * used by dim_faction / MFM / brain. The upstream gw-sync produces
+ * `faction-pack-emperor-s-children.md` (apostrophe → hyphen); brain-side
+ * writes are keyed by `emperors-children` (apostrophe dropped, letters
+ * joined). Applying the rename here keeps this extractor's outputs and the
+ * downstream brain shards on the same slug.
+ *
+ * See apps/brain/server/src/lib/faction-codes.ts LEGACY_FACTION_REWRITES
+ * for the shared rewrite table — `adeptus-titanicus` → `titan-legions`
+ * lands here through the same code path.
+ */
+const FILENAME_SLUG_REWRITES: Record<string, string> = {
+  'emperor-s-children': 'emperors-children',
+  't-au-empire': 'tau-empire',
+  'adeptus-titanicus': 'titan-legions',
+}
+
+function canonicalizeFactionSlug(rawSlug: string): string {
+  return FILENAME_SLUG_REWRITES[rawSlug] ?? rawSlug
+}
+
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
 
@@ -67,7 +89,8 @@ function discoverPacks(): Array<{ faction: string; markdownPath: string; pdfPath
     .filter((f) => f.startsWith('faction-pack-') && f.endsWith('.md'))
     .sort()
   return files.map((f) => {
-    const faction = f.replace(/^faction-pack-/, '').replace(/\.md$/, '')
+    const rawSlug = f.replace(/^faction-pack-/, '').replace(/\.md$/, '')
+    const faction = canonicalizeFactionSlug(rawSlug)
     return {
       faction,
       markdownPath: path.join(MARKDOWN_DIR, f),

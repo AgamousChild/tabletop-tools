@@ -70,7 +70,7 @@ function makeDatasheet(id: string, title: string, extra: Partial<Node> = {}): No
     id,
     layer: 'unit',
     category: 'datasheet',
-    factionId: 'adeptus-titanicus',
+    factionId: 'titan-legions',
     factionName: 'ADEPTUS TITANICUS',
     title,
     content: `KEYWORDS: Vehicle, Imperium, ${title}\n\nFACTION KEYWORDS: Adeptus Titanicus`,
@@ -86,7 +86,7 @@ function makeDatasheet(id: string, title: string, extra: Partial<Node> = {}): No
 }
 
 describe('emitChaosTitanLegionsVariants', () => {
-  it('emits a chaos variant for every adeptus-titanicus node', () => {
+  it('emits a chaos variant for every titan-legions node', () => {
     const nodes: Node[] = [
       makeDatasheet('datasheet:adeptus-titanicus:warhound-titan', 'WARHOUND TITAN'),
       makeDatasheet('datasheet:adeptus-titanicus:reaver-titan', 'REAVER TITAN'),
@@ -139,7 +139,7 @@ describe('emitChaosTitanLegionsVariants', () => {
         id: 'weapon:datasheet:adeptus-titanicus:warhound-titan:vulcan',
         layer: 'unit',
         category: 'weapon',
-        factionId: 'adeptus-titanicus',
+        factionId: 'titan-legions',
         datasheetId: 'datasheet:adeptus-titanicus:warhound-titan',
         title: 'Vulcan Mega-Bolter',
         content: 'A big gun.',
@@ -164,7 +164,7 @@ describe('emitChaosTitanLegionsVariants', () => {
       id: 'ability:adeptus-titanicus:flank-speed',
       layer: 'unit',
       category: 'unit-ability',
-      factionId: 'adeptus-titanicus',
+      factionId: 'titan-legions',
       datasheetId: 'datasheet:adeptus-titanicus:warhound-titan',
       title: 'Flank Speed',
       content: 'go fast',
@@ -192,7 +192,7 @@ describe('emitChaosTitanLegionsVariants', () => {
     expect(chaosRef.context).toContain('Chaos')
   })
 
-  it('skips nodes whose factionId is not adeptus-titanicus', () => {
+  it('skips nodes whose factionId is not titan-legions', () => {
     const nodes: Node[] = [
       makeDatasheet('datasheet:adeptus-titanicus:warhound-titan', 'WARHOUND TITAN'),
       {
@@ -228,7 +228,7 @@ describe('emitChaosTitanLegionsVariants', () => {
       id: 'datasheet:adeptus-titanicus:warhound-titan',
       layer: 'unit',
       category: 'datasheet',
-      factionId: 'adeptus-titanicus',
+      factionId: 'titan-legions',
       factionName: 'ADEPTUS TITANICUS',
       title: 'WARHOUND TITAN',
       content:

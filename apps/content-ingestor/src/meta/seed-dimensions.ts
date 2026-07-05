@@ -50,9 +50,17 @@ const FACTION_MAP: Record<string, { slug: string; name: string; allegiance: stri
   QT: { slug: 'chaos-knights', name: 'Chaos Knights', allegiance: 'chaos' },
   SM: { slug: 'space-marines', name: 'Space Marines (Astartes)', allegiance: 'imperium' },
   TAU: { slug: 'tau-empire', name: "T'au Empire", allegiance: 'xenos' },
+  // Wahapedia files Titan Legions under short code `TL` with the display
+  // name "Adeptus Titanicus"; the brain canonical slug is `titan-legions`
+  // (Micah's directive 2026-07-05: Adeptus Titanicus IS Titan Legions).
+  TL: { slug: 'titan-legions', name: 'Titan Legions', allegiance: 'imperium' },
   TS: { slug: 'thousand-sons', name: 'Thousand Sons', allegiance: 'chaos' },
   TYR: { slug: 'tyranids', name: 'Tyranids', allegiance: 'xenos' },
   WE: { slug: 'world-eaters', name: 'World Eaters', allegiance: 'chaos' },
+  // Chaos Titan Legions has no Wahapedia short code — it lives entirely
+  // as a code-generated variant of Titan Legions (see
+  // apps/brain/server/src/lib/titan-legions-chaos-swap.ts).
+  CTL: { slug: 'chaos-titan-legions', name: 'Chaos Titan Legions', allegiance: 'chaos' },
 }
 
 // BCP subfactions that map to a parent faction
@@ -199,12 +207,28 @@ async function main() {
 
   // Seed dim_faction
   console.log('Seeding dim_faction...')
+  // Drop retired dim_faction rows before insert so a re-seed collapses the
+  // 2026-07-05 cleanup (merge adeptus-titanicus into titan-legions; retire
+  // unaligned-forces/unbound-adversaries/unknown). Retirees below stay in
+  // sync with LEGACY_FACTION_REWRITES + DROPPED_FACTION_IDS in
+  // apps/brain/server/src/lib/faction-codes.ts.
+  const RETIRED_FACTION_SLUGS = [
+    'adeptus-titanicus',
+    'unaligned-forces',
+    'unbound-adversaries',
+    'unknown',
+  ]
+  for (const slug of RETIRED_FACTION_SLUGS) {
+    await client.execute({ sql: 'DELETE FROM dim_faction WHERE id = ?', args: [slug] })
+  }
   const factionBatch = Object.values(FACTION_MAP).map((f) => ({
     sql: 'INSERT OR IGNORE INTO dim_faction VALUES (?, ?, ?)',
     args: [f.slug, f.name, f.allegiance],
   }))
   await client.batch(factionBatch)
-  console.log(`  ${factionBatch.length} factions`)
+  console.log(
+    `  ${factionBatch.length} factions (${RETIRED_FACTION_SLUGS.length} retired rows dropped)`,
+  )
 
   // Seed dim_subfaction
   console.log('Seeding dim_subfaction...')
