@@ -72,6 +72,9 @@ export interface PracticeExamQuestion {
   correct: boolean | null
   source: PracticeExamSource | null
   external: PracticeExamExternal | null
+  /** Path to the cropped question figure (e.g. brain scan), when the exam
+   * question references an image. Relative to the SPA base. */
+  questionImage?: string
 }
 
 export interface PracticeExam {
@@ -85,6 +88,8 @@ export interface PracticeExam {
     correct: number
     wrong: number
   }
+  /** deckId → slide count. Powers popup source-slide prev/next bounds. */
+  deckSlideCounts?: Record<string, number>
 }
 
 export type GradeStamp = 'correct' | 'wrong' | 'ungraded'
