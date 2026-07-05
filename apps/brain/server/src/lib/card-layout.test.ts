@@ -210,14 +210,16 @@ describe('buildDatasheetLayout', () => {
 
   // ── Bug-4a regression: ability title triplicated in body ────────────────
   it('strips a leading copy of the ability title from the description body', () => {
-    const deepStrikeAbility: Node = {
-      id: 'ability:deep-strike',
+    // Use a non-USR ability so it survives the USR filter and gets rendered
+    // as an expanded panel (USRs like Deep Strike / Leader are pill-only —
+    // see the Khârn regression fix).
+    const waaaghAbility: Node = {
+      id: 'ability:waaagh',
       layer: 'unit',
       category: 'unit-ability',
-      title: 'Deep Strike',
-      // Synthetic body — the upstream parser sometimes echoes the rule name
-      // as a heading both in Title Case and ALL CAPS before the rule text.
-      content: 'Deep Strike\nDEEP STRIKE\nDuring the Reinforcements step, set up this unit...',
+      title: 'Waaagh! Boss',
+      content:
+        'Waaagh! Boss\nWAAAGH! BOSS\nOnce per battle, at the start of your Command phase, this unit can shout Waaagh!...',
       summary: '',
       datasheetId: warbossNode.id,
       sources: [],
@@ -228,19 +230,74 @@ describe('buildDatasheetLayout', () => {
     const layout = buildDatasheetLayout({
       datasheet: warbossNode,
       weapons: [],
-      abilities: [deepStrikeAbility],
+      abilities: [waaaghAbility],
     })
     const abilityNodes = flattenAllNodes(layout).filter((n) => n.type === 'ability')
     expect(abilityNodes).toHaveLength(1)
     if (abilityNodes[0]?.type === 'ability') {
       const node = abilityNodes[0]
-      expect(node.name).toBe('Deep Strike')
-      // Body must NOT start with "Deep Strike" or "DEEP STRIKE" any more.
-      expect(node.description.startsWith('Deep Strike')).toBe(false)
-      expect(node.description.startsWith('DEEP STRIKE')).toBe(false)
+      expect(node.name).toBe('Waaagh! Boss')
+      // Body must NOT start with the title repeated.
+      expect(node.description.startsWith('Waaagh! Boss')).toBe(false)
+      expect(node.description.startsWith('WAAAGH! BOSS')).toBe(false)
       // The actual rule text must remain.
-      expect(node.description).toContain('During the Reinforcements step')
+      expect(node.description).toContain('Once per battle')
     }
+  })
+
+  it('skips USR abilities (Leader, Deep Strike, etc.) from expanded panels', () => {
+    // Khârn-shaped datasheet: has a "Leader" ability node with a 3kb generic
+    // body plus a unique "Legendary Killer" ability. The Leader panel should
+    // be filtered out (surfaced as a pill instead); the unique one stays.
+    const kharnLike: Node = {
+      ...warbossNode,
+      id: 'datasheet:kharn-like',
+      title: 'Khârn-like Character',
+      coreAbilities: [{ keyword: 'LEADER' }, { keyword: 'GRENADES' }],
+    }
+    const leaderAbility: Node = {
+      id: 'ability:leader',
+      layer: 'unit',
+      category: 'unit-ability',
+      title: 'Leader',
+      content:
+        'Mighty heroes fight at the forefront of battle. Some CHARACTER units have Leader listed on their datasheets...',
+      summary: '',
+      datasheetId: kharnLike.id,
+      sources: [],
+      refs: [],
+      version: 1,
+      keywords: [],
+    }
+    const uniqueAbility: Node = {
+      id: 'ability:legendary-killer',
+      layer: 'unit',
+      category: 'unit-ability',
+      title: 'Legendary Killer',
+      content: 'While this model is leading a unit, re-roll a Hit roll of 1...',
+      summary: '',
+      datasheetId: kharnLike.id,
+      sources: [],
+      refs: [],
+      version: 1,
+      keywords: [],
+    }
+    const layout = buildDatasheetLayout({
+      datasheet: kharnLike,
+      weapons: [],
+      abilities: [leaderAbility, uniqueAbility],
+    })
+    const abilityNodes = flattenAllNodes(layout).filter((n) => n.type === 'ability')
+    expect(abilityNodes.map((n) => (n.type === 'ability' ? n.name : ''))).toEqual([
+      'Legendary Killer',
+    ])
+    // LEADER must still surface as a pill — never disappear entirely.
+    const pillLists = flattenAllNodes(layout).filter((n) => n.type === 'pill-list') as Array<{
+      type: 'pill-list'
+      pills: Array<{ text: string }>
+    }>
+    const allPills = pillLists.flatMap((pl) => pl.pills.map((p) => p.text))
+    expect(allPills).toContain('LEADER')
   })
 
   it('emits a pill-list for keywords', () => {

@@ -1,4 +1,18 @@
 import { type EditionFilter, nodeMatchesEdition } from './edition'
+
+/**
+ * Normalize a string for title matching:
+ *  - lowercase
+ *  - trim
+ *  - strip combining diacritical marks (NFD → drop U+0300–U+036F)
+ *
+ * So "Khârn" and "kharn" match; "Yncarne" and "Ynnead's" don't (that's a
+ * distinct-word case, not a diacritic case). Applied on both sides of every
+ * title compare.
+ */
+function normalizeForMatch(s: string): string {
+  return s.toLowerCase().trim().normalize('NFD').replace(/[̀-ͯ]/g, '')
+}
 import {
   detectFactions,
   extractMechanicKeywords,
@@ -257,7 +271,7 @@ export async function retrieve(
     factionScopeIds.length > 0
       ? await expandFactionsForRetrieval(factionScopeIds, env.bucket)
       : new Set<string>()
-  const queryLowerForFilter = query.toLowerCase().trim()
+  const queryLowerForFilter = normalizeForMatch(query)
 
   let filtered = allMatches
   if (detectedFactionSet.size > 0) {
@@ -270,7 +284,7 @@ export async function retrieve(
       // Keep datasheets whose title matches the original query (cross-faction units)
       if (
         m.metadata?.category === 'datasheet' &&
-        (m.metadata?.title as string)?.toLowerCase() === queryLowerForFilter
+        normalizeForMatch((m.metadata?.title as string) ?? '') === queryLowerForFilter
       )
         return true
       return false
@@ -278,11 +292,11 @@ export async function retrieve(
   }
 
   // Step 9: Sort — exact title match first, then by score
-  const queryLower = query.toLowerCase().trim()
+  const queryLower = normalizeForMatch(query)
   const factionRankList = [...detectedFactionSet]
   const sortedMatches = filtered.sort((a, b) => {
-    const aTitle = (a.metadata?.title as string)?.toLowerCase() ?? ''
-    const bTitle = (b.metadata?.title as string)?.toLowerCase() ?? ''
+    const aTitle = normalizeForMatch((a.metadata?.title as string) ?? '')
+    const bTitle = normalizeForMatch((b.metadata?.title as string) ?? '')
 
     // Exact title match gets absolute highest priority — any category
     const aTitleExact = aTitle === queryLower ? 1 : 0
@@ -339,9 +353,9 @@ export async function retrieve(
   ])
   const resultIdSet = new Set(results.map((r) => r.id))
   const titleCandidates = new Set<string>()
-  const originalTitleLower = query.toLowerCase().trim()
+  const originalTitleLower = normalizeForMatch(query)
   titleCandidates.add(originalTitleLower)
-  const strippedTitleLower = strippedQuery.toLowerCase().trim()
+  const strippedTitleLower = normalizeForMatch(strippedQuery)
   if (strippedTitleLower && strippedTitleLower !== originalTitleLower) {
     titleCandidates.add(strippedTitleLower)
   }
@@ -359,7 +373,7 @@ export async function retrieve(
       const fileNodes = (await obj.json()) as Node[]
       for (const n of fileNodes) {
         if (CHILD_CATEGORIES.has(n.category)) continue
-        if (!titleCandidates.has(n.title.toLowerCase())) continue
+        if (!titleCandidates.has(normalizeForMatch(n.title))) continue
         if (resultIdSet.has(n.id)) continue
         // Honour the faction scope on title-matched candidates too. Bare-query
         // callers (`detectedFactionSet.size === 0`) still get every title match
@@ -806,7 +820,7 @@ async function factionBrowse(
   // Inject cross-faction datasheets whose title matches the original query
   // (e.g., "Genestealers" exists in both tyranids and genestealer-cults)
   if (originalQuery) {
-    const titleLower = originalQuery.toLowerCase().trim()
+    const titleLower = normalizeForMatch(originalQuery)
     const resultIdSet = new Set(results.map((r) => r.id))
 
     for (const file of Object.keys(manifest.files)) {
@@ -817,7 +831,7 @@ async function factionBrowse(
       for (const n of fileNodes) {
         if (
           n.category === 'datasheet' &&
-          n.title.toLowerCase() === titleLower &&
+          normalizeForMatch(n.title) === titleLower &&
           !resultIdSet.has(n.id)
         ) {
           results.unshift(enrichNode(n, 1.0, new Map()))
