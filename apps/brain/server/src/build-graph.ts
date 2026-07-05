@@ -58,6 +58,7 @@ import { loadTwistsFromFile } from './lib/parsers/twists'
 import { mapNodesToPages } from './lib/pdf-positions'
 import { slugify } from './lib/slugify'
 import { buildManifest, partitionNodes, partitionRefs } from './lib/sync'
+import { emitChaosTitanLegionsVariants } from './lib/titan-legions-chaos-swap'
 
 const MD_DIR = 'C:/R/sync-data/tools/gw-sync/.local/gw/markdown'
 const GAME_DATA_DIR = '../../data-import/client/public/wahapedia'
@@ -286,6 +287,57 @@ async function main() {
   console.log(
     `   ${mdFiles.length} faction packs → ${fpNodes} nodes, ${fpRefs} refs, ${fpErrors} errors (${fpEleventh} packs as 11th edition, ${fpPatches} overlays queued)`,
   )
+
+  // ── 4b. Imperial Armour: Titans ────────────────────────────────────────────
+  // `imperial-armour-titans.md` is the Titan supplement — army rules
+  // (TOWERING EXAMPLE, TITANIC SUPPORT, TITANICUS TRAITORIS) + 4 datasheets
+  // (Warhound, Reaver, Warbringer Nemesis, Warlord). It is NOT a faction pack
+  // by filename (no `faction-pack-` prefix) so the loop above skips it, but
+  // it is STRUCTURALLY a faction pack — same v2 parser handles it.
+  //
+  // The current `eng_24.09_` PDF is 10e content; the 11e Adeptus Titanicus
+  // faction pack (processed above via `faction-pack-adeptus-titanicus.md`,
+  // sourced from an `eng_11-06_` URL) already carries the same 4 datasheets
+  // with the newer "Frame" keyword. Emit here at `edition: '10th'`; the
+  // merge pass dedupes by id when the faction pack has already produced the
+  // same slug node, and the `duplicateEleventh` pass will produce an 11e
+  // twin for the Wahapedia surface ids. What this loop adds is the redundant
+  // ingest bridge so if the faction pack goes away, imperial-armour still
+  // supplies content.
+  const IMPERIAL_ARMOUR_TITANS_FILE = 'imperial-armour-titans.md'
+  const IMPERIAL_ARMOUR_TITANS_FACTION = 'adeptus-titanicus'
+  const imperialArmourTitansPath = join(MD_DIR, IMPERIAL_ARMOUR_TITANS_FILE)
+  let imperialArmourTitansNodesAdded = 0
+  if (existsSync(imperialArmourTitansPath)) {
+    console.log('4b. Imperial Armour: Titans')
+    try {
+      const raw = readFileSync(imperialArmourTitansPath, 'utf-8')
+      const extract = parseFactionPackV2(raw, { faction: IMPERIAL_ARMOUR_TITANS_FACTION })
+      // Force 10th edition — the current PDF is dated 24.09 (September 2024,
+      // 10e-era). If GW republishes for 11e we can flip the URL prefix in
+      // the metadata + let `detectFactionPackEdition` route it 11e.
+      const result = convertPackExtractToNodes(
+        extract,
+        IMPERIAL_ARMOUR_TITANS_FACTION,
+        RETRIEVED_AT,
+        '10th',
+        mfmDetachmentLookup,
+      )
+      stampPublishedAt(result.nodes, SOURCE_DATES['core-rules']!)
+      allNodes.push(...result.nodes)
+      allRefs.push(...result.refs)
+      imperialArmourTitansNodesAdded = result.nodes.length
+      console.log(
+        `   Imperial Armour: Titans → ${result.nodes.length} nodes, ${result.refs.length} refs`,
+      )
+    } catch (err) {
+      errors.push(`Imperial Armour: Titans: ${err}`)
+      console.log(`   ERROR: ${err instanceof Error ? err.message : err}`)
+    }
+  } else {
+    console.log(`4b. Imperial Armour: Titans — skipped (no ${imperialArmourTitansPath})`)
+  }
+  void imperialArmourTitansNodesAdded
 
   // ── 5. Wahapedia/BSData Game Data ──────────────────────────────────────────
   console.log('4. Wahapedia/BSData Game Data')
@@ -879,6 +931,34 @@ async function main() {
     }
     console.log(`   Fixed ${massageResult.renamedIds.size} renamed node IDs in refs`)
   }
+
+  // ── 6b2. Titanicus Traitoris (Chaos Titan Legions) variants ───────────────
+  // GW publishes no separate datasheet for chaos titans. The Adeptus
+  // Titanicus faction pack (and the Imperial Armour: Titans supplement)
+  // include a rule saying "you may reuse these datasheets as Titanicus
+  // Traitoris by swapping Imperium → Chaos and Adeptus Titanicus →
+  // Titanicus Traitoris". Emit those swapped copies here so
+  // `chaos-titan-legions` in the brain graph is non-empty (previously it
+  // had zero datasheets in prod).
+  //
+  // Runs AFTER the merge + massage passes so:
+  //  - the swap sees the normalized, dedup'd loyalist set (10e + 11e twins);
+  //  - loyalist ability/weapon child nodes are already attached and their
+  //    `datasheetId` fields resolve into the swap's id-map;
+  //  - the merge factionId-gate has already validated `adeptus-titanicus`
+  //    (so we can trust the swap's input set is real, not a shadow slug).
+  //
+  // The `chaos-titan-legions` id namespace is disjoint from every other
+  // faction's id namespace by construction (fresh `chaos-titan-legions:`
+  // prefix), so re-merging is unnecessary.
+  console.log('\n6b2. Titanicus Traitoris swap → chaos-titan-legions')
+  const chaosSwap = emitChaosTitanLegionsVariants(allNodes, allRefs)
+  for (const n of chaosSwap.nodes) allNodes.push(n)
+  for (const r of chaosSwap.refs) allRefs.push(r)
+  const chaosDsCount = chaosSwap.nodes.filter((n) => n.category === 'datasheet').length
+  console.log(
+    `   ${chaosSwap.nodes.length} chaos-titan-legions nodes (${chaosDsCount} datasheets), ${chaosSwap.refs.length} refs`,
+  )
 
   // ── 11th Edition detachments (must be before faction nodes so they get connected) ──
   console.log('\n6c. 11th Edition detachments')
