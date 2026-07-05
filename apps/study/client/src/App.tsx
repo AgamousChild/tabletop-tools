@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 
+import { PracticeExamLoader } from '@/components/PracticeExam'
 import { ResultsList } from '@/components/ResultsList'
 import { SearchBar } from '@/components/SearchBar'
 import { SlideViewer } from '@/components/SlideViewer'
@@ -8,7 +9,10 @@ import type { SearchResult, SlidesManifest } from '@/types'
 
 const BASE = import.meta.env.BASE_URL.replace(/\/$/, '')
 
+type Tab = 'search' | 'exam'
+
 export function App() {
+  const [tab, setTab] = useState<Tab>('search')
   const [manifest, setManifest] = useState<SlidesManifest | null>(null)
   const [loadError, setLoadError] = useState<string | null>(null)
   const [query, setQuery] = useState('')
@@ -27,34 +31,51 @@ export function App() {
   const engine = useMemo(() => (manifest ? buildSearchEngine(manifest) : null), [manifest])
   const results = useMemo(() => (engine ? engine.search(query) : []), [engine, query])
 
-  if (loadError) {
-    return (
-      <div className="app">
-        <div className="error">Failed to load slides manifest: {loadError}</div>
-      </div>
-    )
-  }
-
-  if (!manifest) {
-    return (
-      <div className="app">
-        <div className="loading">Loading slides…</div>
-      </div>
-    )
-  }
-
   return (
     <div className="app">
       <header className="app-header">
         <h1>Study</h1>
-        <span className="meta">
-          {manifest.decks.length} decks · {manifest.decks.reduce((n, d) => n + d.slides.length, 0)}{' '}
-          slides
-        </span>
+        <div className="app-tabs" role="tablist">
+          <button
+            role="tab"
+            aria-selected={tab === 'search'}
+            className={`app-tab ${tab === 'search' ? 'app-tab-active' : ''}`}
+            onClick={() => setTab('search')}
+          >
+            Search
+          </button>
+          <button
+            role="tab"
+            aria-selected={tab === 'exam'}
+            className={`app-tab ${tab === 'exam' ? 'app-tab-active' : ''}`}
+            onClick={() => setTab('exam')}
+          >
+            Practice Exam
+          </button>
+        </div>
+        {tab === 'search' && manifest && (
+          <span className="meta">
+            {manifest.decks.length} decks ·{' '}
+            {manifest.decks.reduce((n, d) => n + d.slides.length, 0)} slides
+          </span>
+        )}
       </header>
-      <SearchBar value={query} onChange={setQuery} resultCount={results.length} />
-      <ResultsList results={results} onSelect={setSelected} query={query} />
-      {selected && <SlideViewer result={selected} onClose={() => setSelected(null)} />}
+
+      {tab === 'search' ? (
+        <>
+          {loadError && <div className="error">Failed to load slides manifest: {loadError}</div>}
+          {!loadError && !manifest && <div className="loading">Loading slides…</div>}
+          {!loadError && manifest && (
+            <>
+              <SearchBar value={query} onChange={setQuery} resultCount={results.length} />
+              <ResultsList results={results} onSelect={setSelected} query={query} />
+              {selected && <SlideViewer result={selected} onClose={() => setSelected(null)} />}
+            </>
+          )}
+        </>
+      ) : (
+        <PracticeExamLoader />
+      )}
     </div>
   )
 }
