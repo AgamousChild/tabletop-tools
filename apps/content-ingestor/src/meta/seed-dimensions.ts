@@ -236,7 +236,17 @@ async function main() {
     'unbound-adversaries',
     'unknown',
   ]
+  // FK-safe cascade: only dim_faction_alias has references to retired
+  // factions in prod today (verified 2026-07-05: 0 rows in dim_subfaction/
+  // dim_detachment/meta_events/*/fact_game_results/meta_top; 4 rows in
+  // dim_faction_alias for `unaligned-forces`). Drop the alias rows first,
+  // then the parent. Tournament-facing tables (meta_*, fact_*) stay
+  // untouched — no live tournament records reference the retired factions.
   for (const slug of RETIRED_FACTION_SLUGS) {
+    await client.execute({
+      sql: 'DELETE FROM dim_faction_alias WHERE faction_id = ?',
+      args: [slug],
+    })
     await client.execute({ sql: 'DELETE FROM dim_faction WHERE id = ?', args: [slug] })
   }
   const factionBatch = Object.values(FACTION_MAP).map((f) => ({
