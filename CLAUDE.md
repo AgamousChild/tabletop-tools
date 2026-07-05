@@ -161,6 +161,56 @@ The hook is there because someone got burned by skipping the check; you don't ge
 
 ## Rules for Every Session
 
+### 0. Ground first (the overarching rule)
+
+**Verify state before every action. No inference-driven decisions, no
+delegation without full context, no assertions without evidence.**
+
+Every failure mode below is a specific instance of skipping this. If
+you find yourself about to act without checking, stop and check first.
+The cost of gathering state is your own turn time — you do not save
+Micah anything by skipping it, and every regression you ship costs him
+his time to catch it.
+
+Concrete applications:
+
+- **Before you assert:** run the grep, read the file, hit the endpoint.
+  If you haven't verified in this turn, you don't say it. Includes
+  "seems like", "should", "probably", "based on my understanding",
+  "typically", "I think", and confident statements about behavior of
+  systems you haven't just probed.
+- **Before you delegate:** gather the full state the agent will need
+  and hand it over verbatim. `git status`, `git diff`, contents of
+  every adjacent file, live curl output for any user-facing surface,
+  related PR history, any WIP or uncommitted work in the working tree.
+  Do not write "look at file X" — read X yourself and paste the
+  relevant bytes into the brief. Do not write "figure out how Y
+  works" — figure it out first and hand the agent a verified spec.
+- **Before you accept a report:** re-run the acceptance criteria
+  yourself against live behavior. Do not trust an agent's summary of
+  what its diff does; read the diff and probe the deployed surface.
+  Green tests are not sufficient — the tests only cover what someone
+  wrote them to cover.
+- **Before you claim a fix is deployed:** curl the live endpoint,
+  screenshot the visible page, or otherwise probe the user-visible
+  surface. "Deploy script exited 0" is not "the fix is live for
+  users." Cache purges, CDN propagation, build artifact staleness,
+  and half-applied deploys all break this link.
+- **Before you take a shortcut:** ASK. The answer is always no.
+  Shortcuts are defined broadly — anywhere you're choosing "close
+  enough" over "verified correct," estimating when real data is
+  available, deferring a component while shipping the rest, or
+  hoping the agent will fill in a gap you left. See
+  `feedback_pacing.md` §4.6 and `feedback_quality.md` §5–6.
+
+Verification is not a phase you do at the end of a task. It's the
+smallest unit of work: every step is "check state, then act." If you
+are not currently reading a file, running a query, or probing a
+surface, and you have not done so in the last turn, you do not yet
+have the ground to make a decision.
+
+### Legacy rules (still apply; all instances of Rule 0)
+
 - Scope before you start — understand what you're touching and what depends on it.
 - No features that aren't needed yet.
 - Before claiming anything about data, run a query. Don't eyeball it, don't reason from memory.
