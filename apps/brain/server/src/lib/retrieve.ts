@@ -371,16 +371,44 @@ export async function retrieve(
       const obj = await env.bucket.get(file)
       if (!obj) continue
       const fileNodes = (await obj.json()) as Node[]
+      const substringCandidates: EnrichedNode[] = []
       for (const n of fileNodes) {
         if (CHILD_CATEGORIES.has(n.category)) continue
-        if (!titleCandidates.has(normalizeForMatch(n.title))) continue
-        if (resultIdSet.has(n.id)) continue
-        // Honour the faction scope on title-matched candidates too. Bare-query
-        // callers (`detectedFactionSet.size === 0`) still get every title match
-        // — this only kicks in when the user narrowed to a faction/chapter.
-        if (factionScopeActive && n.factionId && !detectedFactionSet.has(n.factionId)) continue
-        titleMatches.push(enrichNode(n, 1.0, new Map()))
-        resultIdSet.add(n.id)
+        const nTitle = normalizeForMatch(n.title)
+        // Exact-normalized match: highest confidence.
+        if (titleCandidates.has(nTitle)) {
+          if (resultIdSet.has(n.id)) continue
+          if (factionScopeActive && n.factionId && !detectedFactionSet.has(n.factionId)) continue
+          titleMatches.push(enrichNode(n, 1.0, new Map()))
+          resultIdSet.add(n.id)
+          continue
+        }
+        // Word-prefix fallback: catches diacritic + partial-name queries like
+        // "Kharn" → "Khârn The Betrayer" when Vectorize semantic search
+        // misses the accented variant. Only kicks in if NO exact matches
+        // were found (see below) — so "Warboss" still doesn't pull in
+        // "Warboss in Mega Armour" when the exact "Warboss" exists.
+        for (const cand of titleCandidates) {
+          if (cand.length < 4) continue
+          // Word-boundary prefix: either exact-equal, or title starts with cand followed by a space.
+          if (nTitle === cand || nTitle.startsWith(cand + ' ')) {
+            if (resultIdSet.has(n.id)) continue
+            if (factionScopeActive && n.factionId && !detectedFactionSet.has(n.factionId)) continue
+            substringCandidates.push(enrichNode(n, 1.0, new Map()))
+            break
+          }
+        }
+      }
+      // Only fall back to word-prefix matches when no exact title match landed
+      // for this file — preserves the "Warboss" ≠ "Warboss in Mega Armour"
+      // behavior when the exact hit exists.
+      if (titleMatches.length === 0) {
+        for (const c of substringCandidates) {
+          if (!resultIdSet.has(c.id)) {
+            titleMatches.push(c)
+            resultIdSet.add(c.id)
+          }
+        }
       }
     }
 
