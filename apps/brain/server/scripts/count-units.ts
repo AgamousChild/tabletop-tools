@@ -513,6 +513,13 @@ async function main() {
   console.log(`BSData 11e unmapped (dropped factions):`, bs11.unmapped)
   console.log(`SQL source: ${sqlCounts.sqlUrl}`)
 
+  // Per-faction 11e unit title lists for the acceptance-test harness.
+  const unitNames: Record<string, string[]> = {}
+  for (const [slug, m] of brain.names11) unitNames[slug] = [...m.values()].sort()
+  writeFileSync(
+    join(SERVER_ROOT, '.local', 'unit-names-11e.json'),
+    JSON.stringify(unitNames, null, 2),
+  )
   writeFileSync(
     OUT_FILE,
     JSON.stringify(

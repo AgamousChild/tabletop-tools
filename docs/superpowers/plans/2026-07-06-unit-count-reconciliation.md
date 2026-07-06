@@ -77,6 +77,14 @@ All 3 iterations must pass consistently. The reason for the full 4 × 36 × 3 ma
 - Script status: runs up to the SQL step; last run died with `fetch failed / ECONNABORTED` talking to Turso (transient network or large query — NOT yet diagnosed). Faction-code priming from Turso worked on the same run, so creds are good.
 - Next steps: re-run script → build reconciliation table → classify (official/retained/Legends/drift) → fixes if needed → 432-check acceptance run (script + Playwright screenshots) → report.
 
+**2026-07-06 session 2:**
+
+- Turso ECONNABORTED root cause: broken IPv6 route post-outage — Node tried IPv6 first and timed out. `NODE_OPTIONS=--dns-result-order=ipv4first` fixes it. `dim_faction`/`dim_faction_alias`/`dim_subfaction` snapshotted into `.local/dev.db` so build-graph runs offline.
+- Reconciliation + classification complete; six pipeline fixes shipped on branch `fix/unit-count-reconciliation` (commit 740933a): shared-BSData-id fan-out, per-(id,faction) representative rows, pack-Legends 11e emission stop, Legends heading-continuation join, duplicate-summary pass scoped by datasheetId, pack-Legends retire pass + Red Terror stub removal.
+- Result: brain 11e = 1153 units, name-level clean vs (waha non-Legends ∪ pack regular − pack Legends) for all 36 factions; 0 duplicate titles. Only intentional diffs: chaos-titan-legions +4 (variant emission, PR #98), unaligned-forces −20 (dropped faction, PR #106).
+- Deployed: R2 upload (40 node + 41 ref files + manifest), Vectorize re-index 40/40 (0 errors), CDN purged. Live layer shows Units | 1153.
+- Acceptance harness: `apps/brain/server/scripts/acceptance-units.mjs` (Playwright, real UI, per-interface random unit per Micah's directive). Full 432-check run in progress.
+
 ## 7. Deliverables
 
 1. `docs/reports/2026-07-06-count-reconciliation-units.md` — counts per source, overall + per faction; classification table; drift cases with root causes; fixes shipped (if any); terminal test result with deploy ID.
