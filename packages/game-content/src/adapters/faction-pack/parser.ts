@@ -198,7 +198,7 @@ export interface PackExtract {
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
-const ALL_CAPS_NAME = /^[A-Z][A-Z0-9\s\-'’‑().,!?:]+$/
+const ALL_CAPS_NAME = /^[A-Z][A-Z0-9\s\-''‑().,!?:]+$/
 
 function isAllCapsLine(s: string): boolean {
   const trimmed = s.trim()
@@ -214,6 +214,68 @@ function normalizeWhitespace(s: string): string {
 function countSignificantChars(s: string): number {
   return s.replace(/\s+/g, '').length
 }
+
+/**
+ * Convert an ALL-CAPS string to Title Case.
+ * Words that are prepositions/articles/conjunctions (<=3 chars) stay lowercase
+ * unless they're the first word. Possessives (O'MALLEY, FORGEFATHER'S) and
+ * hyphenated compounds (RAGE-CURSED) are handled.
+ */
+function titleCase(s: string): string {
+  const LOWERCASE_WORDS = new Set(['a', 'an', 'the', 'of', 'in', 'on', 'at', 'to', 'by', 'and'])
+  return s
+    .split(/(\s+|-)/g)
+    .map((part, idx, arr) => {
+      // Preserve whitespace/hyphen separators
+      if (/^\s+$/.test(part)) return part
+      if (part === '-') return part
+      const low = part.toLowerCase()
+      // Always capitalise the first word (idx=0) or any part after whitespace
+      // at the start of the joined result. Also capitalise after a hyphen.
+      const prevPart = idx > 0 ? arr[idx - 1] : ''
+      const isAfterHyphen = prevPart === '-'
+      const isFirst = arr.slice(0, idx).every((p) => /^[\s-]*$/.test(p))
+      if (isFirst || isAfterHyphen) {
+        return part.charAt(0).toUpperCase() + part.slice(1).toLowerCase()
+      }
+      // Keep small words lowercase unless first
+      if (LOWERCASE_WORDS.has(low)) return low
+      return part.charAt(0).toUpperCase() + part.slice(1).toLowerCase()
+    })
+    .join('')
+}
+
+/**
+ * Heading names that must NOT be treated as detachment names.
+ * These are either:
+ *  - Faction name repeats that gw-sync emits as h2 section headers
+ *  - Stratagem-type qualifiers that end up as headings due to PDF flow
+ *  - Generic section markers
+ */
+const DETACHMENT_NAME_NOISE = new Set([
+  'BATTLE TACTIC',
+  'STRATEGIC PLOY',
+  'WARGEAR',
+  'UNIT OPTIONS',
+  'ENHANCEMENT',
+  'ENHANCEMENTS',
+  'DAMAGED',
+  "WHAT'S NEW",
+  'CORE STRATAGEM',
+  'SPACE MARINES',
+  "T'AU EMPIRE",
+  "EMPEROR'S CHILDREN",
+  'ADEPTUS TITANICUS',
+  'DEATHWATCH',
+  'DATASHEETS',
+  'DATASHEET',
+  'STRATAGEMS',
+  'STRATAGEM',
+  'ARMY RULES',
+  'ARMY RULE',
+  'DETACHMENT RULES',
+  'DETACHMENT RULE',
+])
 
 // ─── Parser ───────────────────────────────────────────────────────────────────
 
@@ -357,6 +419,48 @@ export function parseFactionPackV2(markdown: string, opts: ParseOptions): PackEx
         if (/\bDETACHMENT$/i.test(headingText!) || /\bTASK FORCE\b/i.test(headingText!)) {
           const entries = splitInlineErrata(body, 'detachment-rule', headingText!)
           result.errata.push(...entries)
+
+          // Also register an errata-only detachment stub so downstream emitters
+          // know this detachment exists in 11e and can emit a fallback node.
+          // Strip the trailing " DETACHMENT" or " TASK FORCE" from the name.
+          const stubNameRaw = headingText!
+            .replace(/\s+DETACHMENT$/i, '')
+            .replace(/\s+TASK\s+FORCE$/i, ' Task Force')
+            .trim()
+          const stubName = cleanDetachmentName(stubNameRaw)
+          // Only add if not already present as a full detachment (avoids duplicates
+          // when the same pack has both a full `## NAME` section and an errata
+          // heading for the same detachment).
+          if (!result.detachments.some((d) => d.name.toLowerCase() === stubName.toLowerCase())) {
+            result.detachments.push({
+              name: stubName,
+              extraRules: [],
+              enhancements: [],
+              stratagems: [],
+              // Mark errata content on the detachment's detachmentRule so
+              // downstream can use it as the 11e overlay body.
+              ...(body.trim()
+                ? {
+                    detachmentRule: {
+                      name: `${stubName} Errata`,
+                      body: body.trim(),
+                    },
+                  }
+                : {}),
+            })
+          } else {
+            // Detachment already exists — append errata body to its rule.
+            const existing = result.detachments.find(
+              (d) => d.name.toLowerCase() === stubName.toLowerCase(),
+            )!
+            if (body.trim()) {
+              if (existing.detachmentRule) {
+                existing.detachmentRule.body = `${existing.detachmentRule.body}\n\n${body.trim()}`
+              } else {
+                existing.detachmentRule = { name: `${stubName} Errata`, body: body.trim() }
+              }
+            }
+          }
           continue
         }
         if (upper === 'DATASHEETS' || upper === 'DATASHEET') {
@@ -378,6 +482,15 @@ export function parseFactionPackV2(markdown: string, opts: ParseOptions): PackEx
 
       // h2 detachment heading
       if (headingLevel === 2) {
+        // Filter known noise headings that appear as h2 but are not detachments.
+        if (DETACHMENT_NAME_NOISE.has(upper)) {
+          // Absorb the body as an extras chunk so coverage is accounted for.
+          if (body.trim()) {
+            result.extras.push({ kind: 'noise-h2-section', content: body.trim() })
+          }
+          continue
+        }
+
         // Heuristic: an h2 inside a detachment block (i.e., we already saw an h2)
         // that doesn't look like a faction name is a detachment.
         const detachment: Detachment = {
@@ -454,11 +567,11 @@ export function parseFactionPackV2(markdown: string, opts: ParseOptions): PackEx
               pendingStratagemName = ''
             } else if (!s.name && currentDetachment.stratagems.length > 0) {
               const prev = currentDetachment.stratagems[currentDetachment.stratagems.length - 1]!
-              const tail = (prev.effect || '').match(/([A-Z][A-Z0-9\s\-'’‑]{2,60})\s*$/)
+              const tail = (prev.effect || '').match(/([A-Z][A-Z0-9\s\-''‑]{2,60})\s*$/)
               if (tail && isAllCapsLine(tail[1]!)) {
                 s.name = tail[1]!.trim()
                 prev.effect = (prev.effect || '')
-                  .replace(/\s*[A-Z][A-Z0-9\s\-'’‑]{2,60}\s*$/, '')
+                  .replace(/\s*[A-Z][A-Z0-9\s\-''‑]{2,60}\s*$/, '')
                   .trim()
               }
             }
@@ -474,7 +587,7 @@ export function parseFactionPackV2(markdown: string, opts: ParseOptions): PackEx
             // Defensive: if the strat's effect STILL ends with an ALL-CAPS
             // run (extractStratagems missed it), hold it.
             if (!pendingStratagemName && s.effect) {
-              const innerTail = s.effect.match(/[.!?]\s+([A-Z][A-Z0-9\s\-'’‑]{2,60})\s*$/)
+              const innerTail = s.effect.match(/[.!?]\s+([A-Z][A-Z0-9\s\-''‑]{2,60})\s*$/)
               if (innerTail && isAllCapsLine(innerTail[1]!)) {
                 pendingStratagemName = innerTail[1]!.trim()
                 s.effect = s.effect.slice(0, s.effect.length - innerTail[0]!.length) + '.'
@@ -531,7 +644,7 @@ export function parseFactionPackV2(markdown: string, opts: ParseOptions): PackEx
           //   - at end of a bullet line: "- Or: [PRECISION] . NEXT STRAT NAME"
           // The stripped name is held as `pendingStratagemName` so the next
           // `##### NCP` block can assign it.
-          const trailMatch = cleanBody.match(/[.!?]\s+([A-Z][A-Z0-9\s\-'’‑]{2,60})\s*$/)
+          const trailMatch = cleanBody.match(/[.!?]\s+([A-Z][A-Z0-9\s\-''‑]{2,60})\s*$/)
           if (trailMatch && isAllCapsLine(trailMatch[1]!)) {
             // Special-case ENHANCEMENTS — that's the section marker, not a
             // strat name. Just drop it.
@@ -544,7 +657,7 @@ export function parseFactionPackV2(markdown: string, opts: ParseOptions): PackEx
           }
           // Same for bullet lines
           cleanBody = cleanBody.replace(
-            /^(\s*[-•][^\n]*?\.)\s+([A-Z][A-Z0-9\s\-'’‑]{2,60})\s*$/gm,
+            /^(\s*[-•][^\n]*?\.)\s+([A-Z][A-Z0-9\s\-''‑]{2,60})\s*$/gm,
             (_full, prefix: string, name: string) => {
               if (isAllCapsLine(name)) {
                 if (name.trim() !== 'ENHANCEMENTS') pendingStratagemName = name.trim()
@@ -797,6 +910,17 @@ function splitIntoBlocks(markdown: string): Block[] {
  * These break the block splitter because they look like new sections.
  * Collapse them into the preceding block's body (as inline text) before
  * splitting.
+ *
+ * Also collapses split-name detachment headings: when a PDF column break
+ * causes a single detachment name to appear as two consecutive `## PART1`
+ * + `## PART2` lines (with only blank lines between them), merge them into
+ * one `## PART1 PART2` heading before the block splitter runs. Examples:
+ *
+ *   ## SPEARPOINT          ##  FORGEFATHER'S       ## COURT OF THE
+ *   ## TASK FORCE      →   ## SEEKERS          →   ## PHOENICIAN
+ *
+ * Heuristic: both headings are h2, the first has no body (only blank lines
+ * precede the second h2), and neither name matches a known section marker.
  */
 function preCollapseArtifacts(markdown: string): string {
   const lines = markdown.split('\n')
@@ -833,6 +957,45 @@ function preCollapseArtifacts(markdown: string): string {
       if (/^WA\s*R\s*HA\s*M\s*M\s*E\s*R\s+L\s*E\s*G\s*E\s*N\s*D\s*S\s*$/i.test(heading)) {
         out.push('WARHAMMER LEGENDS')
         continue
+      }
+
+      // Consecutive h2 split-name detection: if this is an h2 AND the next
+      // non-blank line is also an h2, merge them into one heading. Only merge
+      // when:
+      //   1. Current heading level is 2.
+      //   2. Next non-blank line is also h2.
+      //   3. Current heading is ALL-CAPS (i.e. a detachment name fragment).
+      //   4. Neither name is a known noise/section marker.
+      const hLevel = line.match(/^(#{1,6})\s/)![1]!.length
+      if (hLevel === 2 && /^[A-Z0-9][A-Z0-9\s\-''‑.,!?]*$/.test(heading)) {
+        // Find the next non-blank line
+        let nextNonBlank = -1
+        for (let j = i + 1; j < lines.length; j++) {
+          if (lines[j]!.trim() !== '') {
+            nextNonBlank = j
+            break
+          }
+        }
+        if (nextNonBlank >= 0) {
+          const nextLine = lines[nextNonBlank]!
+          const nextH = nextLine.match(/^##\s+(.+?)\s*$/)
+          if (nextH) {
+            const nextHeading = nextH[1]!.trim()
+            // Both are ALL-CAPS h2s and neither is a noise term
+            if (
+              /^[A-Z0-9][A-Z0-9\s\-''‑.,!?]*$/.test(nextHeading) &&
+              !DETACHMENT_NAME_NOISE.has(heading.toUpperCase()) &&
+              !DETACHMENT_NAME_NOISE.has(nextHeading.toUpperCase())
+            ) {
+              // Merge: emit one combined h2, skip blank lines + consumed next
+              const merged = `${heading} ${nextHeading}`
+              out.push(`## ${merged}`)
+              // Skip past blank lines and the next h2 line
+              i = nextNonBlank
+              continue
+            }
+          }
+        }
       }
     }
     out.push(line)
@@ -932,7 +1095,7 @@ function extractStratagems(text: string): { remaining: string; stratagems: Strat
       }
       // If we hit non-empty non-caps text first, the name might be embedded
       // at the end of that line (PDF flattening artifact).
-      const trailingCapsMatch = cand.match(/[.!?]\s+([A-Z][A-Z0-9\s\-'’‑]{1,60})$/)
+      const trailingCapsMatch = cand.match(/[.!?]\s+([A-Z][A-Z0-9\s\-''‑]{1,60})$/)
       if (trailingCapsMatch && isAllCapsLine(trailingCapsMatch[1]!)) {
         name = trailingCapsMatch[1]!.trim()
         nameIdx = j // we'll keep the rest of that line in body
@@ -964,7 +1127,7 @@ function extractStratagems(text: string): { remaining: string; stratagems: Strat
     let strippedNextName = ''
 
     // Strip trailing ALL-CAPS embedded at end of last line (next strat name)
-    const trailingNameMatch = bodyText.match(/([.!?])\s+([A-Z][A-Z0-9\s\-'’‑]{2,60})\s*$/)
+    const trailingNameMatch = bodyText.match(/([.!?])\s+([A-Z][A-Z0-9\s\-''‑]{2,60})\s*$/)
     if (trailingNameMatch && isAllCapsLine(trailingNameMatch[2]!)) {
       strippedNextName = trailingNameMatch[2]!.trim()
       bodyText = bodyText.replace(trailingNameMatch[0], trailingNameMatch[1]!)
@@ -1371,7 +1534,7 @@ function parseAbilityRuns(
 
   // Split on "Name: " or "Name (Aura): " patterns.
   // Find runs: a CapitalizedName ending in ':' that begins a span.
-  const abilityPattern = /([A-Z][A-Za-z'’][A-Za-z\s'’-]*?(?:\s*\(Aura\))?):\s+/g
+  const abilityPattern = /([A-Z][A-Za-z''][A-Za-z\s''-]*?(?:\s*\(Aura\))?):\s+/g
   const matches: Array<{ name: string; start: number; end: number }> = []
   let m: RegExpExecArray | null
   while ((m = abilityPattern.exec(remaining)) !== null) {
@@ -1537,7 +1700,11 @@ function extractFluff(_body: string): string | undefined {
 }
 
 function cleanDetachmentName(s: string): string {
-  return s.trim()
+  const trimmed = s.trim()
+  // If the name is already mixed-case (title-cased from a prior pass), leave it.
+  // ALL-CAPS names need title-casing so they display correctly.
+  if (trimmed === trimmed.toUpperCase()) return titleCase(trimmed)
+  return trimmed
 }
 
 // ─── Errata / FAQ splitters ───────────────────────────────────────────────────
@@ -1584,7 +1751,7 @@ function splitErrataBlock(body: string): ErrataEntry[] {
     else if (/^Remove:|\bRemove:/i.test(part)) changeKind = 'remove'
 
     // Replacement text: text between leading ' and trailing '
-    const replMatch = part.match(/Change to:\s*['‘]([\s\S]+?)['’]\s*(?=Pages?\s+\d+|$)/i)
+    const replMatch = part.match(/Change to:\s*['']([\s\S]+?)['']\s*(?=Pages?\s+\d+|$)/i)
     const replacementText = replMatch ? replMatch[1]!.trim() : undefined
 
     entries.push({ pages, target, changeKind, body: part.trim(), replacementText })
@@ -1666,7 +1833,7 @@ function splitInlineErrata(
     else if (/^Change\b/i.test(vp.verb)) changeKind = 'replace'
 
     // Replacement text inside quotes
-    const replMatch = bodyText.match(/^['‘]([\s\S]+?)['’]\s*\.?\s*$/)
+    const replMatch = bodyText.match(/^['']([\s\S]+?)['']\s*\.?\s*$/)
 
     entries.push({
       pages: [],
@@ -1737,7 +1904,7 @@ function classifyResidueAndCount(markdown: string, p: PackExtract): number {
     if (/^STRATAGEMS?\s*$/i.test(line)) continue
     if (/^DATASHEETS?\s*$/i.test(line)) continue
     if (/^FACTION PACK:?\s*VERSION/i.test(line)) continue
-    if (/^WHAT['’`]S NEW\??\s*$/i.test(line)) continue
+    if (/^WHAT[''`]S NEW\??\s*$/i.test(line)) continue
     if (/^CONTENTS?\s*$/i.test(line)) continue
     if (/^FAQS?\s*$/i.test(line)) continue
     if (/^UPDATES?(?:\s*&\s*ERRATA|\s+AND\s+ERRATA)?\s*$/i.test(line)) continue

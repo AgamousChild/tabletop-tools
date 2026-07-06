@@ -134,7 +134,7 @@ describe('convertPackExtractToNodes — 11e split-emission mode', () => {
     expect(det).toBeDefined()
     expect(det?.factionId).toBe('orks')
     expect(det?.parentSlug).toBeUndefined()
-    expect(det?.contentFields.title).toBe('SPEED FREEKS')
+    expect(det?.contentFields.title).toBe('Speed Freeks')
   })
 
   it('emits a faction-ability patch for the detachment rule keyed by parent slug', () => {

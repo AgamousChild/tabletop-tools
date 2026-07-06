@@ -20,7 +20,12 @@ import {
   buildEligibleForRefs,
   buildFactionNodes,
 } from './lib/combo-detection'
-import { duplicateEleventh, rekeyByEleventhSurfaceId } from './lib/duplicate-eleventh'
+import {
+  duplicateEleventh,
+  type MfmAllowlist,
+  mfmAllowlistKey,
+  rekeyByEleventhSurfaceId,
+} from './lib/duplicate-eleventh'
 import { EDITION_AGNOSTIC_CATEGORIES } from './lib/edition'
 import { extractStructuredFields } from './lib/extract-fields'
 import { loadFactionCodes, normalizeFactionId } from './lib/faction-codes'
@@ -190,7 +195,16 @@ async function main() {
   // already the 11e pack. Prefer any URL that carries an 11e prefix
   // (`eng_11-02_`, `eng_07-01_`) so the edition tag matches the actual body.
   const mdFileToUrl = new Map<string, string>()
-  const ELEVEN_URL_PREFIXES = ['eng_11-02_', 'eng_07-01_']
+  // All 11e pack URL prefixes — keep in sync with detectFactionPackEdition() in
+  // faction-pack-v2-to-nodes.ts.
+  const ELEVEN_URL_PREFIXES = [
+    'eng_11-02_',
+    'eng_07-01_',
+    'eng_08-06_',
+    'eng_09-06_',
+    'eng_10-06_',
+    'eng_11-06_',
+  ]
   const isElevenUrl = (u: string): boolean => ELEVEN_URL_PREFIXES.some((p) => u.includes(p))
   for (const entry of Object.values(fpMetadata)) {
     if (!entry.markdownFile) continue
@@ -209,7 +223,28 @@ async function main() {
   // parser stamps them on its emitted detachment-rule node by matching
   // `${factionId}::${slugify(name)}`. Step 5b emits the standalone MFM
   // detachment nodes separately — this map is just for the field copy.
+  //
+  // Also build the MFM allow-list used by duplicateEleventh to gate which
+  // 10e Wahapedia detachments get promoted to 11e. Only detachments that
+  // appear in the MFM (currently legal) get a 11e twin. The 25 retired-for-
+  // 11e detachments (Wahapedia-only, no MFM row) stay as 10e-only nodes.
+  //
+  // Allow-list keys: `${canonicalFactionId}::${normalizedTitle}` where
+  // normalizedTitle = lower-case, all non-alphanumeric stripped.
+  // NOTE: the allow-list is UNSCOPED by chapter — SM shared detachments appear
+  // under `space-marines` in MFM, plus redundantly under chapter factionSlugs.
+  // Wahapedia emits all SM detachments under `space-marines` too, so the key
+  // is always `space-marines::${normalizedTitle}` for shared SM detachments.
+  // Chapter-specific detachments (e.g. 'blood-angels::angelic-inheritors')
+  // appear only under their chapter factionSlug in MFM. The allow-list must
+  // cover BOTH so that:
+  //   - shared SM detachments match `space-marines::${title}`
+  //   - chapter-specific detachments match `${chapter}::${title}`
+  // We achieve this by adding all MFM rows with their normalized factionSlug
+  // as-is. For chapter rows that repeat a SM-shared detachment, we skip them
+  // (the SM row already covers it) to keep the allow-list lean.
   const mfmDetachmentLookup = new Map<string, { dp?: number; forceDisposition?: string }>()
+  let mfmAllowlist: MfmAllowlist | undefined
   try {
     if (existsSync(MFM_DETACHMENTS_PATH)) {
       const mfmRaw = JSON.parse(readFileSync(MFM_DETACHMENTS_PATH, 'utf-8')) as Array<{
@@ -218,15 +253,22 @@ async function main() {
         dp?: number | null
         objective?: string | null
       }>
+      const allowlistSet = new Set<string>()
       for (const row of mfmRaw) {
         if (!row?.factionSlug || !row?.name) continue
-        const key = `${normalizeFactionId(row.factionSlug)}::${slugify(row.name)}`
+        const canonicalFaction = normalizeFactionId(row.factionSlug)
+        const key = `${canonicalFaction}::${slugify(row.name)}`
         mfmDetachmentLookup.set(key, {
           ...(typeof row.dp === 'number' ? { dp: row.dp } : {}),
           ...(row.objective ? { forceDisposition: row.objective } : {}),
         })
+        // Allow-list entry: normalized key for the detachment
+        allowlistSet.add(mfmAllowlistKey(canonicalFaction, row.name))
       }
-      console.log(`   MFM detachment lookup: ${mfmDetachmentLookup.size} entries`)
+      mfmAllowlist = allowlistSet
+      console.log(
+        `   MFM detachment lookup: ${mfmDetachmentLookup.size} entries, allow-list: ${allowlistSet.size} keys`,
+      )
     } else {
       console.log(`   MFM detachment lookup: skipped (no file at ${MFM_DETACHMENTS_PATH})`)
     }
@@ -402,7 +444,7 @@ async function main() {
   // build an 11e parallel dataset by duplicating the 10e graph with an
   // `11e:` id prefix. The 11e duplicates are what the MFM 11e points pass
   // and (eventually) the faction-pack unit-level patches mutate.
-  const eleventhDup = duplicateEleventh(gameResult.nodes, gameResult.refs)
+  const eleventhDup = duplicateEleventh(gameResult.nodes, gameResult.refs, mfmAllowlist)
   stampPublishedAt(eleventhDup.nodes, SOURCE_DATES['wahapedia']!)
   for (const n of eleventhDup.nodes) allNodes.push(n)
   for (const r of eleventhDup.refs) allRefs.push(r)

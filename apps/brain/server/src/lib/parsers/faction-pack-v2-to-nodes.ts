@@ -123,9 +123,24 @@ export type FactionPackMfmLookup = Map<string, { dp?: number; forceDisposition?:
 /**
  * Detect the edition of a GW faction-pack PDF from its asset URL. Any URL
  * that doesn't match a known 11e prefix is treated as 10th edition.
+ *
+ * Known 11e URL prefixes (chronological):
+ *   eng_11-02_  Feb 2026 launch wave (SM, sororitas, aeldari, IG, CSM, orks, leagues, chaos-daemons)
+ *   eng_07-01_  Jul 2026 wave A (EC, necrons, tyranids)
+ *   eng_08-06_  Jun 2026 SM family wave (BA, DA, SW, BT, DW, GK, SM updated)
+ *   eng_09-06_  Jun 2026 xenos wave (aeldari, drukhari, GSC, t'au, orks updated)
+ *   eng_10-06_  Jun 2026 chaos wave (death-guard, thousand-sons, chaos-knights, WE, EC, CSM updated)
+ *   eng_11-06_  Jun 2026 Imperium wave (custodes, ad-mech, AT, IA, IG, sororitas, IK updated)
  */
 export function detectFactionPackEdition(assetUrl: string): '10th' | '11th' {
-  const elevenPrefixes = ['eng_11-02_', 'eng_07-01_']
+  const elevenPrefixes = [
+    'eng_11-02_',
+    'eng_07-01_',
+    'eng_08-06_',
+    'eng_09-06_',
+    'eng_10-06_',
+    'eng_11-06_',
+  ]
   for (const prefix of elevenPrefixes) {
     if (assetUrl.includes(prefix)) return '11th'
   }

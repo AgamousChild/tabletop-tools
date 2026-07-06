@@ -47,24 +47,89 @@ export interface DuplicateEleventhResult {
 }
 
 /**
+ * MFM allow-list for the 11e duplicate promotion.
+ *
+ * Keys: `${factionId}::${slugifiedTitle}` (lower-case, non-alpha stripped).
+ * Values: ignored (presence is the signal).
+ *
+ * When provided, only `detachment-rule` nodes whose key appears in the
+ * allow-list are promoted to 11e. Nodes that are NOT detachment-rules
+ * (datasheets, weapons, abilities, stratagems, enhancements …) are always
+ * promoted regardless of the allow-list — the list only gates detachment-rule
+ * promotion so retired-for-11e detachments stay 10e-only.
+ */
+export type MfmAllowlist = ReadonlySet<string>
+
+/**
+ * Build a normalised allow-list key from a faction id and a title.
+ * Normalisation: lower-case → strip all non-alphanumeric chars.
+ * This matches the normalisation used in the report reconciliation doc
+ * (String.toLowerCase().replace(/[^a-z0-9]+/g, '')).
+ */
+export function mfmAllowlistKey(factionId: string, title: string): string {
+  const normalTitle = title.toLowerCase().replace(/[^a-z0-9]+/g, '')
+  return `${factionId}::${normalTitle}`
+}
+
+/**
  * Build an 11e parallel dataset from the 10e Wahapedia-emitted slice.
  *
  * The function is intentionally pure — it doesn't read `edition` to decide
  * what to copy. Callers pass exactly the nodes they want duplicated. Most
  * commonly that's the result of `convertGameData()` filtered to its own
  * output (all of which is tagged 10th by the parser).
+ *
+ * `mfmAllowlist` — when provided, `detachment-rule` nodes whose
+ * `${factionId}::${normalizedTitle}` key is NOT in the allow-list will NOT
+ * be promoted to 11e. This is how we retire the 25 Wahapedia-only 10e
+ * detachments that GW removed from 11e play. All other node categories are
+ * unaffected.
  */
 export function duplicateEleventh(
   tenthNodes: ReadonlyArray<Node>,
   tenthRefs: ReadonlyArray<NodeRef>,
+  mfmAllowlist?: MfmAllowlist,
 ): DuplicateEleventhResult {
+  // Build the id map first, but selectively exclude detachment-rule nodes
+  // that are NOT in the MFM allow-list (retired-for-11e).
   const idMap = new Map<string, string>()
+  // Track excluded detachment ids so we can also skip their children.
+  const excludedDetachmentIds = new Set<string>()
   for (const node of tenthNodes) {
+    if (
+      node.category === 'detachment-rule' &&
+      mfmAllowlist !== undefined &&
+      node.factionId &&
+      !mfmAllowlist.has(mfmAllowlistKey(node.factionId, node.title))
+    ) {
+      // Retired for 11e — exclude from idMap and record id so children skip too.
+      excludedDetachmentIds.add(node.id)
+      // Also exclude by detachmentId slug if present (Wahapedia uses detachmentId
+      // as a stable slug on the rule node itself).
+      if (node.detachmentId && node.detachmentId !== node.id) {
+        excludedDetachmentIds.add(node.detachmentId)
+      }
+      continue
+    }
     idMap.set(node.id, ELEVENTH_PREFIX + node.id)
   }
 
   const nodes: Node[] = []
   for (const original of tenthNodes) {
+    // Skip nodes not in the id map (retired detachment-rules).
+    if (!idMap.has(original.id)) continue
+    // Skip children of excluded detachments (stratagems/enhancements/abilities
+    // whose detachmentId or datasheetId points at a retired detachment).
+    if (
+      excludedDetachmentIds.size > 0 &&
+      original.detachmentId &&
+      (excludedDetachmentIds.has(original.detachmentId) ||
+        // Wahapedia child nodes carry detachmentId = parent's detachmentId slug
+        // (e.g. 'gladius-task-force') which may differ from parent's node id.
+        excludedDetachmentIds.has(original.detachmentId))
+    ) {
+      continue
+    }
     const duplicate: Node = {
       ...original,
       id: idMap.get(original.id)!,
