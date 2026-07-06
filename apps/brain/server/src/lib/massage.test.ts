@@ -216,6 +216,60 @@ describe('massage — Pass 3: duplicate summaries', () => {
     expect(stats.droppedDuplicateSummary).toBe(0)
   })
 
+  it('keeps same-summary weapons that belong to different datasheets', () => {
+    // A Choppa on Boyz and a Choppa on Nobz have byte-identical summaries
+    // (name + statline) but are distinct per-datasheet weapon nodes. The
+    // 2026-07-06 unit reconciliation found only 3 of 12 Ork Choppa nodes
+    // survived this pass — 9 units rendered without their weapon.
+    const boyzChoppa = makeNode({
+      id: 'weapon:000000016:choppa',
+      category: 'weapon',
+      factionId: 'orks',
+      datasheetId: '000000016',
+      summary: 'Choppa (Melee) — Melee, 3A, S4, AP-1, D1.',
+      content: LONG_CONTENT,
+    })
+    const nobzChoppa = makeNode({
+      id: 'weapon:000000021:choppa',
+      category: 'weapon',
+      factionId: 'orks',
+      datasheetId: '000000021',
+      summary: 'Choppa (Melee) — Melee, 3A, S4, AP-1, D1.',
+      content: LONG_CONTENT,
+    })
+    const { nodes, stats } = massage([boyzChoppa, nobzChoppa])
+    expect(nodes).toHaveLength(2)
+    expect(stats.droppedDuplicateSummary).toBe(0)
+  })
+
+  it('keeps same-summary datasheets with different titles (Fluxmaster vs Changecaster)', () => {
+    // Pack-patched twins can share generated summaries when two real units
+    // carry identical weapon lists. Different units must both survive.
+    const changecaster = makeNode({
+      id: '11e:000001462',
+      category: 'datasheet',
+      title: 'CHANGECASTER',
+      factionId: 'chaos-daemons',
+      datasheetId: '11e:000001462',
+      edition: '11th',
+      summary: 'RANGED WEAPONS: Arcane Fireball MELEE WEAPONS: Herald combat weapon',
+      content: LONG_CONTENT,
+    })
+    const fluxmaster = makeNode({
+      id: '11e:000001464',
+      category: 'datasheet',
+      title: 'FLUXMASTER',
+      factionId: 'chaos-daemons',
+      datasheetId: '11e:000001464',
+      edition: '11th',
+      summary: 'RANGED WEAPONS: Arcane Fireball MELEE WEAPONS: Herald combat weapon',
+      content: LONG_CONTENT,
+    })
+    const { nodes, stats } = massage([changecaster, fluxmaster])
+    expect(nodes).toHaveLength(2)
+    expect(stats.droppedDuplicateSummary).toBe(0)
+  })
+
   it('keeps nodes with the same summary but different category', () => {
     const a = makeNode({
       id: 'dup:cat-a',

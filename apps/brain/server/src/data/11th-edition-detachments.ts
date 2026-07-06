@@ -10,70 +10,19 @@
  * pack versions. If new detachment data is needed before a faction pack ships,
  * add it through the faction-pack v2 parser pipeline instead.
  *
- * Retained: Red Terror unit node + Army Construction rules node (neither is a
- * detachment and neither has a canonical source in the faction-pack pipeline).
+ * Retained: Army Construction rules node only (not a detachment and has no
+ * canonical source in the faction-pack pipeline). The hand-scraped Red Terror
+ * unit stub was removed 2026-07-06 — the Tyranids faction pack now ships the
+ * official THE RED TERROR datasheet through the v2 parser, and the stub
+ * duplicated it under a slightly different title.
  */
 import type { Node, NodeRef } from '../lib/model'
 
 const RETRIEVED_AT = '2026-05-05T00:00:00Z'
-const PUBLISHED_AT = '2026-05-05'
-const SOURCE_BASE = 'https://www.warhammer-community.com/en-gb/articles'
 
 export function build11thEditionNodes(): { nodes: Node[]; refs: NodeRef[] } {
   const nodes: Node[] = []
   const refs: NodeRef[] = []
-
-  // ── RED TERROR (Tyranids unit) ───────────────────────────────────────────
-  const redTerrorSource = {
-    type: 'manual' as const,
-    title: 'Warhammer Community Faction Focus',
-    url: `${SOURCE_BASE}/tyranids-faction-focus/`,
-    publishedAt: PUBLISHED_AT,
-    retrievedAt: RETRIEVED_AT,
-  }
-
-  const redTerrorId = '11e:unit:tyranids:red-terror'
-  nodes.push({
-    id: redTerrorId,
-    layer: 'unit',
-    category: 'datasheet',
-    title: 'Red Terror',
-    content: `**Red Terror** (130 pts)
-
-**Keywords:** BURROWER, VANGUARD INVADER
-
-**Weapons:**
-- Scything Talons: S7, anti-infantry
-- Swallow Whole: Single attack, automatically has [DEVASTATING WOUNDS] on a successful wound roll, Precision
-
-**Abilities:**
-- Deep Strike
-- Can burrow back underground (return to strategic reserves)
-- Heals wounds on a successful Swallow Whole attack
-
-**Synergies:**
-- Subterranean Assault Detachment: BURROWER units can re-roll hit rolls of 1
-- Vanguard Onslaught Detachment: benefits from VANGUARD INVADER keyword`,
-    summary:
-      'Red Terror — 11th Edition Tyranids unit. 130 pts. BURROWER, VANGUARD INVADER. Deep Strike, Swallow Whole (auto Devastating Wounds + Precision), burrows back underground, heals on successful Swallow Whole.',
-    phase: 'fight',
-    factionId: 'tyranids',
-    factionName: 'TYRANIDS',
-    edition: '11th',
-    sources: [redTerrorSource],
-    refs: [],
-    version: 1,
-    keywords: [
-      'red terror',
-      'tyranids',
-      'burrower',
-      'vanguard invader',
-      '11th edition',
-      'datasheet',
-      'deep strike',
-      'swallow whole',
-    ],
-  })
 
   // ── 11th Edition Army Construction Rules ──────────────────────────────────
   nodes.push({

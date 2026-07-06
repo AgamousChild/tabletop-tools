@@ -199,3 +199,23 @@ export function rekeyByEleventhSurfaceId<V>(
   }
   return out
 }
+
+/**
+ * Multi-copy variant of `rekeyByEleventhSurfaceId`. Cross-faction same-name
+ * datasheets share one BSData hash (data-import name-based re-keying) but
+ * keep per-faction surface ids — MFM points must land on EVERY copy, not
+ * just the last row's. Points are per-unit in the MFM, identical across the
+ * factions that share the sheet.
+ */
+export function rekeyByEleventhSurfaceIds<V>(
+  byBsdataHash: ReadonlyMap<string, V>,
+  bsdataIdToSurfaceIds: ReadonlyMap<string, string[]>,
+): Map<string, V> {
+  const out = new Map<string, V>()
+  for (const [bsdataHash, value] of byBsdataHash) {
+    for (const surfaceId of bsdataIdToSurfaceIds.get(bsdataHash) ?? []) {
+      out.set(ELEVENTH_PREFIX + surfaceId, value)
+    }
+  }
+  return out
+}

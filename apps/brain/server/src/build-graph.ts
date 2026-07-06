@@ -24,7 +24,7 @@ import {
   duplicateEleventh,
   type MfmAllowlist,
   mfmAllowlistKey,
-  rekeyByEleventhSurfaceId,
+  rekeyByEleventhSurfaceIds,
 } from './lib/duplicate-eleventh'
 import { EDITION_AGNOSTIC_CATEGORIES } from './lib/edition'
 import { extractStructuredFields } from './lib/extract-fields'
@@ -340,6 +340,13 @@ async function main() {
   // produced the twin nodes we're patching into.
   const elevenPackPatches: DatasheetPatch[] = []
   const elevenPackPublishedAt = '2026-02-11'
+  // Pack-declared Legends → 11e retire set (`${faction}::${normTitle}`).
+  // A unit named in a pack's Legends section is NOT 11e-playable even when
+  // the Wahapedia 10e snapshot still carries it as legal (e.g. Venerable
+  // Dreadnought). Names in the pack's REGULAR datasheet section take
+  // precedence — MUTILATORS returns from Legends in the 11e CSM pack and
+  // appears in both sections.
+  const packLegendsRetire = new Set<string>()
   let fpNodes = 0,
     fpRefs = 0,
     fpErrors = 0,
@@ -379,6 +386,19 @@ async function main() {
       if (edition === '11th' && result.patches.length > 0) {
         elevenPackPatches.push(...result.patches)
         fpPatches += result.patches.length
+      }
+      if (edition === '11th') {
+        const packFaction = normalizeFactionId(factionSlug)
+        const regularNames = new Set(
+          extract.datasheets.filter((d) => !d.isLegends).map((d) => normalizeTitle(d.name)),
+        )
+        for (const d of [
+          ...extract.legendsDatasheets,
+          ...extract.datasheets.filter((d) => d.isLegends),
+        ]) {
+          const key = normalizeTitle(d.name)
+          if (!regularNames.has(key)) packLegendsRetire.add(`${packFaction}::${key}`)
+        }
       }
     } catch (err) {
       fpErrors++
@@ -1061,9 +1081,9 @@ async function main() {
   // keyed by BSData hash GUID; `bsdataIdToSurfaceId` translates that to the
   // Wahapedia numeric (surface id); `rekeyByEleventhSurfaceId` prepends the
   // `11e:` prefix.
-  const mfmCostingFor11e = rekeyByEleventhSurfaceId(
+  const mfmCostingFor11e = rekeyByEleventhSurfaceIds(
     mfmResult.byDatasheetId,
-    gameResult.bsdataIdToSurfaceId,
+    gameResult.bsdataIdToSurfaceIds,
   )
 
   // ── Merge and deduplicate nodes from all sources ──────────────────────────
@@ -1191,6 +1211,60 @@ async function main() {
     console.log(
       `   Filtered ${enhFilteredOut} stale 10e-only enhancements from 11e (${enhBefore} → ${allNodes.length})`,
     )
+  }
+
+  // ── 6a1b. Retire pack-declared Legends datasheets from the 11e set ────────
+  // The faction packs are the authoritative 11e Legends designation. A 10e
+  // Wahapedia twin whose title appears in its pack's Legends section is not
+  // 11e-playable (Venerable Dreadnought et al.) — drop the 11e twin and its
+  // weapon/ability children. The 10e original stays (frozen history).
+  // SM-family pooling: chapter shards share the SM pool, so a name retired
+  // by any family pack retires it across the family.
+  if (packLegendsRetire.size > 0) {
+    const SM_FAMILY = [
+      'space-marines',
+      'black-templars',
+      'blood-angels',
+      'dark-angels',
+      'deathwatch',
+      'imperial-fists',
+      'iron-hands',
+      'raven-guard',
+      'salamanders',
+      'space-wolves',
+      'ultramarines',
+      'white-scars',
+    ]
+    const SM_FAMILY_SET = new Set(SM_FAMILY)
+    const retiredIds = new Set<string>()
+    const afterRetire: Node[] = []
+    for (const node of allNodes) {
+      if (node.category === 'datasheet' && node.edition === '11th' && node.factionId) {
+        const title = normalizeTitle(node.title)
+        const factions = SM_FAMILY_SET.has(node.factionId) ? SM_FAMILY : [node.factionId]
+        if (factions.some((f) => packLegendsRetire.has(`${f}::${title}`))) {
+          retiredIds.add(node.id)
+          continue
+        }
+      }
+      afterRetire.push(node)
+    }
+    if (retiredIds.size > 0) {
+      const beforeChildren = afterRetire.length
+      const afterChildren = afterRetire.filter(
+        (n) =>
+          !(
+            (n.category === 'weapon' || n.category === 'unit-ability') &&
+            n.datasheetId &&
+            retiredIds.has(n.datasheetId)
+          ),
+      )
+      allNodes.length = 0
+      for (const n of afterChildren) allNodes.push(n)
+      console.log(
+        `   Retired ${retiredIds.size} pack-declared Legends datasheets from 11e (+${beforeChildren - afterChildren.length} children)`,
+      )
+    }
   }
 
   // ── 6a2. Normalize detachmentId on children to the detachment's slug ──────
