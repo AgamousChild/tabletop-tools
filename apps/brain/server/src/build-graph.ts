@@ -498,7 +498,15 @@ async function main() {
   // etc.). Route them to their chapter now, before duplicateEleventh — so the
   // 11e twin lands under the chapter shard and the MFM chapter row can merge
   // with it cleanly.
+  //
+  // Also rewrite children (stratagems, enhancements, faction-abilities) whose
+  // detachmentId matches a chapter-routed detachment. Without this, the pack
+  // emits the same stratagem under both `factionId=space-marines` (via
+  // Wahapedia+11e-duplicate path) and `factionId=<chapter>` (via MFM),
+  // merge-sources' faction-scoped dedup key keeps them separate, and the
+  // detachment endpoint returns doubled lists with mismatched titles/costs.
   let smChapterRewrites = 0
+  const chapterOwnedDetachmentIds = new Map<string, string>() // detachmentId slug → chapter factionId
   for (const node of gameResult.nodes) {
     if (node.category !== 'detachment-rule') continue
     if (node.factionId !== 'space-marines') continue
@@ -506,10 +514,25 @@ async function main() {
     if (chapter && chapter !== 'space-marines') {
       node.factionId = chapter
       smChapterRewrites++
+      if (node.detachmentId) chapterOwnedDetachmentIds.set(node.detachmentId, chapter)
+    }
+  }
+  let smChapterChildRewrites = 0
+  const CHILD_CATEGORIES = new Set(['stratagem', 'enhancement', 'faction-ability'])
+  for (const node of gameResult.nodes) {
+    if (!CHILD_CATEGORIES.has(node.category)) continue
+    if (node.factionId !== 'space-marines') continue
+    if (!node.detachmentId) continue
+    const chapter = chapterOwnedDetachmentIds.get(node.detachmentId)
+    if (chapter) {
+      node.factionId = chapter
+      smChapterChildRewrites++
     }
   }
   if (smChapterRewrites > 0) {
-    console.log(`   Routed ${smChapterRewrites} SM chapter-specific detachments to chapter shards`)
+    console.log(
+      `   Routed ${smChapterRewrites} SM chapter-specific detachments + ${smChapterChildRewrites} child nodes to chapter shards`,
+    )
   }
 
   for (const n of gameResult.nodes) allNodes.push(n)
@@ -1063,6 +1086,26 @@ async function main() {
   for (const n of mergeResult.nodes) allNodes.push(n)
   allRefs.length = 0
   for (const r of mergeResult.refs) allRefs.push(r)
+
+  // ── 6a2. Normalize detachmentId on children to the detachment's slug ──────
+  // Wahapedia's game-data parser writes `detachmentId` as the full node id
+  // (e.g. `det:chaos-space-marines:devotees-of-destruction`), while the
+  // faction-pack v2 parser writes just the slug (`devotees-of-destruction`).
+  // The `/browse/detachment/:id` endpoint joins by matching the incoming id's
+  // last segment against `n.detachmentId` — that match fails for Wahapedia
+  // children when the requesting id came from an MFM-only detachment. Strip
+  // to the trailing slug so both conventions resolve.
+  let detIdNormalized = 0
+  for (const node of allNodes) {
+    if (!node.detachmentId) continue
+    if (!node.detachmentId.includes(':')) continue
+    const parts = node.detachmentId.split(':')
+    node.detachmentId = parts[parts.length - 1]!
+    detIdNormalized++
+  }
+  if (detIdNormalized > 0) {
+    console.log(`   Normalized ${detIdNormalized} detachmentId values to slug form`)
+  }
 
   // ── Massage: clean phantom nodes, validate content, flag issues ──────────
   console.log('\n6b. Data massage')
