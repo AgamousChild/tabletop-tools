@@ -123,9 +123,24 @@ export type FactionPackMfmLookup = Map<string, { dp?: number; forceDisposition?:
 /**
  * Detect the edition of a GW faction-pack PDF from its asset URL. Any URL
  * that doesn't match a known 11e prefix is treated as 10th edition.
+ *
+ * Known 11e URL prefixes (chronological):
+ *   eng_11-02_  Feb 2026 launch wave (SM, sororitas, aeldari, IG, CSM, orks, leagues, chaos-daemons)
+ *   eng_07-01_  Jul 2026 wave A (EC, necrons, tyranids)
+ *   eng_08-06_  Jun 2026 SM family wave (BA, DA, SW, BT, DW, GK, SM updated)
+ *   eng_09-06_  Jun 2026 xenos wave (aeldari, drukhari, GSC, t'au, orks updated)
+ *   eng_10-06_  Jun 2026 chaos wave (death-guard, thousand-sons, chaos-knights, WE, EC, CSM updated)
+ *   eng_11-06_  Jun 2026 Imperium wave (custodes, ad-mech, AT, IA, IG, sororitas, IK updated)
  */
 export function detectFactionPackEdition(assetUrl: string): '10th' | '11th' {
-  const elevenPrefixes = ['eng_11-02_', 'eng_07-01_']
+  const elevenPrefixes = [
+    'eng_11-02_',
+    'eng_07-01_',
+    'eng_08-06_',
+    'eng_09-06_',
+    'eng_10-06_',
+    'eng_11-06_',
+  ]
   for (const prefix of elevenPrefixes) {
     if (assetUrl.includes(prefix)) return '11th'
   }
@@ -1113,8 +1128,43 @@ export function applyFactionPackPatches(
       !patch.parentSlug && (patch.category === 'datasheet' || patch.category === 'detachment-rule')
 
     let twin: Node | undefined
+    let twinViaSuffixMatch = false
     if (isTopLevel) {
       twin = titleIndex.get(`${patch.category}::${patch.factionId}::${patch.targetSlug}`)
+      // Suffix-match fallback: GW faction-pack errata sections use shortened
+      // detachment names (e.g. "Alien Hunters") while Wahapedia stores the full
+      // name ("Ordo Xenos, Alien Hunters"). If the exact slug lookup misses,
+      // scan the title index for an entry whose slug ends with `-${targetSlug}`.
+      // This also catches GW typos where the pack spells a name differently from
+      // MFM (e.g. "Possessed Slaughterbound" vs "Possessed Slaughterband").
+      if (!twin) {
+        const suffix = `-${patch.targetSlug}`
+        const prefix = `${patch.category}::${patch.factionId}::`
+        for (const [key, node] of titleIndex) {
+          if (key.startsWith(prefix) && key.endsWith(suffix)) {
+            twin = node
+            twinViaSuffixMatch = true
+            break
+          }
+        }
+      }
+      // Fuzzy-prefix fallback: GW typos that differ by 1-2 chars at the end of
+      // a slug (e.g. "possessed-slaughterbound" vs "possessed-slaughterband").
+      // Match when the first 80%+ of the target slug exactly matches a key slug.
+      if (!twin && patch.targetSlug.length >= 10) {
+        const prefixLen = Math.ceil(patch.targetSlug.length * 0.8)
+        const slugPrefix = patch.targetSlug.slice(0, prefixLen)
+        const keyPrefix = `${patch.category}::${patch.factionId}::`
+        for (const [key, node] of titleIndex) {
+          if (!key.startsWith(keyPrefix)) continue
+          const keySlug = key.slice(keyPrefix.length)
+          if (keySlug.startsWith(slugPrefix)) {
+            twin = node
+            twinViaSuffixMatch = true
+            break
+          }
+        }
+      }
     } else {
       const parentSlug = patch.parentSlug ?? '_'
       twin = childIndex.get(
@@ -1149,6 +1199,10 @@ export function applyFactionPackPatches(
       ) {
         continue
       }
+      // When matched via suffix-match the twin's title is canonical (e.g.
+      // "Ordo Xenos, Alien Hunters") while the patch title is a shortened
+      // errata-stub name ("Alien Hunters"). Don't overwrite the canonical title.
+      if (key === 'title' && twinViaSuffixMatch) continue
       ;(twin as unknown as Record<string, unknown>)[key] = value
     }
     twin.updatedInEleventh = true

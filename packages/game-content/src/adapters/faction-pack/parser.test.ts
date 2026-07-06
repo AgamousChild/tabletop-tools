@@ -74,7 +74,7 @@ Bonkers wallop on arrival.
     const r = parseFactionPackV2(md, { faction: 'greenskins' })
     expect(r.detachments).toHaveLength(1)
     const d = r.detachments[0]!
-    expect(d.name).toBe('BONK BRIGADE')
+    expect(d.name).toBe('Bonk Brigade')
     expect(d.detachmentRule?.name).toBe('TURBO BONKS')
     expect(d.detachmentRule?.body).toContain('add 2"')
     expect(d.enhancements).toHaveLength(1)
@@ -329,5 +329,115 @@ KEYWORDS: Infantry, OnlyUnit RANGED WEAPONS RANGE A BS S AP D Pop [PISTOL] 12" 1
     expect(kinds).toContain('faction')
     expect(kinds.includes('aura') || kinds.includes('unit-specific')).toBe(true)
     expect(kinds).toContain('wargear')
+  })
+
+  it('title-cases ALL-CAPS detachment names', () => {
+    const md = `## BLOOD RAVENS STRIKE FORCE
+
+DETACHMENT RULES
+
+
+##### OMNIS ARCANUM
+
+The ravens know all. Friendly units add 1 to hit.
+`
+    const r = parseFactionPackV2(md, { faction: 'space-marines' })
+    expect(r.detachments).toHaveLength(1)
+    // ALL-CAPS h2 name should be converted to Title Case
+    expect(r.detachments[0]!.name).toBe('Blood Ravens Strike Force')
+  })
+
+  it('merges consecutive ALL-CAPS h2 headings split by PDF column break', () => {
+    // Simulates "VEILED BLADE" on one line, "ELIMINATION FORCE" on the next
+    // due to PDF text-flow column break — should produce one detachment.
+    // The faction root h2 (INQUISITION) always has body text before the first
+    // detachment, which prevents it from being merged with the detachment h2.
+    const md = `## INQUISITION
+
+
+##### FACTION PACK: VERSION 1.0
+
+Legal for matched play from 1st January 2026.
+
+
+## VEILED BLADE
+
+## ELIMINATION FORCE
+
+DETACHMENT RULES
+
+
+##### VEILED OPERATIVES
+
+Operatives strike unseen. ENHANCEMENTS
+
+
+##### SHADOW CLOAK
+
+UPGRADE Operative model only. This model is always in cover.
+`
+    const r = parseFactionPackV2(md, { faction: 'inquisition' })
+    // Two consecutive ALL-CAPS h2s should merge into one detachment
+    expect(r.detachments).toHaveLength(1)
+    expect(r.detachments[0]!.name).toBe('Veiled Blade Elimination Force')
+    expect(r.detachments[0]!.detachmentRule?.body).toContain('Operatives strike unseen')
+    expect(r.detachments[0]!.enhancements).toHaveLength(1)
+  })
+
+  it('ignores noise h2 headings (DETACHMENT RULES, BATTLE TACTIC, etc.) as detachment names', () => {
+    // The faction root h2 (GREENSKINS) has body text (preamble) before the
+    // first detachment h2 — that body prevents the two h2s from being merged.
+    const md = `## GREENSKINS
+
+
+##### FACTION PACK: VERSION 2.0
+
+Legal for matched play from 1st January 2026.
+
+
+## STOMP BOYS
+
+DETACHMENT RULES
+
+
+##### WAAAGH BONUS
+
+Friendly units add 1 to charge.
+
+BATTLE TACTIC
+
+STRATEGIC PLOY
+`
+    const r = parseFactionPackV2(md, { faction: 'greenskins' })
+    // Only "STOMP BOYS" should become a detachment — not BATTLE TACTIC, STRATEGIC PLOY, or DETACHMENT RULES
+    const detachmentNames = r.detachments.map((d) => d.name)
+    expect(detachmentNames).toContain('Stomp Boys')
+    expect(detachmentNames.every((n) => !['Battle Tactic', 'Strategic Ploy'].includes(n))).toBe(
+      true,
+    )
+  })
+
+  it('creates a stub detachment from an errata-only ##### NAME DETACHMENT heading', () => {
+    // Some detachments appear only in the errata section (e.g. Bringers of Flame,
+    // Hallowed Martyrs) with a ##### HEADING DETACHMENT entry and rule text.
+    const md = `## FACTION
+
+
+#### UPDATES & ERRATA
+
+##### BRINGERS OF FLAME DETACHMENT
+
+Immolation bonus: friendly units within 6" of a burning model add 1 to hit.
+
+Page 12  —  Immolator, Abilities Change to: 'Burn it all: do thing.'
+`
+    const r = parseFactionPackV2(md, { faction: 'adepta-sororitas' })
+    // A stub detachment should be created for the errata-section heading
+    const bof = r.detachments.find(
+      (d) => d.name.toLowerCase().replace(/\s+/g, '') === 'bringersofflame',
+    )
+    expect(bof).toBeDefined()
+    // The errata body should be attached as detachmentRule
+    expect(bof!.detachmentRule?.body).toContain('Immolation bonus')
   })
 })

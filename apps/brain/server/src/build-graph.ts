@@ -20,7 +20,12 @@ import {
   buildEligibleForRefs,
   buildFactionNodes,
 } from './lib/combo-detection'
-import { duplicateEleventh, rekeyByEleventhSurfaceId } from './lib/duplicate-eleventh'
+import {
+  duplicateEleventh,
+  type MfmAllowlist,
+  mfmAllowlistKey,
+  rekeyByEleventhSurfaceId,
+} from './lib/duplicate-eleventh'
 import { EDITION_AGNOSTIC_CATEGORIES } from './lib/edition'
 import { extractStructuredFields } from './lib/extract-fields'
 import { loadFactionCodes, normalizeFactionId } from './lib/faction-codes'
@@ -190,7 +195,16 @@ async function main() {
   // already the 11e pack. Prefer any URL that carries an 11e prefix
   // (`eng_11-02_`, `eng_07-01_`) so the edition tag matches the actual body.
   const mdFileToUrl = new Map<string, string>()
-  const ELEVEN_URL_PREFIXES = ['eng_11-02_', 'eng_07-01_']
+  // All 11e pack URL prefixes — keep in sync with detectFactionPackEdition() in
+  // faction-pack-v2-to-nodes.ts.
+  const ELEVEN_URL_PREFIXES = [
+    'eng_11-02_',
+    'eng_07-01_',
+    'eng_08-06_',
+    'eng_09-06_',
+    'eng_10-06_',
+    'eng_11-06_',
+  ]
   const isElevenUrl = (u: string): boolean => ELEVEN_URL_PREFIXES.some((p) => u.includes(p))
   for (const entry of Object.values(fpMetadata)) {
     if (!entry.markdownFile) continue
@@ -209,7 +223,56 @@ async function main() {
   // parser stamps them on its emitted detachment-rule node by matching
   // `${factionId}::${slugify(name)}`. Step 5b emits the standalone MFM
   // detachment nodes separately — this map is just for the field copy.
+  //
+  // Also build the MFM allow-list used by duplicateEleventh to gate which
+  // 10e Wahapedia detachments get promoted to 11e. Only detachments that
+  // appear in the MFM (currently legal) get a 11e twin. The 25 retired-for-
+  // 11e detachments (Wahapedia-only, no MFM row) stay as 10e-only nodes.
+  //
+  // Allow-list keys: `${canonicalFactionId}::${normalizedTitle}` where
+  // normalizedTitle = lower-case, all non-alphanumeric stripped.
+  // NOTE: the allow-list is UNSCOPED by chapter — SM shared detachments appear
+  // under `space-marines` in MFM, plus redundantly under chapter factionSlugs.
+  // Wahapedia emits all SM detachments under `space-marines` too, so the key
+  // is always `space-marines::${normalizedTitle}` for shared SM detachments.
+  // Chapter-specific detachments (e.g. 'blood-angels::angelic-inheritors')
+  // appear only under their chapter factionSlug in MFM. The allow-list must
+  // cover BOTH so that:
+  //   - shared SM detachments match `space-marines::${title}`
+  //   - chapter-specific detachments match `${chapter}::${title}`
+  // We achieve this by adding all MFM rows with their normalized factionSlug
+  // as-is. For chapter rows that repeat a SM-shared detachment, we skip them
+  // (the SM row already covers it) to keep the allow-list lean.
   const mfmDetachmentLookup = new Map<string, { dp?: number; forceDisposition?: string }>()
+  let mfmAllowlist: MfmAllowlist | undefined
+  // SM chapter routing: Wahapedia stores every SM chapter-specific detachment
+  // (Angelic Inheritors, Marshal's Household, etc.) under `factionId: "Space
+  // Marines"`. MFM lists them under their chapter factionSlug. We route the
+  // Wahapedia node onto the chapter shard at ingest, so the SM shard only
+  // carries shared library detachments (Gladius Task Force, etc.).
+  // Chapter classification:
+  //   - `smSharedTitles`: normalized titles that appear under
+  //     `factionSlug='space-marines'` in MFM — these are the truly shared
+  //     library; keep them at `space-marines`.
+  //   - `chapterOwnership`: normalized title → chapter factionId. Populated
+  //     for MFM rows under a chapter factionSlug whose title is NOT in
+  //     `smSharedTitles`. This is the router map used below.
+  const smSharedTitles = new Set<string>()
+  const chapterOwnership = new Map<string, string>()
+  const SM_CHAPTER_SLUGS = new Set([
+    'blood-angels',
+    'dark-angels',
+    'black-templars',
+    'space-wolves',
+    'deathwatch',
+    'imperial-fists',
+    'iron-hands',
+    'raven-guard',
+    'salamanders',
+    'ultramarines',
+    'white-scars',
+  ])
+  const normalizeTitle = (s: string) => s.toLowerCase().replace(/[^a-z0-9]+/g, '')
   try {
     if (existsSync(MFM_DETACHMENTS_PATH)) {
       const mfmRaw = JSON.parse(readFileSync(MFM_DETACHMENTS_PATH, 'utf-8')) as Array<{
@@ -218,15 +281,53 @@ async function main() {
         dp?: number | null
         objective?: string | null
       }>
+      // Pass 1: collect SM shared titles (factionSlug='space-marines').
       for (const row of mfmRaw) {
         if (!row?.factionSlug || !row?.name) continue
-        const key = `${normalizeFactionId(row.factionSlug)}::${slugify(row.name)}`
+        if (normalizeFactionId(row.factionSlug) === 'space-marines') {
+          smSharedTitles.add(normalizeTitle(row.name))
+        }
+      }
+      // Pass 2: chapter rows whose title is NOT in the SM shared set are the
+      // chapter's own detachments — record the ownership map so the ingest
+      // can route the Wahapedia SM-tagged node to the correct chapter.
+      for (const row of mfmRaw) {
+        if (!row?.factionSlug || !row?.name) continue
+        const canonicalFaction = normalizeFactionId(row.factionSlug)
+        if (!SM_CHAPTER_SLUGS.has(canonicalFaction)) continue
+        const norm = normalizeTitle(row.name)
+        if (smSharedTitles.has(norm)) continue
+        chapterOwnership.set(norm, canonicalFaction)
+      }
+      // Pass 3: build the allow-list + points/objective lookup.
+      // Chapter rows for SM-shared detachments are skipped entirely — the
+      // SM row already covers dp/objective, and the chapter shard shouldn't
+      // emit a redundant node (chapters reach shared SM via subfaction
+      // expansion at retrieval time).
+      const allowlistSet = new Set<string>()
+      for (const row of mfmRaw) {
+        if (!row?.factionSlug || !row?.name) continue
+        const canonicalFaction = normalizeFactionId(row.factionSlug)
+        const norm = normalizeTitle(row.name)
+        // Skip chapter rows that duplicate an SM shared title (inheritance).
+        if (SM_CHAPTER_SLUGS.has(canonicalFaction) && smSharedTitles.has(norm)) {
+          continue
+        }
+        // For chapter-specific rows, keep the chapter as the canonical
+        // faction. For SM-shared rows and every non-SM row, use the row's
+        // own factionSlug as-is.
+        const emitFaction = chapterOwnership.get(norm) ?? canonicalFaction
+        const key = `${emitFaction}::${slugify(row.name)}`
         mfmDetachmentLookup.set(key, {
           ...(typeof row.dp === 'number' ? { dp: row.dp } : {}),
           ...(row.objective ? { forceDisposition: row.objective } : {}),
         })
+        allowlistSet.add(mfmAllowlistKey(emitFaction, row.name))
       }
-      console.log(`   MFM detachment lookup: ${mfmDetachmentLookup.size} entries`)
+      mfmAllowlist = allowlistSet
+      console.log(
+        `   MFM detachment lookup: ${mfmDetachmentLookup.size} entries, allow-list: ${allowlistSet.size} keys, chapter-owned: ${chapterOwnership.size}`,
+      )
     } else {
       console.log(`   MFM detachment lookup: skipped (no file at ${MFM_DETACHMENTS_PATH})`)
     }
@@ -390,6 +491,27 @@ async function main() {
     bsdataSubfactionByKey: bsdataSubfactionResult.byKey,
   })
   stampPublishedAt(gameResult.nodes, SOURCE_DATES['wahapedia']!)
+
+  // ── 4c. Route SM chapter-specific detachments to the right chapter ─────────
+  // Wahapedia files every SM detachment under `factionId: "Space Marines"`,
+  // including chapter-specific ones (Angelic Inheritors, Marshal's Household,
+  // etc.). Route them to their chapter now, before duplicateEleventh — so the
+  // 11e twin lands under the chapter shard and the MFM chapter row can merge
+  // with it cleanly.
+  let smChapterRewrites = 0
+  for (const node of gameResult.nodes) {
+    if (node.category !== 'detachment-rule') continue
+    if (node.factionId !== 'space-marines') continue
+    const chapter = chapterOwnership.get(normalizeTitle(node.title))
+    if (chapter && chapter !== 'space-marines') {
+      node.factionId = chapter
+      smChapterRewrites++
+    }
+  }
+  if (smChapterRewrites > 0) {
+    console.log(`   Routed ${smChapterRewrites} SM chapter-specific detachments to chapter shards`)
+  }
+
   for (const n of gameResult.nodes) allNodes.push(n)
   for (const r of gameResult.refs) allRefs.push(r)
   console.log(`   ${gameResult.nodes.length} nodes, ${gameResult.refs.length} refs`)
@@ -402,7 +524,7 @@ async function main() {
   // build an 11e parallel dataset by duplicating the 10e graph with an
   // `11e:` id prefix. The 11e duplicates are what the MFM 11e points pass
   // and (eventually) the faction-pack unit-level patches mutate.
-  const eleventhDup = duplicateEleventh(gameResult.nodes, gameResult.refs)
+  const eleventhDup = duplicateEleventh(gameResult.nodes, gameResult.refs, mfmAllowlist)
   stampPublishedAt(eleventhDup.nodes, SOURCE_DATES['wahapedia']!)
   for (const n of eleventhDup.nodes) allNodes.push(n)
   for (const r of eleventhDup.refs) allRefs.push(r)
@@ -872,14 +994,37 @@ async function main() {
       SOURCE_DATES['wahapedia'], // Best-available 11e publication date proxy.
     )
     if (mfmDetResult.totalDetachments > 0) {
+      // Filter out MFM chapter rows that duplicate SM shared titles — those
+      // are inheritance markers, not chapter-specific detachments. Chapters
+      // reach shared SM library at retrieval time via subfaction expansion.
+      // Track by detachment id so we can also drop the enhancement children
+      // that hang off those detachments.
+      const droppedDetIds = new Set<string>()
+      const filteredNodes = mfmDetResult.nodes.filter((node) => {
+        if (node.category !== 'detachment') return true
+        if (!node.factionId || !SM_CHAPTER_SLUGS.has(node.factionId)) return true
+        if (!smSharedTitles.has(normalizeTitle(node.title))) return true
+        droppedDetIds.add(node.id)
+        return false
+      })
+      // Second pass: drop enhancements attached to dropped detachments.
+      const filteredNodes2 = filteredNodes.filter((node) => {
+        if (node.category !== 'enhancement') return true
+        return !node.detachmentId || !droppedDetIds.has(node.detachmentId)
+      })
+      const filteredRefs = mfmDetResult.refs.filter(
+        (r) => !droppedDetIds.has(r.targetId) && !droppedDetIds.has(r.sourceId),
+      )
+      const dropped = mfmDetResult.nodes.length - filteredNodes2.length
       console.log(
-        `\n5b. MFM detachments: ${mfmDetResult.nodes.length} nodes ` +
+        `\n5b. MFM detachments: ${filteredNodes2.length} nodes ` +
           `(${mfmDetResult.totalDetachments} detachments, ` +
           `${mfmDetResult.totalEnhancements} enhancements), ` +
-          `${mfmDetResult.refs.length} refs`,
+          `${filteredRefs.length} refs` +
+          (dropped > 0 ? ` — dropped ${dropped} SM inheritance rows` : ''),
       )
-      allNodes.push(...mfmDetResult.nodes)
-      allRefs.push(...mfmDetResult.refs)
+      for (const n of filteredNodes2) allNodes.push(n)
+      for (const r of filteredRefs) allRefs.push(r)
     } else {
       console.log(`\n5b. MFM detachments: skipped (no file at ${MFM_DETACHMENTS_PATH})`)
     }

@@ -102,7 +102,7 @@ describe('runValidationDelta', () => {
   it('finds 10e nodes that have a matching 11e parser output', () => {
     const deltas = runValidationDelta({ packDir, brainNodesDir })
     expect(deltas.length).toBeGreaterThan(0)
-    const det = deltas.find((d) => d.title === 'CERAMITE SENTINELS')
+    const det = deltas.find((d) => d.title === 'Ceramite Sentinels')
     expect(det).toBeDefined()
     expect(det!.tenthEditionNodeId).toBe('det:space-marines:ceramite-sentinels')
     expect(det!.factionId).toBe('space-marines')
