@@ -253,6 +253,18 @@ async function main() {
         dp?: number | null
         objective?: string | null
       }>
+      // SM chapter factions in MFM — their detachments live under `space-marines`
+      // in Wahapedia (Wahapedia doesn't split SM chapters into separate faction
+      // entries). When we build the allow-list we add the chapter-scoped key
+      // (e.g. `blood-angels::angelicinheritors`) for future use, AND the
+      // `space-marines::${title}` key so the Wahapedia node match succeeds.
+      const SM_CHAPTER_SLUGS = new Set([
+        'blood-angels',
+        'dark-angels',
+        'black-templars',
+        'space-wolves',
+        'deathwatch',
+      ])
       const allowlistSet = new Set<string>()
       for (const row of mfmRaw) {
         if (!row?.factionSlug || !row?.name) continue
@@ -264,6 +276,12 @@ async function main() {
         })
         // Allow-list entry: normalized key for the detachment
         allowlistSet.add(mfmAllowlistKey(canonicalFaction, row.name))
+        // Chapter-inheritance: Wahapedia stores chapter-specific detachments
+        // (e.g. Angelic Inheritors) under `space-marines`. Add the SM key too
+        // so the allow-list gating in duplicateEleventh picks them up.
+        if (SM_CHAPTER_SLUGS.has(row.factionSlug)) {
+          allowlistSet.add(mfmAllowlistKey('space-marines', row.name))
+        }
       }
       mfmAllowlist = allowlistSet
       console.log(
