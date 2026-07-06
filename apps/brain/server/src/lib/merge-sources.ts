@@ -414,7 +414,11 @@ export function mergeSources(
   const detachmentMergesByKey = new Map<string, { mfm?: Node; pack?: Node }>()
   for (const node of nodeMap.values()) {
     if (node.category !== 'detachment' && node.category !== 'detachment-rule') continue
-    const key = `${node.edition ?? ''}|${node.factionId ?? ''}|${node.title.toLowerCase().trim()}`
+    // Normalize title: lower-case + strip non-alphanumeric so smart quotes
+    // (U+2018/U+2019 in MFM titles like "Serpent'S Brood") and punctuation
+    // differences don't prevent pack + MFM twins from matching.
+    const normTitle = node.title.toLowerCase().replace(/[^a-z0-9]+/g, '')
+    const key = `${node.edition ?? ''}|${node.factionId ?? ''}|${normTitle}`
     const bucket = detachmentMergesByKey.get(key) ?? {}
     if (node.category === 'detachment') bucket.mfm = node
     else bucket.pack = node
