@@ -1087,6 +1087,112 @@ async function main() {
   allRefs.length = 0
   for (const r of mergeResult.refs) allRefs.push(r)
 
+  // ── 6a-early. Normalize detachmentId to slug form BEFORE any filtering ────
+  // Wahapedia game-data writes detachmentId as full node id; the pack v2
+  // parser writes slug. Later filters (phantom-stratagem, enhancement
+  // allow-list) key on slug, so unify here first.
+  {
+    let n = 0
+    for (const node of allNodes) {
+      if (!node.detachmentId) continue
+      if (!node.detachmentId.includes(':')) continue
+      const parts = node.detachmentId.split(':')
+      node.detachmentId = parts[parts.length - 1]!
+      n++
+    }
+    if (n > 0) console.log(`   Pre-normalized ${n} detachmentId values to slug form`)
+  }
+
+  // ── 6a0. Filter parser-artifact stratagems ───────────────────────────────
+  // The v2 pack parser occasionally emits a stratagem whose name is the
+  // detachment name itself (Corsair Coterie has "CORSAIR COTERIE" × 5,
+  // Court of the Phoenician has one "COURT OF THE PHOENICIAN"). These are
+  // stratagem-type attribution tags (`*CORSAIR COTERIE STRATAGEM*`)
+  // misinterpreted as stratagem names. Drop stratagems whose normalized
+  // title equals their detachment's normalized title.
+  const detTitleByslug = new Map<string, string>()
+  for (const node of allNodes) {
+    if (node.category !== 'detachment' && node.category !== 'detachment-rule') continue
+    if (!node.detachmentId) continue
+    detTitleByslug.set(node.detachmentId, normalizeTitle(node.title))
+  }
+  const stratsBefore = allNodes.length
+  const stratFiltered: Node[] = []
+  let phantomStratsFiltered = 0
+  for (const node of allNodes) {
+    if (node.category === 'stratagem' && node.edition === '11th' && node.detachmentId) {
+      const detTitle = detTitleByslug.get(node.detachmentId)
+      if (detTitle && normalizeTitle(node.title) === detTitle) {
+        phantomStratsFiltered++
+        continue
+      }
+    }
+    stratFiltered.push(node)
+  }
+  if (phantomStratsFiltered > 0) {
+    allNodes.length = 0
+    for (const n of stratFiltered) allNodes.push(n)
+    console.log(
+      `   Filtered ${phantomStratsFiltered} phantom parser-artifact stratagems (${stratsBefore} → ${allNodes.length})`,
+    )
+  }
+
+  // ── 6a1. Filter stale 10e-only enhancements from 11e ──────────────────────
+  // Wahapedia files some 10e-era detachment "enhancements" that are actually
+  // codex abilities (Devastator Doctrine, Tactical Doctrine, Biomancy
+  // Discipline, etc.). Those don't survive into 11e — MFM's per-detachment
+  // enhancement list is the authoritative 11e set. Filter every 11e
+  // enhancement whose detachment has an MFM enhancement roster but whose
+  // title isn't in that roster. Keep enhancements for detachments MFM has
+  // no roster for (chapter-inherited or MFM-silent cases).
+  const mfmEnhAllowByDet = new Map<string, Set<string>>()
+  try {
+    if (existsSync(MFM_DETACHMENTS_PATH)) {
+      const mfmRaw = JSON.parse(readFileSync(MFM_DETACHMENTS_PATH, 'utf-8')) as Array<{
+        factionSlug?: string
+        name?: string
+        enhancements?: Array<{ name?: string }>
+      }>
+      for (const row of mfmRaw) {
+        if (!row.factionSlug || !row.name || !Array.isArray(row.enhancements)) continue
+        const detSlug = slugify(row.name)
+        if (!mfmEnhAllowByDet.has(detSlug)) mfmEnhAllowByDet.set(detSlug, new Set())
+        const set = mfmEnhAllowByDet.get(detSlug)!
+        for (const e of row.enhancements) {
+          if (!e?.name) continue
+          // MFM appends `(Upgrade)` / `(Aura)` to enhancement names; the
+          // faction-pack parser emits the base name. Strip the suffix before
+          // normalizing so pack `INTERRED EXPERTISE` matches MFM
+          // `Interred Expertise (Upgrade)`.
+          const stripped = e.name.replace(/(?:\s*\((?:upgrade|aura)\)\s*)+$/i, '')
+          set.add(normalizeTitle(stripped))
+        }
+      }
+    }
+  } catch (err) {
+    console.log(`   WARN: could not build MFM enhancement allow-list: ${err}`)
+  }
+  const enhBefore = allNodes.length
+  const filtered: Node[] = []
+  let enhFilteredOut = 0
+  for (const node of allNodes) {
+    if (node.category === 'enhancement' && node.edition === '11th' && node.detachmentId) {
+      const allow = mfmEnhAllowByDet.get(node.detachmentId)
+      if (allow && allow.size > 0 && !allow.has(normalizeTitle(node.title))) {
+        enhFilteredOut++
+        continue
+      }
+    }
+    filtered.push(node)
+  }
+  if (enhFilteredOut > 0) {
+    allNodes.length = 0
+    for (const n of filtered) allNodes.push(n)
+    console.log(
+      `   Filtered ${enhFilteredOut} stale 10e-only enhancements from 11e (${enhBefore} → ${allNodes.length})`,
+    )
+  }
+
   // ── 6a2. Normalize detachmentId on children to the detachment's slug ──────
   // Wahapedia's game-data parser writes `detachmentId` as the full node id
   // (e.g. `det:chaos-space-marines:devotees-of-destruction`), while the

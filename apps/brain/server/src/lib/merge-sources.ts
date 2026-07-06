@@ -467,12 +467,47 @@ export function mergeSources(
     // Edition is part of the key so the 10e and 11e copies of the same
     // detachment-rule / stratagem / enhancement / faction-ability stay
     // distinct. Parallel datasets — see duplicate-eleventh.ts.
-    const key = `${node.edition ?? ''}|${node.category}|${node.title.toLowerCase().trim()}|${faction}`
+    //
+    // Title normalization for the key:
+    //  - lowercase
+    //  - strip `(Upgrade)` and `(Aura)` suffixes that MFM adds to enhancement
+    //    names but the pack does not (`SYMPHONIC PAYLOAD` vs
+    //    `Symphonic Payload (Upgrade)`)
+    //  - strip ALL non-alphanumeric characters to collapse:
+    //    - straight vs curly apostrophes (`Vingh's` vs `Vingh’s`)
+    //    - internal whitespace artifacts from PDF column breaks
+    //      (`PRAES IDIUS` vs `Praesidius`)
+    //    - punctuation drift across sources
+    const normalizedTitle = node.title
+      .toLowerCase()
+      .replace(/(?:\s*\((?:upgrade|aura)\)\s*)+$/, '')
+      .replace(/[^a-z0-9]+/g, '')
+    const key = `${node.edition ?? ''}|${node.category}|${normalizedTitle}|${faction}`
     if (!byTitleFaction.has(key)) byTitleFaction.set(key, [])
     byTitleFaction.get(key)!.push(node)
   }
 
   let titleDeduped = 0
+  // Fields the MFM enhancement/stratagem pass carries but the pack-side
+  // parser doesn't emit — copy from dropped onto keeper so points/CP-cost
+  // survive the dedup. Without this, the pack UPPERCASE stratagem/enhancement
+  // wins on content-length, drops the MFM node, and the merged survivor is
+  // left with cost/cpCost undefined (only content + title).
+  const CROSS_SOURCE_FIELDS = [
+    'cost',
+    'cpCost',
+    'phase',
+    'when',
+    'target',
+    'effect',
+    'stratType',
+    'turn',
+    'attachesTo',
+    'modelRestriction',
+    'leaderTo',
+    'dp',
+    'forceDisposition',
+  ]
   for (const [, dupes] of byTitleFaction) {
     if (dupes.length <= 1) continue
     // Keep the one with more content
@@ -486,6 +521,14 @@ export function mergeSources(
       const existing = new Set(keeper.keywords)
       for (const kw of dropped.keywords) {
         if (!existing.has(kw)) keeper.keywords.push(kw)
+      }
+      // Backfill cross-source fields the keeper is missing.
+      const kk = keeper
+      const dd = dropped
+      for (const f of CROSS_SOURCE_FIELDS) {
+        if ((kk[f] === undefined || kk[f] === null) && dd[f] !== undefined && dd[f] !== null) {
+          kk[f] = dd[f]
+        }
       }
       titleDeduped++
     }
