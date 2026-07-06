@@ -1,97 +1,93 @@
-# Detachment counts across sources — 2026-07-05
+# Detachment counts across sources — 2026-07-05 (v2)
 
-Ground truth: the **11e faction pack** for each faction (canonical for what's new/updated this cycle) plus the **MFM detachment points list** (canonical for what's currently legal). Every faction has an 11e pack; there is no 10e fallback in play.
+Ground truth: the **11e faction pack** for each faction (canonical for what's new/updated this cycle) plus the **MFM detachment points list** (canonical for what's currently legal). Every faction has an 11e pack.
 
-## Ground truth — 339 currently-legal detachments
+## Data model
 
-MFM publishes points for **339** detachments across 29 factions (`titan-legions` = 0 by design — that codex operates without detachments). The **current 11e faction pack cycle** introduces or updates **129** of those detachments; the other **210** are codex-original 11e content or retained 10e-legal detachments not reprinted in this cycle's pack update.
+**Space Marines chapters (BA, DA, SW, BT, DW, IF, IH, RG, Sal, UM, WS) do not duplicate the SM shared library.** All shared SM detachments live once under `space-marines`. Chapters reach them at query time via `expandFactionForRetrieval` walking `dim_subfaction`. Chapter shards hold only the detachments that are genuinely chapter-specific.
 
-- **Faction pack (129)** = "what changed / what's new in 11e this cycle." Extracted from `## HEADING` + stratagem attribution tags (`*NAME — BATTLE TACTIC STRATAGEM*`) in `C:\R\sync-data\tools\gw-sync\.local\gw\markdown\faction-pack-*.md`. Written to `apps/brain/server/.local/faction-pack-canonical-detachments.json`.
-- **MFM (339)** = "what's currently legal to play with points." `apps/brain/server/.local/brain-input/mfm-detachments.json`.
+Rule for the SM pack division: the SM faction pack is the sole source of shared SM detachments. Chapter packs contain only chapter-specific content. MFM lists shared SM detachments redundantly under each chapter's `factionSlug` — that redundancy is inheritance, not additional entries.
 
-Faction packs are strictly a subset of MFM. Any name-mismatch between the two is an authoritative-vs-authoritative disagreement flagged in this report.
+## Ground truth — 266 unique detachments, 339 MFM rows
 
-## Reconciliation summary — source vs ground truth (339)
+- **MFM rows: 339** currently-legal entries (across `factionSlug` values).
+- **Chapter-redundant MFM rows: 73** — shared SM detachments listed under BA/DA/SW/BT/DW factionSlugs. These are pure inheritance; they duplicate the space-marines rows and don't represent additional detachments.
+- **Unique 11e detachment nodes: 266** — what the brain should actually build.
 
-Every source reconciles to 339. Start with the raw count. Subtract entries with no MFM row (retired for 11e, points not published). Add back items the source doesn't publish because of a different data model (chapters filed under `space-marines` parent). The remainder equals 339.
+`titan-legions` = 0 by design (codex operates without detachments). IF/IH/RG/Sal/UM/WS = 0 by design (pure inheritance from SM).
 
-| Source | Raw | − Retired (no MFM row) | + Different-model (chapter data filed under SM parent) | = Ground truth |
-|---|---|---|---|---|
-| MFM detachment points list | 339 | 0 | 0 | 339 ✓ |
-| v2 faction pack extracts (129 new/updated) | 129 | 0 | +210 (codex-original 11e + retained 10e-survivors — not in *this cycle's* pack update, but still in MFM) | 339 ✓ |
-| Wahapedia `detachments.json` | 261 | −25 (10e-era entries with no MFM row — see "Retired 10e" below) | +103 (BA/DA/SW/BT/DW/DW chapter detachments — Wahapedia tags every SM chapter detachment under `factionId: space-marines`) | 339 ✓ |
+Per-shard breakdown of the 266:
+
+| Shard | Nodes | In pack (has 11e content) | No-errata (copy 10e as-is) |
+|---|---:|---:|---:|
+| **space-marines** | 22 | 13 | 9 |
+| **BA / DA / SW / BT / DW (chapter-specific only)** | 30 | 23 | 7 |
+| **Non-SM factions (23 total)** | 214 | 159 | 55 |
+| **IF, IH, RG, Sal, UM, WS** | 0 | 0 | 0 |
+| **Total unique 11e nodes** | **266** | **195** | **71** |
+
+Full per-shard build spec: `apps/brain/server/.local/detachments-no-errata.json`.
+
+## Reconciliation summary — source vs ground truth (266 unique)
+
+Every source reconciles to the 266-node truth. Start with the raw count. Subtract entries not currently legal (no MFM row). Subtract chapter redundancy where the source repeats the same detachment per chapter. Add back detachments the source doesn't publish because it uses a different data model (Wahapedia's SM chapter tags).
+
+| Source | Raw count | − Retired 10e (no MFM row) | − Chapter redundancy (same detachment × chapters) | + Different-model gaps | = Unique 11e |
+|---|---:|---:|---:|---:|---:|
+| MFM detachment points list | 339 | 0 | −73 (SM shared × 5 chapters) | 0 | 266 ✓ |
+| v2 faction pack extracts | 195 | 0 | 0 (packs never duplicate across chapters) | +71 (10e no-errata carryovers) | 266 ✓ |
+| Wahapedia `detachments.json` | 261 | −25 (retired 10e — no MFM row) | 0 (Wahapedia tags all SM under `space-marines`, doesn't split by chapter) | +30 (chapter-specific 11e detachments introduced/updated in chapter packs — Marshal's Household, Angelic Inheritors, Lion's Blade Task Force, Champions of Fenris, Black Spear Task Force, etc.) | 266 ✓ |
 
 **Reads as:**
-- **MFM** is the ground truth itself.
-- **Faction packs** are incremental — they land 129 of 339. The 210 gap is codex-original 11e content and retained 10e-survivors that are still legal but not in this cycle's update.
-- **Wahapedia** carries 10e canon. 25 of its 261 rows are entries GW no longer prices for 11e (retired). 103 chapter-specific detachments file under `space-marines` because Wahapedia uses the chapter-tag model.
+- **MFM** ground truth is 266 unique; 339 rows only because chapters get redundant lookup rows.
+- **Faction packs** are incremental additions. Combined pack coverage (SM + all chapter + non-SM) accounts for 195 detachments with 11e content. The remaining 71 stand as 10e Wahapedia unchanged.
+- **Wahapedia** carries 10e canon. 25 rows are retired for 11e. The other 236 map directly onto 236 of the 266 (SM shared + non-SM). The 30 chapter-specific 11e-introduced detachments come from the chapter packs.
 
-## Chapters — expected coverage by source
+## Per-faction breakdown (currently-legal count, MFM = ground truth)
 
-11 SM chapters in ground truth. Same data-model split as in the faction report:
-
-| Source | Chapters covered as own factionSlug | Missing |
-|---|---|---|
-| MFM | 5/11 (BA, DA, SW, BT, DW) | IF, IH, RG, Sal, UM, WS (their detachments file under `space-marines`) |
-| Faction Pack | 5/11 (BA, DA, SW, BT, DW have own packs) | IF, IH, RG, Sal, UM, WS (their detachments — BLADE OF ULTRAMAR, HAMMER OF AVERNII, EMPEROR'S SHIELD, SHADOWMARK TALON, FORGEFATHER'S SEEKERS, ARMOURED SPEARTIP, TASK FORCE — live in the `space-marines` pack) |
-| Wahapedia | 0/11 (chapters are `space-marines` sub-tags, not own factions) | all 11 |
-
-**Purposeful vs gap:** MFM and the current pack cycle publish per-chapter tables for BA/DA/SW/BT/DW because those are the chapters with their own faction pack in this cycle. IF/IH/RG/Sal/UM/WS chapter detachments (BLADE OF ULTRAMAR, HAMMER OF AVERNII, EMPEROR'S SHIELD, SHADOWMARK TALON, FORGEFATHER'S SEEKERS, and TASK FORCE variants) exist upstream — they file under `space-marines` in both MFM and the pack. Wahapedia collapses everything into `space-marines`. **Purposeful — not a bug.**
-
-## Per-faction breakdown
-
-Legend for each row: `[P/M/W]` = present in Pack / MFM / Wahapedia. **P** implies M (packs are a subset of MFM); **-** in the M column with a W means retired 10e; **-** in both P and M with a W means retired.
-
-Data source: `apps/brain/server/scripts/count-detachments.mjs`.
-
-### Currently-legal count per faction (MFM = ground truth)
-
-| Faction | Pack (new this cycle) | MFM (legal) | Wahapedia (10e) |
+| Faction | Unique 11e nodes | In pack | No-errata (10e as-is) |
 |---|---:|---:|---:|
-| adepta-sororitas | 3 | 8 | 7 |
-| adeptus-custodes | 5 | 9 | 8 |
-| adeptus-mechanicus | 5 | 10 | 10 |
-| aeldari | 7 | 15 | 16 |
-| astra-militarum | 6 | 11 | 11 |
-| black-templars | 2 | 19 | 0 (SM parent) |
-| blood-angels | 5 | 23 | 0 (SM parent) |
-| chaos-daemons | 9 | 9 | 11 |
-| chaos-knights | 4 | 8 | 6 |
-| chaos-space-marines | 7 | 17 | 18 |
-| dark-angels | 5 | 23 | 0 (SM parent) |
-| death-guard | 3 | 9 | 10 |
-| deathwatch | 1 | 16 | 0 (SM parent) |
-| drukhari | 4 | 9 | 10 |
-| emperors-children | 4 | 10 | 8 |
-| genestealer-cults | 4 | 9 | 9 |
-| grey-knights | 4 | 9 | 8 |
-| imperial-agents | 1 | 5 | 7 |
-| imperial-knights | 4 | 8 | 6 |
-| leagues-of-votann | 5 | 10 | 9 |
-| necrons | 7 | 12 | 13 |
-| orks | 5 | 12 | 13 |
-| space-marines | 13 | 22 | 44 (SM + all chapters lumped) |
-| space-wolves | 4 | 22 | 0 (SM parent) |
-| tau-empire | 3 | 7 | 8 |
-| thousand-sons | 4 | 9 | 9 |
-| **titan-legions** | 0 | 0 | 0 |
-| tyranids | 2 | 10 | 12 |
-| world-eaters | 3 | 8 | 8 |
-| **Totals** | **129** | **339** | **261** |
-
-### Titan Legions — 0 by design
-
-Titan Legions has no detachments in either MFM or the pack. The codex operates without a detachment system — the entire army functions as one implicit force organization. Not a data gap; register as expected.
+| adepta-sororitas | 8 | 7 | 1 (Army Of Faith) |
+| adeptus-custodes | 9 | 8 | 1 (Null Maiden Vigil) |
+| adeptus-mechanicus | 10 | 7 | 3 (Data-Psalm Conclave, Explorator Maniple, Rad-Zone Corps) |
+| aeldari | 15 | 15 | 0 |
+| astra-militarum | 11 | 9 | 2 (Combined Arms, Hammer Of The Emperor) |
+| chaos-daemons | 9 | 9 | 0 |
+| chaos-knights | 8 | 8 | 0 |
+| chaos-space-marines | 17 | 7 | 10 (Chaos Cult, Deceptors, Devotees Of Destruction, Dread Talons, Fellhammer Siege-Host, Murdertalon Raiders, Pactbound Zealots, Renegade Raiders, Soulforged Warpack, Veterans Of The Long War) |
+| death-guard | 9 | 4 | 5 (Champions Of Contagion, Death Lord's Chosen, Mortarion's Hammer, Shamblerot Vectorium, Virulent Vectorium) |
+| drukhari | 9 | 7 | 2 (Kabalite Cartel, Realspace Raiders) |
+| emperors-children | 10 | 10 | 0 |
+| genestealer-cults | 9 | 9 | 0 |
+| grey-knights | 9 | 6 | 3 (Augurium Task Force, Banishers, Sanctic Spearhead) |
+| imperial-agents | 5 | 1 | 4 (Imperialis Fleet, Ordo Hereticus (Purgation Force), Ordo Malleus (Daemon Hunters), Ordo Xenos (Alien Hunters)) |
+| imperial-knights | 8 | 5 | 3 (Gate Warden Lance, Questoris Companions, Spearhead-At-Arms) |
+| leagues-of-votann | 10 | 8 | 2 (Dêlve Assault Shift, Hearthfyre Arsenal) |
+| necrons | 12 | 11 | 1 (Awakened Dynasty) |
+| orks | 12 | 5 | 7 (Bully Boyz, Da Big Hunt, Dread Mob, Green Tide, Kult Of Speed, Rollin' Deff, War Horde) |
+| **space-marines (shared)** | **22** | **13** | **9 (1st Company Task Force, Anvil Siege Force, Firestorm Assault Force, Fulguris Task Force, Gladius Task Force, Ironstorm Spearhead, Stormlance Task Force, Subversion Assets, Vanguard Spearhead)** |
+| **black-templars (specific)** | **6** | **5** | **1 (Godhammer Assault Force)** |
+| **blood-angels (specific)** | **8** | **5** | **3 (Liberator Assault Group, Rage-Cursed Onslaught, The Lost Brethren)** |
+| **dark-angels (specific)** | **8** | **8** | **0** |
+| **deathwatch (specific)** | **1** | **1 (Black Spear Task Force)** | **0** |
+| **space-wolves (specific)** | **7** | **5** | **2 (Saga Of The Bold, Saga Of The Hunter)** |
+| **imperial-fists / iron-hands / raven-guard / salamanders / ultramarines / white-scars** | **0 each** | **0** | **0** |
+| tau-empire | 7 | 6 | 1 (Kroot Hunting Pack) |
+| thousand-sons | 9 | 8 | 1 (Rubricae Phalanx) |
+| titan-legions | 0 | 0 | 0 |
+| tyranids | 10 | 2 | 8 (Ambush Predators, Assimilation Swarm, Crusher Stampede, Invasion Fleet, Synaptic Nexus, Talons Of The Norn Queen, Unending Swarm, Vanguard Onslaught) |
+| world-eaters | 8 | 6 | 2 (Cult Of Blood, Possessed Slaughterband) |
+| **Totals** | **266** | **195** | **71** |
 
 ## Classification — official / misnamed / old / wrong
 
-**Official (in the current pack)** — 129 detachments. Canonical 11e content introduced or updated this cycle. Every entry in `faction-pack-canonical-detachments.json` is authoritative.
+**Official 11e (in a faction pack) — 195 detachments.** Canonical 11e content introduced or updated this cycle. Every entry in `apps/brain/server/.local/faction-pack-canonical-detachments.json` is authoritative.
 
-**Legal-and-retained (in MFM but not in this cycle's pack)** — 210 detachments. Codex-original 11e detachments that weren't touched in this cycle's pack update, OR 10e detachments that survived into 11e and still have MFM points. Both are fully playable.
+**Legal-and-retained (in MFM, no pack content) — 71 detachments.** 10e-era detachments still legal for 11e; no changes in this cycle's pack. Copy the 10e Wahapedia rule text into an 11e node unchanged. See the "no-errata" columns above for the full list.
 
-**Retired 10e (Wahapedia-only, no MFM row)** — 25 detachments. GW dropped these entries in 11e; no MFM points published. Wahapedia still carries them as its snapshot is 10e-canonical.
+**Retired 10e (Wahapedia-only, no MFM row) — 25 detachments.** GW no longer prices these for 11e. Wahapedia still carries them as a 10e-canonical snapshot; brain should keep them ONLY as `edition: '10th'` nodes with no 11e twin.
 
-Retired 10e detachments (Wahapedia-only, present in current live data):
+Retired 10e detachments:
 
 | Faction | Retired detachment |
 |---|---|
@@ -111,52 +107,51 @@ Retired 10e detachments (Wahapedia-only, present in current live data):
 | leagues-of-votann | Hearthfire Strike, Void Salvagers |
 | necrons | Canoptek Harvesters, Deranged Outcasts, Harbinger Cabal, Tomb Ship Complement |
 | orks | Kaptin Killers, Ramship Raiders |
-| space-marines | Boarding Strike, Pilum Strike Team, Shield of the Void, Terminator Assault (plus chapter-tagged copies) |
+| space-marines | Boarding Strike, Pilum Strike Team, Shield of the Void, Terminator Assault |
 | tau-empire | Kroot Raiding Party, Starfire Cadre |
 | thousand-sons | Chosen Cabal, Devoted Thralls, Fateseekers |
 | tyranids | Biotide, Boarding Swarm, Infestation Swarm, Tyranid Attack |
 | world-eaters | Boarding Butchers, Skullsworn |
 
-**Misnamed variants** — same detachment written slightly differently across sources. Cosmetic, but confusing when reconciling. Examples:
+**Misnamed variants** — cosmetic apostrophe/typography drift across sources (`'S` vs `'s`, U+2019 vs `'`). Normalize at ingest via `String.toLowerCase().replace(/[^a-z0-9]+/g,'')` for matching.
 
-| MFM canonical | Wahapedia variant | Faction |
-|---|---|---|
-| Serpent's Brood | Serpent'S Brood | aeldari |
-| Rage-Cursed Onslaught | Rage-cursed Onslaught | blood-angels |
-| Lion's Blade Task Force | Lion's Blade Task Force | dark-angels |
-| Emperor's Shield | Emperor's Shield | space-marines |
-| Huron's Marauders | Huron's Marauders | chaos-space-marines |
-| Brood Brothers Auxilia | Brood Brother Auxilia (missing 's') | genestealer-cults |
+**Wrong (brain-only entries)** — internal drift; see "Internal drift" below.
 
-The apostrophe casing (`'S` vs `'s`) and typography (U+2019 vs `'`) causes false differences; canonicalize via `.toLowerCase().replace(/[^a-z0-9]+/g,'')` when matching.
+## Internal drift — built graph vs ground truth
 
-**Wrong (brain-only entries)** — internal drift where brain has more detachment nodes than any upstream source can vouch for. See "Internal drift" below.
+**Total detachment-rule nodes in brain: 297. Corrected ground truth: 266 unique 11e nodes** (plus preserved 10e-only retired nodes as legacy).
 
-## Internal drift — built graph vs ground truth (bugs)
+Per-shard drift vs the corrected build spec:
 
-**Total detachment-rule nodes in brain: 297. Ground truth: 339.** The count is *below* ground truth because 5 chapter shards deliberately store nothing (chapters inherit from `space-marines` via `dim_subfaction` at retrieval time — see `apps/brain/server/src/lib/factions.ts::expandFactionForRetrieval`).
-
-Per-shard bugs:
-
-| Shard | Brain count | MFM ground truth | Gap |
+| Shard | Brain 11e today | Should be | Gap |
 |---|---:|---:|---|
-| space-marines | 75 | 22 | **+53 over** — 10e Wahapedia (44) + 11e duplicates + pack overlays counted as separate nodes. Merge deduplication incomplete. |
-| deathwatch | 0 (no faction file) | 16 | Chapter shard missing; runtime access via subfaction join. Fine. |
-| blood-angels | 5 | 23 | 18 detachments live under `space-marines` and reach BA via subfaction expansion. Fine. |
-| dark-angels | 5 | 23 | Same as BA. Fine. |
-| black-templars | 2 | 19 | 17 SM-shared detachments reach BT via subfaction expansion. Fine. |
-| space-wolves | 3 | 22 | 19 SM-shared detachments reach SW via subfaction expansion. Fine. |
-| adeptus-mechanicus | 11 | 10 | +1 over — likely a duplicate node. |
-| astra-militarum | 12 | 11 | +1 over — likely a duplicate node. |
-| imperial-agents | 9 | 5 | +4 over — carries 4 retired 10e detachments (Interdiction Team, Voidship's Company, etc.) as live nodes. |
-| orks | 14 | 12 | +2 over — carries 2 retired 10e detachments. |
-| necrons | 9 | 12 | −3 under — missing Awakened Dynasty, Canoptek Court, or similar codex-original entries. |
-| adepta-sororitas | 5 | 8 | −3 under. |
+| space-marines | 75 (10e + 11e duplicates) | 22 shared library | +53 duplicates. 10e/11e coexist by design under duplicate-eleventh; but the 11e side has multiple copies of the same detachment (Wrathful Procession × 2, Champions of Fenris × 2, etc.) |
+| deathwatch | 0 (no faction file) | 1 (Black Spear Task Force) | Missing chapter-specific node |
+| blood-angels | 5 | 8 | Missing 3 (Liberator Assault Group, Rage-Cursed Onslaught, The Lost Brethren) |
+| dark-angels | 5 | 8 | Missing 3 (Company Of Hunters, Inner Circle Task Force, Unforgiven Task Force) |
+| black-templars | 2 | 6 | Missing 4 (Companions Of Vehemence, The Living Miracle, Vindication Task Force, Godhammer Assault Force) |
+| space-wolves | 3 | 7 | Missing 4 (Legends Of Saga And Song, Saga Of The Beastslayer, Veterans Of The Fang, Saga Of The Bold, Saga Of The Hunter) |
+| adepta-sororitas | 5 | 8 | Missing 3 (Chorus Of Condemnation, Sacred Champions, Sanctified Orators) |
+| necrons | 9 | 12 | Missing 3 (Hand Of The Dynasty, Skyshroud Spearhead, The Phaeron's Armoury) |
+| chaos-daemons | 6 | 9 | Missing 3 (Cavalcade Of Chaos, Lords Of The Warp, Warptide) |
+| chaos-space-marines | 15 | 17 | Missing 2 (Devotees Of Destruction, Murdertalon Raiders) |
+| leagues-of-votann | 7 | 10 | Missing 3 (Armoured Trailblazers, Farseekers, Hearthguard Covenant) |
+| aeldari | 12 | 15 | Missing 3 (Fateful Performance, Path Of The Outcast, Twilight Flickers) |
+| emperors-children | 8 | 10 | Missing 3 (Elegant Brutes, Frenzied Host, Spectacle Of Slaughter) |
+| imperial-agents | 9 | 5 | +4 (carries retired 10e nodes as live) |
+| orks | 14 | 12 | +2 (carries retired 10e nodes as live) |
+| adeptus-mechanicus | 11 | 10 | +1 |
+| astra-militarum | 12 | 11 | +1 |
+
+Also: 14 brain nodes have truncated/typo titles from PDF column-break artifacts (see "Name typos" in the follow-up plan).
 
 ## Open action items
 
-1. **De-dupe `space-marines` shard** (75 → 22). Merge 10e Wahapedia + 11e duplicates + pack overlays that describe the same detachment. The 3× over-count is the biggest drift in the graph.
-2. **Purge retired 10e detachments from ingestion** — 25 Wahapedia entries have no MFM row and should not land in brain. Filter at ingest time using `mfm-detachments.json` name-match as an allow-list.
-3. **Fix Wahapedia name variants** — normalize `'S` → `'s` and U+2019 → `'` at ingest so cross-source matches don't false-negative.
-4. **Backfill missing entries** — `adepta-sororitas` (−3), `necrons` (−3), and other under-shard counts. Reconcile brain against the pack-canonical + MFM allow-list per faction.
-5. **Titan Legions confirmation** — 0 detachments is by design. Register a `no-detachments: true` flag on the faction so display code doesn't render an empty detachment list.
+Detailed plan: `docs/superpowers/plans/2026-07-05-detachment-ingestion-completion.md`.
+
+1. **Fix pack parser** to extract detachments via `##### NAME DETACHMENT` errata headings, `### NAME` H3 headings, and TOC entries, not just `## NAME` + stratagem attribution.
+2. **Build 30 missing chapter-specific nodes** from chapter packs (BA, DA, SW, BT, DW). IF/IH/RG/Sal/UM/WS get zero nodes — pure inheritance.
+3. **De-duplicate space-marines shard** (75 → 22). 10e/11e coexist by design but the 11e side has real duplicates from multiple ingest passes.
+4. **Retire 25 Wahapedia-only 10e entries.** Keep as `edition: '10th'` only — do not emit an 11e twin. MFM allow-list check at duplicate-eleventh step.
+5. **Copy 71 no-errata detachments 10e→11e** unchanged. Full list per shard in `.local/detachments-no-errata.json`.
+6. **Fix 14 truncated/typo titles** (`TASK FORCE`, `SEEKERS`, `Marshall's Household`, `Incarnadine Speartip`, `Dark Flight Pursuit`, `Living Miracle`, `PHOENICIAN`, `ASSAULT`, `ONSLAUGHT` × 2, `BATTLE CLADE`, `PROTOTYPE CADRE`, `ELIMINATION FORCE`, `Brood Brother Auxilia`).
