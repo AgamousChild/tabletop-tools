@@ -422,11 +422,11 @@ export function parseFactionPackV2(markdown: string, opts: ParseOptions): PackEx
 
           // Also register an errata-only detachment stub so downstream emitters
           // know this detachment exists in 11e and can emit a fallback node.
-          // Strip the trailing " DETACHMENT" or " TASK FORCE" from the name.
-          const stubNameRaw = headingText!
-            .replace(/\s+DETACHMENT$/i, '')
-            .replace(/\s+TASK\s+FORCE$/i, ' Task Force')
-            .trim()
+          // Strip the trailing " DETACHMENT" so cleanDetachmentName's all-caps
+          // detection titleCases the remaining name correctly.
+          // (e.g. "VINDICATION TASK FORCE DETACHMENT" → "VINDICATION TASK FORCE"
+          //  → titleCase → "Vindication Task Force")
+          const stubNameRaw = headingText!.replace(/\s+DETACHMENT$/i, '').trim()
           const stubName = cleanDetachmentName(stubNameRaw)
           // Only add if not already present as a full detachment (avoids duplicates
           // when the same pack has both a full `## NAME` section and an errata
