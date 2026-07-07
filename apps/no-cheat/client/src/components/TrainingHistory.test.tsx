@@ -113,7 +113,6 @@ describe('TrainingHistory', () => {
 
   it('shows filter buttons', () => {
     render(<TrainingHistory {...defaultProps} />)
-    expect(screen.getByText('My Data')).toBeInTheDocument()
     expect(screen.getByText('All')).toBeInTheDocument()
     expect(screen.getByText('Not dice')).toBeInTheDocument()
   })

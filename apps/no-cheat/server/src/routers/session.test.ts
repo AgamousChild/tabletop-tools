@@ -70,7 +70,10 @@ afterAll(() => client.close())
 
 const createCaller = createCallerFactory(appRouter)
 const req = new Request('http://localhost')
-const nullStorage = { upload: vi.fn().mockResolvedValue('null://discarded') }
+const nullStorage = {
+  upload: vi.fn().mockResolvedValue('null://discarded'),
+  delete: vi.fn().mockResolvedValue(undefined),
+}
 const alice = {
   user: { id: 'user-1', email: 'alice@example.com', name: 'Alice' },
   req,
@@ -355,5 +358,68 @@ describe('session.delete', () => {
     await expect(caller.session.delete({ sessionId: 'nonexistent' })).rejects.toMatchObject({
       code: 'NOT_FOUND',
     })
+  })
+
+  it('deletes the R2 evidence photo when the session has one', async () => {
+    const deleteSpy = vi.fn().mockResolvedValue(undefined)
+    const storageWithEvidence = {
+      upload: vi.fn().mockResolvedValue('https://cdn.example.com/evidence/photo-1.jpg'),
+      delete: deleteSpy,
+    }
+    const aliceWithEvidence = { ...alice, storage: storageWithEvidence }
+    const caller = createCaller(aliceWithEvidence)
+
+    const session = await caller.session.start({ diceSetId: 'set-1' })
+    // Bias rolls so the session closes as loaded, then save evidence.
+    for (let i = 0; i < 30; i++) {
+      await caller.session.addRoll({ sessionId: session.id, pipValues: [6] })
+    }
+    await caller.session.close({ sessionId: session.id })
+    const fakeImage = Buffer.from('fake-jpeg-bytes').toString('base64')
+    await caller.session.savePhoto({ sessionId: session.id, imageData: fakeImage })
+
+    await caller.session.delete({ sessionId: session.id })
+
+    expect(deleteSpy).toHaveBeenCalledTimes(1)
+    expect(deleteSpy).toHaveBeenCalledWith(expect.stringContaining('evidence/photo-1.jpg'))
+  })
+
+  it('does not call storage.delete when the session has no evidence photo', async () => {
+    const deleteSpy = vi.fn().mockResolvedValue(undefined)
+    const storageNoEvidence = {
+      upload: vi.fn().mockResolvedValue('null://discarded'),
+      delete: deleteSpy,
+    }
+    const aliceNoEvidence = { ...alice, storage: storageNoEvidence }
+    const caller = createCaller(aliceNoEvidence)
+
+    const session = await caller.session.start({ diceSetId: 'set-1' })
+    await caller.session.delete({ sessionId: session.id })
+
+    expect(deleteSpy).not.toHaveBeenCalled()
+  })
+
+  it('surfaces an R2 delete failure instead of silently deleting the row', async () => {
+    const storageFailingDelete = {
+      upload: vi.fn().mockResolvedValue('https://cdn.example.com/evidence/photo-2.jpg'),
+      delete: vi.fn().mockRejectedValue(new Error('R2 unavailable')),
+    }
+    const aliceFailing = { ...alice, storage: storageFailingDelete }
+    const caller = createCaller(aliceFailing)
+
+    const session = await caller.session.start({ diceSetId: 'set-1' })
+    for (let i = 0; i < 30; i++) {
+      await caller.session.addRoll({ sessionId: session.id, pipValues: [6] })
+    }
+    await caller.session.close({ sessionId: session.id })
+    const fakeImage = Buffer.from('fake-jpeg-bytes').toString('base64')
+    await caller.session.savePhoto({ sessionId: session.id, imageData: fakeImage })
+
+    await expect(caller.session.delete({ sessionId: session.id })).rejects.toThrow()
+
+    // The row must still exist -- objects-before-row means a failed R2
+    // delete must not leave the DB row deleted with the object orphaned.
+    const stillThere = await caller.session.get({ sessionId: session.id })
+    expect(stillThere.session.id).toBe(session.id)
   })
 })
