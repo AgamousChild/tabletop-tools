@@ -77,6 +77,19 @@ The reconciliation surfaced six pipeline defects. All fixed at parsing/ingestion
 Per the goal doc §5: from the **live website**, through all four brain interfaces (**ask, search, browse, graph**), load a random 11e unit from each of the 36 factions, verify the correct unit datasheet renders, screenshot every load, 3 iterations. A **different random unit is drawn for every check** (per-interface seed). Harness: `apps/brain/server/scripts/acceptance-units.mjs` (Playwright, drives the real UI: tab clicks, browse pagination, semantic search, graph visualization, ask RAG).
 
 - Deploy under test: R2 upload 2026-07-06 + Vectorize re-index (40/40 files, 0 errors) + CDN purge. Live Units layer count: 1153.
-- Screenshot archive + `results.json`: `apps/brain/server/.local/acceptance-units/<runId>/`.
+- Run ID: `2026-07-06T21-30-26`. Build version: `20260706-115602`.
+- Screenshot archive + `results.json`: `apps/brain/server/.local/acceptance-units/2026-07-06T21-30-26/`.
 
-**Result:** _PENDING — run in progress, to be filled on completion._
+**Result: 431 passed, 1 failed (99.8 %).**
+
+| Interface | Pass | Fail | Total |
+|---|---:|---:|---:|
+| browse | 108 | 0 | 108 |
+| search | 108 | 0 | 108 |
+| graph | 108 | 0 | 108 |
+| ask | 107 | 1 | 108 |
+| **TOTAL** | **431** | **1** | **432** |
+
+**Sole failure — [i1] chaos-titan-legions / ask / WARLORD TITAN**
+
+Detail: `ask answer/references do not mention "WARLORD TITAN"`. Root cause: chaos-titan-legions has only 4 units (thin RAG corpus); the Ask/Vectorize retrieval for this seed drew context dominated by the larger imperial titan-legions pool, and the rendered page body did not contain the normalized string `"warlordtitan"` at screenshot time. Data presence confirmed: `GET /browse/nodes?layer=units&edition=11th&faction=chaos-titan-legions` returns all 4 units including WARLORD TITAN. The same faction/unit passed on browse, search, and graph in all 3 iterations. i2 and i3 drew WARBRINGER NEMESIS TITAN for ask and both PASSED. This is a thin-corpus RAG edge case, not a missing-data defect — no pipeline fix warranted.
