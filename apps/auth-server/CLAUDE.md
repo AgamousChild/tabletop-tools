@@ -62,6 +62,13 @@ CORS restricted to `['https://tabletop-tools.net']` in production (configured vi
 Uses `let cachedApp` pattern at module scope. The Turso client, Drizzle wrapper, and Hono app
 are created once per Worker isolate lifetime, not per request.
 
+### Rate Limiting
+
+Better Auth's rate limiter is backed by the `AUTH_RATE_LIMIT` KV namespace (bound in
+`wrangler.toml`) via `createAuth`'s optional KV parameter — without it, Better Auth's default
+`storage: "memory"` is a per-isolate `Map` that provides no real protection on Workers, since
+isolates are ephemeral and don't share state.
+
 ### Path Routing
 
 - **Production**: Workers Route `tabletop-tools.net/auth/*` -> Worker receives at `/auth/**`

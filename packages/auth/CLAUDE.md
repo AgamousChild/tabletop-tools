@@ -9,8 +9,11 @@
 The shared authentication package for the entire Tabletop Tools platform. One login
 across all apps. Provides:
 
-- `createAuth(db, baseURL?, trustedOrigins?, secret?, basePath?)` — Better Auth instance
-  factory for the auth Worker
+- `createAuth(db, baseURL?, trustedOrigins?, secret?, basePath?, rateLimitKV?)` — Better Auth
+  instance factory for the auth Worker. `rateLimitKV` is an optional KV-namespace-like store
+  (`get`/`put`/`delete`, e.g. a Cloudflare `KVNamespace`); when provided, Better Auth's rate
+  limiter is backed by it (`secondaryStorage` + `rateLimit: { enabled: true, storage:
+  "secondary-storage" }`). Without it, behavior is unchanged (no rate-limit config passed).
 - `validateSession(db, headers, secret?)` — session validation, called by `server-core`
   middleware (reads cookie, verifies HMAC, checks DB). Apps never call this directly.
 - `User` type — canonical user type for all tRPC contexts
@@ -115,6 +118,12 @@ export type User = {
 - HMAC verification (5 tests): valid signed cookie, tampered signature, no separator,
   wrong secret, fallback when no secret provided
 - User shape: validates all canonical fields returned
+
+**4 tests** in `rate-limit.test.ts`: `createAuth` without a KV param behaves unchanged
+(no rate limiting); with a KV param (in-memory fake KV), repeated sign-in attempts through
+`auth.handler` get rate-limited (429) and counters persist in the KV store. Note: Better
+Auth's rate limiter only runs on requests routed through `auth.handler`, not on direct
+`auth.api.*` calls — the KV-backed tests drive real `Request` objects accordingly.
 
 ```bash
 cd packages/auth && pnpm test
