@@ -104,3 +104,25 @@ Excluded: physics, study (personal apps, Micah 2026-07-06).
   triggers); D2-06 two-track fail-loud rollout (live data-loss bugs first).
   Next: Phase C per-app verdicts, or start executing decisions — Micah's
   call.
+- **2026-07-06 (4)** — **Phase C COMPLETE: all 14 verdicts drafted**
+  (`verdicts/*.md`, 3,540 lines). Tally: **6 keep** (auth-server, brain
+  [keep + ops refactor], data-import [finish the job], gateway [+ D2-02],
+  tournament, widget-lab [park — its eval is decided]) · **7 refactor**
+  (admin, bcp-scraper, game-tracker [v1 enhanced, matchV2 frozen],
+  list-builder, new-meta, no-cheat [Bayesian stats core], versus) ·
+  **1 redesign** (content-ingestor — three parallel pipelines, two on
+  colliding daily crons; capability-split hybrid recommended). Phase C
+  corrected the census in three more places: brain's edition-metadata
+  Vectorize filter **already shipped** (PR #57; code comments + CLAUDE.md
+  stale), new-meta's "duplicate Glicko" is a false alarm (only a test file,
+  importing the shared impl), tournament's metric stack has **no client UI
+  calling `metric.setStack` at all**. New live bugs surfaced beyond the
+  census: bcp-scraper's mid-event failure permanently locks an event out of
+  re-scraping (idempotency gap); auth-server has **no working rate limit**
+  (Better Auth's default is in-memory, doesn't survive isolates → KV
+  `secondaryStorage`); content-ingestor's unauthenticated Gladia webhook +
+  `community.json` RMW race are fix-now items regardless of its redesign.
+  W2 phases A–C done; remaining: hardening passes, then execution — the
+  cross-app priority list is: (1) game-tracker photo loss, (2) list-builder
+  migration data loss + server validation, (3) content-ingestor webhook/race,
+  (4) D2-01 shared writer, (5) the delete sweeps.
