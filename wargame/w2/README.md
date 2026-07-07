@@ -39,10 +39,19 @@ Excluded: physics, study (personal apps, Micah 2026-07-06).
    shared-package usage, drift between its CLAUDE.md and its code, and
    candidate design decision points. One file per app.
 2. **Phase B — cross-cutting decision register** (`decisions/`): the design
-   decisions that emerge from the census (expected candidates: data-layer
-   ownership boundaries, auth topology, deploy/chunking patterns, shared-UI
-   adoption gaps, schema drift handling — but the census decides the list,
-   not this README).
+   decisions that emerged from the census:
+
+   | ID | Decision | Census evidence |
+   |----|----------|-----------------|
+   | D2-01 | **Tournament data-model unification** (Rule 1) — one canonical event model vs three writers + export pipeline; cube-build ownership | tournament, new-meta, bcp-scraper |
+   | D2-02 | **Deploy topology & app-roster manifest** — single source of truth for the roster; verify-script coverage; cache-purge hardening; retire the per-app Pages story | gateway + the 5 apps with phantom deploy configs |
+   | D2-03 | **Legacy-version retirement policy** — list v1/v2, match v1/v2, simulate v1/v2, three ingest generations: sunset criteria as policy | list-builder, game-tracker, versus, content-ingestor |
+   | D2-04 | **Data-in-code cleanup** (Rule 6 cluster) — which hardcoded tables move to datastores; what counts as an acceptable parsing heuristic | admin, tournament, list-builder, bcp-scraper, data-import, brain, versus |
+   | D2-05 | **Worker chunking patterns** (Rule 9 hotspots) — standard pattern (queue / cursor endpoints / CI offload) for the six identified hotspots | admin, new-meta, tournament, bcp-scraper, content-ingestor, brain |
+   | D2-06 | **Silent-failure policy** — fail-loud standards: NullR2 photo loss, swallowed migrations, dropped STORE_MAP files, unpersisted scrape errors | game-tracker, no-cheat, list-builder, data-import, bcp-scraper, admin |
+   | D2-07 | **Shared-utility consolidation** (Rule 3) — slugify ×3, dice math ×2, generateId per-router, 9 proxy handlers, AppShell nav slot | gateway, data-import, versus, game-tracker, admin |
+   | D2-08 | **Documentation drift strategy** — generate, verify, or trim the state that docs duplicate from code (test counts, table counts, rosters) | every census found drift; widget-lab is the sole clean one |
+   | D2-09 | **Dead-subsystem disposition** — wire-or-delete: bcp list parser (~800 lines), `lib/aggregate.ts`, `ingest.ts`, `detachment-map`, `update-data.yml` | bcp-scraper, new-meta, content-ingestor, data-import |
 3. **Phase C — per-app design verdicts**: keep / refactor / redesign, each
    with scored alternatives and a fallback.
 4. **Hardening**: re-verify claims, log corrections (`90-hardening-log.md`
@@ -75,3 +84,23 @@ Excluded: physics, study (personal apps, Micah 2026-07-06).
   files, scraper errors not persisted); (7) **dead subsystems** (~800-line
   bcp list parser with no data feed, `lib/aggregate.ts`, `ingest.ts`).
   Next: Phase B — draft the cross-cutting decision register from these.
+- **2026-07-06 (3)** — **Phase B COMPLETE: all 9 decisions drafted**
+  (`decisions/D2-01`–`D2-09`, 2,288 lines; Sonnet drafters, each re-verified
+  census claims against live code before writing). Drafting corrected the
+  census in four places: game-tracker's v1/v2 situation is **inverted**
+  (`matchV2` has zero production client callers — v1 is the only working
+  feature; deferred, not retired); admin's stats router reads list-builder's
+  v1 `lists`/`listUnits` directly (cross-app dep to patch before retirement);
+  game-tracker hand-rolls **four** ID generators, not two; and BCP list text
+  has **no REST fetch path** (the only precedent is Playwright browser
+  automation, which Workers can't run) — so the ~800-line parser subsystem is
+  *parked with an unpark condition*, not wired. Headline recommendations:
+  D2-01 shared `upsertMetaEvent()` now + orphaned cube-script deletion, full
+  table unification deferred behind named gates; D2-02 roster manifest +
+  proxy factory + hard-fail cache purge; D2-03 standing sunset policy +
+  immediate retirement of list-builder v1 / versus v1 / `ingest_jobs`;
+  D2-05 four pattern classes (cursor endpoints for admin mutations, GH
+  Actions offload for scheduled pipelines — Queues/DOs deferred with flip
+  triggers); D2-06 two-track fail-loud rollout (live data-loss bugs first).
+  Next: Phase C per-app verdicts, or start executing decisions — Micah's
+  call.
