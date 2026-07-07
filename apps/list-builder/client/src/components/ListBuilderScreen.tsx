@@ -65,16 +65,25 @@ function battleSizeFromServer(bsName: string, totalPoints: number): BattleSize {
 
 export function ListBuilderScreen({ onSignOut }: Props) {
   const [screen, setScreen] = useState<Screen>({ type: 'my-lists' })
+  const [migrationFailures, setMigrationFailures] = useState<Array<{ id: string; name: string }>>(
+    [],
+  )
   const invalidateLists = useInvalidateListsV2()
   const migrationRan = useRef(false)
 
   // One-time migration: push any existing IndexedDB lists to the server.
+  // If some lists fail, the migration itself does not mark completion (so it
+  // retries on next load) — but the user still needs to know now that some
+  // of their lists did not make it to the server this run.
   useEffect(() => {
     if (migrationRan.current) return
     migrationRan.current = true
     void migrateIndexedDbLists().then((result) => {
       if (!result.skipped && result.migrated > 0) {
         invalidateLists()
+      }
+      if (result.failed > 0) {
+        setMigrationFailures(result.failedLists)
       }
     })
   }, [invalidateLists])
@@ -184,6 +193,22 @@ export function ListBuilderScreen({ onSignOut }: Props) {
       </header>
 
       <div className="max-w-4xl mx-auto p-6">
+        {migrationFailures.length > 0 && (
+          <div
+            data-testid="migration-warning"
+            className="mb-4 px-3 py-2 rounded-lg bg-amber-900/20 border border-amber-500/30 text-amber-400 text-sm"
+          >
+            <p className="font-semibold">
+              {migrationFailures.length} list{migrationFailures.length === 1 ? '' : 's'} could not
+              be moved to your account
+            </p>
+            <p className="text-xs text-amber-400/80 mt-0.5">
+              {migrationFailures.map((l) => l.name).join(', ')} — we&apos;ll retry automatically
+              next time you open the app. Your original lists are still saved on this device.
+            </p>
+          </div>
+        )}
+
         {screen.type === 'my-lists' && (
           <MyListsScreen onCreateNew={handleCreateNew} onSelectList={handleSelectList} />
         )}
