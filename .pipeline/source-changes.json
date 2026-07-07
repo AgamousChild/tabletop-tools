@@ -734,8 +734,7 @@
     "action": "created",
     "reason": "Interactive review CLI: findDraftDirs + reviewDrafts with approve/reject/skip/quit prompt loop",
     "timestamp": "2026-04-24T00:25:00.000Z"
-  }
-,
+  },
   {
     "taskId": "ci-task-9-brain-commit",
     "agent": "senior-dev",
@@ -799,5 +798,29 @@
     "action": "modified",
     "reason": "Add bcp-scan, bcp-scrape, bcp-import Commander commands with BCP module imports",
     "timestamp": "2026-04-24T23:30:00.000Z"
+  },
+  {
+    "taskId": "w2-phase-0.3-webhook-auth",
+    "agent": "senior-dev",
+    "file": "apps/content-ingestor/server/src/worker.ts",
+    "action": "modified",
+    "reason": "Add WEBHOOK_SECRET-gated checkWebhookToken (constant-time compare, fail-closed) to POST /ingest/callback — the only unauthenticated non-/health route; append ?token= to all 4 callbackUrl construction sites; export getApp/checkWebhookToken for testing",
+    "timestamp": "2026-07-07T10:00:00.000Z"
+  },
+  {
+    "taskId": "w2-phase-0.4-r2-race",
+    "agent": "senior-dev",
+    "file": "apps/content-ingestor/server/src/lib/nodes.ts",
+    "action": "modified",
+    "reason": "Replace unconditional R2 read-modify-write for nodes/community.json and manifest.json with writeConditionally — etag-based optimistic concurrency, bounded retry (5 attempts), throws on exhaustion instead of silently clobbering a concurrent writer",
+    "timestamp": "2026-07-07T10:00:00.000Z"
+  },
+  {
+    "taskId": "w2-phase-0.3-webhook-auth",
+    "agent": "senior-dev",
+    "file": "apps/content-ingestor/server/wrangler.toml",
+    "action": "modified",
+    "reason": "Document required WEBHOOK_SECRET (and other) Worker secrets as deploy prerequisites via wrangler secret put",
+    "timestamp": "2026-07-07T10:00:00.000Z"
   }
 ]

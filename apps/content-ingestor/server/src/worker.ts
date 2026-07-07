@@ -20,6 +20,15 @@ interface Env {
   GLADIA_API_KEY: string
   ANTHROPIC_API_KEY: string
   SYNC_SECRET?: string
+  /**
+   * Shared secret for the public Gladia webhook (POST /ingest/callback).
+   * Required — not optional like SYNC_SECRET — because this route is the
+   * only one reachable by an external, unauthenticated third party
+   * (Gladia's callback caller can't send an Authorization header). Deploy
+   * prerequisite: `wrangler secret put WEBHOOK_SECRET` before shipping this
+   * Worker, or all Gladia callbacks will 401.
+   */
+  WEBHOOK_SECRET: string
   BRAIN_BUCKET: R2Bucket
   BRAIN_INDEX: VectorizeIndex
   AI: Ai
@@ -40,9 +49,54 @@ function checkAuth(c: { env: Env; req: { header(name: string): string | undefine
   return auth === `Bearer ${c.env.SYNC_SECRET}`
 }
 
+/**
+ * Constant-time string comparison to avoid leaking WEBHOOK_SECRET via
+ * response-timing side channels. Compares byte-by-byte over the longer of
+ * the two lengths so the operation count doesn't depend on where a mismatch
+ * occurs; length is folded into the same accumulator so a short guess can't
+ * short-circuit the comparison either.
+ */
+function timingSafeEqual(a: string, b: string): boolean {
+  const maxLen = Math.max(a.length, b.length)
+  let diff = a.length ^ b.length
+  for (let i = 0; i < maxLen; i++) {
+    const charA = i < a.length ? a.charCodeAt(i) : 0
+    const charB = i < b.length ? b.charCodeAt(i) : 0
+    diff |= charA ^ charB
+  }
+  return diff === 0
+}
+
+/**
+ * Auth check for the public Gladia webhook — separate from `checkAuth`
+ * (Bearer-token, internal admin routes) because Gladia can't send an
+ * Authorization header; it only supports a callback URL. The shared secret
+ * travels as a `?token=` query param appended when the callback URL is
+ * registered with Gladia (see submitTranscription in lib/gladia.ts).
+ *
+ * Unlike `checkAuth`, this does NOT fall open when the secret is unset —
+ * this route is reachable by anyone on the internet who discovers the URL,
+ * so a missing secret must fail closed (401) with a loud console.error,
+ * not silently accept every callback.
+ */
+export function checkWebhookToken(c: {
+  env: Env
+  req: { query(name: string): string | undefined }
+}): boolean {
+  if (!c.env.WEBHOOK_SECRET) {
+    console.error(
+      'checkWebhookToken: WEBHOOK_SECRET is unset — rejecting all callbacks. Run `wrangler secret put WEBHOOK_SECRET`.',
+    )
+    return false
+  }
+  const token = c.req.query('token')
+  if (!token) return false
+  return timingSafeEqual(token, c.env.WEBHOOK_SECRET)
+}
+
 let cachedApp: Hono<{ Bindings: Env }> | null = null
 
-function getApp() {
+export function getApp() {
   if (cachedApp) return cachedApp
   const app = new Hono<{ Bindings: Env }>()
 
@@ -147,7 +201,7 @@ function getApp() {
       bucket: c.env.BRAIN_BUCKET,
       vectorize: c.env.BRAIN_INDEX,
       ai: c.env.AI,
-      callbackUrl: `${workerUrl.origin}/ingest/callback`,
+      callbackUrl: `${workerUrl.origin}/ingest/callback?token=${c.env.WEBHOOK_SECRET}`,
     })
     return c.json(result)
   })
@@ -179,7 +233,7 @@ function getApp() {
       bucket: c.env.BRAIN_BUCKET,
       vectorize: c.env.BRAIN_INDEX,
       ai: c.env.AI,
-      callbackUrl: `${new URL(c.req.url).origin}/ingest/callback`,
+      callbackUrl: `${new URL(c.req.url).origin}/ingest/callback?token=${c.env.WEBHOOK_SECRET}`,
       batchLimit: 1,
     })
 
@@ -211,7 +265,7 @@ function getApp() {
       bucket: c.env.BRAIN_BUCKET,
       vectorize: c.env.BRAIN_INDEX,
       ai: c.env.AI,
-      callbackUrl: `${new URL(c.req.url).origin}/ingest/callback`,
+      callbackUrl: `${new URL(c.req.url).origin}/ingest/callback?token=${c.env.WEBHOOK_SECRET}`,
       batchLimit: 1,
     })
 
@@ -221,6 +275,7 @@ function getApp() {
   // ── Gladia callback ───────────────────────────────────────────────────────
 
   app.post('/ingest/callback', async (c) => {
+    if (!checkWebhookToken(c)) return c.json({ error: 'Unauthorized' }, 401)
     const body = await c.req.json()
     const parsed = parseGladiaCallback(body)
 
@@ -322,7 +377,10 @@ export default {
           bucket: env.BRAIN_BUCKET,
           vectorize: env.BRAIN_INDEX,
           ai: env.AI,
-          callbackUrl: 'https://content-ingestor/ingest/callback',
+          // NOTE: 'content-ingestor' is a non-resolvable placeholder hostname —
+          // pre-existing bug, out of scope for this fix. Token param appended
+          // for consistency with the other 3 callbackUrl call sites.
+          callbackUrl: `https://content-ingestor/ingest/callback?token=${env.WEBHOOK_SECRET}`,
         }),
       ),
     )

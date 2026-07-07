@@ -3,21 +3,48 @@ import { describe, expect, it, vi } from 'vitest'
 import type { ExtractedNode } from './extract'
 import { writeNodesToBrain } from './nodes'
 
+interface MockR2PutOptions {
+  onlyIf?: { etagMatches?: string; etagDoesNotMatch?: string }
+}
+
+/**
+ * In-memory R2 bucket mock that tracks a fake etag per key and honours
+ * `onlyIf.etagMatches` conditional-write semantics: `put` returns `null`
+ * (mirroring the real R2Object|null return) when the caller's etag doesn't
+ * match current state, and bumps the etag on every successful write.
+ */
 function mockR2Bucket(existing: unknown[] = []) {
   const stored = new Map<string, string>()
-  stored.set('nodes/community.json', JSON.stringify(existing))
-  stored.set('manifest.json', JSON.stringify({ files: {} }))
+  const etags = new Map<string, string>()
+  let etagCounter = 0
+
+  function setWithEtag(key: string, value: string): string {
+    etagCounter += 1
+    const etag = `etag-${etagCounter}`
+    stored.set(key, value)
+    etags.set(key, etag)
+    return etag
+  }
+
+  setWithEtag('nodes/community.json', JSON.stringify(existing))
+  setWithEtag('manifest.json', JSON.stringify({ files: {} }))
 
   return {
     get: vi.fn(async (key: string) => {
       const val = stored.get(key)
-      if (!val) return null
-      return { json: async () => JSON.parse(val) }
+      if (val === undefined) return null
+      return { json: async () => JSON.parse(val), etag: etags.get(key) }
     }),
-    put: vi.fn(async (key: string, value: string) => {
-      stored.set(key, value)
+    put: vi.fn(async (key: string, value: string, options?: MockR2PutOptions) => {
+      const currentEtag = etags.get(key)
+      if (options?.onlyIf?.etagMatches !== undefined) {
+        if (options.onlyIf.etagMatches !== currentEtag) return null
+      }
+      const etag = setWithEtag(key, value)
+      return { etag }
     }),
     _stored: stored,
+    _etags: etags,
   }
 }
 
@@ -72,8 +99,12 @@ describe('writeNodesToBrain', () => {
     })
 
     expect(result.written).toBe(2)
-    expect(bucket.put).toHaveBeenCalledWith('nodes/community.json', expect.any(String))
-    expect(bucket.put).toHaveBeenCalledWith('manifest.json', expect.any(String))
+    expect(bucket.put).toHaveBeenCalledWith(
+      'nodes/community.json',
+      expect.any(String),
+      expect.anything(),
+    )
+    expect(bucket.put).toHaveBeenCalledWith('manifest.json', expect.any(String), expect.anything())
     expect(ai.run).toHaveBeenCalled()
     expect(vectorize.upsert).toHaveBeenCalled()
 
@@ -151,5 +182,95 @@ describe('writeNodesToBrain', () => {
 
     expect(result.written).toBe(0)
     expect(vectorize.upsert).not.toHaveBeenCalled()
+  })
+
+  it('retries on R2 conditional-write conflict so a concurrent writer is not clobbered', async () => {
+    // Simulates two writers racing: writer B (the cron batch) commits its node
+    // to R2 in between writer A's `get` and `put`. Writer A's first `put` must
+    // fail (etag mismatch), then A re-reads, re-merges, and retries — so BOTH
+    // writers' nodes survive in the final state instead of B's write being
+    // silently lost.
+    const bucket = mockR2Bucket()
+    const vectorize = mockVectorize()
+    const ai = mockAi()
+
+    const originalPut = bucket.put.getMockImplementation()!
+    let putCallCount = 0
+    bucket.put.mockImplementation(async (key: string, value: string, options?: any) => {
+      putCallCount += 1
+      // On writer A's first attempt at community.json, simulate writer B
+      // slipping in a concurrent commit right before A's conditional put lands.
+      if (key === 'nodes/community.json' && putCallCount === 1) {
+        const concurrentNode = {
+          id: 'community:concurrent-writer-b-node',
+          title: 'Concurrent Writer B Node',
+          layer: 'community',
+        }
+        const current = JSON.parse(bucket._stored.get('nodes/community.json')!)
+        const merged = [...current, concurrentNode]
+        // Directly mutate stored state + bump etag to simulate B's commit,
+        // WITHOUT going through this mock's onlyIf check (B "wins" the race).
+        bucket._stored.set('nodes/community.json', JSON.stringify(merged))
+        bucket._etags.set('nodes/community.json', 'etag-from-writer-b')
+        // Now attempt A's original conditional put — it should fail because
+        // the etag A captured at `get`-time no longer matches.
+        return originalPut(key, value, options)
+      }
+      return originalPut(key, value, options)
+    })
+
+    const result = await writeNodesToBrain({
+      nodes: sampleNodes,
+      sourceUrl: 'https://youtube.com/watch?v=abc',
+      sourceName: 'Auspex Tactics',
+      bucket: bucket as any,
+      vectorize: vectorize as any,
+      ai: ai as any,
+    })
+
+    expect(result.written).toBe(2)
+
+    const finalNodes = JSON.parse(bucket._stored.get('nodes/community.json')!) as Array<{
+      id: string
+    }>
+    const finalIds = finalNodes.map((n) => n.id)
+
+    // Writer B's concurrently-committed node survived the retry...
+    expect(finalIds).toContain('community:concurrent-writer-b-node')
+    // ...alongside both of writer A's new nodes.
+    expect(finalIds).toContain('community:gladius-task-force')
+    expect(finalIds).toContain('community:oath-of-moment')
+    expect(finalNodes).toHaveLength(3)
+
+    // put was retried at least once for community.json (conflict then success)
+    const communityPutCalls = bucket.put.mock.calls.filter(
+      (call) => call[0] === 'nodes/community.json',
+    )
+    expect(communityPutCalls.length).toBeGreaterThanOrEqual(2)
+  })
+
+  it('throws after exceeding the retry bound when conflicts never resolve', async () => {
+    const bucket = mockR2Bucket()
+    const vectorize = mockVectorize()
+    const ai = mockAi()
+
+    // Every put to community.json fails the conditional check, forever.
+    bucket.put.mockImplementation(async (key: string, _value: string, options?: any) => {
+      if (key === 'nodes/community.json' && options?.onlyIf?.etagMatches !== undefined) {
+        return null
+      }
+      return { etag: 'irrelevant' }
+    })
+
+    await expect(
+      writeNodesToBrain({
+        nodes: sampleNodes,
+        sourceUrl: 'https://youtube.com/watch?v=abc',
+        sourceName: 'Auspex Tactics',
+        bucket: bucket as any,
+        vectorize: vectorize as any,
+        ai: ai as any,
+      }),
+    ).rejects.toThrow()
   })
 })
