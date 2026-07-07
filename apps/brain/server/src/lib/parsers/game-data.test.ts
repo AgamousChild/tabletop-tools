@@ -58,6 +58,8 @@ describe('convertGameData', () => {
       ['ultramarines', 'Ultramarines', 'imperium'],
       ['white-scars', 'White Scars', 'imperium'],
       ['tyranids', 'Tyranids', 'chaos'],
+      ['astra-militarum', 'Astra Militarum', 'imperium'],
+      ['genestealer-cults', 'Genestealer Cults', 'chaos'],
     ]
     for (const [id, name, alleg] of factions) {
       await client.execute({
@@ -1479,6 +1481,92 @@ describe('convertGameData', () => {
       expect(fallback).toBeDefined()
       expect(fallback!.id).toBe('no-waha-id')
       expect(fallback!.datasheetId).toBe('no-waha-id')
+    })
+
+    it('emits one node per faction copy when cross-faction rows share a BSData id', () => {
+      // data-import's name-based re-keying gives cross-faction same-name
+      // datasheets (AM Chimera / GSC Brood Brothers Chimera, Aeldari /
+      // Drukhari Harlequins, …) the SAME BSData hash id. 69 shared-id groups
+      // exist in the 2026-06-28 snapshot. Each row must still emit its own
+      // node (unique wahapediaId surface id, own factionId), and sibling-table
+      // children (weapons, abilities) must fan out to every copy — otherwise
+      // last-write-wins and entire faction rosters vanish (AM lost 36 units).
+      const sharedId = '9357-7f3f-56be-3129'
+      const input = makeInput({
+        datasheets: [
+          {
+            id: sharedId,
+            wahapediaId: '000000692',
+            name: 'Chimera',
+            factionId: 'Astra Militarum',
+            role: 'Dedicated Transport',
+            legend: '',
+            transport: 'transport capacity 12',
+            loadout: '',
+            damagedW: '',
+            damagedDescription: '',
+          },
+          {
+            id: sharedId,
+            wahapediaId: '000003951',
+            name: 'Chimera',
+            factionId: 'Genestealer Cults',
+            role: 'Dedicated Transport',
+            legend: '',
+            transport: 'transport capacity 12',
+            loadout: '',
+            damagedW: '',
+            damagedDescription: '',
+          },
+        ],
+        datasheetWargear: [
+          {
+            id: 1,
+            datasheetId: sharedId,
+            name: 'Multi-laser',
+            description: '',
+            range: '36"',
+            type: 'Ranged',
+            attacks: '3',
+            skill: '4+',
+            strength: '6',
+            ap: '0',
+            damage: '1',
+          },
+        ],
+        unitAbilities: [
+          {
+            id: 'ab-1',
+            datasheetId: sharedId,
+            name: 'Amphibious',
+            type: 'Datasheet',
+            description: 'This model can move over water terrain.',
+            parameter: '',
+          },
+        ],
+      })
+      const { nodes } = convertGameData(input, '2026-07-06')
+
+      const amCopy = nodes.find((n) => n.id === '000000692')
+      const gscCopy = nodes.find((n) => n.id === '000003951')
+      expect(amCopy).toBeDefined()
+      expect(gscCopy).toBeDefined()
+      expect(amCopy!.factionId).toBe('astra-militarum')
+      expect(gscCopy!.factionId).toBe('genestealer-cults')
+
+      const amWeapon = nodes.find((n) => n.id === 'weapon:000000692:multi-laser')
+      const gscWeapon = nodes.find((n) => n.id === 'weapon:000003951:multi-laser')
+      expect(amWeapon).toBeDefined()
+      expect(gscWeapon).toBeDefined()
+      expect(amWeapon!.factionId).toBe('astra-militarum')
+      expect(gscWeapon!.factionId).toBe('genestealer-cults')
+
+      const amAbility = nodes.find((n) => n.id === 'ability:000000692:amphibious')
+      const gscAbility = nodes.find((n) => n.id === 'ability:000003951:amphibious')
+      expect(amAbility).toBeDefined()
+      expect(gscAbility).toBeDefined()
+      expect(amAbility!.factionId).toBe('astra-militarum')
+      expect(gscAbility!.factionId).toBe('genestealer-cults')
     })
 
     it('tags every Wahapedia-emitted node with edition: "10th"', () => {

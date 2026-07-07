@@ -194,6 +194,36 @@ KEYWORDS: Infantry, Old Unit RANGED WEAPONS RANGE A BS S AP D Stub [PISTOL] 6" 1
     expect(r.legendsDatasheets[0]!.isLegends).toBe(true)
   })
 
+  it('joins a heading name continuation glued to the KEYWORDS line', () => {
+    // PDF headings break mid-name: the tail lands at the start of the first
+    // body line, glued to "KEYWORDS:". Real cases from the Orks pack:
+    // "PAINBOY" + "ON WARBIKE", "BIG MEK" + "WITH KUSTOM FORCE FIELD",
+    // "DEFFKOPTAS" + "WITH BIG SHOOTAS". Without the join, the Legends
+    // variant collides with the live unit of the truncated name.
+    const md = `## FACTION
+
+
+##### WA R HA M M E R L E G E N D S PAINBOY
+
+ON WARBIKE KEYWORDS: Mounted, Speed Freeks, Character, Painboy on Warbike RANGED WEAPONS RANGE A BS S AP D Twin dakkagun [ASSAULT] 18" 3 5+ 5 0 1 MELEE WEAPONS RANGE A WS S AP D Power klaw Melee 3 4+ 9 -2 2 ABILITIES CORE: Leader FACTION: Waaagh! KEYWORDS: Mounted, Speed Freeks, Character, Painboy on Warbike FACTION KEYWORDS: Orks M T SV W LD OC
+
+
+##### 12" 6 4+ 4 7+ 2
+
+
+##### WA R HA M M E R L E G E N D S SQUIGGOTH
+
+KEYWORDS: Monster, Transport, Squiggoth RANGED WEAPONS RANGE A BS S AP D Kannon [BLAST] 36" D6 5+ 5 0 1 MELEE WEAPONS RANGE A WS S AP D Gorin' horns Melee 4 3+ 12 -2 D6 ABILITIES FACTION: Waaagh! KEYWORDS: Monster, Transport, Squiggoth FACTION KEYWORDS: Orks M T SV W LD OC
+`
+    const r = parseFactionPackV2(md, { faction: 'orks' })
+    const names = r.legendsDatasheets.map((d) => d.name)
+    expect(names).toContain('PAINBOY ON WARBIKE')
+    // No continuation — name stays as-is, KEYWORDS line untouched.
+    expect(names).toContain('SQUIGGOTH')
+    const painboy = r.legendsDatasheets.find((d) => d.name === 'PAINBOY ON WARBIKE')!
+    expect(painboy.variant).toBe('ON WARBIKE')
+  })
+
   it('parses Page-based errata into structured entries', () => {
     const md = `## ORKS
 

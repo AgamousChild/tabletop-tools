@@ -729,6 +729,14 @@ export function convertPackExtractToNodes(
   // Legends at 10e). Even in 11e mode we emit them as fresh nodes at
   // `11e:datasheet:*` ids so they don't collide with the 10e slug keyspace.
   const emitDatasheet = (ds: PackExtract['datasheets'][number], isLegends: boolean) => {
+    // Legends datasheets are NOT 11e-playable (goal: "unless a unit has
+    // officially been put into Legends it is available for 11th edition" —
+    // the inverse holds too). The Wahapedia parse already drops isLegends
+    // rows at ingestion (game-data.ts `legendsIds` filter); emitting the
+    // pack's Legends section as untagged 11e datasheet nodes put 300+
+    // retired units (GAUSS PYLON, MACHARIUS, PAINBOY ON WARBIKE, …) into
+    // the playable 11e set. Skip them in 11e mode for parity.
+    if (isEleventh && isLegends) return
     const dsSlug = slugify(ds.name)
     const content = buildDatasheetContent(ds)
     // Chapter membership no longer inferred from datasheet name/body text.

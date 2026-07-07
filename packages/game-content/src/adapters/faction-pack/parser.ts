@@ -1264,7 +1264,7 @@ function looksLikeDatasheetBody(body: string): boolean {
 function parseDatasheet(rawName: string, body: string): Datasheet {
   const isLegends = /^WA\s*R\s*HA\s*M\s*M\s*E\s*R\s+L\s*E\s*G\s*E\s*N\s*D\s*S/i.test(rawName)
   // Strip Legends prefix if present
-  const name = rawName
+  let name = rawName
     .replace(/^WA\s*R\s*HA\s*M\s*M\s*E\s*R\s+L\s*E\s*G\s*E\s*N\s*D\s*S\s*/i, '')
     .trim()
   // Variant detection: "BIG MEK\nON WARBIKE" — but our heading is single line.
@@ -1274,6 +1274,20 @@ function parseDatasheet(rawName: string, body: string): Datasheet {
   const firstNonEmpty = lines.find((l) => l.trim().length > 0)
   if (firstNonEmpty && isAllCapsLine(firstNonEmpty) && firstNonEmpty.length <= 40) {
     variant = firstNonEmpty.trim()
+  }
+  // Heading name continuation — PDF headings break mid-name and the tail
+  // lands glued to the first body line, before "KEYWORDS:". Real cases:
+  // "PAINBOY" + "ON WARBIKE KEYWORDS: …", "BIG MEK" + "WITH KUSTOM FORCE
+  // FIELD KEYWORDS: …", "NOBZ" + "ON WARBIKES KEYWORDS: …". Without the
+  // join, the truncated name collides with the live unit of the same name
+  // (a Legends "PAINBOY ON WARBIKE" masquerading as the legal Painboy).
+  if (firstNonEmpty) {
+    const cont = /^\s*((?:ON|WITH|IN|OF)\s[A-Z0-9'!()\-‑\s]{2,40}?)\s+KEYWORDS:/.exec(firstNonEmpty)
+    if (cont) {
+      const continuation = cont[1]!.replace(/\s+/g, ' ').trim()
+      name = `${name} ${continuation}`
+      variant = variant ?? continuation
+    }
   }
 
   // Stats: look for "M T SV W LD OC" header and the line beneath which has the values

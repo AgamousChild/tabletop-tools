@@ -240,6 +240,13 @@ These are caltrops people have stepped on. Always honor them.
 - **Clear cache before verifying anything.** `wrangler r2 object get`,
   Cloudflare CDN, browser cache — all can return stale data. Before
   concluding something didn't work, clear the cache.
+- **Node fetch timeouts to Turso / tabletop-tools.net = broken IPv6 route.**
+  After the 2026-07-06 power outage the LAN's IPv6 path silently broke; Node
+  tries IPv6 first and dies with `UND_ERR_CONNECT_TIMEOUT` / `ECONNABORTED`
+  while curl (falling back to IPv4) works. Run Node scripts with
+  `NODE_OPTIONS=--dns-result-order=ipv4first`. The dim lookups
+  (`dim_faction`, `dim_faction_alias`, `dim_subfaction`) are snapshotted in
+  `apps/brain/server/.local/dev.db` so `build-graph.ts` also runs offline.
 - **Don't chain `cd path && command` in bash.** Compound commands with
   `cd` trigger a manual approval prompt. Use absolute paths in tool args
   (Read/Edit/Write already take absolute paths). For pnpm, use

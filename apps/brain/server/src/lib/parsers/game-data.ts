@@ -431,6 +431,14 @@ export interface GameDataParseResult {
    * is required for those.
    */
   bsdataIdToSurfaceId: Map<string, string>
+  /**
+   * ALL surface ids sharing a BSData id. Cross-faction same-name datasheets
+   * (AM Chimera / GSC Chimera) share one BSData hash after data-import's
+   * name-based re-keying; each faction copy keeps its own Wahapedia surface
+   * id. `bsdataIdToSurfaceId` (above) is last-write-wins across copies —
+   * consumers that must reach every copy (MFM points re-keying) use this.
+   */
+  bsdataIdToSurfaceIds: Map<string, string[]>
 }
 
 /**
@@ -658,6 +666,46 @@ export function convertGameData(
     dsFactionMap.set(dsId, chapterFaction)
   }
 
+  // Fan-out helper — data-import's name-based re-keying gives cross-faction
+  // same-name datasheets (AM Chimera / GSC Brood Brothers Chimera, Aeldari /
+  // Drukhari Harlequins, shared Imperial Agents, …) the SAME BSData hash id.
+  // Sibling tables (wargear, abilities, keywords) join on that shared id, so
+  // datasheet emission uses per-ROW identity (wahapediaId) and child emission
+  // fans out to every faction copy. Without this, last-write-wins silently
+  // dropped entire rosters (AM lost its 36 shared tank/infantry sheets).
+  const dsRowsByBsdataId = groupBy(filteredDatasheets, (d) => d.id)
+  // Chapter routing (dsChapterFactionMap) is keyed on the SHARED BSData id,
+  // so it must only apply to rows whose OWN faction is Space Marines —
+  // otherwise the Imperial Agents copy of Watch Master inherits the SM
+  // copy's deathwatch routing and Imperial Agents loses the unit.
+  const rowFactionOf = (row: { id: string; factionId: string }): string => {
+    const own = normalizeFactionId(row.factionId)
+    if (own !== 'space-marines') return own
+    return dsChapterFactionMap.get(row.id) ?? own
+  }
+  // One representative row per (bsdataId, resolved faction): Wahapedia lists
+  // chapter-flavoured variants of shared SM vehicles as SECOND rows under the
+  // same "Space Marines" faction + shared BSData id (Impulsor ×2, Gladiator
+  // ×3, …). Both rows chapter-route identically, so without this dedup the
+  // fan-out emits duplicate same-faction datasheets. First row wins.
+  const representativeRows = new Set<GameDataInput['datasheets'][number]>()
+  {
+    const seenFactionCopies = new Set<string>()
+    for (const row of filteredDatasheets) {
+      const key = `${row.id}::${rowFactionOf(row)}`
+      if (seenFactionCopies.has(key)) continue
+      seenFactionCopies.add(key)
+      representativeRows.add(row)
+    }
+  }
+  const surfaceCopiesOf = (bsdataId: string): Array<{ surfaceId: string; factionId: string }> =>
+    (dsRowsByBsdataId.get(bsdataId) ?? [])
+      .filter((row) => representativeRows.has(row))
+      .map((row) => ({
+        surfaceId: row.wahapediaId ?? row.id,
+        factionId: rowFactionOf(row),
+      }))
+
   // ── 0. Faction parent nodes ────────────────────────────────────────────────
   // Create a top-level node for each faction so detachments, army rules, and
   // datasheets can link up to it via part_of.
@@ -671,6 +719,9 @@ export function convertGameData(
   // ── 1. Datasheets → unit/datasheet nodes ──────────────────────────────────
 
   for (const ds of filteredDatasheets) {
+    // Skip non-representative duplicate rows (same bsdataId, same resolved
+    // faction) — see representativeRows above.
+    if (!representativeRows.has(ds)) continue
     const models = modelsByDatasheet.get(ds.id) ?? []
     const keywords = keywordsByDatasheet.get(ds.id) ?? []
     const compositions = compositionsByDatasheet.get(ds.id) ?? []
@@ -784,13 +835,17 @@ export function convertGameData(
     // restructure). The brain surfaces datasheets at their Wahapedia numeric
     // id (e.g. "000000135"). The hash on `ds.id` stays the internal join key
     // for sibling tables (wargear, abilities, etc.) — see surfaceIdOf above.
-    const datasheetSurfaceId = surfaceIdOf(ds.id)
+    // Per-ROW surface id (NOT surfaceIdOf, which is last-write-wins across
+    // cross-faction rows sharing a BSData id — see surfaceCopiesOf above).
+    const datasheetSurfaceId = ds.wahapediaId ?? ds.id
     // Chapter-specific SM units get their chapter's factionId (Blood Angels,
     // Dark Angels, Space Wolves, Black Templars, Deathwatch). Everything else
     // keeps the parent factionId. `subfaction` is left undefined across the
     // board — chapter membership lives on `factionId`, not a side-tag.
     // See docs/superpowers/plans/2026-07-03-scalar-to-ref-refactor.md — PR B.
-    const dsFactionId = dsFactionMap.get(ds.id) ?? normalizeFactionId(ds.factionId)
+    // Per-ROW faction id — dsFactionMap is keyed on the (shared) BSData id,
+    // so cross-faction copies would inherit the last row's faction.
+    const dsFactionId = rowFactionOf(ds)
     const node: Node = {
       id: datasheetSurfaceId,
       layer: 'unit',
@@ -1034,77 +1089,81 @@ export function convertGameData(
     // partitionNodes). Drop them at the source instead — a weapon with no
     // datasheet has no home in the brain graph.
     if (!dsFactionMap.has(wg.datasheetId)) continue
-    // Differentiate melee/ranged profiles with the same name on the same datasheet
-    const parentSurfaceId = surfaceIdOf(wg.datasheetId)
-    let weaponNodeId = `weapon:${parentSurfaceId}:${slugify(wg.name)}`
-    if (seenWeaponIds.has(weaponNodeId)) {
-      weaponNodeId = `weapon:${parentSurfaceId}:${slugify(wg.name)}-${slugify(wg.type)}`
-    }
-    if (seenWeaponIds.has(weaponNodeId)) {
-      weaponNodeId = `weapon:${parentSurfaceId}:${slugify(wg.name)}-${wg.id}`
-    }
-    seenWeaponIds.add(weaponNodeId)
-
-    const cleanDesc = stripHtml(wg.description ?? '')
-
-    const content = [
-      `**Range:** ${wg.range} | **Type:** ${wg.type}`,
-      `**A:** ${wg.attacks} | **BS/WS:** ${wg.skill} | **S:** ${wg.strength} | **AP:** ${wg.ap} | **D:** ${wg.damage}`,
-      cleanDesc ? `\n${cleanDesc}` : '',
-    ]
-      .filter(Boolean)
-      .join('\n')
-
-    nodes.push({
-      id: weaponNodeId,
-      layer: 'unit',
-      category: 'weapon',
-      title: wg.name,
-      content,
-      summary: `${wg.name} (${wg.type}) — ${wg.range}, ${wg.attacks}A, S${wg.strength}, AP${wg.ap}, D${wg.damage}.${cleanDesc ? ` [${cleanDesc}]` : ''}`,
-      factionId: dsFactionMap.get(wg.datasheetId),
-      datasheetId: parentSurfaceId,
-      edition: '10th',
-      weaponStats: {
-        range: wg.range || 'Melee',
-        A: wg.attacks || '1',
-        skill: wg.skill || '-',
-        S: parseInt(wg.strength) || 0,
-        AP: parseInt(wg.ap) || 0,
-        D: wg.damage || '1',
-      },
-      sources: [source],
-      refs: [],
-      version: 1,
-      keywords: extractWeaponKeywords(wg),
-    })
-
-    // Add strength tier and damage info to weapon keywords
-    const s = parseInt(wg.strength)
-    if (!isNaN(s)) {
-      const tier = getStrengthTier(s)
-      if (tier) {
-        nodes[nodes.length - 1]!.keywords.push(`s${s}`, tier.name, `strength-${s}`)
+    // Fan out to every faction copy of the parent datasheet (shared BSData id).
+    for (const { surfaceId: parentSurfaceId, factionId: parentFactionId } of surfaceCopiesOf(
+      wg.datasheetId,
+    )) {
+      // Differentiate melee/ranged profiles with the same name on the same datasheet
+      let weaponNodeId = `weapon:${parentSurfaceId}:${slugify(wg.name)}`
+      if (seenWeaponIds.has(weaponNodeId)) {
+        weaponNodeId = `weapon:${parentSurfaceId}:${slugify(wg.name)}-${slugify(wg.type)}`
       }
-    }
-    const d = parseInt(wg.damage)
-    if (!isNaN(d) && d > 1) {
-      nodes[nodes.length - 1]!.keywords.push(`damage-${d}`, `d${d}`)
-    }
-    const ap = parseInt(wg.ap)
-    if (!isNaN(ap) && ap !== 0) {
-      const absAp = Math.abs(ap)
-      nodes[nodes.length - 1]!.keywords.push(`ap-${absAp}`, `ap${absAp}`)
-    }
+      if (seenWeaponIds.has(weaponNodeId)) {
+        weaponNodeId = `weapon:${parentSurfaceId}:${slugify(wg.name)}-${wg.id}`
+      }
+      seenWeaponIds.add(weaponNodeId)
 
-    // part_of ref to datasheet
-    refs.push({
-      sourceId: weaponNodeId,
-      targetId: parentSurfaceId,
-      rel: 'part_of',
-      context: `${wg.name} is a weapon equipped by this unit.`,
-      bidirectional: true,
-    })
+      const cleanDesc = stripHtml(wg.description ?? '')
+
+      const content = [
+        `**Range:** ${wg.range} | **Type:** ${wg.type}`,
+        `**A:** ${wg.attacks} | **BS/WS:** ${wg.skill} | **S:** ${wg.strength} | **AP:** ${wg.ap} | **D:** ${wg.damage}`,
+        cleanDesc ? `\n${cleanDesc}` : '',
+      ]
+        .filter(Boolean)
+        .join('\n')
+
+      nodes.push({
+        id: weaponNodeId,
+        layer: 'unit',
+        category: 'weapon',
+        title: wg.name,
+        content,
+        summary: `${wg.name} (${wg.type}) — ${wg.range}, ${wg.attacks}A, S${wg.strength}, AP${wg.ap}, D${wg.damage}.${cleanDesc ? ` [${cleanDesc}]` : ''}`,
+        factionId: parentFactionId,
+        datasheetId: parentSurfaceId,
+        edition: '10th',
+        weaponStats: {
+          range: wg.range || 'Melee',
+          A: wg.attacks || '1',
+          skill: wg.skill || '-',
+          S: parseInt(wg.strength) || 0,
+          AP: parseInt(wg.ap) || 0,
+          D: wg.damage || '1',
+        },
+        sources: [source],
+        refs: [],
+        version: 1,
+        keywords: extractWeaponKeywords(wg),
+      })
+
+      // Add strength tier and damage info to weapon keywords
+      const s = parseInt(wg.strength)
+      if (!isNaN(s)) {
+        const tier = getStrengthTier(s)
+        if (tier) {
+          nodes[nodes.length - 1]!.keywords.push(`s${s}`, tier.name, `strength-${s}`)
+        }
+      }
+      const d = parseInt(wg.damage)
+      if (!isNaN(d) && d > 1) {
+        nodes[nodes.length - 1]!.keywords.push(`damage-${d}`, `d${d}`)
+      }
+      const ap = parseInt(wg.ap)
+      if (!isNaN(ap) && ap !== 0) {
+        const absAp = Math.abs(ap)
+        nodes[nodes.length - 1]!.keywords.push(`ap-${absAp}`, `ap${absAp}`)
+      }
+
+      // part_of ref to datasheet
+      refs.push({
+        sourceId: weaponNodeId,
+        targetId: parentSurfaceId,
+        rel: 'part_of',
+        context: `${wg.name} is a weapon equipped by this unit.`,
+        bidirectional: true,
+      })
+    }
   }
 
   // ── 3. Unit abilities → unit/unit-ability nodes ───────────────────────────
@@ -1195,12 +1254,14 @@ export function convertGameData(
     const factionAbNodeId = `faction:${primaryFaction}:${ruleSlug}`
     for (const dsId of dsIds) {
       const dsName = filteredDatasheets.find((d) => d.id === dsId)?.name ?? dsId
-      refs.push({
-        sourceId: factionAbNodeId,
-        targetId: surfaceIdOf(dsId),
-        rel: 'modifies',
-        context: `${factionAb.name} applies to ${dsName}.`,
-      })
+      for (const copy of surfaceCopiesOf(dsId)) {
+        refs.push({
+          sourceId: factionAbNodeId,
+          targetId: copy.surfaceId,
+          rel: 'modifies',
+          context: `${factionAb.name} applies to ${dsName}.`,
+        })
+      }
     }
   }
 
@@ -1212,110 +1273,115 @@ export function convertGameData(
     // orphan case as the weapon loop above — without a datasheet parent the
     // ability inherits `factionId=undefined` and drops into `faction-unknown`.
     if (!dsFactionMap.has(ab.datasheetId)) continue
-    const abilityParentSurfaceId = surfaceIdOf(ab.datasheetId)
-    const baseId = `ability:${abilityParentSurfaceId}:${slugify(ab.name)}`
-    const count = seenAbilityIds.get(baseId) ?? 0
-    seenAbilityIds.set(baseId, count + 1)
-    const abilityNodeId = count === 0 ? baseId : `${baseId}-${count}`
+    // Fan out to every faction copy of the parent datasheet (shared BSData id).
+    for (const {
+      surfaceId: abilityParentSurfaceId,
+      factionId: abilityParentFactionId,
+    } of surfaceCopiesOf(ab.datasheetId)) {
+      const baseId = `ability:${abilityParentSurfaceId}:${slugify(ab.name)}`
+      const count = seenAbilityIds.get(baseId) ?? 0
+      seenAbilityIds.set(baseId, count + 1)
+      const abilityNodeId = count === 0 ? baseId : `${baseId}-${count}`
 
-    const cleanAbDesc = stripHtml(ab.description)
-    const dsName = filteredDatasheets.find((d) => d.id === ab.datasheetId)?.name ?? ''
+      const cleanAbDesc = stripHtml(ab.description)
+      const dsName = filteredDatasheets.find((d) => d.id === ab.datasheetId)?.name ?? ''
 
-    // Split multi-option abilities
-    const subRules = splitSubRules(cleanAbDesc)
-    const hasSubRules = subRules.length >= 2
+      // Split multi-option abilities
+      const subRules = splitSubRules(cleanAbDesc)
+      const hasSubRules = subRules.length >= 2
 
-    const preamble = hasSubRules
-      ? cleanAbDesc.substring(0, cleanAbDesc.indexOf(subRules[0]!.name)).trim()
-      : cleanAbDesc
+      const preamble = hasSubRules
+        ? cleanAbDesc.substring(0, cleanAbDesc.indexOf(subRules[0]!.name)).trim()
+        : cleanAbDesc
 
-    // Main ability node
-    nodes.push({
-      id: abilityNodeId,
-      layer: 'unit',
-      category: 'unit-ability',
-      title: ab.name,
-      content: hasSubRules ? preamble : cleanAbDesc,
-      summary: `${ab.name} (${ab.type}) on ${dsName} — ${truncate(preamble || cleanAbDesc, 120)}`,
-      factionId: dsFactionMap.get(ab.datasheetId),
-      datasheetId: abilityParentSurfaceId,
-      edition: '10th',
-      sources: [source],
-      refs: [],
-      version: 1,
-      keywords: [
-        ab.type.toLowerCase(),
-        ...extractTerms(ab.description),
-        ...extractTargetingKeywords(ab.description),
-      ],
-    })
+      // Main ability node
+      nodes.push({
+        id: abilityNodeId,
+        layer: 'unit',
+        category: 'unit-ability',
+        title: ab.name,
+        content: hasSubRules ? preamble : cleanAbDesc,
+        summary: `${ab.name} (${ab.type}) on ${dsName} — ${truncate(preamble || cleanAbDesc, 120)}`,
+        factionId: abilityParentFactionId,
+        datasheetId: abilityParentSurfaceId,
+        edition: '10th',
+        sources: [source],
+        refs: [],
+        version: 1,
+        keywords: [
+          ab.type.toLowerCase(),
+          ...extractTerms(ab.description),
+          ...extractTargetingKeywords(ab.description),
+        ],
+      })
 
-    refs.push({
-      sourceId: abilityNodeId,
-      targetId: abilityParentSurfaceId,
-      rel: 'part_of',
-      context: `${ab.name} is a ${ab.type} ability of ${dsName}.`,
-      bidirectional: true,
-    })
+      refs.push({
+        sourceId: abilityNodeId,
+        targetId: abilityParentSurfaceId,
+        rel: 'part_of',
+        context: `${ab.name} is a ${ab.type} ability of ${dsName}.`,
+        bidirectional: true,
+      })
 
-    // Sub-rule nodes for each option
-    if (hasSubRules) {
-      for (const sub of subRules) {
-        const subId = `${abilityNodeId}:${slugify(sub.name)}`
+      // Sub-rule nodes for each option
+      if (hasSubRules) {
+        for (const sub of subRules) {
+          const subId = `${abilityNodeId}:${slugify(sub.name)}`
 
-        nodes.push({
-          id: subId,
-          layer: 'unit',
-          category: 'unit-ability',
-          title: `${sub.name} (${ab.name})`,
-          content: sub.text,
-          summary: `${sub.name}, option of ${ab.name} on ${dsName} — ${truncate(sub.text, 120)}`,
-          factionId: dsFactionMap.get(ab.datasheetId),
-          datasheetId: abilityParentSurfaceId,
-          edition: '10th',
-          sources: [source],
-          refs: [],
-          version: 1,
-          keywords: [
-            ab.type.toLowerCase(),
-            slugify(sub.name),
-            ...extractTerms(sub.text),
-            ...extractTargetingKeywords(sub.text),
-          ],
-        })
+          nodes.push({
+            id: subId,
+            layer: 'unit',
+            category: 'unit-ability',
+            title: `${sub.name} (${ab.name})`,
+            content: sub.text,
+            summary: `${sub.name}, option of ${ab.name} on ${dsName} — ${truncate(sub.text, 120)}`,
+            factionId: abilityParentFactionId,
+            datasheetId: abilityParentSurfaceId,
+            edition: '10th',
+            sources: [source],
+            refs: [],
+            version: 1,
+            keywords: [
+              ab.type.toLowerCase(),
+              slugify(sub.name),
+              ...extractTerms(sub.text),
+              ...extractTargetingKeywords(sub.text),
+            ],
+          })
 
-        refs.push({
-          sourceId: subId,
-          targetId: abilityNodeId,
-          rel: 'part_of',
-          context: `${sub.name} is an option within ${ab.name} on ${dsName}.`,
-          bidirectional: true,
-        })
+          refs.push({
+            sourceId: subId,
+            targetId: abilityNodeId,
+            rel: 'part_of',
+            context: `${sub.name} is an option within ${ab.name} on ${dsName}.`,
+            bidirectional: true,
+          })
 
-        // Create requires refs from sub-rules to core mechanic nodes
-        // e.g. MARTIAL EXCELLENCE → core:sustained-hits
-        const subText = `${sub.name} ${sub.text}`.toLowerCase()
-        const SUB_RULE_CORE_LINKS: Array<{ pattern: string; coreSlug: string; label: string }> = [
-          { pattern: 'sustained hits', coreSlug: 'sustained-hits', label: 'Sustained Hits' },
-          { pattern: 'lethal hits', coreSlug: 'lethal-hits', label: 'Lethal Hits' },
-          {
-            pattern: 'devastating wounds',
-            coreSlug: 'devastating-wounds',
-            label: 'Devastating Wounds',
-          },
-          { pattern: 'feel no pain', coreSlug: 'feel-no-pain', label: 'Feel No Pain' },
-          { pattern: 'hazardous', coreSlug: 'hazardous', label: 'Hazardous' },
-          { pattern: 'deep strike', coreSlug: 'deep-strike', label: 'Deep Strike' },
-          { pattern: 'stealth', coreSlug: 'stealth', label: 'Stealth' },
-        ]
-        for (const { pattern, coreSlug, label } of SUB_RULE_CORE_LINKS) {
-          if (subText.includes(pattern)) {
-            refs.push({
-              sourceId: subId,
-              targetId: `core:${coreSlug}`,
-              rel: 'requires',
-              context: `${sub.name} grants ${label}.`,
-            })
+          // Create requires refs from sub-rules to core mechanic nodes
+          // e.g. MARTIAL EXCELLENCE → core:sustained-hits
+          const subText = `${sub.name} ${sub.text}`.toLowerCase()
+          const SUB_RULE_CORE_LINKS: Array<{ pattern: string; coreSlug: string; label: string }> = [
+            { pattern: 'sustained hits', coreSlug: 'sustained-hits', label: 'Sustained Hits' },
+            { pattern: 'lethal hits', coreSlug: 'lethal-hits', label: 'Lethal Hits' },
+            {
+              pattern: 'devastating wounds',
+              coreSlug: 'devastating-wounds',
+              label: 'Devastating Wounds',
+            },
+            { pattern: 'feel no pain', coreSlug: 'feel-no-pain', label: 'Feel No Pain' },
+            { pattern: 'hazardous', coreSlug: 'hazardous', label: 'Hazardous' },
+            { pattern: 'deep strike', coreSlug: 'deep-strike', label: 'Deep Strike' },
+            { pattern: 'stealth', coreSlug: 'stealth', label: 'Stealth' },
+          ]
+          for (const { pattern, coreSlug, label } of SUB_RULE_CORE_LINKS) {
+            if (subText.includes(pattern)) {
+              refs.push({
+                sourceId: subId,
+                targetId: `core:${coreSlug}`,
+                rel: 'requires',
+                context: `${sub.name} grants ${label}.`,
+              })
+            }
           }
         }
       }
@@ -1691,12 +1757,14 @@ export function convertGameData(
         const det = input.detachments.find((d) => d.id === strat.detachmentId)
         if (det) {
           const stratNodeId = `det:${normalizeFactionId(det.factionId)}:${slugify(det.name)}:${slugify(strat.name)}`
-          refs.push({
-            sourceId: stratNodeId,
-            targetId: surfaceIdOf(j.datasheetId),
-            rel: 'modifies',
-            context: `${strat.name} stratagem can be used with this unit.`,
-          })
+          for (const copy of surfaceCopiesOf(j.datasheetId)) {
+            refs.push({
+              sourceId: stratNodeId,
+              targetId: copy.surfaceId,
+              rel: 'modifies',
+              context: `${strat.name} stratagem can be used with this unit.`,
+            })
+          }
         }
       }
     }
@@ -1709,12 +1777,14 @@ export function convertGameData(
         const det = input.detachments.find((d) => d.id === enh.detachmentId)
         if (det) {
           const enhNodeId = `det:${normalizeFactionId(det.factionId)}:${slugify(det.name)}:${slugify(enh.name)}`
-          refs.push({
-            sourceId: enhNodeId,
-            targetId: surfaceIdOf(j.datasheetId),
-            rel: 'modifies',
-            context: `${enh.name} enhancement can be given to a model in this unit.`,
-          })
+          for (const copy of surfaceCopiesOf(j.datasheetId)) {
+            refs.push({
+              sourceId: enhNodeId,
+              targetId: copy.surfaceId,
+              rel: 'modifies',
+              context: `${enh.name} enhancement can be given to a model in this unit.`,
+            })
+          }
         }
       }
     }
@@ -1748,17 +1818,18 @@ export function convertGameData(
   ]
 
   for (const wg of filteredWargear) {
-    const weaponNodeId = `weapon:${surfaceIdOf(wg.datasheetId)}:${slugify(wg.name)}`
     const desc = (wg.description ?? '').toLowerCase()
-
-    for (const { pattern, coreSlug, label } of WEAPON_ABILITY_CORE_NODES) {
-      if (desc.includes(pattern)) {
-        refs.push({
-          sourceId: weaponNodeId,
-          targetId: `core:${coreSlug}`,
-          rel: 'requires',
-          context: `${wg.name} has the ${label} ability. See the core rules for how ${label} works.`,
-        })
+    for (const copy of surfaceCopiesOf(wg.datasheetId)) {
+      const weaponNodeId = `weapon:${copy.surfaceId}:${slugify(wg.name)}`
+      for (const { pattern, coreSlug, label } of WEAPON_ABILITY_CORE_NODES) {
+        if (desc.includes(pattern)) {
+          refs.push({
+            sourceId: weaponNodeId,
+            targetId: `core:${coreSlug}`,
+            rel: 'requires',
+            context: `${wg.name} has the ${label} ability. See the core rules for how ${label} works.`,
+          })
+        }
       }
     }
   }
@@ -1786,21 +1857,22 @@ export function convertGameData(
   const ALL_CORE_PATTERNS = [...WEAPON_ABILITY_CORE_NODES, ...UNIT_ABILITY_CORE_NODES]
 
   for (const ab of filteredUnitAbilities) {
-    // Use the deduplicated ID from section 3
-    const baseId = `ability:${surfaceIdOf(ab.datasheetId)}:${slugify(ab.name)}`
-    const existingCount = seenAbilityIds.get(baseId) ?? 0
-    const abilityNodeId = existingCount <= 1 ? baseId : `${baseId}-${existingCount - 1}`
-
     const text = `${ab.name} ${ab.description}`.toLowerCase()
+    for (const copy of surfaceCopiesOf(ab.datasheetId)) {
+      // Use the deduplicated ID from section 3
+      const baseId = `ability:${copy.surfaceId}:${slugify(ab.name)}`
+      const existingCount = seenAbilityIds.get(baseId) ?? 0
+      const abilityNodeId = existingCount <= 1 ? baseId : `${baseId}-${existingCount - 1}`
 
-    for (const { pattern, coreSlug, label } of ALL_CORE_PATTERNS) {
-      if (text.includes(pattern)) {
-        refs.push({
-          sourceId: abilityNodeId,
-          targetId: `core:${coreSlug}`,
-          rel: 'requires',
-          context: `${ab.name} references ${label}. See the core rules for how ${label} works.`,
-        })
+      for (const { pattern, coreSlug, label } of ALL_CORE_PATTERNS) {
+        if (text.includes(pattern)) {
+          refs.push({
+            sourceId: abilityNodeId,
+            targetId: `core:${coreSlug}`,
+            rel: 'requires',
+            context: `${ab.name} references ${label}. See the core rules for how ${label} works.`,
+          })
+        }
       }
     }
   }
@@ -1873,21 +1945,43 @@ export function convertGameData(
 
   for (const la of filteredLeaderAttachments) {
     const isSupport = la.type === 'support'
-    refs.push({
-      sourceId: surfaceIdOf(la.leaderId),
-      targetId: surfaceIdOf(la.attachedId),
-      rel: isSupport ? 'can_support' : 'can_lead',
-      context: isSupport
-        ? `This character can SUPPORT this unit.`
-        : `This leader can be attached to this unit.`,
-      bidirectional: true,
-    })
+    // Fan out across faction copies, pairing same-faction copies when both
+    // sides are duplicated (AM leader → AM squad, GSC leader → GSC squad).
+    const leaderCopies = surfaceCopiesOf(la.leaderId)
+    const attachedCopies = surfaceCopiesOf(la.attachedId)
+    const leaders = leaderCopies.length
+      ? leaderCopies
+      : [{ surfaceId: surfaceIdOf(la.leaderId), factionId: '' }]
+    const attached = attachedCopies.length
+      ? attachedCopies
+      : [{ surfaceId: surfaceIdOf(la.attachedId), factionId: '' }]
+    for (const lc of leaders) {
+      const sameFaction = attached.filter((a) => a.factionId === lc.factionId)
+      for (const ac of sameFaction.length ? sameFaction : attached) {
+        refs.push({
+          sourceId: lc.surfaceId,
+          targetId: ac.surfaceId,
+          rel: isSupport ? 'can_support' : 'can_lead',
+          context: isSupport
+            ? `This character can SUPPORT this unit.`
+            : `This leader can be attached to this unit.`,
+          bidirectional: true,
+        })
+      }
+    }
   }
 
   // NOTE: stacks_with combo detection moved to lib/combo-detection.ts
   // It runs post-merge+massage in build-graph.ts where all nodes have final factionId/subfaction.
 
-  return { nodes, refs, bsdataIdToSurfaceId }
+  const bsdataIdToSurfaceIds = new Map<string, string[]>()
+  for (const [bsdataId, rows] of dsRowsByBsdataId) {
+    bsdataIdToSurfaceIds.set(
+      bsdataId,
+      rows.map((r) => r.wahapediaId ?? r.id),
+    )
+  }
+  return { nodes, refs, bsdataIdToSurfaceId, bsdataIdToSurfaceIds }
 }
 
 // ── Helpers ─────────────────────────────────────────────────────────────────

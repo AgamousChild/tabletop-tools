@@ -102,8 +102,16 @@ export function massage(nodes: Node[]): MassageResult {
   const afterPass3: Node[] = []
   for (const node of afterPass2) {
     // factionId may be undefined — treat undefined as the empty string so
-    // nodes without a faction form their own dedup group
-    const key = `${node.category}\0${node.factionId ?? ''}\0${node.edition ?? ''}\0${node.summary}`
+    // nodes without a faction form their own dedup group.
+    //
+    // datasheetId scopes the key to the parent unit: a Choppa on Boyz and a
+    // Choppa on Nobz share a byte-identical summary (name + statline) but are
+    // distinct per-datasheet weapon nodes — without the scope this pass kept
+    // 3 of 12 Ork Choppa nodes and 9 unit cards lost their weapon. Datasheet
+    // nodes carry datasheetId = their own id, so two real units with
+    // identical generated summaries (Fluxmaster / Changecaster — same weapon
+    // list) both survive too. 2026-07-06 unit count reconciliation.
+    const key = `${node.category}\0${node.factionId ?? ''}\0${node.edition ?? ''}\0${node.datasheetId ?? ''}\0${node.summary}`
     if (seen.has(key)) {
       droppedDuplicateSummary++
     } else {
