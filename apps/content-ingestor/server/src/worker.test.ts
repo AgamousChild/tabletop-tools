@@ -36,48 +36,48 @@ function makeEnv(overrides: Partial<Record<string, unknown>> = {}) {
 }
 
 describe('checkWebhookToken', () => {
-  it('rejects when WEBHOOK_SECRET is unset — fail loud, not open', () => {
+  it('rejects when WEBHOOK_SECRET is unset — fail loud, not open', async () => {
     const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
     const c = {
       env: { WEBHOOK_SECRET: '' },
       req: { query: (name: string) => (name === 'token' ? 'anything' : undefined) },
     }
 
-    expect(checkWebhookToken(c as any)).toBe(false)
+    expect(await checkWebhookToken(c as any)).toBe(false)
     expect(consoleErrorSpy).toHaveBeenCalled()
     consoleErrorSpy.mockRestore()
   })
 
-  it('rejects when no token query param is present', () => {
+  it('rejects when no token query param is present', async () => {
     const c = {
       env: { WEBHOOK_SECRET },
       req: { query: () => undefined },
     }
-    expect(checkWebhookToken(c as any)).toBe(false)
+    expect(await checkWebhookToken(c as any)).toBe(false)
   })
 
-  it('rejects when the token does not match', () => {
+  it('rejects when the token does not match', async () => {
     const c = {
       env: { WEBHOOK_SECRET },
       req: { query: (name: string) => (name === 'token' ? 'wrong-token' : undefined) },
     }
-    expect(checkWebhookToken(c as any)).toBe(false)
+    expect(await checkWebhookToken(c as any)).toBe(false)
   })
 
-  it('accepts when the token matches exactly', () => {
+  it('accepts when the token matches exactly', async () => {
     const c = {
       env: { WEBHOOK_SECRET },
       req: { query: (name: string) => (name === 'token' ? WEBHOOK_SECRET : undefined) },
     }
-    expect(checkWebhookToken(c as any)).toBe(true)
+    expect(await checkWebhookToken(c as any)).toBe(true)
   })
 
-  it('rejects a token of different length without throwing', () => {
+  it('rejects a token of different length without throwing', async () => {
     const c = {
       env: { WEBHOOK_SECRET },
       req: { query: (name: string) => (name === 'token' ? 'short' : undefined) },
     }
-    expect(checkWebhookToken(c as any)).toBe(false)
+    expect(await checkWebhookToken(c as any)).toBe(false)
   })
 })
 

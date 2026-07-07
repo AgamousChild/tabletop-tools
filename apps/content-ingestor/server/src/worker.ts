@@ -50,21 +50,44 @@ function checkAuth(c: { env: Env; req: { header(name: string): string | undefine
 }
 
 /**
+ * SHA-256 digest of a UTF-8 string, as a hex string.
+ */
+async function sha256Hex(input: string): Promise<string> {
+  const bytes = new TextEncoder().encode(input)
+  const digest = await crypto.subtle.digest('SHA-256', bytes)
+  return Array.from(new Uint8Array(digest))
+    .map((b) => b.toString(16).padStart(2, '0'))
+    .join('')
+}
+
+/**
  * Constant-time string comparison to avoid leaking WEBHOOK_SECRET via
- * response-timing side channels. Compares byte-by-byte over the longer of
- * the two lengths so the operation count doesn't depend on where a mismatch
- * occurs; length is folded into the same accumulator so a short guess can't
- * short-circuit the comparison either.
+ * response-timing side channels. Compares byte-by-byte over the full
+ * fixed length of both inputs so the operation count doesn't depend on
+ * where (or whether) a mismatch occurs.
  */
 function timingSafeEqual(a: string, b: string): boolean {
-  const maxLen = Math.max(a.length, b.length)
-  let diff = a.length ^ b.length
-  for (let i = 0; i < maxLen; i++) {
-    const charA = i < a.length ? a.charCodeAt(i) : 0
-    const charB = i < b.length ? b.charCodeAt(i) : 0
-    diff |= charA ^ charB
+  if (a.length !== b.length) return false
+  let diff = 0
+  for (let i = 0; i < a.length; i++) {
+    diff |= a.charCodeAt(i) ^ b.charCodeAt(i)
   }
   return diff === 0
+}
+
+/**
+ * Constant-*length* comparison of two strings of potentially different
+ * length, without leaking either string's length via comparison timing.
+ * SHA-256-hashes both sides first — the digest is always 64 hex chars
+ * regardless of input length — then runs a fixed-length constant-time
+ * compare on the digests. This is what closes the length side-channel that
+ * a plain byte-by-byte compare over max(a.length, b.length) still leaks
+ * (iteration count varies with input length even if the comparison itself
+ * doesn't short-circuit).
+ */
+async function timingSafeEqualHashed(a: string, b: string): Promise<boolean> {
+  const [hashA, hashB] = await Promise.all([sha256Hex(a), sha256Hex(b)])
+  return timingSafeEqual(hashA, hashB)
 }
 
 /**
@@ -74,15 +97,29 @@ function timingSafeEqual(a: string, b: string): boolean {
  * travels as a `?token=` query param appended when the callback URL is
  * registered with Gladia (see submitTranscription in lib/gladia.ts).
  *
+ * Query-param tradeoff: `submitTranscription`'s request to Gladia's v2
+ * pre-recorded API (lib/gladia.ts) sends only `callback_url` as a plain
+ * string in the JSON body — there is no `callback_headers` (or similarly
+ * named) field anywhere in that request, and nothing else in this codebase
+ * indicates Gladia supports attaching custom headers to its callback
+ * request. Absent evidence that header-based delivery is available, the
+ * token stays in the URL. Concretely, that means the token can appear in
+ * places a header wouldn't: Cloudflare Worker request logs, Gladia's own
+ * access logs, and browser history if the URL is ever opened manually.
+ * Rotation: `wrangler secret put WEBHOOK_SECRET` to set a new value, then
+ * re-register every outstanding callback by re-submitting any in-flight
+ * transcription jobs (the old token stops validating immediately — in-
+ * flight Gladia jobs using the old callback URL will 401 until re-created).
+ *
  * Unlike `checkAuth`, this does NOT fall open when the secret is unset —
  * this route is reachable by anyone on the internet who discovers the URL,
  * so a missing secret must fail closed (401) with a loud console.error,
  * not silently accept every callback.
  */
-export function checkWebhookToken(c: {
+export async function checkWebhookToken(c: {
   env: Env
   req: { query(name: string): string | undefined }
-}): boolean {
+}): Promise<boolean> {
   if (!c.env.WEBHOOK_SECRET) {
     console.error(
       'checkWebhookToken: WEBHOOK_SECRET is unset — rejecting all callbacks. Run `wrangler secret put WEBHOOK_SECRET`.',
@@ -91,7 +128,7 @@ export function checkWebhookToken(c: {
   }
   const token = c.req.query('token')
   if (!token) return false
-  return timingSafeEqual(token, c.env.WEBHOOK_SECRET)
+  return timingSafeEqualHashed(token, c.env.WEBHOOK_SECRET)
 }
 
 let cachedApp: Hono<{ Bindings: Env }> | null = null
@@ -275,7 +312,7 @@ export function getApp() {
   // ── Gladia callback ───────────────────────────────────────────────────────
 
   app.post('/ingest/callback', async (c) => {
-    if (!checkWebhookToken(c)) return c.json({ error: 'Unauthorized' }, 401)
+    if (!(await checkWebhookToken(c))) return c.json({ error: 'Unauthorized' }, 401)
     const body = await c.req.json()
     const parsed = parseGladiaCallback(body)
 

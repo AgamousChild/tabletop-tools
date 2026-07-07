@@ -822,5 +822,37 @@
     "action": "modified",
     "reason": "Document required WEBHOOK_SECRET (and other) Worker secrets as deploy prerequisites via wrangler secret put",
     "timestamp": "2026-07-07T10:00:00.000Z"
+  },
+  {
+    "taskId": "w2-review-required-1",
+    "agent": "senior-dev",
+    "file": "apps/content-ingestor/server/src/lib/nodes.ts",
+    "action": "modified",
+    "reason": "Reword writeConditionally doc comments to avoid overclaiming prod R2 behavior from type absence (antagonistic review REQUIRED 3) — 'no documented create-if-absent precondition' instead of asserting one 'doesn't exist'",
+    "timestamp": "2026-07-07T10:30:00.000Z"
+  },
+  {
+    "taskId": "w2-review-required-2",
+    "agent": "senior-dev",
+    "file": "apps/content-ingestor/server/src/lib/process.ts",
+    "action": "modified",
+    "reason": "Fix stranded-state bug (antagonistic review REQUIRED 2): processDiscovered's main-loop query now also re-picks-up 'failed' ingestContent rows so a partial writeNodesToBrain failure (e.g. manifest.json R2 retry exhaustion after community.json already landed) heals on the next run instead of being permanently stranded — writes are idempotent dedup-by-id merges. processTranscribed's query deliberately left unchanged to avoid double-processing a row within a single processDiscovered() invocation",
+    "timestamp": "2026-07-07T10:30:00.000Z"
+  },
+  {
+    "taskId": "w2-review-minor-4",
+    "agent": "senior-dev",
+    "file": "apps/content-ingestor/server/src/worker.ts",
+    "action": "modified",
+    "reason": "Fix timing side-channel in checkWebhookToken (antagonistic review MINOR 4): timingSafeEqual now hashes both sides with SHA-256 (crypto.subtle.digest) before a fixed-length constant-time compare, closing the token-length leak that a plain byte-by-byte compare over max(a.length,b.length) still had. checkWebhookToken/its call site are now async",
+    "timestamp": "2026-07-07T10:30:00.000Z"
+  },
+  {
+    "taskId": "w2-review-minor-5",
+    "agent": "senior-dev",
+    "file": "apps/content-ingestor/server/src/worker.ts",
+    "action": "modified",
+    "reason": "Document query-param-vs-header tradeoff for the webhook token (antagonistic review MINOR 5): confirmed lib/gladia.ts's submitTranscription sends only callback_url (no callback_headers field) to Gladia's v2 API, so no evidence header-based delivery is available — added a doc comment on checkWebhookToken covering the log-exposure tradeoff and the WEBHOOK_SECRET rotation procedure",
+    "timestamp": "2026-07-07T10:30:00.000Z"
   }
 ]

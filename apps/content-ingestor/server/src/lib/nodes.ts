@@ -74,12 +74,15 @@ const MAX_R2_WRITE_RETRIES = 5
  * (etag) precondition, retrying the whole read→merge→write cycle when a
  * concurrent writer commits in between.
  *
- * R2Conditional (see @cloudflare/workers-types) has no "must not exist"
- * precondition — only etagMatches/etagDoesNotMatch against a known etag — so
- * the first-ever-write case (key doesn't exist yet) can't be asserted
- * atomically. For that case we do a plain unconditional put, then
- * immediately re-read to detect whether another writer created the key
- * first; if so, we fall into the same retry loop as an etag mismatch.
+ * The Workers types (@cloudflare/workers-types' R2Conditional — etagMatches
+ * / etagDoesNotMatch, both typed as a specific known etag string) do not
+ * document a create-if-absent precondition, so we don't rely on one: for
+ * the first-ever-write case (key doesn't exist yet, no etag to assert
+ * against) we use put-then-verify instead — a plain unconditional put,
+ * then an immediate re-read to check whether another writer created the
+ * key first. Correctness here does not depend on any undocumented wildcard
+ * etag semantics; if a race is detected on the re-read, we fall into the
+ * same retry loop as an etag mismatch.
  *
  * Throws after MAX_R2_WRITE_RETRIES failed attempts rather than silently
  * dropping a writer's data.
@@ -103,8 +106,9 @@ async function writeConditionally<T>(
       continue
     }
 
-    // Key doesn't exist yet: no atomic "must not exist" precondition
-    // available, so put unconditionally, then re-check for a lost race.
+    // Key doesn't exist yet and no documented create-if-absent precondition
+    // to assert against, so put unconditionally, then re-check for a lost
+    // race (see the put-then-verify rationale in the doc comment above).
     await bucket.put(key, jsonStr)
     const verify = await bucket.get(key)
     if (verify) {

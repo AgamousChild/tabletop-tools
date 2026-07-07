@@ -12,8 +12,17 @@ interface MockR2PutOptions {
  * `onlyIf.etagMatches` conditional-write semantics: `put` returns `null`
  * (mirroring the real R2Object|null return) when the caller's etag doesn't
  * match current state, and bumps the etag on every successful write.
+ *
+ * `seedCommunity` pre-seeds `nodes/community.json` (and always seeds
+ * `manifest.json` as `{ files: {} }`) — this is the "object already
+ * exists" case, which is what most tests want. Pass `{ empty: true }` (or
+ * use `mockEmptyR2Bucket` below) to get a bucket where BOTH keys are
+ * genuinely absent (`get` returns `null`, no etag) — that's the only way
+ * to exercise writeConditionally's key-absent branch (put-then-verify),
+ * since a pre-seeded bucket always has a real etag and never takes that
+ * code path.
  */
-function mockR2Bucket(existing: unknown[] = []) {
+function mockR2Bucket(seedCommunity: unknown[] | { empty: true } = []) {
   const stored = new Map<string, string>()
   const etags = new Map<string, string>()
   let etagCounter = 0
@@ -26,8 +35,12 @@ function mockR2Bucket(existing: unknown[] = []) {
     return etag
   }
 
-  setWithEtag('nodes/community.json', JSON.stringify(existing))
-  setWithEtag('manifest.json', JSON.stringify({ files: {} }))
+  const isEmpty = !Array.isArray(seedCommunity)
+  if (!isEmpty) {
+    setWithEtag('nodes/community.json', JSON.stringify(seedCommunity))
+    setWithEtag('manifest.json', JSON.stringify({ files: {} }))
+  }
+  // else: leave `stored`/`etags` empty — both keys are genuinely absent.
 
   return {
     get: vi.fn(async (key: string) => {
@@ -46,6 +59,11 @@ function mockR2Bucket(existing: unknown[] = []) {
     _stored: stored,
     _etags: etags,
   }
+}
+
+/** A bucket where neither community.json nor manifest.json exists yet. */
+function mockEmptyR2Bucket() {
+  return mockR2Bucket({ empty: true })
 }
 
 function mockVectorize() {
@@ -272,5 +290,115 @@ describe('writeNodesToBrain', () => {
         ai: ai as any,
       }),
     ).rejects.toThrow()
+  })
+
+  it('succeeds on the first-ever write when neither R2 key exists yet (put-then-verify path)', async () => {
+    // mockEmptyR2Bucket has NO pre-seeded state — get() returns null for
+    // both keys, so writeConditionally's `etag === undefined` branch (the
+    // put-then-verify fallback, since R2 has no documented create-if-absent
+    // precondition — see the doc comment on writeConditionally in nodes.ts)
+    // is what actually runs here, not the etagMatches branch every other
+    // test in this file exercises.
+    const bucket = mockEmptyR2Bucket()
+    const vectorize = mockVectorize()
+    const ai = mockAi()
+
+    expect(bucket._stored.has('nodes/community.json')).toBe(false)
+    expect(bucket._stored.has('manifest.json')).toBe(false)
+
+    const result = await writeNodesToBrain({
+      nodes: sampleNodes,
+      sourceUrl: 'https://youtube.com/watch?v=abc',
+      sourceName: 'Auspex Tactics',
+      bucket: bucket as any,
+      vectorize: vectorize as any,
+      ai: ai as any,
+    })
+
+    expect(result.written).toBe(2)
+
+    const written = JSON.parse(bucket._stored.get('nodes/community.json')!)
+    expect(written).toHaveLength(2)
+    expect(written.map((n: { id: string }) => n.id)).toEqual([
+      'community:gladius-task-force',
+      'community:oath-of-moment',
+    ])
+
+    const manifest = JSON.parse(bucket._stored.get('manifest.json')!)
+    expect(manifest.files['nodes/community.json']).toBeDefined()
+
+    // Each key's first-write path: one unconditional put (no onlyIf, since
+    // there was no etag to assert against) followed by one verification get.
+    const communityPuts = bucket.put.mock.calls.filter((c) => c[0] === 'nodes/community.json')
+    expect(communityPuts).toHaveLength(1)
+    expect(communityPuts[0]![2]).toBeUndefined() // no onlyIf on the first-write put
+  })
+
+  it('converges when two first-writers race to create nodes/community.json simultaneously', async () => {
+    // Simulates the interleaving: writer A's `get` sees no key, A computes
+    // its write, but before A's verification re-read runs, writer B's own
+    // full put-then-verify cycle completes and lands first. A's
+    // verification re-read then sees B's data (not its own), detects the
+    // mismatch, and retries — re-merging against B's now-real state so
+    // both writers' nodes end up in the final result.
+    const bucket = mockEmptyR2Bucket()
+    const vectorize = mockVectorize()
+    const ai = mockAi()
+
+    const originalPut = bucket.put.getMockImplementation()!
+    let communityPutCount = 0
+    bucket.put.mockImplementation(async (key: string, value: string, options?: any) => {
+      if (key === 'nodes/community.json') {
+        communityPutCount += 1
+        if (communityPutCount === 1) {
+          // Writer A's first (unconditional, first-write) put lands first.
+          const putResult = await originalPut(key, value, options)
+          // Immediately after — before writeConditionally's next line
+          // (the verification get()) runs — simulate writer B's own
+          // independent first-write completing and landing in R2,
+          // clobbering the key A just wrote to. A's verification get()
+          // will therefore observe B's data, not its own.
+          const writerBNode = {
+            id: 'community:concurrent-writer-b-first-write',
+            title: 'Concurrent Writer B First Write',
+            layer: 'community',
+          }
+          bucket._stored.set(key, JSON.stringify([writerBNode]))
+          bucket._etags.set(key, 'etag-from-writer-b-first-write')
+          return putResult
+        }
+      }
+      return originalPut(key, value, options)
+    })
+
+    const result = await writeNodesToBrain({
+      nodes: sampleNodes,
+      sourceUrl: 'https://youtube.com/watch?v=abc',
+      sourceName: 'Auspex Tactics',
+      bucket: bucket as any,
+      vectorize: vectorize as any,
+      ai: ai as any,
+    })
+
+    expect(result.written).toBe(2)
+
+    const finalNodes = JSON.parse(bucket._stored.get('nodes/community.json')!) as Array<{
+      id: string
+    }>
+    const finalIds = finalNodes.map((n) => n.id)
+
+    // Writer B's first-write node survived...
+    expect(finalIds).toContain('community:concurrent-writer-b-first-write')
+    // ...alongside both of writer A's nodes, merged in on retry.
+    expect(finalIds).toContain('community:gladius-task-force')
+    expect(finalIds).toContain('community:oath-of-moment')
+    expect(finalNodes).toHaveLength(3)
+
+    // More than one put to community.json: the first-write attempt, plus
+    // at least one retry after the verification re-read caught the race.
+    const communityPutCalls = bucket.put.mock.calls.filter(
+      (call) => call[0] === 'nodes/community.json',
+    )
+    expect(communityPutCalls.length).toBeGreaterThanOrEqual(2)
   })
 })
