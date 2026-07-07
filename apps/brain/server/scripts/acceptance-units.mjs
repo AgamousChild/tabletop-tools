@@ -190,7 +190,7 @@ async function checkSearch(page, unit) {
   const card = page
     .locator('button:visible', { hasText: new RegExp(escapeRe(unit), 'i') })
     .first()
-  await card.waitFor({ timeout: 45000 })
+  await card.waitFor({ timeout: 90000 })
   await card.click()
   return await verifyOverlayCard(page, unit)
 }
@@ -205,7 +205,7 @@ async function checkGraph(page, unit) {
     .locator('p:visible', { hasText: new RegExp(escapeRe(shorten(unit)), 'i') })
     .first()
   try {
-    await label.waitFor({ state: 'attached', timeout: 60000 })
+    await label.waitFor({ state: 'attached', timeout: 90000 })
   } catch {
     return `graph has no node labelled "${unit}"`
   }
@@ -223,7 +223,7 @@ async function checkAsk(page, unit, faction) {
   // Answer can take a while (RAG + LLM).
   await page
     .locator('[data-testid="ask-clear-results"]')
-    .waitFor({ timeout: 120000 })
+    .waitFor({ timeout: 180000 })
   const body = (await page.locator('main').first().innerText().catch(() => '')) ||
     (await page.innerText('body'))
   if (!normTitle(body).includes(normTitle(unit))) {
@@ -266,11 +266,17 @@ for (let iter = 1; iter <= ITERATIONS; iter++) {
       // across the 4 interfaces.
       const rng = mulberry32(hashStr(`${runId}:${iter}:${faction}:${iface}`))
       const unit = pool[Math.floor(rng() * pool.length)]
+      // One automatic retry per check — cold CDN / cold Vectorize paths can
+      // push a first attempt past its timeout; the unit itself is fine.
       let detail = null
-      try {
-        detail = await CHECKS[iface](page, unit, faction, pageMap)
-      } catch (err) {
-        detail = `exception: ${err.message?.slice(0, 200)}`
+      for (let attempt = 1; attempt <= 2; attempt++) {
+        try {
+          detail = await CHECKS[iface](page, unit, faction, pageMap)
+        } catch (err) {
+          detail = `exception: ${err.message?.slice(0, 200)}`
+        }
+        if (detail === null) break
+        await dismissOverlay(page)
       }
       let shot = null
       try {
