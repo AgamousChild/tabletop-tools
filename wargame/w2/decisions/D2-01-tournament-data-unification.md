@@ -55,8 +55,16 @@ this census and must be resolved before either is deleted.
 (`runPipeline`, called from bcp-scraper's own `worker.ts` after every
 scrape, weekly cron `worker.ts:71-85`) already builds
 `meta_for`/`fact_game_results`/`meta_top` and updates `meta_cube_status`
-(`pipeline.ts:200,217,343,346`) — a real, scheduled cube builder, scoped to
-BCP data only. Separately, `apps/content-ingestor/src/meta/build-cube.ts`
+(`pipeline.ts:200,217,343,346`) — a real, scheduled cube builder.
+**Corrected 2026-07-07 hardening pass: it is NOT scoped to BCP data.** Its
+event-selection query (`pipeline.ts:210-213`) is
+`SELECT id, date, name FROM meta_events WHERE imported_at > ${lastCompleted}`
+— no `source = 'bcp'` filter. It cubes every new row from all three
+writers, so tournament's delete-then-reinsert re-exports and new-meta's
+dedup-free CSV imports silently perturb the cube bcp-scraper thinks it
+owns. This makes the shared-writer recommendation below a **correctness
+fix**, not just hygiene. Separately,
+`apps/content-ingestor/src/meta/build-cube.ts`
 is a **second, standalone implementation** of the same cube tables
 (identical DDL, `build-cube.ts:1-60`), runnable only via manual
 `npx tsx src/meta/build-cube.ts` per its own header comment —
@@ -64,9 +72,10 @@ is a **second, standalone implementation** of the same cube tables
 imports it. `new-meta` itself never touches `metaCubeStatus` outside test
 fixtures (only reference: `server.test.ts:38`'s CREATE TABLE). So the cube
 is both orphaned *and* duplicated (a Rule 3 problem nested inside the Rule 1
-one): native/csv-import events are cubed only if someone remembers to run
-the content-ingestor script by hand; BCP events are cubed automatically by
-a pipeline living in a scraper, not in the app that reads the cube.
+one): native/csv-import events are cubed by bcp-scraper's pipeline only if
+they happen to land before its weekly run (or by hand-running the
+content-ingestor script); the cube's ownership lives in a scraper, not in
+the app that reads it.
 
 **Consumer that must not break:** `game-tracker`'s `match.startFromPairing`
 (`apps/game-tracker/server/src/routers/match.ts:81-154`) reads `pairings` →

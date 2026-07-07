@@ -20,20 +20,26 @@ the rest to a destination.
 
 ## Grounding (read 2026-07-06)
 
-1. **slugify ×3 in data-import, genuinely different**: `sync.ts:52-59`
-   (`contentEntitySlug` — strips curly/straight apostrophes via
-   `[’ʼ'‘"”"]`, truncates to 60 chars), `content-producer.ts` (no local
-   slug fn found — reuses `contentEntitySlug` per census; re-verified no
-   second definition in that file), `sources/faction-pack.ts:86-92` (`slug`
-   — different apostrophe class `['‘’′"'"]`, no truncation). Three
-   call sites, two distinct bodies (truncation is the only proven
-   divergence at time of read; the third invocation is confirmed a
-   reuse, not a fork).
-2. **content-ingestor's OWN slugify ×3, byte-identical**:
+1. **slugify ×3 in data-import — corrected 2026-07-07 hardening pass: three
+   bodies, of which two are byte-identical and one divergent**:
+   `sync.ts:52-59` (`contentEntitySlug` — strips curly/straight apostrophes
+   via `[’ʼ'‘"”"]`, truncates to 60 chars), `content-producer.ts:137-143`
+   (a local `slug` fn with the same apostrophe class and same
+   `.slice(0, 60)` — a byte-identical fork, contradicting the earlier
+   "reuses contentEntitySlug" read), `sources/faction-pack.ts:86-92`
+   (`slug` — different apostrophe class `['‘’′"'"]` including prime `′`,
+   **no truncation**). The consolidation call is unchanged: one
+   parameterized `slug.ts` covers all three.
+2. **content-ingestor's OWN slugify ×4, byte-identical** (*count corrected
+   3→4, 2026-07-07 hardening pass*):
    `server/src/lib/nodes.ts:23-28`, `src/commit/commit.ts:27-32`,
-   `src/commit-process-queue.ts:39-44` — all three are
+   `src/commit-process-queue.ts:39-44`, and `src/drafts/store.ts:11` — all
+   four are
    `title.toLowerCase().replace(/[^a-z0-9]+/g,'-').replace(/^-+|-+$/g,'')`,
-   character-for-character identical. This is a different, easier case than
+   character-for-character identical. A fifth, *non*-identical variant
+   exists at `src/meta/extract-detachments.ts:70` (two-arg signature,
+   prefixes `${factionSlug}:`) — a namespacing wrapper, not a copy; it can
+   call the shared fn internally. This is a different, easier case than
    data-import's: no divergent behavior to reconcile, just copy-paste.
 3. **dice-notation average math ×2, genuinely different regex/features**:
    `apps/versus/server/src/lib/attackCount.ts:20,26-47`
@@ -157,9 +163,12 @@ implementations and see they've already diverged in supported syntax
 (`-` modifier) and error behavior (throw vs silent 0). Two-line functions
 that have already forked are the leading indicator for the failure this
 whole decision doc exists to prevent — the census's own list-builder note
-(D2-04) shows a battle-size table forking ×3 from an original single
-source. Catch it now, while reconciling the two versions is a small diff,
-not later.
+(D2-04) shows a battle-size table forking ×4 from an original single
+source (*corrected 2026-07-07: 4th copy at `useListsV2.ts:271-276`, and
+bcp-scraper's fork at `bs-parser.ts:51-58` has drifted into a semantically
+different name→points mapping — the same list gets a different battle-size
+label per app, exactly the end state this doc predicts*). Catch it now,
+while reconciling the two versions is a small diff, not later.
 
 ## Recommendation
 

@@ -126,3 +126,23 @@ Excluded: physics, study (personal apps, Micah 2026-07-06).
   cross-app priority list is: (1) game-tracker photo loss, (2) list-builder
   migration data loss + server validation, (3) content-ingestor webhook/race,
   (4) D2-01 shared writer, (5) the delete sweeps.
+- **2026-07-07** — **HARDENING PASS 1 COMPLETE: full second pass, 11
+  parallel verification agents** (`90-hardening-log.md`). Zero load-bearing
+  refutations; all five priority bugs confirmed, three found *worse* than
+  documented (game-tracker stores `requirePhotos` but never checks it;
+  auth's rate limiter is *on* and ineffective; the `manifest.json` R2 race
+  rides alongside `community.json`'s). One significant new finding: **the
+  bcp-scraper cube builder is unscoped** (`pipeline.ts:210-213`, no
+  `source='bcp'` filter) — all three writers feed one shared cube, making
+  D2-01's `upsertMetaEvent()` a correctness fix. Corrections applied to
+  D2-01/D2-02/D2-04/D2-07 + content-ingestor verdict: 6th phantom-deploy
+  app (tournament), 7th roster copy (`deploy-workers.sh`), stale
+  battle-size bug claim retired (real divergence is cross-app), slugify
+  counts (×4 content-ingestor), 3 census-missed class-C brain files,
+  `packages/db` now at 67 tables. One verifier error caught and reversed
+  (cron-collision claim stands — GH Actions + Worker both fire
+  `0 6 * * *`). **NEW: `95-consolidation-roadmap.md`** — the consolidation
+  deep-dive: 6-phase dependency-ordered cleanup plan (stop-the-bleeding →
+  delete → shared primitives → consumer swaps → chunking → content-ingestor
+  redesign) with a rule-by-rule scorecard and named do-not-do deferrals.
+  W2 status: **hardened; execution-ready.**

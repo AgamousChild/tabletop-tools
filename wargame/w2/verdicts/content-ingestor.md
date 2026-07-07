@@ -128,6 +128,9 @@ calls the identical function — two overlapping writers can both read the
 same starting array and the second `put()` silently discards the first's
 additions. This is a live correctness bug: it needs no unusual timing, just
 a manual admin-triggered ingest firing during the 6am cron window.
+*2026-07-07 hardening pass: the same unconditional-`put` pattern also
+covers `manifest.json` (`nodes.ts:107`) — the Option A fix must apply the
+conditional write to both objects, not just `community.json`.*
 
 | Option | What it is | Fit | Effort | Risk |
 |---|---|---|---|---|
@@ -154,10 +157,13 @@ stable id. The brain-node write path (`nodes.ts`): **title-slug identity**
 (`slugify(title)` → `community:<slug>`, `nodes.ts:23-28,38`, dedup at
 `:85`) — two sources producing a node with a coinciding title collide and
 the second is silently dropped, even without a typo. This slugify function
-is reimplemented byte-identically in three places (`nodes.ts:23-28`,
-`src/commit/commit.ts:27`, `src/commit-process-queue.ts:39`) — a D2-07
-duplication already scoped for extraction into `server-core`'s `slug.ts`
-(D2-07 item 2), just not yet executed.
+is reimplemented byte-identically in four places (`nodes.ts:23-28`,
+`src/commit/commit.ts:27`, `src/commit-process-queue.ts:39`, and
+`src/drafts/store.ts:11` — *count corrected 3→4, 2026-07-07 hardening
+pass; a fifth namespacing variant lives at
+`src/meta/extract-detachments.ts:70`*) — a D2-07 duplication already
+scoped for extraction into `server-core`'s `slug.ts` (D2-07 item 2), just
+not yet executed.
 
 Options for the node-identity layer specifically (source-tracking dedup at
 (a)'s two DB tables is solved enough once consolidation picks one):

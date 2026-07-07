@@ -13,7 +13,10 @@ The gateway (`apps/gateway/`) is a single Cloudflare Pages project that
 builds every client SPA into one `dist/` and proxies API calls to each
 app's Worker via service bindings (`apps/gateway/CLAUDE.md:9-14`). The
 roster of apps is not read from one place — it is retyped independently in
-at least six files, and it has already drifted three times as apps were
+at least seven files (the 2026-07-07 hardening pass added
+`scripts/deploy-workers.sh:14`, whose `APPS` list is a 7-app subset missing
+data-import/brain/study/physics — its own distinct wrong roster), and it
+has already drifted three times as apps were
 added. Separately, five other apps' docs claim a per-app Cloudflare Pages
 deploy (their own `wrangler.toml` + `functions/trpc/[[path]].ts`) that was
 retired in favor of the gateway but never cleaned out of their `PLAN.md`s.
@@ -60,13 +63,17 @@ again and disposes of the phantom per-app deploy story.
   own — it is reachable *only* through the gateway, which makes auth's
   independence a deliberate exception, not an oversight, but it is
   undocumented as a decision anywhere.
-- **Phantom per-app Pages deploys.** Five apps' planning docs check off a
-  client-side Cloudflare Pages deploy that does not exist on disk:
+- **Phantom per-app Pages deploys.** Six apps' planning docs check off a
+  client-side Cloudflare Pages deploy that does not exist on disk
+  (*count corrected 5→6, 2026-07-07 hardening pass*):
   - `apps/game-tracker/PLAN.md:78` — `[x]` claims
     `client/wrangler.toml` + `client/functions/trpc/[[path]].ts`.
   - `versus`, `new-meta`, `no-cheat`, `list-builder` PLAN.md/CLAUDE.md make
     the equivalent claim per their W2 censuses (versus PLAN.md:63,
-    new-meta PLAN.md:60-61, no-cheat PLAN.md:138, list-builder PLAN.md:79).
+    new-meta PLAN.md:61, no-cheat PLAN.md:138, list-builder PLAN.md:79).
+  - `apps/tournament/PLAN.md:76` — the identical `[x]` line, missed by the
+    census and caught in the 2026-07-07 second pass; neither file exists in
+    `apps/tournament/client/` either.
   - None of these files exist; the actual mechanism is the gateway's single
     Pages project + the 9 `functions/<app>/...` proxies. The per-app Pages
     story is a retired architecture nobody deleted from the docs.
@@ -204,8 +211,9 @@ Bundled with A:
   platform's own documented stale-cache incident history (root
   `CLAUDE.md:236-242`), a deploy that silently skips cache invalidation
   should not report as clean.
-- **Delete the phantom per-app Pages claims** from the 5 affected files
-  (game-tracker/versus/new-meta/no-cheat/list-builder PLAN.md) and replace
+- **Delete the phantom per-app Pages claims** from the 6 affected files
+  (game-tracker/versus/new-meta/no-cheat/list-builder/tournament PLAN.md)
+  and replace
   with a one-line pointer to `apps/gateway/CLAUDE.md`. Same root cause as
   the roster drift — no single source of truth for "how does this app
   actually deploy" — so it rides along with A rather than as a separate
@@ -221,7 +229,7 @@ Bundled with A:
 doc-count gaps**, if A's manifest-driven landing page needs more plumbing
 than expected (e.g. the static-HTML-plus-`sed` version injection resists
 templating without a larger `build.sh` rebuild). Fallback still includes
-the hard-fail cache-purge change and the 5-file phantom-deploy cleanup —
+the hard-fail cache-purge change and the 6-file phantom-deploy cleanup —
 cheap and independent of which option wins.
 
 ## Flip triggers
@@ -268,8 +276,10 @@ cheap and independent of which option wins.
    /binding table with a pointer to `apps.json`, and add the one-sentence
    auth-server topology note.
 9. Replace the phantom per-app Pages checkboxes in `game-tracker/PLAN.md:78`,
-   `versus/PLAN.md:63`, `new-meta/PLAN.md:60-61`, `no-cheat/PLAN.md:138`,
-   `list-builder/PLAN.md:79` with a pointer to gateway's CLAUDE.md.
+   `versus/PLAN.md:63`, `new-meta/PLAN.md:61`, `no-cheat/PLAN.md:138`,
+   `list-builder/PLAN.md:79`, and `tournament/PLAN.md:76` (6th instance,
+   added by the 2026-07-07 hardening pass) with a pointer to gateway's
+   CLAUDE.md.
 10. Re-run `scripts/verify-deployment.sh` against production and manually
     check the landing page in a browser — script exit 0 is not "verified
     live" (root CLAUDE.md Rule 0).
