@@ -4,10 +4,11 @@ import { createBaseServer } from '@tabletop-tools/server-core'
 import { appRouter } from './routers'
 import type { Context } from './trpc'
 
-export function createServer(db: Db, secret: string) {
+export function createServer(db: Db, secret: string, environment = 'development') {
   return createBaseServer<Context>({
     router: appRouter,
     db,
     secret,
+    extendContext: (ctx) => ({ ...ctx, environment }),
   })
 }

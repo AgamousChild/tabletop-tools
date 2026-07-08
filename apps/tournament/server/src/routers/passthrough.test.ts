@@ -46,6 +46,7 @@ function authedCaller() {
     db,
     user: { id: 'user-1', email: 'alice@example.com', name: 'Alice' },
     req: new Request('http://test'),
+    environment: 'development',
   })
 }
 
@@ -54,6 +55,7 @@ function publicCaller() {
     db,
     user: null,
     req: new Request('http://test'),
+    environment: 'development',
   })
 }
 
