@@ -1,8 +1,12 @@
 #!/bin/bash
 set -e
 
-# Deploy all 7 app server Workers
+# Deploy every app server Worker (apps with hasBackend: true in the manifest)
 # Run from repo root: bash scripts/deploy-workers.sh
+#
+# App roster comes from apps/gateway/apps.json (single source of truth —
+# see D2-02, wargame/w2/decisions/D2-02-deploy-topology-roster-manifest.md).
+# Do not hardcode the app list here again.
 
 REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 
@@ -11,7 +15,7 @@ if [ -f "$REPO_ROOT/.env" ]; then
   set -a && source "$REPO_ROOT/.env" && set +a
 fi
 
-APPS="no-cheat versus list-builder game-tracker tournament new-meta admin"
+APPS=$(jq -r '.apps[] | select(.hasBackend == true) | .slug' "$REPO_ROOT/apps/gateway/apps.json")
 
 for app in $APPS; do
   echo "=== Deploying $app server Worker ==="

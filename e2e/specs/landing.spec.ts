@@ -1,4 +1,17 @@
-import { test, expect } from '@playwright/test'
+import { readFileSync } from 'node:fs'
+import { join } from 'node:path'
+
+import { expect, test } from '@playwright/test'
+
+// The expected card list comes from the gateway's roster manifest — the same
+// file that renders the landing page at build time (render-landing.mjs).
+// See wargame/w2/decisions/D2-02-deploy-topology-roster-manifest.md.
+const manifest = JSON.parse(
+  readFileSync(join(__dirname, '..', '..', 'apps', 'gateway', 'apps.json'), 'utf8'),
+) as {
+  apps: { slug: string; title: string; showOnLanding: boolean }[]
+}
+const landingApps = manifest.apps.filter((app) => app.showOnLanding)
 
 test.describe('Landing page', () => {
   test('loads with Tabletop Tools heading', async ({ page }) => {
@@ -7,31 +20,20 @@ test.describe('Landing page', () => {
     await expect(page.locator('h1')).toContainText('Tools')
   })
 
-  test('shows all 8 app cards', async ({ page }) => {
+  test('shows a card for every showOnLanding app in the manifest', async ({ page }) => {
     await page.goto('/')
 
     const cards = page.locator('a.card')
-    await expect(cards).toHaveCount(8)
+    await expect(cards).toHaveCount(landingApps.length)
   })
 
-  test('cards have correct hrefs', async ({ page }) => {
+  test('cards have correct hrefs and titles', async ({ page }) => {
     await page.goto('/')
 
-    const expectedApps = [
-      { name: 'No Cheat', href: '/no-cheat/' },
-      { name: 'Versus', href: '/versus/' },
-      { name: 'List Builder', href: '/list-builder/' },
-      { name: 'Game Tracker', href: '/game-tracker/' },
-      { name: 'Tournament', href: '/tournament/' },
-      { name: 'New Meta', href: '/new-meta/' },
-      { name: 'Data Import', href: '/data-import/' },
-      { name: 'Admin', href: '/admin/' },
-    ]
-
-    for (const app of expectedApps) {
-      const card = page.locator(`a.card[href="${app.href}"]`)
+    for (const app of landingApps) {
+      const card = page.locator(`a.card[href="/${app.slug}/"]`)
       await expect(card).toBeVisible()
-      await expect(card.locator('.card-title')).toHaveText(app.name)
+      await expect(card.locator('.card-title')).toHaveText(app.title)
     }
   })
 

@@ -1,18 +1,3 @@
-interface Env {
-  NEW_META_API: Fetcher
-}
+import { createProxyHandler } from '../../_lib/proxy'
 
-export const onRequest: PagesFunction<Env> = async (context) => {
-  const url = new URL(context.request.url)
-  url.pathname = url.pathname.replace(/^\/new-meta/, '')
-  try {
-    return await context.env.NEW_META_API.fetch(
-      new Request(url.toString(), context.request),
-    )
-  } catch {
-    return new Response(
-      JSON.stringify({ error: { message: 'Service unavailable' } }),
-      { status: 503, headers: { 'Content-Type': 'application/json' } },
-    )
-  }
-}
+export const onRequest = createProxyHandler({ envKey: 'NEW_META_API', stripPrefix: '/new-meta' })

@@ -20,18 +20,13 @@ e2e/
   global-setup.ts               <- creates test user -> auth-state.json
   fixtures/
     auth.ts                     <- signUp / logIn / logOut / testEmail helpers
-  specs/
-    landing.spec.ts             <- landing page loads, 8 app cards link correctly
-    auth.spec.ts                <- register, login, logout, session persistence
-    cross-app-auth.spec.ts      <- login in one app -> session carries to another
-    no-cheat.spec.ts            <- auth gate -> main screen, dice set UI
-    versus.spec.ts              <- auth gate -> simulator, faction selectors
-    list-builder.spec.ts        <- auth gate -> list builder, faction selector
-    game-tracker.spec.ts        <- auth gate -> main screen, new match button
-    tournament.spec.ts          <- auth gate -> main screen, create tournament button
-    new-meta.spec.ts            <- NO auth gate -> nav tabs, dashboard renders
-    data-import.spec.ts         <- NO auth gate -> repo config, load button
+  specs/                        <- one spec per app + landing/auth flows
 ```
+
+The authoritative spec list and project assignments live in
+`playwright.config.ts` (`testMatch` per project) — don't restate them here
+(root CLAUDE.md Rule 6 corollary). `landing.spec.ts` derives its expected
+cards from `apps/gateway/apps.json`, the platform's app-roster manifest.
 
 ---
 
@@ -40,7 +35,7 @@ e2e/
 | Project | Auth | What it tests | Retries |
 |---|---|---|---|
 | `auth-flow` | None (tests auth itself) | Register, login, logout, cross-app session | 2 |
-| `public` | None (no auth needed) | Landing page, new-meta, data-import | 1 |
+| `public` | None (no auth needed) | Landing page + apps without an auth gate | 1 |
 | `authed` | `storageState` from global-setup | All auth-gated apps | 1 |
 
 The `authed` project depends on `auth-flow` -- auth-flow creates the session state file
@@ -70,20 +65,5 @@ cd e2e && pnpm test:headed
 cd e2e && pnpm test -- --grep "no-cheat"
 ```
 
----
-
-## Test Counts
-
-| Spec | Tests | Project |
-|---|---|---|
-| landing.spec.ts | 4 | public |
-| auth.spec.ts | 5 | auth-flow |
-| cross-app-auth.spec.ts | 1 | auth-flow |
-| no-cheat.spec.ts | 3 | authed |
-| versus.spec.ts | 4 | authed |
-| list-builder.spec.ts | 4 | authed |
-| game-tracker.spec.ts | 4 | authed |
-| tournament.spec.ts | 3 | authed |
-| new-meta.spec.ts | 4 | public |
-| data-import.spec.ts | 4 | public |
-| **Total** | **36** | |
+Test counts per spec are answered by `pnpm test -- --list`, not by this file
+(root CLAUDE.md Rule 6 corollary).

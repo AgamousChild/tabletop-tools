@@ -2,7 +2,13 @@
 
 # Verify all endpoints after deployment
 # Run from repo root: bash scripts/verify-deployment.sh
+#
+# App roster comes from apps/gateway/apps.json (single source of truth —
+# see D2-02, wargame/w2/decisions/D2-02-deploy-topology-roster-manifest.md).
+# Do not hardcode the app list here again.
 
+REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+MANIFEST="$REPO_ROOT/apps/gateway/apps.json"
 BASE="https://tabletop-tools.net"
 PASS=0
 FAIL=0
@@ -39,17 +45,22 @@ check_json() {
 echo "=== Verifying tabletop-tools.net deployment ==="
 echo ""
 
-echo "Static pages:"
+echo "Static pages (all apps, including backend-less study/physics):"
 check "Landing page" "$BASE/" "200"
-for app in no-cheat versus list-builder game-tracker tournament new-meta data-import admin; do
+for app in $(jq -r '.apps[].slug' "$MANIFEST"); do
   check "$app SPA" "$BASE/$app/" "200"
 done
 
 echo ""
-echo "tRPC health endpoints (server apps only — data-import has no server):"
-for app in no-cheat versus list-builder game-tracker tournament new-meta admin; do
+echo "tRPC health endpoints (backend apps using the standard tRPC health route):"
+for app in $(jq -r '.apps[] | select(.hasBackend == true and (.apiSegment // "trpc") == "trpc") | .slug' "$MANIFEST"); do
   check_json "$app /trpc/health" "$BASE/$app/trpc/health"
 done
+
+echo ""
+echo "Non-tRPC backend liveness checks (Hono/REST apps behind an /api prefix):"
+check "brain /api/version" "$BASE/brain/api/version" "200"
+check "data-import /api/manifest.json" "$BASE/data-import/api/manifest.json" "200"
 
 echo ""
 echo "Auth:"

@@ -25,7 +25,14 @@ export default defineConfig({
     },
     {
       name: 'public',
-      testMatch: ['landing.spec.ts', 'new-meta.spec.ts', 'data-import.spec.ts', 'brain.spec.ts'],
+      testMatch: [
+        'landing.spec.ts',
+        'new-meta.spec.ts',
+        'data-import.spec.ts',
+        'brain.spec.ts',
+        'study.spec.ts',
+        'physics.spec.ts',
+      ],
       use: { ...devices['Desktop Chrome'] },
     },
     {
