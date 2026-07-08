@@ -1,5 +1,6 @@
 import { createClient } from '@libsql/client'
-import { contentEntity, createDbFromClient } from '@tabletop-tools/db'
+import { contentCanLead, contentEntity, createDbFromClient, dimDataslate } from '@tabletop-tools/db'
+import { createTestTables } from '@tabletop-tools/db/src/test-ddl'
 import { eq } from 'drizzle-orm'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 
@@ -38,26 +39,7 @@ afterAll(() => {
 })
 
 beforeAll(async () => {
-  // Match packages/db/src/schema.ts content_entity definition (post-migration 0012).
-  await client.execute(`CREATE TABLE content_entity (
-    id TEXT PRIMARY KEY NOT NULL,
-    type TEXT NOT NULL,
-    name TEXT NOT NULL,
-    faction_id TEXT REFERENCES content_entity(id),
-    parent_id TEXT REFERENCES content_entity(id),
-    dataslate_id TEXT,
-    r2_key TEXT,
-    wahapedia_id TEXT,
-    bsdata_id TEXT,
-    can_deploy_solo INTEGER NOT NULL DEFAULT 1,
-    updated_at INTEGER NOT NULL
-  )`)
-  await client.execute(`CREATE TABLE content_can_lead (
-    leader_datasheet_id TEXT NOT NULL REFERENCES content_entity(id) ON DELETE CASCADE,
-    bodyguard_datasheet_id TEXT NOT NULL REFERENCES content_entity(id) ON DELETE CASCADE,
-    role TEXT NOT NULL DEFAULT 'leader',
-    PRIMARY KEY (leader_datasheet_id, bodyguard_datasheet_id, role)
-  )`)
+  await createTestTables(client, { dimDataslate, contentEntity, contentCanLead })
 })
 
 describe('produceDatasheets', () => {
@@ -314,10 +296,10 @@ describe('produceCanLead', () => {
   // Seed two datasheets needed by the FK references in content_can_lead.
   beforeAll(async () => {
     await client.execute(
-      `INSERT OR IGNORE INTO content_entity VALUES ('ds-a', 'datasheet', 'UnitA', NULL, NULL, NULL, NULL, NULL, NULL, 1, 0)`,
+      `INSERT OR IGNORE INTO content_entity (id, type, name, updated_at) VALUES ('ds-a', 'datasheet', 'UnitA', 0)`,
     )
     await client.execute(
-      `INSERT OR IGNORE INTO content_entity VALUES ('ds-b', 'datasheet', 'UnitB', NULL, NULL, NULL, NULL, NULL, NULL, 1, 0)`,
+      `INSERT OR IGNORE INTO content_entity (id, type, name, updated_at) VALUES ('ds-b', 'datasheet', 'UnitB', 0)`,
     )
   })
 
