@@ -1,8 +1,8 @@
 import { createClient } from '@libsql/client'
 import { eq } from 'drizzle-orm'
-import { drizzle } from 'drizzle-orm/libsql'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 
+import { createDbFromClient } from './client'
 import { battleSize, battleSizeAlias } from './schema'
 import {
   BATTLE_SIZES,
@@ -13,7 +13,7 @@ import {
 } from './seed-battle-size'
 
 const client = createClient({ url: ':memory:' })
-const db = drizzle(client, { schema: { battleSize, battleSizeAlias } })
+const db = createDbFromClient(client)
 
 afterAll(() => {
   client.close()
