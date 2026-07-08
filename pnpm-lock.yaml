@@ -593,6 +593,9 @@ importers:
 
   apps/list-builder/client:
     dependencies:
+      '@tabletop-tools/game-content':
+        specifier: workspace:*
+        version: link:../../../packages/game-content
       '@tabletop-tools/game-data-store':
         specifier: workspace:*
         version: link:../../../packages/game-data-store
