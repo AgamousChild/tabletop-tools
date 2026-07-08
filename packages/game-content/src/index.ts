@@ -35,6 +35,8 @@ export {
   parseTabletopAdmiralCsv,
   TournamentImportAdapter,
 } from './adapters/tournament-import/index.js'
+export type { BattleSize, ListUnit, ValidationError } from './rules/index.js'
+export { validateArmy } from './rules/index.js'
 export type {
   GameContentAdapter,
   TournamentDataAdapter,
