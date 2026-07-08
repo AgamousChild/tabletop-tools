@@ -1432,6 +1432,22 @@ export const missionGameState = sqliteTable(
   ],
 )
 
+// ── Admin: project task tracker (W2 Phase 3 / D2-04) ─────────────────────────
+// Was a hardcoded array in apps/admin/client/src/pages/TasksPage.tsx — moved
+// to the DB per root CLAUDE.md Rule 6 (data lives in datastores, not source).
+// `id` is NOT autoincrement: historical task ids from the source array must
+// be preserved verbatim on seed (non-sequential, has gaps).
+
+export const tasks = sqliteTable('tasks', {
+  id: integer('id').primaryKey(),
+  subject: text('subject').notNull(),
+  category: text('category').notNull(), // open-ended: 'auto' | 'review' | 'design' | future values
+  priority: integer('priority').notNull(),
+  status: text('status').notNull().default('pending'), // 'pending' | 'in_progress' | 'completed'
+  createdAt: integer('created_at', { mode: 'timestamp' }).notNull(),
+  updatedAt: integer('updated_at', { mode: 'timestamp' }).notNull(),
+})
+
 // === Phase 2 list tables ===
 export { list, listUnit, listUnitLoadout, listUnitLoadoutWeapon } from './list-schema'
 
