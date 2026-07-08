@@ -65,6 +65,10 @@ not yet the runtime.
 No hardcoded lookup tables in `.ts` files. Faction maps, detachment lists, source registries —
 all go in the database (or other datastore). Code reads from data, doesn't contain data.
 
+Corollary for docs: CLAUDE.md/PLAN.md describe architecture, intent, and shape — not counts,
+rosters, or `[x]`-completion claims for anything a grep, a test run, or `ls` already answers.
+Link to the code instead.
+
 ### 7. No test data in production
 No hardcoded test users, tokens, or secrets in source code. Test infrastructure uses isolated
 environments only. E2E tests clean up after themselves. No test setup function can touch prod.

@@ -75,7 +75,7 @@ Actual R2 upload requires deployment configuration (Phase 9).
 ## Phase 9: Deployment ✅ infrastructure ready (R2 pending)
 
 - [x] Configure Cloudflare Workers for the tRPC server — `server/wrangler.toml` + `server/src/worker.ts` (uses NullR2Storage — no R2 binding yet)
-- [x] Configure Cloudflare Pages for the React client — `client/wrangler.toml` + `client/functions/trpc/[[path]].ts`
+- Client ships through the unified gateway Pages project — see `apps/gateway/CLAUDE.md`.
 - [ ] Create and configure the R2 bucket for turn photos — add `[[r2_buckets]]` binding in wrangler.toml
 - [ ] Set environment variables — `wrangler secret put TURSO_DB_URL` + `wrangler secret put TURSO_AUTH_TOKEN`
 - [ ] Run full end-to-end test on deployed environment
