@@ -6,9 +6,9 @@ export interface BaseEnv {
   AUTH_SECRET: string
 }
 
-export function createWorkerHandler<TEnv extends BaseEnv>(opts: {
-  createApp: (env: TEnv) => Promise<Hono>
-}): { fetch(request: Request, env: TEnv, ctx?: unknown): Promise<Response> } {
+export function createWorkerHandler<TEnv>(opts: { createApp: (env: TEnv) => Promise<Hono> }): {
+  fetch(request: Request, env: TEnv, ctx?: unknown): Promise<Response>
+} {
   let cachedApp: Hono | null = null
 
   return {

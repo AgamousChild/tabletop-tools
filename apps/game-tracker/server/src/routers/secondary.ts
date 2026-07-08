@@ -1,13 +1,10 @@
 import { matches, matchSecondaries } from '@tabletop-tools/db'
+import { generateId } from '@tabletop-tools/server-core'
 import { TRPCError } from '@trpc/server'
 import { and, eq } from 'drizzle-orm'
 import { z } from 'zod'
 
 import { protectedProcedure, router } from '../trpc'
-
-function generateId(): string {
-  return `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`
-}
 
 export const secondaryRouter = router({
   set: protectedProcedure

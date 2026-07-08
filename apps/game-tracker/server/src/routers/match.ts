@@ -7,16 +7,13 @@ import {
   tournaments,
   turns,
 } from '@tabletop-tools/db'
+import { generateId } from '@tabletop-tools/server-core'
 import { TRPCError } from '@trpc/server'
 import { and, eq, isNull } from 'drizzle-orm'
 import { z } from 'zod'
 
 import { deriveResult } from '../lib/scoring/result'
 import { protectedProcedure, router } from '../trpc'
-
-function generateId(): string {
-  return `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`
-}
 
 export const matchRouter = router({
   start: protectedProcedure
