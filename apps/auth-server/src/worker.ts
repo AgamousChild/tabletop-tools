@@ -10,6 +10,7 @@ interface Env {
   AUTH_SECRET: string
   AUTH_BASE_URL: string
   TRUSTED_ORIGINS: string
+  AUTH_RATE_LIMIT: KVNamespace
 }
 
 let cachedApp: Hono | null = null
@@ -24,7 +25,9 @@ export default {
       const db = createDbFromClient(client)
 
       const allowedOrigins = env.TRUSTED_ORIGINS
-        ? env.TRUSTED_ORIGINS.split(',').map((o) => o.trim()).filter(Boolean)
+        ? env.TRUSTED_ORIGINS.split(',')
+            .map((o) => o.trim())
+            .filter(Boolean)
         : ['https://tabletop-tools.net']
 
       const auth = createAuth(
@@ -33,14 +36,14 @@ export default {
         allowedOrigins,
         env.AUTH_SECRET,
         '/auth/api/auth',
+        env.AUTH_RATE_LIMIT,
       )
 
       const app = new Hono()
       app.use(
         '*',
         cors({
-          origin: (origin) =>
-            allowedOrigins.includes(origin) ? origin : allowedOrigins[0]!,
+          origin: (origin) => (allowedOrigins.includes(origin) ? origin : allowedOrigins[0]!),
           credentials: true,
         }),
       )

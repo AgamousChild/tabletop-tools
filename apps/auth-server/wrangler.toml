@@ -15,3 +15,7 @@ TRUSTED_ORIGINS = "https://tabletop-tools.net"
 [[routes]]
 pattern = "tabletop-tools.net/auth/*"
 zone_name = "tabletop-tools.net"
+
+[[kv_namespaces]]
+binding = "AUTH_RATE_LIMIT"
+id = "8290dc734d8847c893347e186b26aa38"
