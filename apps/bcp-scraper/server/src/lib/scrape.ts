@@ -92,11 +92,29 @@ export async function runScrape(
     const errors: string[] = []
 
     for (const searchEvent of newEvents) {
+      // Network phase: fetch everything from BCP before writing anything to the
+      // DB, so a mid-event fetch failure leaves no row behind that would
+      // permanently exclude the event via the existingSourceIds filter above.
+      let event: BcpEvent
+      let allPairings: BcpPairing[]
       try {
-        // Get full event details
-        const event = await api.getEvent(searchEvent.id)
-        const eventId = generateId()
+        event = await api.getEvent(searchEvent.id)
 
+        allPairings = []
+        for (let round = 1; round <= event.rounds; round++) {
+          const roundPairings = await api.getPairings(event.id, round)
+          allPairings.push(...roundPairings)
+        }
+      } catch (fetchErr) {
+        errors.push(`Event ${searchEvent.id} (${searchEvent.name}): ${(fetchErr as Error).message}`)
+        continue
+      }
+
+      // Insert phase: write event, players, pairings. If anything fails partway,
+      // delete whatever was already inserted for this event so it stays
+      // re-scrapable on the next run instead of being permanently locked out.
+      const eventId = generateId()
+      try {
         // Insert event
         await db.insert(metaEvents).values({
           id: eventId,
@@ -110,13 +128,6 @@ export async function runScrape(
           sourceId: event.id,
           importedAt: Date.now(),
         })
-
-        // Collect all pairings across rounds
-        const allPairings: BcpPairing[] = []
-        for (let round = 1; round <= event.rounds; round++) {
-          const roundPairings = await api.getPairings(event.id, round)
-          allPairings.push(...roundPairings)
-        }
 
         // Accumulate player stats from pairings
         const playerMap = new Map<string, PlayerAccumulator>()
@@ -219,6 +230,13 @@ export async function runScrape(
         totalPairings += allPairings.length
         eventsScraped++
       } catch (eventErr) {
+        // Roll back any partial writes for this event so it stays re-scrapable
+        // (existingSourceIds is derived from metaEvents, so a lingering row
+        // here would permanently exclude the event from future runs).
+        await db.delete(metaPairings).where(eq(metaPairings.eventId, eventId))
+        await db.delete(metaEventPlayers).where(eq(metaEventPlayers.eventId, eventId))
+        await db.delete(metaEvents).where(eq(metaEvents.id, eventId))
+
         errors.push(`Event ${searchEvent.id} (${searchEvent.name}): ${(eventErr as Error).message}`)
       }
     }
@@ -232,6 +250,7 @@ export async function runScrape(
         eventsFound: events.length,
         eventsScraped,
         pairingsScraped: totalPairings,
+        errors: errors.length > 0 ? errors.join('\n') : null,
       })
       .where(eq(bcpScrapeJobs.id, jobId))
   } catch (err) {
