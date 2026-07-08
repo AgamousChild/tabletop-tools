@@ -1,4 +1,5 @@
 import {
+  authUsers,
   contentEntity,
   pairings,
   tournamentCards,
@@ -10,6 +11,7 @@ import { TRPCError } from '@trpc/server'
 import { and, asc, eq, inArray } from 'drizzle-orm'
 import { z } from 'zod'
 
+import { TEST_PLAYERS } from '../__fixtures__/test-players'
 import { protectedProcedure, router } from '../trpc'
 
 export const playerRouter = router({
@@ -214,9 +216,19 @@ export const playerRouter = router({
     }),
 
   // Seed test players — dev/testing only. TO inserts fake players for local testing.
+  // Rule 7 (no test data in production): rejects with FORBIDDEN when
+  // ctx.environment === 'production'. See trpc.ts / worker.ts for how
+  // ctx.environment is threaded from the Worker's ENVIRONMENT var.
   seedTestPlayers: protectedProcedure
     .input(z.object({ tournamentId: z.string(), count: z.number().min(1).max(32).optional() }))
     .mutation(async ({ ctx, input }) => {
+      if (ctx.environment === 'production') {
+        throw new TRPCError({
+          code: 'FORBIDDEN',
+          message: 'Test player seeding is not available in production',
+        })
+      }
+
       const tournament = await ctx.db
         .select()
         .from(tournaments)
@@ -227,42 +239,30 @@ export const playerRouter = router({
         throw new TRPCError({ code: 'FORBIDDEN', message: 'Not authorized' })
 
       const count = input.count ?? 8
-      const testPlayers = [
-        { name: 'Alex Ironforge', faction: 'Space Marines', detachment: 'Gladius Task Force' },
-        { name: 'Sam Greenskin', faction: 'Orks', detachment: 'Waaagh! Tribe' },
-        { name: 'Jordan Cryptek', faction: 'Necrons', detachment: 'Awakened Dynasty' },
-        { name: 'Morgan Shas', faction: "T'au Empire", detachment: 'Kauyon' },
-        {
-          name: 'Riley Warpsmith',
-          faction: 'Chaos Space Marines',
-          detachment: 'Pactbound Zealots',
-        },
-        { name: 'Casey Farstrider', faction: 'Aeldari', detachment: 'Battle Host' },
-        { name: 'Taylor Canticles', faction: 'Adeptus Mechanicus', detachment: 'Rad-Zone Corps' },
-        { name: 'Jamie Terminator', faction: 'Grey Knights', detachment: 'Teleport Strike Force' },
-        { name: 'Pat Shadowkeeper', faction: 'Adeptus Custodes', detachment: 'Shield Host' },
-        { name: 'Drew Lictor', faction: 'Tyranids', detachment: 'Invasion Fleet' },
-        { name: 'Charlie Bloodletter', faction: 'Chaos Daemons', detachment: 'Daemonic Incursion' },
-        { name: 'Avery Commissar', faction: 'Astra Militarum', detachment: 'Combined Regiment' },
-        { name: 'Quinn Plague', faction: 'Death Guard', detachment: 'Plague Company' },
-        { name: 'Robin Hexfire', faction: 'Thousand Sons', detachment: 'Cult of Magic' },
-        {
-          name: 'Blair Skitarii',
-          faction: 'Adeptus Mechanicus',
-          detachment: 'Skitarii Hunter Cohort',
-        },
-        { name: 'Kai Wychking', faction: 'Drukhari', detachment: 'Realspace Raiders' },
-      ]
+      const testPlayers = TEST_PLAYERS
 
       const now = Date.now()
       const inserted: string[] = []
       for (let i = 0; i < Math.min(count, testPlayers.length); i++) {
         const p = testPlayers[i]!
         const id = crypto.randomUUID()
+        // tournament_players.user_id is a NOT NULL FK -> "user"(id), so each
+        // synthetic player needs a real auth user row. These test-prefixed
+        // users only ever exist in dev/test databases — the production gate
+        // above throws before this path can run.
+        const userId = `test-${crypto.randomUUID()}`
+        await ctx.db.insert(authUsers).values({
+          id: userId,
+          name: p.name,
+          email: `${userId}@seed.invalid`,
+          emailVerified: false,
+          createdAt: new Date(now),
+          updatedAt: new Date(now),
+        })
         await ctx.db.insert(tournamentPlayers).values({
           id,
           tournamentId: input.tournamentId,
-          userId: `test-${crypto.randomUUID()}`,
+          userId,
           displayName: p.name,
           faction: p.faction,
           detachment: p.detachment,

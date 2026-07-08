@@ -276,4 +276,122 @@ describe('runScrape', () => {
     const events = await client.execute('SELECT * FROM meta_events')
     expect(events.rows[0]!.location).toBe('Austin, TX, US')
   })
+
+  it('does not leave a permanent lockout when getPairings fails mid-event', async () => {
+    const event = makeEvent({ id: 'evt-flaky', rounds: 3 })
+    mockSearchEvents.mockResolvedValue([event])
+    mockGetEvent.mockResolvedValue(event)
+    // Round 1 OK, round 2 throws
+    mockGetPairings.mockImplementation((_id: string, round: number) => {
+      if (round === 2) return Promise.reject(new Error('pairings fetch failed'))
+      return Promise.resolve([makePairing(round)])
+    })
+
+    const { jobId } = await runScrape({
+      bcpEmail: 'test@example.com',
+      bcpPassword: 'pass',
+      db,
+    })
+    expect(jobId).toBeTruthy()
+
+    // No trace of the failed event should remain
+    const events = await client.execute('SELECT * FROM meta_events')
+    expect(events.rows).toHaveLength(0)
+    const players = await client.execute('SELECT * FROM meta_event_players')
+    expect(players.rows).toHaveLength(0)
+    const pairings = await client.execute('SELECT * FROM meta_pairings')
+    expect(pairings.rows).toHaveLength(0)
+
+    // The job should still complete, recording the error
+    const jobs = await client.execute('SELECT * FROM bcp_scrape_jobs')
+    expect(jobs.rows[0]!.status).toBe('completed')
+    expect(jobs.rows[0]!.eventsScraped ?? jobs.rows[0]!.events_scraped).toBe(0)
+    expect(String(jobs.rows[0]!.errors)).toContain('evt-flaky')
+
+    // A second run should retry the same event (not locked out)
+    mockGetEvent.mockClear()
+    mockGetPairings.mockReset()
+    mockGetPairings.mockImplementation((_id: string, round: number) =>
+      Promise.resolve([makePairing(round)]),
+    )
+    mockSearchEvents.mockResolvedValue([event])
+
+    await runScrape({
+      bcpEmail: 'test@example.com',
+      bcpPassword: 'pass',
+      db,
+    })
+
+    expect(mockGetEvent).toHaveBeenCalledWith('evt-flaky')
+    const eventsAfterRetry = await client.execute('SELECT * FROM meta_events')
+    expect(eventsAfterRetry.rows).toHaveLength(1)
+    expect(eventsAfterRetry.rows[0]!.source_id).toBe('evt-flaky')
+  })
+
+  it('rolls back the event row when an insert fails partway through the insert phase', async () => {
+    // Pre-insert a row using the id our mocked generateId will hand out for the
+    // *pairing* insert, forcing a PRIMARY KEY collision only once event + players
+    // have already been written — proving the insert-phase failure is cleaned up.
+    const event = makeEvent({ id: 'evt-insertfail', rounds: 1 })
+    mockSearchEvents.mockResolvedValue([event])
+    mockGetEvent.mockResolvedValue(event)
+    mockGetPairings.mockResolvedValue([makePairing(1)])
+
+    // generateId sequence for this event: jobId -> id-1 (already consumed by
+    // runScrape's job-record insert before this loop runs), eventId -> id-2,
+    // player1Id -> id-3, player2Id -> id-4, pairingId -> id-5. Pre-seed id-5
+    // into meta_pairings so the pairing INSERT collides on PRIMARY KEY.
+    await client.execute({
+      sql: 'INSERT INTO meta_pairings (id, event_id, round, result) VALUES (?, ?, ?, ?)',
+      args: ['id-5', 'other-event', 1, 'draw'],
+    })
+
+    await runScrape({
+      bcpEmail: 'test@example.com',
+      bcpPassword: 'pass',
+      db,
+    })
+
+    // The event row (and its players) must not survive the failed insert phase.
+    const events = await client.execute(
+      "SELECT * FROM meta_events WHERE source_id = 'evt-insertfail'",
+    )
+    expect(events.rows).toHaveLength(0)
+    const players = await client.execute('SELECT * FROM meta_event_players')
+    expect(players.rows).toHaveLength(0)
+
+    // Error should be recorded on the job
+    const jobs = await client.execute('SELECT * FROM bcp_scrape_jobs')
+    expect(jobs.rows[0]!.status).toBe('completed')
+    expect(String(jobs.rows[0]!.errors)).toContain('evt-insertfail')
+  })
+
+  it('persists accumulated errors on the completed job when some events fail and others succeed', async () => {
+    const goodEvent = makeEvent({ id: 'evt-good', rounds: 1 })
+    const badEvent = makeEvent({ id: 'evt-bad', rounds: 1 })
+    mockSearchEvents.mockResolvedValue([goodEvent, badEvent])
+    mockGetEvent.mockImplementation((id: string) => {
+      if (id === 'evt-bad') return Promise.reject(new Error('event fetch failed'))
+      return Promise.resolve(goodEvent)
+    })
+    mockGetPairings.mockImplementation(() => Promise.resolve([makePairing(1)]))
+
+    const { jobId } = await runScrape({
+      bcpEmail: 'test@example.com',
+      bcpPassword: 'pass',
+      db,
+    })
+    expect(jobId).toBeTruthy()
+
+    const jobs = await client.execute('SELECT * FROM bcp_scrape_jobs')
+    expect(jobs.rows[0]!.status).toBe('completed')
+    expect(jobs.rows[0]!.events_scraped).toBe(1)
+    expect(String(jobs.rows[0]!.errors)).toContain('evt-bad')
+    expect(String(jobs.rows[0]!.errors)).toContain('event fetch failed')
+
+    // The good event still landed
+    const events = await client.execute('SELECT * FROM meta_events')
+    expect(events.rows).toHaveLength(1)
+    expect(events.rows[0]!.source_id).toBe('evt-good')
+  })
 })

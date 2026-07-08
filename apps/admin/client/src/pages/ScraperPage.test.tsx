@@ -144,4 +144,24 @@ describe('ScraperPage', () => {
     fireEvent.click(screen.getByText('Rebuild Cube'))
     expect(mockPipelineMutate).toHaveBeenCalledTimes(1)
   })
+
+  it('shows a warning, not a success message, when the pipeline is not-configured', () => {
+    statusReturn = {
+      data: { latestJob: null, totalEvents: 0 },
+      isLoading: false,
+      error: null,
+    }
+    historyReturn = { data: [], isLoading: false, error: null }
+    mockPipelineMutate.mockImplementation((_input: unknown, opts: any) => {
+      opts.onSuccess({
+        status: 'not-configured',
+        message: 'Meta pipeline trigger not configured yet',
+      })
+    })
+    render(<ScraperPage />)
+    fireEvent.click(screen.getByText('Rebuild Cube'))
+
+    expect(screen.getByText('Cube rebuild is not yet available')).toBeInTheDocument()
+    expect(screen.queryByText(/^Pipeline:/)).not.toBeInTheDocument()
+  })
 })

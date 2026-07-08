@@ -1,8 +1,9 @@
 import { createClient } from '@libsql/client'
-import { createDbFromClient, stratagemLog } from '@tabletop-tools/db'
+import { createDbFromClient, stratagemLog, turns as turnsTable } from '@tabletop-tools/db'
 import { eq } from 'drizzle-orm'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 
+import type { R2Storage } from '../lib/storage/r2'
 import { createNullR2Storage } from '../lib/storage/r2'
 import { createCallerFactory } from '../trpc'
 import { appRouter } from './index'
@@ -100,6 +101,8 @@ beforeAll(async () => {
     VALUES ('user-1', 'Alice', 'alice@example.com', 0, 0, 0);
     INSERT INTO matches (id, user_id, opponent_faction, mission, is_tournament, created_at)
     VALUES ('match-1', 'user-1', 'Orks', 'Scorched Earth', 0, 0);
+    INSERT INTO matches (id, user_id, opponent_faction, mission, is_tournament, require_photos, created_at)
+    VALUES ('match-photos-required', 'user-1', 'Orks', 'Scorched Earth', 0, 1, 0);
   `)
   matchId = 'match-1'
 })
@@ -115,6 +118,17 @@ const ctx = {
   storage,
 }
 const unauthCtx = { user: null, req, db, storage }
+
+/** Storage stub whose upload() always resolves to null, simulating an unbound/misconfigured
+ *  R2 bucket in prod (the exact failure mode this fix guards against). */
+const failingStorage: R2Storage = {
+  async upload() {
+    return null
+  },
+}
+function ctxWithStorage(storage: R2Storage) {
+  return { ...ctx, storage }
+}
 
 describe('turn.add', () => {
   it('adds a turn to a match', async () => {
@@ -152,20 +166,152 @@ describe('turn.add', () => {
     expect(parsed[0].name).toBe('Intercessors')
   })
 
-  it('accepts an optional photo data URL (no R2 configured → photoUrl null)', async () => {
+  it('does not persist a turn when a photo was provided but storage is unavailable (NullR2Storage)', async () => {
+    // Regression test: R2 unbound in prod silently discarded photos and saved the turn anyway
+    // with photo_url = null. Storage unavailability must now be a loud failure, not a silent one.
     const caller = createCaller(ctx)
+    await expect(
+      caller.turn.add({
+        matchId,
+        turnNumber: 3,
+        yourUnitsLost: [],
+        theirUnitsLost: [],
+        primaryScored: 0,
+        secondaryScored: 0,
+        cpSpent: 0,
+        photoDataUrl: 'data:image/jpeg;base64,/9j/abc123',
+      }),
+    ).rejects.toMatchObject({ code: 'INTERNAL_SERVER_ERROR' })
+
+    const rows = await db.select().from(turnsTable).where(eq(turnsTable.matchId, matchId))
+    expect(rows.find((r) => r.turnNumber === 3)).toBeUndefined()
+  })
+
+  it('throws when yourPhotoDataUrl upload returns null (storage unavailable)', async () => {
+    const caller = createCaller(ctxWithStorage(failingStorage))
+    await expect(
+      caller.turn.add({
+        matchId,
+        turnNumber: 30,
+        yourUnitsLost: [],
+        theirUnitsLost: [],
+        primaryScored: 0,
+        secondaryScored: 0,
+        cpSpent: 0,
+        yourPhotoDataUrl: 'data:image/jpeg;base64,/9j/abc123',
+      }),
+    ).rejects.toMatchObject({ code: 'INTERNAL_SERVER_ERROR' })
+
+    const rows = await db.select().from(turnsTable).where(eq(turnsTable.matchId, matchId))
+    expect(rows.find((r) => r.turnNumber === 30)).toBeUndefined()
+  })
+
+  it('throws when theirPhotoDataUrl upload returns null (storage unavailable)', async () => {
+    const caller = createCaller(ctxWithStorage(failingStorage))
+    await expect(
+      caller.turn.add({
+        matchId,
+        turnNumber: 31,
+        yourUnitsLost: [],
+        theirUnitsLost: [],
+        primaryScored: 0,
+        secondaryScored: 0,
+        cpSpent: 0,
+        theirPhotoDataUrl: 'data:image/jpeg;base64,/9j/abc123',
+      }),
+    ).rejects.toMatchObject({ code: 'INTERNAL_SERVER_ERROR' })
+
+    const rows = await db.select().from(turnsTable).where(eq(turnsTable.matchId, matchId))
+    expect(rows.find((r) => r.turnNumber === 31)).toBeUndefined()
+  })
+
+  it('normal path unaffected: succeeds when no photo is provided, even with failing storage', async () => {
+    const caller = createCaller(ctxWithStorage(failingStorage))
     const turn = await caller.turn.add({
       matchId,
-      turnNumber: 3,
+      turnNumber: 32,
+      yourUnitsLost: [],
+      theirUnitsLost: [],
+      primaryScored: 7,
+      secondaryScored: 1,
+      cpSpent: 0,
+    })
+    expect(turn.turnNumber).toBe(32)
+    expect(turn.photoUrl).toBeNull()
+    expect(turn.yourPhotoUrl).toBeNull()
+    expect(turn.theirPhotoUrl).toBeNull()
+  })
+
+  it('normal path unaffected: succeeds when a photo is provided and storage returns a URL', async () => {
+    const workingStorage: R2Storage = {
+      async upload(key) {
+        return `https://photos.tabletop-tools.net/${key}`
+      },
+    }
+    const caller = createCaller(ctxWithStorage(workingStorage))
+    const turn = await caller.turn.add({
+      matchId,
+      turnNumber: 33,
       yourUnitsLost: [],
       theirUnitsLost: [],
       primaryScored: 0,
       secondaryScored: 0,
       cpSpent: 0,
-      photoDataUrl: 'data:image/jpeg;base64,/9j/abc123',
+      yourPhotoDataUrl: 'data:image/jpeg;base64,/9j/abc123',
+      theirPhotoDataUrl: 'data:image/jpeg;base64,/9j/def456',
     })
-    // NullR2Storage returns null for photoUrl
-    expect(turn.photoUrl).toBeNull()
+    expect(turn.yourPhotoUrl).toContain('https://photos.tabletop-tools.net/')
+    expect(turn.theirPhotoUrl).toContain('https://photos.tabletop-tools.net/')
+  })
+
+  it('requirePhotos gate: throws BAD_REQUEST when match requires photos and none is provided', async () => {
+    const caller = createCaller(ctx)
+    await expect(
+      caller.turn.add({
+        matchId: 'match-photos-required',
+        turnNumber: 1,
+        yourUnitsLost: [],
+        theirUnitsLost: [],
+        primaryScored: 0,
+        secondaryScored: 0,
+        cpSpent: 0,
+      }),
+    ).rejects.toMatchObject({ code: 'BAD_REQUEST' })
+  })
+
+  it('requirePhotos gate: succeeds when match requires photos and a photo is provided', async () => {
+    const workingStorage: R2Storage = {
+      async upload(key) {
+        return `https://photos.tabletop-tools.net/${key}`
+      },
+    }
+    const caller = createCaller(ctxWithStorage(workingStorage))
+    const turn = await caller.turn.add({
+      matchId: 'match-photos-required',
+      turnNumber: 1,
+      yourUnitsLost: [],
+      theirUnitsLost: [],
+      primaryScored: 0,
+      secondaryScored: 0,
+      cpSpent: 0,
+      yourPhotoDataUrl: 'data:image/jpeg;base64,/9j/abc123',
+      theirPhotoDataUrl: 'data:image/jpeg;base64,/9j/def456',
+    })
+    expect(turn.yourPhotoUrl).toContain('https://photos.tabletop-tools.net/')
+  })
+
+  it('requirePhotos gate: does not require photos when match does not require them', async () => {
+    const caller = createCaller(ctx)
+    const turn = await caller.turn.add({
+      matchId, // default match has require_photos = 0
+      turnNumber: 34,
+      yourUnitsLost: [],
+      theirUnitsLost: [],
+      primaryScored: 0,
+      secondaryScored: 0,
+      cpSpent: 0,
+    })
+    expect(turn.turnNumber).toBe(34)
   })
 
   it('throws NOT_FOUND for unknown match', async () => {

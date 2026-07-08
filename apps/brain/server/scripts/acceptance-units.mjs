@@ -190,7 +190,7 @@ async function checkSearch(page, unit) {
   const card = page
     .locator('button:visible', { hasText: new RegExp(escapeRe(unit), 'i') })
     .first()
-  await card.waitFor({ timeout: 90000 })
+  await card.waitFor({ timeout: 45000 })
   await card.click()
   return await verifyOverlayCard(page, unit)
 }
@@ -205,7 +205,7 @@ async function checkGraph(page, unit) {
     .locator('p:visible', { hasText: new RegExp(escapeRe(shorten(unit)), 'i') })
     .first()
   try {
-    await label.waitFor({ state: 'attached', timeout: 90000 })
+    await label.waitFor({ state: 'attached', timeout: 60000 })
   } catch {
     return `graph has no node labelled "${unit}"`
   }
@@ -223,7 +223,7 @@ async function checkAsk(page, unit, faction) {
   // Answer can take a while (RAG + LLM).
   await page
     .locator('[data-testid="ask-clear-results"]')
-    .waitFor({ timeout: 180000 })
+    .waitFor({ timeout: 120000 })
   const body = (await page.locator('main').first().innerText().catch(() => '')) ||
     (await page.innerText('body'))
   if (!normTitle(body).includes(normTitle(unit))) {

@@ -4,7 +4,7 @@
  */
 import type { Db } from '@tabletop-tools/db'
 import { ingestContent, ingestSources } from '@tabletop-tools/db'
-import { eq } from 'drizzle-orm'
+import { eq, inArray } from 'drizzle-orm'
 
 import { extractNodes } from './extract'
 import { submitTranscription } from './gladia'
@@ -37,7 +37,18 @@ export async function processDiscovered(opts: ProcessOpts): Promise<ProcessResul
   const errors: string[] = []
   let processed = 0
 
-  // Get discovered content with source type
+  // Get discovered content with source type. Also re-pick-up 'failed' rows:
+  // writeNodesToBrain's R2 writes are idempotent merges by node id, and
+  // extractNodes is a pure re-derivation from the same source text, so
+  // replaying a failed item (e.g. one that failed because manifest.json's
+  // conditional write exhausted its retries after community.json already
+  // landed — see writeConditionally in lib/nodes.ts) safely converges
+  // instead of leaving it permanently stranded with no path back to
+  // 'discovered'. There is no retry-count/backoff column on ingestContent
+  // today, so a permanently-broken URL (e.g. a 404) will keep re-entering
+  // this batch on every run — same bounded batchLimit as fresh discoveries,
+  // not unbounded. Tracked as a known limitation rather than adding a
+  // schema migration to this fix.
   const rows = await db
     .select({
       id: ingestContent.id,
@@ -47,7 +58,7 @@ export async function processDiscovered(opts: ProcessOpts): Promise<ProcessResul
     })
     .from(ingestContent)
     .innerJoin(ingestSources, eq(ingestContent.sourceId, ingestSources.id))
-    .where(eq(ingestContent.status, 'discovered'))
+    .where(inArray(ingestContent.status, ['discovered', 'failed']))
     .orderBy(ingestContent.discoveredAt)
     .limit(batchLimit)
 
@@ -132,6 +143,21 @@ async function processWeb(contentId: string, url: string, opts: ProcessOpts): Pr
 
 /**
  * Process YouTube content that has received transcripts via Gladia callback.
+ *
+ * Deliberately does NOT also re-pick-up 'failed' rows here (unlike
+ * processDiscovered's main-loop query below) — this function runs
+ * unconditionally right after that main loop, within the SAME
+ * processDiscovered() invocation, and status updates from the main loop are
+ * already committed by the time this query runs. If both queries matched
+ * 'failed', a row that the main loop just failed (and left with a
+ * transcript already set, e.g. from processWeb) would be picked up AGAIN
+ * by this function in the same invocation — double-processing within one
+ * run. The main loop's 'failed' re-pickup alone is sufficient to heal every
+ * stranded case, including ones that originally failed deep in this
+ * function's YouTube post-Gladia-callback path: on the next run they're
+ * re-routed through processYouTube (re-submitting to Gladia), which
+ * eventually lands back in 'transcribed' and flows through here again.
+ * That's an extra Gladia call in the worst case, not a correctness problem.
  */
 async function processTranscribed(opts: ProcessOpts): Promise<void> {
   const rows = await opts.db

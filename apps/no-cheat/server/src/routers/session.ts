@@ -4,6 +4,7 @@ import { and, desc, eq, sql } from 'drizzle-orm'
 import { z } from 'zod'
 
 import { analyze } from '../lib/stats/analyze'
+import { keyFromUrl } from '../lib/storage/r2'
 import { protectedProcedure, router } from '../trpc'
 
 export const sessionRouter = router({
@@ -266,6 +267,15 @@ export const sessionRouter = router({
       }
       if (session.userId !== ctx.user.id) {
         throw new TRPCError({ code: 'FORBIDDEN', message: 'Not your session' })
+      }
+
+      // Delete the R2 evidence object before the DB row. If bucket.delete()
+      // fails, we fail loud here and leave the row intact rather than
+      // deleting the row and silently orphaning the object in R2 -- a
+      // "deleted" session must not leave evidence photos behind.
+      const evidenceKey = keyFromUrl(session.photoUrl)
+      if (evidenceKey) {
+        await ctx.storage.delete(evidenceKey)
       }
 
       // Cascade: rolls deleted automatically by FK constraint

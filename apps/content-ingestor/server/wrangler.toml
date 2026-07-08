@@ -3,6 +3,16 @@ main = "src/worker.ts"
 compatibility_date = "2024-09-23"
 compatibility_flags = ["nodejs_compat"]
 
+# Required secrets (not set here — set via `wrangler secret put <NAME>`):
+#   TURSO_DB_URL, TURSO_AUTH_TOKEN, GLADIA_API_KEY, ANTHROPIC_API_KEY
+#   WEBHOOK_SECRET  — shared secret for the public Gladia webhook
+#                     (POST /ingest/callback?token=...). REQUIRED before
+#                     deploy: without it, checkWebhookToken fails closed and
+#                     every Gladia callback 401s (fail-loud by design — see
+#                     worker.ts checkWebhookToken).
+# Optional: SYNC_SECRET (Bearer-token auth for internal admin routes;
+#   falls open — permits all requests — when unset, unlike WEBHOOK_SECRET).
+
 [limits]
 cpu_ms = 30000
 

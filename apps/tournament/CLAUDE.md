@@ -117,12 +117,6 @@ id, tournament_id, round_number, status, created_at
 // pairings
 id, round_id, table_number, player1_id, player2_id, mission, player1_vp, player2_vp, result, reported_by, confirmed, to_override, created_at
 
-// player_elo  (UNIQUE: user_id)
-id, user_id, rating, games_played, updated_at
-
-// elo_history
-id, user_id, pairing_id, rating_before, rating_after, delta, opponent_id, recorded_at
-
 // ranking_metric — catalog of metric keys (wins, losses, battle_points, sos_wins, etc.)
 id, key (UNIQUE), label, description, created_at
 
@@ -136,7 +130,7 @@ id, tournament_id, metric_id (FK→ranking_metric), position, enabled, created_a
 id, bcp_event_id (UNIQUE), name, location, event_date, player_count, game_system, registration_url, raw_data, synced_at
 
 // bcp_registration — consent-gated BCP list submission record
-id, user_id, bcp_event_id, list_id, method (server|agent), status (submitted|failed|pending), consent_at, submitted_at, error_message
+id, user_id, bcp_event_id, list_id, method (server|agent), status (submitted|failed), consent_at, submitted_at
 ```
 
 ---
@@ -222,10 +216,12 @@ ELO updates when the TO closes a round -- all results committed together.
 
 ## Testing
 
-**158 tests** (100 server + 58 client), all passing.
+**167 tests** (107 server + 60 client), all passing.
 
 ```
 server/src/
+  __fixtures__/
+    test-players.ts                        <- TEST_PLAYERS fixture (dev/test only) for player.seedTestPlayers
   lib/
     swiss/pairings.ts / .test.ts           <- Swiss algorithm: round 1, mid-event, odd players, rematches, byes
     standings/compute.ts / .test.ts        <- tiebreaker ordering, SOS calculation
@@ -233,6 +229,7 @@ server/src/
     result/derive.ts / .test.ts            <- result derivation from VP
   routers/
     tournament.test.ts                     <- 29 tests: CRUD, status, standings, exportToMeta, placement freeze
+    player.test.ts                         <- 7 tests: seedTestPlayers environment gate (Rule 7), auth, FK-safe insert path
     metric.test.ts                         <- 9 tests: catalog CRUD, getStack, setStack
     passthrough.test.ts                    <- 7 tests: list, get, upsert, search
     bcp-registration.test.ts               <- 9 tests: record, updateStatus, listMine, getForEvent, auth
@@ -243,12 +240,28 @@ server/src/
 client/src/
   components/
     TournamentScreen.test.tsx              <- 32 tests: list, create, detail, standings, registration, rounds
-    ManageTournament.test.tsx              <- 14 tests: tabs, players, cards, awards, reinstate
+    ManageTournament.test.tsx              <- 16 tests: tabs, players, cards, awards, reinstate, seed-players PROD gate
   lib/
     router.test.ts                         <- 12 tests: parseHash for all hash routes
 ```
 
 ```bash
-cd apps/tournament/server && pnpm test   # 100 server tests
-cd apps/tournament/client && pnpm test   # 58 client tests
+cd apps/tournament/server && pnpm test   # 107 server tests
+cd apps/tournament/client && pnpm test   # 60 client tests
 ```
+
+### Test data seeding (Rule 7)
+
+`player.seedTestPlayers` inserts fixture players from `server/src/__fixtures__/test-players.ts`
+for TO-driven local testing. Gated server-side: rejects with `FORBIDDEN` when
+`ctx.environment === 'production'`. `ctx.environment` is threaded from the Worker's
+`ENVIRONMENT` var (`wrangler.toml` sets it to `"production"` for the deployed Worker;
+`worker.ts` defaults to `'production'` if unset — fail closed). Local dev (`index.ts`) and
+router-level tests default to `'development'`. The "Load Test Players" button in
+`ManageTournament` is hidden when `import.meta.env.PROD` is true, so the control never
+appears where it's guaranteed to be rejected.
+
+Because `tournament_players.user_id` is a NOT NULL FK to `"user"(id)` (enforced by libSQL —
+verified `PRAGMA foreign_keys = 1` on the hosted Turso instance), each seeded player also
+gets a real auth `user` row: id `test-<uuid>`, email `<id>@seed.invalid` — clearly marked
+fixture data that only ever exists in dev/test databases.

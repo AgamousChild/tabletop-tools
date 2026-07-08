@@ -20,9 +20,13 @@ try {
     exit 1
 }
 
-$gitDir       = (git rev-parse --git-dir).Trim()
-$gitCommonDir = (git rev-parse --git-common-dir).Trim()
-$isWorktree   = -not $gitDir.StartsWith($gitCommonDir)
+# On a linked worktree git-dir is <common>/worktrees/<name>, which STARTS WITH
+# git-common-dir — so a StartsWith check reports every worktree as the main
+# checkout. Only exact equality means main checkout. --path-format=absolute
+# keeps both sides comparable (git can otherwise mix relative and absolute).
+$gitDir       = (git rev-parse --path-format=absolute --git-dir).Trim()
+$gitCommonDir = (git rev-parse --path-format=absolute --git-common-dir).Trim()
+$isWorktree   = $gitDir -ne $gitCommonDir
 
 Write-Host ''
 Write-Host '════════════════════════════════════════════════════════════════════════' -ForegroundColor Yellow

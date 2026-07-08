@@ -1,5 +1,5 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react'
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { ManageTournament } from './ManageTournament'
 
@@ -119,6 +119,11 @@ beforeEach(() => {
   mockRemovePlayer.mockReset()
   mockReinstate.mockReset()
   mockSeedPlayers.mockReset()
+  vi.unstubAllEnvs()
+})
+
+afterEach(() => {
+  vi.unstubAllEnvs()
 })
 
 describe('ManageTournament', () => {
@@ -207,5 +212,24 @@ describe('ManageTournament', () => {
     render(<ManageTournament tournamentId="t1" onBack={onBack} />)
     fireEvent.click(screen.getByText('Back to Tournament'))
     expect(onBack).toHaveBeenCalled()
+  })
+
+  // Rule 7: seedTestPlayers is gated server-side in production; the client
+  // hides the "Load Test Players" button in production builds so it never
+  // offers a control that's guaranteed to fail.
+  it('shows Load Test Players button outside production and calls the mutation on click', async () => {
+    render(<ManageTournament tournamentId="t1" onBack={vi.fn()} />)
+    const button = screen.getByRole('button', { name: 'Load Test Players' })
+    expect(button).toBeInTheDocument()
+    fireEvent.click(button)
+    await waitFor(() =>
+      expect(mockSeedPlayers).toHaveBeenCalledWith({ tournamentId: 't1', count: 8 }),
+    )
+  })
+
+  it('hides Load Test Players button in production builds', () => {
+    vi.stubEnv('PROD', true)
+    render(<ManageTournament tournamentId="t1" onBack={vi.fn()} />)
+    expect(screen.queryByRole('button', { name: 'Load Test Players' })).not.toBeInTheDocument()
   })
 })

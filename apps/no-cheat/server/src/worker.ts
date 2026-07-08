@@ -15,6 +15,7 @@ interface Env {
       value: ArrayBuffer,
       options?: { httpMetadata?: { contentType: string } },
     ): Promise<unknown>
+    delete(key: string): Promise<unknown>
   }
 }
 

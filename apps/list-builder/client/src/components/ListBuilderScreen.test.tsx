@@ -227,4 +227,35 @@ describe('ListBuilderScreen', () => {
     expect(statLines[0]?.textContent).toContain('M6')
     expect(statLines[0]?.textContent).toContain('T4')
   })
+
+  it('does not show a migration warning when migration is skipped or fully successful', async () => {
+    render(<ListBuilderScreen onSignOut={vi.fn()} />)
+    await waitFor(() => {
+      expect(screen.queryByTestId('migration-warning')).not.toBeInTheDocument()
+    })
+  })
+
+  it('shows a non-blocking warning when some lists fail to migrate', async () => {
+    const { migrateIndexedDbLists } = await import('../lib/migrateIndexedDbLists')
+    vi.mocked(migrateIndexedDbLists).mockResolvedValueOnce({
+      migrated: 1,
+      failed: 2,
+      skipped: false,
+      failedLists: [
+        { id: 'local-1', name: 'Old Orks List' },
+        { id: 'local-2', name: 'Old Marines List' },
+      ],
+    })
+
+    render(<ListBuilderScreen onSignOut={vi.fn()} />)
+
+    const warning = await screen.findByTestId('migration-warning')
+    expect(warning.textContent).toContain('2')
+    expect(warning.textContent).toContain('Old Orks List')
+    expect(warning.textContent).toContain('Old Marines List')
+
+    // Non-blocking: the rest of the screen still renders and is usable.
+    expect(screen.getByText('My Army Lists')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /new list/i })).toBeInTheDocument()
+  })
 })

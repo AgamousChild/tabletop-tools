@@ -47,6 +47,7 @@ function user1Caller() {
     db,
     user: { id: 'user-1', email: 'alice@example.com', name: 'Alice' },
     req: new Request('http://test'),
+    environment: 'development',
   })
 }
 
@@ -55,6 +56,7 @@ function user2Caller() {
     db,
     user: { id: 'user-2', email: 'bob@example.com', name: 'Bob' },
     req: new Request('http://test'),
+    environment: 'development',
   })
 }
 

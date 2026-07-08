@@ -35,13 +35,17 @@ beforeAll(async () => {
       attacker_name TEXT NOT NULL, defender_content_id TEXT NOT NULL,
       defender_name TEXT NOT NULL, result TEXT NOT NULL, created_at INTEGER NOT NULL
     );
-    CREATE TABLE IF NOT EXISTS lists (
-      id TEXT PRIMARY KEY, user_id TEXT NOT NULL, faction TEXT NOT NULL, name TEXT NOT NULL,
-      total_pts INTEGER NOT NULL DEFAULT 0, created_at INTEGER NOT NULL, updated_at INTEGER NOT NULL
+    CREATE TABLE IF NOT EXISTS list (
+      id TEXT PRIMARY KEY, user_id TEXT NOT NULL, name TEXT NOT NULL, description TEXT, author TEXT,
+      edition TEXT NOT NULL DEFAULT '11th', faction_id TEXT, subfaction_id TEXT, detachment_id TEXT,
+      battle_size TEXT NOT NULL DEFAULT 'unknown', total_points INTEGER NOT NULL DEFAULT 0,
+      dataslate_id TEXT, source TEXT NOT NULL DEFAULT 'list-builder',
+      created_at INTEGER NOT NULL, updated_at INTEGER NOT NULL
     );
-    CREATE TABLE IF NOT EXISTS list_units (
-      id TEXT PRIMARY KEY, list_id TEXT NOT NULL, unit_content_id TEXT NOT NULL,
-      unit_name TEXT NOT NULL, unit_points INTEGER NOT NULL, count INTEGER NOT NULL DEFAULT 1
+    CREATE TABLE IF NOT EXISTS list_unit (
+      id TEXT PRIMARY KEY, list_id TEXT NOT NULL, datasheet_id TEXT, enhancement_id TEXT,
+      is_warlord INTEGER NOT NULL DEFAULT 0, points INTEGER NOT NULL DEFAULT 0,
+      attached_to_unit_id TEXT, attach_role TEXT
     );
     CREATE TABLE IF NOT EXISTS matches (
       id TEXT PRIMARY KEY, user_id TEXT NOT NULL, list_id TEXT, opponent_faction TEXT NOT NULL,

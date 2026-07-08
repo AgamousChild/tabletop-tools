@@ -39,7 +39,10 @@ afterAll(() => client.close())
 const createCaller = createCallerFactory(appRouter)
 const req = new Request('http://localhost')
 
-const nullStorage = { upload: vi.fn().mockResolvedValue('null://discarded') }
+const nullStorage = {
+  upload: vi.fn().mockResolvedValue('null://discarded'),
+  delete: vi.fn().mockResolvedValue(undefined),
+}
 const aliceCtx = {
   user: { id: 'user-1', email: 'alice@example.com', name: 'Alice' },
   req,
