@@ -311,7 +311,10 @@ describe('produceCanLead', () => {
       new Set(['ds-a', 'ds-b']),
     )
     expect(r.rowsWritten).toBe(1)
-    const rows = await client.execute('SELECT * FROM content_can_lead WHERE role = ?', ['leader'])
+    const rows = await client.execute({
+      sql: 'SELECT * FROM content_can_lead WHERE role = ?',
+      args: ['leader'],
+    })
     expect(rows.rows).toHaveLength(1)
   })
 
@@ -355,9 +358,10 @@ describe('produceCanSupport', () => {
       new Set(['ds-a', 'ds-b']),
     )
     expect(r.rowsWritten).toBe(1)
-    const rows = await client.execute('SELECT role FROM content_can_lead WHERE role = ?', [
-      'support',
-    ])
+    const rows = await client.execute({
+      sql: 'SELECT role FROM content_can_lead WHERE role = ?',
+      args: ['support'],
+    })
     expect(rows.rows).toHaveLength(1)
     expect(rows.rows[0]?.role).toBe('support')
   })
