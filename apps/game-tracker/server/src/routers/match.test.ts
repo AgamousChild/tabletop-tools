@@ -1,5 +1,18 @@
 import { createClient } from '@libsql/client'
-import { createDbFromClient } from '@tabletop-tools/db'
+import {
+  authUsers,
+  contentEntity,
+  createDbFromClient,
+  matches,
+  matchSecondaries,
+  pairings,
+  rounds,
+  stratagemLog,
+  tournamentPlayers,
+  tournaments,
+  turns,
+} from '@tabletop-tools/db'
+import { createTestTables } from '@tabletop-tools/db/src/test-ddl'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 
 import { createNullR2Storage } from '../lib/storage/r2'
@@ -11,147 +24,20 @@ const db = createDbFromClient(client)
 const storage = createNullR2Storage()
 
 beforeAll(async () => {
+  await createTestTables(client, {
+    authUsers,
+    // FK target of tournament_players.faction_entity_id — libsql enforces FKs
+    contentEntity,
+    matches,
+    turns,
+    matchSecondaries,
+    stratagemLog,
+    tournaments,
+    tournamentPlayers,
+    rounds,
+    pairings,
+  })
   await client.executeMultiple(`
-    CREATE TABLE IF NOT EXISTS "user" (
-      id TEXT PRIMARY KEY,
-      name TEXT NOT NULL,
-      email TEXT UNIQUE NOT NULL,
-      email_verified INTEGER NOT NULL DEFAULT 0,
-      image TEXT,
-      username TEXT UNIQUE,
-      display_username TEXT UNIQUE,
-      created_at INTEGER NOT NULL,
-      updated_at INTEGER NOT NULL
-    );
-    CREATE TABLE IF NOT EXISTS matches (
-      id TEXT PRIMARY KEY,
-      user_id TEXT NOT NULL REFERENCES "user"(id),
-      list_id TEXT,
-      opponent_faction TEXT NOT NULL,
-      mission TEXT NOT NULL,
-      result TEXT,
-      your_final_score INTEGER,
-      their_final_score INTEGER,
-      is_tournament INTEGER NOT NULL DEFAULT 0,
-      opponent_name TEXT,
-      opponent_detachment TEXT,
-      your_faction TEXT,
-      your_detachment TEXT,
-      terrain_layout TEXT,
-      deployment_zone TEXT,
-      twist_cards TEXT,
-      challenger_cards TEXT,
-      require_photos INTEGER NOT NULL DEFAULT 0,
-      attacker_defender TEXT,
-      who_goes_first TEXT,
-      date INTEGER,
-      location TEXT,
-      tournament_name TEXT,
-      tournament_id TEXT,
-      created_at INTEGER NOT NULL,
-      closed_at INTEGER,
-      hidden_at INTEGER
-    );
-    CREATE TABLE IF NOT EXISTS turns (
-      id TEXT PRIMARY KEY,
-      match_id TEXT NOT NULL REFERENCES matches(id),
-      turn_number INTEGER NOT NULL,
-      photo_url TEXT,
-      your_units_lost TEXT NOT NULL DEFAULT '[]',
-      their_units_lost TEXT NOT NULL DEFAULT '[]',
-      primary_scored INTEGER NOT NULL DEFAULT 0,
-      secondary_scored INTEGER NOT NULL DEFAULT 0,
-      cp_spent INTEGER NOT NULL DEFAULT 0,
-      notes TEXT,
-      your_cp_start INTEGER NOT NULL DEFAULT 0,
-      your_cp_gained INTEGER NOT NULL DEFAULT 1,
-      your_cp_spent INTEGER NOT NULL DEFAULT 0,
-      their_cp_start INTEGER NOT NULL DEFAULT 0,
-      their_cp_gained INTEGER NOT NULL DEFAULT 1,
-      their_cp_spent INTEGER NOT NULL DEFAULT 0,
-      your_primary INTEGER NOT NULL DEFAULT 0,
-      their_primary INTEGER NOT NULL DEFAULT 0,
-      your_secondary INTEGER NOT NULL DEFAULT 0,
-      their_secondary INTEGER NOT NULL DEFAULT 0,
-      your_photo_url TEXT,
-      their_photo_url TEXT,
-      your_units_destroyed TEXT NOT NULL DEFAULT '[]',
-      their_units_destroyed TEXT NOT NULL DEFAULT '[]',
-      created_at INTEGER NOT NULL
-    );
-    CREATE TABLE IF NOT EXISTS tournaments (
-      id TEXT PRIMARY KEY,
-      to_user_id TEXT NOT NULL,
-      name TEXT NOT NULL,
-      event_date INTEGER NOT NULL,
-      location TEXT,
-      format TEXT NOT NULL,
-      total_rounds INTEGER NOT NULL,
-      status TEXT NOT NULL DEFAULT 'DRAFT',
-      description TEXT,
-      image_url TEXT,
-      external_link TEXT,
-      start_time TEXT,
-      latitude REAL,
-      longitude REAL,
-      mission_pool TEXT,
-      require_photos INTEGER NOT NULL DEFAULT 0,
-      include_twists INTEGER NOT NULL DEFAULT 0,
-      include_challenger INTEGER NOT NULL DEFAULT 0,
-      max_players INTEGER,
-      created_at INTEGER NOT NULL
-    );
-    CREATE TABLE IF NOT EXISTS tournament_players (
-      id TEXT PRIMARY KEY,
-      tournament_id TEXT NOT NULL,
-      user_id TEXT NOT NULL,
-      display_name TEXT NOT NULL,
-      faction TEXT NOT NULL,
-      detachment TEXT,
-      list_text TEXT,
-      list_id TEXT,
-      list_locked INTEGER NOT NULL DEFAULT 0,
-      checked_in INTEGER NOT NULL DEFAULT 0,
-      dropped INTEGER NOT NULL DEFAULT 0,
-      registered_at INTEGER NOT NULL
-    );
-    CREATE TABLE IF NOT EXISTS rounds (
-      id TEXT PRIMARY KEY,
-      tournament_id TEXT NOT NULL,
-      round_number INTEGER NOT NULL,
-      status TEXT NOT NULL DEFAULT 'PENDING',
-      start_time TEXT,
-      created_at INTEGER NOT NULL
-    );
-    CREATE TABLE IF NOT EXISTS pairings (
-      id TEXT PRIMARY KEY,
-      round_id TEXT NOT NULL,
-      table_number INTEGER NOT NULL,
-      player1_id TEXT NOT NULL,
-      player2_id TEXT,
-      mission TEXT NOT NULL,
-      player1_vp INTEGER,
-      player2_vp INTEGER,
-      result TEXT,
-      reported_by TEXT,
-      confirmed INTEGER NOT NULL DEFAULT 0,
-      to_override INTEGER NOT NULL DEFAULT 0,
-      created_at INTEGER NOT NULL
-    );
-    CREATE TABLE IF NOT EXISTS match_secondaries (
-      id TEXT PRIMARY KEY,
-      match_id TEXT NOT NULL REFERENCES matches(id) ON DELETE CASCADE,
-      player TEXT NOT NULL,
-      secondary_name TEXT NOT NULL,
-      vp_per_round TEXT NOT NULL DEFAULT '[]'
-    );
-    CREATE TABLE IF NOT EXISTS stratagem_log (
-      id TEXT PRIMARY KEY,
-      turn_id TEXT NOT NULL REFERENCES turns(id) ON DELETE CASCADE,
-      player TEXT NOT NULL,
-      stratagem_name TEXT NOT NULL,
-      cp_cost INTEGER NOT NULL DEFAULT 1
-    );
     INSERT INTO "user" (id, name, email, email_verified, created_at, updated_at)
     VALUES ('user-1', 'Alice', 'alice@example.com', 0, 0, 0);
     INSERT INTO "user" (id, name, email, email_verified, created_at, updated_at)
