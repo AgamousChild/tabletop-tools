@@ -3,6 +3,7 @@
  * @see docs/schema-indexeddb-game-data.md — IndexedDB game data schema
  */
 import type { Db } from '@tabletop-tools/db'
+import { slugify } from '@tabletop-tools/server-core'
 
 import type { Manifest } from '../types'
 import {
@@ -50,12 +51,7 @@ import { fetchAndProcessWahapedia } from './sources/wahapedia'
  * "emperors-children" (matching brain) instead of "emperor-s-children".
  */
 function contentEntitySlug(s: string): string {
-  return s
-    .toLowerCase()
-    .replace(/[’ʼ'‘"”“]/g, '')
-    .replace(/[^a-z0-9]+/g, '-')
-    .replace(/^-|-$/g, '')
-    .slice(0, 60)
+  return slugify(s, { stripChars: /[’ʼ'‘"”“]/g, maxLength: 60 })
 }
 
 /**

@@ -2,6 +2,8 @@
  * Write community nodes to R2 brain bucket and index in Vectorize.
  */
 
+import { slugify } from '@tabletop-tools/server-core'
+
 import type { ExtractedNode } from './extract'
 
 interface BrainNode {
@@ -18,13 +20,6 @@ interface BrainNode {
   refs: never[]
   version: 1
   keywords: string[]
-}
-
-function slugify(title: string): string {
-  return title
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, '-')
-    .replace(/^-+|-+$/g, '')
 }
 
 function vectorizeId(nodeId: string): string {

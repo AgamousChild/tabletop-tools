@@ -32,6 +32,7 @@ import type {
   WeaponAbility,
   WeaponProfile,
 } from '@tabletop-tools/game-content/src/types'
+import { slugify } from '@tabletop-tools/server-core'
 
 /** Existing-unit row we look up against (subset of BSData UnitProfile). */
 export interface ExistingUnitLookup {
@@ -84,11 +85,7 @@ export interface FactionPackResult {
 
 /** Slugify matching brain + game-data-store convention. */
 function slug(s: string): string {
-  return s
-    .toLowerCase()
-    .replace(/['‘’′"'"]/g, '')
-    .replace(/[^a-z0-9]+/g, '-')
-    .replace(/^-|-$/g, '')
+  return slugify(s, { stripChars: /['‘’′"'"]/g })
 }
 
 /** BSData catalog faction-name convention for a canonical slug. */
