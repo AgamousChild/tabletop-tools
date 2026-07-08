@@ -67,6 +67,8 @@ beforeAll(async () => {
     VALUES ('player-1', 'Bob', 'bob@example.com', 0, 0, 0);
     INSERT INTO tournaments (id, to_user_id, name, event_date, format, total_rounds, status, created_at)
     VALUES ('t1', 'to-1', 'Test GT', 1000, '2000pts', 5, 'REGISTRATION', 1000);
+    INSERT INTO tournaments (id, to_user_id, name, event_date, format, total_rounds, status, created_at)
+    VALUES ('t2', 'to-1', 'Seed GT', 1000, '2000pts', 5, 'REGISTRATION', 1000);
   `)
 })
 
@@ -119,21 +121,6 @@ describe('player.seedTestPlayers — environment gate (Rule 7)', () => {
     expect(players.length).toBe(0)
   })
 
-  it('is not blocked by the environment gate in development (reaches the insert path)', async () => {
-    // NOTE: tournament_players.user_id is a NOT NULL FK -> "user"(id) in the real
-    // schema (packages/db/src/schema.ts:410-412). seedTestPlayers inserts a
-    // fabricated `test-${uuid}` userId with no corresponding user row, so this
-    // throws a FK violation rather than UNAUTHORIZED/FORBIDDEN — proving the
-    // request got PAST the environment gate (the thing this test suite is
-    // responsible for) and reached real insert logic. That FK mismatch is a
-    // pre-existing bug in seedTestPlayers, out of scope for the Rule 7 gate
-    // fixed here; tracked separately.
-    const caller = toCaller('development')
-    await expect(caller.player.seedTestPlayers({ tournamentId: 't1', count: 4 })).rejects.toThrow(
-      /FOREIGN KEY/i,
-    )
-  })
-
   it('still enforces TO-only authorization in non-production', async () => {
     const caller = playerCaller('development')
     await expect(caller.player.seedTestPlayers({ tournamentId: 't1', count: 2 })).rejects.toThrow(
@@ -146,5 +133,51 @@ describe('player.seedTestPlayers — environment gate (Rule 7)', () => {
     await expect(
       caller.player.seedTestPlayers({ tournamentId: 'does-not-exist', count: 2 }),
     ).rejects.toThrow('not available in production')
+  })
+})
+
+describe('player.seedTestPlayers — insert path (FK-safe seeding)', () => {
+  // tournament_players.user_id is a NOT NULL FK -> "user"(id)
+  // (packages/db/src/schema.ts). This in-memory DB enforces it, same as the
+  // real schema, so a successful seed proves each synthetic player got a
+  // real auth user row — the FK the old implementation violated.
+  it('inserts players with matching auth user rows in development', async () => {
+    const caller = toCaller('development')
+    const result = await caller.player.seedTestPlayers({ tournamentId: 't2', count: 4 })
+    expect(result.inserted).toBe(4)
+    expect(result.players).toEqual(TEST_PLAYERS.slice(0, 4).map((p) => p.name))
+
+    // read-back via the TO's player list
+    const players = await caller.player.list({ tournamentId: 't2' })
+    expect(players.length).toBe(4)
+    for (const p of players) {
+      expect(p.userId).toMatch(/^test-/)
+      expect(TEST_PLAYERS.map((tp) => tp.name)).toContain(p.displayName)
+    }
+
+    // no orphaned user_ids: every seeded player resolves to a "user" row
+    const orphans = await client.execute(`
+      SELECT tp.user_id FROM tournament_players tp
+      LEFT JOIN "user" u ON u.id = tp.user_id
+      WHERE tp.tournament_id = 't2' AND u.id IS NULL
+    `)
+    expect(orphans.rows.length).toBe(0)
+
+    // seeded auth users are clearly marked as fixture data
+    const seedUsers = await client.execute(`SELECT id, email FROM "user" WHERE id LIKE 'test-%'`)
+    expect(seedUsers.rows.length).toBe(4)
+    for (const row of seedUsers.rows) {
+      expect(String(row.email)).toBe(`${String(row.id)}@seed.invalid`)
+    }
+  })
+
+  it('seeds repeatedly without unique-constraint collisions (fresh users per call)', async () => {
+    const caller = toCaller('development')
+    const again = await caller.player.seedTestPlayers({ tournamentId: 't2', count: 4 })
+    expect(again.inserted).toBe(4)
+
+    const players = await caller.player.list({ tournamentId: 't2' })
+    expect(players.length).toBe(8)
+    expect(new Set(players.map((p) => p.userId)).size).toBe(8)
   })
 })

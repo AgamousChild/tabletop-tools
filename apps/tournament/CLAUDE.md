@@ -216,7 +216,7 @@ ELO updates when the TO closes a round -- all results committed together.
 
 ## Testing
 
-**165 tests** (105 server + 60 client), all passing.
+**167 tests** (107 server + 60 client), all passing.
 
 ```
 server/src/
@@ -229,7 +229,7 @@ server/src/
     result/derive.ts / .test.ts            <- result derivation from VP
   routers/
     tournament.test.ts                     <- 29 tests: CRUD, status, standings, exportToMeta, placement freeze
-    player.test.ts                         <- 5 tests: seedTestPlayers environment gate (Rule 7), auth
+    player.test.ts                         <- 7 tests: seedTestPlayers environment gate (Rule 7), auth, FK-safe insert path
     metric.test.ts                         <- 9 tests: catalog CRUD, getStack, setStack
     passthrough.test.ts                    <- 7 tests: list, get, upsert, search
     bcp-registration.test.ts               <- 9 tests: record, updateStatus, listMine, getForEvent, auth
@@ -246,7 +246,7 @@ client/src/
 ```
 
 ```bash
-cd apps/tournament/server && pnpm test   # 105 server tests
+cd apps/tournament/server && pnpm test   # 107 server tests
 cd apps/tournament/client && pnpm test   # 60 client tests
 ```
 
@@ -260,3 +260,8 @@ for TO-driven local testing. Gated server-side: rejects with `FORBIDDEN` when
 router-level tests default to `'development'`. The "Load Test Players" button in
 `ManageTournament` is hidden when `import.meta.env.PROD` is true, so the control never
 appears where it's guaranteed to be rejected.
+
+Because `tournament_players.user_id` is a NOT NULL FK to `"user"(id)` (enforced by libSQL —
+verified `PRAGMA foreign_keys = 1` on the hosted Turso instance), each seeded player also
+gets a real auth `user` row: id `test-<uuid>`, email `<id>@seed.invalid` — clearly marked
+fixture data that only ever exists in dev/test databases.

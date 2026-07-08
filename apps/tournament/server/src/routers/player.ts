@@ -1,4 +1,5 @@
 import {
+  authUsers,
   contentEntity,
   pairings,
   tournamentCards,
@@ -245,10 +246,23 @@ export const playerRouter = router({
       for (let i = 0; i < Math.min(count, testPlayers.length); i++) {
         const p = testPlayers[i]!
         const id = crypto.randomUUID()
+        // tournament_players.user_id is a NOT NULL FK -> "user"(id), so each
+        // synthetic player needs a real auth user row. These test-prefixed
+        // users only ever exist in dev/test databases — the production gate
+        // above throws before this path can run.
+        const userId = `test-${crypto.randomUUID()}`
+        await ctx.db.insert(authUsers).values({
+          id: userId,
+          name: p.name,
+          email: `${userId}@seed.invalid`,
+          emailVerified: false,
+          createdAt: new Date(now),
+          updatedAt: new Date(now),
+        })
         await ctx.db.insert(tournamentPlayers).values({
           id,
           tournamentId: input.tournamentId,
-          userId: `test-${crypto.randomUUID()}`,
+          userId,
           displayName: p.name,
           faction: p.faction,
           detachment: p.detachment,
