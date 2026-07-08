@@ -63,21 +63,60 @@ export const turnRouter = router({
         throw new TRPCError({ code: 'NOT_FOUND', message: 'Match not found' })
       }
 
-      // Upload photos if provided (NullR2Storage returns null if R2 not configured)
+      // The client only gates the "Skip Photo" button on requirePhotos (MissionSetupScreen /
+      // TurnFlow / PhotoCaptureScreen) — it does not stop a direct API call. Enforce server-side
+      // too, since requirePhotos is stored specifically to make photo evidence mandatory for a
+      // match (e.g. tournament proof-of-play).
+      if (match.requirePhotos) {
+        const hasAnyPhoto = Boolean(
+          input.photoDataUrl || input.yourPhotoDataUrl || input.theirPhotoDataUrl,
+        )
+        if (!hasAnyPhoto) {
+          throw new TRPCError({
+            code: 'BAD_REQUEST',
+            message: 'This match requires a photo for each turn.',
+          })
+        }
+      }
+
+      // Upload photos if provided. Storage.upload() returns null when the storage backend is
+      // unavailable (e.g. the R2 binding isn't configured for this Worker deploy). Previously
+      // that null was persisted silently, so photos were "accepted" by the app but discarded
+      // with no error and no way for the user to know. Fail loudly instead: if the caller
+      // supplied a photo, an upload failure must abort the whole turn.add rather than save a
+      // turn record that claims a photo exists when it does not.
       let photoUrl: string | null = null
       if (input.photoDataUrl) {
         const key = `${input.matchId}/turn-${input.turnNumber}-${Date.now()}.jpg`
         photoUrl = await ctx.storage.upload(key, input.photoDataUrl)
+        if (photoUrl === null) {
+          throw new TRPCError({
+            code: 'INTERNAL_SERVER_ERROR',
+            message: 'Photo storage is unavailable. The turn was not saved — please try again.',
+          })
+        }
       }
       let yourPhotoUrl: string | null = null
       if (input.yourPhotoDataUrl) {
         const key = `${input.matchId}/turn-${input.turnNumber}-your-${Date.now()}.jpg`
         yourPhotoUrl = await ctx.storage.upload(key, input.yourPhotoDataUrl)
+        if (yourPhotoUrl === null) {
+          throw new TRPCError({
+            code: 'INTERNAL_SERVER_ERROR',
+            message: 'Photo storage is unavailable. The turn was not saved — please try again.',
+          })
+        }
       }
       let theirPhotoUrl: string | null = null
       if (input.theirPhotoDataUrl) {
         const key = `${input.matchId}/turn-${input.turnNumber}-their-${Date.now()}.jpg`
         theirPhotoUrl = await ctx.storage.upload(key, input.theirPhotoDataUrl)
+        if (theirPhotoUrl === null) {
+          throw new TRPCError({
+            code: 'INTERNAL_SERVER_ERROR',
+            message: 'Photo storage is unavailable. The turn was not saved — please try again.',
+          })
+        }
       }
 
       const id = generateId()
