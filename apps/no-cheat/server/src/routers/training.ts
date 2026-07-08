@@ -1,9 +1,28 @@
+import type { Db } from '@tabletop-tools/db'
 import { diceSets, trainingExamples, trainingFrames } from '@tabletop-tools/db'
 import { TRPCError } from '@trpc/server'
 import { and, desc, eq } from 'drizzle-orm'
 import { z } from 'zod'
 
+import { keyFromUrl } from '../lib/storage/r2'
 import { protectedProcedure, router } from '../trpc'
+
+/**
+ * Verify `diceSetId` belongs to the calling user and throw FORBIDDEN otherwise.
+ * Mirrors the ownership check already used by saveExamples/saveFrame
+ * (and diceSet.delete/session.start) -- reads on training data must be
+ * scoped the same way writes already are.
+ */
+async function assertOwnsDiceSet(db: Db, diceSetId: string, userId: string) {
+  const [diceSet] = await db
+    .select()
+    .from(diceSets)
+    .where(and(eq(diceSets.id, diceSetId), eq(diceSets.userId, userId)))
+
+  if (!diceSet) {
+    throw new TRPCError({ code: 'FORBIDDEN', message: 'Dice set not found' })
+  }
+}
 
 const exampleInput = z.object({
   label: z.number().int().min(0).max(6),
@@ -67,31 +86,32 @@ export const trainingRouter = router({
     .input(
       z.object({
         diceSetId: z.string().optional(),
-        myOnly: z.boolean().optional(),
         label: z.number().int().min(0).max(6).optional(),
         limit: z.number().int().min(1).max(100).optional().default(50),
         offset: z.number().int().min(0).optional().default(0),
       }),
     )
     .query(async ({ ctx, input }) => {
-      const conditions = []
+      // Always scoped to the caller -- no myOnly opt-in. When a diceSetId is
+      // given, verify the caller owns it (matching saveExamples' write-side
+      // check) instead of silently returning cross-user data.
+      if (input.diceSetId) {
+        await assertOwnsDiceSet(ctx.db, input.diceSetId, ctx.user.id)
+      }
+
+      const conditions = [eq(trainingExamples.userId, ctx.user.id)]
 
       if (input.diceSetId) {
         conditions.push(eq(trainingExamples.diceSetId, input.diceSetId))
-      }
-      if (input.myOnly) {
-        conditions.push(eq(trainingExamples.userId, ctx.user.id))
       }
       if (input.label !== undefined) {
         conditions.push(eq(trainingExamples.label, input.label))
       }
 
-      const where = conditions.length > 0 ? and(...conditions) : undefined
-
       const examples = await ctx.db
         .select()
         .from(trainingExamples)
-        .where(where)
+        .where(and(...conditions))
         .orderBy(desc(trainingExamples.createdAt))
         .limit(input.limit)
         .offset(input.offset)
@@ -106,6 +126,8 @@ export const trainingRouter = router({
       }),
     )
     .query(async ({ ctx, input }) => {
+      await assertOwnsDiceSet(ctx.db, input.diceSetId, ctx.user.id)
+
       const allExamples = await ctx.db
         .select({
           label: trainingExamples.label,
@@ -144,6 +166,13 @@ export const trainingRouter = router({
       }
       if (example.userId !== ctx.user.id) {
         throw new TRPCError({ code: 'FORBIDDEN', message: 'Not your example' })
+      }
+
+      // Delete the R2 object before the row -- see session.delete for the
+      // same fail-loud, objects-before-row rationale.
+      const imageKey = keyFromUrl(example.imageUrl)
+      if (imageKey) {
+        await ctx.storage.delete(imageKey)
       }
 
       await ctx.db.delete(trainingExamples).where(eq(trainingExamples.id, input.id))
@@ -208,6 +237,10 @@ export const trainingRouter = router({
       }),
     )
     .query(async ({ ctx, input }) => {
+      if (input.diceSetId) {
+        await assertOwnsDiceSet(ctx.db, input.diceSetId, ctx.user.id)
+      }
+
       const conditions = [eq(trainingFrames.userId, ctx.user.id)]
       if (input.diceSetId) {
         conditions.push(eq(trainingFrames.diceSetId, input.diceSetId))
@@ -242,6 +275,10 @@ export const trainingRouter = router({
       }),
     )
     .query(async ({ ctx, input }) => {
+      if (input.diceSetId) {
+        await assertOwnsDiceSet(ctx.db, input.diceSetId, ctx.user.id)
+      }
+
       const conditions = [eq(trainingFrames.userId, ctx.user.id)]
       if (input.diceSetId) {
         conditions.push(eq(trainingFrames.diceSetId, input.diceSetId))
@@ -296,6 +333,13 @@ export const trainingRouter = router({
       }
       if (frame.userId !== ctx.user.id) {
         throw new TRPCError({ code: 'FORBIDDEN', message: 'Not your frame' })
+      }
+
+      // Delete the R2 object before the row -- see session.delete for the
+      // same fail-loud, objects-before-row rationale.
+      const imageKey = keyFromUrl(frame.imageUrl)
+      if (imageKey) {
+        await ctx.storage.delete(imageKey)
       }
 
       await ctx.db.delete(trainingFrames).where(eq(trainingFrames.id, input.id))

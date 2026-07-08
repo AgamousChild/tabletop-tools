@@ -36,7 +36,10 @@ afterAll(() => client.close())
 
 const createCaller = createCallerFactory(appRouter)
 
-const nullStorage = { upload: vi.fn().mockResolvedValue('null://discarded') }
+const nullStorage = {
+  upload: vi.fn().mockResolvedValue('null://discarded'),
+  delete: vi.fn().mockResolvedValue(undefined),
+}
 
 const anonCtx = {
   user: null,
