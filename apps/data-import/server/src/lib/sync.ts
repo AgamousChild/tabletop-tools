@@ -7,6 +7,11 @@ import { slugify } from '@tabletop-tools/server-core'
 
 import type { Manifest } from '../types'
 import {
+  CATALOG_TO_FACTION_SLUG,
+  MFM_FACTION_SLUGS,
+  SM_CHAPTERS_WITHOUT_MFM,
+} from './catalogAliases'
+import {
   canonicalDetachmentId,
   type DatasheetRecord,
   type DetachmentAbilityRecord,
@@ -70,37 +75,20 @@ function contentEntitySlug(s: string): string {
  *      catalog (e.g. `Library - Tyranids` → `tyranids`).
  *   5. slug(catalog up to first dash/paren) — fallback for compound names.
  *
- * The alias table is grounded in actual repo enumeration (BSData/wh40k-10e
- * main branch): 11 SM chapter catalogs + Agents of the Imperium are the
- * concrete names that don't slug to a Wahapedia id. Three further catalogs
- * (Chaos Titanicus Traitoris, Library Astartes Heresy Legends, Library
- * Titans) intentionally have no Wahapedia canonical id and stay unresolved.
+ * The alias table (`CATALOG_TO_FACTION_SLUG`, in ./catalogAliases) is
+ * grounded in actual repo enumeration (BSData/wh40k-10e main branch): 11 SM
+ * chapter catalogs + Agents of the Imperium are the concrete names that
+ * don't slug to a Wahapedia id. Three further catalogs (Chaos Titanicus
+ * Traitoris, Library Astartes Heresy Legends, Library Titans) intentionally
+ * have no Wahapedia canonical id and stay unresolved.
  */
-const CATALOG_FACTION_ALIASES: Record<string, string> = {
-  // Space Marines chapters — each catalog is a subfaction of `space-marines`
-  'black templars': 'space-marines',
-  'blood angels': 'space-marines',
-  'dark angels': 'space-marines',
-  deathwatch: 'space-marines',
-  'imperial fists': 'space-marines',
-  'iron hands': 'space-marines',
-  'raven guard': 'space-marines',
-  salamanders: 'space-marines',
-  'space wolves': 'space-marines',
-  ultramarines: 'space-marines',
-  'white scars': 'space-marines',
-  // String drift: Wahapedia calls this `imperial-agents`, BSData says
-  // `Agents of the Imperium`.
-  'agents of the imperium': 'imperial-agents',
-}
-
 function resolveCatalogToCanonicalFactionId(
   catalog: string,
   canonicalIds: Set<string>,
 ): string | null {
   // Alias lookup is case-insensitive on the bare catalog string (after the
   // source-layer `Imperium - ` / `Chaos - ` prefix has already been stripped).
-  const aliased = CATALOG_FACTION_ALIASES[catalog.toLowerCase().trim()]
+  const aliased = CATALOG_TO_FACTION_SLUG[catalog.toLowerCase().trim()]
   if (aliased) return aliased
 
   const candidates = [
@@ -770,67 +758,6 @@ export async function runSync(
     ...(Object.keys(producer).length > 0 ? { producer } : {}),
     ...(contentIdValidation ? { contentIdValidation } : {}),
   }
-}
-
-/**
- * MFM faction slugs that exist in the upstream `BSData/wh40k-11e-mfm` repo as
- * standalone YAML files. Determines which SM chapter / sub-faction BSData
- * catalogs keep their own slug versus rolling up to the parent faction.
- *
- * Hardcoded from the actual MFM repo listing (data/*.yaml minus meta.yaml).
- * Update when MFM adds or removes a faction file. Source registry rule (Rule
- * 1) is upheld because this is presentation-only ID mapping logic — the data
- * still lives in MFM upstream.
- */
-const MFM_FACTION_SLUGS: ReadonlySet<string> = new Set([
-  'adepta-sororitas',
-  'adeptus-custodes',
-  'adeptus-mechanicus',
-  'aeldari',
-  'astra-militarum',
-  'black-templars',
-  'blood-angels',
-  'chaos-daemons',
-  'chaos-knights',
-  'chaos-space-marines',
-  'chaos-titan-legions',
-  'dark-angels',
-  'death-guard',
-  'deathwatch',
-  'drukhari',
-  'emperors-children',
-  'genestealer-cults',
-  'grey-knights',
-  'imperial-agents',
-  'imperial-knights',
-  'leagues-of-votann',
-  'necrons',
-  'orks',
-  'space-marines',
-  'space-wolves',
-  'tau-empire',
-  'thousand-sons',
-  'titan-legions',
-  'tyranids',
-  'world-eaters',
-])
-
-/** SM chapters that have no dedicated MFM YAML — they roll up to `space-marines`. */
-const SM_CHAPTERS_WITHOUT_MFM: ReadonlySet<string> = new Set([
-  'imperial-fists',
-  'iron-hands',
-  'raven-guard',
-  'salamanders',
-  'ultramarines',
-  'white-scars',
-])
-
-/**
- * String drift between BSData catalog naming and MFM faction slugs that the
- * generic suffix-strip + slugify can't bridge.
- */
-const BSDATA_TO_MFM_NAME_ALIASES: Record<string, string> = {
-  'agents of the imperium': 'imperial-agents',
 }
 
 /**
