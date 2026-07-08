@@ -1,47 +1,21 @@
 import type { WeaponAbility, WeaponProfile } from '@tabletop-tools/game-content'
+import { resolveAvg, resolveMax, resolveMin } from '@tabletop-tools/util'
 
 // ── Attack resolution ─────────────────────────────────────────────────────────
 
 /**
  * Parse a dice notation string or flat number to its expected (average) value.
  * Supports: flat integers, D6, 2D6, D3+1, D6-1, etc.
+ *
+ * Delegates to the shared dice-notation parser (D2-07 item 3); default
+ * `onInvalid: 'zero'` preserves this call site's original silent-0
+ * behavior on unrecognised input.
  */
 export function resolveAttacks(attacks: number | string): number {
-  if (typeof attacks === 'number') return attacks
-  const m = /^(\d*)D(\d+)([+-]\d+)?$/i.exec(String(attacks))
-  if (!m) return 0
-  const count = m[1] ? parseInt(m[1]) : 1
-  const sides = parseInt(m[2]!)
-  const mod = m[3] ? parseInt(m[3]) : 0
-  return (count * (1 + sides)) / 2 + mod
+  return resolveAvg(attacks)
 }
 
-/**
- * Returns the minimum possible value for a dice notation or flat number.
- * D6 → 1, 2D6 → 2, D6+1 → 2, flat 3 → 3.
- */
-export function resolveMin(value: number | string): number {
-  if (typeof value === 'number') return value
-  const m = /^(\d*)D(\d+)([+-]\d+)?$/i.exec(String(value))
-  if (!m) return 0
-  const count = m[1] ? parseInt(m[1]) : 1
-  const mod = m[3] ? parseInt(m[3]) : 0
-  return Math.max(1, count + mod)
-}
-
-/**
- * Returns the maximum possible value for a dice notation or flat number.
- * D6 → 6, 2D6 → 12, D3+1 → 4, flat 3 → 3.
- */
-export function resolveMax(value: number | string): number {
-  if (typeof value === 'number') return value
-  const m = /^(\d*)D(\d+)([+-]\d+)?$/i.exec(String(value))
-  if (!m) return 0
-  const count = m[1] ? parseInt(m[1]) : 1
-  const sides = parseInt(m[2]!)
-  const mod = m[3] ? parseInt(m[3]) : 0
-  return count * sides + mod
-}
+export { resolveMax, resolveMin }
 
 // ── Wound target table ────────────────────────────────────────────────────────
 
