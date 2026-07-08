@@ -17,6 +17,7 @@ import { fileURLToPath } from 'node:url'
 
 import { createClient } from '@libsql/client'
 import { createDbFromClient, getFactionAliasMap, getSubfactions } from '@tabletop-tools/db'
+import { slugify as sharedSlugify } from '@tabletop-tools/server-core'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const BCP_DIR = '.local/ingest/bcp'
@@ -68,10 +69,7 @@ const STRUCTURED_PATTERNS: RegExp[] = [
 ]
 
 function slugify(name: string, factionSlug: string): string {
-  return `${factionSlug}:${name
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, '-')
-    .replace(/^-+|-+$/g, '')}`
+  return `${factionSlug}:${sharedSlugify(name)}`
 }
 
 interface DetachmentMatch {
