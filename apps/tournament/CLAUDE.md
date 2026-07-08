@@ -117,12 +117,6 @@ id, tournament_id, round_number, status, created_at
 // pairings
 id, round_id, table_number, player1_id, player2_id, mission, player1_vp, player2_vp, result, reported_by, confirmed, to_override, created_at
 
-// player_elo  (UNIQUE: user_id)
-id, user_id, rating, games_played, updated_at
-
-// elo_history
-id, user_id, pairing_id, rating_before, rating_after, delta, opponent_id, recorded_at
-
 // ranking_metric — catalog of metric keys (wins, losses, battle_points, sos_wins, etc.)
 id, key (UNIQUE), label, description, created_at
 
@@ -136,7 +130,7 @@ id, tournament_id, metric_id (FK→ranking_metric), position, enabled, created_a
 id, bcp_event_id (UNIQUE), name, location, event_date, player_count, game_system, registration_url, raw_data, synced_at
 
 // bcp_registration — consent-gated BCP list submission record
-id, user_id, bcp_event_id, list_id, method (server|agent), status (submitted|failed|pending), consent_at, submitted_at, error_message
+id, user_id, bcp_event_id, list_id, method (server|agent), status (submitted|failed), consent_at, submitted_at
 ```
 
 ---
