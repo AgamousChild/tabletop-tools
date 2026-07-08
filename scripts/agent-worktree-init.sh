@@ -21,13 +21,18 @@ if [ -z "$WORKTREE_ROOT" ]; then
     exit 1
 fi
 
-# Detect if we're on a worktree vs the main checkout.
-GIT_COMMON_DIR="$(git rev-parse --git-common-dir 2>/dev/null)"
-GIT_DIR="$(git rev-parse --git-dir 2>/dev/null)"
-case "$GIT_DIR" in
-    "$GIT_COMMON_DIR"*) IS_WORKTREE=false ;;
-    *)                  IS_WORKTREE=true ;;
-esac
+# Detect if we're on a worktree vs the main checkout. On a linked worktree
+# git-dir is <common>/worktrees/<name>, which is a strict PREFIX extension of
+# git-common-dir — so a prefix/glob match reports every worktree as the main
+# checkout. Only exact equality means main checkout. --path-format=absolute
+# keeps both sides comparable (git can otherwise mix relative and absolute).
+GIT_COMMON_DIR="$(git rev-parse --path-format=absolute --git-common-dir 2>/dev/null)"
+GIT_DIR="$(git rev-parse --path-format=absolute --git-dir 2>/dev/null)"
+if [ "$GIT_DIR" = "$GIT_COMMON_DIR" ]; then
+    IS_WORKTREE=false
+else
+    IS_WORKTREE=true
+fi
 
 echo ""
 echo "════════════════════════════════════════════════════════════════════════"
