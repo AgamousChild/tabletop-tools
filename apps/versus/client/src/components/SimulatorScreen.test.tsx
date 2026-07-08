@@ -3,7 +3,6 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { SimulatorScreen } from './SimulatorScreen'
 
-const mockSave = vi.fn()
 const mockSaveV2 = vi.fn()
 
 vi.mock('../lib/auth', () => ({
@@ -31,20 +30,6 @@ vi.mock('../lib/useSimulateV2', () => ({
 
 vi.mock('../lib/trpc', () => ({
   trpc: {
-    simulate: {
-      save: {
-        useMutation: () => ({ mutate: mockSave }),
-      },
-      history: {
-        useQuery: () => ({ data: [] }),
-      },
-      lookup: {
-        useQuery: () => ({ data: null }),
-      },
-      delete: {
-        useMutation: () => ({ mutate: vi.fn() }),
-      },
-    },
     simulateV2: {
       history: {
         useQuery: () => ({ data: [] }),
@@ -54,7 +39,6 @@ vi.mock('../lib/trpc', () => ({
       },
     },
     useUtils: () => ({
-      simulate: { history: { invalidate: vi.fn() } },
       simulateV2: { history: { invalidate: vi.fn() } },
     }),
   },
@@ -144,7 +128,6 @@ vi.mock('../lib/useGameData', () => ({
 }))
 
 beforeEach(() => {
-  mockSave.mockReset()
   mockSaveV2.mockReset()
 })
 

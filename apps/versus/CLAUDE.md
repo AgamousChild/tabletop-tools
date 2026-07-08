@@ -29,7 +29,7 @@ you didn't know to ask.
                  | tRPC over HTTP
 +----------------v-------------------+
 |  Tier 2: tRPC Server               |
-|  - Simulate router (save/history)  |
+|  - simulateV2 router (save/history)|
 |  - SQLite via Turso                |
 |  - Base infra from server-core     |
 +------------------------------------+
@@ -105,8 +105,10 @@ source          TEXT NOT NULL  -- 'weapon_ability' | 'special_rule' | 'leader'
 key             TEXT NOT NULL  -- 'LETHAL_HITS', 'SUSTAINED_HITS', etc.
 value           TEXT           -- JSON-stringified numeric or null for boolean flags
 
-// simulations  (DEPRECATED — legacy JSON-blob table, kept for backward compat)
-// Use simulation/simulation_weapon/simulation_modifier instead.
+// simulations  (RETIRED — v1 router deleted per W2 roadmap Phase 1.2/D2-03;
+// table drop deferred to a follow-up migration PR by design. No router reads
+// or writes it. Use simulation/simulation_weapon/simulation_modifier instead.
+// See wargame/w2/95-consolidation-roadmap.md.)
 ```
 
 **Attack-count invariant:** `total_attacks = model_count × weapons_per_model × attacks_per_weapon`
@@ -122,12 +124,11 @@ simulateV2.save({ attackerName, defenderName, weapons, modifiers, ... }) -> { id
 simulateV2.history()     -> simulation[] with weapons[]
 simulateV2.get({ id })   -> simulation with weapons[] + modifiers[]
 simulateV2.delete({ id }) -> { success: true }
-
-// simulate (DEPRECATED — legacy JSON-blob router, kept for backward compat)
-simulate.save({ attackerId, defenderId, result })  -> simulationId
-simulate.history()                                 -> simulation[]
-simulate.lookup({ configHash })                    -> cached result or null
 ```
+
+The v1 `simulate` router (JSON-blob save/history/lookup) was retired per W2 roadmap
+Phase 1.2/D2-03 — zero client callers besides the cache-lookup UI, which is gone too.
+See `wargame/w2/95-consolidation-roadmap.md`.
 
 Unit selection and simulation computation happen entirely client-side using IndexedDB data
 and the rules pipeline in `client/src/lib/rules/pipeline.ts`.
@@ -164,25 +165,26 @@ simulate(attacker, defender):
 
 ## Testing
 
-**137 tests** (8 server + 129 client), all passing.
+See each package's test files for current coverage — counts drift as tests are added; this
+doc points at the suites rather than restating numbers (D2-08 policy, root CLAUDE.md).
 
 ```
 client/src/
   lib/rules/
-    pipeline.ts / pipeline.test.ts     <- rules engine: every weapon ability, modifier interaction, ANTI (66 tests)
+    pipeline.ts / pipeline.test.ts     <- rules engine: every weapon ability, modifier interaction, ANTI
   lib/
-    modelCount.test.ts                 <- model count parsing (6 tests)
-    useGameData.test.tsx               <- IndexedDB hook tests (4 tests)
+    modelCount.test.ts                 <- model count parsing
+    useGameData.test.tsx               <- IndexedDB hook tests
   components/
-    SimulatorScreen.test.tsx           <- 10 tests: title, attacker/defender, weapon form, stats, results, save, special rules, unit picker
-    SimulationResult.test.tsx          <- 9 tests: names, wounds, models, best/worst, save, survivors
-    UnitProfileCard.test.tsx           <- 8 tests: stat display, invuln, fnp
-    SpecialRulesEditor.test.tsx        <- 9 tests: add/remove abilities
-    UnitSelector.test.tsx              <- 8 tests: faction/unit selection
-    WeaponSelector.test.tsx            <- 9 tests: weapon selection, attack type toggle
+    SimulatorScreen.test.tsx           <- title, attacker/defender, weapon form, stats, results, save, special rules, unit picker
+    SimulationResult.test.tsx          <- names, wounds, models, best/worst, save, survivors
+    UnitProfileCard.test.tsx           <- stat display, invuln, fnp
+    SpecialRulesEditor.test.tsx        <- add/remove abilities
+    UnitSelector.test.tsx              <- faction/unit selection
+    WeaponSelector.test.tsx            <- weapon selection, attack type toggle
 server/src/
   routers/
-    simulate.test.ts                   <- save + history router tests
+    simulateV2.test.ts                 <- normalized save/history/get/delete router tests
 server/src/server.test.ts              <- HTTP session integration tests
 ```
 
@@ -190,6 +192,6 @@ The rules engine is fully unit-tested. Every weapon ability, every modifier inte
 The pipeline runs client-side — moved from server to client as it's pure math with zero Node.js deps.
 
 ```bash
-cd apps/versus/server && pnpm test   # 8 server tests
-cd apps/versus/client && pnpm test   # 113 client tests
+cd apps/versus/server && pnpm test
+cd apps/versus/client && pnpm test
 ```
