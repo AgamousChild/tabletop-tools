@@ -107,13 +107,18 @@ export function ManageTournament({ tournamentId, onBack }: Props) {
             <h3 className="text-sm font-semibold text-slate-400 uppercase">
               Active Players ({activePlayers.length})
             </h3>
-            <button
-              onClick={() => seedPlayers.mutate({ tournamentId, count: 8 })}
-              disabled={seedPlayers.isPending}
-              className="text-xs text-slate-500 hover:text-slate-300 border border-slate-700 rounded px-2 py-1"
-            >
-              {seedPlayers.isPending ? 'Loading...' : 'Load Test Players'}
-            </button>
+            {/* Rule 7: seedTestPlayers is gated server-side to reject in production.
+                Hiding the button in production builds avoids offering a control
+                that always fails; the server remains the source of truth for the gate. */}
+            {!import.meta.env.PROD && (
+              <button
+                onClick={() => seedPlayers.mutate({ tournamentId, count: 8 })}
+                disabled={seedPlayers.isPending}
+                className="text-xs text-slate-500 hover:text-slate-300 border border-slate-700 rounded px-2 py-1"
+              >
+                {seedPlayers.isPending ? 'Loading...' : 'Load Test Players'}
+              </button>
+            )}
           </div>
           {activePlayers.map((p) => {
             const playerCards = cards.filter((c) => c.playerId === p.id)

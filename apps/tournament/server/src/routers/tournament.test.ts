@@ -245,10 +245,26 @@ afterAll(() => client.close())
 
 const createCaller = createCallerFactory(appRouter)
 const req = new Request('http://localhost')
-const toCtx = { user: { id: 'to-1', email: 'alice@example.com', name: 'Alice' }, req, db }
-const p1Ctx = { user: { id: 'player-1', email: 'bob@example.com', name: 'Bob' }, req, db }
-const p2Ctx = { user: { id: 'player-2', email: 'carol@example.com', name: 'Carol' }, req, db }
-const unauthCtx = { user: null, req, db }
+const environment = 'development'
+const toCtx = {
+  user: { id: 'to-1', email: 'alice@example.com', name: 'Alice' },
+  req,
+  db,
+  environment,
+}
+const p1Ctx = {
+  user: { id: 'player-1', email: 'bob@example.com', name: 'Bob' },
+  req,
+  db,
+  environment,
+}
+const p2Ctx = {
+  user: { id: 'player-2', email: 'carol@example.com', name: 'Carol' },
+  req,
+  db,
+  environment,
+}
+const unauthCtx = { user: null, req, db, environment }
 
 describe('tournament.create', () => {
   it('creates a tournament and returns it', async () => {
@@ -639,7 +655,12 @@ describe('player.myProfile', () => {
   })
 
   it('returns empty profile for user with no tournaments', async () => {
-    const freshCtx = { user: { id: 'to-1', email: 'alice@example.com', name: 'Alice' }, req, db }
+    const freshCtx = {
+      user: { id: 'to-1', email: 'alice@example.com', name: 'Alice' },
+      req,
+      db,
+      environment,
+    }
     const caller = createCaller(freshCtx)
     const profile = await caller.player.myProfile()
     // Alice is a TO, check that the profile returns at minimum

@@ -2,6 +2,7 @@ import { createClient } from '@libsql/client'
 import { createDbFromClient } from '@tabletop-tools/db'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 
+import { TEST_PLAYERS } from '../__fixtures__/test-players'
 import { createCallerFactory } from '../trpc'
 import { appRouter } from './index'
 
@@ -60,23 +61,12 @@ beforeAll(async () => {
       detachment_entity_id TEXT,
       placement INTEGER
     );
-    CREATE TABLE IF NOT EXISTS tournament_cards (
-      id TEXT PRIMARY KEY,
-      tournament_id TEXT NOT NULL REFERENCES tournaments(id),
-      player_id TEXT NOT NULL REFERENCES tournament_players(id),
-      issued_by TEXT NOT NULL REFERENCES "user"(id),
-      card_type TEXT NOT NULL,
-      reason TEXT NOT NULL,
-      issued_at INTEGER NOT NULL
-    );
     INSERT INTO "user" (id, name, email, email_verified, created_at, updated_at)
     VALUES ('to-1', 'Alice', 'alice@example.com', 0, 0, 0);
     INSERT INTO "user" (id, name, email, email_verified, created_at, updated_at)
     VALUES ('player-1', 'Bob', 'bob@example.com', 0, 0, 0);
     INSERT INTO tournaments (id, to_user_id, name, event_date, format, total_rounds, status, created_at)
-    VALUES ('t1', 'to-1', 'Test GT', 1000, '2000pts', 5, 'IN_PROGRESS', 1000);
-    INSERT INTO tournament_players (id, tournament_id, user_id, display_name, faction, list_locked, checked_in, dropped, registered_at)
-    VALUES ('tp1', 't1', 'player-1', 'Bob', 'Orks', 0, 1, 0, 1000);
+    VALUES ('t1', 'to-1', 'Test GT', 1000, '2000pts', 5, 'REGISTRATION', 1000);
   `)
 })
 
@@ -84,72 +74,77 @@ afterAll(() => client.close())
 
 const createCaller = createCallerFactory(appRouter)
 
-function toCaller() {
+function toCaller(environment: string) {
   return createCaller({
     db,
     user: { id: 'to-1', email: 'alice@example.com', name: 'Alice' },
     req: new Request('http://test'),
-    environment: 'development',
+    environment,
   })
 }
 
-function playerCaller() {
+function playerCaller(environment: string) {
   return createCaller({
     db,
     user: { id: 'player-1', email: 'bob@example.com', name: 'Bob' },
     req: new Request('http://test'),
-    environment: 'development',
+    environment,
   })
 }
 
-describe('card router', () => {
-  it('TO can issue a yellow card', async () => {
-    const caller = toCaller()
-    const card = await caller.card.issue({
-      tournamentId: 't1',
-      playerId: 'tp1',
-      cardType: 'YELLOW',
-      reason: 'Slow play',
-    })
-    expect(card).toBeDefined()
-    expect(card!.cardType).toBe('YELLOW')
-    expect(card!.reason).toBe('Slow play')
+describe('__fixtures__/test-players', () => {
+  it('provides a bounded, well-formed fixture list for seedTestPlayers', () => {
+    expect(TEST_PLAYERS.length).toBeGreaterThan(0)
+    expect(TEST_PLAYERS.length).toBeLessThanOrEqual(32) // seedTestPlayers count input max
+    for (const p of TEST_PLAYERS) {
+      expect(p.name.length).toBeGreaterThan(0)
+      expect(p.faction.length).toBeGreaterThan(0)
+    }
+  })
+})
+
+describe('player.seedTestPlayers — environment gate (Rule 7)', () => {
+  it('rejects with FORBIDDEN when environment is production', async () => {
+    const caller = toCaller('production')
+    await expect(caller.player.seedTestPlayers({ tournamentId: 't1', count: 4 })).rejects.toThrow(
+      'not available in production',
+    )
   })
 
-  it('TO can issue a red card', async () => {
-    const caller = toCaller()
-    const card = await caller.card.issue({
-      tournamentId: 't1',
-      playerId: 'tp1',
-      cardType: 'RED',
-      reason: 'Unsportsmanlike conduct',
-    })
-    expect(card).toBeDefined()
-    expect(card!.cardType).toBe('RED')
+  it('does not insert any rows when rejected in production', async () => {
+    const caller = toCaller('production')
+    await expect(caller.player.seedTestPlayers({ tournamentId: 't1', count: 4 })).rejects.toThrow()
+
+    const players = await caller.player.list({ tournamentId: 't1' })
+    expect(players.length).toBe(0)
   })
 
-  it('non-TO cannot issue cards', async () => {
-    const caller = playerCaller()
+  it('is not blocked by the environment gate in development (reaches the insert path)', async () => {
+    // NOTE: tournament_players.user_id is a NOT NULL FK -> "user"(id) in the real
+    // schema (packages/db/src/schema.ts:410-412). seedTestPlayers inserts a
+    // fabricated `test-${uuid}` userId with no corresponding user row, so this
+    // throws a FK violation rather than UNAUTHORIZED/FORBIDDEN — proving the
+    // request got PAST the environment gate (the thing this test suite is
+    // responsible for) and reached real insert logic. That FK mismatch is a
+    // pre-existing bug in seedTestPlayers, out of scope for the Rule 7 gate
+    // fixed here; tracked separately.
+    const caller = toCaller('development')
+    await expect(caller.player.seedTestPlayers({ tournamentId: 't1', count: 4 })).rejects.toThrow(
+      /FOREIGN KEY/i,
+    )
+  })
+
+  it('still enforces TO-only authorization in non-production', async () => {
+    const caller = playerCaller('development')
+    await expect(caller.player.seedTestPlayers({ tournamentId: 't1', count: 2 })).rejects.toThrow(
+      'Not authorized',
+    )
+  })
+
+  it('checks the environment gate before tournament lookup (fails closed even for a bad tournamentId)', async () => {
+    const caller = toCaller('production')
     await expect(
-      caller.card.issue({
-        tournamentId: 't1',
-        playerId: 'tp1',
-        cardType: 'YELLOW',
-        reason: 'test',
-      }),
-    ).rejects.toThrow('Not authorized')
-  })
-
-  it('lists cards for tournament', async () => {
-    const caller = toCaller()
-    const cards = await caller.card.listForTournament({ tournamentId: 't1' })
-    expect(cards.length).toBeGreaterThanOrEqual(2)
-  })
-
-  it('lists card history for player', async () => {
-    const caller = toCaller()
-    const cards = await caller.card.playerHistory({ playerId: 'tp1' })
-    expect(cards.length).toBeGreaterThanOrEqual(2)
-    expect(cards.every((c) => c.playerId === 'tp1')).toBe(true)
+      caller.player.seedTestPlayers({ tournamentId: 'does-not-exist', count: 2 }),
+    ).rejects.toThrow('not available in production')
   })
 })

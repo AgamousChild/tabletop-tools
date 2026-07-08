@@ -216,10 +216,12 @@ ELO updates when the TO closes a round -- all results committed together.
 
 ## Testing
 
-**158 tests** (100 server + 58 client), all passing.
+**165 tests** (105 server + 60 client), all passing.
 
 ```
 server/src/
+  __fixtures__/
+    test-players.ts                        <- TEST_PLAYERS fixture (dev/test only) for player.seedTestPlayers
   lib/
     swiss/pairings.ts / .test.ts           <- Swiss algorithm: round 1, mid-event, odd players, rematches, byes
     standings/compute.ts / .test.ts        <- tiebreaker ordering, SOS calculation
@@ -227,6 +229,7 @@ server/src/
     result/derive.ts / .test.ts            <- result derivation from VP
   routers/
     tournament.test.ts                     <- 29 tests: CRUD, status, standings, exportToMeta, placement freeze
+    player.test.ts                         <- 5 tests: seedTestPlayers environment gate (Rule 7), auth
     metric.test.ts                         <- 9 tests: catalog CRUD, getStack, setStack
     passthrough.test.ts                    <- 7 tests: list, get, upsert, search
     bcp-registration.test.ts               <- 9 tests: record, updateStatus, listMine, getForEvent, auth
@@ -237,12 +240,23 @@ server/src/
 client/src/
   components/
     TournamentScreen.test.tsx              <- 32 tests: list, create, detail, standings, registration, rounds
-    ManageTournament.test.tsx              <- 14 tests: tabs, players, cards, awards, reinstate
+    ManageTournament.test.tsx              <- 16 tests: tabs, players, cards, awards, reinstate, seed-players PROD gate
   lib/
     router.test.ts                         <- 12 tests: parseHash for all hash routes
 ```
 
 ```bash
-cd apps/tournament/server && pnpm test   # 100 server tests
-cd apps/tournament/client && pnpm test   # 58 client tests
+cd apps/tournament/server && pnpm test   # 105 server tests
+cd apps/tournament/client && pnpm test   # 60 client tests
 ```
+
+### Test data seeding (Rule 7)
+
+`player.seedTestPlayers` inserts fixture players from `server/src/__fixtures__/test-players.ts`
+for TO-driven local testing. Gated server-side: rejects with `FORBIDDEN` when
+`ctx.environment === 'production'`. `ctx.environment` is threaded from the Worker's
+`ENVIRONMENT` var (`wrangler.toml` sets it to `"production"` for the deployed Worker;
+`worker.ts` defaults to `'production'` if unset — fail closed). Local dev (`index.ts`) and
+router-level tests default to `'development'`. The "Load Test Players" button in
+`ManageTournament` is hidden when `import.meta.env.PROD` is true, so the control never
+appears where it's guaranteed to be rejected.
