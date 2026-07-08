@@ -1432,6 +1432,47 @@ export const missionGameState = sqliteTable(
   ],
 )
 
+// ── Battle size lookup (tournament-standard points brackets) ─────────────────
+// Canonical points-bracket taxonomy for 11th edition matched play. Was forked
+// ×4 (list-builder ×3, bcp-scraper ×1) with a real semantic divergence — the
+// bcp-scraper fork used a 4-name/4-points mapping (Combat Patrol 500 /
+// Incursion 1000 / Strike Force 2000 / Onslaught 3000+) while list-builder's
+// used a 4-row/3-name mapping (Incursion 500 / Strike Force 1000 / Strike
+// Force 2000 / Onslaught 3000). Grounded against
+// docs/superpowers/specs/2026-05-26-11th-edition-game-flow.md §1.1 (Incursion
+// ~1,000 pts, Strike Force 2,000 pts) and this package's own `list.battle_size`
+// enum (list-schema.ts — already 4 distinct names: Combat Patrol / Incursion /
+// Strike Force / Onslaught). Both sources confirm the bcp-scraper convention;
+// see wargame/w2/decisions/D2-04-data-in-code-cleanup.md items 4-7.
+//
+// Structural tournament-format data (points brackets, not GW datasheet
+// content) — same class as scoring_mission/game_state above and
+// dim_dataslate/dim_tournament_pack/dim_edition, seeded the same way (see
+// packages/db/src/seed-battle-size.ts).
+export const battleSize = sqliteTable('battle_size', {
+  id: text('id').primaryKey(), // slug, e.g. 'combat-patrol'
+  name: text('name').notNull(), // canonical display name, e.g. 'Combat Patrol'
+  points: integer('points').notNull(), // points cap for this bracket
+  maxDuplicates: integer('max_duplicates').notNull(), // non-Battleline datasheet duplicate limit
+  description: text('description'), // short blurb (UI display)
+  sortOrder: integer('sort_order').notNull().default(0),
+})
+
+// Alternate names for a battle_size row (e.g. a source that spells
+// 'Combat Patrol' differently, or a future edition renaming a bracket).
+// Empty today — the table exists so a divergent-name source can be
+// reconciled via a data row instead of a second code fork.
+export const battleSizeAlias = sqliteTable(
+  'battle_size_alias',
+  {
+    alias: text('alias').primaryKey(),
+    battleSizeId: text('battle_size_id')
+      .notNull()
+      .references(() => battleSize.id, { onDelete: 'cascade' }),
+  },
+  (table) => [index('idx_battle_size_alias_battle_size').on(table.battleSizeId)],
+)
+
 // === Phase 2 list tables ===
 export { list, listUnit, listUnitLoadout, listUnitLoadoutWeapon } from './list-schema'
 

@@ -493,6 +493,30 @@ export function useIncludeLegends() {
   return useStoreQuery(() => getIncludeLegends(), [], false)
 }
 
+// ── Battle size (points bracket) hook ───────────────────────────────────────
+// battle_size lives server-side in packages/db (single canonical registry —
+// Rule 1), not in this package's IndexedDB store. This hook takes a fetcher
+// so each app supplies its own tRPC call (game-data-store has no network/
+// tRPC client of its own — see packages/db/src/seed-battle-size.ts for the
+// server-side getAllBattleSizes/resolveBattleSize/battleSizeForPoints query
+// helpers a router would call). Not yet wired to a live endpoint by any app
+// — Phase 3 of the W2 roadmap D2-04 battle-size consolidation points the
+// consumer call sites (list-builder, bcp-scraper) at this shared shape.
+
+export interface BattleSize {
+  id: string
+  name: string
+  points: number
+  maxDuplicates: number
+  description: string
+  sortOrder: number
+}
+
+/** Load the canonical battle-size list via an app-supplied fetcher (e.g. a tRPC query). */
+export function useBattleSizes(fetcher: () => Promise<BattleSize[]>) {
+  return useStoreQuery(fetcher, [], [] as BattleSize[])
+}
+
 // ── Legends detection ───────────────────────────────────────────────────────
 
 /** Returns a Set of datasheet IDs that are Legends units.

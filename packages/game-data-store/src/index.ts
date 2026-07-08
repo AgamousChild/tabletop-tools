@@ -1,7 +1,9 @@
+export type { BattleSize } from './hooks.js'
 export {
   convertWargearToWeapons,
   useAllDatasheets,
   useAllUnitKeywords,
+  useBattleSizes,
   useDatasheetDetachmentAbilities,
   useDatasheetEnhancements,
   useDatasheetFactions,
