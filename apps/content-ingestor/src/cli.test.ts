@@ -1,13 +1,17 @@
-import { describe, it, expect } from 'vitest'
 import { execSync } from 'node:child_process'
+import { createRequire } from 'node:module'
 import { join, resolve } from 'node:path'
 
+import { describe, expect, it } from 'vitest'
+
 const CLI = resolve(join(import.meta.dirname ?? __dirname, 'cli.ts'))
-const TSX = resolve(join(import.meta.dirname ?? __dirname, '..', 'node_modules', '.bin', 'tsx'))
+// Resolve tsx's CLI entry via module resolution — with node-linker=hoisted the
+// .bin shim's directory depends on workspace-wide hoisting, so a fixed path breaks.
+const TSX_CLI = createRequire(import.meta.url).resolve('tsx/cli')
 
 function runCLI(args: string): string {
   try {
-    return execSync(`"${TSX}" "${CLI}" ${args}`, {
+    return execSync(`"${process.execPath}" "${TSX_CLI}" "${CLI}" ${args}`, {
       encoding: 'utf-8',
       timeout: 15_000,
       env: { ...process.env, NO_COLOR: '1' },

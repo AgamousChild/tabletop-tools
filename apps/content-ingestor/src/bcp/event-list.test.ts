@@ -1,13 +1,10 @@
-import { describe, it, expect, beforeEach, afterEach } from 'vitest'
-import { mkdirSync, rmSync, existsSync } from 'node:fs'
-import { join } from 'node:path'
+import { existsSync, mkdirSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
-import {
-  saveEventList,
-  loadEventList,
-  BCP_SEARCH_URL,
-  type BCPEvent,
-} from './event-list'
+import { join } from 'node:path'
+
+import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+
+import { BCP_SEARCH_URL, type BCPEvent, loadEventList, saveEventList } from './event-list'
 
 const SAMPLE_EVENTS: BCPEvent[] = [
   {
@@ -123,8 +120,8 @@ describe('BCP_SEARCH_URL', () => {
     expect(BCP_SEARCH_URL).toContain('numberOfRounds=5')
   })
 
-  it('sorts ascending by event date', () => {
-    expect(BCP_SEARCH_URL).toContain('sortAsc=true')
+  it('sorts descending by event date (newest first, per d113414)', () => {
+    expect(BCP_SEARCH_URL).toContain('sortAsc=false')
     expect(BCP_SEARCH_URL).toContain('sortKey=eventDate')
   })
 
