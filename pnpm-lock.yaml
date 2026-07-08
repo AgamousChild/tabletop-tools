@@ -1140,6 +1140,9 @@ importers:
       '@tabletop-tools/ui':
         specifier: workspace:*
         version: link:../../../packages/ui
+      '@tabletop-tools/util':
+        specifier: workspace:*
+        version: link:../../../packages/util
       '@tanstack/react-query':
         specifier: ^5.56.0
         version: 5.90.21(react@18.3.1)
@@ -1219,6 +1222,9 @@ importers:
       '@tabletop-tools/server-core':
         specifier: workspace:*
         version: link:../../../packages/server-core
+      '@tabletop-tools/util':
+        specifier: workspace:*
+        version: link:../../../packages/util
       '@trpc/server':
         specifier: ^11.0.0
         version: 11.10.0(typescript@5.9.3)
@@ -1468,6 +1474,12 @@ importers:
       vitest:
         specifier: ^2.0.0
         version: 2.1.9(@types/node@20.19.33)(jsdom@25.0.1(canvas@2.11.2))
+
+  packages/util:
+    devDependencies:
+      vitest:
+        specifier: ^2.0.0
+        version: 2.1.9(@types/node@20.19.33)(jsdom@28.1.0(@noble/hashes@2.0.1)(canvas@3.1.0))
 
 packages:
 
