@@ -6,8 +6,8 @@ import {
   diceSets,
   ingestContent,
   ingestSources,
-  lists,
-  listUnits,
+  list,
+  listUnit,
   matches,
   metaEvents,
   playerGlicko,
@@ -68,8 +68,8 @@ export const statsRouter = router({
         simulations: await count(ctx.db, simulations),
       },
       listBuilder: {
-        lists: await count(ctx.db, lists),
-        units: await count(ctx.db, listUnits),
+        lists: await count(ctx.db, list),
+        units: await count(ctx.db, listUnit),
       },
       gameTracker: {
         matches: await count(ctx.db, matches),
@@ -150,11 +150,11 @@ export const statsRouter = router({
     activity.push({ app: 'versus', total: vsTotal.count, recent: vsRecent.count })
 
     // List Builder: lists
-    const [lbTotal] = await ctx.db.select({ count: sql<number>`count(*)` }).from(lists)
+    const [lbTotal] = await ctx.db.select({ count: sql<number>`count(*)` }).from(list)
     const [lbRecent] = await ctx.db
       .select({ count: sql<number>`count(*)` })
-      .from(lists)
-      .where(gt(lists.createdAt, sevenDaysAgo))
+      .from(list)
+      .where(gt(list.createdAt, sevenDaysAgo))
     activity.push({ app: 'list-builder', total: lbTotal.count, recent: lbRecent.count })
 
     // Game Tracker: matches
