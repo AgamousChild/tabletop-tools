@@ -102,22 +102,32 @@ beforeAll(async () => {
       result TEXT NOT NULL,
       created_at INTEGER NOT NULL
     );
-    CREATE TABLE IF NOT EXISTS lists (
+    CREATE TABLE IF NOT EXISTS list (
       id TEXT PRIMARY KEY,
       user_id TEXT NOT NULL REFERENCES "user"(id),
-      faction TEXT NOT NULL,
       name TEXT NOT NULL,
-      total_pts INTEGER NOT NULL DEFAULT 0,
+      description TEXT,
+      author TEXT,
+      edition TEXT NOT NULL DEFAULT '11th',
+      faction_id TEXT,
+      subfaction_id TEXT,
+      detachment_id TEXT,
+      battle_size TEXT NOT NULL DEFAULT 'unknown',
+      total_points INTEGER NOT NULL DEFAULT 0,
+      dataslate_id TEXT,
+      source TEXT NOT NULL DEFAULT 'list-builder',
       created_at INTEGER NOT NULL,
       updated_at INTEGER NOT NULL
     );
-    CREATE TABLE IF NOT EXISTS list_units (
+    CREATE TABLE IF NOT EXISTS list_unit (
       id TEXT PRIMARY KEY,
-      list_id TEXT NOT NULL REFERENCES lists(id),
-      unit_content_id TEXT NOT NULL,
-      unit_name TEXT NOT NULL,
-      unit_points INTEGER NOT NULL,
-      count INTEGER NOT NULL DEFAULT 1
+      list_id TEXT NOT NULL REFERENCES list(id),
+      datasheet_id TEXT,
+      enhancement_id TEXT,
+      is_warlord INTEGER NOT NULL DEFAULT 0,
+      points INTEGER NOT NULL DEFAULT 0,
+      attached_to_unit_id TEXT,
+      attach_role TEXT
     );
     CREATE TABLE IF NOT EXISTS unit_ratings (
       id TEXT PRIMARY KEY,
@@ -318,8 +328,8 @@ async function clearAllData() {
     DELETE FROM turns;
     DELETE FROM matches;
     DELETE FROM unit_ratings;
-    DELETE FROM list_units;
-    DELETE FROM lists;
+    DELETE FROM list_unit;
+    DELETE FROM list;
     DELETE FROM simulations;
     DELETE FROM rolls;
     DELETE FROM sessions;
@@ -411,9 +421,9 @@ describe('stats router', () => {
 
       // List builder data
       await client.executeMultiple(`
-        INSERT INTO lists (id, user_id, faction, name, total_pts, created_at, updated_at) VALUES ('l1', 'u1', 'Space Marines', 'My list', 2000, ${now}, ${now});
-        INSERT INTO list_units (id, list_id, unit_content_id, unit_name, unit_points) VALUES ('lu1', 'l1', 'uc1', 'Intercessors', 100);
-        INSERT INTO list_units (id, list_id, unit_content_id, unit_name, unit_points) VALUES ('lu2', 'l1', 'uc2', 'Hellblaster', 200);
+        INSERT INTO list (id, user_id, name, total_points, created_at, updated_at) VALUES ('l1', 'u1', 'My list', 2000, ${now}, ${now});
+        INSERT INTO list_unit (id, list_id, points) VALUES ('lu1', 'l1', 100);
+        INSERT INTO list_unit (id, list_id, points) VALUES ('lu2', 'l1', 200);
       `)
 
       // Game tracker data
