@@ -1,4 +1,10 @@
-import { pairings, rounds, tournamentPlayers, tournaments } from '@tabletop-tools/db'
+import {
+  getRandomMission,
+  pairings,
+  rounds,
+  tournamentPlayers,
+  tournaments,
+} from '@tabletop-tools/db'
 import { TRPCError } from '@trpc/server'
 import { and, eq, inArray } from 'drizzle-orm'
 import { z } from 'zod'
@@ -7,18 +13,10 @@ import { computeStandings } from '../lib/standings/compute'
 import { generatePairings } from '../lib/swiss/pairings'
 import { protectedProcedure, router } from '../trpc'
 
-const MISSIONS = [
-  'Sweeping Engagement',
-  'Priority Targets',
-  'Scorched Earth',
-  'Search and Destroy',
-  'Take and Hold',
-  'Vital Ground',
-]
-
-function randomMission(): string {
-  return MISSIONS[Math.floor(Math.random() * MISSIONS.length)]
-}
+// Mission pool lives in the scoring_mission table (packages/db/src/missions.ts) —
+// see wargame/w2/decisions/D2-04-data-in-code-cleanup.md item #2. Fails loudly
+// (D2-06) if the catalog hasn't been seeded rather than silently pairing with
+// an undefined mission.
 
 export const roundRouter = router({
   create: protectedProcedure
@@ -135,7 +133,7 @@ export const roundRouter = router({
       const result = generatePairings(swissPlayers, prevSwissPairings)
 
       // Insert pairings into DB
-      const mission = randomMission()
+      const mission = await getRandomMission(ctx.db)
       const insertedPairings: (typeof pairings.$inferSelect)[] = []
 
       for (const p of result.pairings) {
