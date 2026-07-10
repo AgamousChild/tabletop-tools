@@ -215,15 +215,26 @@ interface GlickoRow {
  * games (rating 1500, RD 200) built from each player's win/loss/draw
  * counts when the event has no pairing-level data (CSV imports without
  * round detail).
+ *
+ * Exported (not just called internally by upsertMetaEvent) so callers that
+ * need to recompute ratings for an *already-stored* event — e.g. new-meta's
+ * admin.recomputeGlicko, which reruns every event from scratch after
+ * clearing playerGlicko/glickoHistory — reuse this same implementation
+ * instead of forking a second one.
+ *
+ * Returns the number of players actually updated (skips players with zero
+ * games — see the `games.length === 0` continue below) so callers that
+ * report a total (recomputeGlicko's `playersUpdated`) don't need their own
+ * copy of that skip condition.
  */
-async function runGlickoForEvent(db: Db, eventId: string): Promise<void> {
+export async function runGlickoForEvent(db: Db, eventId: string): Promise<number> {
   const eventPlayers = await db
     .select()
     .from(metaEventPlayers)
     .where(eq(metaEventPlayers.eventId, eventId))
     .all()
 
-  if (eventPlayers.length === 0) return
+  if (eventPlayers.length === 0) return 0
 
   const eventPairings = await db
     .select()
@@ -288,6 +299,7 @@ async function runGlickoForEvent(db: Db, eventId: string): Promise<void> {
   }
 
   const hasPairings = eventPairings.length > 0
+  let updated = 0
 
   for (const ep of eventPlayers) {
     const glickoId = metaPlayerIdToGlickoId.get(ep.id)
@@ -396,5 +408,9 @@ async function runGlickoForEvent(db: Db, eventId: string): Promise<void> {
       volatility: result.volatility,
       gamesPlayed: current.gamesPlayed + games.length,
     })
+
+    updated++
   }
+
+  return updated
 }

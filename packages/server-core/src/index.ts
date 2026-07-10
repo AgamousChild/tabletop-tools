@@ -5,6 +5,7 @@ export { buildCubeForEvents, type EventRow, type Frame, generateFrames } from '.
 export {
   type MetaIngestPairing,
   type MetaIngestPlayer,
+  runGlickoForEvent,
   upsertMetaEvent,
   type UpsertMetaEventInput,
   type UpsertMetaEventResult,

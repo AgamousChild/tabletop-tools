@@ -1,25 +1,53 @@
-import {
-  authUsers,
-  glickoHistory,
-  metaEventPlayers,
-  metaEvents,
-  metaPairings,
-  playerGlicko,
-} from '@tabletop-tools/db'
-import { resolveFaction } from '@tabletop-tools/db'
+import { authUsers, glickoHistory, metaEvents, playerGlicko } from '@tabletop-tools/db'
 import type { TournamentRecord } from '@tabletop-tools/game-content'
 import { parseBcpCsv, parseGenericCsv, parseTabletopAdmiralCsv } from '@tabletop-tools/game-content'
-import { generateId, updateGlicko2 } from '@tabletop-tools/server-core'
+import {
+  type MetaIngestPlayer,
+  runGlickoForEvent,
+  upsertMetaEvent,
+} from '@tabletop-tools/server-core'
 import { eq } from 'drizzle-orm'
 import { z } from 'zod'
 
 import { matchPlayerName } from '../lib/playerMatch.js'
 import { adminProcedure, router } from '../trpc.js'
 
+/**
+ * SHA-256 digest of a UTF-8 string, as a hex string. Same pattern as
+ * content-ingestor's worker.ts webhook-token hashing.
+ */
+async function sha256Hex(input: string): Promise<string> {
+  const bytes = new TextEncoder().encode(input)
+  const digest = await crypto.subtle.digest('SHA-256', bytes)
+  return Array.from(new Uint8Array(digest))
+    .map((b) => b.toString(16).padStart(2, '0'))
+    .join('')
+}
+
+/**
+ * Deterministic (source, sourceId) key for a CSV-imported event — D2-01's
+ * fix for the `sourceId: null` gap that let every re-upload duplicate the
+ * whole event instead of replacing it.
+ *
+ * Keyed on the record's own eventName + eventDate (not the raw CSV bytes):
+ * generic-csv can yield several records from one upload, each already
+ * uniquely keyed by exactly this pair (see parseGenericCsv's `eventKey`),
+ * so it's sufficient for uniqueness within and across uploads. Deliberately
+ * excludes CSV content so that re-uploading a *corrected* file for the same
+ * event replaces it via upsertMetaEvent's delete-then-reinsert instead of
+ * creating a duplicate "corrected" ghost event — the behavior an admin
+ * fixing a typo'd result actually wants.
+ */
+async function csvEventSourceId(record: Pick<TournamentRecord, 'eventName' | 'eventDate'>) {
+  return sha256Hex(`${record.eventName}|${record.eventDate}`)
+}
+
 export const adminRouter = router({
   /**
-   * Import a tournament CSV.
-   * Writes directly to metaEvents/metaEventPlayers/metaPairings, then computes Glicko-2.
+   * Import a tournament CSV. Each parsed record is handed to the shared
+   * upsertMetaEvent() writer (D2-01), which owns the (source, sourceId)
+   * upsert, Glicko-2, and the analytics-cube rebuild — this router only
+   * parses the CSV and resolves player-name-to-account matches first.
    */
   import: adminProcedure
     .input(
@@ -54,50 +82,55 @@ export const adminRouter = router({
         records = parseGenericCsv(input.csv)
       }
 
-      const now = Date.now()
+      // Loaded once and reused for every record/player below — matches
+      // updateGlickoForEvent's former per-player query, just hoisted out of
+      // the loop since it doesn't change across records in one import call.
+      const users = await ctx.db
+        .select({
+          id: authUsers.id,
+          username: authUsers.username,
+          displayUsername: authUsers.displayUsername,
+        })
+        .from(authUsers)
+        .all()
+
       let totalImported = 0
 
       for (const record of records) {
-        const eventId = generateId()
+        const players: MetaIngestPlayer[] = record.players.map((p) => ({
+          playerName: p.playerName ?? `[${p.faction}@${p.placement}]`,
+          // Case-insensitive exact username/displayUsername match — same
+          // matchPlayerName this router always used; upsertMetaEvent's
+          // shared Glicko path (runGlickoForEvent) links to the resolved
+          // account via sourcePlayerId instead of re-matching by name.
+          sourcePlayerId: matchPlayerName(p.playerName ?? '', users) ?? undefined,
+          faction: p.faction,
+          placement: p.placement,
+          listText: p.listText ?? null,
+          wins: p.wins,
+          losses: p.losses,
+          draws: p.draws,
+        }))
 
-        // Insert meta event
-        await ctx.db.insert(metaEvents).values({
-          id: eventId,
-          name: input.eventName,
-          date: eventDateTs,
+        await upsertMetaEvent(ctx.db, {
+          source: 'csv-import',
+          sourceId: await csvEventSourceId(record),
+          name: record.eventName || input.eventName,
+          date: record.eventDate ? new Date(record.eventDate).getTime() : eventDateTs,
           format: input.format,
           rounds: null,
           playerCount: record.players.length,
-          source: 'csv-import',
-          sourceId: null,
-          importedAt: now,
+          players,
+          // CSV imports carry no round-by-round pairing data — matches the
+          // pre-D2-01 behavior, which never wrote metaPairings rows for
+          // this path either. runGlickoForEvent's synthesized-games
+          // fallback (built from each player's W/L/D) is exactly the path
+          // this exercises, preserved unchanged from admin.ts's original
+          // updateGlickoForEvent.
+          pairings: [],
         })
 
-        // Insert meta event players
-        for (let i = 0; i < record.players.length; i++) {
-          const p = record.players[i]
-          const playerName = p.playerName ?? `[${p.faction}@${p.placement}]`
-
-          let factionId = await resolveFaction(ctx.db, p.faction)
-          if (!factionId) factionId = 'unknown'
-
-          await ctx.db.insert(metaEventPlayers).values({
-            id: generateId(),
-            eventId,
-            playerName,
-            factionId,
-            placement: p.placement,
-            listText: p.listText ?? null,
-            wins: p.wins,
-            losses: p.losses,
-            draws: p.draws,
-          })
-        }
-
         totalImported += record.players.length
-
-        // Run Glicko-2 for this event
-        await updateGlickoForEvent(ctx.db, eventId)
       }
 
       return {
@@ -122,7 +155,7 @@ export const adminRouter = router({
 
       let updated = 0
       for (const event of events) {
-        updated += await updateGlickoForEvent(ctx.db, event.id)
+        updated += await runGlickoForEvent(ctx.db, event.id)
       }
 
       return { playersUpdated: updated }
@@ -151,174 +184,3 @@ export const adminRouter = router({
       return updated ?? null
     }),
 })
-
-// ---- Internal helper ----
-
-async function updateGlickoForEvent(db: any, eventId: string): Promise<number> {
-  // Load event players
-  const eventPlayers = await db
-    .select()
-    .from(metaEventPlayers)
-    .where(eq(metaEventPlayers.eventId, eventId))
-    .all()
-
-  // Load event pairings
-  const eventPairings = await db
-    .select()
-    .from(metaPairings)
-    .where(eq(metaPairings.eventId, eventId))
-    .all()
-
-  // Load all existing Glicko entries
-  const allGlicko = await db.select().from(playerGlicko).all()
-  type GlickoRow = (typeof allGlicko)[number]
-  const glickoByName = new Map<string, GlickoRow>()
-  for (const g of allGlicko) {
-    glickoByName.set(g.playerName.toLowerCase(), g)
-  }
-
-  // Load platform users for name matching
-  const users = await db
-    .select({
-      id: authUsers.id,
-      username: authUsers.username,
-      displayUsername: authUsers.displayUsername,
-    })
-    .from(authUsers)
-
-  // Map metaEventPlayer IDs to Glicko entries
-  const metaPlayerToGlicko = new Map<string, string>()
-  const metaPlayerIdToGlickoData = new Map<string, GlickoRow>()
-
-  for (const ep of eventPlayers) {
-    const name = ep.playerName
-    let glickoEntry = glickoByName.get(name.toLowerCase())
-
-    if (!glickoEntry) {
-      const userId = matchPlayerName(name, users)
-      const newId = generateId()
-      const newEntry = {
-        id: newId,
-        userId,
-        playerName: name,
-        rating: 1500,
-        ratingDeviation: 350,
-        volatility: 0.06,
-        gamesPlayed: 0,
-        lastRatingPeriod: null,
-        updatedAt: Date.now(),
-      }
-      await db.insert(playerGlicko).values(newEntry)
-      glickoByName.set(name.toLowerCase(), newEntry as any)
-      glickoEntry = newEntry as any
-    }
-
-    metaPlayerToGlicko.set(ep.id, glickoEntry!.id)
-    metaPlayerIdToGlickoData.set(ep.id, glickoEntry!)
-  }
-
-  // If no pairings, use synthesized games (for CSV imports without pairing data)
-  const hasPairings = eventPairings.length > 0
-  let updated = 0
-
-  for (const ep of eventPlayers) {
-    const glickoId = metaPlayerToGlicko.get(ep.id)
-    if (!glickoId) continue
-
-    const current = metaPlayerIdToGlickoData.get(ep.id)!
-    let games: Array<{ opponentRating: number; opponentRD: number; score: number }> = []
-
-    if (hasPairings) {
-      // Use real pairing data
-      for (const pair of eventPairings) {
-        let opponentMetaId: string | null = null
-        let score: number | null = null
-
-        if (pair.player1Id === ep.id) {
-          opponentMetaId = pair.player2Id
-          score = pair.result === 'p1' ? 1 : pair.result === 'p2' ? 0 : 0.5
-        } else if (pair.player2Id === ep.id) {
-          opponentMetaId = pair.player1Id
-          score = pair.result === 'p2' ? 1 : pair.result === 'p1' ? 0 : 0.5
-        }
-
-        if (opponentMetaId && score !== null) {
-          const oppGlicko = metaPlayerIdToGlickoData.get(opponentMetaId)
-          if (oppGlicko) {
-            games.push({
-              opponentRating: oppGlicko.rating,
-              opponentRD: oppGlicko.ratingDeviation,
-              score,
-            })
-          }
-        }
-      }
-    } else {
-      // Synthesize games from W/L/D (for CSV imports without pairing data)
-      const avgOpponentRating = 1500
-      const avgOpponentRD = 200
-      games = [
-        ...Array(ep.wins).fill({
-          opponentRating: avgOpponentRating,
-          opponentRD: avgOpponentRD,
-          score: 1,
-        }),
-        ...Array(ep.losses).fill({
-          opponentRating: avgOpponentRating,
-          opponentRD: avgOpponentRD,
-          score: 0,
-        }),
-        ...Array(ep.draws).fill({
-          opponentRating: avgOpponentRating,
-          opponentRD: avgOpponentRD,
-          score: 0.5,
-        }),
-      ]
-    }
-
-    if (games.length === 0) continue
-
-    const ratingBefore = current.rating
-    const rdBefore = current.ratingDeviation
-
-    const result = updateGlicko2(
-      {
-        rating: current.rating,
-        ratingDeviation: current.ratingDeviation,
-        volatility: current.volatility,
-      },
-      games,
-    )
-
-    const now = Date.now()
-    await db
-      .update(playerGlicko)
-      .set({
-        rating: result.rating,
-        ratingDeviation: result.ratingDeviation,
-        volatility: result.volatility,
-        gamesPlayed: current.gamesPlayed + games.length,
-        lastRatingPeriod: eventId,
-        updatedAt: now,
-      })
-      .where(eq(playerGlicko.id, glickoId))
-
-    await db.insert(glickoHistory).values({
-      id: generateId(),
-      playerId: glickoId,
-      ratingPeriod: eventId,
-      ratingBefore,
-      rdBefore,
-      ratingAfter: result.rating,
-      rdAfter: result.ratingDeviation,
-      volatilityAfter: result.volatility,
-      delta: result.rating - ratingBefore,
-      gamesInPeriod: games.length,
-      recordedAt: now,
-    })
-
-    updated++
-  }
-
-  return updated
-}
