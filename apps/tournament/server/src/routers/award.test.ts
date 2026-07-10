@@ -88,6 +88,7 @@ function toCaller() {
     db,
     user: { id: 'to-1', email: 'alice@example.com', name: 'Alice' },
     req: new Request('http://test'),
+    environment: 'development',
   })
 }
 
@@ -96,6 +97,7 @@ function playerCaller() {
     db,
     user: { id: 'player-1', email: 'bob@example.com', name: 'Bob' },
     req: new Request('http://test'),
+    environment: 'development',
   })
 }
 

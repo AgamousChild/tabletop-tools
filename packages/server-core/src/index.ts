@@ -10,6 +10,7 @@ export {
   type UpsertMetaEventResult,
 } from './meta-ingest'
 export { createBaseServer } from './server'
+export { slugify, type SlugifyOptions } from './slug'
 export {
   type BaseContext,
   createCallerFactory,

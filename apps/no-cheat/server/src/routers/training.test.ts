@@ -8,6 +8,7 @@ import { appRouter } from './index'
 
 const mockStorage: R2Storage = {
   upload: vi.fn().mockResolvedValue('https://cdn.example.com/training/test.png'),
+  delete: vi.fn().mockResolvedValue(undefined),
 }
 
 const client = createClient({ url: ':memory:' })
@@ -57,6 +58,8 @@ beforeAll(async () => {
     VALUES ('set-1', 'user-1', 'Red Dragons', 0);
     INSERT INTO dice_sets (id, user_id, name, created_at)
     VALUES ('set-2', 'user-2', 'Blue Dice', 0);
+    INSERT INTO dice_sets (id, user_id, name, created_at)
+    VALUES ('set-3', 'user-1', 'Empty Set (Alice, no training data)', 0);
   `)
 })
 
@@ -164,7 +167,7 @@ describe('training.saveExamples', () => {
 })
 
 describe('training.list', () => {
-  it('returns examples for a dice set', async () => {
+  it('returns examples for a dice set owned by the caller', async () => {
     const caller = createCaller(alice)
     const result = await caller.training.list({ diceSetId: 'set-1' })
     expect(result.examples.length).toBeGreaterThanOrEqual(2)
@@ -177,7 +180,7 @@ describe('training.list', () => {
     expect(result.examples.every((e) => e.label === 4)).toBe(true)
   })
 
-  it('supports myOnly filter', async () => {
+  it('is always scoped to the caller, with no myOnly opt-in needed', async () => {
     // Bob saves some training data to his own set
     const bobCaller = createCaller(bob)
     await bobCaller.training.saveExamples({
@@ -193,15 +196,23 @@ describe('training.list', () => {
       ],
     })
 
-    // Bob can only see his own with myOnly
-    const result = await bobCaller.training.list({ myOnly: true })
+    // Bob only ever sees his own, without needing an opt-in flag.
+    const result = await bobCaller.training.list({})
     expect(result.examples.every((e) => e.userId === 'user-2')).toBe(true)
   })
 
-  it('returns all examples when no filter', async () => {
+  it("rejects listing another user's dice set training data", async () => {
+    const caller = createCaller(bob)
+    await expect(caller.training.list({ diceSetId: 'set-1' })).rejects.toMatchObject({
+      code: 'FORBIDDEN',
+    })
+  })
+
+  it('returns only the caller-owned examples when no diceSetId filter is given', async () => {
     const caller = createCaller(alice)
     const result = await caller.training.list({})
-    expect(result.examples.length).toBeGreaterThanOrEqual(3)
+    expect(result.examples.length).toBeGreaterThanOrEqual(2)
+    expect(result.examples.every((e) => e.userId === 'user-1')).toBe(true)
   })
 
   it('supports pagination with limit and offset', async () => {
@@ -224,12 +235,25 @@ describe('training.getStats', () => {
     expect(stats.perLabel).toBeDefined()
   })
 
-  it('returns zero stats for empty dice set', async () => {
-    // Create a new set with no training data
+  it('returns zero stats for an owned dice set with no training data', async () => {
     const caller = createCaller(alice)
-    const stats = await caller.training.getStats({ diceSetId: 'nonexistent' })
+    const stats = await caller.training.getStats({ diceSetId: 'set-3' })
     expect(stats.total).toBe(0)
     expect(stats.accuracy).toBe(0)
+  })
+
+  it("rejects reading another user's dice set stats", async () => {
+    const caller = createCaller(bob)
+    await expect(caller.training.getStats({ diceSetId: 'set-1' })).rejects.toMatchObject({
+      code: 'FORBIDDEN',
+    })
+  })
+
+  it('rejects reading stats for a nonexistent dice set', async () => {
+    const caller = createCaller(alice)
+    await expect(caller.training.getStats({ diceSetId: 'nonexistent' })).rejects.toMatchObject({
+      code: 'FORBIDDEN',
+    })
   })
 })
 
@@ -245,13 +269,78 @@ describe('training.delete', () => {
 
   it("rejects deleting another user's example", async () => {
     const aliceCaller = createCaller(alice)
-    const aliceList = await aliceCaller.training.list({ myOnly: true })
+    const aliceList = await aliceCaller.training.list({})
     if (aliceList.examples.length === 0) return // skip if no examples left
 
     const bobCaller = createCaller(bob)
     await expect(
       bobCaller.training.delete({ id: aliceList.examples[0]!.id }),
     ).rejects.toMatchObject({ code: 'FORBIDDEN' })
+  })
+
+  it('deletes the R2 image when the example has one', async () => {
+    const deleteSpy = vi.fn().mockResolvedValue(undefined)
+    const storageWithDelete: R2Storage = {
+      upload: vi.fn().mockResolvedValue('https://cdn.example.com/training/set-1/example-x.png'),
+      delete: deleteSpy,
+    }
+    const aliceWithSpy = { ...alice, storage: storageWithDelete }
+    const caller = createCaller(aliceWithSpy)
+
+    const saved = await caller.training.saveExamples({
+      diceSetId: 'set-1',
+      examples: [
+        {
+          label: 5,
+          guess: 5,
+          confidence: 0.7,
+          features: fakeFeatures,
+          imageBase64: fakeImageBase64,
+        },
+      ],
+    })
+    expect(saved.saved).toBe(1)
+
+    const list = await caller.training.list({ diceSetId: 'set-1' })
+    const target = list.examples.find(
+      (e) => e.imageUrl === 'https://cdn.example.com/training/set-1/example-x.png',
+    )!
+
+    await caller.training.delete({ id: target.id })
+
+    expect(deleteSpy).toHaveBeenCalledTimes(1)
+    expect(deleteSpy).toHaveBeenCalledWith(expect.stringContaining('training/set-1/example-x.png'))
+  })
+
+  it('surfaces an R2 delete failure instead of silently deleting the row', async () => {
+    const storageFailing: R2Storage = {
+      upload: vi.fn().mockResolvedValue('https://cdn.example.com/training/set-1/example-y.png'),
+      delete: vi.fn().mockRejectedValue(new Error('R2 unavailable')),
+    }
+    const aliceFailing = { ...alice, storage: storageFailing }
+    const caller = createCaller(aliceFailing)
+
+    await caller.training.saveExamples({
+      diceSetId: 'set-1',
+      examples: [
+        {
+          label: 5,
+          guess: 5,
+          confidence: 0.7,
+          features: fakeFeatures,
+          imageBase64: fakeImageBase64,
+        },
+      ],
+    })
+    const list = await caller.training.list({ diceSetId: 'set-1' })
+    const target = list.examples.find(
+      (e) => e.imageUrl === 'https://cdn.example.com/training/set-1/example-y.png',
+    )!
+
+    await expect(caller.training.delete({ id: target.id })).rejects.toThrow()
+
+    const stillThere = await caller.training.list({ diceSetId: 'set-1' })
+    expect(stillThere.examples.some((e) => e.id === target.id)).toBe(true)
   })
 })
 
@@ -311,9 +400,9 @@ describe('training.listFrames', () => {
     expect(result.frames[0]?.frameWidth).toBe(640)
   })
 
-  it('filters by dice set', async () => {
+  it('filters by dice set, returning empty for an owned set with no frames', async () => {
     const caller = createCaller(alice)
-    const result = await caller.training.listFrames({ diceSetId: 'nonexistent' })
+    const result = await caller.training.listFrames({ diceSetId: 'set-3' })
     expect(result.frames).toHaveLength(0)
   })
 
@@ -321,6 +410,20 @@ describe('training.listFrames', () => {
     const caller = createCaller(alice)
     const page1 = await caller.training.listFrames({ limit: 1, offset: 0 })
     expect(page1.frames).toHaveLength(1)
+  })
+
+  it("rejects listing another user's dice set frames", async () => {
+    const caller = createCaller(bob)
+    await expect(caller.training.listFrames({ diceSetId: 'set-1' })).rejects.toMatchObject({
+      code: 'FORBIDDEN',
+    })
+  })
+
+  it('rejects listing frames for a nonexistent dice set', async () => {
+    const caller = createCaller(alice)
+    await expect(caller.training.listFrames({ diceSetId: 'nonexistent' })).rejects.toMatchObject({
+      code: 'FORBIDDEN',
+    })
   })
 })
 
@@ -334,6 +437,13 @@ describe('training.exportDataset', () => {
     // Box labels should be 0-indexed (pip 4 → class 3)
     const firstBox = result.dataset[0]?.boxes[0]
     expect(firstBox?.classId).toBe(3) // pip 4 → class 3
+  })
+
+  it("rejects exporting another user's dice set dataset", async () => {
+    const caller = createCaller(bob)
+    await expect(caller.training.exportDataset({ diceSetId: 'set-1' })).rejects.toMatchObject({
+      code: 'FORBIDDEN',
+    })
   })
 })
 
@@ -369,5 +479,56 @@ describe('training.deleteFrame', () => {
     await expect(caller.training.deleteFrame({ id: 'nonexistent' })).rejects.toMatchObject({
       code: 'NOT_FOUND',
     })
+  })
+
+  it('deletes the R2 image when the frame has one', async () => {
+    const deleteSpy = vi.fn().mockResolvedValue(undefined)
+    const storageWithDelete: R2Storage = {
+      upload: vi
+        .fn()
+        .mockResolvedValue('https://cdn.example.com/training-frames/set-1/frame-x.png'),
+      delete: deleteSpy,
+    }
+    const aliceWithSpy = { ...alice, storage: storageWithDelete }
+    const caller = createCaller(aliceWithSpy)
+
+    const saved = await caller.training.saveFrame({
+      diceSetId: 'set-1',
+      imageBase64: fakeFrameBase64,
+      frameWidth: 640,
+      frameHeight: 480,
+      boxes: [{ x: 0.3, y: 0.3, w: 0.1, h: 0.1, label: 2 }],
+    })
+
+    await caller.training.deleteFrame({ id: saved.id })
+
+    expect(deleteSpy).toHaveBeenCalledTimes(1)
+    expect(deleteSpy).toHaveBeenCalledWith(
+      expect.stringContaining('training-frames/set-1/frame-x.png'),
+    )
+  })
+
+  it('surfaces an R2 delete failure instead of silently deleting the row', async () => {
+    const storageFailing: R2Storage = {
+      upload: vi
+        .fn()
+        .mockResolvedValue('https://cdn.example.com/training-frames/set-1/frame-y.png'),
+      delete: vi.fn().mockRejectedValue(new Error('R2 unavailable')),
+    }
+    const aliceFailing = { ...alice, storage: storageFailing }
+    const caller = createCaller(aliceFailing)
+
+    const saved = await caller.training.saveFrame({
+      diceSetId: 'set-1',
+      imageBase64: fakeFrameBase64,
+      frameWidth: 640,
+      frameHeight: 480,
+      boxes: [{ x: 0.3, y: 0.3, w: 0.1, h: 0.1, label: 2 }],
+    })
+
+    await expect(caller.training.deleteFrame({ id: saved.id })).rejects.toThrow()
+
+    const stillThere = await caller.training.listFrames({ diceSetId: 'set-1' })
+    expect(stillThere.frames.some((f) => f.id === saved.id)).toBe(true)
   })
 })

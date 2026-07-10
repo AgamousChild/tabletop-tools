@@ -1,5 +1,8 @@
-import { readFileSync, writeFileSync, existsSync, mkdirSync, copyFileSync } from 'node:fs'
-import { join, basename } from 'node:path'
+import { copyFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
+import { basename, join } from 'node:path'
+
+import { slugify } from '@tabletop-tools/server-core'
+
 import { loadDrafts } from '../drafts/store'
 import { findDraftDirs } from '../review/interactive'
 
@@ -19,17 +22,6 @@ interface BrainNode {
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────
-
-/**
- * Slugify a title: lowercase, replace non-alphanumeric runs with hyphens,
- * trim leading/trailing hyphens.
- */
-function slugify(title: string): string {
-  return title
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, '-')
-    .replace(/^-+|-+$/g, '')
-}
 
 /**
  * Load the existing community.json from brainNodesDir, or return an empty

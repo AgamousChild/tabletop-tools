@@ -98,17 +98,32 @@ export async function runScrape(
     const errors: string[] = []
 
     for (const searchEvent of newEvents) {
+      // Network phase: fetch everything from BCP before writing anything to the
+      // DB, so a mid-event fetch failure leaves no row behind that would
+      // permanently exclude the event via the existingSourceIds filter above.
+      let event: BcpEvent
+      let allPairings: BcpPairing[]
       try {
-        // Get full event details
-        const event = await api.getEvent(searchEvent.id)
+        event = await api.getEvent(searchEvent.id)
 
-        // Collect all pairings across rounds
-        const allPairings: BcpPairing[] = []
+        allPairings = []
         for (let round = 1; round <= event.rounds; round++) {
           const roundPairings = await api.getPairings(event.id, round)
           allPairings.push(...roundPairings)
         }
+      } catch (fetchErr) {
+        errors.push(`Event ${searchEvent.id} (${searchEvent.name}): ${(fetchErr as Error).message}`)
+        continue
+      }
 
+      // Insert phase: build the players/pairings shape and hand off to the
+      // shared upsertMetaEvent() writer (D2-01), which owns the
+      // (source, sourceId) delete-then-reinsert contract, Glicko-2, and the
+      // scoped cube rebuild. A failure here is just recorded — the next
+      // scrape of this event retries via upsertMetaEvent's own upsert
+      // semantics rather than scrape.ts manually unwinding partial writes
+      // across tables it no longer touches directly.
+      try {
         // Accumulate player stats from pairings
         const playerMap = new Map<string, PlayerAccumulator>()
 
@@ -220,6 +235,9 @@ export async function runScrape(
         totalPairings += allPairings.length
         eventsScraped++
       } catch (eventErr) {
+        // No manual rollback needed: upsertMetaEvent's own (source, sourceId)
+        // delete-then-reinsert makes the next scrape of this event
+        // self-healing even if this attempt wrote partial rows.
         errors.push(`Event ${searchEvent.id} (${searchEvent.name}): ${(eventErr as Error).message}`)
       }
     }
@@ -233,6 +251,7 @@ export async function runScrape(
         eventsFound: events.length,
         eventsScraped,
         pairingsScraped: totalPairings,
+        errors: errors.length > 0 ? errors.join('\n') : null,
       })
       .where(eq(bcpScrapeJobs.id, jobId))
   } catch (err) {

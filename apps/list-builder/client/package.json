@@ -12,6 +12,7 @@
     "test:watch": "vitest"
   },
   "dependencies": {
+    "@tabletop-tools/game-content": "workspace:*",
     "@tabletop-tools/game-data-store": "workspace:*",
     "@tabletop-tools/ui": "workspace:*",
     "@tanstack/react-query": "^5.56.0",

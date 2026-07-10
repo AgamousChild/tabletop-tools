@@ -17,6 +17,7 @@
  * @see docs/superpowers/plans/2026-05-29-phase-1.4-unified-etl.md
  */
 import { contentCanLead, contentEntity, type Db } from '@tabletop-tools/db'
+import { slugify } from '@tabletop-tools/server-core'
 import { sql } from 'drizzle-orm'
 
 type ContentEntityType = (typeof contentEntity.$inferInsert)['type']
@@ -134,13 +135,7 @@ async function writeR2<T>(bucket: R2Bucket, config: ProducerConfig<T>): Promise<
  * "T'au Empire" → "tau-empire", matching the brain's existing factionIds
  * and detachment node ids.
  */
-const slug = (s: string): string =>
-  s
-    .toLowerCase()
-    .replace(/[’ʼ'‘"”“]/g, '')
-    .replace(/[^a-z0-9]+/g, '-')
-    .replace(/^-|-$/g, '')
-    .slice(0, 60)
+const slug = (s: string): string => slugify(s, { stripChars: /[’ʼ'‘"”“]/g, maxLength: 60 })
 
 // ── Per-type producers ───────────────────────────────────────────────────────
 

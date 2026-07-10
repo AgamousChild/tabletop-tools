@@ -6,7 +6,7 @@ import {
   authVerifications,
   type Db,
 } from '@tabletop-tools/db'
-import { betterAuth } from 'better-auth'
+import { betterAuth, type BetterAuthOptions } from 'better-auth'
 import { drizzleAdapter } from 'better-auth/adapters/drizzle'
 import { username } from 'better-auth/plugins'
 import { and, eq, gt } from 'drizzle-orm'
@@ -25,6 +25,18 @@ function hexDecode(hex: string): Uint8Array {
     bytes[i / 2] = parseInt(hex.slice(i, i + 2), 16)
   }
   return bytes
+}
+
+/**
+ * Minimal shape of a Cloudflare KV namespace binding — just what the
+ * rate limiter's secondaryStorage adapter needs. Kept local instead of
+ * depending on @cloudflare/workers-types since this package also runs
+ * in Node (auth-server's dev server has no KV binding at all).
+ */
+export interface KVLike {
+  get(key: string): Promise<string | null>
+  put(key: string, value: string, options?: { expirationTtl?: number }): Promise<void>
+  delete(key: string): Promise<void>
 }
 
 /** Constant-time comparison to prevent timing attacks. */
@@ -114,7 +126,27 @@ export function createAuth(
   trustedOrigins: string[] = [],
   secret = process.env['AUTH_SECRET'] ?? 'dev-secret-change-in-production',
   basePath = '/api/auth',
+  rateLimitKV?: KVLike,
 ) {
+  // Better Auth's default rate limiter is `enabled: isProduction` with
+  // `storage: "memory"` unless a secondaryStorage is configured — on
+  // Cloudflare Workers, "memory" means a per-isolate Map that is useless
+  // (isolates are ephemeral, no shared state). When a KV namespace is
+  // provided, back the limiter with it explicitly and turn it on
+  // regardless of NODE_ENV. When no KV is provided (local dev, tests),
+  // omit both options entirely — unchanged from prior behavior.
+  const secondaryStorage: BetterAuthOptions['secondaryStorage'] = rateLimitKV
+    ? {
+        get: async (key) => (await rateLimitKV.get(key)) ?? undefined,
+        set: async (key, value, ttl) => {
+          await rateLimitKV.put(key, value, ttl !== undefined ? { expirationTtl: ttl } : undefined)
+        },
+        delete: async (key) => {
+          await rateLimitKV.delete(key)
+        },
+      }
+    : undefined
+
   return betterAuth({
     baseURL,
     basePath,
@@ -138,6 +170,8 @@ export function createAuth(
     },
     plugins: [username()],
     secret,
+    ...(secondaryStorage ? { secondaryStorage } : {}),
+    ...(rateLimitKV ? { rateLimit: { enabled: true, storage: 'secondary-storage' as const } } : {}),
   })
 }
 

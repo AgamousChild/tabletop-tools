@@ -53,12 +53,22 @@ vi.mock('./bcp-api', () => ({
 // Mock generateId to return predictable IDs, but keep the real
 // upsertMetaEvent (and its transitive Glicko/cube machinery) so this test
 // still exercises the shared writer end-to-end against the in-memory DB.
+// upsertMetaEventOverride lets one test force a failure partway through the
+// insert phase without relying on generateId's output — upsertMetaEvent's
+// OWN generateId calls come via a relative `./id` import internal to the
+// package, which this mock (applied from outside the package) cannot see or
+// control, so an ID-collision trigger is not reachable from here.
 let idCounter = 0
+let upsertMetaEventOverride: ((...args: unknown[]) => Promise<unknown>) | null = null
 vi.mock('@tabletop-tools/server-core', async (importOriginal) => {
   const actual = await importOriginal<typeof ServerCore>()
   return {
     ...actual,
     generateId: () => `id-${++idCounter}`,
+    upsertMetaEvent: (...args: unknown[]) =>
+      (upsertMetaEventOverride ?? actual.upsertMetaEvent)(
+        ...(args as Parameters<typeof actual.upsertMetaEvent>),
+      ),
   }
 })
 
@@ -98,6 +108,7 @@ describe('runScrape', () => {
 
   beforeEach(async () => {
     idCounter = 0
+    upsertMetaEventOverride = null
     resetFactionMapCache()
     client = createClient({ url: ':memory:' })
     db = createDbFromClient(client)
@@ -294,5 +305,129 @@ describe('runScrape', () => {
 
     const events = await client.execute('SELECT * FROM meta_events')
     expect(events.rows[0]!.location).toBe('Austin, TX, US')
+  })
+
+  it('does not leave a permanent lockout when getPairings fails mid-event', async () => {
+    const event = makeEvent({ id: 'evt-flaky', rounds: 3 })
+    mockSearchEvents.mockResolvedValue([event])
+    mockGetEvent.mockResolvedValue(event)
+    // Round 1 OK, round 2 throws
+    mockGetPairings.mockImplementation((_id: string, round: number) => {
+      if (round === 2) return Promise.reject(new Error('pairings fetch failed'))
+      return Promise.resolve([makePairing(round)])
+    })
+
+    const { jobId } = await runScrape({
+      bcpEmail: 'test@example.com',
+      bcpPassword: 'pass',
+      db,
+    })
+    expect(jobId).toBeTruthy()
+
+    // No trace of the failed event should remain
+    const events = await client.execute('SELECT * FROM meta_events')
+    expect(events.rows).toHaveLength(0)
+    const players = await client.execute('SELECT * FROM meta_event_players')
+    expect(players.rows).toHaveLength(0)
+    const pairings = await client.execute('SELECT * FROM meta_pairings')
+    expect(pairings.rows).toHaveLength(0)
+
+    // The job should still complete, recording the error
+    const jobs = await client.execute('SELECT * FROM bcp_scrape_jobs')
+    expect(jobs.rows[0]!.status).toBe('completed')
+    expect(jobs.rows[0]!.eventsScraped ?? jobs.rows[0]!.events_scraped).toBe(0)
+    expect(String(jobs.rows[0]!.errors)).toContain('evt-flaky')
+
+    // A second run should retry the same event (not locked out)
+    mockGetEvent.mockClear()
+    mockGetPairings.mockReset()
+    mockGetPairings.mockImplementation((_id: string, round: number) =>
+      Promise.resolve([makePairing(round)]),
+    )
+    mockSearchEvents.mockResolvedValue([event])
+
+    await runScrape({
+      bcpEmail: 'test@example.com',
+      bcpPassword: 'pass',
+      db,
+    })
+
+    expect(mockGetEvent).toHaveBeenCalledWith('evt-flaky')
+    const eventsAfterRetry = await client.execute('SELECT * FROM meta_events')
+    expect(eventsAfterRetry.rows).toHaveLength(1)
+    expect(eventsAfterRetry.rows[0]!.source_id).toBe('evt-flaky')
+  })
+
+  it('records the error without a manual rollback when upsertMetaEvent fails partway through the insert phase', async () => {
+    // D2-01 moved the insert phase (event/players/pairings writes, Glicko,
+    // cube rebuild) inside the shared upsertMetaEvent() writer, which owns
+    // its own (source, sourceId) delete-then-reinsert idempotency contract
+    // (proven separately in packages/server-core/src/meta-ingest.test.ts,
+    // "re-upserting the same (source, sourceId) replaces rather than
+    // duplicates"). scrape.ts's job is narrower now: catch whatever
+    // upsertMetaEvent throws, record it, and move on — it no longer has (or
+    // needs) direct knowledge of metaEventPlayers/metaPairings to manually
+    // unwind. Forcing that failure via the mocked upsertMetaEvent (rather
+    // than an ID collision or schema-constraint hack) is what's actually
+    // reachable from this test: upsertMetaEvent's own generateId() calls come
+    // via a relative `./id` import internal to the server-core package, so
+    // the sequential id-N mock this file applies from outside the package
+    // never reaches them.
+    const event = makeEvent({ id: 'evt-insertfail', rounds: 1 })
+    mockSearchEvents.mockResolvedValue([event])
+    mockGetEvent.mockResolvedValue(event)
+    mockGetPairings.mockResolvedValue([makePairing(1)])
+
+    upsertMetaEventOverride = vi
+      .fn()
+      .mockRejectedValueOnce(new Error('simulated insert-phase failure'))
+
+    await runScrape({
+      bcpEmail: 'test@example.com',
+      bcpPassword: 'pass',
+      db,
+    })
+
+    // Nothing was ever written for this event — the mocked upsertMetaEvent
+    // rejected before touching the DB, and scrape.ts attempts no writes of
+    // its own in the insert phase anymore.
+    const events = await client.execute(
+      "SELECT * FROM meta_events WHERE source_id = 'evt-insertfail'",
+    )
+    expect(events.rows).toHaveLength(0)
+
+    const jobs = await client.execute('SELECT * FROM bcp_scrape_jobs')
+    expect(jobs.rows[0]!.status).toBe('completed')
+    expect(String(jobs.rows[0]!.errors)).toContain('evt-insertfail')
+    expect(String(jobs.rows[0]!.errors)).toContain('simulated insert-phase failure')
+  })
+
+  it('persists accumulated errors on the completed job when some events fail and others succeed', async () => {
+    const goodEvent = makeEvent({ id: 'evt-good', rounds: 1 })
+    const badEvent = makeEvent({ id: 'evt-bad', rounds: 1 })
+    mockSearchEvents.mockResolvedValue([goodEvent, badEvent])
+    mockGetEvent.mockImplementation((id: string) => {
+      if (id === 'evt-bad') return Promise.reject(new Error('event fetch failed'))
+      return Promise.resolve(goodEvent)
+    })
+    mockGetPairings.mockImplementation(() => Promise.resolve([makePairing(1)]))
+
+    const { jobId } = await runScrape({
+      bcpEmail: 'test@example.com',
+      bcpPassword: 'pass',
+      db,
+    })
+    expect(jobId).toBeTruthy()
+
+    const jobs = await client.execute('SELECT * FROM bcp_scrape_jobs')
+    expect(jobs.rows[0]!.status).toBe('completed')
+    expect(jobs.rows[0]!.events_scraped).toBe(1)
+    expect(String(jobs.rows[0]!.errors)).toContain('evt-bad')
+    expect(String(jobs.rows[0]!.errors)).toContain('event fetch failed')
+
+    // The good event still landed
+    const events = await client.execute('SELECT * FROM meta_events')
+    expect(events.rows).toHaveLength(1)
+    expect(events.rows[0]!.source_id).toBe('evt-good')
   })
 })

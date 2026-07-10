@@ -58,7 +58,7 @@ Protected — requires authenticated session.
 ## Phase 7: Deployment ✅ infrastructure ready
 
 - [x] Configure Cloudflare Workers for the tRPC server — `server/wrangler.toml` + `server/src/worker.ts`
-- [x] Configure Cloudflare Pages for the React client — `client/wrangler.toml` + `client/functions/trpc/[[path]].ts`
+- Client ships through the unified gateway Pages project — see `apps/gateway/CLAUDE.md`.
 - [ ] Set environment variables — `wrangler secret put TURSO_DB_URL` + `wrangler secret put TURSO_AUTH_TOKEN`
 - [ ] Run full end-to-end test on deployed environment with a real CSV import
 

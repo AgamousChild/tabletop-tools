@@ -1,19 +1,11 @@
 import { mkdirSync, readdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
+
+import { slugify } from '@tabletop-tools/server-core'
+
 import type { DraftNode, DraftStatus, Screenshot } from '../types'
 
 // ── Serialisation helpers ─────────────────────────────────────────────────
-
-/**
- * Slugify a title: lowercase, replace non-alphanumeric runs with hyphens,
- * trim leading/trailing hyphens.
- */
-function slugify(title: string): string {
-  return title
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, '-')
-    .replace(/^-+|-+$/g, '')
-}
 
 /**
  * Serialize a screenshots array to YAML list format (indented, no library).
@@ -43,7 +35,7 @@ function parseScreenshots(frontmatter: string): Screenshot[] {
 
   const screenshots: Screenshot[] = []
   // Split on the "  - file:" boundary to find each screenshot item
-  const itemBlocks = frontmatter.split(/\n  - file: /).slice(1)
+  const itemBlocks = frontmatter.split(/\n {2}- file: /).slice(1)
   for (const block of itemBlocks) {
     const lines = block.split('\n')
     // Strip surrounding quotes added by screenshotsToYaml for safety
@@ -123,7 +115,7 @@ export function markdownToDraft(markdown: string): DraftNode {
   const keywordsInline = frontmatter.match(/^keywords:\s*\[\]\s*$/m)
   let keywords: string[] = []
   if (!keywordsInline) {
-    const kwBlock = frontmatter.match(/^keywords:\n((?:  - .+\n?)+)/m)
+    const kwBlock = frontmatter.match(/^keywords:\n((?: {2}- .+\n?)+)/m)
     if (kwBlock) {
       keywords = kwBlock[1]!
         .split('\n')
@@ -141,9 +133,8 @@ export function markdownToDraft(markdown: string): DraftNode {
     if (start === -1) return ''
     const contentStart = start + headingMarker.length
     const nextHeading = body.indexOf('\n## ', contentStart)
-    const raw = nextHeading === -1
-      ? body.slice(contentStart)
-      : body.slice(contentStart, nextHeading)
+    const raw =
+      nextHeading === -1 ? body.slice(contentStart) : body.slice(contentStart, nextHeading)
     return raw.trim()
   }
 

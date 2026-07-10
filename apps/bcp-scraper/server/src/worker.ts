@@ -4,6 +4,7 @@
  */
 import { createClient } from '@libsql/client'
 import { createDbFromClient } from '@tabletop-tools/db'
+import { createWorkerHandler } from '@tabletop-tools/server-core'
 import { Hono } from 'hono'
 
 import { parsePendingLists } from './lib/parse-lists'
@@ -27,46 +28,43 @@ function createDb(env: Env) {
   )
 }
 
-let cachedApp: Hono<{ Bindings: Env }> | null = null
+const handler = createWorkerHandler<Env>({
+  createApp: async (env) => {
+    const app = new Hono()
 
-function getApp() {
-  if (cachedApp) return cachedApp
+    app.get('/health', (c) => c.json({ status: 'ok' }))
 
-  const app = new Hono<{ Bindings: Env }>()
-
-  app.get('/health', (c) => c.json({ status: 'ok' }))
-
-  app.post('/scrape', async (c) => {
-    if (c.env.SYNC_SECRET) {
-      const auth = c.req.header('Authorization')
-      if (auth !== `Bearer ${c.env.SYNC_SECRET}`) {
-        return c.json({ error: 'Unauthorized' }, 401)
+    app.post('/scrape', async (c) => {
+      if (env.SYNC_SECRET) {
+        const auth = c.req.header('Authorization')
+        if (auth !== `Bearer ${env.SYNC_SECRET}`) {
+          return c.json({ error: 'Unauthorized' }, 401)
+        }
       }
-    }
 
-    const db = createDb(c.env)
+      const db = createDb(env)
 
-    const result = await runScrape(
-      {
-        bcpEmail: c.env.BCP_EMAIL,
-        bcpPassword: c.env.BCP_PASSWORD,
-        db,
-      },
-      'manual',
-    )
+      const result = await runScrape(
+        {
+          bcpEmail: env.BCP_EMAIL,
+          bcpPassword: env.BCP_PASSWORD,
+          db,
+        },
+        'manual',
+      )
 
-    await runPipeline(db)
-    await parsePendingLists(db)
+      await runPipeline(db)
+      await parsePendingLists(db)
 
-    return c.json(result)
-  })
+      return c.json(result)
+    })
 
-  cachedApp = app
-  return app
-}
+    return app
+  },
+})
 
 export default {
-  fetch: (req: Request, env: Env) => getApp().fetch(req, env),
+  fetch: handler.fetch,
 
   async scheduled(_event: ScheduledEvent, env: Env, ctx: ExecutionContext) {
     const db = createDb(env)

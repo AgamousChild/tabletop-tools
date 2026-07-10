@@ -62,7 +62,7 @@ export function createBaseServer<TContext extends BaseContext>(opts: {
   extendContext?: (baseCtx: BaseContext) => TContext | Promise<TContext>
 }): Hono
 
-export function createWorkerHandler<TEnv extends BaseEnv>(opts: {
+export function createWorkerHandler<TEnv>(opts: {
   createApp: (env: TEnv) => Promise<Hono>
 }): { fetch(request: Request, env: TEnv, ctx?: unknown): Promise<Response> }
 

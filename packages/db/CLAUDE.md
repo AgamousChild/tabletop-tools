@@ -7,11 +7,12 @@
 ## What This Is
 
 The shared database package for the entire Tabletop Tools platform. Single Turso (libSQL)
-database, Drizzle ORM, 22 tables covering auth and all 7 server apps. Every app Worker
-imports the schema and client factory from this package.
+database, Drizzle ORM, covering auth and all 7 server apps. Every app Worker
+imports the schema and client factory from this package. Table count is derivable from
+`src/schema.ts` — that file is the source of truth, not this doc.
 
 Provides:
-- `schema.ts` — all 22 table definitions with indexes, unique constraints, and cascading deletes
+- `schema.ts` — table definitions with indexes, unique constraints, and cascading deletes
 - `client.ts` — `createDb(url, authToken)` and `createDbFromClient(client)` factories
 - Type exports for all table row types
 
@@ -53,7 +54,7 @@ TypeScript. Schema defined in code, migrations generated via `drizzle-kit genera
 ```
 packages/db/
   src/
-    schema.ts         <- 22 tables with indexes, unique constraints, cascade deletes
+    schema.ts         <- table definitions (source of truth for table count) with indexes, unique constraints, cascade deletes
     client.ts         <- createDb(), createDbFromClient() factories
     index.ts          <- barrel export (schema + client + types)
     schema.test.ts    <- 42 tests
@@ -106,7 +107,7 @@ Migration 0002 implements this via table recreation with `PRAGMA foreign_keys` O
 
 **42 tests** in `schema.test.ts`:
 - In-memory SQLite with `PRAGMA foreign_keys = ON`
-- Table creation and basic insert/select for all 22 tables
+- Table creation and basic insert/select for every table in `schema.ts`
 - Foreign key relationship verification
 - Cascade delete verification (user -> children chains)
 - Unique constraint enforcement
@@ -122,5 +123,5 @@ cd packages/db && pnpm test
 ```typescript
 export { createDb, createDbFromClient } from './client'
 export type { Db } from './client'
-export * from './schema'  // all 22 tables + indexes + constraints
+export * from './schema'  // all tables + indexes + constraints — see schema.ts for the current set
 ```

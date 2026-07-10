@@ -8,7 +8,9 @@ import {
   contentNodeLink,
   contentNodeLinkCandidate,
   contentNodeLinkHistory,
+  dimDataslate,
 } from './schema'
+import { createTestTables } from './test-ddl'
 
 const client = createClient({ url: ':memory:' })
 const db = drizzle(client)
@@ -19,69 +21,13 @@ afterAll(() => {
 
 beforeAll(async () => {
   await client.execute('PRAGMA foreign_keys = ON')
-  await client.execute(`CREATE TABLE dim_dataslate (
-    id TEXT PRIMARY KEY,
-    name TEXT NOT NULL,
-    effective_date INTEGER NOT NULL,
-    end_date INTEGER
-  )`)
-  await client.execute(`CREATE TABLE content_entity (
-    id TEXT PRIMARY KEY NOT NULL,
-    type TEXT NOT NULL,
-    name TEXT NOT NULL,
-    faction_id TEXT REFERENCES content_entity(id),
-    parent_id TEXT REFERENCES content_entity(id),
-    dataslate_id TEXT REFERENCES dim_dataslate(id),
-    r2_key TEXT,
-    wahapedia_id TEXT,
-    bsdata_id TEXT,
-    can_deploy_solo INTEGER NOT NULL DEFAULT 1,
-    updated_at INTEGER NOT NULL
-  )`)
-  // content_node_link — single-row per brain_node_id (UPDATE-in-place model).
-  await client.execute(`CREATE TABLE content_node_link (
-    brain_node_id TEXT PRIMARY KEY NOT NULL,
-    canonical_id TEXT NOT NULL REFERENCES content_entity(id) ON DELETE CASCADE,
-    match_method TEXT NOT NULL,
-    confidence REAL NOT NULL DEFAULT 1,
-    validation_method TEXT NOT NULL,
-    validated_by TEXT NOT NULL,
-    validated_at INTEGER NOT NULL
-  )`)
-  // content_node_link_history — append-only audit log of every change.
-  await client.execute(`CREATE TABLE content_node_link_history (
-    history_id TEXT PRIMARY KEY NOT NULL,
-    brain_node_id TEXT NOT NULL,
-    prior_canonical_id TEXT,
-    new_canonical_id TEXT NOT NULL,
-    changed_at INTEGER NOT NULL,
-    changed_by TEXT NOT NULL,
-    change_method TEXT NOT NULL,
-    change_reason TEXT,
-    candidate_id TEXT
-  )`)
-  await client.execute(`CREATE TABLE content_node_link_candidate (
-    candidate_id TEXT PRIMARY KEY NOT NULL,
-    brain_node_id TEXT NOT NULL,
-    proposed_canonical_id TEXT NOT NULL REFERENCES content_entity(id) ON DELETE CASCADE,
-    match_method TEXT NOT NULL,
-    confidence REAL NOT NULL DEFAULT 1,
-    prior_canonical_id TEXT,
-    source TEXT NOT NULL,
-    run_id TEXT NOT NULL,
-    proposed_at INTEGER NOT NULL,
-    status TEXT NOT NULL DEFAULT 'pending',
-    decision_method TEXT,
-    decided_by TEXT,
-    decided_at INTEGER,
-    decision_reason TEXT,
-    resulting_history_id TEXT,
-    llm_attempt_count INTEGER NOT NULL DEFAULT 0,
-    llm_last_attempted_at INTEGER
-  )`)
-  await client.execute(`CREATE UNIQUE INDEX uq_candidate_pending
-    ON content_node_link_candidate (brain_node_id, proposed_canonical_id)
-    WHERE status = 'pending'`)
+  await createTestTables(client, {
+    dimDataslate,
+    contentEntity,
+    contentNodeLink,
+    contentNodeLinkHistory,
+    contentNodeLinkCandidate,
+  })
 })
 
 describe('contentEntity', () => {

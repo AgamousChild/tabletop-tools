@@ -9,6 +9,7 @@ export function ScraperPage() {
   const scrapeMutation = trpc.stats.triggerBcpScrape.useMutation()
   const pipelineMutation = trpc.stats.triggerMetaPipeline.useMutation()
   const [actionResult, setActionResult] = useState<string | null>(null)
+  const [pipelineWarning, setPipelineWarning] = useState<string | null>(null)
 
   if (status.isLoading) return <p className="text-slate-400">Loading scraper status...</p>
   if (status.error) {
@@ -112,8 +113,15 @@ export function ScraperPage() {
           <button
             onClick={() => {
               setActionResult(null)
+              setPipelineWarning(null)
               pipelineMutation.mutate(undefined, {
-                onSuccess: (data) => setActionResult(`Pipeline: ${data.message}`),
+                onSuccess: (data) => {
+                  if (data.status === 'not-configured') {
+                    setPipelineWarning('Cube rebuild is not yet available')
+                    return
+                  }
+                  setActionResult(`Pipeline: ${data.message}`)
+                },
               })
             }}
             disabled={pipelineMutation.isPending}
@@ -123,6 +131,11 @@ export function ScraperPage() {
           </button>
         </div>
         {actionResult && <p className="text-sm text-slate-400 mt-2">{actionResult}</p>}
+        {pipelineWarning && (
+          <div className="mt-2 p-3 bg-amber-950 border border-amber-800 rounded-lg text-sm text-amber-300">
+            {pipelineWarning}
+          </div>
+        )}
       </section>
 
       {/* History table */}

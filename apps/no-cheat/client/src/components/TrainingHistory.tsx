@@ -12,13 +12,13 @@ type Tab = 'examples' | 'frames'
 
 export function TrainingHistory({ diceSetId, onBack }: Props) {
   const [tab, setTab] = useState<Tab>('examples')
-  const [myOnly, setMyOnly] = useState(true)
   const [labelFilter, setLabelFilter] = useState<number | undefined>(undefined)
   const [exporting, setExporting] = useState(false)
 
+  // training.list is always scoped to the caller's own data server-side now
+  // (no myOnly opt-in) -- see apps/no-cheat/server/src/routers/training.ts.
   const { data, isLoading, refetch } = trpc.training.list.useQuery({
     diceSetId,
-    myOnly,
     label: labelFilter,
     limit: 50,
   })
@@ -174,17 +174,6 @@ export function TrainingHistory({ diceSetId, onBack }: Props) {
 
             {/* Filters */}
             <div className="flex items-center gap-2 flex-wrap">
-              <button
-                onClick={() => setMyOnly(!myOnly)}
-                className={`px-3 py-1 rounded-full text-xs font-medium transition-colors ${
-                  myOnly
-                    ? 'bg-amber-400/20 text-amber-400 border border-amber-400/40'
-                    : 'bg-slate-800 text-slate-400 border border-slate-700'
-                }`}
-              >
-                {myOnly ? 'My Data' : 'All Data'}
-              </button>
-
               {[undefined, 0, 1, 2, 3, 4, 5, 6].map((pip) => (
                 <button
                   key={pip ?? 'all'}

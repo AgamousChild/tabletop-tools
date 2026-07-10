@@ -19,6 +19,8 @@ import {
 } from 'node:fs'
 import path from 'node:path'
 
+import { slugify } from '@tabletop-tools/server-core'
+
 import { markdownToDraft } from './drafts/store'
 import type { DraftNode } from './types'
 import { DEFAULT_CONFIG } from './types'
@@ -34,13 +36,6 @@ interface BrainNode {
   refs: string[]
   version: number
   keywords: string[]
-}
-
-function slugify(title: string): string {
-  return title
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, '-')
-    .replace(/^-+|-+$/g, '')
 }
 
 function findProcessQueueDraftDirs(baseDir: string): string[] {

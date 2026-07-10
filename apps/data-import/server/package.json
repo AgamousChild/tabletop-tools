@@ -14,6 +14,7 @@
     "@libsql/client": "^0.14.0",
     "@tabletop-tools/db": "workspace:*",
     "@tabletop-tools/game-content": "workspace:*",
+    "@tabletop-tools/server-core": "workspace:*",
     "drizzle-orm": "^0.38.0",
     "hono": "^4.6.0",
     "yaml": "^2.9.0"

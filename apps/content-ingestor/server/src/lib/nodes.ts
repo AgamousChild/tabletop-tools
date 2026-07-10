@@ -2,6 +2,8 @@
  * Write community nodes to R2 brain bucket and index in Vectorize.
  */
 
+import { slugify } from '@tabletop-tools/server-core'
+
 import type { ExtractedNode } from './extract'
 
 interface BrainNode {
@@ -18,13 +20,6 @@ interface BrainNode {
   refs: never[]
   version: 1
   keywords: string[]
-}
-
-function slugify(title: string): string {
-  return title
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, '-')
-    .replace(/^-+|-+$/g, '')
 }
 
 function vectorizeId(nodeId: string): string {
@@ -66,10 +61,71 @@ interface WriteNodesOpts {
   ai: Ai
 }
 
+/** Bound on read-merge-write retries for R2 conditional writes (see writeConditionally). */
+const MAX_R2_WRITE_RETRIES = 5
+
+/**
+ * Read-modify-write a JSON object in R2 under an optimistic-concurrency
+ * (etag) precondition, retrying the whole read→merge→write cycle when a
+ * concurrent writer commits in between.
+ *
+ * The Workers types (@cloudflare/workers-types' R2Conditional — etagMatches
+ * / etagDoesNotMatch, both typed as a specific known etag string) do not
+ * document a create-if-absent precondition, so we don't rely on one: for
+ * the first-ever-write case (key doesn't exist yet, no etag to assert
+ * against) we use put-then-verify instead — a plain unconditional put,
+ * then an immediate re-read to check whether another writer created the
+ * key first. Correctness here does not depend on any undocumented wildcard
+ * etag semantics; if a race is detected on the re-read, we fall into the
+ * same retry loop as an etag mismatch.
+ *
+ * Throws after MAX_R2_WRITE_RETRIES failed attempts rather than silently
+ * dropping a writer's data.
+ */
+async function writeConditionally<T>(
+  bucket: R2Bucket,
+  key: string,
+  merge: (current: T | undefined) => T,
+): Promise<void> {
+  for (let attempt = 0; attempt < MAX_R2_WRITE_RETRIES; attempt++) {
+    const existingObj = await bucket.get(key)
+    const etag = existingObj?.etag
+    const current = existingObj ? ((await existingObj.json()) as T) : undefined
+    const next = merge(current)
+    const jsonStr = JSON.stringify(next)
+
+    if (etag !== undefined) {
+      const result = await bucket.put(key, jsonStr, { onlyIf: { etagMatches: etag } })
+      if (result !== null) return // conditional write succeeded
+      // Someone else wrote first — loop and retry with fresh state.
+      continue
+    }
+
+    // Key doesn't exist yet and no documented create-if-absent precondition
+    // to assert against, so put unconditionally, then re-check for a lost
+    // race (see the put-then-verify rationale in the doc comment above).
+    await bucket.put(key, jsonStr)
+    const verify = await bucket.get(key)
+    if (verify) {
+      const verifyText = (await verify.json()) as T
+      if (JSON.stringify(verifyText) === jsonStr) return // our write is the one that landed
+      // Another writer created the key concurrently — retry against real state.
+      continue
+    }
+    return
+  }
+
+  throw new Error(
+    `writeConditionally: exceeded ${MAX_R2_WRITE_RETRIES} retries writing R2 key "${key}" — concurrent writers kept conflicting`,
+  )
+}
+
 export async function writeNodesToBrain(opts: WriteNodesOpts): Promise<{ written: number }> {
   const { nodes, sourceUrl, sourceName, bucket, vectorize, ai } = opts
 
-  // 1. Read existing community.json from R2
+  // 1. Read existing community.json from R2 to compute what's new (dedup is
+  //    read-only here; the authoritative merge happens again, against
+  //    possibly-fresher state, inside writeConditionally below).
   let existingNodes: BrainNode[] = []
   const communityObj = await bucket.get('nodes/community.json')
   if (communityObj) {
@@ -78,7 +134,7 @@ export async function writeNodesToBrain(opts: WriteNodesOpts): Promise<{ written
 
   const existingIds = new Set(existingNodes.map((n) => n.id))
 
-  // 2. Convert and deduplicate
+  // 2. Convert and deduplicate against the snapshot read above.
   const newBrainNodes: BrainNode[] = []
   for (const extracted of nodes) {
     const brainNode = toBrainNode(extracted, sourceUrl, sourceName)
@@ -89,22 +145,28 @@ export async function writeNodesToBrain(opts: WriteNodesOpts): Promise<{ written
 
   if (newBrainNodes.length === 0) return { written: 0 }
 
-  // 3. Write new nodes to a separate ingested file (avoids large file read-modify-write)
-  // Brain rebuild merges these. Also append to main file.
-  const allNodes = [...existingNodes, ...newBrainNodes]
-  const jsonStr = JSON.stringify(allNodes)
-  console.log(`Writing community.json: ${allNodes.length} nodes, ${jsonStr.length} bytes`)
-  await bucket.put('nodes/community.json', jsonStr)
+  // 3. Conditionally write community.json: re-read + re-merge against
+  // current R2 state on every attempt so a concurrent writer's nodes are
+  // never clobbered, only appended alongside.
+  console.log(`Writing community.json: ${newBrainNodes.length} new nodes`)
+  await writeConditionally<BrainNode[]>(bucket, 'nodes/community.json', (current) => {
+    const base = current ?? []
+    const baseIds = new Set(base.map((n) => n.id))
+    const toAppend = newBrainNodes.filter((n) => !baseIds.has(n.id))
+    return [...base, ...toAppend]
+  })
   console.log('R2 PUT complete')
 
-  // 4. Update manifest.json
-  const manifestObj = await bucket.get('manifest.json')
-  let manifest: { files: Record<string, string> } = { files: {} }
-  if (manifestObj) {
-    manifest = (await manifestObj.json()) as typeof manifest
-  }
-  manifest.files['nodes/community.json'] = String(Date.now())
-  await bucket.put('manifest.json', JSON.stringify(manifest))
+  // 4. Conditionally update manifest.json (independent key, independent race).
+  await writeConditionally<{ files: Record<string, string> }>(
+    bucket,
+    'manifest.json',
+    (current) => {
+      const manifest = current ?? { files: {} }
+      manifest.files['nodes/community.json'] = String(Date.now())
+      return manifest
+    },
+  )
 
   // 5. Embed and index new nodes in Vectorize
   const BATCH_SIZE = 50

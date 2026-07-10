@@ -317,9 +317,10 @@ secondary.remove({ secondaryId })                    -> void
 
 ## Testing
 
-**251 tests** (73 server + 178 client). 3 pre-existing failures in match.test.ts (`startFromPairing`)
-caused by `faction_entity_id` column added by a background agent's migration not being reflected in
-the test's in-memory CREATE TABLE — not a regression from Phase 3 work.
+Server and client suites run with Vitest; current counts come from the test run, not this doc.
+match.test.ts generates its fixture DDL from the `packages/db` schema via `createTestTables`
+(`@tabletop-tools/db/src/test-ddl`), so the fixture cannot drift from schema.ts. Prefer that
+helper over hand-rolled CREATE TABLE fixtures in new server tests.
 
 ```
 server/src/
@@ -327,7 +328,7 @@ server/src/
     scoring/result.ts / result.test.ts              <- 3 tests
     storage/r2.ts / r2.test.ts                       <- 6 tests
   routers/
-    match.test.ts                                    <- 23 tests (3 pre-existing failures: startFromPairing)
+    match.test.ts                                    <- 23 tests
     matchV2.test.ts                                  <- 8 tests: start, get, addRound, scoreRound, close
     mission.test.ts                                  <- 4 tests: listPrimaries, listSecondaries, getGameStates
     turn.test.ts                                     <- 9 tests: add (with V3 fields + stratagems), update
@@ -363,6 +364,6 @@ client/src/components/
 ```
 
 ```bash
-cd apps/game-tracker/server && pnpm test   # 73 server tests (70 passing, 3 pre-existing failures)
+cd apps/game-tracker/server && pnpm test
 cd apps/game-tracker/client && pnpm test   # 178 client tests
 ```

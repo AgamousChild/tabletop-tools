@@ -8,6 +8,7 @@ import { appRouter } from './index'
 
 const mockStorage: R2Storage = {
   upload: vi.fn().mockResolvedValue('https://cdn.example.com/evidence/test.jpg'),
+  delete: vi.fn().mockResolvedValue(undefined),
 }
 
 const client = createClient({ url: ':memory:' })

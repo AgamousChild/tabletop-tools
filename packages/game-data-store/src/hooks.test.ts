@@ -2,7 +2,9 @@ import type { UnitProfile } from '@tabletop-tools/game-content'
 import { act, renderHook, waitFor } from '@testing-library/react'
 import { beforeEach, describe, expect, it } from 'vitest'
 
+import type { BattleSize } from './hooks'
 import {
+  useBattleSizes,
   useDetachment,
   useDetachmentAbilities,
   useDetachments,
@@ -518,5 +520,62 @@ describe('useRulesImportMeta', () => {
     await waitFor(() => expect(result.current.isLoading).toBe(false))
     expect(result.current.data).not.toBeNull()
     expect(result.current.data!.counts.detachments).toBe(10)
+  })
+})
+
+// ── Battle size hook ─────────────────────────────────────────────────────────
+
+describe('useBattleSizes', () => {
+  const CANONICAL: BattleSize[] = [
+    {
+      id: 'combat-patrol',
+      name: 'Combat Patrol',
+      points: 500,
+      maxDuplicates: 1,
+      description: 'Small-scale skirmish',
+      sortOrder: 0,
+    },
+    {
+      id: 'incursion',
+      name: 'Incursion',
+      points: 1000,
+      maxDuplicates: 2,
+      description: 'Standard matched play',
+      sortOrder: 1,
+    },
+    {
+      id: 'strike-force',
+      name: 'Strike Force',
+      points: 2000,
+      maxDuplicates: 3,
+      description: 'Tournament standard',
+      sortOrder: 2,
+    },
+    {
+      id: 'onslaught',
+      name: 'Onslaught',
+      points: 3000,
+      maxDuplicates: 3,
+      description: 'Large-scale battle',
+      sortOrder: 3,
+    },
+  ]
+
+  it('returns rows from the app-supplied fetcher', async () => {
+    const { result } = renderHook(() => useBattleSizes(() => Promise.resolve(CANONICAL)))
+    await waitFor(() => expect(result.current.isLoading).toBe(false))
+    expect(result.current.data).toHaveLength(4)
+    expect(result.current.data[0]!.name).toBe('Combat Patrol')
+    expect(result.current.data[2]!.points).toBe(2000)
+    expect(result.current.error).toBeNull()
+  })
+
+  it('surfaces fetcher errors and falls back to an empty list', async () => {
+    const { result } = renderHook(() =>
+      useBattleSizes(() => Promise.reject(new Error('endpoint down'))),
+    )
+    await waitFor(() => expect(result.current.isLoading).toBe(false))
+    expect(result.current.data).toEqual([])
+    expect(result.current.error).toBe('endpoint down')
   })
 })

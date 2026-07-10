@@ -26,8 +26,21 @@ vi.mock('./useListsV2', () => ({
 
 const MIGRATION_KEY = 'list-builder:idb-migration-v2-done'
 
+const makeLocalList = (overrides: Partial<Record<string, unknown>> = {}) => ({
+  id: 'local-1',
+  name: 'My List',
+  faction: 'Space Marines',
+  detachment: 'det-1',
+  battleSize: 2000,
+  totalPts: 180,
+  createdAt: 0,
+  updatedAt: 0,
+  ...overrides,
+})
+
 beforeEach(() => {
   localStorage.clear()
+  vi.clearAllMocks()
 })
 
 describe('isMigrationDone', () => {
@@ -63,7 +76,7 @@ describe('migrateIndexedDbLists', () => {
     expect(result.failed).toBe(0)
   })
 
-  it('marks migration done after running', async () => {
+  it('marks migration done after a fully successful run', async () => {
     await migrateIndexedDbLists()
     expect(isMigrationDone()).toBe(true)
   })
@@ -72,28 +85,8 @@ describe('migrateIndexedDbLists', () => {
     const { getLists, getList, getListUnits } = await import('@tabletop-tools/game-data-store')
     const { createListV2Imperative, addUnitV2Imperative } = await import('./useListsV2')
 
-    vi.mocked(getLists).mockResolvedValueOnce([
-      {
-        id: 'local-1',
-        name: 'My List',
-        faction: 'Space Marines',
-        detachment: 'det-1',
-        battleSize: 2000,
-        totalPts: 180,
-        createdAt: 0,
-        updatedAt: 0,
-      },
-    ])
-    vi.mocked(getList).mockResolvedValueOnce({
-      id: 'local-1',
-      name: 'My List',
-      faction: 'Space Marines',
-      detachment: 'det-1',
-      battleSize: 2000,
-      totalPts: 180,
-      createdAt: 0,
-      updatedAt: 0,
-    })
+    vi.mocked(getLists).mockResolvedValueOnce([makeLocalList()])
+    vi.mocked(getList).mockResolvedValueOnce(makeLocalList())
     vi.mocked(getListUnits).mockResolvedValueOnce([
       {
         id: 'lu-1',
@@ -136,5 +129,86 @@ describe('migrateIndexedDbLists', () => {
       }),
     )
     expect(addUnitV2Imperative).toHaveBeenCalledTimes(2)
+  })
+
+  it('does NOT mark migration done when a list fails to migrate (partial failure)', async () => {
+    const { getLists, getList } = await import('@tabletop-tools/game-data-store')
+
+    vi.mocked(getLists).mockResolvedValueOnce([
+      makeLocalList({ id: 'local-1', name: 'Good List' }),
+      makeLocalList({ id: 'local-2', name: 'Bad List' }),
+    ])
+    vi.mocked(getList).mockImplementation(async (id: string) => {
+      if (id === 'local-1') return makeLocalList({ id: 'local-1', name: 'Good List' })
+      throw new Error('boom')
+    })
+
+    const result = await migrateIndexedDbLists()
+
+    expect(result.migrated).toBe(1)
+    expect(result.failed).toBe(1)
+    expect(result.skipped).toBe(false)
+    // Partial failure must NOT set the completion flag — otherwise the failed
+    // list is silently lost forever (it will never be retried).
+    expect(isMigrationDone()).toBe(false)
+  })
+
+  it('surfaces failed list names/ids so the caller can show the user what was lost', async () => {
+    const { getLists, getList } = await import('@tabletop-tools/game-data-store')
+
+    vi.mocked(getLists).mockResolvedValueOnce([makeLocalList({ id: 'local-2', name: 'Bad List' })])
+    vi.mocked(getList).mockRejectedValueOnce(new Error('boom'))
+
+    const result = await migrateIndexedDbLists()
+
+    expect(result.failed).toBe(1)
+    expect(result.failedLists).toEqual([{ id: 'local-2', name: 'Bad List' }])
+  })
+
+  it('re-run after partial failure retries only the failed lists (no duplicates)', async () => {
+    const { getLists, getList, getListUnits } = await import('@tabletop-tools/game-data-store')
+    const { createListV2Imperative } = await import('./useListsV2')
+
+    // First run: local-1 succeeds, local-2 fails.
+    vi.mocked(getLists).mockResolvedValueOnce([
+      makeLocalList({ id: 'local-1', name: 'Good List' }),
+      makeLocalList({ id: 'local-2', name: 'Bad List' }),
+    ])
+    vi.mocked(getList).mockImplementation(async (id: string) => {
+      if (id === 'local-1') return makeLocalList({ id: 'local-1', name: 'Good List' })
+      throw new Error('boom')
+    })
+    vi.mocked(getListUnits).mockResolvedValue([])
+
+    const first = await migrateIndexedDbLists()
+    expect(first.migrated).toBe(1)
+    expect(first.failed).toBe(1)
+    expect(isMigrationDone()).toBe(false)
+
+    vi.mocked(createListV2Imperative).mockClear()
+
+    // Second run: getLists again returns both local lists (nothing deleted from
+    // IndexedDB), but local-2 now succeeds. local-1 must be SKIPPED, not
+    // re-migrated (no duplicate list on the server).
+    vi.mocked(getLists).mockResolvedValueOnce([
+      makeLocalList({ id: 'local-1', name: 'Good List' }),
+      makeLocalList({ id: 'local-2', name: 'Bad List' }),
+    ])
+    vi.mocked(getList).mockImplementation(async (id: string) => {
+      if (id === 'local-1') return makeLocalList({ id: 'local-1', name: 'Good List' })
+      if (id === 'local-2') return makeLocalList({ id: 'local-2', name: 'Bad List' })
+      return undefined
+    })
+
+    const second = await migrateIndexedDbLists()
+
+    expect(second.migrated).toBe(1) // only local-2 migrated this time
+    expect(second.failed).toBe(0)
+    expect(createListV2Imperative).toHaveBeenCalledTimes(1)
+    expect(createListV2Imperative).toHaveBeenCalledWith(
+      expect.objectContaining({ name: 'Bad List' }),
+    )
+    // Now that everything has succeeded, the flag should be set.
+    expect(isMigrationDone()).toBe(true)
   })
 })

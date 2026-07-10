@@ -1,5 +1,16 @@
 import { createClient } from '@libsql/client'
-import { createDbFromClient } from '@tabletop-tools/db'
+import {
+  authUsers,
+  contentCanLead,
+  contentEntity,
+  createDbFromClient,
+  dimDataslate,
+  list,
+  listUnit,
+  listUnitLoadout,
+  listUnitLoadoutWeapon,
+} from '@tabletop-tools/db'
+import { createTestTables } from '@tabletop-tools/db/src/test-ddl'
 import { createCallerFactory } from '@tabletop-tools/server-core'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 
@@ -9,27 +20,33 @@ const client = createClient({ url: ':memory:' })
 const db = createDbFromClient(client)
 
 beforeAll(async () => {
+  await client.execute('PRAGMA foreign_keys = ON')
+  await createTestTables(client, {
+    authUsers,
+    dimDataslate,
+    contentEntity,
+    contentCanLead,
+    list,
+    listUnit,
+    listUnitLoadout,
+    listUnitLoadoutWeapon,
+  })
   await client.executeMultiple(`
-    PRAGMA foreign_keys = ON;
-    CREATE TABLE "user" (id TEXT PRIMARY KEY, name TEXT NOT NULL, email TEXT UNIQUE NOT NULL, email_verified INTEGER NOT NULL DEFAULT 0, created_at INTEGER NOT NULL, updated_at INTEGER NOT NULL);
-    CREATE TABLE dim_dataslate (id TEXT PRIMARY KEY, name TEXT NOT NULL, effective_date INTEGER NOT NULL, end_date INTEGER);
-    CREATE TABLE content_entity (id TEXT PRIMARY KEY, type TEXT NOT NULL, name TEXT NOT NULL, faction_id TEXT, parent_id TEXT, dataslate_id TEXT, r2_key TEXT, wahapedia_id TEXT, bsdata_id TEXT, can_deploy_solo INTEGER NOT NULL DEFAULT 1, updated_at INTEGER NOT NULL);
-    CREATE TABLE list (id TEXT PRIMARY KEY, user_id TEXT NOT NULL REFERENCES "user"(id) ON DELETE CASCADE, name TEXT NOT NULL, description TEXT, author TEXT, edition TEXT NOT NULL DEFAULT '11th', faction_id TEXT REFERENCES content_entity(id), subfaction_id TEXT REFERENCES content_entity(id), detachment_id TEXT REFERENCES content_entity(id), battle_size TEXT NOT NULL DEFAULT 'unknown', total_points INTEGER NOT NULL DEFAULT 0, dataslate_id TEXT REFERENCES dim_dataslate(id), source TEXT NOT NULL DEFAULT 'list-builder', created_at INTEGER NOT NULL, updated_at INTEGER NOT NULL);
-    CREATE TABLE list_unit (id TEXT PRIMARY KEY, list_id TEXT NOT NULL REFERENCES list(id) ON DELETE CASCADE, datasheet_id TEXT REFERENCES content_entity(id), enhancement_id TEXT REFERENCES content_entity(id), is_warlord INTEGER NOT NULL DEFAULT 0, points INTEGER NOT NULL DEFAULT 0, attached_to_unit_id TEXT REFERENCES list_unit(id), attach_role TEXT);
-    CREATE TABLE list_unit_loadout (id TEXT PRIMARY KEY, list_unit_id TEXT NOT NULL REFERENCES list_unit(id) ON DELETE CASCADE, model_count INTEGER NOT NULL);
-    CREATE TABLE list_unit_loadout_weapon (id TEXT PRIMARY KEY, loadout_id TEXT NOT NULL REFERENCES list_unit_loadout(id) ON DELETE CASCADE, weapon_id TEXT REFERENCES content_entity(id), count INTEGER NOT NULL DEFAULT 1);
-    CREATE TABLE content_can_lead (leader_datasheet_id TEXT NOT NULL REFERENCES content_entity(id) ON DELETE CASCADE, bodyguard_datasheet_id TEXT NOT NULL REFERENCES content_entity(id) ON DELETE CASCADE, role TEXT NOT NULL DEFAULT 'leader', PRIMARY KEY (leader_datasheet_id, bodyguard_datasheet_id, role));
-    INSERT INTO "user" VALUES ('u-1', 'Alice', 'a@test.com', 0, 0, 0);
-    INSERT INTO "user" VALUES ('u-2', 'Bob', 'b@test.com', 0, 0, 0);
-    INSERT INTO content_entity VALUES ('w-sword', 'weapon', 'Power Sword', NULL, NULL, NULL, NULL, NULL, NULL, 1, 0);
-    INSERT INTO content_entity VALUES ('ds-captain', 'datasheet', 'Captain', NULL, NULL, NULL, NULL, NULL, NULL, 1, 0);
-    INSERT INTO content_entity VALUES ('ds-intercessors', 'datasheet', 'Intercessors', NULL, NULL, NULL, NULL, NULL, NULL, 1, 0);
-    INSERT INTO content_entity VALUES ('ds-terminators', 'datasheet', 'Terminators', NULL, NULL, NULL, NULL, NULL, NULL, 1, 0);
-    INSERT INTO content_entity VALUES ('ds-librarian', 'datasheet', 'Librarian', NULL, NULL, NULL, NULL, NULL, NULL, 1, 0);
-    INSERT INTO content_entity VALUES ('ds-support-only', 'datasheet', 'Support-Only Char', NULL, NULL, NULL, NULL, NULL, NULL, 0, 0);
-    INSERT INTO content_can_lead VALUES ('ds-captain', 'ds-intercessors', 'leader');
-    INSERT INTO content_can_lead VALUES ('ds-librarian', 'ds-intercessors', 'support');
-    INSERT INTO content_can_lead VALUES ('ds-support-only', 'ds-intercessors', 'support');
+    INSERT INTO "user" (id, name, email, email_verified, created_at, updated_at) VALUES
+      ('u-1', 'Alice', 'a@test.com', 0, 0, 0),
+      ('u-2', 'Bob', 'b@test.com', 0, 0, 0);
+    INSERT INTO content_entity (id, type, name, updated_at) VALUES
+      ('w-sword', 'weapon', 'Power Sword', 0),
+      ('ds-captain', 'datasheet', 'Captain', 0),
+      ('ds-intercessors', 'datasheet', 'Intercessors', 0),
+      ('ds-terminators', 'datasheet', 'Terminators', 0),
+      ('ds-librarian', 'datasheet', 'Librarian', 0);
+    INSERT INTO content_entity (id, type, name, can_deploy_solo, updated_at) VALUES
+      ('ds-support-only', 'datasheet', 'Support-Only Char', 0, 0);
+    INSERT INTO content_can_lead (leader_datasheet_id, bodyguard_datasheet_id, role) VALUES
+      ('ds-captain', 'ds-intercessors', 'leader'),
+      ('ds-librarian', 'ds-intercessors', 'support'),
+      ('ds-support-only', 'ds-intercessors', 'support');
   `)
 })
 

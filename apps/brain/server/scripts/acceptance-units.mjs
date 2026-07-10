@@ -266,11 +266,17 @@ for (let iter = 1; iter <= ITERATIONS; iter++) {
       // across the 4 interfaces.
       const rng = mulberry32(hashStr(`${runId}:${iter}:${faction}:${iface}`))
       const unit = pool[Math.floor(rng() * pool.length)]
+      // One automatic retry per check — cold CDN / cold Vectorize paths can
+      // push a first attempt past its timeout; the unit itself is fine.
       let detail = null
-      try {
-        detail = await CHECKS[iface](page, unit, faction, pageMap)
-      } catch (err) {
-        detail = `exception: ${err.message?.slice(0, 200)}`
+      for (let attempt = 1; attempt <= 2; attempt++) {
+        try {
+          detail = await CHECKS[iface](page, unit, faction, pageMap)
+        } catch (err) {
+          detail = `exception: ${err.message?.slice(0, 200)}`
+        }
+        if (detail === null) break
+        await dismissOverlay(page)
       }
       let shot = null
       try {

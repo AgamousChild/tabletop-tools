@@ -9,6 +9,7 @@
  * Both the server router and the client pipeline use this to enforce
  * that we never persist or display a wrong total.
  */
+import { resolveAvg } from '@tabletop-tools/util'
 
 export interface AttackCountFactors {
   modelCount: number
@@ -17,33 +18,16 @@ export interface AttackCountFactors {
   totalAttacks: number
 }
 
-const DICE_NOTATION = /^(\d+)?[Dd](\d+)(?:\+(\d+))?$/
-
 /**
  * Converts a dice notation string or numeric string to its expected value.
- * Supports: "3", "2.5", "D6", "d3", "2D6", "D6+1", "2D3+2".
+ * Supports: "3", "2.5", "D6", "d3", "2D6", "D6+1", "2D3+2", "D6-1".
+ *
+ * Throws on unrecognised notation — preserves this call site's original
+ * error semantics (server rejects bad data before it hits the DB). See
+ * packages/util/src/dice-notation.ts (D2-07 item 3) for the shared parser.
  */
 export function resolveAttacksExpected(notation: string): number {
-  const trimmed = notation.trim()
-
-  // Plain number (int or decimal)
-  const asNum = Number(trimmed)
-  if (!isNaN(asNum) && trimmed !== '') {
-    return asNum
-  }
-
-  // Dice notation: [multiplier]D[sides][+bonus]
-  const match = trimmed.match(DICE_NOTATION)
-  if (match) {
-    const multiplier = match[1] ? parseInt(match[1], 10) : 1
-    const sides = parseInt(match[2], 10)
-    const bonus = match[3] ? parseInt(match[3], 10) : 0
-    // Expected value of one die: (sides + 1) / 2
-    const dieExpected = (sides + 1) / 2
-    return multiplier * dieExpected + bonus
-  }
-
-  throw new Error(`resolveAttacksExpected: unrecognised notation "${notation}"`)
+  return resolveAvg(notation, { onInvalid: 'throw' })
 }
 
 /**

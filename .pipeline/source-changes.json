@@ -734,8 +734,7 @@
     "action": "created",
     "reason": "Interactive review CLI: findDraftDirs + reviewDrafts with approve/reject/skip/quit prompt loop",
     "timestamp": "2026-04-24T00:25:00.000Z"
-  }
-,
+  },
   {
     "taskId": "ci-task-9-brain-commit",
     "agent": "senior-dev",
@@ -799,6 +798,62 @@
     "action": "modified",
     "reason": "Add bcp-scan, bcp-scrape, bcp-import Commander commands with BCP module imports",
     "timestamp": "2026-04-24T23:30:00.000Z"
+  },
+  {
+    "taskId": "w2-phase-0.3-webhook-auth",
+    "agent": "senior-dev",
+    "file": "apps/content-ingestor/server/src/worker.ts",
+    "action": "modified",
+    "reason": "Add WEBHOOK_SECRET-gated checkWebhookToken (constant-time compare, fail-closed) to POST /ingest/callback — the only unauthenticated non-/health route; append ?token= to all 4 callbackUrl construction sites; export getApp/checkWebhookToken for testing",
+    "timestamp": "2026-07-07T10:00:00.000Z"
+  },
+  {
+    "taskId": "w2-phase-0.4-r2-race",
+    "agent": "senior-dev",
+    "file": "apps/content-ingestor/server/src/lib/nodes.ts",
+    "action": "modified",
+    "reason": "Replace unconditional R2 read-modify-write for nodes/community.json and manifest.json with writeConditionally — etag-based optimistic concurrency, bounded retry (5 attempts), throws on exhaustion instead of silently clobbering a concurrent writer",
+    "timestamp": "2026-07-07T10:00:00.000Z"
+  },
+  {
+    "taskId": "w2-phase-0.3-webhook-auth",
+    "agent": "senior-dev",
+    "file": "apps/content-ingestor/server/wrangler.toml",
+    "action": "modified",
+    "reason": "Document required WEBHOOK_SECRET (and other) Worker secrets as deploy prerequisites via wrangler secret put",
+    "timestamp": "2026-07-07T10:00:00.000Z"
+  },
+  {
+    "taskId": "w2-review-required-1",
+    "agent": "senior-dev",
+    "file": "apps/content-ingestor/server/src/lib/nodes.ts",
+    "action": "modified",
+    "reason": "Reword writeConditionally doc comments to avoid overclaiming prod R2 behavior from type absence (antagonistic review REQUIRED 3) — 'no documented create-if-absent precondition' instead of asserting one 'doesn't exist'",
+    "timestamp": "2026-07-07T10:30:00.000Z"
+  },
+  {
+    "taskId": "w2-review-required-2",
+    "agent": "senior-dev",
+    "file": "apps/content-ingestor/server/src/lib/process.ts",
+    "action": "modified",
+    "reason": "Fix stranded-state bug (antagonistic review REQUIRED 2): processDiscovered's main-loop query now also re-picks-up 'failed' ingestContent rows so a partial writeNodesToBrain failure (e.g. manifest.json R2 retry exhaustion after community.json already landed) heals on the next run instead of being permanently stranded — writes are idempotent dedup-by-id merges. processTranscribed's query deliberately left unchanged to avoid double-processing a row within a single processDiscovered() invocation",
+    "timestamp": "2026-07-07T10:30:00.000Z"
+  },
+  {
+    "taskId": "w2-review-minor-4",
+    "agent": "senior-dev",
+    "file": "apps/content-ingestor/server/src/worker.ts",
+    "action": "modified",
+    "reason": "Fix timing side-channel in checkWebhookToken (antagonistic review MINOR 4): timingSafeEqual now hashes both sides with SHA-256 (crypto.subtle.digest) before a fixed-length constant-time compare, closing the token-length leak that a plain byte-by-byte compare over max(a.length,b.length) still had. checkWebhookToken/its call site are now async",
+    "timestamp": "2026-07-07T10:30:00.000Z"
+  },
+  {
+    "taskId": "w2-review-minor-5",
+    "agent": "senior-dev",
+    "file": "apps/content-ingestor/server/src/worker.ts",
+    "action": "modified",
+    "reason": "Document query-param-vs-header tradeoff for the webhook token (antagonistic review MINOR 5): confirmed lib/gladia.ts's submitTranscription sends only callback_url (no callback_headers field) to Gladia's v2 API, so no evidence header-based delivery is available — added a doc comment on checkWebhookToken covering the log-exposure tradeoff and the WEBHOOK_SECRET rotation procedure",
+    "timestamp": "2026-07-07T10:30:00.000Z"
   },
   {
     "taskId": "d2-01-shared-meta-writer",
