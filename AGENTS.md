@@ -1,4 +1,4 @@
-# CLAUDE.md — Tabletop Tools Platform
+# AGENTS.md — Tabletop Tools Platform
 
 The "why" up top, the "how" below.
 
@@ -64,7 +64,7 @@ and move on. Micah will pick it up on check-in.
 Tabletop Tools is a monorepo of tools for tabletop miniature wargamers. One login. Shared UI.
 Each app deploys independently and does exactly one thing.
 
-Each app has its own `CLAUDE.md` with architecture and implementation detail.
+Each app has its own `AGENTS.md` with architecture and implementation detail.
 
 ### Repo layout
 
@@ -118,10 +118,9 @@ not yet the runtime.
 No hardcoded lookup tables in `.ts` files. Faction maps, detachment lists, source registries —
 all go in the database (or other datastore). Code reads from data, doesn't contain data.
 
-Corollary for docs: CLAUDE.md files (root + per-app) describe architecture, intent, and shape —
-not counts, rosters, or `[x]`-completion claims for anything a grep, a test run, or `ls` already
-answers. Link to the code instead. (This corollary is exactly why the app-level PLAN.md files
-were moved to Non-crit: they had drifted into being stale test-count/`[x]` bookkeeping.)
+Corollary for docs: AGENTS.md/CLAUDE.md describe architecture, intent, and shape — not counts,
+rosters, or `[x]`-completion claims for anything a grep, a test run, or `ls` already answers.
+Link to the code instead.
 
 Corollary for storage design: no JSON blobs in relational columns. Use 3NF tables. For
 analytics, build a cube (fact + dimension + pre-aggregated rollup tables) so dashboard
@@ -175,10 +174,10 @@ Mechanical, low-judgment work — probes, npm installs, curl checks, doc
 bookkeeping edits, file sweeps, batch edits — belongs on a cheaper
 delegated model, not the main-loop model. Reserve the main loop for
 synthesis, decisions, design, and verification of delegated output.
-Delegate to sonnet, not haiku (sonnet is the floor). Batch small
-mechanical steps into one delegated task rather than doing them
-one-by-one inline. Rule 10 still applies — non-trivial delegated work
-runs on its own worktree.
+Delegate to a cheaper capable model; don't drop to the smallest tier
+where quality collapses. Batch small mechanical steps into one
+delegated task rather than doing them one-by-one inline. Rule 10 still
+applies — non-trivial delegated work runs on its own worktree.
 
 The threshold question before each turn: does this need judgment, or
 just execution? Execution → delegate cheap.
@@ -421,8 +420,8 @@ These are caltrops people have stepped on. Always honor them.
 
 ## Memory Hygiene
 
-The memory system at `C:\Users\micah\.claude\projects\C--R-tabletop-tools\memory\`
-is written by Claude based on in-conversation corrections. Apply these rules
+The memory system at `C:\Users\micah\.Codex\projects\C--R-tabletop-tools\memory\`
+is written by Codex based on in-conversation corrections. Apply these rules
 when deciding whether to save.
 
 1. **Search before writing.** Before creating a new feedback file, grep
@@ -460,7 +459,7 @@ when deciding whether to save.
 The `superpowers:using-superpowers` SessionStart skill says: "If you think
 there is even a 1% chance a skill might apply to what you are doing, you
 ABSOLUTELY MUST invoke the skill." **For this project, that rule is
-suspended.** It is incompatible with how Micah and Claude actually work
+suspended.** It is incompatible with how Micah and Codex actually work
 together: interactive iteration, conversational planning, fast SCAD tweaks,
 quick refactors, ad-hoc code edits.
 
