@@ -68,7 +68,7 @@ Each app has its own `CLAUDE.md` with architecture and implementation detail.
 
 ### Repo layout
 
-- `apps/` — independently deployable apps (brain, versus, list-builder, tournament, study, physics, gateway).
+- `apps/` — independently deployable apps, each with its own `CLAUDE.md`. Run `ls apps/` for the current list — per Rule 6, this doc doesn't try to keep a live roster.
 - `packages/` — shared code (`ui`, `game-content`, `server-core`, `game-data-store`, etc.). Imported by apps.
 - `scripts/` — one-off shell scripts for ingestion bridges and admin chores. Not load-bearing for the running system (see Rule 4).
 - `docs/` — long-form plans, design notes, and references.
