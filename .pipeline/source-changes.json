@@ -799,5 +799,77 @@
     "action": "modified",
     "reason": "Add bcp-scan, bcp-scrape, bcp-import Commander commands with BCP module imports",
     "timestamp": "2026-04-24T23:30:00.000Z"
+  },
+  {
+    "taskId": "d2-01-shared-meta-writer",
+    "agent": "senior-dev",
+    "file": "packages/server-core/package.json",
+    "action": "modified",
+    "reason": "Add drizzle-orm as a direct dependency — meta-cube.ts and meta-ingest.ts import eq/and/sql directly, previously only resolvable as a phantom dep via @tabletop-tools/db",
+    "timestamp": "2026-07-08T03:17:57.000Z"
+  },
+  {
+    "taskId": "d2-01-shared-meta-writer",
+    "agent": "senior-dev",
+    "file": "packages/server-core/src/meta-cube.ts",
+    "action": "created",
+    "reason": "Extract event-scoped analytics cube builder from bcp-scraper's pipeline.ts, fixing the unscoped `WHERE imported_at > lastCompleted` query that cubed all three writers' rows regardless of source",
+    "timestamp": "2026-07-08T03:17:57.000Z"
+  },
+  {
+    "taskId": "d2-01-shared-meta-writer",
+    "agent": "senior-dev",
+    "file": "packages/server-core/src/meta-ingest.ts",
+    "action": "created",
+    "reason": "One shared upsertMetaEvent() replacing tournament.exportToMeta, new-meta admin.import, and bcp-scraper's scrape writer — owns (source, sourceId) upsert semantics, single Glicko-2 path, and scoped cube trigger",
+    "timestamp": "2026-07-08T03:17:57.000Z"
+  },
+  {
+    "taskId": "d2-01-shared-meta-writer",
+    "agent": "senior-dev",
+    "file": "packages/server-core/src/index.ts",
+    "action": "modified",
+    "reason": "Barrel-export buildCubeForEvents, generateFrames, and upsertMetaEvent from the new meta-cube/meta-ingest modules",
+    "timestamp": "2026-07-08T03:17:57.000Z"
+  },
+  {
+    "taskId": "d2-01-shared-meta-writer",
+    "agent": "senior-dev",
+    "file": "apps/bcp-scraper/server/src/lib/scrape.ts",
+    "action": "modified",
+    "reason": "Swap direct metaEvents/metaEventPlayers/metaPairings inserts for a single upsertMetaEvent() call; keep existingSourceIds as a cheap pre-skip only, per D2-01",
+    "timestamp": "2026-07-08T16:26:47.000Z"
+  },
+  {
+    "taskId": "d2-01-shared-meta-writer",
+    "agent": "senior-dev",
+    "file": "packages/server-core/src/meta-ingest.ts",
+    "action": "modified",
+    "reason": "Add optional playerCount override (defaults to players.length) — BCP's registered-player count can exceed players actually recovered from pairing data on a partial scrape; preserves scrape.ts's original event.playerCount semantics",
+    "timestamp": "2026-07-08T16:26:47.000Z"
+  },
+  {
+    "taskId": "d2-01-shared-meta-writer",
+    "agent": "senior-dev",
+    "file": "apps/bcp-scraper/server/src/lib/pipeline.ts",
+    "action": "modified",
+    "reason": "Reduce runPipeline to a thin watermark-tracking wrapper around the shared buildCubeForEvents(); delegates all cube-building logic to packages/server-core/src/meta-cube.ts",
+    "timestamp": "2026-07-08T16:26:47.000Z"
+  },
+  {
+    "taskId": "d2-01-shared-meta-writer",
+    "agent": "senior-dev",
+    "file": "apps/content-ingestor/src/meta/build-cube.ts",
+    "action": "deleted",
+    "reason": "Orphaned, duplicated cube-builder (manual npx tsx entry point only, never imported by cli.ts or any script) — superseded by packages/server-core/src/meta-cube.ts per D2-01",
+    "timestamp": "2026-07-08T16:26:47.000Z"
+  },
+  {
+    "taskId": "d2-01-shared-meta-writer",
+    "agent": "senior-dev",
+    "file": "apps/tournament/server/src/routers/tournament.ts",
+    "action": "modified",
+    "reason": "Replace exportToMeta's hand-rolled insert/delete + computeGlicko2ForEvent with a single upsertMetaEvent() call; keep operational placement-freeze logic local; delete computeGlicko2ForEvent entirely; type db as real Drizzle Db instead of any",
+    "timestamp": "2026-07-08T19:22:13.000Z"
   }
 ]
