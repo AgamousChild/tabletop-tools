@@ -172,6 +172,41 @@ beforeAll(async () => {
       games_in_period INTEGER NOT NULL,
       recorded_at INTEGER NOT NULL
     );
+    CREATE TABLE IF NOT EXISTS dim_dataslate (
+      id TEXT PRIMARY KEY, name TEXT NOT NULL, effective_date INTEGER NOT NULL, end_date INTEGER
+    );
+    CREATE TABLE IF NOT EXISTS dim_tournament_pack (
+      id TEXT PRIMARY KEY, name TEXT NOT NULL, effective_date INTEGER NOT NULL, end_date INTEGER
+    );
+    CREATE TABLE IF NOT EXISTS dim_edition (
+      id TEXT PRIMARY KEY, name TEXT NOT NULL, start_date INTEGER NOT NULL, end_date INTEGER
+    );
+    CREATE TABLE IF NOT EXISTS dim_for_type (id INTEGER PRIMARY KEY, name TEXT NOT NULL);
+    CREATE TABLE IF NOT EXISTS dim_granularity (id INTEGER PRIMARY KEY, name TEXT NOT NULL);
+    CREATE TABLE IF NOT EXISTS meta_for (
+      id TEXT PRIMARY KEY, type_id INTEGER NOT NULL, date INTEGER NOT NULL, end_date INTEGER,
+      day INTEGER, month INTEGER, quarter INTEGER, year INTEGER NOT NULL,
+      dataslate_id TEXT, tourney_pack_id TEXT, edition_id TEXT
+    );
+    CREATE TABLE IF NOT EXISTS fact_game_results (
+      id TEXT PRIMARY KEY, event_id TEXT NOT NULL, player_id TEXT NOT NULL, opponent_id TEXT,
+      round INTEGER NOT NULL, faction_id TEXT NOT NULL, subfaction_id TEXT, detachment_id TEXT,
+      opponent_faction_id TEXT, opponent_subfaction_id TEXT, opponent_detachment_id TEXT,
+      result REAL NOT NULL, player_score INTEGER, opponent_score INTEGER
+    );
+    CREATE TABLE IF NOT EXISTS meta_top (
+      id TEXT PRIMARY KEY, granularity_id INTEGER NOT NULL, faction_id TEXT NOT NULL,
+      subfaction_id TEXT, detachment_id TEXT, meta_for_id TEXT NOT NULL,
+      win_rate REAL NOT NULL, draw_rate REAL NOT NULL, over_rep REAL NOT NULL, four_oh_start REAL NOT NULL,
+      event_wins INTEGER NOT NULL DEFAULT 0, event_finals INTEGER NOT NULL DEFAULT 0,
+      event_top4 INTEGER NOT NULL DEFAULT 0, event_top8 INTEGER NOT NULL DEFAULT 0, event_top16 INTEGER NOT NULL DEFAULT 0,
+      player_pop_pct REAL NOT NULL, wins INTEGER NOT NULL DEFAULT 0, losses INTEGER NOT NULL DEFAULT 0,
+      draws INTEGER NOT NULL DEFAULT 0, games INTEGER NOT NULL DEFAULT 0, players INTEGER NOT NULL DEFAULT 0
+    );
+    CREATE TABLE IF NOT EXISTS meta_cube_status (
+      id INTEGER PRIMARY KEY DEFAULT 1, last_started_at INTEGER, last_completed_at INTEGER,
+      last_event_id TEXT, status TEXT NOT NULL DEFAULT 'pending'
+    );
     INSERT OR IGNORE INTO dim_faction (id, name, allegiance) VALUES ('unknown', 'Unknown', 'unknown');
     CREATE TABLE IF NOT EXISTS tournament_cards (
       id TEXT PRIMARY KEY,

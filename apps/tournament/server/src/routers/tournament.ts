@@ -1,11 +1,7 @@
 import {
   authUsers,
-  glickoHistory,
-  metaEventPlayers,
-  metaEvents,
-  metaPairings,
+  type Db,
   pairings,
-  playerGlicko,
   rankingMetric,
   rounds,
   tournamentPairingMetric,
@@ -13,10 +9,13 @@ import {
   tournamentPlayers,
   tournaments,
 } from '@tabletop-tools/db'
-import { resolveFaction } from '@tabletop-tools/db'
-import { generateId, updateGlicko2 } from '@tabletop-tools/server-core'
+import {
+  type MetaIngestPairing,
+  type MetaIngestPlayer,
+  upsertMetaEvent,
+} from '@tabletop-tools/server-core'
 import { TRPCError } from '@trpc/server'
-import { and, asc, eq, inArray } from 'drizzle-orm'
+import { asc, eq, inArray } from 'drizzle-orm'
 import { z } from 'zod'
 
 import { computeStandings } from '../lib/standings/compute'
@@ -324,11 +323,17 @@ export const tournamentRouter = router({
 // ---- Internal helpers ----
 
 /**
- * Export completed tournament results directly to meta 3NF tables
- * (metaEvents, metaEventPlayers, metaPairings) and run Glicko-2.
+ * Export completed tournament results to the shared meta-analytics tables
+ * via upsertMetaEvent (D2-01) and freeze final placement on each
+ * tournament_player row.
+ *
+ * Placement-freezing stays local: it writes to the operational
+ * tournament_players table, which upsertMetaEvent has no business
+ * touching. Everything downstream of "who placed where" — meta table
+ * writes, Glicko-2, cube refresh — is delegated to the shared function.
  */
 async function exportToMeta(
-  db: any,
+  db: Db,
   tournament: {
     id: string
     name: string
@@ -345,7 +350,7 @@ async function exportToMeta(
     .where(eq(tournamentPlayers.tournamentId, tournament.id))
     .all()
 
-  const activePlayers = allPlayers.filter((p: any) => !p.dropped)
+  const activePlayers = allPlayers.filter((p) => !p.dropped)
 
   // Get all rounds and pairings
   const allRounds = await db
@@ -354,7 +359,7 @@ async function exportToMeta(
     .where(eq(rounds.tournamentId, tournament.id))
     .all()
 
-  const roundIds = allRounds.map((r: any) => r.id)
+  const roundIds = allRounds.map((r) => r.id)
   if (roundIds.length === 0) return
 
   const allPairings = await db
@@ -362,16 +367,6 @@ async function exportToMeta(
     .from(pairings)
     .where(inArray(pairings.roundId, roundIds))
     .all()
-
-  // Check for existing export and delete if found (re-export)
-  const existing = await db
-    .select({ id: metaEvents.id })
-    .from(metaEvents)
-    .where(and(eq(metaEvents.source, 'native'), eq(metaEvents.sourceId, tournament.id)))
-    .get()
-  if (existing) {
-    await db.delete(metaEvents).where(eq(metaEvents.id, existing.id))
-  }
 
   // Compute W/L/D for each player
   const playerStats = new Map<string, { wins: number; losses: number; draws: number; vp: number }>()
@@ -420,7 +415,7 @@ async function exportToMeta(
   }
 
   // Sort players by record (wins desc, then VP desc) for placement
-  const sorted = [...activePlayers].sort((a: any, b: any) => {
+  const sorted = [...activePlayers].sort((a, b) => {
     const sa = playerStats.get(a.id)!
     const sb = playerStats.get(b.id)!
     if (sb.wins !== sa.wins) return sb.wins - sa.wins
@@ -432,234 +427,67 @@ async function exportToMeta(
     await db
       .update(tournamentPlayers)
       .set({ placement: i + 1 })
-      .where(eq(tournamentPlayers.id, sorted[i].id))
+      .where(eq(tournamentPlayers.id, sorted[i]!.id))
   }
 
-  // INSERT metaEvent
-  const eventId = generateId()
-  const now = Date.now()
-  await db.insert(metaEvents).values({
-    id: eventId,
+  // Build the shared function's player list + index map (dropped players
+  // are excluded from meta entirely, matching the original behavior).
+  const tournPlayerIdToIndex = new Map<string, number>()
+  const metaPlayers: MetaIngestPlayer[] = sorted.map((p, i) => {
+    tournPlayerIdToIndex.set(p.id, i)
+    const stats = playerStats.get(p.id)!
+    return {
+      playerName: p.displayName,
+      sourcePlayerId: p.userId,
+      faction: p.faction,
+      placement: i + 1,
+      listText: p.listText ?? null,
+      wins: stats.wins,
+      losses: stats.losses,
+      draws: stats.draws,
+    }
+  })
+
+  // Round numbers: build roundId -> roundNumber map
+  const roundNumberMap = new Map<string, number>()
+  for (const r of allRounds) {
+    roundNumberMap.set(r.id, r.roundNumber)
+  }
+
+  const metaPairings: MetaIngestPairing[] = []
+  for (const pair of allPairings) {
+    if (!pair.result || !pair.player2Id) continue // skip byes and unresolved
+
+    const p1Index = tournPlayerIdToIndex.get(pair.player1Id)
+    const p2Index = tournPlayerIdToIndex.get(pair.player2Id)
+    if (p1Index === undefined || p2Index === undefined) continue // dropped players not in meta
+
+    let result: 'p1' | 'p2' | 'draw'
+    if (pair.result === 'P1_WIN') result = 'p1'
+    else if (pair.result === 'P2_WIN') result = 'p2'
+    else if (pair.result === 'DRAW') result = 'draw'
+    else continue // skip BYE or unknown
+
+    metaPairings.push({
+      round: roundNumberMap.get(pair.roundId) ?? 1,
+      player1Index: p1Index,
+      player2Index: p2Index,
+      player1Score: pair.player1Vp ?? null,
+      player2Score: pair.player2Vp ?? null,
+      result,
+    })
+  }
+
+  await upsertMetaEvent(db, {
+    source: 'native',
+    sourceId: tournament.id,
     name: tournament.name,
     date: tournament.eventDate,
     location: tournament.location ?? null,
     format: tournament.format,
     rounds: tournament.totalRounds,
     playerCount: activePlayers.length,
-    source: 'native',
-    sourceId: tournament.id,
-    importedAt: now,
+    players: metaPlayers,
+    pairings: metaPairings,
   })
-
-  // INSERT metaEventPlayers — map tournament player IDs to new meta player IDs
-  const tournPlayerToMetaPlayer = new Map<string, string>()
-
-  for (let i = 0; i < sorted.length; i++) {
-    const p = sorted[i] as any
-    const stats = playerStats.get(p.id)!
-    const metaPlayerId = generateId()
-    tournPlayerToMetaPlayer.set(p.id, metaPlayerId)
-
-    // Resolve faction
-    let factionId = await resolveFaction(db, p.faction)
-    if (!factionId) factionId = 'unknown'
-
-    await db.insert(metaEventPlayers).values({
-      id: metaPlayerId,
-      eventId,
-      playerName: p.displayName,
-      sourcePlayerId: p.userId,
-      factionId,
-      placement: i + 1,
-      listText: p.listText ?? null,
-      wins: stats.wins,
-      losses: stats.losses,
-      draws: stats.draws,
-    })
-  }
-
-  // INSERT metaPairings — skip byes (player2Id is NULL)
-  // Need round numbers: build roundId -> roundNumber map
-  const roundNumberMap = new Map<string, number>()
-  for (const r of allRounds) {
-    roundNumberMap.set(r.id, r.roundNumber)
-  }
-
-  for (const pair of allPairings) {
-    if (!pair.result || !pair.player2Id) continue // skip byes and unresolved
-
-    const metaP1 = tournPlayerToMetaPlayer.get(pair.player1Id)
-    const metaP2 = tournPlayerToMetaPlayer.get(pair.player2Id)
-    if (!metaP1 || !metaP2) continue // dropped players not in meta
-
-    let metaResult: string
-    if (pair.result === 'P1_WIN') metaResult = 'p1'
-    else if (pair.result === 'P2_WIN') metaResult = 'p2'
-    else if (pair.result === 'DRAW') metaResult = 'draw'
-    else continue // skip BYE or unknown
-
-    await db.insert(metaPairings).values({
-      id: generateId(),
-      eventId,
-      round: roundNumberMap.get(pair.roundId) ?? 1,
-      player1Id: metaP1,
-      player2Id: metaP2,
-      player1Score: pair.player1Vp ?? null,
-      player2Score: pair.player2Vp ?? null,
-      result: metaResult,
-    })
-  }
-
-  // Run Glicko-2 computation using real pairing data
-  await computeGlicko2ForEvent(db, eventId)
-}
-
-/**
- * Compute Glicko-2 updates for all players in a meta event.
- * Uses actual opponent ratings from metaPairings instead of synthetic average opponents.
- */
-async function computeGlicko2ForEvent(db: any, eventId: string) {
-  // Load all meta event players for this event
-  const eventPlayers = await db
-    .select()
-    .from(metaEventPlayers)
-    .where(eq(metaEventPlayers.eventId, eventId))
-    .all()
-
-  // Load all pairings for this event
-  const eventPairings = await db
-    .select()
-    .from(metaPairings)
-    .where(eq(metaPairings.eventId, eventId))
-    .all()
-
-  if (eventPlayers.length === 0 || eventPairings.length === 0) return
-
-  // Load all existing Glicko entries
-  const allGlicko = await db.select().from(playerGlicko).all()
-  type GlickoRow = (typeof allGlicko)[number]
-  const glickoByName = new Map<string, GlickoRow>()
-  for (const g of allGlicko) {
-    glickoByName.set(g.playerName.toLowerCase(), g)
-  }
-
-  // Map metaEventPlayer IDs to Glicko IDs, creating entries as needed
-  const metaPlayerToGlicko = new Map<string, string>()
-  const metaPlayerIdToGlickoData = new Map<string, GlickoRow>()
-
-  // Load platform users for userId matching
-  const users = await db
-    .select({
-      id: authUsers.id,
-      username: authUsers.username,
-      displayUsername: authUsers.displayUsername,
-    })
-    .from(authUsers)
-
-  for (const ep of eventPlayers) {
-    const name = ep.playerName
-    let glickoEntry = glickoByName.get(name.toLowerCase())
-
-    if (!glickoEntry) {
-      // Try to match to platform user
-      let userId: string | null = null
-      if (ep.sourcePlayerId) {
-        const user = users.find((u: any) => u.id === ep.sourcePlayerId)
-        if (user) userId = user.id
-      }
-
-      const newId = generateId()
-      const newEntry = {
-        id: newId,
-        userId,
-        playerName: name,
-        rating: 1500,
-        ratingDeviation: 350,
-        volatility: 0.06,
-        gamesPlayed: 0,
-        lastRatingPeriod: null,
-        updatedAt: Date.now(),
-      }
-      await db.insert(playerGlicko).values(newEntry)
-      glickoByName.set(name.toLowerCase(), newEntry as any)
-      glickoEntry = newEntry as any
-    }
-
-    metaPlayerToGlicko.set(ep.id, glickoEntry!.id)
-    metaPlayerIdToGlickoData.set(ep.id, glickoEntry!)
-  }
-
-  // For each meta event player, collect their games from pairings
-  for (const ep of eventPlayers) {
-    const glickoId = metaPlayerToGlicko.get(ep.id)
-    if (!glickoId) continue
-
-    const current = metaPlayerIdToGlickoData.get(ep.id)!
-    const games: Array<{ opponentRating: number; opponentRD: number; score: number }> = []
-
-    for (const pair of eventPairings) {
-      let opponentMetaId: string | null = null
-      let score: number | null = null
-
-      if (pair.player1Id === ep.id) {
-        opponentMetaId = pair.player2Id
-        score = pair.result === 'p1' ? 1 : pair.result === 'p2' ? 0 : 0.5
-      } else if (pair.player2Id === ep.id) {
-        opponentMetaId = pair.player1Id
-        score = pair.result === 'p2' ? 1 : pair.result === 'p1' ? 0 : 0.5
-      }
-
-      if (opponentMetaId && score !== null) {
-        const oppGlicko = metaPlayerIdToGlickoData.get(opponentMetaId)
-        if (oppGlicko) {
-          games.push({
-            opponentRating: oppGlicko.rating,
-            opponentRD: oppGlicko.ratingDeviation,
-            score,
-          })
-        }
-      }
-    }
-
-    if (games.length === 0) continue
-
-    const ratingBefore = current.rating
-    const rdBefore = current.ratingDeviation
-
-    const result = updateGlicko2(
-      {
-        rating: current.rating,
-        ratingDeviation: current.ratingDeviation,
-        volatility: current.volatility,
-      },
-      games,
-    )
-
-    const now = Date.now()
-    await db
-      .update(playerGlicko)
-      .set({
-        rating: result.rating,
-        ratingDeviation: result.ratingDeviation,
-        volatility: result.volatility,
-        gamesPlayed: current.gamesPlayed + games.length,
-        lastRatingPeriod: eventId,
-        updatedAt: now,
-      })
-      .where(eq(playerGlicko.id, glickoId))
-
-    await db.insert(glickoHistory).values({
-      id: generateId(),
-      playerId: glickoId,
-      ratingPeriod: eventId,
-      ratingBefore,
-      rdBefore,
-      ratingAfter: result.rating,
-      rdAfter: result.ratingDeviation,
-      volatilityAfter: result.volatility,
-      delta: result.rating - ratingBefore,
-      gamesInPeriod: games.length,
-      recordedAt: now,
-    })
-  }
 }

@@ -1,10 +1,16 @@
 /**
  * @see docs/etl-data-pipelines.md — ETL diagram and function reference
  * @see docs/schema-turso.md — Turso database schema (meta_events, meta_event_players, meta_pairings)
+ * @see packages/server-core/src/meta-ingest.ts — shared upsertMetaEvent() writer (D2-01)
  */
 import type { Db } from '@tabletop-tools/db'
-import { bcpScrapeJobs, metaEventPlayers, metaEvents, metaPairings } from '@tabletop-tools/db'
-import { generateId } from '@tabletop-tools/server-core'
+import { bcpScrapeJobs, metaEvents } from '@tabletop-tools/db'
+import {
+  generateId,
+  type MetaIngestPairing,
+  type MetaIngestPlayer,
+  upsertMetaEvent,
+} from '@tabletop-tools/server-core'
 import { eq } from 'drizzle-orm'
 
 import type { BcpEvent, BcpPairing } from './bcp-api'
@@ -110,25 +116,14 @@ export async function runScrape(
         continue
       }
 
-      // Insert phase: write event, players, pairings. If anything fails partway,
-      // delete whatever was already inserted for this event so it stays
-      // re-scrapable on the next run instead of being permanently locked out.
-      const eventId = generateId()
+      // Insert phase: build the players/pairings shape and hand off to the
+      // shared upsertMetaEvent() writer (D2-01), which owns the
+      // (source, sourceId) delete-then-reinsert contract, Glicko-2, and the
+      // scoped cube rebuild. A failure here is just recorded — the next
+      // scrape of this event retries via upsertMetaEvent's own upsert
+      // semantics rather than scrape.ts manually unwinding partial writes
+      // across tables it no longer touches directly.
       try {
-        // Insert event
-        await db.insert(metaEvents).values({
-          id: eventId,
-          name: event.name,
-          date: new Date(event.endDate).getTime(),
-          location: buildLocation(event),
-          format: 'GT',
-          rounds: event.rounds,
-          playerCount: event.playerCount,
-          source: 'bcp',
-          sourceId: event.id,
-          importedAt: Date.now(),
-        })
-
         // Accumulate player stats from pairings
         const playerMap = new Map<string, PlayerAccumulator>()
 
@@ -174,13 +169,15 @@ export async function runScrape(
           (a, b) => b.wins - a.wins || a.losses - b.losses,
         )
 
-        // Insert players, build name->id map for pairing FKs
-        const playerIdMap = new Map<string, string>()
-        for (let i = 0; i < sortedPlayers.length; i++) {
-          const player = sortedPlayers[i]!
-          const playerId = generateId()
-          playerIdMap.set(player.name, playerId)
-
+        // Resolve factions and filter out players whose faction can't be
+        // normalized — bcp-scraper drops these rather than tagging them
+        // "unknown" (unlike upsertMetaEvent's internal resolveFaction
+        // fallback, which is for callers that never had a canonical slug
+        // to begin with). Build the players array + a name -> array-index
+        // map so pairings can reference the right entry.
+        const players: MetaIngestPlayer[] = []
+        const playerIndexMap = new Map<string, number>()
+        for (const player of sortedPlayers) {
           const factionSlug = normalizeFaction(player.faction)
           if (!factionSlug) {
             errors.push(
@@ -189,54 +186,58 @@ export async function runScrape(
             continue
           }
 
-          await db.insert(metaEventPlayers).values({
-            id: playerId,
-            eventId,
+          playerIndexMap.set(player.name, players.length)
+          players.push({
             playerName: player.name,
             sourcePlayerId: player.userId ?? null,
-            factionId: factionSlug,
-            subfactionId: null,
-            detachmentId: null,
-            placement: i + 1,
+            faction: factionSlug,
+            placement: players.length + 1,
             wins: player.wins,
             losses: player.losses,
             draws: player.draws,
           })
         }
 
-        // Insert pairings (skip if either player wasn't inserted)
+        // Build pairings (skip if either player was filtered out above)
+        const pairings: MetaIngestPairing[] = []
         for (const pairing of allPairings) {
           if (!pairing.player1Game || !pairing.player2Game) continue
 
-          const p1Id = playerIdMap.get(pairing.player1.name)
-          const p2Id = playerIdMap.get(pairing.player2.name)
-          if (!p1Id || !p2Id) continue
+          const p1Index = playerIndexMap.get(pairing.player1.name)
+          const p2Index = playerIndexMap.get(pairing.player2.name)
+          if (p1Index === undefined || p2Index === undefined) continue
 
-          const pairingId = generateId()
-          const result = mapResult(pairing.player1Game.result, pairing.player2Game.result)
-
-          await db.insert(metaPairings).values({
-            id: pairingId,
-            eventId,
+          pairings.push({
             round: pairing.round,
-            player1Id: p1Id,
-            player2Id: p2Id,
+            player1Index: p1Index,
+            player2Index: p2Index,
             player1Score: pairing.player1Game.points,
             player2Score: pairing.player2Game.points,
-            result,
+            result: mapResult(pairing.player1Game.result, pairing.player2Game.result),
           })
         }
+
+        await upsertMetaEvent(db, {
+          source: 'bcp',
+          sourceId: event.id,
+          name: event.name,
+          date: new Date(event.endDate).getTime(),
+          location: buildLocation(event),
+          format: 'GT',
+          rounds: event.rounds,
+          // BCP's own registered-player count, independent of how many
+          // players were actually recovered from pairing data (players.length).
+          playerCount: event.playerCount,
+          players,
+          pairings,
+        })
 
         totalPairings += allPairings.length
         eventsScraped++
       } catch (eventErr) {
-        // Roll back any partial writes for this event so it stays re-scrapable
-        // (existingSourceIds is derived from metaEvents, so a lingering row
-        // here would permanently exclude the event from future runs).
-        await db.delete(metaPairings).where(eq(metaPairings.eventId, eventId))
-        await db.delete(metaEventPlayers).where(eq(metaEventPlayers.eventId, eventId))
-        await db.delete(metaEvents).where(eq(metaEvents.id, eventId))
-
+        // No manual rollback needed: upsertMetaEvent's own (source, sourceId)
+        // delete-then-reinsert makes the next scrape of this event
+        // self-healing even if this attempt wrote partial rows.
         errors.push(`Event ${searchEvent.id} (${searchEvent.name}): ${(eventErr as Error).message}`)
       }
     }
