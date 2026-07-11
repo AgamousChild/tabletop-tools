@@ -3,6 +3,18 @@ import type { Node, NodeRef } from './model'
 import type { MfmCostingForDatasheet } from './parsers/mfm-costing'
 import { slugify } from './slugify'
 
+function copyIfMissing<K extends keyof Node>(keeper: Node, dropped: Node, fields: readonly K[]) {
+  for (const f of fields) {
+    if (
+      (keeper[f] === undefined || keeper[f] === null) &&
+      dropped[f] !== undefined &&
+      dropped[f] !== null
+    ) {
+      keeper[f] = dropped[f]
+    }
+  }
+}
+
 /** Editions accepted by the brain. Per Rule 5, 11th is the target edition. */
 const ALLOWED_EDITIONS: ReadonlySet<string> = new Set(['9th', '10th', '11th'])
 const DEFAULT_EDITION = '11th'
@@ -493,6 +505,10 @@ export function mergeSources(
   // survive the dedup. Without this, the pack UPPERCASE stratagem/enhancement
   // wins on content-length, drops the MFM node, and the merged survivor is
   // left with cost/cpCost undefined (only content + title).
+  // `leaderTo` used to be listed here, but it isn't in the Node schema —
+  // the comment at model.ts:194 clarifies it is an MFM-parser input field
+  // promoted to `attachesTo` upstream. Writing it here was a no-op (Zod
+  // strips unknown keys), so dropping it is a cleanup, not a behaviour change.
   const CROSS_SOURCE_FIELDS = [
     'cost',
     'cpCost',
@@ -504,10 +520,9 @@ export function mergeSources(
     'turn',
     'attachesTo',
     'modelRestriction',
-    'leaderTo',
     'dp',
     'forceDisposition',
-  ]
+  ] as const satisfies readonly (keyof Node)[]
   for (const [, dupes] of byTitleFaction) {
     if (dupes.length <= 1) continue
     // Keep the one with more content
@@ -522,14 +537,10 @@ export function mergeSources(
       for (const kw of dropped.keywords) {
         if (!existing.has(kw)) keeper.keywords.push(kw)
       }
-      // Backfill cross-source fields the keeper is missing.
-      const kk = keeper
-      const dd = dropped
-      for (const f of CROSS_SOURCE_FIELDS) {
-        if ((kk[f] === undefined || kk[f] === null) && dd[f] !== undefined && dd[f] !== null) {
-          kk[f] = dd[f]
-        }
-      }
+      // Backfill cross-source fields the keeper is missing. TS can't narrow
+      // `kk[f] = dd[f]` when `f` is a union of keys with heterogeneous value
+      // types, so we widen via one helper generic on the specific key.
+      copyIfMissing(keeper, dropped, CROSS_SOURCE_FIELDS)
       titleDeduped++
     }
   }

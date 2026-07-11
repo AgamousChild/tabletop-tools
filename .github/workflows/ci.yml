@@ -1,0 +1,56 @@
+# ci.yml — PR-time gate: format, lint, build, test on every pull request against main.
+#
+# Rationale: as of 2026-07-11 the platform has zero PR-time CI (see 3797b58).
+# PR #136 shipped a browser-breaking barrel import against `packages/game-content`
+# and merged with zero checks because no workflow ran. This workflow closes that
+# gap by running the same checks the pre-commit hook runs locally, on every PR
+# and every push to main.
+#
+# Not a deploy workflow — see deploy-platform.yml for that (manual trigger only,
+# and only trustworthy once this workflow gates the merges it deploys).
+
+name: CI
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  ci:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: 'pnpm'
+
+      - name: Install workspace dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Format check (prettier)
+        run: pnpm format:check
+
+      - name: Lint (oxlint + eslint)
+        run: pnpm lint
+
+      - name: Build all packages
+        run: pnpm -r build
+
+      - name: Test all packages
+        run: pnpm -r test
