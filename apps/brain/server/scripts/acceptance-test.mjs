@@ -16,11 +16,6 @@ import { readdirSync, readFileSync } from 'node:fs'
 const MODE = process.argv[2] ?? 'local'
 const ITERATIONS = Number(process.argv[3] ?? '3')
 
-const norm = (s) =>
-  String(s ?? '')
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, '')
-
 function loadLocalGraph() {
   const dir = 'apps/brain/server/.local/brain/nodes'
   const all = []
