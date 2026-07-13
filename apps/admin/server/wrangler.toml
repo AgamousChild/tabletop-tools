@@ -19,3 +19,8 @@ service = "tabletop-tools-bcp-scraper"
 [[services]]
 binding = "CONTENT_INGESTOR"
 service = "tabletop-tools-content-ingestor-worker"
+
+
+[[kv_namespaces]]
+binding = "AUTH_RATE_LIMIT"
+id = "8290dc734d8847c893347e186b26aa38"
