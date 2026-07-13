@@ -172,6 +172,19 @@ export function createAuth(
     secret,
     ...(secondaryStorage ? { secondaryStorage } : {}),
     ...(rateLimitKV ? { rateLimit: { enabled: true, storage: 'secondary-storage' as const } } : {}),
+    // When `secondaryStorage` is configured, Better Auth's default is to
+    // write sessions to secondary storage ONLY and skip the database
+    // (see node_modules/better-auth/dist/db/internal-adapter.mjs — every
+    // session write is gated on `!secondaryStorage || session.storeSessionInDatabase`).
+    // The app workers (packages/server-core/createBaseServer) validate every
+    // request by looking up the session in the DB via validateSession(). If
+    // sessions never land in the DB, every authenticated tRPC call returns
+    // UNAUTHORIZED even though the cookie is valid at the auth-server. This
+    // exact regression shipped when the KV rate limiter (PR #121) was
+    // deployed on 2026-07-11 and was rolled back the same evening. Force
+    // dual writes so KV acts as a cache in front of the DB, not as a
+    // replacement.
+    session: { storeSessionInDatabase: true },
   })
 }
 
@@ -203,6 +216,7 @@ export async function validateSession(
   db: Db,
   headers: Headers,
   secret: string,
+  sessionKV?: KVLike,
 ): Promise<User | null> {
   const cookieHeader = headers.get('cookie') ?? ''
   // Better Auth uses '__Secure-better-auth.session_token' on HTTPS (production)
@@ -221,6 +235,17 @@ export async function validateSession(
   const token = await verifySignature(signedToken, secret)
   if (!token) return null
 
+  // Fast path: when sessionKV is provided (the same KV namespace Better Auth
+  // uses as `secondaryStorage`), Better Auth writes each session under
+  // key=<raw token>, value=JSON({ session, user }). Reading it here avoids a
+  // Turso round-trip for every authenticated request. Defense-in-depth: if
+  // sessions ever go KV-only again (see createAuth's session.storeSessionInDatabase
+  // guard), this keeps the DB lookup from being the sole path.
+  if (sessionKV) {
+    const kvUser = await lookupSessionInKV(sessionKV, token)
+    if (kvUser) return kvUser
+  }
+
   const [row] = await db
     .select({
       id: authUsers.id,
@@ -237,4 +262,51 @@ export async function validateSession(
     .limit(1)
 
   return row ?? null
+}
+
+/**
+ * Look up a Better Auth session in KV using the same key/value shape Better
+ * Auth writes (see node_modules/better-auth/dist/db/internal-adapter.mjs):
+ *
+ *   key   = raw token
+ *   value = JSON.stringify({ session: {...}, user: {...} })
+ *
+ * Returns the User if the KV hit is present and the session hasn't expired,
+ * null otherwise. Never throws on parse failures — a bad row falls through
+ * to the DB lookup instead of blocking auth.
+ */
+async function lookupSessionInKV(sessionKV: KVLike, token: string): Promise<User | null> {
+  try {
+    const raw = await sessionKV.get(token)
+    if (!raw) return null
+    const parsed = JSON.parse(raw) as {
+      session?: { expiresAt?: string | number }
+      user?: {
+        id?: string
+        email?: string
+        name?: string
+        emailVerified?: boolean
+        image?: string | null
+        createdAt?: string | number | Date
+        updatedAt?: string | number | Date
+      }
+    }
+    const expiresAt = parsed.session?.expiresAt
+    if (!expiresAt) return null
+    const expiryMs = typeof expiresAt === 'string' ? Date.parse(expiresAt) : Number(expiresAt)
+    if (!Number.isFinite(expiryMs) || expiryMs <= Date.now()) return null
+    const u = parsed.user
+    if (!u?.id || typeof u.email !== 'string' || typeof u.name !== 'string') return null
+    return {
+      id: u.id,
+      email: u.email,
+      name: u.name,
+      emailVerified: Boolean(u.emailVerified),
+      image: u.image ?? null,
+      createdAt: new Date(u.createdAt ?? 0),
+      updatedAt: new Date(u.updatedAt ?? 0),
+    }
+  } catch {
+    return null
+  }
 }

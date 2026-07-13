@@ -191,4 +191,37 @@ describe('createAuth with KV-backed rate limiting', () => {
     const keys = Array.from((kv as unknown as { store: Map<string, string> }).store.keys())
     expect(keys.length).toBeGreaterThan(0)
   })
+
+  // Regression: PR #121 wired `secondaryStorage` into createAuth() to back
+  // the rate limiter with KV. Better Auth's default when `secondaryStorage`
+  // is present is to write NEW sessions to secondary storage only and skip
+  // the DB (see internal-adapter.mjs: every session write is gated on
+  // `!secondaryStorage || options.session.storeSessionInDatabase`).
+  // The app workers' `validateSession()` looks up sessions in the DB, so
+  // KV-only sessions produce UNAUTHORIZED on every authenticated tRPC call.
+  // createAuth() sets `session.storeSessionInDatabase: true` to force dual
+  // writes; this test locks that in.
+  it('writes new sessions to the database even with KV secondary storage', async () => {
+    const auth = createAuth(db, undefined, undefined, undefined, undefined, kv)
+
+    const email = `session-in-db-${Date.now()}@example.com`
+    const signUp = await auth.api.signUpEmail({
+      body: {
+        name: 'Session In DB',
+        email,
+        password: 'password123',
+        username: `sessioninbd${Date.now()}`,
+      },
+    })
+
+    expect(signUp.token).toBeDefined()
+
+    // Query the raw session table — this is exactly what validateSession()
+    // does in production. Row must exist with the token returned by signUp.
+    const rows = await db.$client.execute({
+      sql: 'SELECT token FROM session WHERE token = ?',
+      args: [signUp.token],
+    })
+    expect(rows.rows).toHaveLength(1)
+  })
 })
