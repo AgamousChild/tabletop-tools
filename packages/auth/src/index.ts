@@ -124,10 +124,22 @@ export function createAuth(
   db: Db,
   baseURL = 'http://localhost:3000',
   trustedOrigins: string[] = [],
-  secret = process.env['AUTH_SECRET'] ?? 'dev-secret-change-in-production',
+  secret?: string,
   basePath = '/api/auth',
   rateLimitKV?: KVLike,
 ) {
+  // Fail-loud: without an AUTH_SECRET the HMAC cookie signature is either
+  // reduced to a known dev fallback (used to silently downgrade production
+  // when the env var was accidentally unset) or missing entirely. Either
+  // way, forged cookies become trivial. Refuse to boot instead — misconfig
+  // should be visible in Worker logs, not hidden as "auth just isn't
+  // working." Local dev sets AUTH_SECRET via .env; index.ts passes it in.
+  const resolvedSecret = secret ?? process.env['AUTH_SECRET']
+  if (!resolvedSecret) {
+    throw new Error(
+      'createAuth: AUTH_SECRET is required (was undefined). Set it as a wrangler secret in production or in .env for local dev.',
+    )
+  }
   // Better Auth's default rate limiter is `enabled: isProduction` with
   // `storage: "memory"` unless a secondaryStorage is configured — on
   // Cloudflare Workers, "memory" means a per-isolate Map that is useless
@@ -169,7 +181,7 @@ export function createAuth(
       },
     },
     plugins: [username()],
-    secret,
+    secret: resolvedSecret,
     ...(secondaryStorage ? { secondaryStorage } : {}),
     ...(rateLimitKV ? { rateLimit: { enabled: true, storage: 'secondary-storage' as const } } : {}),
     // When `secondaryStorage` is configured, Better Auth's default is to

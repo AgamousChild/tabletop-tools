@@ -101,7 +101,7 @@ afterAll(() => {
 
 describe('createAuth without KV (unchanged behavior)', () => {
   it('creates an auth instance and allows sign-up without a rate limit config', async () => {
-    const auth = createAuth(db)
+    const auth = createAuth(db, undefined, undefined, 'test-secret')
 
     const result = await auth.api.signUpEmail({
       body: {
@@ -117,7 +117,7 @@ describe('createAuth without KV (unchanged behavior)', () => {
   })
 
   it('does not rate-limit repeated sign-in attempts (no secondary storage configured)', async () => {
-    const auth = createAuth(db)
+    const auth = createAuth(db, undefined, undefined, 'test-secret')
 
     // Better Auth's default in-memory rate limiter is disabled outside of
     // production and createAuth does not set NODE_ENV, so repeated attempts
@@ -128,6 +128,22 @@ describe('createAuth without KV (unchanged behavior)', () => {
           body: { email: 'no-kv@example.com', password: 'wrongpassword' },
         }),
       ).rejects.toThrow()
+    }
+  })
+
+  // Regression: the previous default (`?? 'dev-secret-change-in-production'`)
+  // silently downgraded auth in any Worker where AUTH_SECRET was accidentally
+  // unset — cookies would sign with a known secret, letting anyone forge
+  // sessions. createAuth() now throws on missing/empty secret so misconfig
+  // is immediately visible in Worker logs instead of hidden as "auth just
+  // isn't working."
+  it('throws when neither an explicit secret nor process.env.AUTH_SECRET is set', () => {
+    const original = process.env['AUTH_SECRET']
+    delete process.env['AUTH_SECRET']
+    try {
+      expect(() => createAuth(db)).toThrow(/AUTH_SECRET is required/)
+    } finally {
+      if (original !== undefined) process.env['AUTH_SECRET'] = original
     }
   })
 })
@@ -152,7 +168,7 @@ describe('createAuth with KV-backed rate limiting', () => {
   }
 
   it('rate-limits repeated sign-in attempts beyond the limit (429)', async () => {
-    const auth = createAuth(db, undefined, undefined, undefined, undefined, kv)
+    const auth = createAuth(db, undefined, undefined, 'test-secret', undefined, kv)
 
     await auth.api.signUpEmail({
       body: {
@@ -174,7 +190,7 @@ describe('createAuth with KV-backed rate limiting', () => {
   })
 
   it('persists rate limit counters in the provided KV store', async () => {
-    const auth = createAuth(db, undefined, undefined, undefined, undefined, kv)
+    const auth = createAuth(db, undefined, undefined, 'test-secret', undefined, kv)
 
     await auth.api.signUpEmail({
       body: {
@@ -202,7 +218,7 @@ describe('createAuth with KV-backed rate limiting', () => {
   // createAuth() sets `session.storeSessionInDatabase: true` to force dual
   // writes; this test locks that in.
   it('writes new sessions to the database even with KV secondary storage', async () => {
-    const auth = createAuth(db, undefined, undefined, undefined, undefined, kv)
+    const auth = createAuth(db, undefined, undefined, 'test-secret', undefined, kv)
 
     const email = `session-in-db-${Date.now()}@example.com`
     const signUp = await auth.api.signUpEmail({
