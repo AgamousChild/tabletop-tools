@@ -27,11 +27,12 @@ const testRouter = router({
   whoami: protectedProcedure.query(({ ctx }) => ({ name: ctx.user.name })),
 })
 
-function makeApp() {
+function makeApp(trustedOrigins: string[] = ['http://example.com']) {
   return createBaseServer({
     router: testRouter,
     db,
     secret: TEST_SECRET,
+    trustedOrigins,
   })
 }
 
@@ -70,6 +71,34 @@ describe('createBaseServer', () => {
     )
     expect(res.status).toBe(204)
     expect(res.headers.get('access-control-allow-origin')).toBe('http://example.com')
+  })
+
+  // Regression: prior CORS reflected every incoming origin with
+  // `credentials: true`, which is an "open door" shape flagged by D2-06.
+  // With SameSite=Lax session cookies the browser mostly protects users
+  // from cross-site fetch abuse, but relying on that alone is not defense
+  // in depth. Untrusted origins should not appear in the response.
+  it('does not reflect untrusted origins for credentialed requests', async () => {
+    const app = makeApp(['https://tabletop-tools.net'])
+    const res = await app.fetch(
+      new Request('http://localhost/trpc/health', {
+        method: 'GET',
+        headers: { Origin: 'https://evil.com' },
+      }),
+    )
+    // Whatever the header value is, it must not echo evil.com back.
+    expect(res.headers.get('access-control-allow-origin')).not.toBe('https://evil.com')
+  })
+
+  it('defaults trustedOrigins to https://tabletop-tools.net when omitted', async () => {
+    const app = createBaseServer({ router: testRouter, db, secret: TEST_SECRET })
+    const res = await app.fetch(
+      new Request('http://localhost/trpc/health', {
+        method: 'GET',
+        headers: { Origin: 'https://tabletop-tools.net' },
+      }),
+    )
+    expect(res.headers.get('access-control-allow-origin')).toBe('https://tabletop-tools.net')
   })
 
   it('passes context with authenticated user to protected procedures', async () => {
