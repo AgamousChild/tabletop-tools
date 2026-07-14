@@ -13,12 +13,20 @@ export function createServer(
   contentIngestor?: { fetch(request: Request): Promise<Response> },
   ai?: AiBinding,
   sessionKV?: KVLike,
+  syncSecret?: string,
 ) {
   return createBaseServer<Context>({
     router: appRouter,
     db,
     secret,
     sessionKV,
-    extendContext: (ctx) => ({ ...ctx, adminEmails, bcpScraper, contentIngestor, ai }),
+    extendContext: (ctx) => ({
+      ...ctx,
+      adminEmails,
+      bcpScraper,
+      contentIngestor,
+      ai,
+      syncSecret,
+    }),
   })
 }

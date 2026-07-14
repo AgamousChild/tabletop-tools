@@ -1,19 +1,13 @@
 /**
  * Worker-level tests for the Gladia webhook callback authentication.
  *
- * POST /ingest/callback is the only non-/health route that isn't gated by
- * `checkAuth` (Bearer-token auth for internal admin calls) — it's a public
- * webhook that Gladia (an external transcription API) calls back on. Without
- * a shared-secret check, anyone who discovers the callback URL can POST a
- * forged `{id, status: 'done', result: {...}}` payload and have it written
- * straight into `ingestContent.transcript`, which later feeds the public
- * brain knowledge base. `checkWebhookToken` closes that gap with a
- * query-param shared secret, verified via constant-time comparison, and
- * fails loud (401) when `WEBHOOK_SECRET` itself is unset — unlike the
- * existing `checkAuth`, which permissively allows everything when
- * `SYNC_SECRET` is unset. That permissive fallback is wrong for a public
- * external webhook: better to break Gladia callbacks loudly than silently
- * accept forged transcripts.
+ * POST /ingest/callback uses a query-param shared-secret (`checkWebhookToken`)
+ * because Gladia's callback caller can't attach an Authorization header.
+ * Every other admin route is gated by `checkAuth` (Bearer-token) — both
+ * paths now fail loud (401) when their secret is unset, matching each
+ * other and D2-06. The old `checkAuth` permissive fallback (allow all
+ * when SYNC_SECRET was unset) was replaced 2026-07-13 after verifying it
+ * had left `/sources` and friends unauth on the deployed worker.
  */
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 

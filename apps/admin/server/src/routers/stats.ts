@@ -22,7 +22,7 @@ import { desc, eq, gt, sql } from 'drizzle-orm'
 import { z } from 'zod'
 
 import { addIngestSourceSchema } from '../schemas/ingest.js'
-import { adminProcedure, publicProcedure, router } from '../trpc.js'
+import { adminProcedure, publicProcedure, router, serviceHeaders } from '../trpc.js'
 
 export { addIngestSourceSchema }
 
@@ -395,7 +395,10 @@ export const statsRouter = router({
       return { status: 'error', message: 'BCP Scraper service binding not configured' }
     }
     const resp = await ctx.bcpScraper.fetch(
-      new Request('https://bcp-scraper/scrape', { method: 'POST' }),
+      new Request('https://bcp-scraper/scrape', {
+        method: 'POST',
+        headers: serviceHeaders(ctx.syncSecret),
+      }),
     )
     if (!resp.ok) {
       return { status: 'error', message: `Scraper returned ${resp.status}` }
@@ -442,7 +445,7 @@ export const statsRouter = router({
     const resp = await ctx.contentIngestor.fetch(
       new Request('https://content-ingestor/sources', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: serviceHeaders(ctx.syncSecret, { 'Content-Type': 'application/json' }),
         body: JSON.stringify(input),
       }),
     )
@@ -460,7 +463,7 @@ export const statsRouter = router({
       const resp = await ctx.contentIngestor.fetch(
         new Request(`https://content-ingestor/sources/${input.id}`, {
           method: 'PATCH',
-          headers: { 'Content-Type': 'application/json' },
+          headers: serviceHeaders(ctx.syncSecret, { 'Content-Type': 'application/json' }),
           body: JSON.stringify({ active: input.active }),
         }),
       )
@@ -506,6 +509,7 @@ export const statsRouter = router({
     const resp = await ctx.contentIngestor.fetch(
       new Request('https://content-ingestor/discover', {
         method: 'POST',
+        headers: serviceHeaders(ctx.syncSecret),
       }),
     )
     if (!resp.ok) return { status: 'error', message: `Ingestor returned ${resp.status}` }
@@ -520,6 +524,7 @@ export const statsRouter = router({
     const resp = await ctx.contentIngestor.fetch(
       new Request('https://content-ingestor/process', {
         method: 'POST',
+        headers: serviceHeaders(ctx.syncSecret),
       }),
     )
     if (!resp.ok) return { status: 'error', message: `Ingestor returned ${resp.status}` }
@@ -536,7 +541,7 @@ export const statsRouter = router({
       const resp = await ctx.contentIngestor.fetch(
         new Request('https://content-ingestor/ingest/youtube', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: serviceHeaders(ctx.syncSecret, { 'Content-Type': 'application/json' }),
           body: JSON.stringify({ url: input.url, sourceName: input.sourceName }),
         }),
       )
@@ -554,7 +559,7 @@ export const statsRouter = router({
       const resp = await ctx.contentIngestor.fetch(
         new Request('https://content-ingestor/ingest/web', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: serviceHeaders(ctx.syncSecret, { 'Content-Type': 'application/json' }),
           body: JSON.stringify({ url: input.url, sourceName: input.sourceName }),
         }),
       )

@@ -43,8 +43,31 @@ function createDb(env: Env) {
   )
 }
 
+/**
+ * Bearer-token auth for the content-ingestor admin routes.
+ *
+ * The previous implementation returned `true` when SYNC_SECRET was unset,
+ * on the theory that "no secret means dev, so allow it." That's the exact
+ * D2-06 anti-pattern: a route that looks authenticated but silently opens
+ * in any environment where the secret was accidentally removed — turning
+ * every admin action (discover, process, add-source, patch-source, list-
+ * sources/content) into an unauth surface. Prod inherited this open shape
+ * for weeks (verified 2026-07-13: HTTP 200 with no auth). Fail closed
+ * instead — no secret = 401 with a loud console.error, matching how the
+ * Gladia webhook (checkWebhookToken) already behaves.
+ *
+ * Callers: the admin worker's stats.ts routers thread env.SYNC_SECRET into
+ * every service-binding fetch via `serviceHeaders(ctx.syncSecret)`. Prod
+ * deploy prerequisite: `wrangler secret put SYNC_SECRET` on both this
+ * worker and the admin worker with the same value, before shipping.
+ */
 function checkAuth(c: { env: Env; req: { header(name: string): string | undefined } }): boolean {
-  if (!c.env.SYNC_SECRET) return true
+  if (!c.env.SYNC_SECRET) {
+    console.error(
+      'checkAuth: SYNC_SECRET is unset — rejecting all admin requests. Run `wrangler secret put SYNC_SECRET`.',
+    )
+    return false
+  }
   const auth = c.req.header('Authorization')
   return auth === `Bearer ${c.env.SYNC_SECRET}`
 }
