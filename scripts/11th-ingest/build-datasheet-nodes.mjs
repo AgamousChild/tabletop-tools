@@ -116,7 +116,7 @@ function parseAbilities(body) {
     const f = ln.match(/^FACTION:\s*(.*)$/)
     if (f) { faction.push(...f[1].split(/\s*,\s*/).filter(Boolean)); continue }
     // Named ability: "<Name>: <text>"  — name segment is short and ends in colon.
-    const m = ln.match(/^([A-Z][A-Za-z'’ \-]+):\s+(.+)$/)
+    const m = ln.match(/^([A-Z][A-Za-z'’ -]+):\s+(.+)$/)
     if (m && m[1].length <= 40) {
       if (currentNamed) named.push(currentNamed)
       currentNamed = { name: m[1].trim(), text: m[2].trim() }
@@ -161,7 +161,7 @@ function parseWeapons(body, type) {
   for (const ln of segment.split('\n').map((l) => l.trim()).filter(Boolean)) {
     // Weapon row: <name> [<abilities>] <range> <A> <stat> <S> <AP> <D>
     // Range: 18" or "Melee"; stats: numbers or `4+`.
-    const m = ln.match(/^(.+?)\s+(?:\[([^\]]*)\]\s+)?(\d+\"|Melee)\s+(\S+)\s+(\S+)\s+(\S+)\s+(\S+)\s+(\S+)$/)
+    const m = ln.match(/^(.+?)\s+(?:\[([^\]]*)\]\s+)?(\d+"|Melee)\s+(\S+)\s+(\S+)\s+(\S+)\s+(\S+)\s+(\S+)$/)
     if (!m) continue
     out.push({
       name: m[1].trim(),

@@ -1,0 +1,104 @@
+# deploy-platform.yml — Full-stack deploy: DB migrate → app workers → auth-server → gateway.
+#
+# Mirrors scripts/deploy-all.sh so local deploys and CI deploys go through the same
+# steps in the same order. Manual-only trigger by default (workflow_dispatch); once
+# a proper PR-time build/test workflow exists to gate merges to main, adding a
+# push:branches:[main] trigger here becomes safe.
+#
+# What this does NOT deploy: brain-server (pre-existing tsc error in
+# merge-sources.ts blocks its recursive build; deployed via scripts/deploy-brain.sh
+# out of band) and data-import server (has its own auto-deploy workflow).
+#
+# Required repo secrets (all already present):
+#   - CLOUDFLARE_API_TOKEN: Workers Scripts: Edit + Pages: Edit + Cache Purge
+#   - TURSO_DB_URL, TURSO_AUTH_TOKEN: drizzle-kit migrate against prod Turso
+#
+# Optional repo variable:
+#   - CF_ZONE_ID: Cloudflare zone id for tabletop-tools.net. If unset, the gateway
+#     step still deploys but skips the CDN cache purge (deploy-gateway.sh warns
+#     and continues). Set as a repo variable (not secret) so it appears in logs.
+
+name: Deploy platform
+
+on:
+  workflow_dispatch:
+    inputs:
+      skip_migrate:
+        description: 'Skip drizzle migrate step (use when schema is unchanged)'
+        type: boolean
+        default: false
+
+concurrency:
+  group: deploy-platform
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+
+    env:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CF_ZONE_ID: ${{ vars.CF_ZONE_ID }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: 'pnpm'
+
+      - name: Install workspace dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build packages (excluding brain-server pre-existing tsc error)
+        run: pnpm -r --filter '!brain-server' build
+
+      - name: Apply database migrations
+        if: ${{ !inputs.skip_migrate }}
+        working-directory: packages/db
+        env:
+          TURSO_DB_URL: ${{ secrets.TURSO_DB_URL }}
+          TURSO_AUTH_TOKEN: ${{ secrets.TURSO_AUTH_TOKEN }}
+        run: pnpm exec drizzle-kit migrate
+
+      - name: Deploy app workers
+        run: |
+          set -e
+          for app in no-cheat versus list-builder game-tracker tournament new-meta admin; do
+            echo "::group::Deploying $app"
+            (cd apps/$app/server && pnpm exec wrangler deploy)
+            echo "::endgroup::"
+          done
+          for app in bcp-scraper content-ingestor; do
+            echo "::group::Deploying $app"
+            (cd apps/$app/server && pnpm exec wrangler deploy)
+            echo "::endgroup::"
+          done
+
+      - name: Deploy auth-server
+        working-directory: apps/auth-server
+        run: pnpm exec wrangler deploy
+
+      - name: Deploy gateway (Pages) + purge CDN
+        run: bash scripts/deploy-gateway.sh
+
+      - name: Smoke-test live surface
+        run: |
+          set -e
+          echo "gateway landing:"
+          curl -sSf -o /dev/null -w '  %{http_code} %{url}\n' https://tabletop-tools.net/
+          echo "auth health:"
+          curl -sSf https://tabletop-tools.net/auth/health
+          echo
+          echo "content-ingestor webhook (should be 401 unauth after PR #122):"
+          code=$(curl -s -o /dev/null -w '%{http_code}' -X POST https://tabletop-tools-content-ingestor-worker.micah-ec2.workers.dev/ingest/callback -H 'Content-Type: application/json' -d '{}')
+          echo "  $code"
+          test "$code" = "401" || (echo "expected 401, got $code"; exit 1)

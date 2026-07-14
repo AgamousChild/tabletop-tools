@@ -1,7 +1,7 @@
 import 'dotenv/config'
 
 import { serve } from '@hono/node-server'
-import { createAuth } from '@tabletop-tools/auth'
+import { buildResendEmailSender, createAuth } from '@tabletop-tools/auth'
 import { createDb } from '@tabletop-tools/db'
 import { Hono } from 'hono'
 import { cors } from 'hono/cors'
@@ -22,10 +22,25 @@ const trustedOrigins = process.env['TRUSTED_ORIGINS']
       'http://localhost:5178',
     ]
 
+// Local dev only — the worker.ts entry passes `env.AUTH_SECRET` directly.
+// createAuth now fails loud when secret is missing (was silently falling
+// back to a known dev secret, which downgraded prod on misconfigure), so
+// the Node dev process provides its own dev fallback explicitly here.
+const secret = process.env['AUTH_SECRET'] ?? 'dev-secret-change-in-production'
+const emailSender = process.env['RESEND_API_KEY']
+  ? buildResendEmailSender({
+      apiKey: process.env['RESEND_API_KEY'],
+      from: process.env['RESEND_FROM'] ?? 'noreply@tabletop-tools.net',
+    })
+  : undefined
 const auth = createAuth(
   db,
   process.env['AUTH_BASE_URL'] ?? 'http://localhost:3000',
   trustedOrigins,
+  secret,
+  undefined,
+  undefined,
+  emailSender,
 )
 
 const app = new Hono()
@@ -33,8 +48,7 @@ const app = new Hono()
 app.use(
   '*',
   cors({
-    origin: (origin) =>
-      trustedOrigins.includes(origin) ? origin : trustedOrigins[0]!,
+    origin: (origin) => (trustedOrigins.includes(origin) ? origin : trustedOrigins[0]!),
     credentials: true,
   }),
 )

@@ -10,3 +10,4 @@
  * This file is kept as a named module so that any lingering import of
  * `../lib/sync` fails loudly (missing exports) rather than silently.
  */
+export {}

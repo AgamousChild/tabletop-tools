@@ -1,4 +1,4 @@
-import { PARSER_VERSION } from '@tabletop-tools/game-content/src/adapters/bsdata/parser'
+import { PARSER_VERSION } from '@tabletop-tools/game-content/bsdata/parser'
 import type { ImportMeta, RulesImportMeta } from '@tabletop-tools/game-data-store'
 import {
   clearAll,

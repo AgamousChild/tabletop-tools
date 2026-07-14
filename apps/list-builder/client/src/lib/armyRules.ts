@@ -1,10 +1,11 @@
 // Army validation engine lives in @tabletop-tools/game-content so both the
-// client and the server (Phase 3 hard-gate) can import it.
-// See packages/game-content/src/rules/army-validation.ts.
-export type { BattleSize, ListUnit, ValidationError } from '@tabletop-tools/game-content'
-export { validateArmy } from '@tabletop-tools/game-content'
+// client and the server (Phase 3 hard-gate) can import it. Imported from the
+// browser-safe /rules subpath — the package's root barrel pulls in Node-only
+// BSData adapters and would break Vite's browser build.
+export type { BattleSize, ListUnit, ValidationError } from '@tabletop-tools/game-content/rules'
+export { validateArmy } from '@tabletop-tools/game-content/rules'
 
-import type { BattleSize } from '@tabletop-tools/game-content'
+import type { BattleSize } from '@tabletop-tools/game-content/rules'
 
 // Canonical battle-size data. Hardcoded here today; a `battle_size` DB table
 // is being introduced separately (W2 roadmap Phase 2/3) — once it lands,

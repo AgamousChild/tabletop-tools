@@ -73,7 +73,7 @@ async function fetchYouTubeMeta(url: string) {
     )
     const publishedAt = ytDateToUnix(stdout.trim().split('\n').pop() ?? '')
     return { title: j.title ?? null, channel: j.author_name ?? null, publishedAt }
-  } catch (err) {
+  } catch {
     return { title: null, channel: null, publishedAt: null }
   }
 }

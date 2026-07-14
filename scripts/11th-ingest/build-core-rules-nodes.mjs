@@ -274,7 +274,7 @@ for (let i = 0; i < located.length; i++) {
 // scan its body for "Name (CODE):" lines, and attach to matching entries.
 const inlineCharRe = /^\s*([A-Z][A-Za-z][A-Za-z'’\- ]{2,30}?)\s*\(([A-Z][A-Za-z]{0,5})\):\s*(.*)$/
 const inlineContent = new Map() // key "NAME (CODE)" → { lineIdx, content }
-for (const { entry, lineIdx } of located) {
+for (const { lineIdx } of located) {
   if (!lineIdx) continue
   // For each anchored entry, scan the next 200 lines for inline definitions.
   // 200 is enough for PROFILES body without bleeding into the next section.
@@ -442,7 +442,7 @@ for (let i = 0; i < located.length; i++) {
   const id = `11e-core-${slug(title)}-${ref.replace(/\./g, '-')}`
   const summary = (content.split(/[.!?]\s/)[0] || title).slice(0, 200)
   const kw = new Set()
-  for (const tok of (title + ' ' + content).toLowerCase().match(/[a-z][a-z\-]{3,}/g) ?? []) {
+  for (const tok of (title + ' ' + content).toLowerCase().match(/[a-z][a-z-]{3,}/g) ?? []) {
     if (kw.size >= 12) break
     if (['this', 'that', 'with', 'from', 'their', 'your', 'have', 'these'].includes(tok)) continue
     kw.add(tok)

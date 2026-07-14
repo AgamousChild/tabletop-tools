@@ -3,7 +3,7 @@ import { createDb } from '@tabletop-tools/db'
 import { existsSync, unlinkSync } from 'fs'
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest'
 
-import { createAuth } from './index'
+import { createAuth, type EmailSender } from './index'
 
 /**
  * In-memory fake KV implementing the minimal shape createAuth expects
@@ -101,7 +101,7 @@ afterAll(() => {
 
 describe('createAuth without KV (unchanged behavior)', () => {
   it('creates an auth instance and allows sign-up without a rate limit config', async () => {
-    const auth = createAuth(db)
+    const auth = createAuth(db, undefined, undefined, 'test-secret')
 
     const result = await auth.api.signUpEmail({
       body: {
@@ -117,7 +117,7 @@ describe('createAuth without KV (unchanged behavior)', () => {
   })
 
   it('does not rate-limit repeated sign-in attempts (no secondary storage configured)', async () => {
-    const auth = createAuth(db)
+    const auth = createAuth(db, undefined, undefined, 'test-secret')
 
     // Better Auth's default in-memory rate limiter is disabled outside of
     // production and createAuth does not set NODE_ENV, so repeated attempts
@@ -128,6 +128,22 @@ describe('createAuth without KV (unchanged behavior)', () => {
           body: { email: 'no-kv@example.com', password: 'wrongpassword' },
         }),
       ).rejects.toThrow()
+    }
+  })
+
+  // Regression: the previous default (`?? 'dev-secret-change-in-production'`)
+  // silently downgraded auth in any Worker where AUTH_SECRET was accidentally
+  // unset — cookies would sign with a known secret, letting anyone forge
+  // sessions. createAuth() now throws on missing/empty secret so misconfig
+  // is immediately visible in Worker logs instead of hidden as "auth just
+  // isn't working."
+  it('throws when neither an explicit secret nor process.env.AUTH_SECRET is set', () => {
+    const original = process.env['AUTH_SECRET']
+    delete process.env['AUTH_SECRET']
+    try {
+      expect(() => createAuth(db)).toThrow(/AUTH_SECRET is required/)
+    } finally {
+      if (original !== undefined) process.env['AUTH_SECRET'] = original
     }
   })
 })
@@ -152,7 +168,7 @@ describe('createAuth with KV-backed rate limiting', () => {
   }
 
   it('rate-limits repeated sign-in attempts beyond the limit (429)', async () => {
-    const auth = createAuth(db, undefined, undefined, undefined, undefined, kv)
+    const auth = createAuth(db, undefined, undefined, 'test-secret', undefined, kv)
 
     await auth.api.signUpEmail({
       body: {
@@ -174,7 +190,7 @@ describe('createAuth with KV-backed rate limiting', () => {
   })
 
   it('persists rate limit counters in the provided KV store', async () => {
-    const auth = createAuth(db, undefined, undefined, undefined, undefined, kv)
+    const auth = createAuth(db, undefined, undefined, 'test-secret', undefined, kv)
 
     await auth.api.signUpEmail({
       body: {
@@ -190,5 +206,92 @@ describe('createAuth with KV-backed rate limiting', () => {
     // The rate limiter should have written at least one key into the KV store.
     const keys = Array.from((kv as unknown as { store: Map<string, string> }).store.keys())
     expect(keys.length).toBeGreaterThan(0)
+  })
+
+  // Regression: PR #121 wired `secondaryStorage` into createAuth() to back
+  // the rate limiter with KV. Better Auth's default when `secondaryStorage`
+  // is present is to write NEW sessions to secondary storage only and skip
+  // the DB (see internal-adapter.mjs: every session write is gated on
+  // `!secondaryStorage || options.session.storeSessionInDatabase`).
+  // The app workers' `validateSession()` looks up sessions in the DB, so
+  // KV-only sessions produce UNAUTHORIZED on every authenticated tRPC call.
+  // createAuth() sets `session.storeSessionInDatabase: true` to force dual
+  // writes; this test locks that in.
+  it('writes new sessions to the database even with KV secondary storage', async () => {
+    const auth = createAuth(db, undefined, undefined, 'test-secret', undefined, kv)
+
+    const email = `session-in-db-${Date.now()}@example.com`
+    const signUp = await auth.api.signUpEmail({
+      body: {
+        name: 'Session In DB',
+        email,
+        password: 'password123',
+        username: `sessioninbd${Date.now()}`,
+      },
+    })
+
+    expect(signUp.token).toBeDefined()
+
+    // Query the raw session table — this is exactly what validateSession()
+    // does in production. Row must exist with the token returned by signUp.
+    const rows = await db.$client.execute({
+      sql: 'SELECT token FROM session WHERE token = ?',
+      args: [signUp.token],
+    })
+    expect(rows.rows).toHaveLength(1)
+  })
+})
+
+describe('createAuth with an email verification transport', () => {
+  it('calls sendVerificationEmail on signup and blocks sign-in until verified', async () => {
+    const sent: Array<{ to: string; subject: string }> = []
+    const sender: EmailSender = {
+      send: async ({ to, subject }) => {
+        sent.push({ to, subject })
+      },
+    }
+    const auth = createAuth(db, undefined, undefined, 'test-secret', undefined, undefined, sender)
+
+    const email = `verify-${Date.now()}@example.com`
+    const signUp = await auth.api.signUpEmail({
+      body: {
+        name: 'Needs Verification',
+        email,
+        password: 'password123',
+        username: `verify${Date.now()}`,
+      },
+    })
+
+    // Signup succeeds but no session is issued — verification is required first.
+    expect(signUp.user.email).toBe(email)
+    expect(signUp.token).toBeFalsy()
+
+    // Better Auth handed sendVerificationEmail a URL with our subject.
+    expect(sent).toHaveLength(1)
+    expect(sent[0]!.to).toBe(email)
+    expect(sent[0]!.subject).toMatch(/verify/i)
+
+    // Signing in with correct password STILL fails because email is unverified.
+    await expect(
+      auth.api.signInEmail({ body: { email, password: 'password123' } }),
+    ).rejects.toThrow()
+  })
+
+  it('does not call sendVerificationEmail when no sender is configured', async () => {
+    const auth = createAuth(db, undefined, undefined, 'test-secret')
+
+    const email = `no-verify-${Date.now()}@example.com`
+    const signUp = await auth.api.signUpEmail({
+      body: {
+        name: 'No Verification',
+        email,
+        password: 'password123',
+        username: `noverify${Date.now()}`,
+      },
+    })
+
+    // Without a sender, verification stays off — signup returns a session
+    // immediately, matching the platform's pre-verification behaviour.
+    expect(signUp.token).toBeDefined()
   })
 })

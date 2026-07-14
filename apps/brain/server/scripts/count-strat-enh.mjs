@@ -25,7 +25,6 @@ const wStrat = JSON.parse(
 )
 // group by (factionId, detachmentId)
 const wStratByDet = new Map() // det-wahapedia-id → { faction, name, stratagems: [] }
-const wStratByDetName = new Map() // `${factionSlug}::${detNorm}` → count
 const wStratByFactionOnly = new Map() // stratagems with detachmentId=''
 for (const s of wStrat) {
   const fSlug = factionSlug(s.factionId)

@@ -35,11 +35,22 @@ const handler = createWorkerHandler<Env>({
     app.get('/health', (c) => c.json({ status: 'ok' }))
 
     app.post('/scrape', async (c) => {
-      if (env.SYNC_SECRET) {
-        const auth = c.req.header('Authorization')
-        if (auth !== `Bearer ${env.SYNC_SECRET}`) {
-          return c.json({ error: 'Unauthorized' }, 401)
-        }
+      // Fail closed: the prior guard `if (env.SYNC_SECRET)` skipped auth
+      // entirely when the secret was unset. Verified 2026-07-13 that the
+      // deployed bcp-scraper worker had SYNC_SECRET unset — anyone on the
+      // internet could POST /scrape and start a real BCP session. Same
+      // D2-06 anti-pattern flagged for content-ingestor/checkAuth. No
+      // secret = 401 with a loud console.error, so misconfig surfaces
+      // instead of hiding as "the endpoint just works for everyone."
+      if (!env.SYNC_SECRET) {
+        console.error(
+          '/scrape: SYNC_SECRET is unset — rejecting request. Run `wrangler secret put SYNC_SECRET`.',
+        )
+        return c.json({ error: 'Unauthorized' }, 401)
+      }
+      const auth = c.req.header('Authorization')
+      if (auth !== `Bearer ${env.SYNC_SECRET}`) {
+        return c.json({ error: 'Unauthorized' }, 401)
       }
 
       const db = createDb(env)

@@ -5,6 +5,24 @@
   "type": "module",
   "main": "./src/index.ts",
   "types": "./src/index.ts",
+  "exports": {
+    ".": {
+      "types": "./src/index.ts",
+      "default": "./src/index.ts"
+    },
+    "./rules": {
+      "types": "./src/rules/index.ts",
+      "default": "./src/rules/index.ts"
+    },
+    "./bsdata/parser": {
+      "types": "./src/adapters/bsdata/parser.ts",
+      "default": "./src/adapters/bsdata/parser.ts"
+    },
+    "./src/*": {
+      "types": "./src/*.ts",
+      "default": "./src/*.ts"
+    }
+  },
   "scripts": {
     "test": "vitest run",
     "test:watch": "vitest"

@@ -8,9 +8,9 @@
  * output on the first line that contains only ALL-CAPS words — that's the
  * title; everything else is body.
  *
- * Reuses the trained data file from the study app when present
- * (`apps/study/client/eng.traineddata`). Falls back to tesseract.js's default
- * CDN download otherwise; this is fine for offline-after-first-run usage.
+ * Reuses a checked-in copy of `eng.traineddata` when present at the repo
+ * root. Falls back to tesseract.js's default CDN download otherwise; this
+ * is fine for offline-after-first-run usage.
  *
  * @see apps/brain/server/scripts/ocr-mission-cards.ts — batch driver
  */
@@ -29,20 +29,15 @@ export interface CardOcrResult {
 }
 
 /**
- * Find the trained-data directory. We try the study app's checked-in copy
- * first (so we don't duplicate the 25 MB file), then fall back to a worktree-
- * local copy if Micah dropped one there, then to `process.cwd()`.
+ * Find the trained-data directory. Covers the two common cwds: repo root
+ * (where the checked-in copy lives) and `apps/brain/server` (which is the
+ * cwd CLAUDE.md's deploy steps cd into).
  *
  * Returns `null` to mean "let tesseract.js fetch the default file" rather than
  * pointing at a missing directory (which would just trigger a confusing error).
  */
 function findLangPath(): string | null {
-  const candidates = [
-    resolve(process.cwd(), 'apps/study/client'),
-    resolve(process.cwd(), '../../study/client'),
-    resolve(process.cwd(), '../../../apps/study/client'),
-    process.cwd(),
-  ]
+  const candidates = [process.cwd(), resolve(process.cwd(), '../..')]
   for (const dir of candidates) {
     if (existsSync(resolve(dir, 'eng.traineddata'))) return dir
   }

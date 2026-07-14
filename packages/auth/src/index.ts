@@ -120,14 +120,67 @@ async function verifySignature(signedValue: string, secret: string): Promise<str
   return token
 }
 
+/**
+ * Injectable email sender. Auth-server wires this to Resend in prod
+ * (`buildResendEmailSender` below); tests and local dev pass a fake or omit
+ * it entirely. Kept as an interface so we don't depend on the Resend SDK
+ * inside packages/auth — the caller controls the transport.
+ */
+export interface EmailSender {
+  send(input: { to: string; subject: string; html: string; text: string }): Promise<void>
+}
+
+/**
+ * Build an EmailSender that hits Resend's REST API from a Cloudflare Worker
+ * without pulling in the Resend Node SDK (which has Node-only deps). Every
+ * transactional email the platform sends goes through this; callers just
+ * pass `to/subject/html/text`. `from` and the API key are captured once at
+ * construction time.
+ */
+export function buildResendEmailSender(opts: { apiKey: string; from: string }): EmailSender {
+  return {
+    async send({ to, subject, html, text }) {
+      const res = await fetch('https://api.resend.com/emails', {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${opts.apiKey}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ from: opts.from, to, subject, html, text }),
+      })
+      if (!res.ok) {
+        // Log rather than throw to keep signup flowing even if the email
+        // provider is briefly unavailable — Better Auth also retries on
+        // subsequent verification-resend calls. Fail-loud remains via the
+        // console.error so misconfigures surface in Worker logs.
+        const body = await res.text().catch(() => '<unreadable>')
+        console.error(`Resend send failed (${res.status}): ${body}`)
+      }
+    },
+  }
+}
+
 export function createAuth(
   db: Db,
   baseURL = 'http://localhost:3000',
   trustedOrigins: string[] = [],
-  secret = process.env['AUTH_SECRET'] ?? 'dev-secret-change-in-production',
+  secret?: string,
   basePath = '/api/auth',
   rateLimitKV?: KVLike,
+  emailSender?: EmailSender,
 ) {
+  // Fail-loud: without an AUTH_SECRET the HMAC cookie signature is either
+  // reduced to a known dev fallback (used to silently downgrade production
+  // when the env var was accidentally unset) or missing entirely. Either
+  // way, forged cookies become trivial. Refuse to boot instead — misconfig
+  // should be visible in Worker logs, not hidden as "auth just isn't
+  // working." Local dev sets AUTH_SECRET via .env; index.ts passes it in.
+  const resolvedSecret = secret ?? process.env['AUTH_SECRET']
+  if (!resolvedSecret) {
+    throw new Error(
+      'createAuth: AUTH_SECRET is required (was undefined). Set it as a wrangler secret in production or in .env for local dev.',
+    )
+  }
   // Better Auth's default rate limiter is `enabled: isProduction` with
   // `storage: "memory"` unless a secondaryStorage is configured — on
   // Cloudflare Workers, "memory" means a per-isolate Map that is useless
@@ -162,16 +215,66 @@ export function createAuth(
     }),
     emailAndPassword: {
       enabled: true,
-      requireEmailVerification: false,
+      // Only require verification when a transport is wired. Without a
+      // sender, flipping this to true would block every sign-in with no
+      // way for users to verify — worse than accepting unverified accounts.
+      requireEmailVerification: Boolean(emailSender),
       password: {
         hash: hashPassword,
         verify: verifyPassword,
       },
     },
+    // Better Auth's built-in email-verification flow: sends on signup, the
+    // link goes to /api/auth/verify-email?token=…&callbackURL=…, and after
+    // the token is validated the user is redirected to callbackURL. Client
+    // passes callbackURL via signUp.email({ callbackURL: ... }).
+    ...(emailSender
+      ? {
+          emailVerification: {
+            sendOnSignUp: true,
+            autoSignInAfterVerification: true,
+            sendVerificationEmail: async ({
+              user,
+              url,
+            }: {
+              user: { email: string; name?: string }
+              url: string
+            }) => {
+              const name = user.name ?? 'there'
+              await emailSender.send({
+                to: user.email,
+                subject: 'Verify your Tabletop Tools account',
+                html: [
+                  `<p>Hi ${name},</p>`,
+                  `<p>Confirm your email to finish creating your Tabletop Tools account:</p>`,
+                  `<p><a href="${url}">Verify email address</a></p>`,
+                  `<p>If the link doesn't work, paste this URL into your browser:</p>`,
+                  `<p>${url}</p>`,
+                  `<p>If you didn't create an account, you can ignore this message.</p>`,
+                ].join('\n'),
+                text: `Hi ${name},\n\nConfirm your email to finish creating your Tabletop Tools account:\n${url}\n\nIf you didn't create an account, you can ignore this message.`,
+              })
+            },
+          },
+        }
+      : {}),
     plugins: [username()],
-    secret,
+    secret: resolvedSecret,
     ...(secondaryStorage ? { secondaryStorage } : {}),
     ...(rateLimitKV ? { rateLimit: { enabled: true, storage: 'secondary-storage' as const } } : {}),
+    // When `secondaryStorage` is configured, Better Auth's default is to
+    // write sessions to secondary storage ONLY and skip the database
+    // (see node_modules/better-auth/dist/db/internal-adapter.mjs — every
+    // session write is gated on `!secondaryStorage || session.storeSessionInDatabase`).
+    // The app workers (packages/server-core/createBaseServer) validate every
+    // request by looking up the session in the DB via validateSession(). If
+    // sessions never land in the DB, every authenticated tRPC call returns
+    // UNAUTHORIZED even though the cookie is valid at the auth-server. This
+    // exact regression shipped when the KV rate limiter (PR #121) was
+    // deployed on 2026-07-11 and was rolled back the same evening. Force
+    // dual writes so KV acts as a cache in front of the DB, not as a
+    // replacement.
+    session: { storeSessionInDatabase: true },
   })
 }
 
@@ -203,6 +306,7 @@ export async function validateSession(
   db: Db,
   headers: Headers,
   secret: string,
+  sessionKV?: KVLike,
 ): Promise<User | null> {
   const cookieHeader = headers.get('cookie') ?? ''
   // Better Auth uses '__Secure-better-auth.session_token' on HTTPS (production)
@@ -221,6 +325,17 @@ export async function validateSession(
   const token = await verifySignature(signedToken, secret)
   if (!token) return null
 
+  // Fast path: when sessionKV is provided (the same KV namespace Better Auth
+  // uses as `secondaryStorage`), Better Auth writes each session under
+  // key=<raw token>, value=JSON({ session, user }). Reading it here avoids a
+  // Turso round-trip for every authenticated request. Defense-in-depth: if
+  // sessions ever go KV-only again (see createAuth's session.storeSessionInDatabase
+  // guard), this keeps the DB lookup from being the sole path.
+  if (sessionKV) {
+    const kvUser = await lookupSessionInKV(sessionKV, token)
+    if (kvUser) return kvUser
+  }
+
   const [row] = await db
     .select({
       id: authUsers.id,
@@ -237,4 +352,51 @@ export async function validateSession(
     .limit(1)
 
   return row ?? null
+}
+
+/**
+ * Look up a Better Auth session in KV using the same key/value shape Better
+ * Auth writes (see node_modules/better-auth/dist/db/internal-adapter.mjs):
+ *
+ *   key   = raw token
+ *   value = JSON.stringify({ session: {...}, user: {...} })
+ *
+ * Returns the User if the KV hit is present and the session hasn't expired,
+ * null otherwise. Never throws on parse failures — a bad row falls through
+ * to the DB lookup instead of blocking auth.
+ */
+async function lookupSessionInKV(sessionKV: KVLike, token: string): Promise<User | null> {
+  try {
+    const raw = await sessionKV.get(token)
+    if (!raw) return null
+    const parsed = JSON.parse(raw) as {
+      session?: { expiresAt?: string | number }
+      user?: {
+        id?: string
+        email?: string
+        name?: string
+        emailVerified?: boolean
+        image?: string | null
+        createdAt?: string | number | Date
+        updatedAt?: string | number | Date
+      }
+    }
+    const expiresAt = parsed.session?.expiresAt
+    if (!expiresAt) return null
+    const expiryMs = typeof expiresAt === 'string' ? Date.parse(expiresAt) : Number(expiresAt)
+    if (!Number.isFinite(expiryMs) || expiryMs <= Date.now()) return null
+    const u = parsed.user
+    if (!u?.id || typeof u.email !== 'string' || typeof u.name !== 'string') return null
+    return {
+      id: u.id,
+      email: u.email,
+      name: u.name,
+      emailVerified: Boolean(u.emailVerified),
+      image: u.image ?? null,
+      createdAt: new Date(u.createdAt ?? 0),
+      updatedAt: new Date(u.updatedAt ?? 0),
+    }
+  } catch {
+    return null
+  }
 }

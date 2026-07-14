@@ -8,7 +8,7 @@ import { createAuth, validateSession } from './index'
 const TEST_DB = `test-auth-${Date.now()}.db`
 const TEST_DB_URL = `file:./${TEST_DB}`
 
-const AUTH_SECRET = 'dev-secret-change-in-production'
+const AUTH_SECRET = 'test-secret'
 
 let auth: ReturnType<typeof createAuth>
 let db: ReturnType<typeof createDb>
@@ -66,7 +66,7 @@ beforeAll(async () => {
   setup.close()
 
   db = createDb({ url: TEST_DB_URL })
-  auth = createAuth(db)
+  auth = createAuth(db, undefined, undefined, 'test-secret')
 })
 
 afterAll(() => {

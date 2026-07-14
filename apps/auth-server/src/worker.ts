@@ -1,5 +1,5 @@
 import { createClient } from '@libsql/client/web'
-import { createAuth } from '@tabletop-tools/auth'
+import { buildResendEmailSender, createAuth } from '@tabletop-tools/auth'
 import { createDbFromClient } from '@tabletop-tools/db'
 import { Hono } from 'hono'
 import { cors } from 'hono/cors'
@@ -11,6 +11,17 @@ interface Env {
   AUTH_BASE_URL: string
   TRUSTED_ORIGINS: string
   AUTH_RATE_LIMIT: KVNamespace
+  /**
+   * Set to enable email verification on signup. Without it, createAuth
+   * omits the emailVerification block and requireEmailVerification stays
+   * off — accounts are usable immediately without a verified email.
+   */
+  RESEND_API_KEY?: string
+  /**
+   * Verified `from` address in the Resend dashboard. Defaults to
+   * `noreply@tabletop-tools.net` — override if the sender domain changes.
+   */
+  RESEND_FROM?: string
 }
 
 let cachedApp: Hono | null = null
@@ -30,6 +41,13 @@ export default {
             .filter(Boolean)
         : ['https://tabletop-tools.net']
 
+      const emailSender = env.RESEND_API_KEY
+        ? buildResendEmailSender({
+            apiKey: env.RESEND_API_KEY,
+            from: env.RESEND_FROM ?? 'noreply@tabletop-tools.net',
+          })
+        : undefined
+
       const auth = createAuth(
         db,
         env.AUTH_BASE_URL ?? 'https://tabletop-tools.net',
@@ -37,6 +55,7 @@ export default {
         env.AUTH_SECRET,
         '/auth/api/auth',
         env.AUTH_RATE_LIMIT,
+        emailSender,
       )
 
       const app = new Hono()
