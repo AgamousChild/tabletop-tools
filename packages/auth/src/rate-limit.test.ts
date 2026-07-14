@@ -3,7 +3,7 @@ import { createDb } from '@tabletop-tools/db'
 import { existsSync, unlinkSync } from 'fs'
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest'
 
-import { createAuth } from './index'
+import { createAuth, type EmailSender } from './index'
 
 /**
  * In-memory fake KV implementing the minimal shape createAuth expects
@@ -239,5 +239,59 @@ describe('createAuth with KV-backed rate limiting', () => {
       args: [signUp.token],
     })
     expect(rows.rows).toHaveLength(1)
+  })
+})
+
+describe('createAuth with an email verification transport', () => {
+  it('calls sendVerificationEmail on signup and blocks sign-in until verified', async () => {
+    const sent: Array<{ to: string; subject: string }> = []
+    const sender: EmailSender = {
+      send: async ({ to, subject }) => {
+        sent.push({ to, subject })
+      },
+    }
+    const auth = createAuth(db, undefined, undefined, 'test-secret', undefined, undefined, sender)
+
+    const email = `verify-${Date.now()}@example.com`
+    const signUp = await auth.api.signUpEmail({
+      body: {
+        name: 'Needs Verification',
+        email,
+        password: 'password123',
+        username: `verify${Date.now()}`,
+      },
+    })
+
+    // Signup succeeds but no session is issued — verification is required first.
+    expect(signUp.user.email).toBe(email)
+    expect(signUp.token).toBeFalsy()
+
+    // Better Auth handed sendVerificationEmail a URL with our subject.
+    expect(sent).toHaveLength(1)
+    expect(sent[0]!.to).toBe(email)
+    expect(sent[0]!.subject).toMatch(/verify/i)
+
+    // Signing in with correct password STILL fails because email is unverified.
+    await expect(
+      auth.api.signInEmail({ body: { email, password: 'password123' } }),
+    ).rejects.toThrow()
+  })
+
+  it('does not call sendVerificationEmail when no sender is configured', async () => {
+    const auth = createAuth(db, undefined, undefined, 'test-secret')
+
+    const email = `no-verify-${Date.now()}@example.com`
+    const signUp = await auth.api.signUpEmail({
+      body: {
+        name: 'No Verification',
+        email,
+        password: 'password123',
+        username: `noverify${Date.now()}`,
+      },
+    })
+
+    // Without a sender, verification stays off — signup returns a session
+    // immediately, matching the platform's pre-verification behaviour.
+    expect(signUp.token).toBeDefined()
   })
 })

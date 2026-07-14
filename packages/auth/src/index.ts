@@ -120,6 +120,46 @@ async function verifySignature(signedValue: string, secret: string): Promise<str
   return token
 }
 
+/**
+ * Injectable email sender. Auth-server wires this to Resend in prod
+ * (`buildResendEmailSender` below); tests and local dev pass a fake or omit
+ * it entirely. Kept as an interface so we don't depend on the Resend SDK
+ * inside packages/auth — the caller controls the transport.
+ */
+export interface EmailSender {
+  send(input: { to: string; subject: string; html: string; text: string }): Promise<void>
+}
+
+/**
+ * Build an EmailSender that hits Resend's REST API from a Cloudflare Worker
+ * without pulling in the Resend Node SDK (which has Node-only deps). Every
+ * transactional email the platform sends goes through this; callers just
+ * pass `to/subject/html/text`. `from` and the API key are captured once at
+ * construction time.
+ */
+export function buildResendEmailSender(opts: { apiKey: string; from: string }): EmailSender {
+  return {
+    async send({ to, subject, html, text }) {
+      const res = await fetch('https://api.resend.com/emails', {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${opts.apiKey}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ from: opts.from, to, subject, html, text }),
+      })
+      if (!res.ok) {
+        // Log rather than throw to keep signup flowing even if the email
+        // provider is briefly unavailable — Better Auth also retries on
+        // subsequent verification-resend calls. Fail-loud remains via the
+        // console.error so misconfigures surface in Worker logs.
+        const body = await res.text().catch(() => '<unreadable>')
+        console.error(`Resend send failed (${res.status}): ${body}`)
+      }
+    },
+  }
+}
+
 export function createAuth(
   db: Db,
   baseURL = 'http://localhost:3000',
@@ -127,6 +167,7 @@ export function createAuth(
   secret?: string,
   basePath = '/api/auth',
   rateLimitKV?: KVLike,
+  emailSender?: EmailSender,
 ) {
   // Fail-loud: without an AUTH_SECRET the HMAC cookie signature is either
   // reduced to a known dev fallback (used to silently downgrade production
@@ -174,12 +215,49 @@ export function createAuth(
     }),
     emailAndPassword: {
       enabled: true,
-      requireEmailVerification: false,
+      // Only require verification when a transport is wired. Without a
+      // sender, flipping this to true would block every sign-in with no
+      // way for users to verify — worse than accepting unverified accounts.
+      requireEmailVerification: Boolean(emailSender),
       password: {
         hash: hashPassword,
         verify: verifyPassword,
       },
     },
+    // Better Auth's built-in email-verification flow: sends on signup, the
+    // link goes to /api/auth/verify-email?token=…&callbackURL=…, and after
+    // the token is validated the user is redirected to callbackURL. Client
+    // passes callbackURL via signUp.email({ callbackURL: ... }).
+    ...(emailSender
+      ? {
+          emailVerification: {
+            sendOnSignUp: true,
+            autoSignInAfterVerification: true,
+            sendVerificationEmail: async ({
+              user,
+              url,
+            }: {
+              user: { email: string; name?: string }
+              url: string
+            }) => {
+              const name = user.name ?? 'there'
+              await emailSender.send({
+                to: user.email,
+                subject: 'Verify your Tabletop Tools account',
+                html: [
+                  `<p>Hi ${name},</p>`,
+                  `<p>Confirm your email to finish creating your Tabletop Tools account:</p>`,
+                  `<p><a href="${url}">Verify email address</a></p>`,
+                  `<p>If the link doesn't work, paste this URL into your browser:</p>`,
+                  `<p>${url}</p>`,
+                  `<p>If you didn't create an account, you can ignore this message.</p>`,
+                ].join('\n'),
+                text: `Hi ${name},\n\nConfirm your email to finish creating your Tabletop Tools account:\n${url}\n\nIf you didn't create an account, you can ignore this message.`,
+              })
+            },
+          },
+        }
+      : {}),
     plugins: [username()],
     secret: resolvedSecret,
     ...(secondaryStorage ? { secondaryStorage } : {}),

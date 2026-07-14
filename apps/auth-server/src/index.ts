@@ -1,7 +1,7 @@
 import 'dotenv/config'
 
 import { serve } from '@hono/node-server'
-import { createAuth } from '@tabletop-tools/auth'
+import { buildResendEmailSender, createAuth } from '@tabletop-tools/auth'
 import { createDb } from '@tabletop-tools/db'
 import { Hono } from 'hono'
 import { cors } from 'hono/cors'
@@ -27,11 +27,20 @@ const trustedOrigins = process.env['TRUSTED_ORIGINS']
 // back to a known dev secret, which downgraded prod on misconfigure), so
 // the Node dev process provides its own dev fallback explicitly here.
 const secret = process.env['AUTH_SECRET'] ?? 'dev-secret-change-in-production'
+const emailSender = process.env['RESEND_API_KEY']
+  ? buildResendEmailSender({
+      apiKey: process.env['RESEND_API_KEY'],
+      from: process.env['RESEND_FROM'] ?? 'noreply@tabletop-tools.net',
+    })
+  : undefined
 const auth = createAuth(
   db,
   process.env['AUTH_BASE_URL'] ?? 'http://localhost:3000',
   trustedOrigins,
   secret,
+  undefined,
+  undefined,
+  emailSender,
 )
 
 const app = new Hono()
