@@ -19,7 +19,11 @@ bash build.sh
 echo ""
 echo "=== Step 2: Deploy to Cloudflare Pages ==="
 cd "$GATEWAY_DIR"
-wrangler pages deploy dist --project-name tabletop-tools --branch main --commit-dirty=true
+# Use `pnpm exec wrangler` so this works both locally (where wrangler may
+# not be on PATH) and inside GH Actions runners (deploy-platform.yml —
+# where the workflow container has no global wrangler binary). Matches
+# how the workflow already deploys the workers/auth-server.
+pnpm exec wrangler pages deploy dist --project-name tabletop-tools --branch main --commit-dirty=true
 
 echo ""
 echo "=== Step 3: Purge CDN cache ==="
