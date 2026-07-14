@@ -22,8 +22,11 @@ cd "$GATEWAY_DIR"
 # Use `pnpm exec wrangler` so this works both locally (where wrangler may
 # not be on PATH) and inside GH Actions runners (deploy-platform.yml —
 # where the workflow container has no global wrangler binary). Matches
-# how the workflow already deploys the workers/auth-server.
-pnpm exec wrangler pages deploy dist --project-name tabletop-tools --branch main --commit-dirty=true
+# how the workflow already deploys the workers/auth-server. Pass the
+# absolute dist path — `pnpm exec` resolves relative paths from the
+# workspace root, not the current directory, so `dist` alone becomes
+# `<repo>/dist` and wrangler ENOENTs.
+pnpm exec wrangler pages deploy "$GATEWAY_DIR/dist" --project-name tabletop-tools --branch main --commit-dirty=true
 
 echo ""
 echo "=== Step 3: Purge CDN cache ==="
