@@ -122,8 +122,10 @@ describe('AuthScreen', () => {
     const onAuthenticated = vi.fn()
     const authClient = {
       signIn: { email: vi.fn() },
-      signUp: { email: vi.fn().mockResolvedValue({ error: null }) },
-      // Presence of this method signals verification is enabled on the server.
+      // Better Auth returns { token: null } when email verification is on.
+      signUp: {
+        email: vi.fn().mockResolvedValue({ error: null, data: { token: null, user: {} } }),
+      },
       sendVerificationEmail: vi.fn().mockResolvedValue({ error: null }),
     }
 

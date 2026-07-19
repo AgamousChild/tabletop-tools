@@ -1,8 +1,20 @@
 import { useState } from 'react'
 
+type AuthError = { message?: string; code?: string; status?: number } | null
+
 type AuthResult = {
-  error?: { message?: string; code?: string; status?: number } | null
+  error?: AuthError
+  // Left permissive so real Better Auth clients (whose data shape varies per
+  // endpoint — `{status: boolean}` for sendVerificationEmail, `{token, user}`
+  // for signUp) satisfy the type without casting. The signUp handler narrows
+  // via SignUpData below at the use site.
+  data?: unknown
 }
+
+// Shape of Better Auth's signUp.email(...) success data. Only `token` is
+// load-bearing — non-null means auto-signed in; null means email verification
+// is required and the user has to click the link before a session is issued.
+type SignUpData = { token?: string | null; user?: { emailVerified?: boolean } | null }
 
 type AuthClient = {
   signIn: {
@@ -79,10 +91,15 @@ export function AuthScreen({ title, subtitle, onAuthenticated, authClient }: Aut
           return
         }
         // With email verification enabled, Better Auth returns success but
-        // does not create a session — the user has to click the link first.
-        // Show the "check your inbox" state; the server decides whether
-        // verification is on based on whether an email sender is configured.
-        if (authClient.sendVerificationEmail) {
+        // does not create a session — `data.token` is null and the user has
+        // to click the link first. Check the RESPONSE rather than the client
+        // shape: `authClient.sendVerificationEmail` is a proxy method that
+        // exists whether or not verification is on server-side, so a
+        // property-presence check misroutes the signed-out case as "signed
+        // in" and the app spins on empty auth state. `data.token == null`
+        // is the actual server signal.
+        const data = result.data as SignUpData | null | undefined
+        if (data && data.token == null) {
           setAwaitingVerification(email)
           return
         }
