@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
-import { bsdataFactionToMfmSlug } from './sync'
+import { bsdataFactionToMfmSlug, validateMfmCounts } from './sync'
 
 /**
  * MFM↔BSData faction slug mapping.
@@ -116,5 +116,85 @@ describe('bsdataFactionToMfmSlug', () => {
       expect(bsdataFactionToMfmSlug('Genestealer Cults')).toBe('genestealer-cults')
       expect(bsdataFactionToMfmSlug('Leagues of Votann')).toBe('leagues-of-votann')
     })
+  })
+})
+
+/**
+ * MFM count guard.
+ *
+ * Prevents "BSData scraper broke and silently dropped everything" from
+ * clobbering good R2 data. The exact scenario this catches: 22/7/2026 MFM
+ * v1.1 layout change silently dropped 28 of 30 factions' changed units in
+ * the BSData scraper for ~16 hours before their PR #25 fixed the selectors.
+ */
+describe('validateMfmCounts', () => {
+  it('passes when there is no baseline (first ever run)', () => {
+    expect(validateMfmCounts(undefined, { unitCount: 1805, detachmentCount: 346 })).toEqual({
+      ok: true,
+    })
+  })
+
+  it('passes when a baseline has both counts at 0 — treats as first run', () => {
+    expect(
+      validateMfmCounts(
+        { unitCount: 0, detachmentCount: 0 },
+        { unitCount: 1805, detachmentCount: 346 },
+      ),
+    ).toEqual({ ok: true })
+  })
+
+  it('passes when counts are stable or grow', () => {
+    expect(
+      validateMfmCounts(
+        { unitCount: 1800, detachmentCount: 340 },
+        { unitCount: 1805, detachmentCount: 346 },
+      ).ok,
+    ).toBe(true)
+  })
+
+  it('passes a small drop within threshold (2% shrink)', () => {
+    expect(
+      validateMfmCounts(
+        { unitCount: 1800, detachmentCount: 340 },
+        { unitCount: 1764, detachmentCount: 335 },
+      ).ok,
+    ).toBe(true)
+  })
+
+  it('fails when unit count drops more than 5%', () => {
+    const r = validateMfmCounts(
+      { unitCount: 1800, detachmentCount: 340 },
+      { unitCount: 1000, detachmentCount: 340 },
+    )
+    expect(r.ok).toBe(false)
+    expect(r.reason).toContain('unit drop')
+    expect(r.reason).toContain('1800→1000')
+  })
+
+  it('fails when detachment count drops more than 5%', () => {
+    const r = validateMfmCounts(
+      { unitCount: 1800, detachmentCount: 340 },
+      { unitCount: 1800, detachmentCount: 200 },
+    )
+    expect(r.ok).toBe(false)
+    expect(r.reason).toContain('detachment drop')
+    expect(r.reason).toContain('340→200')
+  })
+
+  it('honors a custom threshold', () => {
+    // 8% drop with default 5% threshold → fails
+    const strict = validateMfmCounts(
+      { unitCount: 100, detachmentCount: 10 },
+      { unitCount: 92, detachmentCount: 10 },
+    )
+    expect(strict.ok).toBe(false)
+
+    // Same drop with 10% threshold → passes
+    const loose = validateMfmCounts(
+      { unitCount: 100, detachmentCount: 10 },
+      { unitCount: 92, detachmentCount: 10 },
+      10,
+    )
+    expect(loose.ok).toBe(true)
   })
 })

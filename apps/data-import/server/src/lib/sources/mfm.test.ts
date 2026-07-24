@@ -56,6 +56,35 @@ units:
     legends: true
 `
 
+/**
+ * MFM v1.1 shape (BSData PR #25, 22/7/2026): faction-level `parent` on
+ * SM-chapter files and per-enhancement `supportTo` mirroring `leaderTo`.
+ */
+const SAMPLE_YAML_V11 = `name: Black Templars
+slug: black-templars
+version: "1.1"
+firstSeen: 2026-07-22
+parent: Space Marines
+detachments:
+  - name: Righteous Crusaders
+    dp: 2
+    objective: TAKE AND HOLD
+    enhancements:
+      - { name: Sigismund's Seal, points: 25, leaderTo: [Marshal] }
+      - { name: Tactica Frater, points: 15, supportTo: [Ancient, Apothecary] }
+      - { name: Both Grants, points: 20, leaderTo: [Marshal], supportTo: [Apothecary] }
+units:
+  - name: Marshal
+    pricing:
+      - range: "[1,)"
+        label: Your Unit Costs
+        costs:
+          - { models: 1, points: 80 }
+    role: leader
+    attachTo:
+      - Sword Brethren Squad
+`
+
 describe('parseMfmFactionYaml', () => {
   it('parses identity fields', () => {
     const f = parseMfmFactionYaml(SAMPLE_YAML)
@@ -122,6 +151,52 @@ describe('parseMfmFactionYaml', () => {
 
   it('throws on missing required fields', () => {
     expect(() => parseMfmFactionYaml('detachments: []\nunits: []')).toThrow()
+  })
+})
+
+describe('parseMfmFactionYaml — v1.1 additive fields (BSData PR #25)', () => {
+  it('captures faction-level parent for SM-chapter YAMLs', () => {
+    const f = parseMfmFactionYaml(SAMPLE_YAML_V11)
+    expect(f.parent).toBe('Space Marines')
+  })
+
+  it('omits parent when the field is absent (10e-shaped faction)', () => {
+    const f = parseMfmFactionYaml(SAMPLE_YAML)
+    expect(f.parent).toBeUndefined()
+  })
+
+  it('omits parent when the field is an empty string', () => {
+    const yaml = `name: X
+slug: x
+version: "1.1"
+parent: ""
+detachments: []
+units: []
+`
+    const f = parseMfmFactionYaml(yaml)
+    expect(f.parent).toBeUndefined()
+  })
+
+  it('captures supportTo on enhancements (Support-role grant)', () => {
+    const f = parseMfmFactionYaml(SAMPLE_YAML_V11)
+    const rc = f.detachments[0]!
+    const tactica = rc.enhancements.find((e) => e.name === 'Tactica Frater')!
+    expect(tactica.supportTo).toEqual(['Ancient', 'Apothecary'])
+    expect(tactica.leaderTo).toBeUndefined()
+  })
+
+  it('captures leaderTo and supportTo independently on the same enhancement', () => {
+    const f = parseMfmFactionYaml(SAMPLE_YAML_V11)
+    const both = f.detachments[0]!.enhancements.find((e) => e.name === 'Both Grants')!
+    expect(both.leaderTo).toEqual(['Marshal'])
+    expect(both.supportTo).toEqual(['Apothecary'])
+  })
+
+  it('omits supportTo when the field is absent (10e enhancement shape)', () => {
+    const f = parseMfmFactionYaml(SAMPLE_YAML_V11)
+    const seal = f.detachments[0]!.enhancements.find((e) => e.name === "Sigismund's Seal")!
+    expect(seal.leaderTo).toEqual(['Marshal'])
+    expect(seal.supportTo).toBeUndefined()
   })
 })
 
