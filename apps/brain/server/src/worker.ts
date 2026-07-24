@@ -148,34 +148,98 @@ const BROWSE_CATEGORIES: Array<{
     label: 'Errata',
     filter: (n) => n.layer === 'errata' || n.category === 'faq' || n.category === 'commentary',
   },
+  // ── 11e Chapter Approved (current) ──────────────────────────────────────
+  // Source-title filters (not just category) so 10e and 11e content stay in
+  // their own sidebar entries. Both currently emit under the same category
+  // (primary-mission, terrain-layout, etc.) because the edition tag isn't
+  // universally set on the older 10e nodes; splitting by source.title is the
+  // durable fix.
+  {
+    id: 'ca11-primary-missions',
+    label: 'Primary Missions (11e)',
+    filter: (n) =>
+      n.category === 'primary-mission' &&
+      n.sources.some(
+        (s) =>
+          s.title === 'CA11 Force Dispositions' || (s.title ?? '').startsWith('gdmissions.app'),
+      ),
+  },
+  {
+    id: 'ca11-secondary-missions',
+    label: 'Secondary Missions (11e)',
+    filter: (n) =>
+      n.category === 'secondary-mission' &&
+      n.sources.some((s) => (s.title ?? '').startsWith('gdmissions.app')),
+  },
+  {
+    id: 'ca11-terrain-layouts',
+    label: 'Terrain Layouts (11e)',
+    filter: (n) => n.sources.some((s) => s.title === 'CA11 Terrain Layouts'),
+  },
+  {
+    id: 'ca11-deployment-zones',
+    label: 'Deployment Zones (11e)',
+    filter: (n) => n.sources.some((s) => s.title === 'CA11 Deployment Zones'),
+  },
+  {
+    id: 'ca11-force-dispositions',
+    label: 'Force Dispositions (11e)',
+    filter: (n) => n.category === 'force-disposition',
+  },
+  {
+    id: 'universal-rules-updates',
+    label: 'Universal Rules Updates (July 2026)',
+    filter: (n) => n.sources.some((s) => s.title === 'Universal Rules Updates'),
+  },
+  {
+    id: 'balance-dataslate',
+    label: 'Balance Dataslate (June 2025)',
+    filter: (n) => n.sources.some((s) => s.title === 'Balance Dataslate'),
+  },
+  {
+    id: 'tournament-companion',
+    label: 'Tournament Companion',
+    filter: (n) => n.sources.some((s) => (s.title ?? '').includes('Tournament Companion')),
+  },
+
+  // ── 10e Chapter Approved (legacy — kept for historical reference) ───────
   {
     id: 'ca-deployments',
-    label: 'Chapter Approved Deployments',
-    filter: (n) => n.category === 'deployment-zone',
+    label: 'Deployment Zones (10e legacy)',
+    filter: (n) =>
+      n.category === 'deployment-zone' &&
+      n.sources.some((s) => s.title === 'Chapter Approved Deployment Zones'),
   },
   {
     id: 'ca-terrain',
-    label: 'Chapter Approved Terrain',
-    filter: (n) => n.category === 'terrain-layout',
+    label: 'Terrain Layouts (10e legacy)',
+    filter: (n) =>
+      n.category === 'terrain-layout' &&
+      n.sources.some((s) => (s.title ?? '').startsWith('Chapter Approved')),
   },
   {
     id: 'ca-primary-missions',
-    label: 'Chapter Approved Primary Missions',
-    filter: (n) => n.category === 'primary-mission',
+    label: 'Primary Missions (10e legacy)',
+    filter: (n) =>
+      n.category === 'primary-mission' &&
+      n.sources.some((s) => (s.title ?? '').startsWith('Chapter Approved')),
   },
   {
     id: 'ca-secondary-missions',
-    label: 'Chapter Approved Secondary Missions',
-    filter: (n) => n.category === 'secondary-mission' && !n.id.startsWith('tc:'),
+    label: 'Secondary Missions (10e legacy)',
+    filter: (n) =>
+      n.category === 'secondary-mission' &&
+      !n.id.startsWith('tc:') &&
+      n.sources.some((s) => (s.title ?? '').startsWith('Chapter Approved')),
   },
   {
     id: 'ca-twists',
-    label: 'Chapter Approved Twists',
+    label: 'Twists (10e legacy)',
     filter: (n) => n.category === 'twist',
   },
   {
     id: 'ca-challengers',
-    label: 'Chapter Approved Challenger Cards',
+    label: 'Challenger Cards (10e only — not in 11e)',
     filter: (n) => n.category === 'challenger',
   },
   {

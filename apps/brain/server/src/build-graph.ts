@@ -58,6 +58,7 @@ import { loadMfmDetachmentsFromFile } from './lib/parsers/mfm-detachments'
 import { loadMissionCardOcr, parseMissionCards } from './lib/parsers/mission-cards'
 import { parseRulesCommentary } from './lib/parsers/rules-commentary'
 import { loadSecondaryBodiesFromFile } from './lib/parsers/secondary-mission-bodies'
+import { buildTerrainLayoutNodes } from './lib/parsers/terrain-layouts'
 import { parseTournamentCompanion } from './lib/parsers/tournament-companion'
 import { loadTwistsFromFile } from './lib/parsers/twists'
 import { mapNodesToPages } from './lib/pdf-positions'
@@ -1001,6 +1002,20 @@ async function main() {
   console.log(
     `\n--- 11e force dispositions ---\n  ${fdNodes.length} disposition nodes, ${pmStubNodes.length} primary-mission stub nodes`,
   )
+
+  // ── 7f. 11e Warhammer Event Companion terrain layouts (pages 14-53) ───────
+  // 40 image-only nodes (one per PDF page). Images live in R2 under
+  // `pages/ca11-terrain-layouts/page-{1..40}.png`, uploaded out-of-band by
+  // `scripts/upload-terrain-layout-images.ts` after
+  // `scripts/extract-terrain-layout-images.py` renders the Event Companion
+  // PDF pages. Mission-name mapping (layout N ↔ "Purge the Foe A" etc.) is
+  // deferred until the labelling text lands separately.
+  const tlNodes = buildTerrainLayoutNodes({
+    retrievedAt: RETRIEVED_AT,
+    publishedAt: '2026-07-22',
+  })
+  allNodes.push(...tlNodes)
+  console.log(`\n--- 11e terrain layouts ---\n  ${tlNodes.length}/40 nodes`)
 
   // ── 8. Tournament Companion rules ──────────────────────────────────────────
   const TC_DIR = 'C:/R/sync-data/tools/gw-sync/.local/gw/markdown'
