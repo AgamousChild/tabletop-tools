@@ -93,6 +93,10 @@ const SOURCE_DATES: Record<string, string> = {
   'core-rules': '2024-06-01', // 10th Edition launch
   'rules-commentary': '2025-01-01', // Updated with each dataslate
   'balance-dataslate': '2025-04-14', // April 2025 dataslate
+  // July 2026 replacement for the monolithic Balance Dataslate — GW split
+  // per-faction changes into 28 Faction Packs and left only cross-faction
+  // core rules updates in this doc. See universal-rules-updates.md.
+  'universal-rules-updates': '2026-07-22',
   'chapter-approved': '2025-01-01', // Chapter Approved 2025
   'pariah-nexus-tournament-companion': '2024-10-01', // Pariah Nexus launch
   'chapter-approved-tournament-companion': '2025-01-01',
@@ -165,6 +169,27 @@ async function main() {
   } catch (err) {
     console.log(`   ERROR: ${err instanceof Error ? err.message : err}`)
     errors.push(`Balance dataslate: ${err}`)
+  }
+
+  // ── 3b. Universal Rules Updates (July 2026 dataslate replacement) ──────────
+  // GW split the old monolithic Balance Dataslate into (a) this small
+  // cross-faction rules doc and (b) 28 per-faction Faction Packs. Same
+  // parser structure (H4 section headers, H5 individual changes), so we
+  // reuse parseBalanceDataslate — but tag the source distinctly so
+  // consumers can tell June 2025 changes from July 2026 changes without
+  // dropping the historical record.
+  console.log('3b. Universal Rules Updates')
+  try {
+    const raw = readFileSync(join(MD_DIR, 'universal-rules-updates.md'), 'utf-8')
+    const norm = normalizeMarkdown(raw)
+    const result = parseBalanceDataslate(norm, RETRIEVED_AT, 'Universal Rules Updates')
+    stampPublishedAt(result.nodes, SOURCE_DATES['universal-rules-updates']!)
+    allNodes.push(...result.nodes)
+    allRefs.push(...result.refs)
+    console.log(`   ${result.nodes.length} nodes, ${result.refs.length} refs`)
+  } catch (err) {
+    console.log(`   ERROR: ${err instanceof Error ? err.message : err}`)
+    errors.push(`Universal rules updates: ${err}`)
   }
 
   // ── 4. Faction Packs (errata/FAQ sections) ─────────────────────────────────

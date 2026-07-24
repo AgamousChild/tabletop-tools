@@ -148,7 +148,7 @@ export async function runBrainSync(
     }
   }
 
-  // Parse balance dataslate
+  // Parse balance dataslate (June 2025 monolithic slate)
   if (markdownFiles['balance-dataslate.md']) {
     try {
       const result = parseBalanceDataslate(markdownFiles['balance-dataslate.md']!, retrievedAt)
@@ -156,6 +156,23 @@ export async function runBrainSync(
       allRefs.push(...result.refs)
     } catch (err) {
       errors.push(`Balance dataslate: ${err instanceof Error ? err.message : String(err)}`)
+    }
+  }
+
+  // Parse universal rules updates (July 2026 dataslate replacement — same
+  // parser, tagged distinctly via sourceTitle so consumers can tell
+  // June 2025 changes from July 2026 changes).
+  if (markdownFiles['universal-rules-updates.md']) {
+    try {
+      const result = parseBalanceDataslate(
+        markdownFiles['universal-rules-updates.md']!,
+        retrievedAt,
+        'Universal Rules Updates',
+      )
+      allNodes.push(...result.nodes)
+      allRefs.push(...result.refs)
+    } catch (err) {
+      errors.push(`Universal rules updates: ${err instanceof Error ? err.message : String(err)}`)
     }
   }
 

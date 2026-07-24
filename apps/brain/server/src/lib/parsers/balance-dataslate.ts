@@ -15,6 +15,7 @@ import type { ParseResult } from './core-rules'
 export function parseBalanceDataslate(
   normalizedMarkdown: string,
   retrievedAt: string,
+  sourceTitle: string = 'Balance Dataslate',
 ): ParseResult {
   const nodes: Node[] = []
   const refs: NodeRef[] = []
@@ -22,7 +23,7 @@ export function parseBalanceDataslate(
 
   const source: Source = {
     type: 'balance-dataslate',
-    title: 'Balance Dataslate',
+    title: sourceTitle,
     retrievedAt,
   }
 
@@ -56,7 +57,14 @@ export function parseBalanceDataslate(
 
     const isCoreChange = !currentFaction || currentFaction.toUpperCase() === 'CORE RULES'
     const fSlug = isCoreChange ? undefined : currentFactionSlug
-    const baseId = isCoreChange ? balanceId('core', title) : balanceId(fSlug!, title)
+    const rootId = isCoreChange ? balanceId('core', title) : balanceId(fSlug!, title)
+    // Non-default source titles (e.g. "Universal Rules Updates") append a
+    // suffix so their nodes don't collide with the June 2025 Balance
+    // Dataslate. Both rules can legitimately be titled the same and mean
+    // different things — merge-sources dedupes on exact ID, so distinct IDs
+    // are required to keep both historical records.
+    const baseId =
+      sourceTitle === 'Balance Dataslate' ? rootId : `${rootId}:${slugify(sourceTitle)}`
     const nodeId = makeId(baseId)
 
     const node: Node = {
@@ -93,11 +101,27 @@ export function parseBalanceDataslate(
   }
 
   for (const line of lines) {
-    // #### = faction header
+    // #### = faction header — except when it's a meta heading (VERSION 1.0,
+    // CONTENTS, PRODUCED BY). Meta H4s cleared state before flushNode's
+    // node-title check ran, but currentFaction stayed set to the meta string
+    // (e.g. 'VERSION 1.0'), which caused every subsequent H5 to be tagged
+    // with factionId=version-1-0 and title prefixed 'VERSION 1.0: ...'.
+    // The old monolithic Balance Dataslate had a 'CORE RULES' H4 right
+    // after the version line so this never surfaced; the July 2026
+    // Universal Rules Updates has ONLY the meta H4, and every core-rule
+    // node picked up the bogus faction tag.
     const h4 = line.match(/^####\s+(.+)$/)
     if (h4) {
       flushNode()
       const heading = h4[1]!.trim()
+      const upper = heading.toUpperCase()
+      const isMeta =
+        upper.startsWith('VERSION') || upper === 'CONTENTS' || upper.includes('PRODUCED BY')
+      if (isMeta) {
+        currentTitle = ''
+        currentBody = []
+        continue
+      }
       currentFaction = heading
       currentFactionSlug = slugify(heading)
       currentTitle = ''
@@ -108,9 +132,21 @@ export function parseBalanceDataslate(
     // ##### = individual change entry
     const h5 = line.match(/^#{3,5}\s+(.+)$/)
     if (h5 && !h4) {
-      flushNode()
-      currentTitle = h5[1]!.trim()
-      currentBody = []
+      const newTitle = h5[1]!.trim()
+      // gw-sync's PDF→markdown conversion sometimes splits a single visual
+      // heading across two consecutive ##### lines with no body in between
+      // (e.g. the July 2026 Universal Rules Updates splits "STRATAGEMS THAT
+      // PREVENT UNITS FROM BEING TARGETED" into two headings). If the current
+      // title has no body yet, treat the new h5 as a continuation and merge
+      // the titles instead of dropping the first as an empty node.
+      const hasBody = currentBody.some((l) => l.trim().length > 0)
+      if (currentTitle && !hasBody) {
+        currentTitle = `${currentTitle} ${newTitle}`
+      } else {
+        flushNode()
+        currentTitle = newTitle
+        currentBody = []
+      }
       continue
     }
 
