@@ -116,6 +116,45 @@ function resolveCatalogToCanonicalFactionId(
   return null
 }
 
+export interface MfmCountGuardResult {
+  ok: boolean
+  /** Human-readable failure reason. Undefined when `ok === true`. */
+  reason?: string
+}
+
+/**
+ * Refuse to overwrite MFM outputs when the fresh run has significantly fewer
+ * units or detachments than the previous run — the "BSData scraper broke and
+ * silently dropped everything" scenario. Threshold defaults to 5% on either
+ * axis; no baseline means first-ever run and the check is skipped.
+ *
+ * Pure: previous manifest slice + new counts in, result out. Exported so the
+ * ingest can wrap this at the right call site AND the test can pin the
+ * numeric thresholds down.
+ */
+export function validateMfmCounts(
+  previous: { unitCount?: number; detachmentCount?: number } | undefined,
+  next: { unitCount: number; detachmentCount: number },
+  thresholdPct = 5,
+): MfmCountGuardResult {
+  const hadBaseline = (previous?.unitCount ?? 0) > 0 || (previous?.detachmentCount ?? 0) > 0
+  if (!hadBaseline) return { ok: true }
+
+  const dropPct = (was: number, now: number) => (was === 0 ? 0 : ((was - now) / was) * 100)
+  const unitDrop = previous?.unitCount ? dropPct(previous.unitCount, next.unitCount) : 0
+  const detDrop = previous?.detachmentCount
+    ? dropPct(previous.detachmentCount, next.detachmentCount)
+    : 0
+
+  if (unitDrop > thresholdPct || detDrop > thresholdPct) {
+    return {
+      ok: false,
+      reason: `unit drop ${unitDrop.toFixed(1)}% (${previous?.unitCount ?? 0}→${next.unitCount}), detachment drop ${detDrop.toFixed(1)}% (${previous?.detachmentCount ?? 0}→${next.detachmentCount}); threshold ${thresholdPct}%`,
+    }
+  }
+  return { ok: true }
+}
+
 export interface SyncResult {
   success: boolean
   manifest: Manifest
@@ -651,21 +690,38 @@ export async function runSync(
           }
         }
 
-        await writeDataFile(bucket, 'mfm-unit-costing.json', mfmUnitRows)
-        await writeDataFile(bucket, 'mfm-detachments.json', mfmDetachmentRows)
-        files.add('mfm-unit-costing.json')
-        files.add('mfm-detachments.json')
-
-        mfmMeta = {
-          commitSha: mfmResult.commitSha,
-          factionCount: mfmResult.factions.length,
+        // Guard against BSData scraper regressions: refuse to overwrite good
+        // R2 files if the fresh run has significantly fewer units or
+        // detachments than the previous run. This exact scenario happened on
+        // 22/7/2026 — GW re-laid out MFM v1.1 with an annotation layer
+        // (▲/▼ badges, deltas, UPDATED tags), the BSData scraper's HTML
+        // selectors broke, and 28 of 30 factions silently dropped their
+        // changed units for ~16 hours before BSData PR #25 landed. Without
+        // this gate a cron in that window would wipe good data.
+        const guard = validateMfmCounts(existing?.mfm, {
           unitCount: mfmUnitRows.length,
           detachmentCount,
-          unmappedUnitCount: mfmMap.unmatched,
+        })
+        if (!guard.ok) {
+          errors.push(`MFM: rejected update — ${guard.reason}. Manifest unchanged.`)
+          console.error(`[mfm] REJECTED: ${guard.reason}`)
+        } else {
+          await writeDataFile(bucket, 'mfm-unit-costing.json', mfmUnitRows)
+          await writeDataFile(bucket, 'mfm-detachments.json', mfmDetachmentRows)
+          files.add('mfm-unit-costing.json')
+          files.add('mfm-detachments.json')
+
+          mfmMeta = {
+            commitSha: mfmResult.commitSha,
+            factionCount: mfmResult.factions.length,
+            unitCount: mfmUnitRows.length,
+            detachmentCount,
+            unmappedUnitCount: mfmMap.unmatched,
+          }
+          console.log(
+            `[mfm] factions=${mfmResult.factions.length} units=${mfmUnitRows.length} detachments=${detachmentCount} mapped=${mfmMap.matched} unmapped=${mfmMap.unmatched} ambiguous=${mfmMap.ambiguous}`,
+          )
         }
-        console.log(
-          `[mfm] factions=${mfmResult.factions.length} units=${mfmUnitRows.length} detachments=${detachmentCount} mapped=${mfmMap.matched} unmapped=${mfmMap.unmatched} ambiguous=${mfmMap.ambiguous}`,
-        )
       }
     } catch (err) {
       errors.push(`MFM: ${err instanceof Error ? err.message : String(err)}`)

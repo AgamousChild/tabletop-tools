@@ -61,6 +61,13 @@ export interface MfmEnhancement {
   points: number
   /** Units this enhancement unlocks the Leader ability for. */
   leaderTo?: string[]
+  /**
+   * Units this enhancement unlocks the Support ability for. New in 11e —
+   * upstream BSData scraper started emitting this in PR #25 (22/7/2026) when
+   * GW added the `SUPPORT:` grant annotation to enhancement cards, mirroring
+   * `LEADER:`. Empty on 10e-shaped enhancements.
+   */
+  supportTo?: string[]
 }
 
 export interface MfmDetachment {
@@ -77,6 +84,15 @@ export interface MfmFactionContent {
   slug: string
   name: string
   version: string
+  /**
+   * Parent army for sub-factions — set on SM chapters that have their own
+   * MFM YAML (e.g. Black Templars → "Space Marines"). Data-driven marker
+   * from BSData PR #10; we capture but don't yet consume it (the
+   * SM_CHAPTERS_WITHOUT_MFM set in sync.ts still handles chapter-rollup
+   * routing hardcoded, since chapters WITH their own YAML don't need
+   * routing).
+   */
+  parent?: string
   detachments: MfmDetachment[]
   units: MfmUnit[]
 }
@@ -185,13 +201,17 @@ export function parseMfmFactionYaml(yamlText: string): MfmFactionContent {
     return v
   }
 
-  return {
+  const result: MfmFactionContent = {
     slug: requiredString('slug'),
     name: requiredString('name'),
     version: requiredString('version'),
     detachments: normalizeDetachments(raw['detachments']),
     units: normalizeUnits(raw['units']),
   }
+  if (typeof raw['parent'] === 'string' && raw['parent'].length > 0) {
+    result.parent = raw['parent']
+  }
+  return result
 }
 
 function normalizeUnits(raw: unknown): MfmUnit[] {
@@ -272,6 +292,11 @@ function normalizeDetachments(raw: unknown): MfmDetachment[] {
         const enh: MfmEnhancement = { name: er['name'], points: er['points'] }
         if (Array.isArray(er['leaderTo'])) {
           enh.leaderTo = (er['leaderTo'] as unknown[]).filter(
+            (x): x is string => typeof x === 'string',
+          )
+        }
+        if (Array.isArray(er['supportTo'])) {
+          enh.supportTo = (er['supportTo'] as unknown[]).filter(
             (x): x is string => typeof x === 'string',
           )
         }

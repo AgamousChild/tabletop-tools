@@ -26,6 +26,7 @@ const __dirname = dirname(fileURLToPath(import.meta.url))
 interface BufferedR2 {
   put(key: string, value: string | ArrayBuffer): Promise<unknown>
   get(key: string): Promise<null>
+  list(options?: unknown): Promise<{ objects: Array<{ key: string }> }>
 }
 
 const writes = new Map<string, string | ArrayBuffer>()
@@ -40,6 +41,14 @@ const bucket: BufferedR2 = {
   // fetching every time costs nothing and keeps the runner stateless.
   async get() {
     return null
+  },
+  // Faction-pack stage enumerates `faction-packs/*.md` via bucket.list. The
+  // CI runner starts with an empty local R2 view, so an empty listing matches
+  // the stage's "no markdown → no-op" contract. Without this the stage threw
+  // `bucket.list is not a function`, flipped success=false, and every weekly
+  // sync failed the workflow after successfully producing all its output.
+  async list() {
+    return { objects: [] }
   },
 }
 
