@@ -80,16 +80,24 @@ if [ "$SKIP_VECTORS" -eq 0 ]; then
     echo "  Set SYNC_SECRET in .env to enable"
   else
     BRAIN_URL="https://tabletop-tools-brain.micah-ec2.workers.dev"
+    # Per-faction indexing takes long enough that a transient CF network hiccup
+    # can drop the connection mid-response (seen: curl exit 56 on the
+    # emperors-children batch during the 2026-07-24 deploy). --max-time gives
+    # the Worker room to finish an embed batch; --retry recovers connection
+    # drops without failing the whole script. set -e still aborts if a call
+    # fails all retries — desired, because a persistent failure means half
+    # the graph is unindexed.
+    CURL_OPTS="-s --max-time 300 --retry 2 --retry-delay 3"
     # Top-level node files
     for file in nodes/core.json nodes/errata.json nodes/balance.json nodes/community.json; do
       echo "  indexing $file"
-      curl -s -X POST "$BRAIN_URL/index-vectors?file=$file" \
+      curl $CURL_OPTS -X POST "$BRAIN_URL/index-vectors?file=$file" \
         -H "Authorization: Bearer $SYNC_SECRET" > /dev/null
     done
     # Per-faction files (these are big — one at a time)
     for faction in adepta-sororitas adeptus-custodes adeptus-mechanicus adeptus-titanicus aeldari astra-militarum black-templars blood-angels chaos-daemons chaos-knights chaos-space-marines chaos-titan-legions dark-angels death-guard deathwatch drukhari emperors-children genestealer-cults grey-knights imperial-agents imperial-knights leagues-of-votann necrons orks space-marines space-wolves t-au-empire thousand-sons titan-legions tyranids unaligned-forces world-eaters; do
       echo "  indexing faction-$faction"
-      curl -s -X POST "$BRAIN_URL/index-vectors?file=nodes/faction-${faction}.json" \
+      curl $CURL_OPTS -X POST "$BRAIN_URL/index-vectors?file=nodes/faction-${faction}.json" \
         -H "Authorization: Bearer $SYNC_SECRET" > /dev/null
     done
   fi
