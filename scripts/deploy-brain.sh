@@ -80,14 +80,19 @@ if [ "$SKIP_VECTORS" -eq 0 ]; then
     echo "  Set SYNC_SECRET in .env to enable"
   else
     BRAIN_URL="https://tabletop-tools-brain.micah-ec2.workers.dev"
-    # Per-faction indexing takes long enough that a transient CF network hiccup
-    # can drop the connection mid-response (seen: curl exit 56 on the
-    # emperors-children batch during the 2026-07-24 deploy). --max-time gives
-    # the Worker room to finish an embed batch; --retry recovers connection
-    # drops without failing the whole script. set -e still aborts if a call
-    # fails all retries — desired, because a persistent failure means half
-    # the graph is unindexed.
-    CURL_OPTS="-s --max-time 300 --retry 2 --retry-delay 3"
+    # Per-faction indexing takes long enough that transient CF network hiccups
+    # drop the connection mid-response (curl exit 56 = "failure receiving
+    # network data"). Two variants hit us on 2026-07-24: the classic
+    # connection-reset (covered by --retry) and a receive-side reset that
+    # curl doesn't classify as retryable by default, so a bare --retry silently
+    # skipped it. --retry-all-errors forces retry regardless of curl's
+    # classification. --max-time 600 leaves comfortable slack for the largest
+    # embed batches (core.json took ~12s post-renegotiation on the recovery
+    # run). --retry 4 --retry-delay 5 rides through short outages.
+    #
+    # set -e still aborts if a call fails all 4 retries — desired, because a
+    # persistent failure means half the graph is unindexed.
+    CURL_OPTS="-s --max-time 600 --retry 4 --retry-delay 5 --retry-all-errors"
     # Top-level node files
     for file in nodes/core.json nodes/errata.json nodes/balance.json nodes/community.json; do
       echo "  indexing $file"
