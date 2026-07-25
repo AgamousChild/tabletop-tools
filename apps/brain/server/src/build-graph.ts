@@ -1451,6 +1451,26 @@ async function main() {
   }
   console.log(`\n8. Source dates: stamped publishedAt on ${stamped} sources`)
 
+  // ── 8b. Detachment edition correction ─────────────────────────────────────
+  // Category → edition is a natural mapping for detachments:
+  //   - `detachment`      = MFM 11e + faction-pack shape → edition '11th'
+  //   - `detachment-rule` = Wahapedia 10e shape          → edition '10th'
+  // merge-sources sometimes mis-tags because MFM 11e sources get merged
+  // onto 10e originals in place, keeping the 10e edition tag. Forcing the
+  // category→edition alignment here fixes the sidebar count under
+  // `?edition=11th` (was silently dropping ~400 detachments).
+  let detEditionCorrected = 0
+  for (const node of allNodes) {
+    if (node.category === 'detachment' && node.edition !== '11th') {
+      node.edition = '11th'
+      detEditionCorrected++
+    } else if (node.category === 'detachment-rule' && node.edition !== '10th') {
+      node.edition = '10th'
+      detEditionCorrected++
+    }
+  }
+  console.log(`   Corrected edition on ${detEditionCorrected} detachment nodes`)
+
   // ── 9. Edition stamping ────────────────────────────────────────────────────
   // 10th edition launched 2024-06-01. Community nodes (YouTube, etc.) with
   // source dates before that are 9th edition. Everything else is 10th.

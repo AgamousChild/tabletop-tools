@@ -758,156 +758,180 @@ function AskTab({ onOpenCard, activeFilters, onFilterChange, edition }: AskTabPr
         </div>
       )}
 
-      {answer && (
-        <div className="space-y-4">
-          {factionFilter && answer.detected?.factions?.length > 0 && (
-            <FactionBanner
-              factions={answer.detected.factions}
-              onDismiss={() => setFactionFilter(false)}
-            />
-          )}
-
-          {!fallbackDismissed && answer.fallback && answer.fallbackFrom && (
-            <EditionFallbackBanner
-              fallbackFrom={answer.fallbackFrom}
-              onDismiss={() => setFallbackDismissed(true)}
-            />
-          )}
-
-          <div
-            className="bg-slate-900 border border-slate-700 rounded p-4 overflow-auto max-h-[70vh]"
-            onClick={async (e) => {
-              const target = e.target as HTMLElement
-              const nodeId = target.closest('[data-brain-node]')?.getAttribute('data-brain-node')
-              if (!nodeId) return
-              // Try reference list first
-              const node = answer.reference?.find((r) => r.id === nodeId)
-              if (node) {
-                onOpenCard(node)
-                return
-              }
-              // Fetch from API if not in reference
-              try {
-                const res = await brainFetch(`/browse/node/${encodeURIComponent(nodeId)}`, {
-                  edition,
-                })
-                if (res.ok) {
-                  const data = (await res.json()) as { node: ResultNode }
-                  if (data.node) onOpenCard(data.node)
-                }
-              } catch {
-                /* ignore fetch errors */
-              }
-            }}
-          >
-            <div
-              className="max-w-none"
-              dangerouslySetInnerHTML={{ __html: renderMarkdown(answer.answer) }}
-            />
+      {/* Loading overlay: spinner sits above (or beside) whatever's already
+          rendered, and the previous answer blurs behind it so the user knows
+          new data is on the way without losing visual continuity. */}
+      {loading && (
+        <div
+          className={`flex items-center justify-center py-10 ${
+            answer ? 'absolute inset-x-0 top-32 z-10 pointer-events-none' : ''
+          }`}
+          data-testid="ask-loading-spinner"
+        >
+          <div className="flex flex-col items-center gap-3 bg-slate-950/70 backdrop-blur-sm rounded-lg px-8 py-6 border border-slate-700">
+            <div className="animate-spin rounded-full h-10 w-10 border-4 border-amber-500 border-t-transparent"></div>
+            <span className="text-slate-300 text-sm font-medium">Thinking…</span>
           </div>
-
-          {answer.webSources && answer.webSources.length > 0 && (
-            <details className="bg-slate-900/50 border border-slate-800 rounded p-3">
-              <summary className="text-xs font-medium text-slate-400 uppercase cursor-pointer select-none hover:text-slate-300">
-                Sources ({answer.webSources.length})
-              </summary>
-              <div className="flex flex-wrap gap-2 mt-2">
-                {answer.webSources.map((s, i) => (
-                  <a
-                    key={i}
-                    href={s.url}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="inline-flex items-center gap-1 bg-slate-800 rounded px-2 py-1 text-xs text-blue-400 hover:text-blue-300 hover:bg-slate-700"
-                  >
-                    {s.title.length > 50 ? s.title.substring(0, 47) + '...' : s.title}
-                    <span className="text-slate-600">↗</span>
-                  </a>
-                ))}
-              </div>
-            </details>
-          )}
-
-          {answer.reference && answer.reference.length > 0 && (
-            <div className="mt-4">
-              <div className="flex items-center gap-2 mb-2">
-                <h4 className="text-sm font-medium text-slate-400 uppercase">Reference</h4>
-                <ActiveEditionChip edition={edition} />
-              </div>
-              {answer.reference.map((r, i) => (
-                <div key={r.id + '-' + i} className="mb-2">
-                  <button onClick={() => onOpenCard(r)} className="w-full text-left">
-                    <ResultCard
-                      index={i + 1}
-                      title={r.title}
-                      summary={r.summary}
-                      layer={r.layer}
-                      category={r.category}
-                      score={r.score}
-                      factionId={r.factionId}
-                      phase={r.phase}
-                      parentUnit={r.parentUnit}
-                      edition={r.edition}
-                    />
-                  </button>
-                  {entityMap.size > 0 && r.summary && (
-                    <p className="text-xs text-slate-400 mt-1 px-3">
-                      <LinkedText
-                        text={r.summary}
-                        entities={entityMap}
-                        onEntityClick={async (name) => {
-                          const info = entityMap.get(name.toLowerCase())
-                          if (info) {
-                            try {
-                              const res = await brainFetch(
-                                `/browse/node/${encodeURIComponent(info.nodeId)}`,
-                                { edition },
-                              )
-                              if (res.ok) {
-                                const data = (await res.json()) as { node: ResultNode }
-                                if (data.node) {
-                                  onOpenCard(data.node)
-                                  return
-                                }
-                              }
-                            } catch {
-                              /* fall through */
-                            }
-                          }
-                          onOpenCard(r)
-                        }}
-                      />
-                    </p>
-                  )}
-                </div>
-              ))}
-            </div>
-          )}
-
-          {answer.sources.length > 0 && (
-            <div className="bg-slate-900/50 border border-slate-800 rounded p-3">
-              <h4 className="text-xs font-medium text-slate-400 uppercase mb-2">
-                Sources ({answer.sources.length} nodes, {answer.connectedCount} connected)
-              </h4>
-              <div className="flex flex-wrap gap-2">
-                {answer.sources.map((s) => (
-                  <span
-                    key={s.id}
-                    className="inline-flex items-center gap-1 bg-slate-800 rounded px-2 py-1 text-xs"
-                  >
-                    <span className="text-amber-400">{s.layer}</span>
-                    <span className="text-slate-500">/</span>
-                    <span className="text-slate-300">
-                      {s.title.length > 40 ? s.title.substring(0, 37) + '...' : s.title}
-                    </span>
-                  </span>
-                ))}
-              </div>
-            </div>
-          )}
         </div>
       )}
 
+      <div
+        className={
+          loading
+            ? 'opacity-40 blur-sm pointer-events-none transition-all duration-200'
+            : 'transition-all duration-200'
+        }
+      >
+        {answer && (
+          <div className="space-y-4">
+            {factionFilter && answer.detected?.factions?.length > 0 && (
+              <FactionBanner
+                factions={answer.detected.factions}
+                onDismiss={() => setFactionFilter(false)}
+              />
+            )}
+
+            {!fallbackDismissed && answer.fallback && answer.fallbackFrom && (
+              <EditionFallbackBanner
+                fallbackFrom={answer.fallbackFrom}
+                onDismiss={() => setFallbackDismissed(true)}
+              />
+            )}
+
+            <div
+              className="bg-slate-900 border border-slate-700 rounded p-4 overflow-auto max-h-[70vh]"
+              onClick={async (e) => {
+                const target = e.target as HTMLElement
+                const nodeId = target.closest('[data-brain-node]')?.getAttribute('data-brain-node')
+                if (!nodeId) return
+                // Try reference list first
+                const node = answer.reference?.find((r) => r.id === nodeId)
+                if (node) {
+                  onOpenCard(node)
+                  return
+                }
+                // Fetch from API if not in reference
+                try {
+                  const res = await brainFetch(`/browse/node/${encodeURIComponent(nodeId)}`, {
+                    edition,
+                  })
+                  if (res.ok) {
+                    const data = (await res.json()) as { node: ResultNode }
+                    if (data.node) onOpenCard(data.node)
+                  }
+                } catch {
+                  /* ignore fetch errors */
+                }
+              }}
+            >
+              <div
+                className="max-w-none"
+                dangerouslySetInnerHTML={{ __html: renderMarkdown(answer.answer) }}
+              />
+            </div>
+
+            {answer.webSources && answer.webSources.length > 0 && (
+              <details className="bg-slate-900/50 border border-slate-800 rounded p-3">
+                <summary className="text-xs font-medium text-slate-400 uppercase cursor-pointer select-none hover:text-slate-300">
+                  Sources ({answer.webSources.length})
+                </summary>
+                <div className="flex flex-wrap gap-2 mt-2">
+                  {answer.webSources.map((s, i) => (
+                    <a
+                      key={i}
+                      href={s.url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-flex items-center gap-1 bg-slate-800 rounded px-2 py-1 text-xs text-blue-400 hover:text-blue-300 hover:bg-slate-700"
+                    >
+                      {s.title.length > 50 ? s.title.substring(0, 47) + '...' : s.title}
+                      <span className="text-slate-600">↗</span>
+                    </a>
+                  ))}
+                </div>
+              </details>
+            )}
+
+            {answer.reference && answer.reference.length > 0 && (
+              <div className="mt-4">
+                <div className="flex items-center gap-2 mb-2">
+                  <h4 className="text-sm font-medium text-slate-400 uppercase">Reference</h4>
+                  <ActiveEditionChip edition={edition} />
+                </div>
+                {answer.reference.map((r, i) => (
+                  <div key={r.id + '-' + i} className="mb-2">
+                    <button onClick={() => onOpenCard(r)} className="w-full text-left">
+                      <ResultCard
+                        index={i + 1}
+                        title={r.title}
+                        summary={r.summary}
+                        layer={r.layer}
+                        category={r.category}
+                        score={r.score}
+                        factionId={r.factionId}
+                        phase={r.phase}
+                        parentUnit={r.parentUnit}
+                        edition={r.edition}
+                      />
+                    </button>
+                    {entityMap.size > 0 && r.summary && (
+                      <p className="text-xs text-slate-400 mt-1 px-3">
+                        <LinkedText
+                          text={r.summary}
+                          entities={entityMap}
+                          onEntityClick={async (name) => {
+                            const info = entityMap.get(name.toLowerCase())
+                            if (info) {
+                              try {
+                                const res = await brainFetch(
+                                  `/browse/node/${encodeURIComponent(info.nodeId)}`,
+                                  { edition },
+                                )
+                                if (res.ok) {
+                                  const data = (await res.json()) as { node: ResultNode }
+                                  if (data.node) {
+                                    onOpenCard(data.node)
+                                    return
+                                  }
+                                }
+                              } catch {
+                                /* fall through */
+                              }
+                            }
+                            onOpenCard(r)
+                          }}
+                        />
+                      </p>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {answer.sources.length > 0 && (
+              <div className="bg-slate-900/50 border border-slate-800 rounded p-3">
+                <h4 className="text-xs font-medium text-slate-400 uppercase mb-2">
+                  Sources ({answer.sources.length} nodes, {answer.connectedCount} connected)
+                </h4>
+                <div className="flex flex-wrap gap-2">
+                  {answer.sources.map((s) => (
+                    <span
+                      key={s.id}
+                      className="inline-flex items-center gap-1 bg-slate-800 rounded px-2 py-1 text-xs"
+                    >
+                      <span className="text-amber-400">{s.layer}</span>
+                      <span className="text-slate-500">/</span>
+                      <span className="text-slate-300">
+                        {s.title.length > 40 ? s.title.substring(0, 37) + '...' : s.title}
+                      </span>
+                    </span>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+      </div>
       {!answer && !loading && !error && (
         <div className="text-center py-12 text-slate-500">
           <p className="text-lg mb-2">Ask anything about Warhammer 40K rules</p>

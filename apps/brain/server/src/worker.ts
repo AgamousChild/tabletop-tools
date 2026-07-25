@@ -5,6 +5,12 @@ import { filterBrowseNodes } from './lib/browse'
 import { buildDatasheetLayout } from './lib/card-layout'
 import { buildCrossRefs, loadIndexes } from './lib/cross-refs'
 import {
+  brainNodesToSnippets,
+  curateSnippets,
+  geminiToSnippet,
+  snippetsToPromptText,
+} from './lib/curator'
+import {
   editionsAvailableForId,
   filterByEdition,
   nodeMatchesEdition,
@@ -13,7 +19,7 @@ import {
 import { type EntityMap, getEntityIndex, linkEntitiesInContent } from './lib/entity-linker'
 import { findErrataForNode } from './lib/errata-linker'
 import { expandFactionForRetrieval, expandFactionsForRetrieval } from './lib/factions'
-import { assembleContext, formatConversationalAnswer } from './lib/format'
+import { formatConversationalAnswer } from './lib/format'
 import type { Node } from './lib/model'
 import { retrieve } from './lib/retrieve'
 import { buildCorpusForNode } from './lib/vectorize-corpus'
@@ -253,9 +259,21 @@ const BROWSE_CATEGORIES: Array<{
     filter: (n) => n.category === 'army-rule',
   },
   {
-    id: 'detachments',
-    label: 'Detachments',
-    filter: (n) => n.category === 'detachment-rule',
+    id: 'detachments-11e',
+    label: 'Detachments (11e)',
+    // Category-based: `detachment` is the newer MFM/Faction-Pack shape.
+    // The build-graph edition-correction sweep ensures edition='11th'.
+    // The `detachment:` id-prefix exclusion drops truncated merge-artifact
+    // twins that some pipeline step emits alongside the real `11e:det:*`
+    // and `mfm:det:*` ids (each detachment was showing up twice: one full,
+    // one 170-char stub). Real ids start with `11e:`, `mfm:`, `det:`,
+    // or a faction-pack prefix — none start with the literal `detachment:`.
+    filter: (n) => n.category === 'detachment' && !n.id.startsWith('detachment:'),
+  },
+  {
+    id: 'detachments-10e',
+    label: 'Detachments (10e legacy)',
+    filter: (n) => n.category === 'detachment-rule' && !n.id.startsWith('detachment:'),
   },
   {
     id: 'stratagems',
@@ -937,8 +955,30 @@ app.post('/ask', async (c) => {
     .filter((s) => s.score > 0) // only include nodes with at least one keyword match
     .map((s) => s.node)
 
-  // Assemble Brain context
-  let brainContext = retrieveResult ? assembleContext(primaryNodes, connectedNodes, parentMap) : ''
+  // Assemble Brain context — new curator path:
+  // Instead of concatenating a `BRAIN` block and a `WEB SEARCH` block side by
+  // side (which historically let Gemini's phrasing override brain facts),
+  // pool brain + web snippets into one list, rank by score, dedupe overlap,
+  // and format as a single self-labelled context. Brain snippets start with
+  // higher scores; web is only kept when it adds signal.
+  // (Legacy fallback: `assembleContext` still exports the older shape — kept
+  // in imports for `formatConversationalAnswer` and future callers.)
+  const primaryScoreMap = new Map<string, number>()
+  for (const rec of results) {
+    if ((rec as { id?: string }).id && typeof (rec as { score?: number }).score === 'number') {
+      primaryScoreMap.set((rec as { id: string }).id, (rec as { score: number }).score)
+    }
+  }
+  const brainSnippets = retrieveResult
+    ? brainNodesToSnippets(primaryNodes, connectedNodes, primaryScoreMap)
+    : []
+  const hasStrongBrainHits = brainSnippets.some((s) => s.score >= 0.5)
+  const webSnippet = geminiResult?.answer
+    ? geminiToSnippet(geminiResult.answer, geminiResult.sources, hasStrongBrainHits)
+    : null
+  const pool = webSnippet ? [...brainSnippets, webSnippet] : brainSnippets
+  const curated = curateSnippets(pool, { maxSnippets: 20, maxChars: 120_000 })
+  let brainContext = snippetsToPromptText(curated.kept)
 
   // Append errata corrections to context so the LLM always cites them
   if (primaryErrata.length > 0) {
@@ -1063,13 +1103,19 @@ app.post('/ask', async (c) => {
 
 CRITICAL: Focus on the question. If they ask "how does Oath of Moment work?" — explain Oath of Moment. Do NOT list every stratagem, enhancement, and ability the faction has.
 
-USE ONLY THE PROVIDED CONTEXT. The BRAIN KNOWLEDGE GRAPH below is the source of truth. If a fact is not in the context, do not state it. Do not fall back on your training data.
+USE ONLY THE PROVIDED CONTEXT. The CURATED POOL below is the source of truth. If a fact is not in the context, do not state it. Do not fall back on your training data.
+
+WHEN THE CONTEXT DOESN'T ANSWER THE QUESTION: say so plainly. Write "This isn't covered in my knowledge base." or "The context doesn't specify this — [what specifically is missing]." Do NOT invent an answer, do NOT extrapolate from general 40K knowledge, do NOT summarise vague web-search phrasing as if it were an authoritative rule.
 
 USE EXACT TERMS. When you name a datasheet, character, unit, ability, stratagem, enhancement, or detachment, use its FULL name exactly as it appears in the context. Never abbreviate or paraphrase (e.g. write "Captain in Terminator Armour" — NOT "Captain"; write "Terminator Assault Squad" — NOT "Terminator Squad"; write "Lord of Contagion" — NOT "Chaos Lord").
 
-Sources (in priority order):
-1. BRAIN KNOWLEDGE GRAPH — official rules data (prefer this)
-2. WEB SEARCH RESULTS — supplementary context
+DO NOT USE TACTICAL VOCABULARY THAT ISN'T IN THE CONTEXT. Generic phrases like "alpha strike", "combined arms", "target priority", "trading blows" are common 40K lingo but if the context doesn't use them for this specific question, don't insert them — they'll link to unrelated brain entries and confuse the reader.
+
+The CONTEXT below is a curated pool of evidence. Each snippet is labelled
+with its origin ([brain/...] = official rules from our knowledge graph;
+[web/...] = general web-search snippet). Prefer brain snippets over web.
+NEVER cite the "WEB SEARCH RESULTS" block by that phrase — no such block
+exists; the curator merged everything into one list.
 
 Rules:
 - Name the specific unit/datasheet that has each ability
@@ -1081,18 +1127,58 @@ Rules:
 
   let userMessage = ''
   if (brainContext) {
-    userMessage += `=== BRAIN KNOWLEDGE GRAPH ===\n\n${brainContext}\n\n`
+    userMessage += `=== CURATED CONTEXT ===\n\n${brainContext}\n\n`
   }
   if (unitListContext) {
     userMessage += `=== ${unitListContext}\n\n`
   }
-  if (geminiResult?.answer) {
-    userMessage += `=== WEB SEARCH RESULTS (Gemini with Google Search) ===\n\n${geminiResult.answer}\n\n`
-  }
+  // NOTE: geminiResult is NOT concatenated separately anymore — the curator
+  // (see `snippetsToPromptText`) has already inlined it into the CURATED
+  // CONTEXT block above, with a low-priority score, dedupe against brain,
+  // and self-labelling. Concatenating it again would double-count and
+  // resurrect the "WEB SEARCH RESULTS = authority" failure mode.
   userMessage += `---\n\nQuestion: ${body.question}`
 
   let answer: string
   let answerPath = 'unknown'
+
+  // ── B. Confidence gate ─────────────────────────────────────────────────────
+  // If the curator kept nothing (or nothing scored), skip the LLM and return
+  // a plain "not in my knowledge base" response instead of forcing a
+  // hallucination. Threshold: at least one snippet with score >= 0.30.
+  //
+  // We don't gate on retrieval-hit count alone (a bad question can pull
+  // dozens of tangentially-related nodes); we gate on whether any snippet
+  // scored above the "clearly relevant" floor.
+  const topScore = curated.kept.reduce((max, s) => Math.max(max, s.score), 0)
+  if (curated.kept.length === 0 || topScore < 0.3) {
+    const closestList = curated.kept
+      .slice(0, 5)
+      .map((s) => `- ${s.title} (${s.bucket ?? s.origin}, score ${s.score.toFixed(2)})`)
+      .join('\n')
+    return c.json({
+      detected,
+      answer:
+        "I don't have solid data on this in my knowledge base." +
+        (closestList
+          ? `\n\nClosest matches by keyword:\n${closestList}\n\nThose weren't relevant enough for me to answer confidently.`
+          : ''),
+      answerPath: 'confidence-gate-bypass',
+      contextLength: userMessage.length,
+      connectedIds: connectedNodes.map((n) => n.id),
+      reference: results,
+      sources: results,
+      connectedCount: connectedNodes.length,
+      webSources: geminiResult?.sources ?? [],
+      geminiCached: !!cachedGemini,
+      webSource: cachedGemini ? 'cache' : geminiResult ? 'gemini' : null,
+      errors: { retrieveError, geminiError },
+      edition,
+      debug: {
+        confidenceGate: { triggered: true, topScore, keptCount: curated.kept.length },
+      },
+    })
+  }
 
   // Model selection order:
   //   1. ?model=<provider/name> query param (per-request override, needs gateway id)
@@ -1220,17 +1306,68 @@ Rules:
     }
   }
 
-  // Server-side entity linking — global index + retrieved nodes
-  const globalEntities = await getEntityIndex(c.env.BRAIN_BUCKET)
-  const entityMap = new Map(globalEntities)
-  // Override with retrieved nodes (more specific context)
+  // Server-side entity linking — context-scoped.
+  //
+  // Was: seed with getEntityIndex(bucket) (every entity in the whole brain),
+  // then layer retrieved nodes on top. Failure mode: LLM writes "Alpha
+  // Strike" as generic tactical language, the linker string-matches to the
+  // Space Marines `Alpha Strike` stratagem and adds a wrong link.
+  //
+  // Now: seed ONLY with the retrieved node set (primary + connected). The
+  // LLM was instructed to only use provided context, so the only entities
+  // it should be naming are ones from that context — a link to anything
+  // outside it is a false positive by construction.
+  //
+  // Global index is kept as a fallback for HIGH-CONFIDENCE matches only:
+  // an entity name that appears verbatim in the answer AND was also in the
+  // retrieved node's `keywords` array (i.e., mentioned by name in the
+  // context body, just not in the retrieved node's own title).
+  const contextScopedEntities = new Map<string, { nodeId: string; title: string }>()
+  const contextKeywords = new Set<string>()
   for (const node of [...results, ...connected]) {
     const key = node.title.toLowerCase()
     if (key.length > 2) {
-      entityMap.set(key, { nodeId: node.id, title: node.title })
+      contextScopedEntities.set(key, { nodeId: node.id, title: node.title })
     }
+    for (const kw of node.keywords ?? []) contextKeywords.add(kw.toLowerCase())
   }
-  answer = linkEntitiesInContent(answer, entityMap)
+  // High-confidence global fallback: only add global entities whose lowercase
+  // title also shows up in the retrieved context's keyword set. This lets
+  // us link to nodes mentioned by name in a stratagem's body text (e.g.
+  // an enhancement referenced by a stratagem card) without linking any
+  // word the LLM happens to write.
+  const globalEntities = await getEntityIndex(c.env.BRAIN_BUCKET)
+  for (const [key, entity] of globalEntities) {
+    if (contextScopedEntities.has(key)) continue
+    if (contextKeywords.has(key)) contextScopedEntities.set(key, entity)
+  }
+  answer = linkEntitiesInContent(answer, contextScopedEntities)
+
+  // ── C. Post-gen grounding check ────────────────────────────────────────────
+  // After entity linking, count how many `brain:<id>` links in the answer
+  // point to nodes actually in the retrieved primary/connected set vs the
+  // keyword-fallback layer. All links are grounded-somewhere (D restricted
+  // the linker to context-scoped + keyword-fallback), but a high fallback
+  // ratio hints the LLM is leaning on peripheral mentions.
+  const retrievedIds = new Set<string>()
+  for (const node of [...results, ...connected]) retrievedIds.add(node.id)
+  const brainLinkPattern = /\(brain:([^)]+)\)/g
+  let groundedInPrimary = 0
+  let groundedViaKeyword = 0
+  const ungroundedLinks: string[] = []
+  for (const m of answer.matchAll(brainLinkPattern)) {
+    const id = m[1]!
+    if (retrievedIds.has(id)) groundedInPrimary++
+    else if (contextScopedEntities.has(id.toLowerCase())) groundedViaKeyword++
+    else ungroundedLinks.push(id) // shouldn't happen given D, but track for regression
+  }
+  const groundingStats = {
+    totalLinks: groundedInPrimary + groundedViaKeyword + ungroundedLinks.length,
+    inRetrievedSet: groundedInPrimary,
+    viaKeywordFallback: groundedViaKeyword,
+    ungrounded: ungroundedLinks.length,
+    ungroundedIds: ungroundedLinks.slice(0, 5),
+  }
 
   return c.json({
     detected,
@@ -1265,6 +1402,14 @@ Rules:
       geminiHasResult: !!geminiResult,
       geminiAnswerLen: geminiResult?.answer?.length ?? 0,
       brainContextLen: brainContext.length,
+      curator: {
+        pooled: pool.length,
+        kept: curated.kept.length,
+        dropped: curated.droppedIds.length,
+        webKept: curated.webKept,
+        topScore,
+      },
+      grounding: groundingStats,
     },
   })
 })
