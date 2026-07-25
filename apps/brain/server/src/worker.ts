@@ -1094,10 +1094,57 @@ Rules:
   let answer: string
   let answerPath = 'unknown'
 
-  const useClaudeParam = c.req.query('model') === 'claude'
-  const useClaude = useClaudeParam && anthropicKey
+  // Model selection order:
+  //   1. ?model=<provider/name> query param (per-request override, needs gateway env)
+  //   2. env.ASK_MODEL (default gateway model, needs gateway env)
+  //   3. ?model=claude + ANTHROPIC_API_KEY → direct Anthropic (legacy)
+  //   4. Fall back to Workers AI Llama (default)
+  //
+  // The gateway path uses CF's OpenAI-compat endpoint so a single code path
+  // handles any provider (Anthropic, Google, Workers AI, etc.). Model name is
+  // `provider/model-id`, e.g. `anthropic/claude-sonnet-4-5-20250929` or
+  // `google-ai-studio/gemini-2.5-pro`.
+  const modelParam = c.req.query('model') ?? ''
+  const gatewayReady = Boolean(
+    c.env.CF_ACCOUNT_ID && c.env.CF_GATEWAY_ID && c.env.CF_AI_GATEWAY_TOKEN,
+  )
+  const gatewayModel =
+    gatewayReady && modelParam.includes('/')
+      ? modelParam
+      : gatewayReady && c.env.ASK_MODEL && modelParam !== 'claude'
+        ? c.env.ASK_MODEL
+        : null
+  const useClaude = !gatewayModel && modelParam === 'claude' && anthropicKey
 
-  if (useClaude) {
+  if (gatewayModel) {
+    answerPath = `gateway:${gatewayModel}`
+    const gwUrl = `https://gateway.ai.cloudflare.com/v1/${c.env.CF_ACCOUNT_ID}/${c.env.CF_GATEWAY_ID}/compat/chat/completions`
+    const response = await fetch(gwUrl, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${c.env.CF_AI_GATEWAY_TOKEN!}`,
+      },
+      body: JSON.stringify({
+        model: gatewayModel,
+        max_tokens: 2048,
+        messages: [
+          { role: 'system', content: systemPrompt },
+          { role: 'user', content: userMessage },
+        ],
+      }),
+    })
+
+    if (!response.ok) {
+      const err = await response.text()
+      return c.json({ error: `AI Gateway error: ${response.status}`, details: err }, 502)
+    }
+
+    const gwResponse = (await response.json()) as {
+      choices?: Array<{ message?: { content?: string } }>
+    }
+    answer = gwResponse.choices?.[0]?.message?.content ?? 'No response from gateway'
+  } else if (useClaude) {
     answerPath = 'claude'
     const response = await fetch('https://api.anthropic.com/v1/messages', {
       method: 'POST',

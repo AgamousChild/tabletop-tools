@@ -4,6 +4,9 @@ compatibility_date = "2024-09-23"
 
 [vars]
 CORS_ORIGIN = "https://tabletop-tools.net"
+# CF AI Gateway routing (public identifiers — the token is a wrangler secret).
+CF_ACCOUNT_ID = "ec20dffd67b31fef83cfa072c2c61b06"
+CF_GATEWAY_ID = "tabletop-tools-brain"
 
 [[r2_buckets]]
 binding = "BRAIN_BUCKET"
@@ -18,4 +21,9 @@ binding = "AI"
 
 # Secrets (set via wrangler secret put):
 # SYNC_SECRET - bearer token for manual sync trigger
-# ANTHROPIC_API_KEY - Claude API key for Q&A
+# ANTHROPIC_API_KEY - Claude API key for Q&A (direct, when ?model=claude)
+# GEMINI_API_KEY - Gemini API key for web-search grounding (callGemini)
+# CF_AI_GATEWAY_TOKEN - CF-issued token for the AI Gateway compat endpoint
+# ASK_MODEL - when set, /ask routes via AI Gateway using this model
+#             (e.g. "anthropic/claude-sonnet-4-5-20250929",
+#              "google-ai-studio/gemini-2.5-pro").
