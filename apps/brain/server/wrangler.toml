@@ -23,7 +23,10 @@ binding = "AI"
 # SYNC_SECRET - bearer token for manual sync trigger
 # ANTHROPIC_API_KEY - Claude API key for Q&A (direct, when ?model=claude)
 # GEMINI_API_KEY - Gemini API key for web-search grounding (callGemini)
-# CF_AI_GATEWAY_TOKEN - CF-issued token for the AI Gateway compat endpoint
 # ASK_MODEL - when set, /ask routes via AI Gateway using this model
 #             (e.g. "anthropic/claude-sonnet-4-5-20250929",
 #              "google-ai-studio/gemini-2.5-pro").
+#
+# AI Gateway calls use env.AI.run(..., { gateway: { id: CF_GATEWAY_ID } }) —
+# no CF_AI_GATEWAY_TOKEN needed; the binding is trusted intra-account.
+# Provider API keys live inside the Gateway (BYOK).

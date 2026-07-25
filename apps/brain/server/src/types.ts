@@ -14,13 +14,16 @@ export interface Env {
    */
   BRAIN_DEFAULT_EDITION?: string
   /**
-   * Cloudflare account ID + gateway ID for AI Gateway routing. When both are
-   * set alongside CF_AI_GATEWAY_TOKEN and ASK_MODEL, /ask routes the answer
-   * generation through the CF AI Gateway's OpenAI-compatible endpoint:
-   *   https://gateway.ai.cloudflare.com/v1/{ACCOUNT}/{GATEWAY}/compat/chat/completions
-   * That endpoint fans out to any supported provider based on the `model`
-   * field in the request body (e.g. `anthropic/claude-sonnet-4-5-20250929`,
-   * `google-ai-studio/gemini-2.5-pro`). Swap models via one env var, no code.
+   * Cloudflare AI Gateway routing. When all three are set alongside ASK_MODEL
+   * (or ?model= with a `provider/name` value), /ask routes answer generation
+   * through the gateway's OpenAI-compat endpoint:
+   *   POST https://gateway.ai.cloudflare.com/v1/{ACCOUNT}/{GATEWAY}/compat/chat/completions
+   * Provider API keys live in the Gateway (BYOK); CF picks the right one from
+   * the model prefix (`anthropic/*`, `google-ai-studio/*`, `workers-ai/*`).
+   *
+   * We tried the env.AI.run binding first — worked for Anthropic but 502'd
+   * for every Google prefix regardless of request shape. Compat endpoint via
+   * fetch works uniformly for all providers, so that's what we use.
    */
   CF_ACCOUNT_ID?: string
   CF_GATEWAY_ID?: string

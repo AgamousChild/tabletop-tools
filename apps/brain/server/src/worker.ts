@@ -1095,19 +1095,18 @@ Rules:
   let answerPath = 'unknown'
 
   // Model selection order:
-  //   1. ?model=<provider/name> query param (per-request override, needs gateway env)
-  //   2. env.ASK_MODEL (default gateway model, needs gateway env)
+  //   1. ?model=<provider/name> query param (per-request override, needs gateway id)
+  //   2. env.ASK_MODEL (default gateway model, needs gateway id)
   //   3. ?model=claude + ANTHROPIC_API_KEY → direct Anthropic (legacy)
   //   4. Fall back to Workers AI Llama (default)
   //
-  // The gateway path uses CF's OpenAI-compat endpoint so a single code path
-  // handles any provider (Anthropic, Google, Workers AI, etc.). Model name is
-  // `provider/model-id`, e.g. `anthropic/claude-sonnet-4-5-20250929` or
-  // `google-ai-studio/gemini-2.5-pro`.
+  // The gateway path uses env.AI.run() with { gateway: { id } } — a binding
+  // call, no auth token needed. Model name is `provider/model-id`, e.g.
+  // `anthropic/claude-sonnet-4-5-20250929` or `google-ai-studio/gemini-2.5-pro`.
+  // Provider API keys stay in the Gateway (BYOK); CF looks them up from the
+  // model prefix and forwards downstream.
   const modelParam = c.req.query('model') ?? ''
-  const gatewayReady = Boolean(
-    c.env.CF_ACCOUNT_ID && c.env.CF_GATEWAY_ID && c.env.CF_AI_GATEWAY_TOKEN,
-  )
+  const gatewayReady = Boolean(c.env.CF_GATEWAY_ID)
   const gatewayModel =
     gatewayReady && modelParam.includes('/')
       ? modelParam
@@ -1118,12 +1117,27 @@ Rules:
 
   if (gatewayModel) {
     answerPath = `gateway:${gatewayModel}`
+    // Route via CF AI Gateway's OpenAI-compat endpoint. One URL, one auth
+    // token, uniform request/response shape for all providers. We tried the
+    // env.AI.run(model, input, { gateway }) binding — it worked for Anthropic
+    // but 502'd for every google/* and google-ai-studio/* prefix regardless of
+    // request shape (contents/parts, messages, systemInstruction variants).
+    // Falling back to the fetch pattern which is provider-shape-neutral.
+    if (!c.env.CF_ACCOUNT_ID || !c.env.CF_GATEWAY_ID || !c.env.CF_AI_GATEWAY_TOKEN) {
+      return c.json(
+        {
+          error:
+            'AI Gateway not configured (need CF_ACCOUNT_ID, CF_GATEWAY_ID, CF_AI_GATEWAY_TOKEN)',
+        },
+        500,
+      )
+    }
     const gwUrl = `https://gateway.ai.cloudflare.com/v1/${c.env.CF_ACCOUNT_ID}/${c.env.CF_GATEWAY_ID}/compat/chat/completions`
     const response = await fetch(gwUrl, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        Authorization: `Bearer ${c.env.CF_AI_GATEWAY_TOKEN!}`,
+        Authorization: `Bearer ${c.env.CF_AI_GATEWAY_TOKEN}`,
       },
       body: JSON.stringify({
         model: gatewayModel,
@@ -1137,7 +1151,10 @@ Rules:
 
     if (!response.ok) {
       const err = await response.text()
-      return c.json({ error: `AI Gateway error: ${response.status}`, details: err }, 502)
+      return c.json(
+        { error: `AI Gateway ${response.status}`, model: gatewayModel, details: err },
+        502,
+      )
     }
 
     const gwResponse = (await response.json()) as {
