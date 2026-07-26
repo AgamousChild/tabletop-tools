@@ -3,6 +3,8 @@ import { cors } from 'hono/cors'
 
 import { filterBrowseNodes } from './lib/browse'
 import { buildDatasheetLayout } from './lib/card-layout'
+import { countCached, type CountQuery, reloadCube } from './lib/count'
+import { parseCountQueryFromQuestion, renderCubeContext } from './lib/count-parser'
 import { buildCrossRefs, loadIndexes } from './lib/cross-refs'
 import {
   brainNodesToSnippets,
@@ -604,6 +606,69 @@ app.get('/data/:path{.+}', async (c) => {
   return c.body(await obj.text())
 })
 
+// ── /count — deterministic cube query ──────────────────────────────────────
+// Reads the cube tables (fact/dim/rollup) written to R2 by build-graph.
+// Query params: faction=, category=, edition=, keyword=, dp=, group=,
+// includePool=, poolLimit=. Response is R2-cached under
+// cache/count/{cubeVersion}/{hash}.json; cache auto-orphans when the cube
+// version changes on rebuild.
+app.get('/count', async (c) => {
+  const q = c.req.query()
+  const query: CountQuery = {
+    faction: q.faction || undefined,
+    category: q.category || undefined,
+    edition: q.edition || undefined,
+    keyword: q.keyword || undefined,
+    dp: q.dp ? Number(q.dp) : undefined,
+    group: (q.group as CountQuery['group']) || undefined,
+    includePool: q.includePool === 'true' || q.includePool === '1',
+    poolLimit: q.poolLimit ? Number(q.poolLimit) : undefined,
+  }
+  try {
+    const result = await countCached(c.env.BRAIN_BUCKET, query)
+    c.header('Cache-Control', 'public, max-age=300')
+    return c.json(result)
+  } catch (e) {
+    return c.json({ error: e instanceof Error ? e.message : String(e) }, 500)
+  }
+})
+
+// ── /reload-cube — drop the isolate's cube cache + purge response cache ────
+// Bearer auth (SYNC_SECRET). Use after uploading a fresh cube/ to R2
+// without a full worker redeploy.
+app.post('/reload-cube', async (c) => {
+  const secret = c.env.SYNC_SECRET
+  const auth = c.req.header('Authorization')
+  if (!secret || auth !== `Bearer ${secret}`) return c.json({ error: 'unauthorized' }, 401)
+
+  const cube = await reloadCube(c.env.BRAIN_BUCKET)
+  // Also delete the response cache so stale entries don't linger.
+  let purged = 0
+  if (c.env.BRAIN_BUCKET.list && c.env.BRAIN_BUCKET.delete) {
+    let cursor: string | undefined
+    do {
+      const listed: {
+        objects: Array<{ key: string }>
+        truncated?: boolean
+        cursor?: string
+      } = await c.env.BRAIN_BUCKET.list({ prefix: 'cache/count/', cursor })
+      const keys = (listed.objects ?? []).map((o) => o.key)
+      if (keys.length) {
+        await c.env.BRAIN_BUCKET.delete(keys)
+        purged += keys.length
+      }
+      cursor = listed.truncated ? listed.cursor : undefined
+    } while (cursor)
+  }
+  return c.json({
+    ok: true,
+    cubeVersion: cube.manifestVersion,
+    facts: cube.facts.length,
+    factions: cube.dimFaction.length,
+    responseCachePurged: purged,
+  })
+})
+
 app.get('/pages/:path{.+}', async (c) => {
   const path = c.req.param('path')
   if (!path.endsWith('.png')) {
@@ -1042,53 +1107,26 @@ app.post('/ask', async (c) => {
     /* forward index not available — skip combos */
   }
 
-  // If the question is about detachments for a detected faction, enumerate
-  // that faction's full detachment pool as context. Vectorize retrieval on
-  // "how many detachment combos" returns 0 usable nodes (the query is
-  // meta/enumerative, not semantic-similarity), so without this injection the
-  // curator only sees Gemini web-search chatter and echoes stale wrong totals.
-  // Chapter queries (Dark Angels) inherit the parent Space Marines pool via
-  // expandFactionsForRetrieval — same helper the unit-list branch below uses.
-  let detachmentListContext = ''
-  if (
-    detected.factions.length > 0 &&
-    /\bdetachment/i.test(body.question) &&
-    edition !== '10th' &&
-    edition !== '9th'
-  ) {
+  // ── Cube dispatch: deterministic answer for count-shape questions ────────
+  // When the question matches a count/enumeration/table shape ("how many X",
+  // "count of Y", "table of Z per W", "list all N"), parse dims from the
+  // question + detected factions and hit /count internally. Inject the
+  // structured result (numbers + optional per-group breakdown + pool) as
+  // top-priority context so the LLM's job is language framing, not
+  // arithmetic. Vectorize retrieval alone returns nothing useful for these
+  // meta questions — the cube supplies the ground truth.
+  let cubeContext = ''
+  const cubeQ = parseCountQueryFromQuestion(body.question, detected.factions, edition)
+  if (cubeQ) {
     try {
-      const factionSet = await expandFactionsForRetrieval(detected.factions, c.env.BRAIN_BUCKET)
-      const allNodesForDetPool = await getAllNodes(c.env.BRAIN_BUCKET)
-      const dets = allNodesForDetPool.filter(
-        (n) =>
-          n.category === 'detachment' &&
-          n.edition === '11th' &&
-          n.dp != null &&
-          n.factionId &&
-          factionSet.has(n.factionId),
-      )
-      if (dets.length > 0) {
-        // Sort by faction, then dp, then name for a stable, scannable pool.
-        dets.sort(
-          (a, b) =>
-            (a.factionId ?? '').localeCompare(b.factionId ?? '') ||
-            (a.dp ?? 0) - (b.dp ?? 0) ||
-            a.title.localeCompare(b.title),
-        )
-        const lines = dets.map(
-          (d) =>
-            `- **${d.title}** (${d.factionId}) — ${d.dp} DP` +
-            (d.forceDisposition ? ` · ${d.forceDisposition}` : ''),
-        )
-        const bucket = { 1: 0, 2: 0, 3: 0 } as Record<number, number>
-        for (const d of dets) if (d.dp != null && bucket[d.dp] != null) bucket[d.dp]++
-        detachmentListContext =
-          `FACTION DETACHMENT POOL (${detected.factions.join(', ')}, 11th Edition):\n` +
-          `Total accessible: ${dets.length} detachments — ${bucket[1]} × 1 DP, ${bucket[2]} × 2 DP, ${bucket[3]} × 3 DP.\n\n` +
-          lines.join('\n')
-      }
-    } catch {
-      /* skip detachment list on error */
+      const result = await countCached(c.env.BRAIN_BUCKET, {
+        ...cubeQ,
+        includePool: true,
+        poolLimit: 200,
+      })
+      cubeContext = renderCubeContext(cubeQ, result)
+    } catch (e) {
+      console.warn('[cube] dispatch failed:', e instanceof Error ? e.message : e)
     }
   }
 
@@ -1154,12 +1192,14 @@ USE EXACT TERMS. When you name a datasheet, character, unit, ability, stratagem,
 
 DO NOT USE TACTICAL VOCABULARY THAT ISN'T IN THE CONTEXT. Generic phrases like "alpha strike", "combined arms", "target priority", "trading blows" are common 40K lingo but if the context doesn't use them for this specific question, don't insert them — they'll link to unrelated brain entries and confuse the reader.
 
-11TH EDITION DETACHMENT MATH. When you see detachment nodes in context, each one is tagged with its DP cost like "[detachment, space-marines, 2 DP]". 11e armies have a Detachment Point budget: Incursion (1000 pts) = 2 DP, Strike Force (2000 pts) = 3 DP. When asked how many DETACHMENT COMBOS a faction has access to, do this:
-  1. Count the accessible detachments the faction can field (its own faction-branded ones PLUS any parent codex detachments — e.g. Dark Angels can field DA-branded detachments AND Space Marines parent-codex ones).
-  2. Bucket the pool by DP cost (1-pt, 2-pt, 3-pt).
-  3. For Strike Force (3 DP budget, no repeats, unordered), the combo count = (# 3-pt detachments) + (# 2-pt × # 1-pt) + C(# 1-pt, 3).
-  4. Report the pool composition (e.g. "8 × 1 DP, 18 × 2 DP, 6 × 3 DP") and the resulting combo count. Do NOT confuse "detachments accessible" with "combos" — a pool of 30 detachments produces hundreds of combos, not 30.
-If the context does not include DP costs on the detachment nodes for that faction, say the data is incomplete rather than guessing.
+DETERMINISTIC CUBE ANSWERS. When you see a block labelled "DETERMINISTIC CUBE ANSWER" in the context, those numbers were computed by a query engine over the raw brain data — they are ground truth. DO NOT re-derive them, DO NOT sanity-check them against other snippets, DO NOT hedge with "approximately". Report the numbers verbatim. The block ends with an "INSTRUCTION FOR THE ANSWERING MODEL" line that reinforces this.
+
+11TH EDITION DETACHMENT MATH. 11e armies have a Detachment Point budget: Incursion (1000 pts) = 2 DP, Strike Force (2000 pts) = 3 DP. Strike Force combos = (#3pt) + (#2pt × #1pt) + C(#1pt, 3). When the cube block gives you a combo count, use it as-is; never recompute.
+
+FORMATTING — MARKDOWN ONLY, NO LATEX. The client renders plain GitHub-flavored markdown. LaTeX is NOT rendered — output like \\[ ... \\], \\begin{aligned}, \\binom{n}{k}, \\times, \\frac{a}{b} shows up as literal backslash garbage on the user's screen. Rules:
+- Never use \\[ ... \\], \\( ... \\), $$ ... $$, or any LaTeX environment/macro. If you need math, write it inline in plain text: use "×" for multiply, "C(n, k)" for binomial coefficient, "n^2" for exponent, "6 + 108 + 20 = 134" for arithmetic.
+- Keep answers short. When the question is a straight number ("how many X"), lead with the answer in one sentence, then a compact breakdown (bulleted or a small table). No walls of prose.
+- Use "## Heading" sparingly (only for multi-section answers). Bullets and bold are usually enough. Skip a summary at the end — the reader already sees the numbers.
 
 The CONTEXT below is a curated pool of evidence. Each snippet is labelled
 with its origin ([brain/...] = official rules from our knowledge graph;
@@ -1179,8 +1219,8 @@ Rules:
   if (brainContext) {
     userMessage += `=== CURATED CONTEXT ===\n\n${brainContext}\n\n`
   }
-  if (detachmentListContext) {
-    userMessage += `=== ${detachmentListContext}\n\n`
+  if (cubeContext) {
+    userMessage += `=== ${cubeContext}\n\n`
   }
   if (unitListContext) {
     userMessage += `=== ${unitListContext}\n\n`

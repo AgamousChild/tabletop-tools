@@ -20,6 +20,7 @@ import {
   buildEligibleForRefs,
   buildFactionNodes,
 } from './lib/combo-detection'
+import { buildCube } from './lib/cube'
 import {
   duplicateEleventh,
   type MfmAllowlist,
@@ -1586,6 +1587,30 @@ async function main() {
   const subfactionsJson = JSON.stringify(subfactionRows)
   writeFileSync(join(OUTPUT_DIR, 'dim', 'subfactions.json'), subfactionsJson)
   console.log(`   dim/subfactions.json: ${subfactionRows.length} rows`)
+
+  // ── Cube: fact + dim + rollup tables for deterministic count queries ───
+  // See lib/cube.ts. /count reads these instead of scanning node JSON so
+  // "how many X does faction Y have" is O(1) after cache warm-up.
+  console.log('\nBuilding cube (fact + dim + rollup tables)')
+  const cube = buildCube(allNodes, subfactionRows)
+  mkdirSync(join(OUTPUT_DIR, 'cube'), { recursive: true })
+  writeFileSync(join(OUTPUT_DIR, 'cube', 'fact_node.jsonl'), cube.factNodesJsonl)
+  writeFileSync(join(OUTPUT_DIR, 'cube', 'dim_faction.json'), JSON.stringify(cube.dimFaction))
+  writeFileSync(join(OUTPUT_DIR, 'cube', 'dim_keyword.json'), JSON.stringify(cube.dimKeyword))
+  writeFileSync(
+    join(OUTPUT_DIR, 'cube', 'rollup_faction_dp.json'),
+    JSON.stringify(cube.rollupFactionDp),
+  )
+  writeFileSync(
+    join(OUTPUT_DIR, 'cube', 'rollup_faction_category_edition.json'),
+    JSON.stringify(cube.rollupFactionCategoryEdition),
+  )
+  const cubeFactCount = cube.factNodesJsonl.split('\n').filter(Boolean).length
+  console.log(
+    `   cube/: ${cubeFactCount} facts, ${cube.dimFaction.length} factions, ` +
+      `${cube.dimKeyword.length} keywords, ${cube.rollupFactionDp.length} DP rollups, ` +
+      `${cube.rollupFactionCategoryEdition.length} category rollups`,
+  )
 
   // ── Partition and write ────────────────────────────────────────────────────
   console.log('\nPartitioning and writing files...')
