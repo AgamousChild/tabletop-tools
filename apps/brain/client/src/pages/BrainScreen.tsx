@@ -833,7 +833,12 @@ function AskTab({ onOpenCard, activeFilters, onFilterChange, edition }: AskTabPr
             {answer.webSources && answer.webSources.length > 0 && (
               <details className="bg-slate-900/50 border border-slate-800 rounded p-3">
                 <summary className="text-xs font-medium text-slate-400 uppercase cursor-pointer select-none hover:text-slate-300">
-                  Sources ({answer.webSources.length})
+                  Related web results ({answer.webSources.length}) —
+                  <span className="text-slate-500 normal-case font-normal">
+                    {' '}
+                    incidental hits from Gemini's web search; the answer above draws from the
+                    brain's own sources (shown below under Reference)
+                  </span>
                 </summary>
                 <div className="flex flex-wrap gap-2 mt-2">
                   {answer.webSources.map((s, i) => (
@@ -1354,10 +1359,31 @@ function BrowseTab({ onOpenCard, edition }: BrowseTabProps) {
         </nav>
       </aside>
 
-      <div className="flex-1 p-4 max-w-4xl">
-        <div className="space-y-3">
-          {!selectedLayer && <p className="text-slate-400">Select a layer to browse rules.</p>}
-          {loading && <p className="text-slate-400">Loading...</p>}
+      <div className="flex-1 p-4 max-w-4xl relative">
+        {loading && (
+          <div
+            className={`flex items-center justify-center py-10 ${
+              nodes.length > 0 ? 'absolute inset-x-0 top-10 z-10 pointer-events-none' : ''
+            }`}
+            data-testid="browse-loading-spinner"
+          >
+            <div className="flex flex-col items-center gap-3 bg-slate-950/70 backdrop-blur-sm rounded-lg px-8 py-6 border border-slate-700">
+              <div className="animate-spin rounded-full h-10 w-10 border-4 border-amber-500 border-t-transparent"></div>
+              <span className="text-slate-300 text-sm font-medium">Loading…</span>
+            </div>
+          </div>
+        )}
+
+        <div
+          className={
+            loading && nodes.length > 0
+              ? 'space-y-3 opacity-40 blur-sm pointer-events-none transition-all duration-200'
+              : 'space-y-3 transition-all duration-200'
+          }
+        >
+          {!selectedLayer && !loading && (
+            <p className="text-slate-400">Select a layer to browse rules.</p>
+          )}
           {!loading && selectedLayer && nodes.length === 0 && (
             <p className="text-slate-400">No nodes in this layer.</p>
           )}
