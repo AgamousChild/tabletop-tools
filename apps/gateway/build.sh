@@ -27,6 +27,9 @@ sed "s/<!--VERSION-->/v${VERSION} \&middot; /g" "$GATEWAY_DIR/landing/index.html
 # Copy SPA redirects
 cp "$GATEWAY_DIR/_redirects" "$DIST/_redirects"
 
+# Copy cache headers (no-store on /* — dev site, no caching wanted)
+cp "$GATEWAY_DIR/_headers" "$DIST/_headers"
+
 # Validate all outputs exist before declaring success
 echo "Validating build outputs..."
 for app in no-cheat versus list-builder game-tracker tournament new-meta data-import admin brain; do
