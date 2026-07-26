@@ -9,6 +9,11 @@
       "command": "cmd",
       "args": ["/c", "npx", "tsx", "mcp/tts-client/src/index.ts"],
       "cwd": "C:/R/tabletop-tools"
+    },
+    "ops": {
+      "command": "cmd",
+      "args": ["/c", "npx", "tsx", "mcp/ops-server/src/index.ts"],
+      "cwd": "C:/R/tabletop-tools"
     }
   }
 }
