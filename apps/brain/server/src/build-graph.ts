@@ -1517,6 +1517,37 @@ async function main() {
   // (11th Edition detachments already added at step 6c)
   console.log(`   ${eleventhResult.nodes.length} nodes, ${eleventhResult.refs.length} refs`)
 
+  // ── 8c. Drop malformed 11e detachment containers ─────────────────────────
+  // Enforce the schema promise (model.ts superRefine): every
+  // `category: 'detachment'` at edition '11th' MUST have a `dp` cost.
+  // Anything without `dp` is a Wahapedia-legacy shell for a detachment
+  // that has no MFM entry (event/community detachments) — dropping keeps
+  // /ask combo math honest. Losing them from browse is acceptable until
+  // dp costs get added properly.
+  const before11eDrop = allNodes.length
+  const droppedIds = new Set<string>()
+  for (const n of allNodes) {
+    if (n.category === 'detachment' && n.edition === '11th' && n.dp == null) {
+      droppedIds.add(n.id)
+    }
+  }
+  if (droppedIds.size > 0) {
+    for (const id of droppedIds) console.log(`   drop malformed 11e detachment: ${id}`)
+    // Filter in place — avoid `push(...kept)` because tens-of-thousands of
+    // spread args blow the call stack.
+    const kept = allNodes.filter((n) => !droppedIds.has(n.id))
+    allNodes.length = 0
+    for (const n of kept) allNodes.push(n)
+    const keptRefs = allRefs.filter(
+      (r) => !droppedIds.has(r.sourceId) && !droppedIds.has(r.targetId),
+    )
+    allRefs.length = 0
+    for (const r of keptRefs) allRefs.push(r)
+  }
+  console.log(
+    `\n8c. Dropped ${droppedIds.size} malformed 11e detachment container(s) missing dp (${before11eDrop} → ${allNodes.length})`,
+  )
+
   // ── Summary ────────────────────────────────────────────────────────────────
   console.log(`\n=== TOTAL: ${allNodes.length} nodes, ${allRefs.length} refs ===`)
 

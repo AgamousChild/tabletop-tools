@@ -261,19 +261,12 @@ const BROWSE_CATEGORIES: Array<{
   {
     id: 'detachments-11e',
     label: 'Detachments (11e)',
-    // Category-based: `detachment` is the newer MFM/Faction-Pack shape.
-    // The build-graph edition-correction sweep ensures edition='11th'.
-    // The `detachment:` id-prefix exclusion drops truncated merge-artifact
-    // twins that some pipeline step emits alongside the real `11e:det:*`
-    // and `mfm:det:*` ids (each detachment was showing up twice: one full,
-    // one 170-char stub). Real ids start with `11e:`, `mfm:`, `det:`,
-    // or a faction-pack prefix — none start with the literal `detachment:`.
-    filter: (n) => n.category === 'detachment' && !n.id.startsWith('detachment:'),
+    filter: (n) => n.category === 'detachment',
   },
   {
     id: 'detachments-10e',
     label: 'Detachments (10e legacy)',
-    filter: (n) => n.category === 'detachment-rule' && !n.id.startsWith('detachment:'),
+    filter: (n) => n.category === 'detachment-rule',
   },
   {
     id: 'stratagems',
@@ -1049,6 +1042,56 @@ app.post('/ask', async (c) => {
     /* forward index not available — skip combos */
   }
 
+  // If the question is about detachments for a detected faction, enumerate
+  // that faction's full detachment pool as context. Vectorize retrieval on
+  // "how many detachment combos" returns 0 usable nodes (the query is
+  // meta/enumerative, not semantic-similarity), so without this injection the
+  // curator only sees Gemini web-search chatter and echoes stale wrong totals.
+  // Chapter queries (Dark Angels) inherit the parent Space Marines pool via
+  // expandFactionsForRetrieval — same helper the unit-list branch below uses.
+  let detachmentListContext = ''
+  if (
+    detected.factions.length > 0 &&
+    /\bdetachment/i.test(body.question) &&
+    edition !== '10th' &&
+    edition !== '9th'
+  ) {
+    try {
+      const factionSet = await expandFactionsForRetrieval(detected.factions, c.env.BRAIN_BUCKET)
+      const allNodesForDetPool = await getAllNodes(c.env.BRAIN_BUCKET)
+      const dets = allNodesForDetPool.filter(
+        (n) =>
+          n.category === 'detachment' &&
+          n.edition === '11th' &&
+          n.dp != null &&
+          n.factionId &&
+          factionSet.has(n.factionId),
+      )
+      if (dets.length > 0) {
+        // Sort by faction, then dp, then name for a stable, scannable pool.
+        dets.sort(
+          (a, b) =>
+            (a.factionId ?? '').localeCompare(b.factionId ?? '') ||
+            (a.dp ?? 0) - (b.dp ?? 0) ||
+            a.title.localeCompare(b.title),
+        )
+        const lines = dets.map(
+          (d) =>
+            `- **${d.title}** (${d.factionId}) — ${d.dp} DP` +
+            (d.forceDisposition ? ` · ${d.forceDisposition}` : ''),
+        )
+        const bucket = { 1: 0, 2: 0, 3: 0 } as Record<number, number>
+        for (const d of dets) if (d.dp != null && bucket[d.dp] != null) bucket[d.dp]++
+        detachmentListContext =
+          `FACTION DETACHMENT POOL (${detected.factions.join(', ')}, 11th Edition):\n` +
+          `Total accessible: ${dets.length} detachments — ${bucket[1]} × 1 DP, ${bucket[2]} × 2 DP, ${bucket[3]} × 3 DP.\n\n` +
+          lines.join('\n')
+      }
+    } catch {
+      /* skip detachment list on error */
+    }
+  }
+
   // If question asks for a faction's units, fetch the unit list
   let unitListContext = ''
   if (detected.factions.length > 0) {
@@ -1111,6 +1154,13 @@ USE EXACT TERMS. When you name a datasheet, character, unit, ability, stratagem,
 
 DO NOT USE TACTICAL VOCABULARY THAT ISN'T IN THE CONTEXT. Generic phrases like "alpha strike", "combined arms", "target priority", "trading blows" are common 40K lingo but if the context doesn't use them for this specific question, don't insert them — they'll link to unrelated brain entries and confuse the reader.
 
+11TH EDITION DETACHMENT MATH. When you see detachment nodes in context, each one is tagged with its DP cost like "[detachment, space-marines, 2 DP]". 11e armies have a Detachment Point budget: Incursion (1000 pts) = 2 DP, Strike Force (2000 pts) = 3 DP. When asked how many DETACHMENT COMBOS a faction has access to, do this:
+  1. Count the accessible detachments the faction can field (its own faction-branded ones PLUS any parent codex detachments — e.g. Dark Angels can field DA-branded detachments AND Space Marines parent-codex ones).
+  2. Bucket the pool by DP cost (1-pt, 2-pt, 3-pt).
+  3. For Strike Force (3 DP budget, no repeats, unordered), the combo count = (# 3-pt detachments) + (# 2-pt × # 1-pt) + C(# 1-pt, 3).
+  4. Report the pool composition (e.g. "8 × 1 DP, 18 × 2 DP, 6 × 3 DP") and the resulting combo count. Do NOT confuse "detachments accessible" with "combos" — a pool of 30 detachments produces hundreds of combos, not 30.
+If the context does not include DP costs on the detachment nodes for that faction, say the data is incomplete rather than guessing.
+
 The CONTEXT below is a curated pool of evidence. Each snippet is labelled
 with its origin ([brain/...] = official rules from our knowledge graph;
 [web/...] = general web-search snippet). Prefer brain snippets over web.
@@ -1128,6 +1178,9 @@ Rules:
   let userMessage = ''
   if (brainContext) {
     userMessage += `=== CURATED CONTEXT ===\n\n${brainContext}\n\n`
+  }
+  if (detachmentListContext) {
+    userMessage += `=== ${detachmentListContext}\n\n`
   }
   if (unitListContext) {
     userMessage += `=== ${unitListContext}\n\n`

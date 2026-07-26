@@ -299,6 +299,7 @@ export function assembleContext(
 function renderNodeGroup(nodes: Node[], parentMap: Map<string, string>, parts: string[]): void {
   const categories = [
     'faction-ability',
+    'detachment',
     'detachment-rule',
     'stratagem',
     'enhancement',
@@ -348,6 +349,16 @@ function renderNodeGroup(nodes: Node[], parentMap: Map<string, string>, parts: s
         parts.push(n.content || n.summary)
       } else if (cat === 'detachment-rule') {
         parts.push(`### ${n.title} [detachment-rule${n.factionId ? `, ${n.factionId}` : ''}]`)
+        parts.push(n.content || n.summary)
+      } else if (cat === 'detachment') {
+        // 11e detachment container — surface the DP cost + force disposition
+        // inline so the LLM can reason about combos + army composition
+        // without having to parse them out of markdown.
+        const dpTag = n.dp != null ? `, ${n.dp} DP` : ''
+        const fdTag = n.forceDisposition ? `, ${n.forceDisposition}` : ''
+        parts.push(
+          `### ${n.title} [detachment${n.factionId ? `, ${n.factionId}` : ''}${dpTag}${fdTag}]`,
+        )
         parts.push(n.content || n.summary)
       } else {
         parts.push(`### ${n.title} [${n.category}]`)

@@ -456,4 +456,63 @@ describe('Record schema', () => {
     expect(() => NodeCategorySchema.parse('deployment-zone')).not.toThrow()
     expect(() => NodeCategorySchema.parse('terrain-layout')).not.toThrow()
   })
+
+  describe('11e detachment requires dp', () => {
+    const base = {
+      layer: 'faction' as const,
+      title: 'Test Detachment',
+      content: 'Content.',
+      summary: 'Summary.',
+      factionId: 'space-marines',
+      sources: [{ type: 'pdf' as const, title: 'MFM', retrievedAt: '2026-04-08' }],
+      refs: [],
+      version: 1,
+      keywords: [],
+    }
+
+    it('rejects an 11e detachment without dp', () => {
+      expect(() =>
+        NodeSchema.parse({
+          ...base,
+          id: '11e:det:sm:test',
+          category: 'detachment',
+          edition: '11th',
+        }),
+      ).toThrowError(/missing required dp/)
+    })
+
+    it('accepts an 11e detachment with dp populated', () => {
+      expect(() =>
+        NodeSchema.parse({
+          ...base,
+          id: '11e:det:sm:test',
+          category: 'detachment',
+          edition: '11th',
+          dp: 2,
+        }),
+      ).not.toThrow()
+    })
+
+    it('accepts a 10e detachment-rule without dp (10e has no DP system)', () => {
+      expect(() =>
+        NodeSchema.parse({
+          ...base,
+          id: 'det:sm:test',
+          category: 'detachment-rule',
+          edition: '10th',
+        }),
+      ).not.toThrow()
+    })
+
+    it('accepts a non-detachment 11e node without dp', () => {
+      expect(() =>
+        NodeSchema.parse({
+          ...base,
+          id: '11e:strat:sm:test',
+          category: 'stratagem',
+          edition: '11th',
+        }),
+      ).not.toThrow()
+    })
+  })
 })
