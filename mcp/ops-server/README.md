@@ -54,11 +54,13 @@ Reads `.env` at the repo root. Must contain:
 ## Tool map
 
 **Brain**
-- `brain_build` — rebuild .local/brain/ from all sources
+- `brain_build` — rebuild .local/brain/ from all sources (emits cube/ too)
 - `brain_detachments_report` — read-only diagnostic (run before deploy)
-- `brain_upload_r2` — push local build to R2
+- `brain_cube_report` — read-only cube diagnostic (live vs local)
+- `brain_upload_r2` — push local build to R2 (includes cube/)
 - `brain_deploy_worker` — wrangler deploy
 - `brain_reindex` — chunked Vectorize embed (fixes Rule 9 CPU-cap failures)
+- `brain_reload_cube` — drop Worker isolate cube cache + purge response cache
 - `brain_purge_cache` — CDN purge
 - `brain_deploy_full` — build → upload → worker → reindex → purge
 

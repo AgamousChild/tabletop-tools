@@ -358,6 +358,167 @@ server.tool(
   },
 )
 
+// ── /ask + /count passthrough (deployed brain endpoints) ────────────────────
+// These hit the deployed Worker rather than the local brain files. They
+// depend on the cube being deployed (build → upload → worker). See
+// mcp/ops-server for the cube deploy pipeline.
+
+const DEPLOYED_BRAIN_URL = process.env.BRAIN_URL ?? 'https://tabletop-tools.net/brain/api'
+
+server.tool(
+  'brain_ask',
+  [
+    'Ask the deployed brain a natural-language question. Runs RAG retrieval +',
+    'the /ask query planner: count-shape questions get deterministic answers',
+    'from the cube; free-form questions get LLM-formatted responses grounded',
+    'in brain nodes.',
+    '',
+    'Prefer brain_count for pure count/list questions when you know the exact',
+    'dimensions — /count is deterministic, cheaper, and has no LLM in the loop.',
+    'Use brain_ask for questions that need prose framing or that span multiple',
+    'concepts.',
+  ].join('\n'),
+  {
+    question: z.string().describe('Natural-language question about 40K rules/units/factions'),
+    edition: z
+      .enum(['11th', '10th', '9th', 'any'])
+      .optional()
+      .default('11th')
+      .describe('Rules edition scope (default 11th)'),
+    model: z
+      .string()
+      .optional()
+      .describe('Optional model override, e.g. "anthropic/claude-sonnet-4-5" or "claude"'),
+  },
+  async ({ question, edition, model }) => {
+    const params = new URLSearchParams({ edition })
+    if (model) params.set('model', model)
+    const resp = await fetch(`${DEPLOYED_BRAIN_URL}/ask?${params.toString()}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ question }),
+    })
+    if (!resp.ok) {
+      return {
+        content: [{ type: 'text' as const, text: `brain_ask failed: HTTP ${resp.status}` }],
+      }
+    }
+    const body = (await resp.json()) as {
+      answer?: string
+      edition?: string
+      answerPath?: string
+      reference?: unknown[]
+      webSources?: unknown[]
+    }
+    const lines = [
+      body.answer ?? '(no answer)',
+      '',
+      `— edition=${body.edition ?? edition}, path=${body.answerPath ?? 'unknown'}, refs=${body.reference?.length ?? 0}, web=${body.webSources?.length ?? 0}`,
+    ]
+    return { content: [{ type: 'text' as const, text: lines.join('\n') }] }
+  },
+)
+
+server.tool(
+  'brain_count',
+  [
+    'Deterministic count/list query against the deployed brain cube. Returns',
+    'raw structured numbers — no LLM, no prose, exact ground truth.',
+    '',
+    'Use for questions like "how many detachments does X have", "how many',
+    'units with Y keyword", "count of stratagems per faction". The Strike',
+    'Force combo count (formula (#3pt) + (#2pt × #1pt) + C(#1pt, 3)) is',
+    'pre-computed and returned as combosStrikeForce on dpRollup rows.',
+    '',
+    'Chapter → parent expansion is baked into the fact table, so',
+    'faction=dark-angels includes SM detachments/units accessible to DA.',
+    '',
+    'Response includes cubeVersion — use this to detect when data has changed',
+    'between calls. Response is R2-cached; repeat queries are ~free.',
+  ].join('\n'),
+  {
+    category: z
+      .string()
+      .optional()
+      .describe(
+        'Node category: detachment, stratagem, enhancement, datasheet, army-rule, faction-ability, weapon, unit-ability, mission',
+      ),
+    faction: z.string().optional().describe('Faction slug (e.g. dark-angels, orks, aeldari)'),
+    edition: z.enum(['11th', '10th', '9th']).optional().describe('Edition filter'),
+    keyword: z
+      .string()
+      .optional()
+      .describe(
+        'Ability/tag keyword filter (case-insensitive substring; e.g. "sustained hits", "deep strike")',
+      ),
+    dp: z.number().int().min(1).max(3).optional().describe('DP cost filter (11e detachments only)'),
+    group: z
+      .enum(['faction', 'category', 'edition', 'dp', 'faction_dp'])
+      .optional()
+      .describe('Group results by this dimension (per-group breakdown instead of a scalar)'),
+    includePool: z
+      .boolean()
+      .optional()
+      .default(false)
+      .describe('Include a list of matching node titles in the response'),
+    poolLimit: z.number().int().positive().optional().describe('Max pool entries (default 500)'),
+  },
+  async (args) => {
+    const params = new URLSearchParams()
+    for (const [k, v] of Object.entries(args)) {
+      if (v === undefined || v === null || v === false) continue
+      params.set(k, String(v))
+    }
+    const resp = await fetch(`${DEPLOYED_BRAIN_URL}/count?${params.toString()}`)
+    if (!resp.ok) {
+      return {
+        content: [{ type: 'text' as const, text: `brain_count failed: HTTP ${resp.status}` }],
+      }
+    }
+    const body = (await resp.json()) as {
+      count: number
+      cubeVersion: string
+      dpRollup?: Array<{
+        factionId: string
+        displayName: string
+        total: number
+        dp1: number
+        dp2: number
+        dp3: number
+        combosStrikeForce: number
+        isChapter?: boolean
+        parentId?: string
+      }>
+      groups?: Array<Record<string, string | number>>
+      pool?: Array<{ id: string; title: string; factionId?: string; dp?: number }>
+    }
+    const lines: string[] = [`brain_count → ${body.count} (cube ${body.cubeVersion})`]
+    if (body.dpRollup && body.dpRollup.length > 0) {
+      lines.push('', 'DP rollup:')
+      for (const r of body.dpRollup) {
+        lines.push(
+          `  ${r.displayName.padEnd(24)} ${String(r.total).padStart(3)} total (${r.dp1}×1DP, ${r.dp2}×2DP, ${r.dp3}×3DP) → ${r.combosStrikeForce} Strike Force combos${r.isChapter ? ` (chapter of ${r.parentId})` : ''}`,
+        )
+      }
+    } else if (body.groups && body.groups.length > 0) {
+      lines.push('', 'Groups:')
+      for (const g of body.groups.slice(0, 40)) {
+        lines.push(`  ${JSON.stringify(g)}`)
+      }
+      if (body.groups.length > 40) lines.push(`  … +${body.groups.length - 40} more`)
+    }
+    if (body.pool && body.pool.length > 0) {
+      lines.push('', `Pool (first ${Math.min(body.pool.length, 30)} of ${body.pool.length}):`)
+      for (const p of body.pool.slice(0, 30)) {
+        lines.push(
+          `  - ${p.title}${p.factionId ? ` (${p.factionId})` : ''}${p.dp != null ? ` [${p.dp} DP]` : ''}`,
+        )
+      }
+    }
+    return { content: [{ type: 'text' as const, text: lines.join('\n') }] }
+  },
+)
+
 server.tool('brain_factions', 'List all factions with their unit counts.', {}, async () => {
   loadNodes()
   const counts = new Map<

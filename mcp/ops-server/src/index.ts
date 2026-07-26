@@ -20,11 +20,13 @@ import { z } from 'zod'
 
 import {
   brainBuild,
+  brainCubeReport,
   brainDeployFull,
   brainDeployWorker,
   brainDetachmentsReport,
   brainPurgeCache,
   brainReindex,
+  brainReloadCube,
   brainUploadR2,
   resolveBrainDir,
 } from './lib/brain-ops.js'
@@ -59,11 +61,15 @@ server.tool(
   async () => {
     const result = await brainBuild()
     const status = result.code === 0 ? 'OK' : `FAILED (exit ${result.code})`
+    const cubeLine = result.cube?.present
+      ? `cube: ${result.cube.factCount} facts, ${result.cube.factionCount} factions, ${result.cube.dpRollupCount} DP rollups, ${result.cube.categoryEditionRollupCount} category rollups (${Math.round(result.cube.factNodeBytes / 1024)} KB fact_node.jsonl)`
+      : 'cube: NOT EMITTED (build-graph must run cube step)'
     return textResult(
       [
         `brain_build ${status} in ${Math.round(result.durationMs / 1000)}s`,
         `nodes: ${result.totalNodes} across ${result.nodeFileCount} shard files`,
         `detachments: 11e=${result.detachments11e}, 10e=${result.detachments10e}`,
+        cubeLine,
         '',
         '--- stdout tail ---',
         result.stdout,
@@ -72,6 +78,79 @@ server.tool(
         .filter(Boolean)
         .join('\n'),
     )
+  },
+)
+
+server.tool(
+  'brain_reload_cube',
+  [
+    'Force the deployed brain Worker to drop its in-memory cube cache AND',
+    'purge the R2 response cache (cache/count/*). Use after brain_upload_r2',
+    'when you want the new cube to take effect without a full worker redeploy',
+    '(a redeploy already spins up a fresh isolate, so /reload-cube is only',
+    'needed for cube-only uploads).',
+    '',
+    'Requires SYNC_SECRET in the environment.',
+    '',
+    'Response shows cubeVersion + fact/faction counts as the fresh cube sees them.',
+  ].join('\n'),
+  {},
+  async () => {
+    const r = await brainReloadCube()
+    return textResult(
+      r.ok
+        ? [
+            'brain_reload_cube OK',
+            `cubeVersion: ${r.cubeVersion ?? 'unknown'}`,
+            `facts: ${r.facts ?? '?'}, factions: ${r.factions ?? '?'}`,
+            `response cache purged: ${r.responseCachePurged ?? 0} entries`,
+          ].join('\n')
+        : `brain_reload_cube FAILED — ${r.message ?? 'unknown error'}`,
+    )
+  },
+)
+
+server.tool(
+  'brain_cube_report',
+  [
+    'Read-only diagnostic of the cube (fact + dim + rollup tables).',
+    '',
+    'Shows LIVE state from the deployed Worker (via /count) side-by-side with',
+    'LOCAL state on disk (.local/brain/cube/). Use this to:',
+    '  - confirm the deployed cube matches the local build',
+    '  - sanity-check a rebuild before promoting via brain_deploy_full',
+    '  - inspect the top faction rollups after a data change',
+    '',
+    'Never mutates state.',
+  ].join('\n'),
+  {},
+  async () => {
+    const r = await brainCubeReport()
+    const lines: string[] = ['brain_cube_report', '', 'LIVE (deployed):']
+    if (r.live.cubeVersion) {
+      lines.push(`  cubeVersion: ${r.live.cubeVersion}`)
+      lines.push(`  faction rollups: ${r.live.factionRollupCount ?? 0}`)
+      lines.push('  sample factions (top 5 by rollup order):')
+      for (const f of r.live.sampleFactions ?? []) {
+        lines.push(
+          `    ${f.displayName.padEnd(24)} total=${String(f.total).padStart(3)}, combos=${f.combosStrikeForce}`,
+        )
+      }
+    } else {
+      lines.push('  (unable to fetch — /count endpoint may not be deployed yet)')
+    }
+    lines.push('', 'LOCAL (.local/brain/cube/):')
+    if (r.local?.present) {
+      lines.push(`  dir: ${r.fromDir}`)
+      lines.push(`  facts: ${r.local.factCount} (${Math.round(r.local.factNodeBytes / 1024)} KB)`)
+      lines.push(`  factions: ${r.local.factionCount}, keywords: ${r.local.keywordCount}`)
+      lines.push(
+        `  DP rollups: ${r.local.dpRollupCount}, category-edition rollups: ${r.local.categoryEditionRollupCount}`,
+      )
+    } else {
+      lines.push('  (no local cube — run brain_build)')
+    }
+    return textResult(lines.join('\n'))
   },
 )
 

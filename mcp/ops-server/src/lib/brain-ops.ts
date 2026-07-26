@@ -35,6 +35,7 @@ export interface BuildResult extends RunResult {
   nodeFileCount: number
   detachments11e: number
   detachments10e: number
+  cube?: CubeStats
 }
 
 export async function brainBuild(): Promise<BuildResult> {
@@ -45,7 +46,8 @@ export async function brainBuild(): Promise<BuildResult> {
     env: { NODE_OPTIONS: '--dns-result-order=ipv4first' },
   })
   const stats = collectLocalStats()
-  return { ...result, ...stats }
+  const cube = collectCubeStats()
+  return { ...result, ...stats, cube }
 }
 
 interface LocalStats {
@@ -77,6 +79,58 @@ function collectLocalStats(): LocalStats {
     }
   }
   return { totalNodes, nodeFileCount: files.length, detachments11e, detachments10e }
+}
+
+// ── Cube stats (from local build output) ────────────────────────────────────
+
+export interface CubeStats {
+  factCount: number
+  factionCount: number
+  keywordCount: number
+  dpRollupCount: number
+  categoryEditionRollupCount: number
+  factNodeBytes: number
+  present: boolean
+}
+
+function collectCubeStats(): CubeStats {
+  const cubeDir = join(BRAIN_LOCAL_DIR, 'cube')
+  const stats: CubeStats = {
+    factCount: 0,
+    factionCount: 0,
+    keywordCount: 0,
+    dpRollupCount: 0,
+    categoryEditionRollupCount: 0,
+    factNodeBytes: 0,
+    present: false,
+  }
+  if (!existsSync(cubeDir)) return stats
+  stats.present = true
+  const factsPath = join(cubeDir, 'fact_node.jsonl')
+  if (existsSync(factsPath)) {
+    const text = readFileSync(factsPath, 'utf-8')
+    stats.factNodeBytes = text.length
+    stats.factCount = text.split('\n').filter(Boolean).length
+  }
+  const dimFactionPath = join(cubeDir, 'dim_faction.json')
+  if (existsSync(dimFactionPath)) {
+    stats.factionCount = (JSON.parse(readFileSync(dimFactionPath, 'utf-8')) as unknown[]).length
+  }
+  const dimKeywordPath = join(cubeDir, 'dim_keyword.json')
+  if (existsSync(dimKeywordPath)) {
+    stats.keywordCount = (JSON.parse(readFileSync(dimKeywordPath, 'utf-8')) as unknown[]).length
+  }
+  const dpPath = join(cubeDir, 'rollup_faction_dp.json')
+  if (existsSync(dpPath)) {
+    stats.dpRollupCount = (JSON.parse(readFileSync(dpPath, 'utf-8')) as unknown[]).length
+  }
+  const catPath = join(cubeDir, 'rollup_faction_category_edition.json')
+  if (existsSync(catPath)) {
+    stats.categoryEditionRollupCount = (
+      JSON.parse(readFileSync(catPath, 'utf-8')) as unknown[]
+    ).length
+  }
+  return stats
 }
 
 // ── R2 upload ───────────────────────────────────────────────────────────────
@@ -236,6 +290,93 @@ function planChunks(nodeCount: number, chunkSize: number): Array<[number, number
     chunks.push([offset, chunkSize])
   }
   return chunks
+}
+
+// ── Cube: reload + live report ─────────────────────────────────────────────
+
+export interface CubeReloadResult {
+  ok: boolean
+  message?: string
+  cubeVersion?: string
+  facts?: number
+  factions?: number
+  responseCachePurged?: number
+}
+
+/**
+ * Kick the deployed Worker to drop its isolate cube cache + purge the R2
+ * response cache. Use after uploading a fresh cube/ without a full worker
+ * redeploy — a plain redeploy already spins up a fresh isolate.
+ */
+export async function brainReloadCube(
+  opts: { brainUrl?: string; syncSecret?: string } = {},
+): Promise<CubeReloadResult> {
+  const brainUrl = opts.brainUrl ?? DEFAULT_BRAIN_URL
+  const syncSecret = opts.syncSecret ?? process.env.SYNC_SECRET
+  if (!syncSecret) {
+    return { ok: false, message: 'SYNC_SECRET not set — cannot call /reload-cube' }
+  }
+  const resp = await fetch(`${brainUrl}/reload-cube`, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${syncSecret}` },
+  })
+  const body = (await resp.json().catch(() => ({}))) as CubeReloadResult
+  if (!resp.ok) {
+    return { ok: false, message: `HTTP ${resp.status} ${JSON.stringify(body)}` }
+  }
+  return { ...body, ok: true }
+}
+
+export interface CubeReportResult {
+  live: {
+    cubeVersion?: string
+    factionRollupCount?: number
+    sampleFactions?: Array<{
+      factionId: string
+      displayName: string
+      total: number
+      combosStrikeForce: number
+    }>
+  }
+  local?: CubeStats
+  fromDir?: string
+}
+
+/**
+ * Read-only cube diagnostic. Compares the deployed cube (via /count with a
+ * couple of well-known queries) against the locally-built cube on disk.
+ * Handy sanity check after brainBuild but before brainDeployFull, or after
+ * a redeploy to confirm the live version matches expectations.
+ */
+export async function brainCubeReport(opts: { brainUrl?: string } = {}): Promise<CubeReportResult> {
+  const brainUrl = opts.brainUrl ?? DEFAULT_BRAIN_URL
+  const live: CubeReportResult['live'] = {}
+  try {
+    const resp = await fetch(`${brainUrl}/count?category=detachment&edition=11th&group=faction`)
+    if (resp.ok) {
+      const body = (await resp.json()) as {
+        cubeVersion?: string
+        dpRollup?: Array<{
+          factionId: string
+          displayName: string
+          total: number
+          combosStrikeForce: number
+        }>
+      }
+      live.cubeVersion = body.cubeVersion
+      live.factionRollupCount = body.dpRollup?.length
+      live.sampleFactions = body.dpRollup?.slice(0, 5).map((r) => ({
+        factionId: r.factionId,
+        displayName: r.displayName,
+        total: r.total,
+        combosStrikeForce: r.combosStrikeForce,
+      }))
+    }
+  } catch {
+    /* live report is best-effort */
+  }
+  const local = collectCubeStats()
+  return { live, local, fromDir: local.present ? BRAIN_LOCAL_DIR : undefined }
 }
 
 // ── CDN purge ──────────────────────────────────────────────────────────────
