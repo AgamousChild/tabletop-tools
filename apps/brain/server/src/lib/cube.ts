@@ -42,6 +42,13 @@ export interface FactNode {
   title: string
   dp?: number
   keywords: string[] // lower-cased for case-insensitive matching
+  /** Parent container's title (detachment for strat/enh, datasheet for
+   *  weapon/unit-ability). Precomputed from detachmentId/datasheetId at
+   *  cube-build time so /count consumers can attribute a hit to its parent
+   *  without a second lookup. Null when the parent isn't in the graph. */
+  parentTitle?: string
+  /** Parent container's node id (full id, not scalar slug). */
+  parentId?: string
 }
 
 /** Dimension table row for factions with chapter parentage. */
@@ -170,6 +177,10 @@ export function buildCube(
   //     chapter is also added (SM stratagems are accessible to DA, BA, SW, …).
   //   - Chapter-only nodes stay chapter-only (Blood Angels enhancements are
   //     not accessible to Dark Angels).
+  // Index nodes by id so we can resolve parent titles for child rows.
+  const nodeById = new Map<string, Node>()
+  for (const n of allNodes) nodeById.set(n.id, n)
+
   const facts: FactNode[] = []
   for (const n of allNodes) {
     const ownFactionId = n.factionId
@@ -181,6 +192,30 @@ export function buildCube(
       const chapters = chaptersOf.get(ownFactionId) ?? []
       for (const c of chapters) factionIdsForNode.push(c)
     }
+    // Resolve parent: stratagem/enhancement → detachment container via
+    // detachmentId; weapon/unit-ability → datasheet via datasheetId. After
+    // the build-graph 6a2/6a3 normalization pass these scalars now hold
+    // full container ids that resolve directly against nodeById.
+    let parentTitle: string | undefined
+    let parentId: string | undefined
+    if (
+      (n.category === 'stratagem' ||
+        n.category === 'enhancement' ||
+        n.category === 'faction-ability') &&
+      n.detachmentId
+    ) {
+      const parent = nodeById.get(n.detachmentId)
+      if (parent) {
+        parentTitle = parent.title
+        parentId = parent.id
+      }
+    } else if ((n.category === 'weapon' || n.category === 'unit-ability') && n.datasheetId) {
+      const parent = nodeById.get(n.datasheetId)
+      if (parent) {
+        parentTitle = parent.title
+        parentId = parent.id
+      }
+    }
     facts.push({
       id: n.id,
       factionId: ownFactionId,
@@ -191,6 +226,8 @@ export function buildCube(
       title: n.title,
       dp: n.dp,
       keywords: (n.keywords ?? []).map((k) => k.toLowerCase()),
+      parentTitle,
+      parentId,
     })
   }
 

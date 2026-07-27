@@ -1308,29 +1308,113 @@ async function main() {
     }
   }
 
-  // ── 6a2. Normalize detachmentId on children to the detachment's slug ──────
+  // ── 6a2. Normalize detachmentId on children to the container's FULL id ────
   // Wahapedia's game-data parser writes `detachmentId` as the full node id
-  // (e.g. `det:chaos-space-marines:devotees-of-destruction`), while the
-  // faction-pack v2 parser writes just the slug (`devotees-of-destruction`).
-  // The `/browse/detachment/:id` endpoint joins by matching the incoming id's
-  // last segment against `n.detachmentId` — that match fails for Wahapedia
-  // children when the requesting id came from an MFM-only detachment. Strip
-  // to the trailing slug so both conventions resolve.
+  // (`det:chaos-space-marines:devotees-of-destruction`); the faction-pack v2
+  // parser writes just the trailing slug (`devotees-of-destruction`); MFM
+  // writes its own full form (`mfm:det:...`) that later collapses onto the
+  // pack id.
+  //
+  // The previous pass truncated everything DOWN to the trailing slug so
+  // /browse/detachment/:id could match by suffix. That created a data bug:
+  // 100% of 11e stratagems + enhancements got flagged `orphan` by massage.ts
+  // (bare slug never equals the container's `11e:det:<faction>:<slug>` id),
+  // combo-detection stopped matching, and the /ask curator lost detachment
+  // attribution — every strat/enh landed as `[stratagem, faction]` with no
+  // detachment tag, so the LLM lumped them all under whichever detachment
+  // happened to appear in the primary retrieval.
+  //
+  // Fix: normalize UP to the full container id. Every child gets its
+  // `detachmentId` rewritten to `${container.id}` when we can match by
+  // (factionId, trailing-slug). /browse/detachment/:id already handles both
+  // forms (`n.detachmentId === id || n.detachmentId === id.split(':').pop()`)
+  // so the browse consumer stays happy.
+  const containerBySlug = new Map<string, string>() // `${factionId}::${slug}` → container id
+  for (const node of allNodes) {
+    if (node.category !== 'detachment' && node.category !== 'detachment-rule') continue
+    if (!node.factionId) continue
+    const slug = node.id.split(':').pop()
+    if (!slug) continue
+    const key = `${node.factionId}::${slug}`
+    // Prefer detachment-container id over detachment-rule id when both share
+    // a slug — the container is the merged/authoritative node.
+    if (!containerBySlug.has(key) || node.category === 'detachment') {
+      containerBySlug.set(key, node.id)
+    }
+  }
   let detIdNormalized = 0
+  let detIdUnresolved = 0
   for (const node of allNodes) {
     if (!node.detachmentId) continue
-    if (!node.detachmentId.includes(':')) continue
-    const parts = node.detachmentId.split(':')
-    node.detachmentId = parts[parts.length - 1]!
-    detIdNormalized++
+    if (!node.factionId) continue
+    // Already full-id form that resolves to a real node → leave alone.
+    // Only slug or misaligned scalars need rewriting.
+    const trailingSlug = node.detachmentId.includes(':')
+      ? node.detachmentId.split(':').pop()!
+      : node.detachmentId
+    const canonical = containerBySlug.get(`${node.factionId}::${trailingSlug}`)
+    if (canonical && canonical !== node.detachmentId) {
+      node.detachmentId = canonical
+      detIdNormalized++
+    } else if (!canonical) {
+      detIdUnresolved++
+    }
   }
-  if (detIdNormalized > 0) {
-    console.log(`   Normalized ${detIdNormalized} detachmentId values to slug form`)
+  console.log(
+    `   Normalized ${detIdNormalized} detachmentId values to full container id (unresolved: ${detIdUnresolved})`,
+  )
+
+  // ── 6a3. Normalize datasheetId on children (weapons + unit-abilities) ─────
+  // Same class of bug as 6a2 but one layer down. Faction-pack v2 emits
+  // datasheetId as a title-slug id (`11e:datasheet:adepta-sororitas:
+  // intranzia-fraye`), while the actual 11e datasheet's id from Wahapedia +
+  // duplicate-eleventh is `11e:{numeric}` (`11e:000004215`). The scalar
+  // never resolves → orphan flags + broken parentMap lookups in /ask (the
+  // LLM loses the unit → ability attribution entirely).
+  //
+  // Match by (factionId, slugified-title). Build a title-slug → datasheet-id
+  // index over 11e datasheets; rewrite any child datasheetId whose trailing
+  // slug matches. Prefers 11e datasheets over 10e (edition tiebreak) so a
+  // Wahapedia 10e node doesn't shadow the 11e canonical one.
+  const datasheetBySlug = new Map<string, { id: string; edition: string }>()
+  for (const node of allNodes) {
+    if (node.category !== 'datasheet') continue
+    if (!node.factionId) continue
+    const key = `${node.factionId}::${slugify(node.title)}`
+    const existing = datasheetBySlug.get(key)
+    if (!existing || (node.edition === '11th' && existing.edition !== '11th')) {
+      datasheetBySlug.set(key, { id: node.id, edition: node.edition ?? '' })
+    }
   }
+  let dsIdNormalized = 0
+  let dsIdUnresolved = 0
+  for (const node of allNodes) {
+    if (!node.datasheetId) continue
+    if (!node.factionId) continue
+    if (node.category !== 'weapon' && node.category !== 'unit-ability') continue
+    // Already resolves? Skip. (Wahapedia-emitted datasheetIds like
+    // `11e:000004215` will already exist and shouldn't be rewritten.)
+    const trailingSlug = node.datasheetId.includes(':')
+      ? node.datasheetId.split(':').pop()!
+      : node.datasheetId
+    // Skip pure-numeric slugs — they're Wahapedia numeric ids, don't try to
+    // reslug them.
+    if (/^\d+$/.test(trailingSlug)) continue
+    const canonical = datasheetBySlug.get(`${node.factionId}::${trailingSlug}`)
+    if (canonical && canonical.id !== node.datasheetId) {
+      node.datasheetId = canonical.id
+      dsIdNormalized++
+    } else if (!canonical) {
+      dsIdUnresolved++
+    }
+  }
+  console.log(
+    `   Normalized ${dsIdNormalized} datasheetId values to full container id (unresolved: ${dsIdUnresolved})`,
+  )
 
   // ── Massage: clean phantom nodes, validate content, flag issues ──────────
   console.log('\n6b. Data massage')
-  const massageResult = massage(allNodes)
+  const massageResult = massage(allNodes, allRefs)
   allNodes.length = 0
   for (const n of massageResult.nodes) allNodes.push(n)
 

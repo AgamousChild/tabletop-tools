@@ -4,9 +4,35 @@ import type { CountResult } from './count'
 import { parseCountQueryFromQuestion, renderCubeContext } from './count-parser'
 
 describe('parseCountQueryFromQuestion', () => {
-  test('returns null for non-count-shape questions', () => {
+  test('returns null for pure explanatory questions (not count-shape)', () => {
     expect(parseCountQueryFromQuestion('what is oath of moment?', [], '11th')).toBeNull()
-    expect(parseCountQueryFromQuestion('who has sustained hits?', [], '11th')).toBeNull()
+    expect(parseCountQueryFromQuestion('explain how a wound roll works', [], '11th')).toBeNull()
+  })
+
+  test('ability-source enumeration ("who has X") → keyword query, no category', () => {
+    const q = parseCountQueryFromQuestion('who has sustained hits?', [], '11th')
+    expect(q).toEqual({
+      category: undefined,
+      edition: '11th',
+      faction: undefined,
+      keyword: 'sustained hits',
+      group: undefined,
+    })
+  })
+
+  test('ability-source enumeration ("how do I get X") → keyword query for detected faction', () => {
+    const q = parseCountQueryFromQuestion(
+      'In Tau, how can you get Sustained hits?',
+      ['tau-empire'],
+      '11th',
+    )
+    expect(q).toEqual({
+      category: undefined,
+      edition: '11th',
+      faction: 'tau-empire',
+      keyword: 'sustained hits',
+      group: undefined,
+    })
   })
 
   test('classic "how many X" — detachments for a detected faction', () => {

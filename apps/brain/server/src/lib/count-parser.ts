@@ -59,7 +59,12 @@ const KEYWORD_TOKENS = [
   'character',
 ]
 
-// ── Count-shape detection ─────────────────────────────────────────────────
+// ── Count-shape / enumeration detection ───────────────────────────────────
+// Patterns that flag a question as "enumerate matching nodes" rather than
+// "answer via free-form retrieval". Includes both explicit count/table
+// requests AND ability-source questions ("how do I get sustained hits",
+// "what units have deep strike") — both need a structured pool response,
+// not a semantic-similarity retrieval.
 const COUNT_SHAPE_PATTERNS = [
   /^\s*how\s+many\b/i,
   /^\s*count\s+(?:of|the)\b/i,
@@ -67,6 +72,17 @@ const COUNT_SHAPE_PATTERNS = [
   /^\s*list\s+(?:all\s+of\s+the|all|every|each)\b/i,
   /^\s*table\s+of\b/i,
   /\bgive\s+me\s+a\s+(?:list|table|count|breakdown)\b/i,
+  // Ability-source enumeration ("how can I get sustained hits", "how do I
+  // give my units deep strike", "how to get lethal hits", "ways to inflict…")
+  /\bhow\s+(?:can|do|to)\s+(?:i|you|we|they|it|units?|models?)?\s*(?:get|give|gain|grant|generate|apply|inflict|cause)\b/i,
+  /\bhow\s+(?:can|does?)\s+(?:you|one|a\s+player|a\s+unit|any\s+unit)\b.*\b(?:get|gain|have|receive)\b/i,
+  // "what/which units/models/weapons have X"
+  /\b(?:what|which)\s+(?:units?|models?|weapons?|datasheets?|characters?|stratagems?|enhancements?)\s+(?:have|has|get|gain|come\s+with|carry|grant|give)\b/i,
+  // "who has X"
+  /\bwho\s+(?:has|have|gets|carries|grants|gives)\b/i,
+  // "ways to X", "sources of X"
+  /\bways?\s+to\s+(?:get|give|grant|gain|apply|inflict)\b/i,
+  /\bsources?\s+of\b/i,
   /\btable\s+that\s+lists?\b/i,
   /\bfor\s+(?:each|every)\s+faction\b/i,
   /\bper\s+faction\b/i,
@@ -87,8 +103,8 @@ const ALL_FACTIONS_SIGNAL =
 
 /**
  * Parse a natural-language question into a CountQuery. Returns null when the
- * question isn't count-shaped OR when we can't identify at least a category
- * (nothing to count).
+ * question isn't count-shaped OR when we can't identify anything to count
+ * (no category AND no keyword).
  *
  * `detectedFactions` and `askEdition` come from the /ask pipeline — reused so
  * we honour the caller's faction detection + edition filter.
@@ -102,7 +118,7 @@ export function parseCountQueryFromQuestion(
   const isCountShape = COUNT_SHAPE_PATTERNS.some((p) => p.test(question))
   if (!isCountShape) return null
 
-  // Category: pick the first match; return null if none identified.
+  // Category: pick the first match (may be undefined for keyword-only queries).
   let category: string | undefined
   for (const { pattern, category: cat } of CATEGORY_LEXICON) {
     if (pattern.test(question)) {
@@ -110,7 +126,6 @@ export function parseCountQueryFromQuestion(
       break
     }
   }
-  if (!category) return null
 
   // Keyword filter (optional): scan for any known ability token.
   let keyword: string | undefined
@@ -121,6 +136,11 @@ export function parseCountQueryFromQuestion(
       break
     }
   }
+
+  // Need something to filter on. A pure "how many X does Y have" without a
+  // recognised category or keyword can't be answered deterministically — fall
+  // back to normal RAG.
+  if (!category && !keyword) return null
 
   // Edition: honour the caller's edition unless the question explicitly names
   // a different one.
@@ -200,19 +220,52 @@ export function renderCubeContext(q: CountQuery, r: CountResult): string {
   }
 
   if (r.pool && r.pool.length > 0) {
-    lines.push('')
-    lines.push(`Pool (${r.pool.length} shown${r.pool.length === 200 ? ', capped' : ''}):`)
-    for (const p of r.pool.slice(0, 50)) {
-      const suffix = [p.factionId, p.dp != null ? `${p.dp} DP` : null].filter(Boolean).join(', ')
-      lines.push(`- ${p.title}${suffix ? ` (${suffix})` : ''}`)
+    // Group by category so ability-source questions ("how to get sustained
+    // hits") emit clean sections per source type (Detachment rules,
+    // Stratagems, Enhancements, Weapons, Unit abilities). Keeps the LLM
+    // from mashing everything into one bullet list.
+    const byCategory = new Map<string, typeof r.pool>()
+    for (const p of r.pool) {
+      const cat = p.category ?? 'other'
+      if (!byCategory.has(cat)) byCategory.set(cat, [])
+      byCategory.get(cat)!.push(p)
     }
-    if (r.pool.length > 50)
-      lines.push(`… (+${r.pool.length - 50} more, ask if you need the full list)`)
+    // Show detachment-rule + faction-ability first (broad army-wide sources),
+    // then stratagems + enhancements (list-building sources), then weapons +
+    // unit-abilities (per-unit sources).
+    const CATEGORY_ORDER = [
+      'detachment-rule',
+      'detachment',
+      'faction-ability',
+      'army-rule',
+      'stratagem',
+      'enhancement',
+      'unit-ability',
+      'weapon',
+      'datasheet',
+      'other',
+    ]
+    const orderedCats = [...byCategory.keys()].sort(
+      (a, b) => CATEGORY_ORDER.indexOf(a) - CATEGORY_ORDER.indexOf(b),
+    )
+    lines.push('')
+    lines.push(`Pool (${r.pool.length} matches):`)
+    for (const cat of orderedCats) {
+      const items = byCategory.get(cat)!
+      lines.push('')
+      lines.push(`**${cat}** (${items.length}):`)
+      for (const p of items.slice(0, 30)) {
+        const suffix = [p.factionId, p.dp != null ? `${p.dp} DP` : null].filter(Boolean).join(', ')
+        const parent = p.parentTitle ? ` — from **${p.parentTitle}**` : ''
+        lines.push(`- ${p.title}${suffix ? ` (${suffix})` : ''}${parent}`)
+      }
+      if (items.length > 30) lines.push(`… (+${items.length - 30} more)`)
+    }
   }
 
   lines.push('')
   lines.push(
-    'INSTRUCTION FOR THE ANSWERING MODEL: The numbers above are authoritative — do not re-count, do not re-derive combo counts, do not doubt them. Format the answer using these numbers verbatim.',
+    'INSTRUCTION FOR THE ANSWERING MODEL: The pool above is the COMPLETE, authoritative list from the brain\'s deterministic query engine. Format your answer using ONLY items from this pool — do NOT add items from web-search snippets, do NOT invent stratagems or enhancements not listed here, do NOT re-count. When mentioning a stratagem or enhancement, always name its detachment (the "detachment: X" tag on the source snippet earlier in the context, if present). If the pool is empty, say plainly that the brain has no matching content — do NOT fill the gap with your training data.',
   )
   return lines.join('\n')
 }

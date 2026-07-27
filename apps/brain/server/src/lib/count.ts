@@ -166,7 +166,15 @@ export interface CountResult {
   /** Per-group breakdown when `group` is set. */
   groups?: Array<Record<string, string | number>>
   /** Compact pool of matching fact rows when `includePool` is true. */
-  pool?: Array<{ id: string; title: string; factionId?: string; dp?: number }>
+  pool?: Array<{
+    id: string
+    title: string
+    factionId?: string
+    category?: string
+    dp?: number
+    parentTitle?: string
+    parentId?: string
+  }>
   /** Special-case: DP rollup with pre-computed Strike Force combo count.
    *  Populated when category='detachment' + edition='11th' and either
    *  no faction filter (all factions) or a single faction (one row). */
@@ -266,7 +274,10 @@ export async function count(bucket: R2Bucket, q: CountQuery): Promise<CountResul
       id: m.id,
       title: m.title,
       factionId: m.factionId,
+      category: m.category,
       dp: m.dp,
+      parentTitle: m.parentTitle,
+      parentId: m.parentId,
     }))
   }
 
@@ -277,16 +288,32 @@ function collectPool(
   cube: CubeCache,
   q: CountQuery,
   limit: number,
-): Array<{ id: string; title: string; factionId?: string; dp?: number }> {
+): Array<{ id: string; title: string; factionId?: string; category?: string; dp?: number }> {
   const candidates = q.faction ? (cube.factsByFaction.get(q.faction) ?? []) : cube.facts
-  const out: Array<{ id: string; title: string; factionId?: string; dp?: number }> = []
+  const out: Array<{
+    id: string
+    title: string
+    factionId?: string
+    category?: string
+    dp?: number
+    parentTitle?: string
+    parentId?: string
+  }> = []
   for (const f of candidates) {
     if (out.length >= limit) break
     if (q.category && f.category !== q.category) continue
     if (q.edition && f.edition !== q.edition) continue
     if (q.dp != null && f.dp !== q.dp) continue
     if (q.keyword && !f.keywords.some((k) => k.includes(q.keyword!.toLowerCase()))) continue
-    out.push({ id: f.id, title: f.title, factionId: f.factionId, dp: f.dp })
+    out.push({
+      id: f.id,
+      title: f.title,
+      factionId: f.factionId,
+      category: f.category,
+      dp: f.dp,
+      parentTitle: f.parentTitle,
+      parentId: f.parentId,
+    })
   }
   return out
 }

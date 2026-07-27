@@ -1,4 +1,4 @@
-import type { Node, NodeCategory } from './model'
+import type { Node, NodeCategory, NodeRef } from './model'
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
@@ -61,7 +61,7 @@ const SHORT_CONTENT_THRESHOLD = 20
  * 5. Flag nodes with invalid PDF bounding-box coordinates
  * 6. Flag nodes whose parent reference (datasheetId / detachmentId) is dangling
  */
-export function massage(nodes: Node[]): MassageResult {
+export function massage(nodes: Node[], _refs: ReadonlyArray<NodeRef> = []): MassageResult {
   const inputCount = nodes.length
   let droppedPhantom = 0
   let droppedShortContent = 0
@@ -167,6 +167,15 @@ export function massage(nodes: Node[]): MassageResult {
   // Pass 6 — hierarchy validation
   // Weapon / unit-ability nodes reference a datasheet; stratagem / enhancement
   // nodes reference a detachment. Flag dangling references.
+  //
+  // The scalar semantic is deliberately strict — the flag exists specifically
+  // to catch parser bugs where `detachmentId` doesn't align with the parent
+  // container's id. If you're seeing this flag on 11e children the parent
+  // exists but its id has a `11e:det:<faction>:<slug>` prefix, the parser is
+  // emitting a bare slug and needs the fix at ingest time (see build-graph
+  // step 6a — detachmentId normalization). Don't relax this check to make
+  // the flag disappear — that just hides the same data bug from the next
+  // person to look.
   const idSet = new Set(working.map((n) => n.id))
   for (const node of working) {
     let orphaned = false
