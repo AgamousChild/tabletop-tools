@@ -1227,6 +1227,18 @@ app.post('/ask', async (c) => {
   // arithmetic. Vectorize retrieval alone returns nothing useful for these
   // meta questions — the cube supplies the ground truth.
   let cubeContext = ''
+  // Capture the cube-surfaced brain content so the response object can expose
+  // it as first-class refs (see cubeRefs at the response-assembly site below).
+  // Without this the UI + eval treat cube-dispatched answers as source-less
+  // even though they're brain-authoritative.
+  let cubeRefs: Array<{
+    id: string
+    title: string
+    category: string
+    factionId?: string
+    dp?: number
+    parentTitle?: string
+  }> = []
   const cubeQ = parseCountQueryFromQuestion(body.question, detected.factions, edition)
   if (cubeQ) {
     try {
@@ -1236,6 +1248,14 @@ app.post('/ask', async (c) => {
         poolLimit: 200,
       })
       cubeContext = renderCubeContext(cubeQ, result)
+      cubeRefs = (result.pool ?? []).map((p) => ({
+        id: p.id,
+        title: p.title,
+        category: p.category ?? 'unknown',
+        factionId: p.factionId,
+        dp: p.dp,
+        parentTitle: p.parentTitle,
+      }))
     } catch (e) {
       console.warn('[cube] dispatch failed:', e instanceof Error ? e.message : e)
     }
@@ -1362,6 +1382,17 @@ Rules:
       .slice(0, 5)
       .map((s) => `- ${s.title} (${s.bucket ?? s.origin}, score ${s.score.toFixed(2)})`)
       .join('\n')
+    // Even the confidence-gate bypass path needs to surface cube + connected
+    // refs — otherwise a cube-dispatched question that fails the curator
+    // score returns a "no data" answer to the user with the cube content
+    // invisibly attached.
+    const connectedRefsGate = connectedNodes.map((n) => ({
+      id: n.id,
+      title: n.title,
+      category: n.category,
+      factionId: n.factionId,
+      edition: n.edition,
+    }))
     return c.json({
       detected,
       answer:
@@ -1372,7 +1403,9 @@ Rules:
       answerPath: 'confidence-gate-bypass',
       contextLength: userMessage.length,
       connectedIds: connectedNodes.map((n) => n.id),
+      connectedRefs: connectedRefsGate,
       reference: results,
+      cubeRefs,
       sources: results,
       connectedCount: connectedNodes.length,
       webSources: geminiResult?.sources ?? [],
@@ -1382,6 +1415,8 @@ Rules:
       edition,
       debug: {
         confidenceGate: { triggered: true, topScore, keptCount: curated.kept.length },
+        cubeDispatched: cubeContext.length > 0,
+        cubeRefsCount: cubeRefs.length,
       },
     })
   }
@@ -1575,13 +1610,33 @@ Rules:
     ungroundedIds: ungroundedLinks.slice(0, 5),
   }
 
+  // connectedRefs: enrich the connectedIds with title/category/faction so
+  // the UI + eval can show WHAT was connected, not just that N things were
+  // fetched. Prior response only exposed the raw id list.
+  const connectedRefs = connected.map((n) => ({
+    id: n.id,
+    title: n.title,
+    category: n.category,
+    factionId: n.factionId,
+    edition: n.edition,
+  }))
+
   const responsePayload = {
     detected,
     answer,
     answerPath,
     contextLength: userMessage.length,
     connectedIds: connected.map((c) => c.id),
+    connectedRefs,
     reference: results,
+    // cubeRefs: brain nodes surfaced by the deterministic cube dispatch
+    // (count-shape / ability-source questions). These fed the LLM via the
+    // DETERMINISTIC CUBE ANSWER context block but never appeared in
+    // reference[] before — the UI "no References" section was lying about
+    // brain contribution. Also lets the eval grader see cube-driven
+    // brain contribution as first-class instead of inferring from
+    // context length.
+    cubeRefs,
     sources: results.map((n) => ({
       id: n.id,
       title: n.title,
@@ -1605,6 +1660,8 @@ Rules:
       retrieveHasResult: !!retrieveResult,
       retrieveResultCount: results.length,
       connectedCount2: connected.length,
+      cubeDispatched: cubeContext.length > 0,
+      cubeRefsCount: cubeRefs.length,
       geminiHasResult: !!geminiResult,
       geminiAnswerLen: geminiResult?.answer?.length ?? 0,
       brainContextLen: brainContext.length,
