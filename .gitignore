@@ -62,3 +62,6 @@ apps/study/client/public/data/
 
 # Physics app generated transcript chunks + extracted video frames
 apps/physics/client/public/data/
+
+# /ask eval pipeline data (harvested questions, run responses, grades)
+scripts/eval-ask/.data/
