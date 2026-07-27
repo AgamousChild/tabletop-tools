@@ -30,6 +30,14 @@ interface CubeCache {
   dimFaction: DimFactionRow[]
   dimFactionById: Map<string, DimFactionRow>
   dimKeyword: string[]
+  /**
+   * Fast lookup: lowercase datasheet title → all datasheet facts with that
+   * title (may be multiple across factions or editions). Enables faction
+   * inference from unit names in a natural-language query — a critical hop
+   * for strategic questions like "would Eradicators be a good addition" that
+   * don't name a faction directly but do name units.
+   */
+  datasheetsByTitle: Map<string, FactNode[]>
   rollupFactionDp: RollupFactionDp[]
   rollupFactionCategoryEdition: RollupFactionCategoryEdition[]
   manifestVersion: string
@@ -114,11 +122,17 @@ async function loadCube(bucket: R2Bucket): Promise<CubeCache> {
   const factsById = new Map<string, FactNode>()
   const factsByFaction = new Map<string, FactNode[]>()
   const dimFactionById = new Map<string, DimFactionRow>()
+  const datasheetsByTitle = new Map<string, FactNode[]>()
   for (const f of facts) {
     factsById.set(f.id, f)
     for (const fid of f.factionIds) {
       if (!factsByFaction.has(fid)) factsByFaction.set(fid, [])
       factsByFaction.get(fid)!.push(f)
+    }
+    if (f.category === 'datasheet') {
+      const key = f.title.toLowerCase()
+      if (!datasheetsByTitle.has(key)) datasheetsByTitle.set(key, [])
+      datasheetsByTitle.get(key)!.push(f)
     }
   }
   for (const d of dimFaction) dimFactionById.set(d.id, d)
@@ -130,11 +144,286 @@ async function loadCube(bucket: R2Bucket): Promise<CubeCache> {
     dimFaction,
     dimFactionById,
     dimKeyword,
+    datasheetsByTitle,
     rollupFactionDp,
     rollupFactionCategoryEdition,
     manifestVersion,
   }
   return cached
+}
+
+// ── Faction inference from unit names ──────────────────────────────────────
+
+/**
+ * Scan a query for unit names that appear as datasheet titles in the cube.
+ * Returns the list of matched datasheets + the inferred faction set.
+ *
+ * Chapter-vs-parent rule (Micah's directive): "if its space marines units
+ * its just space marines unless another sub-faction (chapter) is also
+ * included". Implemented as:
+ *  - Datasheet whose factionId is 'space-marines' → contributes 'space-marines'
+ *  - Datasheet whose factionId is a chapter (has parentId in dim) →
+ *    contributes the CHAPTER (dropping any 'space-marines' parent contribution
+ *    since the chapter can already see the shared pool via factionIds[]).
+ *  - Non-SM factions → contribute their own factionId.
+ *
+ * Matching strategy: n-gram scan (1..4 tokens) against the lowercased
+ * datasheet title index. Prefers the longest match at each position so
+ * "Ballistus Dreadnought" doesn't also fire on the bare "Dreadnought".
+ *
+ * Returns empty result if nothing matched — caller falls back to the
+ * pattern-based faction detection they already have.
+ */
+// Stopwords + generic 40K nouns that don't uniquely identify a datasheet.
+// A query token that only matches noise words gives no signal about faction.
+const UNIT_MATCH_STOPWORDS = new Set([
+  // English stopwords
+  'a',
+  'an',
+  'the',
+  'of',
+  'in',
+  'on',
+  'with',
+  'and',
+  'or',
+  'my',
+  'your',
+  'i',
+  'we',
+  'they',
+  'it',
+  'is',
+  'are',
+  'be',
+  'as',
+  'to',
+  'for',
+  'from',
+  'have',
+  'has',
+  'do',
+  'does',
+  'can',
+  'should',
+  'would',
+  'could',
+  'good',
+  'bad',
+  'better',
+  'best',
+  'run',
+  'take',
+  'add',
+  'addition',
+  'currently',
+  'also',
+  // 40K generic nouns that appear across many datasheets and would fire on
+  // almost every unit-name-shaped query.
+  'squad',
+  'unit',
+  'units',
+  'warriors',
+  'warrior',
+  'guard',
+  'guardsman',
+  'soldiers',
+  'brotherhood',
+  'cadre',
+  'gang',
+  'team',
+  'company',
+  'pack',
+  'boyz',
+  'boy',
+  'models',
+  'model',
+  'list',
+  'lists',
+  'army',
+  'faction',
+])
+
+/** Rough singular normalization — drop trailing 's' when the stem is ≥4 chars. */
+function stemToken(t: string): string {
+  if (t.length >= 5 && t.endsWith('s') && !t.endsWith('ss')) return t.slice(0, -1)
+  return t
+}
+
+/** Tokenize a title (or query) into significant words. */
+function significantWords(text: string): string[] {
+  const cleaned = text.toLowerCase().replace(/[^a-z0-9'\s]+/g, ' ')
+  const out: string[] = []
+  for (const raw of cleaned.split(/\s+/)) {
+    if (!raw) continue
+    const stemmed = stemToken(raw)
+    if (stemmed.length < 4) continue
+    if (UNIT_MATCH_STOPWORDS.has(stemmed)) continue
+    out.push(stemmed)
+  }
+  return out
+}
+
+export async function inferFactionsFromUnitNames(
+  bucket: R2Bucket,
+  query: string,
+): Promise<{
+  factions: string[]
+  matches: Array<{
+    id: string
+    title: string
+    factionId?: string
+    category: string
+    edition?: string
+  }>
+}> {
+  const cube = await loadCube(bucket)
+
+  // Build (once per cache) a word-index over 11e datasheet titles:
+  //   significant title word → list of datasheet facts.
+  // Then match by score: how many of a datasheet's significant title words
+  // appear in the query. This handles:
+  //   - Plural in query ("Eradicators") vs singular in title ("Eradicator Squad")
+  //   - Abbreviated query ("Ballistus dread") vs full title ("Ballistus Dreadnought")
+  //   - Variant families ("Gladiator" → all Gladiator Lancer/Reaper/Valiant)
+  const queryWords = new Set(significantWords(query))
+  if (queryWords.size === 0) return { factions: [], matches: [] }
+
+  interface Scored {
+    fact: FactNode
+    titleWords: string[]
+    matched: string[]
+    /** Query tokens that produced each match (may differ from titleWord
+     *  when a prefix triggered — "dread" matches "dreadnought"). Used for
+     *  the per-token best-match gate below. */
+    matchedQueryTokens: string[]
+  }
+  // A title word matches a query token when they are equal OR when a query
+  // token (≥4 chars) is a prefix of the title word. Prefix matching handles
+  // abbreviations users type ("Ballistus dread" for "Ballistus Dreadnought")
+  // so those queries produce a stronger match than the accidental token
+  // hit on an unrelated unit ("dread" alone would otherwise fire on Deff
+  // Dread as much as on Ballistus Dreadnought).
+  const matchesToken = (titleWord: string): string | null => {
+    if (queryWords.has(titleWord)) return titleWord
+    for (const q of queryWords) {
+      if (q.length >= 4 && titleWord.startsWith(q) && titleWord.length >= q.length + 2) return q
+    }
+    return null
+  }
+  const scored: Scored[] = []
+  for (const bucketFacts of cube.factsByFaction.values()) {
+    for (const f of bucketFacts) {
+      if (f.category !== 'datasheet') continue
+      if (f.edition && f.edition !== '11th') continue
+      const titleWords = significantWords(f.title)
+      if (titleWords.length === 0) continue
+      const matched: string[] = []
+      const matchedQueryTokens: string[] = []
+      for (const w of titleWords) {
+        const q = matchesToken(w)
+        if (q) {
+          matched.push(w)
+          matchedQueryTokens.push(q)
+        }
+      }
+      if (matched.length === 0) continue
+      scored.push({ fact: f, titleWords, matched, matchedQueryTokens })
+    }
+  }
+
+  // Per-query-token best-match: for each significant query token, find the
+  // datasheet(s) with the highest score that include that token. Keep every
+  // fact that is the best-match for at least one query token.
+  //
+  // Why: a global "best-match-wins" gate drops legitimate matches for OTHER
+  // query tokens as soon as ANY token gets an exact hit. Example: the query
+  // "Would Eradicators + Ballistus dread + Gladiator" — Eradicator hits its
+  // exact title (score 1.0) but Ballistus (partial, 0.5) and Gladiator
+  // (partial, 0.5) both need to survive so the LLM can talk about all three.
+  //
+  // Rarity gate: skip query tokens that appear in more than
+  // MAX_TOKEN_DATASHEETS distinct datasheet titles. A common word like
+  // "dread" appears in Dreadnought variants across factions AND in "Deff
+  // Dread" (Orks) — matching on that token is noise, not signal. Rare tokens
+  // ("ballistus", "eradicator") stay strong.
+  const MAX_TOKEN_DATASHEETS = 5
+  // Rarity gate keyed by QUERY tokens (not title words) — the token frequency
+  // is how many datasheets a given query token matched. Drops noisy tokens.
+  const tokenFrequency = new Map<string, number>()
+  for (const s of scored) {
+    for (const qToken of s.matchedQueryTokens) {
+      tokenFrequency.set(qToken, (tokenFrequency.get(qToken) ?? 0) + 1)
+    }
+  }
+  const isRareEnough = (token: string): boolean =>
+    (tokenFrequency.get(token) ?? 0) <= MAX_TOKEN_DATASHEETS
+
+  const scoreOf = (s: Scored): number => s.matched.length / s.titleWords.length
+  const PARTIAL_MIN_SCORE = 0.5
+  const bestByToken = new Map<string, { score: number; facts: Set<FactNode> }>()
+  for (const s of scored) {
+    const score = scoreOf(s)
+    if (score < PARTIAL_MIN_SCORE) continue
+    for (const qToken of s.matchedQueryTokens) {
+      if (!isRareEnough(qToken)) continue
+      const entry = bestByToken.get(qToken)
+      if (!entry || score > entry.score) {
+        bestByToken.set(qToken, { score, facts: new Set([s.fact]) })
+      } else if (score === entry.score) {
+        entry.facts.add(s.fact)
+      }
+    }
+  }
+  const matchedFacts = new Map<string, FactNode>()
+  for (const { facts } of bestByToken.values()) {
+    for (const f of facts) {
+      const key = `${f.factionId}::${f.title.toLowerCase()}`
+      if (!matchedFacts.has(key)) matchedFacts.set(key, f)
+    }
+  }
+
+  if (matchedFacts.size === 0) return { factions: [], matches: [] }
+
+  // Apply chapter-preference rule.
+  const factionSet = new Set<string>()
+  const chapterSet = new Set<string>()
+  for (const f of matchedFacts.values()) {
+    if (!f.factionId) continue
+    const dim = cube.dimFactionById.get(f.factionId)
+    if (dim?.isChapter) chapterSet.add(f.factionId)
+    else factionSet.add(f.factionId)
+  }
+  // If any chapters matched AND the parent (space-marines) also appears,
+  // drop the parent — chapters already see the shared pool.
+  if (chapterSet.size > 0) {
+    for (const chapter of chapterSet) {
+      const dim = cube.dimFactionById.get(chapter)
+      if (dim?.parentId) factionSet.delete(dim.parentId)
+      factionSet.add(chapter)
+    }
+  }
+
+  // Prefer 11e edition matches for display; drop 10e duplicates when both exist.
+  const byId = new Map<string, FactNode>()
+  for (const f of matchedFacts.values()) {
+    const key = `${f.factionId}::${f.title.toLowerCase()}`
+    const existing = byId.get(key)
+    if (!existing || (f.edition === '11th' && existing.edition !== '11th')) {
+      byId.set(key, f)
+    }
+  }
+
+  return {
+    factions: [...factionSet],
+    matches: [...byId.values()].map((f) => ({
+      id: f.id,
+      title: f.title,
+      factionId: f.factionId,
+      category: f.category,
+      edition: f.edition,
+    })),
+  }
 }
 
 // ── Query API ──────────────────────────────────────────────────────────────

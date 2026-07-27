@@ -3,7 +3,13 @@ import { cors } from 'hono/cors'
 
 import { filterBrowseNodes } from './lib/browse'
 import { buildDatasheetLayout } from './lib/card-layout'
-import { countCached, type CountQuery, getCubeVersion, reloadCube } from './lib/count'
+import {
+  countCached,
+  type CountQuery,
+  getCubeVersion,
+  inferFactionsFromUnitNames,
+  reloadCube,
+} from './lib/count'
 import { parseCountQueryFromQuestion, renderCubeContext } from './lib/count-parser'
 import { buildCrossRefs, loadIndexes } from './lib/cross-refs'
 import {
@@ -1025,6 +1031,60 @@ app.post('/ask', async (c) => {
   const results = retrieveResult?.results ?? []
   const connected = retrieveResult?.connected ?? []
   const parentMap = retrieveResult?.parentMap ?? new Map<string, string>()
+
+  // ── Faction inference from unit names ───────────────────────────────────
+  // The pattern-based faction detector only fires on faction/chapter names
+  // ("space marines", "dark angels", "orks"). For strategic questions that
+  // name UNITS instead of factions ("would Eradicators be a good addition"),
+  // it returns empty and retrieval blows out — the answer then comes only
+  // from Gemini web-search. Fill the gap by scanning the query for datasheet
+  // titles; every matched datasheet contributes its factionId, with the
+  // chapter-preference rule applied (SM units + DA units → DA, not SM).
+  //
+  // The matched datasheets are also added to `results` so the LLM sees the
+  // actual unit stats — which is exactly what a "should I take X" question
+  // needs to answer well.
+  if (detected.factions.length === 0) {
+    try {
+      const inferred = await inferFactionsFromUnitNames(c.env.BRAIN_BUCKET, body.question)
+      if (inferred.factions.length > 0) {
+        detected.factions = inferred.factions
+      }
+      if (inferred.matches.length > 0) {
+        // Fetch the full node objects for the matched datasheets so
+        // formatting has access to their content / summary. The cube fact
+        // rows carry only title + factionId; the node in R2 has stats +
+        // abilities + refs.
+        const matchedIds = inferred.matches.map((m) => m.id)
+        const allNodes = await getAllNodes(c.env.BRAIN_BUCKET)
+        const byId = new Map(allNodes.map((n) => [n.id, n]))
+        for (const id of matchedIds) {
+          const n = byId.get(id)
+          if (!n) continue
+          // Prepend as high-relevance results so the LLM sees them first.
+          results.unshift({
+            id: n.id,
+            score: 1.0,
+            title: n.title,
+            summary: n.summary,
+            content: n.content,
+            layer: n.layer,
+            category: n.category,
+            factionId: n.factionId,
+            factionName: n.factionName,
+            phase: n.phase,
+            datasheetId: n.datasheetId,
+            edition: n.edition,
+            dp: n.dp,
+            sources: n.sources,
+            keywords: n.keywords,
+          })
+        }
+      }
+    } catch (e) {
+      console.warn('[ask] unit-name inference failed:', e instanceof Error ? e.message : e)
+    }
+  }
 
   // Attach errata to primary results so the LLM context includes corrections
   const errataNodesForAsk = await getErrataNodes(c.env.BRAIN_BUCKET)
