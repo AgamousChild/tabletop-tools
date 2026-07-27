@@ -1,3 +1,6 @@
+// Side-effect import: registers all question shapes on module load.
+import './lib/question-shapes/shapes/index'
+
 import { Hono } from 'hono'
 import { cors } from 'hono/cors'
 
@@ -29,6 +32,7 @@ import { findErrataForNode } from './lib/errata-linker'
 import { expandFactionForRetrieval, expandFactionsForRetrieval } from './lib/factions'
 import { formatConversationalAnswer } from './lib/format'
 import type { Node } from './lib/model'
+import { classify, route } from './lib/question-shapes/registry'
 import { retrieve } from './lib/retrieve'
 import { buildCorpusForNode } from './lib/vectorize-corpus'
 import type { Env } from './types'
@@ -1295,6 +1299,54 @@ app.post('/ask', async (c) => {
     }
   }
 
+  // ── Question-shape registry dispatch ─────────────────────────────────────
+  // Classify the question and run matching shapes before the LLM path.
+  // A shape returning delegated:true short-circuits the LLM entirely.
+  // All other shapes contribute augmentContext strings appended below.
+  const shapeCtx = {
+    question: body.question,
+    detectedFactions: detected.factions,
+    edition,
+    bucket: c.env.BRAIN_BUCKET,
+  }
+  const matchedShapes = classify(shapeCtx)
+  const matchedShapeIds = matchedShapes.map((s) => s.id)
+
+  const shapeAugments: string[] = []
+  for (const shape of matchedShapes) {
+    const shapeResult = await route(shape, shapeCtx)
+    if (shapeResult.delegated && shapeResult.answer) {
+      // Short-circuit: return the shape's answer directly.
+      return c.json({
+        detected,
+        answer: shapeResult.answer,
+        answerPath: `shape:${shapeResult.shapeId}`,
+        contextLength: 0,
+        connectedIds: [],
+        reference: shapeResult.refs ?? [],
+        sources: shapeResult.refs ?? [],
+        connectedCount: 0,
+        webSources: [],
+        geminiCached: false,
+        webSource: 'none',
+        errors: {},
+        edition: retrieveResult?.edition ?? edition,
+        debug: {
+          retrieveHasResult: !!retrieveResult,
+          retrieveResultCount: results.length,
+          connectedCount2: connected.length,
+          geminiHasResult: false,
+          geminiAnswerLen: 0,
+          brainContextLen: 0,
+          matchedShapes: matchedShapeIds,
+        },
+      })
+    }
+    if (shapeResult.augmentContext) {
+      shapeAugments.push(shapeResult.augmentContext)
+    }
+  }
+
   // Build the combined LLM prompt
   const factionScope =
     detected.factions.length > 0
@@ -1363,6 +1415,10 @@ Rules:
   // CONTEXT block above, with a low-priority score, dedupe against brain,
   // and self-labelling. Concatenating it again would double-count and
   // resurrect the "WEB SEARCH RESULTS = authority" failure mode.
+  // Append shape augment context collected above (non-delegating shapes only).
+  if (shapeAugments.length > 0) {
+    userMessage += `=== QUESTION CONTEXT (shape analysis) ===\n\n${shapeAugments.join('\n\n')}\n\n`
+  }
   userMessage += `---\n\nQuestion: ${body.question}`
 
   let answer: string
@@ -1673,6 +1729,7 @@ Rules:
         topScore,
       },
       grounding: groundingStats,
+      matchedShapes: matchedShapeIds,
     },
   }
 
