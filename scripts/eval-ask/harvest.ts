@@ -80,6 +80,42 @@ const SUBREDDITS = [
 
 const SIX_MONTHS_SECONDS = 180 * 24 * 60 * 60
 const MAX_POSTS_PER_SUB = 100 // hard cap per sub even before deduping/filtering
+
+/**
+ * Subreddit → faction display name. Questions in a faction-specific sub
+ * are almost always about that faction, so we prepend the context to the
+ * question text before feeding it to /ask. This mirrors what a helpful
+ * commenter would assume from the post's community.
+ *
+ * Subs with no specific-faction context (r/Warhammer, r/PoorHammer,
+ * r/CompetitiveWH40k, r/TTSWarhammer40k, r/UnitCrunch, r/Warhammer40k,
+ * r/WarhammerCompetitive, r/Chaos40k) intentionally have no entry — the
+ * question stands alone.
+ */
+const SUBREDDIT_FACTION_HINT: Record<string, string> = {
+  AdeptusMechanicus: 'Adeptus Mechanicus',
+  BlackTemplars: 'Black Templars',
+  BloodAngels: 'Blood Angels',
+  ChaosKnights: 'Chaos Knights',
+  deathguard40k: 'Death Guard',
+  deathwatch40k: 'Deathwatch',
+  Drukhari: 'Drukhari',
+  Eldar: 'Aeldari',
+  EmperorsChildren: "Emperor's Children",
+  genestealercult: 'Genestealer Cults',
+  ImperialAgents_40K: 'Imperial Agents',
+  ImperialKnights: 'Imperial Knights',
+  IronHands40k: 'Iron Hands',
+  Necrons40k: 'Necrons',
+  orks: 'Orks',
+  sistersofbattle: 'Adepta Sororitas',
+  spacemarines: 'Space Marines',
+  Tau40K: "T'au Empire",
+  TheAstraMilitarum: 'Astra Militarum',
+  ThousandSons: 'Thousand Sons',
+  Tyranids: 'Tyranids',
+  WorldEaters40k: 'World Eaters',
+}
 // Data source: arctic-shift — post-Pushshift Reddit archive maintained by
 // the Photon Reddit team. Full Reddit post objects (title, selftext, flair,
 // created_utc, permalink) served from their own DB with no Reddit auth
@@ -163,14 +199,21 @@ function isQuestionShape(post: RedditPost): boolean {
   return false
 }
 
-function normalizeQuestion(post: RedditPost): string {
+function normalizeQuestion(post: RedditPost, sub: string): string {
   const title = post.title.trim()
   const body = post.selftext.trim()
-  if (!body) return title
-  // Cap body at ~2000 chars — long body posts are usually list-building
-  // rambles that we still want to feed to /ask, but not TB-scale.
   const trimmedBody = body.length > 2000 ? body.slice(0, 2000) + '…' : body
-  return `${title}\n\n${trimmedBody}`
+
+  // Faction hint from subreddit: posts in r/BloodAngels are almost always
+  // about Blood Angels, so prepend the context. Mirrors what a helpful
+  // commenter would assume from the post's community. Subs without a
+  // specific-faction mapping (r/Warhammer, r/WarhammerCompetitive, etc.)
+  // pass through untouched.
+  const faction = SUBREDDIT_FACTION_HINT[sub]
+  const prefix = faction ? `[${faction}] ` : ''
+
+  if (!body) return prefix + title
+  return `${prefix}${title}\n\n${trimmedBody}`
 }
 
 async function harvestSub(
@@ -218,7 +261,7 @@ async function harvestSub(
         createdAtIso: new Date(post.created_utc * 1000).toISOString(),
         permalink: `https://www.reddit.com${post.permalink}`,
         numComments: post.num_comments,
-        question: normalizeQuestion(post),
+        question: normalizeQuestion(post, sub),
       })
       seenThisSub.add(post.id)
       if (out.length >= MAX_POSTS_PER_SUB) break

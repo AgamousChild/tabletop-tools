@@ -89,26 +89,30 @@ function gradeRun(run: AskRun): Grade {
   const brainCtxLen = r.debug?.brainContextLen ?? 0
   const geminiLen = r.debug?.geminiAnswerLen ?? 0
 
-  // Provenance classification: is the answer drawn from brain, web, both,
-  // or is there no meaningful answer at all?
-  let provenance: Grade['provenance']
-  if (!answer.trim()) provenance = 'no-answer'
-  else if (refs.length === 0 && webSources.length > 0) provenance = 'web-only'
-  else if (refs.length > 0 && webSources.length > 0) provenance = 'mixed'
-  else if (refs.length > 0) provenance = 'brain-primary'
-  else provenance = 'no-answer'
-
-  // Cube dispatched? Heuristic: /ask logs contextLength AND we know the
-  // deterministic cube block adds ~500-3000 chars. Without a direct flag
-  // in the response, we detect by looking for the marker string the cube
-  // renderer emits into the LLM context — but that context isn't exposed.
-  // Compromise: infer from the shape of the response. The cube path
-  // populates `answer` even when retrieval returned 0 brain nodes, AND
-  // typically produces contextLength > geminiLen alone would explain.
+  // Cube dispatched? Prefer the explicit debug flag when the response
+  // provides it; fall back to shape inference for older responses that
+  // predate the flag.
   const contextLen = r.contextLength ?? 0
   const cubeDispatched =
-    contextLen > geminiLen + brainCtxLen + 500 && // extra ~500+ chars for cube block
-    (COUNT_SHAPE_PATTERNS.some((p) => p.test(run.question)) || factions.length > 0)
+    r.debug?.cubeDispatched ??
+    (contextLen > geminiLen + brainCtxLen + 500 &&
+      (COUNT_SHAPE_PATTERNS.some((p) => p.test(run.question)) || factions.length > 0))
+  // Reserved for future dimensional split (cubeRefs count vs vectorize refs).
+  const _cubeRefsCount = r.cubeRefs?.length ?? r.debug?.cubeRefsCount ?? 0
+  void _cubeRefsCount
+
+  // Provenance: brain contribution counts as EITHER (a) reference nodes from
+  // Vectorize retrieval / unit-name inference, OR (b) cube dispatch feeding
+  // deterministic data into the LLM context. Cube data doesn't populate
+  // reference[] but is still authoritative brain output — earlier grader
+  // mis-classified 93 cube-dispatched answers as web-only.
+  const hasBrainContribution = refs.length > 0 || cubeDispatched
+  let provenance: Grade['provenance']
+  if (!answer.trim()) provenance = 'no-answer'
+  else if (hasBrainContribution && webSources.length > 0) provenance = 'mixed'
+  else if (hasBrainContribution) provenance = 'brain-primary'
+  else if (webSources.length > 0) provenance = 'web-only'
+  else provenance = 'no-answer'
 
   const shouldCubeDispatch = COUNT_SHAPE_PATTERNS.some((p) => p.test(run.question))
 

@@ -59,6 +59,25 @@ export interface AskResponse {
     factionId?: string
     edition?: string
   }>
+  /** Brain nodes surfaced by the cube dispatch (deterministic /count).
+   *  Fed to the LLM via the DETERMINISTIC CUBE ANSWER context block. */
+  cubeRefs?: Array<{
+    id: string
+    title: string
+    category: string
+    factionId?: string
+    dp?: number
+    parentTitle?: string
+  }>
+  /** Connected nodes (part_of / requires / modifies neighbors) with titles.
+   *  Was previously only surfaced as raw id list in connectedIds. */
+  connectedRefs?: Array<{
+    id: string
+    title: string
+    category: string
+    factionId?: string
+    edition?: string
+  }>
   sources?: Array<{ id: string; title: string; category: string }>
   connectedCount?: number
   connectedIds?: string[]
@@ -74,6 +93,10 @@ export interface AskResponse {
   debug?: {
     retrieveResultCount?: number
     connectedCount2?: number
+    /** Set true when the cube dispatched into the LLM context. */
+    cubeDispatched?: boolean
+    /** How many rows the cube returned (matches cubeRefs.length). */
+    cubeRefsCount?: number
     geminiAnswerLen?: number
     brainContextLen?: number
     curator?: { pooled: number; kept: number; dropped: number; webKept: boolean; topScore: number }
