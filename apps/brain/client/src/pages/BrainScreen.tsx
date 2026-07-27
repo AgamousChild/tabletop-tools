@@ -47,38 +47,128 @@ import type { CardLayout } from '../lib/server-cards/types'
 import type { DetachmentPageProps } from './DetachmentPage'
 import { DetachmentPage } from './DetachmentPage'
 
-/** Simple markdown to HTML — handles ##, **, -, `, and brain: entity links */
+/** Simple markdown to HTML — handles ##, **, -, GFM tables, and brain: entity links */
 function renderMarkdown(text: string): string {
   // `linkBrainHtml` is the shared helper that emits the canonical
   // `brain-entity-link` class — keep it in lockstep with LinkedText.
   const linkBrain = linkBrainHtml
 
-  return text
-    .split('\n')
-    .map((line) => {
-      // Headings
-      if (line.startsWith('## '))
-        return `<h2 class="text-lg font-bold text-amber-400 mt-4 mb-2">${linkBrain(line.slice(3))}</h2>`
-      if (line.startsWith('### '))
-        return `<h3 class="text-base font-semibold text-amber-300 mt-3 mb-1">${linkBrain(line.slice(4))}</h3>`
-      // Bullet points
-      if (line.startsWith('- ')) {
-        const content = line
-          .slice(2)
-          .replace(/\*\*([^*]+)\*\*/g, '<strong class="text-slate-100">$1</strong>')
-        return `<div class="pl-4 py-0.5 text-sm text-slate-300 border-l border-slate-700 ml-2">${linkBrain(content)}</div>`
+  const applyInline = (s: string): string =>
+    linkBrain(
+      s
+        .replace(/\*\*([^*]+)\*\*/g, '<strong class="text-slate-100">$1</strong>')
+        .replace(/(^|[^*])\*([^*\n]+)\*(?!\*)/g, '$1<em class="italic text-slate-400">$2</em>'),
+    )
+
+  // Split a GFM table row into raw cell strings. Handles leading/trailing
+  // pipes and escapes.
+  const splitRow = (line: string): string[] =>
+    line
+      .replace(/^\s*\|/, '')
+      .replace(/\|\s*$/, '')
+      .split('|')
+      .map((c) => c.trim())
+
+  // A separator row looks like `|---|:--:|---:|` — hyphens + optional colons
+  // for alignment, one segment per column.
+  const isSeparator = (line: string): boolean =>
+    /^\s*\|?\s*:?-{3,}:?\s*(\|\s*:?-{3,}:?\s*)+\|?\s*$/.test(line)
+
+  // Alignment marker from a separator cell (":---" left, "---:" right,
+  // ":---:" center, "---" default).
+  const alignmentOf = (cell: string): 'left' | 'right' | 'center' | null => {
+    const t = cell.trim()
+    const startsColon = t.startsWith(':')
+    const endsColon = t.endsWith(':')
+    if (startsColon && endsColon) return 'center'
+    if (endsColon) return 'right'
+    if (startsColon) return 'left'
+    return null
+  }
+
+  const lines = text.split('\n')
+  const out: string[] = []
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i]!
+
+    // ── GFM table: header row followed by separator row ────────────────
+    // Peek ahead: current line has pipes, next line is a separator.
+    if (line.includes('|') && i + 1 < lines.length && isSeparator(lines[i + 1]!)) {
+      const headerCells = splitRow(line)
+      const alignments = splitRow(lines[i + 1]!).map(alignmentOf)
+      const bodyRows: string[][] = []
+      let j = i + 2
+      while (j < lines.length && lines[j]!.includes('|') && !isSeparator(lines[j]!)) {
+        // Blank line breaks a table; a plain-text line without `|` also breaks it.
+        if (!lines[j]!.trim()) break
+        bodyRows.push(splitRow(lines[j]!))
+        j++
       }
-      // Italic line
-      if (line.startsWith('*') && line.endsWith('*') && !line.startsWith('**')) {
-        return `<p class="text-xs text-slate-500 italic mt-2">${linkBrain(line.slice(1, -1))}</p>`
+      const alignClass = (idx: number): string => {
+        const a = alignments[idx]
+        return a === 'right' ? ' text-right' : a === 'center' ? ' text-center' : ' text-left'
       }
-      // Empty line
-      if (!line.trim()) return ''
-      // Regular text with bold
-      const formatted = line.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>')
-      return `<p class="text-sm text-slate-300 my-1">${linkBrain(formatted)}</p>`
-    })
-    .join('\n')
+      const html: string[] = []
+      html.push(
+        '<div class="my-3 overflow-x-auto"><table class="w-full text-sm border border-slate-700 rounded">',
+      )
+      html.push('<thead><tr class="bg-slate-800/60">')
+      for (let c = 0; c < headerCells.length; c++) {
+        html.push(
+          `<th class="px-3 py-1.5 border-b border-slate-700 font-semibold text-amber-300${alignClass(c)}">${applyInline(headerCells[c]!)}</th>`,
+        )
+      }
+      html.push('</tr></thead><tbody>')
+      for (let r = 0; r < bodyRows.length; r++) {
+        const stripe = r % 2 === 0 ? 'bg-slate-900/40' : 'bg-slate-900/20'
+        html.push(`<tr class="${stripe}">`)
+        for (let c = 0; c < bodyRows[r]!.length; c++) {
+          html.push(
+            `<td class="px-3 py-1 border-b border-slate-800 text-slate-300${alignClass(c)}">${applyInline(bodyRows[r]![c]!)}</td>`,
+          )
+        }
+        html.push('</tr>')
+      }
+      html.push('</tbody></table></div>')
+      out.push(html.join(''))
+      i = j - 1
+      continue
+    }
+
+    // ── Headings ───────────────────────────────────────────────────────
+    if (line.startsWith('## ')) {
+      out.push(
+        `<h2 class="text-lg font-bold text-amber-400 mt-4 mb-2">${linkBrain(line.slice(3))}</h2>`,
+      )
+      continue
+    }
+    if (line.startsWith('### ')) {
+      out.push(
+        `<h3 class="text-base font-semibold text-amber-300 mt-3 mb-1">${linkBrain(line.slice(4))}</h3>`,
+      )
+      continue
+    }
+    // ── Bullet points ──────────────────────────────────────────────────
+    if (line.startsWith('- ')) {
+      out.push(
+        `<div class="pl-4 py-0.5 text-sm text-slate-300 border-l border-slate-700 ml-2">${applyInline(line.slice(2))}</div>`,
+      )
+      continue
+    }
+    // ── Italic line (whole-line *...*) ─────────────────────────────────
+    if (line.startsWith('*') && line.endsWith('*') && !line.startsWith('**')) {
+      out.push(`<p class="text-xs text-slate-500 italic mt-2">${linkBrain(line.slice(1, -1))}</p>`)
+      continue
+    }
+    // ── Empty line ─────────────────────────────────────────────────────
+    if (!line.trim()) {
+      out.push('')
+      continue
+    }
+    // ── Regular text ───────────────────────────────────────────────────
+    out.push(`<p class="text-sm text-slate-300 my-1">${applyInline(line)}</p>`)
+  }
+  return out.join('\n')
 }
 
 // ── Shared result type ───────────────────────────────────────────────────────

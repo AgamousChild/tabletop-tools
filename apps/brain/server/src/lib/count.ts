@@ -42,6 +42,16 @@ export function resetCubeCache(): void {
   cached = null
 }
 
+/**
+ * Cheap wrapper — just returns the cube version key (manifest.updatedAt-derived
+ * token, or 'unknown' when the manifest is missing). Used by /ask response
+ * caching so its cache key rolls over on rebuild in lockstep with /count's.
+ */
+export async function getCubeVersion(bucket: R2Bucket): Promise<string> {
+  const cube = await loadCube(bucket)
+  return cube.manifestVersion
+}
+
 /** Force a reload — public counterpart used by /reload-cube. */
 export async function reloadCube(bucket: R2Bucket): Promise<CubeCache> {
   cached = null

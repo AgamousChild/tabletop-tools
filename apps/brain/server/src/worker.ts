@@ -3,7 +3,7 @@ import { cors } from 'hono/cors'
 
 import { filterBrowseNodes } from './lib/browse'
 import { buildDatasheetLayout } from './lib/card-layout'
-import { countCached, type CountQuery, reloadCube } from './lib/count'
+import { countCached, type CountQuery, getCubeVersion, reloadCube } from './lib/count'
 import { parseCountQueryFromQuestion, renderCubeContext } from './lib/count-parser'
 import { buildCrossRefs, loadIndexes } from './lib/cross-refs'
 import {
@@ -839,6 +839,33 @@ async function setCachedGemini(
   await bucket.put(key, JSON.stringify(cached))
 }
 
+/**
+ * Cache-key for a full /ask response. Keyed by cube version + question +
+ * edition + model so:
+ *   - a brain rebuild orphans the whole cache (via cubeVersion prefix)
+ *   - different editions/models get their own cached entries
+ *   - the same question with insignificant whitespace/case differences
+ *     resolves to the same key (hashQuestion normalizes both)
+ *
+ * Returns null when the cube version can't be resolved — signal to the
+ * caller that caching is unavailable this request (don't crash /ask on it).
+ */
+async function computeAskCacheKey(
+  bucket: R2Bucket,
+  question: string,
+  edition: string,
+  modelParam: string,
+): Promise<string | null> {
+  try {
+    const cubeVersion = await getCubeVersion(bucket)
+    const qHash = hashQuestion(question)
+    const modelSlug = modelParam ? modelParam.replace(/[^a-z0-9-]/gi, '_').slice(0, 40) : 'default'
+    return `cache/ask/${cubeVersion}/${edition}/${modelSlug}/${qHash}.json`
+  } catch {
+    return null
+  }
+}
+
 // ── Gemini with Google Search grounding ─────────────────────────────────────
 
 interface GeminiSource {
@@ -908,6 +935,30 @@ app.post('/ask', async (c) => {
   const anthropicKey = c.env.ANTHROPIC_API_KEY
   const geminiKey = c.env.GEMINI_API_KEY
   const edition = resolveEdition(c.req.query('edition'), c.env.BRAIN_DEFAULT_EDITION)
+
+  // ── /ask response cache (R2) ──────────────────────────────────────────
+  // Same question + edition + model → same answer, at least until the
+  // brain rebuilds. Keyed by cubeVersion (manifest.updatedAt) so a rebuild
+  // orphans stale entries automatically. Skip with ?nocache=1 for dev.
+  const nocache = c.req.query('nocache') === '1'
+  const modelParamForCache = c.req.query('model') ?? ''
+  const askCacheKey = await computeAskCacheKey(
+    c.env.BRAIN_BUCKET,
+    body.question,
+    edition,
+    modelParamForCache,
+  )
+  if (!nocache && askCacheKey) {
+    try {
+      const hit = await c.env.BRAIN_BUCKET.get(askCacheKey)
+      if (hit) {
+        const payload = (await hit.json()) as Record<string, unknown>
+        return c.json({ ...payload, cached: true, cacheKey: askCacheKey })
+      }
+    } catch {
+      /* cache read failure is non-fatal — fall through and compute */
+    }
+  }
 
   const env = {
     ai: c.env.AI,
@@ -1462,7 +1513,7 @@ Rules:
     ungroundedIds: ungroundedLinks.slice(0, 5),
   }
 
-  return c.json({
+  const responsePayload = {
     detected,
     answer,
     answerPath,
@@ -1504,7 +1555,26 @@ Rules:
       },
       grounding: groundingStats,
     },
-  })
+  }
+
+  // Write to /ask cache when the answer is real (not the confidence-gate
+  // bypass and not an LLM error path). Fire-and-forget: cache-write failures
+  // must not affect the response.
+  const isCacheableAnswer =
+    askCacheKey &&
+    !nocache &&
+    typeof answer === 'string' &&
+    answer.length > 0 &&
+    !answerPath.startsWith('deterministic-fallback')
+  if (isCacheableAnswer) {
+    try {
+      await c.env.BRAIN_BUCKET.put(askCacheKey, JSON.stringify(responsePayload))
+    } catch {
+      /* cache-write failure is non-fatal */
+    }
+  }
+
+  return c.json(responsePayload)
 })
 
 // ── Graph data endpoint ─────────────────────────────────────────────────────
