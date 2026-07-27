@@ -1309,12 +1309,23 @@ app.post('/ask', async (c) => {
     edition,
     bucket: c.env.BRAIN_BUCKET,
   }
-  const matchedShapes = classify(shapeCtx)
+  let matchedShapes: Awaited<ReturnType<typeof classify>> = []
+  try {
+    matchedShapes = classify(shapeCtx)
+  } catch (e) {
+    console.warn('[shape.classify] failed:', e instanceof Error ? e.message : e)
+  }
   const matchedShapeIds = matchedShapes.map((s) => s.id)
 
   const shapeAugments: string[] = []
   for (const shape of matchedShapes) {
-    const shapeResult = await route(shape, shapeCtx)
+    let shapeResult
+    try {
+      shapeResult = await route(shape, shapeCtx)
+    } catch (e) {
+      console.warn(`[shape.route:${shape.id}] failed:`, e instanceof Error ? e.message : e)
+      continue
+    }
     if (shapeResult.delegated && shapeResult.answer) {
       // Short-circuit: return the shape's answer directly.
       return c.json({
