@@ -920,32 +920,54 @@ function AskTab({ onOpenCard, activeFilters, onFilterChange, edition }: AskTabPr
               />
             </div>
 
-            {answer.webSources && answer.webSources.length > 0 && (
-              <details className="bg-slate-900/50 border border-slate-800 rounded p-3">
-                <summary className="text-xs font-medium text-slate-400 uppercase cursor-pointer select-none hover:text-slate-300">
-                  Related web results ({answer.webSources.length}) —
-                  <span className="text-slate-500 normal-case font-normal">
-                    {' '}
-                    incidental hits from Gemini's web search; the answer above draws from the
-                    brain's own sources (shown below under Reference)
-                  </span>
-                </summary>
-                <div className="flex flex-wrap gap-2 mt-2">
-                  {answer.webSources.map((s, i) => (
-                    <a
-                      key={i}
-                      href={s.url}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="inline-flex items-center gap-1 bg-slate-800 rounded px-2 py-1 text-xs text-blue-400 hover:text-blue-300 hover:bg-slate-700"
-                    >
-                      {s.title.length > 50 ? s.title.substring(0, 47) + '...' : s.title}
-                      <span className="text-slate-600">↗</span>
-                    </a>
-                  ))}
-                </div>
-              </details>
-            )}
+            {(() => {
+              const webCount = answer.webSources?.length ?? 0
+              const refCount = answer.reference?.length ?? 0
+              if (webCount === 0) return null
+              // Two very different provenance stories depending on whether
+              // the brain contributed anything. Don't claim brain-sourced
+              // when the brain returned zero refs — that's the exact
+              // "answer says brain but really Gemini" bug.
+              const isWebOnly = refCount === 0
+              const label = isWebOnly
+                ? `Web sources (${webCount}) — brain has no matching content; this answer was written from web-search results only`
+                : `Related web results (${webCount}) — incidental hits from Gemini's web search; the answer above draws from the brain's own sources (shown below under Reference)`
+              const summaryColor = isWebOnly
+                ? 'text-amber-400 hover:text-amber-300'
+                : 'text-slate-400 hover:text-slate-300'
+              const noteColor = isWebOnly ? 'text-amber-500/70' : 'text-slate-500'
+              const border = isWebOnly ? 'border-amber-800/50' : 'border-slate-800'
+              // Split label so the loud part stays uppercase and the note stays normal-case.
+              const dashIdx = label.indexOf(' — ')
+              const head = dashIdx >= 0 ? label.slice(0, dashIdx) : label
+              const note = dashIdx >= 0 ? label.slice(dashIdx + 3) : ''
+              return (
+                <details className={`bg-slate-900/50 border ${border} rounded p-3`}>
+                  <summary
+                    className={`text-xs font-medium uppercase cursor-pointer select-none ${summaryColor}`}
+                  >
+                    {head}
+                    {note && (
+                      <span className={`normal-case font-normal ${noteColor}`}> — {note}</span>
+                    )}
+                  </summary>
+                  <div className="flex flex-wrap gap-2 mt-2">
+                    {answer.webSources!.map((s, i) => (
+                      <a
+                        key={i}
+                        href={s.url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="inline-flex items-center gap-1 bg-slate-800 rounded px-2 py-1 text-xs text-blue-400 hover:text-blue-300 hover:bg-slate-700"
+                      >
+                        {s.title.length > 50 ? s.title.substring(0, 47) + '...' : s.title}
+                        <span className="text-slate-600">↗</span>
+                      </a>
+                    ))}
+                  </div>
+                </details>
+              )
+            })()}
 
             {answer.reference && answer.reference.length > 0 && (
               <div className="mt-4">

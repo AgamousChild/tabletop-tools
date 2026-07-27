@@ -1239,6 +1239,8 @@ USE ONLY THE PROVIDED CONTEXT. The CURATED POOL below is the source of truth. If
 
 WHEN THE CONTEXT DOESN'T ANSWER THE QUESTION: say so plainly. Write "This isn't covered in my knowledge base." or "The context doesn't specify this — [what specifically is missing]." Do NOT invent an answer, do NOT extrapolate from general 40K knowledge, do NOT summarise vague web-search phrasing as if it were an authoritative rule.
 
+WEB-ONLY MODE. When the CURATED CONTEXT block has NO brain snippets (only web-search snippets like [web/...]), open your answer with a single italicized line: "*Brain has no matching content on this — the following is drawn from web-search results and may not reflect the current official rules.*" Then answer as best you can from the web snippets, but do NOT claim brain-sourced authority. The reader needs to know the provenance is weak.
+
 USE EXACT TERMS. When you name a datasheet, character, unit, ability, stratagem, enhancement, or detachment, use its FULL name exactly as it appears in the context. Never abbreviate or paraphrase (e.g. write "Captain in Terminator Armour" — NOT "Captain"; write "Terminator Assault Squad" — NOT "Terminator Squad"; write "Lord of Contagion" — NOT "Chaos Lord").
 
 DO NOT USE TACTICAL VOCABULARY THAT ISN'T IN THE CONTEXT. Generic phrases like "alpha strike", "combined arms", "target priority", "trading blows" are common 40K lingo but if the context doesn't use them for this specific question, don't insert them — they'll link to unrelated brain entries and confuse the reader.
