@@ -283,6 +283,21 @@ async function main() {
   await client.batch(subfactionBatch)
   console.log(`  ${subfactionBatch.length} subfactions`)
 
+  // Seed dim_faction_alias for every subfaction — BCP publishes tournament
+  // lists under chapter names (e.g. "Space Wolves", "Dark Angels"), and the
+  // BCP scraper resolves those names to a factionId via dim_faction_alias.
+  // Without these entries the scraper's `normalizeFaction("Space Wolves")`
+  // returns empty string, which FK-fails when written to meta_event_players.
+  // Symptom (2026-07-27): the Jun-Jul BCP backfill lost Terracon 2026 +
+  // Warhammer Open Tacoma (~665 players combined) to this exact gap.
+  console.log('Seeding dim_faction_alias for chapter names...')
+  const chapterAliasBatch = SUBFACTIONS.map((sf) => ({
+    sql: 'INSERT OR IGNORE INTO dim_faction_alias VALUES (?, ?)',
+    args: [sf.name, sf.slug], // "Blood Angels" -> "blood-angels"
+  }))
+  await client.batch(chapterAliasBatch)
+  console.log(`  ${chapterAliasBatch.length} chapter aliases`)
+
   // Seed dim_detachment from Wahapedia
   console.log('Seeding dim_detachment...')
   const wahapediaDetachments: WahapediaDetachment[] = JSON.parse(
