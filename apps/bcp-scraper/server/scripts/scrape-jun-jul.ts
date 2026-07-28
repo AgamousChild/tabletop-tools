@@ -38,6 +38,12 @@ const WINDOW_END = new Date('2026-07-31T23:59:59Z')
 const WINDOW_START_MS = WINDOW_START.getTime()
 const WINDOW_END_MS = WINDOW_END.getTime()
 
+// Minimum size filter — BCP's `numberOfRounds` + `numberOfPlayers` query params
+// are silently ignored (confirmed 2026-07-27), so filter client-side. Only
+// tournaments of 5+ rounds AND 20+ players count as meta-relevant data.
+const MIN_ROUNDS = 5
+const MIN_PLAYERS = 20
+
 const HEADERS: Record<string, string> = {
   'client-id': 'web-app',
   env: 'bcp',
@@ -98,6 +104,7 @@ async function fetchEventsInWindow(): Promise<BcpEvent[]> {
     totalFetched += page.length
 
     let hitPreWindow = false
+    let droppedTooSmall = 0
 
     for (const raw of page) {
       const endMs = new Date(raw.dates.end).getTime()
@@ -113,7 +120,15 @@ async function fetchEventsInWindow(): Promise<BcpEvent[]> {
         break
       }
 
-      // In window
+      // Size filter — BCP ignores numberOfRounds/numberOfPlayers query params.
+      const rounds = raw.status.numberOfRounds ?? 0
+      const players = raw.playerCounts?.total ?? 0
+      if (rounds < MIN_ROUNDS || players < MIN_PLAYERS) {
+        droppedTooSmall++
+        continue
+      }
+
+      // In window + meets size floor
       windowEvents.push({
         id: raw.id,
         name: raw.name,
@@ -124,15 +139,15 @@ async function fetchEventsInWindow(): Promise<BcpEvent[]> {
         country: raw.location?.country,
         latitude: raw.location?.point?.latitude,
         longitude: raw.location?.point?.longitude,
-        rounds: raw.status.numberOfRounds,
-        playerCount: raw.playerCounts?.total ?? 0,
+        rounds,
+        playerCount: players,
         isTeamEvent: raw.format.teamEvent,
       })
     }
 
     const lastDate = page.length > 0 ? page[page.length - 1].dates.end : null
     console.log(
-      `  page ${pageNum}: ${page.length} fetched, ${windowEvents.length} in window, last date: ${lastDate?.slice(0, 10) ?? 'n/a'}`,
+      `  page ${pageNum}: ${page.length} fetched, ${windowEvents.length} in window (dropped ${droppedTooSmall} too-small this page), last date: ${lastDate?.slice(0, 10) ?? 'n/a'}`,
     )
 
     if (page.length === 0 || !data.nextKey || hitPreWindow) {

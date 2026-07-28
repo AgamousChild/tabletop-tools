@@ -23,6 +23,13 @@ interface ScrapeConfig {
   bcpPassword: string
   db: Db
   fetch?: typeof globalThis.fetch
+  /** Minimum rounds an event needs to be scraped (default 5). BCP's own
+   *  numberOfRounds query param is silently ignored, so this is a
+   *  client-side floor. Tests pass 0 to bypass. */
+  minRounds?: number
+  /** Minimum players an event needs to be scraped (default 20). Same reason
+   *  as minRounds. Tests pass 0 to bypass. */
+  minPlayers?: number
 }
 
 function buildLocation(event: BcpEvent): string | null {
@@ -93,8 +100,20 @@ export async function runScrape(
       .where(eq(metaEvents.source, 'bcp'))
     const existingSourceIds = new Set(existingEvents.map((e) => e.sourceId))
 
-    // Filter to new, non-team events
-    const newEvents = events.filter((e) => !e.isTeamEvent && !existingSourceIds.has(e.id))
+    // Filter to new, non-team events that meet the meta-relevance floor.
+    // BCP's own minPlayers/minRounds query params are silently ignored, so
+    // enforce the same 5-round / 20-player floor client-side. Only real
+    // tournament data feeds meta-driven analysis. Tests override with 0
+    // to bypass the filter.
+    const minRounds = config.minRounds ?? 5
+    const minPlayers = config.minPlayers ?? 20
+    const newEvents = events.filter(
+      (e) =>
+        !e.isTeamEvent &&
+        !existingSourceIds.has(e.id) &&
+        (e.rounds ?? 0) >= minRounds &&
+        (e.playerCount ?? 0) >= minPlayers,
+    )
 
     let eventsScraped = 0
     let totalPairings = 0

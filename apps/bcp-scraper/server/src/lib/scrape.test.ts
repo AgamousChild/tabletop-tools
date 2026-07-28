@@ -136,6 +136,8 @@ describe('runScrape', () => {
 
     const { jobId } = await runScrape({
       bcpEmail: 'test@example.com',
+      minRounds: 0,
+      minPlayers: 0,
       bcpPassword: 'pass',
       db,
     })
@@ -181,6 +183,8 @@ describe('runScrape', () => {
 
     const { jobId } = await runScrape({
       bcpEmail: 'test@example.com',
+      minRounds: 0,
+      minPlayers: 0,
       bcpPassword: 'pass',
       db,
     })
@@ -205,6 +209,8 @@ describe('runScrape', () => {
 
     await runScrape({
       bcpEmail: 'test@example.com',
+      minRounds: 0,
+      minPlayers: 0,
       bcpPassword: 'pass',
       db,
     })
@@ -223,6 +229,8 @@ describe('runScrape', () => {
 
     const { jobId } = await runScrape({
       bcpEmail: 'test@example.com',
+      minRounds: 0,
+      minPlayers: 0,
       bcpPassword: 'pass',
       db,
     })
@@ -248,6 +256,8 @@ describe('runScrape', () => {
 
     await runScrape({
       bcpEmail: 'test@example.com',
+      minRounds: 0,
+      minPlayers: 0,
       bcpPassword: 'pass',
       db,
     })
@@ -274,6 +284,8 @@ describe('runScrape', () => {
 
     await runScrape({
       bcpEmail: 'test@example.com',
+      minRounds: 0,
+      minPlayers: 0,
       bcpPassword: 'pass',
       db,
     })
@@ -285,7 +297,10 @@ describe('runScrape', () => {
   it('sets triggeredBy from parameter', async () => {
     mockSearchEvents.mockResolvedValue([])
 
-    await runScrape({ bcpEmail: 'test@example.com', bcpPassword: 'pass', db }, 'manual')
+    await runScrape(
+      { bcpEmail: 'test@example.com', minRounds: 0, minPlayers: 0, bcpPassword: 'pass', db },
+      'manual',
+    )
 
     const jobs = await client.execute('SELECT * FROM bcp_scrape_jobs')
     expect(jobs.rows[0]!.triggered_by).toBe('manual')
@@ -299,6 +314,8 @@ describe('runScrape', () => {
 
     await runScrape({
       bcpEmail: 'test@example.com',
+      minRounds: 0,
+      minPlayers: 0,
       bcpPassword: 'pass',
       db,
     })
@@ -319,6 +336,8 @@ describe('runScrape', () => {
 
     const { jobId } = await runScrape({
       bcpEmail: 'test@example.com',
+      minRounds: 0,
+      minPlayers: 0,
       bcpPassword: 'pass',
       db,
     })
@@ -348,6 +367,8 @@ describe('runScrape', () => {
 
     await runScrape({
       bcpEmail: 'test@example.com',
+      minRounds: 0,
+      minPlayers: 0,
       bcpPassword: 'pass',
       db,
     })
@@ -384,6 +405,8 @@ describe('runScrape', () => {
 
     await runScrape({
       bcpEmail: 'test@example.com',
+      minRounds: 0,
+      minPlayers: 0,
       bcpPassword: 'pass',
       db,
     })
@@ -414,6 +437,8 @@ describe('runScrape', () => {
 
     const { jobId } = await runScrape({
       bcpEmail: 'test@example.com',
+      minRounds: 0,
+      minPlayers: 0,
       bcpPassword: 'pass',
       db,
     })
