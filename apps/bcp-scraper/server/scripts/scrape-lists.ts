@@ -2,10 +2,12 @@
  * Fetch army list text for meta_event_players rows that have source_list_id
  * set but no list_text yet.
  *
- * BCP list API (2026-07-27):
- *   Endpoint: GET https://newprod-api.bestcoastpairings.com/v1/lists/{listId}
+ * BCP list API (verified 2026-07-27):
+ *   Endpoint: GET https://newprod-api.bestcoastpairings.com/v1/armylists/{listId}
+ *   NOT /v1/lists/{listId} — that path is not routed, and API Gateway answers
+ *   unrouted paths with a 403 "Invalid key=value pair ... Authorization header"
+ *   that looks like an auth failure. Response field is `armyListText`.
  *   Auth: requires Bearer token from Cognito (same flow as events scrape).
- *   Returns 403 without auth, 200 with a response body containing the list text.
  *   The HTML page (https://www.bestcoastpairings.com/list/{listId}) is public
  *   but client-side rendered — not accessible via plain fetch.
  *
@@ -40,6 +42,8 @@ interface PendingRow {
 }
 
 interface BcpListResponse {
+  /** The field /v1/armylists/{id} actually returns. */
+  armyListText?: string | null
   listText?: string | null
   list?: string | null
   armyList?: string | null
@@ -52,7 +56,11 @@ interface BcpListResponse {
  * Throws on unexpected errors (non-200, non-404).
  */
 async function fetchListText(listId: string, token: string): Promise<string | null> {
-  const resp = await fetch(`${BASE_URL}/v1/lists/${listId}`, {
+  // Endpoint is /v1/armylists/{id} — NOT /v1/lists/{id}. The latter is not a
+  // route at all, and API Gateway answers unrouted paths with a generic
+  // "Invalid key=value pair ... Authorization header" 403, which reads like an
+  // auth failure but is really a 404 in disguise. Verified 2026-07-27.
+  const resp = await fetch(`${BASE_URL}/v1/armylists/${listId}`, {
     headers: {
       'client-id': 'web-app',
       env: 'bcp',
@@ -63,7 +71,9 @@ async function fetchListText(listId: string, token: string): Promise<string | nu
 
   if (resp.status === 404) return null
   if (resp.status === 403) {
-    throw new Error(`BCP list API returned 403 for listId=${listId} — token may have expired`)
+    throw new Error(
+      `BCP list API returned 403 for listId=${listId} — check the route path before assuming token expiry`,
+    )
   }
   if (!resp.ok) {
     throw new Error(`BCP list API error ${resp.status} for listId=${listId}`)
@@ -71,8 +81,10 @@ async function fetchListText(listId: string, token: string): Promise<string | nu
 
   const body = (await resp.json()) as BcpListResponse
 
-  // Try known field names — BCP API field naming is not fully documented
-  const text = body.listText ?? body.list ?? body.armyList ?? body.rosters ?? null
+  // armyListText is the field /v1/armylists/{id} actually returns (verified
+  // 2026-07-27); the rest are kept as fallbacks for older/other shapes.
+  const text =
+    body.armyListText ?? body.listText ?? body.list ?? body.armyList ?? body.rosters ?? null
   if (!text || String(text).trim().length < 10) return null
   return String(text).trim()
 }

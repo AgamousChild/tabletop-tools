@@ -14,7 +14,13 @@
  * Run from apps/bcp-scraper/server/:
  *   set -a && source ../../../.env && set +a
  *   NODE_OPTIONS=--dns-result-order=ipv4first \
- *     node --import tsx/esm scripts/scrape-jun-jul.ts
+ *     node --import tsx/esm scripts/scrape-jun-jul.ts [--since 2026-06-01] [--until 2026-07-31] [--refresh]
+ *
+ * Flags:
+ *   --since / --until  window bounds (ISO date, default Jun 1 – Jul 31 2026)
+ *   --refresh          re-process events already in the DB instead of skipping
+ *                      them. Required to backfill source_list_id onto events
+ *                      ingested before this script captured listId.
  */
 import { createDb } from '@tabletop-tools/db'
 import { bcpScrapeJobs, metaEvents } from '@tabletop-tools/db'
@@ -32,9 +38,24 @@ import { loadFactionMap, normalizeFaction } from '../src/lib/faction-map.js'
 const BASE_URL = 'https://newprod-api.bestcoastpairings.com'
 const GAME_SYSTEM_ID = 'WGMSzfKFYA'
 
+/**
+ * --refresh re-processes events already in the DB. Needed because the original
+ * run of this script dropped `listId` on the floor (no sourceListId in the
+ * player payload), leaving every in-window row with source_list_id NULL and
+ * scrape-lists.ts with nothing to fetch. upsertMetaEvent is delete-then-reinsert
+ * keyed on (source, sourceId), so a refresh pass rewrites the event cleanly.
+ */
+const REFRESH = process.argv.includes('--refresh')
+
+function argValue(flag: string): string | null {
+  const idx = process.argv.indexOf(flag)
+  if (idx === -1 || idx + 1 >= process.argv.length) return null
+  return process.argv[idx + 1] ?? null
+}
+
 // Target window — client-side filter since API date params are ignored
-const WINDOW_START = new Date('2026-06-01T00:00:00Z')
-const WINDOW_END = new Date('2026-07-31T23:59:59Z')
+const WINDOW_START = new Date(`${argValue('--since') ?? '2026-06-01'}T00:00:00Z`)
+const WINDOW_END = new Date(`${argValue('--until') ?? '2026-07-31'}T23:59:59Z`)
 const WINDOW_START_MS = WINDOW_START.getTime()
 const WINDOW_END_MS = WINDOW_END.getTime()
 
@@ -84,8 +105,8 @@ async function fetchEventsInWindow(): Promise<BcpEvent[]> {
       sortAscending: 'false',
       sortKey: 'eventDate',
       // Required by the API even though it ignores them for actual filtering
-      startDate: '2026-06-01T00:00:00Z',
-      endDate: '2026-07-31T23:59:59Z',
+      startDate: WINDOW_START.toISOString(),
+      endDate: WINDOW_END.toISOString(),
       gameSystemId: GAME_SYSTEM_ID,
       numberOfRounds: '5',
       numberOfPlayers: '20',
@@ -239,6 +260,9 @@ interface PlayerAccumulator {
   name: string
   faction: string
   userId?: string
+  /** BCP list id — captured from any pairing round that has one so
+   *  scrape-lists.ts knows which list to fetch later. */
+  listId?: string
   wins: number
   losses: number
   draws: number
@@ -280,12 +304,31 @@ async function main() {
   const existingSourceIds = new Set(existingRows.map((e) => e.sourceId))
 
   const teamEvents = windowEvents.filter((e) => e.isTeamEvent)
-  const newEvents = windowEvents.filter((e) => !e.isTeamEvent && !existingSourceIds.has(e.id))
   const alreadyInDb = windowEvents.filter((e) => !e.isTeamEvent && existingSourceIds.has(e.id))
+  // In --refresh mode, already-in-DB events are re-processed rather than skipped.
+  // upsertMetaEvent deletes the prior event row (cascading to players/pairings)
+  // and reinserts, so this replaces rather than duplicates.
+  const newEvents = windowEvents.filter(
+    (e) => !e.isTeamEvent && (REFRESH || !existingSourceIds.has(e.id)),
+  )
 
+  console.log(`  Mode: ${REFRESH ? 'REFRESH (re-processes existing events)' : 'new-events-only'}`)
   console.log(`  Team events skipped: ${teamEvents.length}`)
-  console.log(`  Already in DB (skipped): ${alreadyInDb.length}`)
-  console.log(`  New events to scrape: ${newEvents.length}`)
+  console.log(
+    `  Already in DB: ${alreadyInDb.length}${REFRESH ? ' (will be refreshed)' : ' (skipped)'}`,
+  )
+  console.log(`  Events to scrape: ${newEvents.length}`)
+
+  // --limit N: cap the batch, so a refresh can be validated on one event
+  // before rewriting the whole window.
+  const limitArg = argValue('--limit')
+  if (limitArg !== null) {
+    const limit = Number(limitArg)
+    if (Number.isFinite(limit) && limit > 0 && limit < newEvents.length) {
+      newEvents.length = limit
+      console.log(`  --limit ${limit} applied`)
+    }
+  }
 
   if (newEvents.length === 0) {
     console.log('\nNo new events to scrape.')
@@ -342,6 +385,7 @@ async function main() {
             name: pairing.player1.name,
             faction: pairing.player1.faction,
             userId: pairing.player1.userId,
+            listId: pairing.player1.listId,
             wins: 0,
             losses: 0,
             draws: 0,
@@ -351,12 +395,15 @@ async function main() {
         if (result === 'p1') p1.wins++
         else if (result === 'p2') p1.losses++
         else p1.draws++
+        // Capture listId from any round that has one
+        if (pairing.player1.listId) p1.listId = pairing.player1.listId
 
         if (!playerMap.has(pairing.player2.name)) {
           playerMap.set(pairing.player2.name, {
             name: pairing.player2.name,
             faction: pairing.player2.faction,
             userId: pairing.player2.userId,
+            listId: pairing.player2.listId,
             wins: 0,
             losses: 0,
             draws: 0,
@@ -366,6 +413,8 @@ async function main() {
         if (result === 'p2') p2.wins++
         else if (result === 'p1') p2.losses++
         else p2.draws++
+        // Capture listId from any round that has one
+        if (pairing.player2.listId) p2.listId = pairing.player2.listId
       }
 
       const sortedPlayers = [...playerMap.values()].sort(
@@ -388,6 +437,7 @@ async function main() {
           sourcePlayerId: player.userId ?? null,
           faction: factionSlug,
           placement: players.length + 1,
+          sourceListId: player.listId ?? null,
           wins: player.wins,
           losses: player.losses,
           draws: player.draws,
