@@ -18,6 +18,7 @@ import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js'
 import { z } from 'zod'
 
+import { bcpPipelineFull, bcpScrapeEvents, bcpScrapeLists } from './lib/bcp-ops.js'
 import {
   brainBuild,
   brainCubeReport,
@@ -456,6 +457,114 @@ server.tool(
       r.commit ? `commit:  exit ${r.commit.code}` : '',
     ]
     return textResult(lines.filter(Boolean).join('\n'))
+  },
+)
+
+// ── BCP scraper ─────────────────────────────────────────────────────────────
+
+server.tool(
+  'bcp_scrape_events',
+  [
+    'Scrape BCP events + pairings for the rolling 7-day window via the BCP REST API.',
+    '',
+    'Writes to meta_events, meta_event_players, meta_pairings, bcp_scrape_jobs.',
+    'Also stores source_list_id on meta_event_players so bcp_scrape_lists can',
+    'follow up with army list text.',
+    '',
+    'Requires: TURSO_DB_URL, TURSO_AUTH_TOKEN, BCP_EMAIL, BCP_PASSWORD (from .env).',
+    '',
+    'For a custom date window (backfill), run scripts/scrape-jun-jul.ts directly',
+    'as a template — this tool uses the default 7-day window.',
+    '',
+    'What to run next: bcp_scrape_lists to fetch army list text for new players.',
+  ].join('\n'),
+  {},
+  async () => {
+    const r = await bcpScrapeEvents()
+    const lines = [
+      `bcp_scrape_events exit ${r.code} in ${Math.round(r.durationMs / 1000)}s`,
+      r.eventsScraped !== undefined ? `events scraped: ${r.eventsScraped}` : '',
+      r.pairingsScraped !== undefined ? `pairings scraped: ${r.pairingsScraped}` : '',
+      '',
+      '--- stdout tail ---',
+      r.stdout,
+      r.stderr ? '\n--- stderr tail ---\n' + r.stderr : '',
+    ]
+    return textResult(lines.filter(Boolean).join('\n'))
+  },
+)
+
+server.tool(
+  'bcp_scrape_lists',
+  [
+    'Fetch army list text for meta_event_players rows that have source_list_id',
+    'set but no list_text yet.',
+    '',
+    'Idempotent: skips rows where list_text is already populated.',
+    '',
+    'Scope params (all optional):',
+    '  since   — ISO date string, e.g. "2026-06-01" (filter by event date)',
+    '  until   — ISO date string, e.g. "2026-07-31"',
+    '  eventId — restrict to one BCP event source_id',
+    '',
+    'Requires: TURSO_DB_URL, TURSO_AUTH_TOKEN, BCP_EMAIL, BCP_PASSWORD (from .env).',
+    'BCP list REST API returns 403 without auth — Cognito token required.',
+    'Prerequisite: migration 0014_bcp_source_list_id.sql must have run,',
+    'AND at least one bcp_scrape_events run must have populated source_list_id.',
+    '',
+    'What to run next: nothing — list_text is immediately available for cube/parse.',
+  ].join('\n'),
+  {
+    since: z.string().optional().describe('ISO date start, e.g. "2026-06-01"'),
+    until: z.string().optional().describe('ISO date end, e.g. "2026-07-31"'),
+    eventId: z.string().optional().describe('BCP event source_id to restrict to'),
+  },
+  async ({ since, until, eventId }) => {
+    const r = await bcpScrapeLists({ since, until, eventId })
+    const lines = [
+      `bcp_scrape_lists exit ${r.code} in ${Math.round(r.durationMs / 1000)}s`,
+      r.fetched !== undefined ? `lists fetched: ${r.fetched}` : '',
+      r.skipped !== undefined ? `skipped (no list): ${r.skipped}` : '',
+      r.errors !== undefined ? `errors: ${r.errors}` : '',
+      '',
+      '--- stdout tail ---',
+      r.stdout,
+      r.stderr ? '\n--- stderr tail ---\n' + r.stderr : '',
+    ]
+    return textResult(lines.filter(Boolean).join('\n'))
+  },
+)
+
+server.tool(
+  'bcp_pipeline_full',
+  [
+    'Convenience: bcp_scrape_events → bcp_scrape_lists, in sequence.',
+    '',
+    'Use this for a full catch-up pass. Both steps are idempotent — safe to',
+    're-run if interrupted.',
+    '',
+    'Scope the list-fetch pass with since/until (ISO dates). Events scrape',
+    'always uses the default 7-day window.',
+    '',
+    'Set skipLists=true if you only need events + pairings this pass.',
+    '',
+    'Requires: TURSO_DB_URL, TURSO_AUTH_TOKEN, BCP_EMAIL, BCP_PASSWORD.',
+  ].join('\n'),
+  {
+    since: z.string().optional().describe('ISO date start for list-fetch scope'),
+    until: z.string().optional().describe('ISO date end for list-fetch scope'),
+    skipLists: z.boolean().optional().default(false),
+  },
+  async ({ since, until, skipLists }) => {
+    const r = await bcpPipelineFull({ since, until, skipLists })
+    const lines = [
+      `bcp_pipeline_full done in ${Math.round(r.totalDurationMs / 1000)}s`,
+      `events: exit ${r.events.code}`,
+      r.lists
+        ? `lists:  exit ${r.lists.code} — fetched=${r.lists.fetched ?? '?'}, errors=${r.lists.errors ?? '?'}`
+        : 'lists:  skipped',
+    ]
+    return textResult(lines.join('\n'))
   },
 )
 

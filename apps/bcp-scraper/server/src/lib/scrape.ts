@@ -40,6 +40,9 @@ interface PlayerAccumulator {
   name: string
   faction: string
   userId?: string
+  /** BCP list id — captured from any pairing round that has one so the
+   *  list-text scraper knows which URL to fetch later. */
+  listId?: string
   wins: number
   losses: number
   draws: number
@@ -137,6 +140,7 @@ export async function runScrape(
               name: pairing.player1.name,
               faction: pairing.player1.faction,
               userId: pairing.player1.userId,
+              listId: pairing.player1.listId,
               wins: 0,
               losses: 0,
               draws: 0,
@@ -146,6 +150,8 @@ export async function runScrape(
           if (result === 'p1') p1.wins++
           else if (result === 'p2') p1.losses++
           else p1.draws++
+          // Capture listId from any round that has one
+          if (pairing.player1.listId) p1.listId = pairing.player1.listId
 
           // Player 2
           if (!playerMap.has(pairing.player2.name)) {
@@ -153,6 +159,7 @@ export async function runScrape(
               name: pairing.player2.name,
               faction: pairing.player2.faction,
               userId: pairing.player2.userId,
+              listId: pairing.player2.listId,
               wins: 0,
               losses: 0,
               draws: 0,
@@ -162,6 +169,8 @@ export async function runScrape(
           if (result === 'p2') p2.wins++
           else if (result === 'p1') p2.losses++
           else p2.draws++
+          // Capture listId from any round that has one
+          if (pairing.player2.listId) p2.listId = pairing.player2.listId
         }
 
         // Sort players by wins (descending) for placement
@@ -192,6 +201,7 @@ export async function runScrape(
             sourcePlayerId: player.userId ?? null,
             faction: factionSlug,
             placement: players.length + 1,
+            sourceListId: player.listId ?? null,
             wins: player.wins,
             losses: player.losses,
             draws: player.draws,
