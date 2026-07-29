@@ -111,7 +111,7 @@ async function createTables(client: Client) {
       faction_id TEXT NOT NULL REFERENCES dim_faction(id),
       subfaction_id TEXT REFERENCES dim_subfaction(id),
       detachment_id TEXT REFERENCES dim_detachment(id),
-      placement INTEGER NOT NULL, list_text TEXT,
+      placement INTEGER NOT NULL, list_text TEXT, list_ttt TEXT, source_list_id TEXT,
       wins INTEGER NOT NULL DEFAULT 0, losses INTEGER NOT NULL DEFAULT 0, draws INTEGER NOT NULL DEFAULT 0,
       gl2_rating_start REAL, gl2_rd_start REAL, gl2_vol_start REAL,
       gl2_rating_end REAL, gl2_rd_end REAL, gl2_vol_end REAL,

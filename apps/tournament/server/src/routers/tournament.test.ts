@@ -126,6 +126,7 @@ beforeAll(async () => {
       placement INTEGER NOT NULL,
       list_text TEXT,
       list_ttt TEXT,
+      source_list_id TEXT,
       wins INTEGER NOT NULL DEFAULT 0,
       losses INTEGER NOT NULL DEFAULT 0,
       draws INTEGER NOT NULL DEFAULT 0,

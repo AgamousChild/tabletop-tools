@@ -13,7 +13,7 @@ INSERT INTO dim_faction VALUES ('tyranids', 'Tyranids', 'xenos');
 CREATE TABLE dim_faction_alias (alias TEXT PRIMARY KEY, faction_id TEXT NOT NULL);
 INSERT INTO dim_faction_alias VALUES ('Tyranids', 'tyranids');
 CREATE TABLE dim_subfaction (id TEXT PRIMARY KEY, name TEXT NOT NULL, faction_id TEXT NOT NULL);
-CREATE TABLE meta_event_players (id TEXT PRIMARY KEY, event_id TEXT NOT NULL, player_name TEXT NOT NULL, source_player_id TEXT, faction_id TEXT NOT NULL, subfaction_id TEXT, detachment_id TEXT, placement INTEGER NOT NULL, list_text TEXT, list_ttt TEXT, wins INTEGER NOT NULL DEFAULT 0, losses INTEGER NOT NULL DEFAULT 0, draws INTEGER NOT NULL DEFAULT 0, gl2_rating_start REAL, gl2_rd_start REAL, gl2_vol_start REAL, gl2_rating_end REAL, gl2_rd_end REAL, gl2_vol_end REAL);
+CREATE TABLE meta_event_players (id TEXT PRIMARY KEY, event_id TEXT NOT NULL, player_name TEXT NOT NULL, source_player_id TEXT, faction_id TEXT NOT NULL, subfaction_id TEXT, detachment_id TEXT, placement INTEGER NOT NULL, list_text TEXT, list_ttt TEXT, source_list_id TEXT, wins INTEGER NOT NULL DEFAULT 0, losses INTEGER NOT NULL DEFAULT 0, draws INTEGER NOT NULL DEFAULT 0, gl2_rating_start REAL, gl2_rd_start REAL, gl2_vol_start REAL, gl2_rating_end REAL, gl2_rd_end REAL, gl2_vol_end REAL);
 INSERT INTO meta_events VALUES ('evt1', 'Test GT', ${new Date('2026-03-15').getTime()}, NULL, NULL, NULL, 'GT', 5, 40, 'bcp', 'bcp-1', ${Date.now()}, NULL, NULL, NULL);
 `
 
