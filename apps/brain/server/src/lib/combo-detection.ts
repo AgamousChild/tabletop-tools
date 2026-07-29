@@ -286,7 +286,22 @@ export function buildDetachmentNodes(allNodes: Node[]): { nodes: Node[]; refs: N
 
   const detRules = allNodes.filter((n) => n.category === 'detachment-rule')
 
+  // Skip rules that already have a canonical `category: 'detachment'` container
+  // for the same (factionId, normalized-title). Without this guard, every 10e
+  // Wahapedia detachment-rule with an 11e MFM/pack counterpart gets a legacy
+  // `detachment:${rule.id}` container emitted here, then step 8b in build-graph
+  // flips its edition to 11th, producing parallel dupes of the real 11e node.
+  // See the worker.ts `detachments-11e` browse filter for the historical
+  // workaround that only masked the symptom.
+  const normTitle = (s: string) => s.toLowerCase().replace(/[^a-z0-9]+/g, '')
+  const canonicalKeys = new Set<string>()
+  for (const n of allNodes) {
+    if (n.category !== 'detachment') continue
+    canonicalKeys.add(`${n.factionId ?? ''}::${normTitle(n.title)}`)
+  }
+
   for (const rule of detRules) {
+    if (canonicalKeys.has(`${rule.factionId ?? ''}::${normTitle(rule.title)}`)) continue
     const containerId = `detachment:${rule.id}`
 
     // Count what's inside this detachment

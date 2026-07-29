@@ -46,6 +46,8 @@ export interface MetaIngestPlayer {
   detachmentId?: string | null
   placement: number
   listText?: string | null
+  /** BCP list ID — stored so the list-text scraper can find rows needing army list fetch. */
+  sourceListId?: string | null
   wins: number
   losses: number
   draws: number
@@ -164,6 +166,7 @@ export async function upsertMetaEvent(
       detachmentId: p.detachmentId ?? null,
       placement: p.placement,
       listText: p.listText ?? null,
+      sourceListId: p.sourceListId ?? null,
       wins: p.wins,
       losses: p.losses,
       draws: p.draws,

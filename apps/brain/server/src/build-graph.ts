@@ -20,6 +20,7 @@ import {
   buildEligibleForRefs,
   buildFactionNodes,
 } from './lib/combo-detection'
+import { buildCube } from './lib/cube'
 import {
   duplicateEleventh,
   type MfmAllowlist,
@@ -1307,29 +1308,113 @@ async function main() {
     }
   }
 
-  // ── 6a2. Normalize detachmentId on children to the detachment's slug ──────
+  // ── 6a2. Normalize detachmentId on children to the container's FULL id ────
   // Wahapedia's game-data parser writes `detachmentId` as the full node id
-  // (e.g. `det:chaos-space-marines:devotees-of-destruction`), while the
-  // faction-pack v2 parser writes just the slug (`devotees-of-destruction`).
-  // The `/browse/detachment/:id` endpoint joins by matching the incoming id's
-  // last segment against `n.detachmentId` — that match fails for Wahapedia
-  // children when the requesting id came from an MFM-only detachment. Strip
-  // to the trailing slug so both conventions resolve.
+  // (`det:chaos-space-marines:devotees-of-destruction`); the faction-pack v2
+  // parser writes just the trailing slug (`devotees-of-destruction`); MFM
+  // writes its own full form (`mfm:det:...`) that later collapses onto the
+  // pack id.
+  //
+  // The previous pass truncated everything DOWN to the trailing slug so
+  // /browse/detachment/:id could match by suffix. That created a data bug:
+  // 100% of 11e stratagems + enhancements got flagged `orphan` by massage.ts
+  // (bare slug never equals the container's `11e:det:<faction>:<slug>` id),
+  // combo-detection stopped matching, and the /ask curator lost detachment
+  // attribution — every strat/enh landed as `[stratagem, faction]` with no
+  // detachment tag, so the LLM lumped them all under whichever detachment
+  // happened to appear in the primary retrieval.
+  //
+  // Fix: normalize UP to the full container id. Every child gets its
+  // `detachmentId` rewritten to `${container.id}` when we can match by
+  // (factionId, trailing-slug). /browse/detachment/:id already handles both
+  // forms (`n.detachmentId === id || n.detachmentId === id.split(':').pop()`)
+  // so the browse consumer stays happy.
+  const containerBySlug = new Map<string, string>() // `${factionId}::${slug}` → container id
+  for (const node of allNodes) {
+    if (node.category !== 'detachment' && node.category !== 'detachment-rule') continue
+    if (!node.factionId) continue
+    const slug = node.id.split(':').pop()
+    if (!slug) continue
+    const key = `${node.factionId}::${slug}`
+    // Prefer detachment-container id over detachment-rule id when both share
+    // a slug — the container is the merged/authoritative node.
+    if (!containerBySlug.has(key) || node.category === 'detachment') {
+      containerBySlug.set(key, node.id)
+    }
+  }
   let detIdNormalized = 0
+  let detIdUnresolved = 0
   for (const node of allNodes) {
     if (!node.detachmentId) continue
-    if (!node.detachmentId.includes(':')) continue
-    const parts = node.detachmentId.split(':')
-    node.detachmentId = parts[parts.length - 1]!
-    detIdNormalized++
+    if (!node.factionId) continue
+    // Already full-id form that resolves to a real node → leave alone.
+    // Only slug or misaligned scalars need rewriting.
+    const trailingSlug = node.detachmentId.includes(':')
+      ? node.detachmentId.split(':').pop()!
+      : node.detachmentId
+    const canonical = containerBySlug.get(`${node.factionId}::${trailingSlug}`)
+    if (canonical && canonical !== node.detachmentId) {
+      node.detachmentId = canonical
+      detIdNormalized++
+    } else if (!canonical) {
+      detIdUnresolved++
+    }
   }
-  if (detIdNormalized > 0) {
-    console.log(`   Normalized ${detIdNormalized} detachmentId values to slug form`)
+  console.log(
+    `   Normalized ${detIdNormalized} detachmentId values to full container id (unresolved: ${detIdUnresolved})`,
+  )
+
+  // ── 6a3. Normalize datasheetId on children (weapons + unit-abilities) ─────
+  // Same class of bug as 6a2 but one layer down. Faction-pack v2 emits
+  // datasheetId as a title-slug id (`11e:datasheet:adepta-sororitas:
+  // intranzia-fraye`), while the actual 11e datasheet's id from Wahapedia +
+  // duplicate-eleventh is `11e:{numeric}` (`11e:000004215`). The scalar
+  // never resolves → orphan flags + broken parentMap lookups in /ask (the
+  // LLM loses the unit → ability attribution entirely).
+  //
+  // Match by (factionId, slugified-title). Build a title-slug → datasheet-id
+  // index over 11e datasheets; rewrite any child datasheetId whose trailing
+  // slug matches. Prefers 11e datasheets over 10e (edition tiebreak) so a
+  // Wahapedia 10e node doesn't shadow the 11e canonical one.
+  const datasheetBySlug = new Map<string, { id: string; edition: string }>()
+  for (const node of allNodes) {
+    if (node.category !== 'datasheet') continue
+    if (!node.factionId) continue
+    const key = `${node.factionId}::${slugify(node.title)}`
+    const existing = datasheetBySlug.get(key)
+    if (!existing || (node.edition === '11th' && existing.edition !== '11th')) {
+      datasheetBySlug.set(key, { id: node.id, edition: node.edition ?? '' })
+    }
   }
+  let dsIdNormalized = 0
+  let dsIdUnresolved = 0
+  for (const node of allNodes) {
+    if (!node.datasheetId) continue
+    if (!node.factionId) continue
+    if (node.category !== 'weapon' && node.category !== 'unit-ability') continue
+    // Already resolves? Skip. (Wahapedia-emitted datasheetIds like
+    // `11e:000004215` will already exist and shouldn't be rewritten.)
+    const trailingSlug = node.datasheetId.includes(':')
+      ? node.datasheetId.split(':').pop()!
+      : node.datasheetId
+    // Skip pure-numeric slugs — they're Wahapedia numeric ids, don't try to
+    // reslug them.
+    if (/^\d+$/.test(trailingSlug)) continue
+    const canonical = datasheetBySlug.get(`${node.factionId}::${trailingSlug}`)
+    if (canonical && canonical.id !== node.datasheetId) {
+      node.datasheetId = canonical.id
+      dsIdNormalized++
+    } else if (!canonical) {
+      dsIdUnresolved++
+    }
+  }
+  console.log(
+    `   Normalized ${dsIdNormalized} datasheetId values to full container id (unresolved: ${dsIdUnresolved})`,
+  )
 
   // ── Massage: clean phantom nodes, validate content, flag issues ──────────
   console.log('\n6b. Data massage')
-  const massageResult = massage(allNodes)
+  const massageResult = massage(allNodes, allRefs)
   allNodes.length = 0
   for (const n of massageResult.nodes) allNodes.push(n)
 
@@ -1451,6 +1536,26 @@ async function main() {
   }
   console.log(`\n8. Source dates: stamped publishedAt on ${stamped} sources`)
 
+  // ── 8b. Detachment edition correction ─────────────────────────────────────
+  // Category → edition is a natural mapping for detachments:
+  //   - `detachment`      = MFM 11e + faction-pack shape → edition '11th'
+  //   - `detachment-rule` = Wahapedia 10e shape          → edition '10th'
+  // merge-sources sometimes mis-tags because MFM 11e sources get merged
+  // onto 10e originals in place, keeping the 10e edition tag. Forcing the
+  // category→edition alignment here fixes the sidebar count under
+  // `?edition=11th` (was silently dropping ~400 detachments).
+  let detEditionCorrected = 0
+  for (const node of allNodes) {
+    if (node.category === 'detachment' && node.edition !== '11th') {
+      node.edition = '11th'
+      detEditionCorrected++
+    } else if (node.category === 'detachment-rule' && node.edition !== '10th') {
+      node.edition = '10th'
+      detEditionCorrected++
+    }
+  }
+  console.log(`   Corrected edition on ${detEditionCorrected} detachment nodes`)
+
   // ── 9. Edition stamping ────────────────────────────────────────────────────
   // 10th edition launched 2024-06-01. Community nodes (YouTube, etc.) with
   // source dates before that are 9th edition. Everything else is 10th.
@@ -1497,6 +1602,37 @@ async function main() {
   // (11th Edition detachments already added at step 6c)
   console.log(`   ${eleventhResult.nodes.length} nodes, ${eleventhResult.refs.length} refs`)
 
+  // ── 8c. Drop malformed 11e detachment containers ─────────────────────────
+  // Enforce the schema promise (model.ts superRefine): every
+  // `category: 'detachment'` at edition '11th' MUST have a `dp` cost.
+  // Anything without `dp` is a Wahapedia-legacy shell for a detachment
+  // that has no MFM entry (event/community detachments) — dropping keeps
+  // /ask combo math honest. Losing them from browse is acceptable until
+  // dp costs get added properly.
+  const before11eDrop = allNodes.length
+  const droppedIds = new Set<string>()
+  for (const n of allNodes) {
+    if (n.category === 'detachment' && n.edition === '11th' && n.dp == null) {
+      droppedIds.add(n.id)
+    }
+  }
+  if (droppedIds.size > 0) {
+    for (const id of droppedIds) console.log(`   drop malformed 11e detachment: ${id}`)
+    // Filter in place — avoid `push(...kept)` because tens-of-thousands of
+    // spread args blow the call stack.
+    const kept = allNodes.filter((n) => !droppedIds.has(n.id))
+    allNodes.length = 0
+    for (const n of kept) allNodes.push(n)
+    const keptRefs = allRefs.filter(
+      (r) => !droppedIds.has(r.sourceId) && !droppedIds.has(r.targetId),
+    )
+    allRefs.length = 0
+    for (const r of keptRefs) allRefs.push(r)
+  }
+  console.log(
+    `\n8c. Dropped ${droppedIds.size} malformed 11e detachment container(s) missing dp (${before11eDrop} → ${allNodes.length})`,
+  )
+
   // ── Summary ────────────────────────────────────────────────────────────────
   console.log(`\n=== TOTAL: ${allNodes.length} nodes, ${allRefs.length} refs ===`)
 
@@ -1535,6 +1671,30 @@ async function main() {
   const subfactionsJson = JSON.stringify(subfactionRows)
   writeFileSync(join(OUTPUT_DIR, 'dim', 'subfactions.json'), subfactionsJson)
   console.log(`   dim/subfactions.json: ${subfactionRows.length} rows`)
+
+  // ── Cube: fact + dim + rollup tables for deterministic count queries ───
+  // See lib/cube.ts. /count reads these instead of scanning node JSON so
+  // "how many X does faction Y have" is O(1) after cache warm-up.
+  console.log('\nBuilding cube (fact + dim + rollup tables)')
+  const cube = buildCube(allNodes, subfactionRows)
+  mkdirSync(join(OUTPUT_DIR, 'cube'), { recursive: true })
+  writeFileSync(join(OUTPUT_DIR, 'cube', 'fact_node.jsonl'), cube.factNodesJsonl)
+  writeFileSync(join(OUTPUT_DIR, 'cube', 'dim_faction.json'), JSON.stringify(cube.dimFaction))
+  writeFileSync(join(OUTPUT_DIR, 'cube', 'dim_keyword.json'), JSON.stringify(cube.dimKeyword))
+  writeFileSync(
+    join(OUTPUT_DIR, 'cube', 'rollup_faction_dp.json'),
+    JSON.stringify(cube.rollupFactionDp),
+  )
+  writeFileSync(
+    join(OUTPUT_DIR, 'cube', 'rollup_faction_category_edition.json'),
+    JSON.stringify(cube.rollupFactionCategoryEdition),
+  )
+  const cubeFactCount = cube.factNodesJsonl.split('\n').filter(Boolean).length
+  console.log(
+    `   cube/: ${cubeFactCount} facts, ${cube.dimFaction.length} factions, ` +
+      `${cube.dimKeyword.length} keywords, ${cube.rollupFactionDp.length} DP rollups, ` +
+      `${cube.rollupFactionCategoryEdition.length} category rollups`,
+  )
 
   // ── Partition and write ────────────────────────────────────────────────────
   console.log('\nPartitioning and writing files...')

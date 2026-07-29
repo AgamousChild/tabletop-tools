@@ -9,7 +9,7 @@ import { loadFactionMap, resetFactionMapCache } from './faction-map'
 const CREATE_TABLES = `
 CREATE TABLE IF NOT EXISTS "user" (id TEXT PRIMARY KEY, name TEXT NOT NULL, email TEXT UNIQUE NOT NULL, username TEXT UNIQUE, display_username TEXT UNIQUE, created_at INTEGER NOT NULL, updated_at INTEGER NOT NULL);
 CREATE TABLE IF NOT EXISTS meta_events (id TEXT PRIMARY KEY, name TEXT NOT NULL, date INTEGER NOT NULL, location TEXT, gps_coords TEXT, region_id INTEGER, format TEXT NOT NULL, rounds INTEGER, player_count INTEGER NOT NULL, source TEXT NOT NULL, source_id TEXT, imported_at INTEGER NOT NULL, win_faction_id TEXT, win_subfaction_id TEXT, win_detachment_id TEXT, UNIQUE(source, source_id));
-CREATE TABLE IF NOT EXISTS meta_event_players (id TEXT PRIMARY KEY, event_id TEXT NOT NULL REFERENCES meta_events(id) ON DELETE CASCADE, player_name TEXT NOT NULL, source_player_id TEXT, faction_id TEXT NOT NULL, subfaction_id TEXT, detachment_id TEXT, placement INTEGER NOT NULL, list_text TEXT, list_ttt TEXT, wins INTEGER NOT NULL DEFAULT 0, losses INTEGER NOT NULL DEFAULT 0, draws INTEGER NOT NULL DEFAULT 0, gl2_rating_start REAL, gl2_rd_start REAL, gl2_vol_start REAL, gl2_rating_end REAL, gl2_rd_end REAL, gl2_vol_end REAL);
+CREATE TABLE IF NOT EXISTS meta_event_players (id TEXT PRIMARY KEY, event_id TEXT NOT NULL REFERENCES meta_events(id) ON DELETE CASCADE, player_name TEXT NOT NULL, source_player_id TEXT, faction_id TEXT NOT NULL, subfaction_id TEXT, detachment_id TEXT, placement INTEGER NOT NULL, source_list_id TEXT, list_text TEXT, list_ttt TEXT, wins INTEGER NOT NULL DEFAULT 0, losses INTEGER NOT NULL DEFAULT 0, draws INTEGER NOT NULL DEFAULT 0, gl2_rating_start REAL, gl2_rd_start REAL, gl2_vol_start REAL, gl2_rating_end REAL, gl2_rd_end REAL, gl2_vol_end REAL);
 CREATE TABLE IF NOT EXISTS meta_pairings (id TEXT PRIMARY KEY, event_id TEXT NOT NULL REFERENCES meta_events(id) ON DELETE CASCADE, round INTEGER NOT NULL, player1_id TEXT, player2_id TEXT, player1_score INTEGER, player2_score INTEGER, player1_gl2 REAL, player2_gl2 REAL, result TEXT NOT NULL);
 CREATE TABLE IF NOT EXISTS bcp_scrape_jobs (id TEXT PRIMARY KEY, started_at INTEGER NOT NULL, completed_at INTEGER, status TEXT NOT NULL DEFAULT 'running', events_found INTEGER DEFAULT 0, events_scraped INTEGER DEFAULT 0, pairings_scraped INTEGER DEFAULT 0, lists_scraped INTEGER DEFAULT 0, errors TEXT, triggered_by TEXT NOT NULL DEFAULT 'cron');
 CREATE TABLE IF NOT EXISTS dim_faction (id TEXT PRIMARY KEY, name TEXT NOT NULL, allegiance TEXT NOT NULL);
@@ -136,6 +136,8 @@ describe('runScrape', () => {
 
     const { jobId } = await runScrape({
       bcpEmail: 'test@example.com',
+      minRounds: 0,
+      minPlayers: 0,
       bcpPassword: 'pass',
       db,
     })
@@ -181,6 +183,8 @@ describe('runScrape', () => {
 
     const { jobId } = await runScrape({
       bcpEmail: 'test@example.com',
+      minRounds: 0,
+      minPlayers: 0,
       bcpPassword: 'pass',
       db,
     })
@@ -205,6 +209,8 @@ describe('runScrape', () => {
 
     await runScrape({
       bcpEmail: 'test@example.com',
+      minRounds: 0,
+      minPlayers: 0,
       bcpPassword: 'pass',
       db,
     })
@@ -223,6 +229,8 @@ describe('runScrape', () => {
 
     const { jobId } = await runScrape({
       bcpEmail: 'test@example.com',
+      minRounds: 0,
+      minPlayers: 0,
       bcpPassword: 'pass',
       db,
     })
@@ -248,6 +256,8 @@ describe('runScrape', () => {
 
     await runScrape({
       bcpEmail: 'test@example.com',
+      minRounds: 0,
+      minPlayers: 0,
       bcpPassword: 'pass',
       db,
     })
@@ -274,6 +284,8 @@ describe('runScrape', () => {
 
     await runScrape({
       bcpEmail: 'test@example.com',
+      minRounds: 0,
+      minPlayers: 0,
       bcpPassword: 'pass',
       db,
     })
@@ -285,7 +297,10 @@ describe('runScrape', () => {
   it('sets triggeredBy from parameter', async () => {
     mockSearchEvents.mockResolvedValue([])
 
-    await runScrape({ bcpEmail: 'test@example.com', bcpPassword: 'pass', db }, 'manual')
+    await runScrape(
+      { bcpEmail: 'test@example.com', minRounds: 0, minPlayers: 0, bcpPassword: 'pass', db },
+      'manual',
+    )
 
     const jobs = await client.execute('SELECT * FROM bcp_scrape_jobs')
     expect(jobs.rows[0]!.triggered_by).toBe('manual')
@@ -299,6 +314,8 @@ describe('runScrape', () => {
 
     await runScrape({
       bcpEmail: 'test@example.com',
+      minRounds: 0,
+      minPlayers: 0,
       bcpPassword: 'pass',
       db,
     })
@@ -319,6 +336,8 @@ describe('runScrape', () => {
 
     const { jobId } = await runScrape({
       bcpEmail: 'test@example.com',
+      minRounds: 0,
+      minPlayers: 0,
       bcpPassword: 'pass',
       db,
     })
@@ -348,6 +367,8 @@ describe('runScrape', () => {
 
     await runScrape({
       bcpEmail: 'test@example.com',
+      minRounds: 0,
+      minPlayers: 0,
       bcpPassword: 'pass',
       db,
     })
@@ -384,6 +405,8 @@ describe('runScrape', () => {
 
     await runScrape({
       bcpEmail: 'test@example.com',
+      minRounds: 0,
+      minPlayers: 0,
       bcpPassword: 'pass',
       db,
     })
@@ -414,6 +437,8 @@ describe('runScrape', () => {
 
     const { jobId } = await runScrape({
       bcpEmail: 'test@example.com',
+      minRounds: 0,
+      minPlayers: 0,
       bcpPassword: 'pass',
       db,
     })

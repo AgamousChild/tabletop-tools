@@ -31,8 +31,13 @@ export const FACTION_PATTERNS: Array<{ pattern: string; slug: string }> = [
   { pattern: 'tyranid', slug: 'tyranids' },
   { pattern: 'aeldari', slug: 'aeldari' },
   { pattern: 'eldar', slug: 'aeldari' },
-  { pattern: 'tau', slug: 't-au-empire' },
-  { pattern: "t'au", slug: 't-au-empire' },
+  // Canonical data slug is `tau-empire` (no mid-hyphen), per every
+  // faction-tau-empire.json node's factionId. The old `t-au-empire` variant
+  // is preserved as a rewrite target in faction-codes.ts but MUST NOT be
+  // emitted by the detector — /count and other cube consumers filter by the
+  // canonical slug, and a mid-hyphened detected id produces zero matches.
+  { pattern: 'tau', slug: 'tau-empire' },
+  { pattern: "t'au", slug: 'tau-empire' },
   { pattern: 'custodes', slug: 'adeptus-custodes' },
   { pattern: 'sororitas', slug: 'adepta-sororitas' },
   { pattern: 'mechanicus', slug: 'adeptus-mechanicus' },

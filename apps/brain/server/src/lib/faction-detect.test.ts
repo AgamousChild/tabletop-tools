@@ -49,7 +49,7 @@ describe('FACTION_PATTERNS', () => {
     const slugs = FACTION_PATTERNS.map((p) => p.slug)
     const allowedDupes = new Set([
       'aeldari',
-      't-au-empire',
+      'tau-empire',
       'adepta-sororitas',
       'astra-militarum',
       'drukhari',
@@ -137,8 +137,8 @@ describe('detectFactions — top-level factions', () => {
     ['tyranid synapse', ['tyranids']],
     ['aeldari fate dice', ['aeldari']],
     ['eldar wraithlord', ['aeldari']],
-    ['tau crisis suits', ['t-au-empire']],
-    ["t'au broadside", ['t-au-empire']],
+    ['tau crisis suits', ['tau-empire']],
+    ["t'au broadside", ['tau-empire']],
     ['custodes golden light', ['adeptus-custodes']],
     ['sororitas repentia', ['adepta-sororitas']],
     ['mechanicus skitarii', ['adeptus-mechanicus']],

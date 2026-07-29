@@ -47,38 +47,128 @@ import type { CardLayout } from '../lib/server-cards/types'
 import type { DetachmentPageProps } from './DetachmentPage'
 import { DetachmentPage } from './DetachmentPage'
 
-/** Simple markdown to HTML — handles ##, **, -, `, and brain: entity links */
+/** Simple markdown to HTML — handles ##, **, -, GFM tables, and brain: entity links */
 function renderMarkdown(text: string): string {
   // `linkBrainHtml` is the shared helper that emits the canonical
   // `brain-entity-link` class — keep it in lockstep with LinkedText.
   const linkBrain = linkBrainHtml
 
-  return text
-    .split('\n')
-    .map((line) => {
-      // Headings
-      if (line.startsWith('## '))
-        return `<h2 class="text-lg font-bold text-amber-400 mt-4 mb-2">${linkBrain(line.slice(3))}</h2>`
-      if (line.startsWith('### '))
-        return `<h3 class="text-base font-semibold text-amber-300 mt-3 mb-1">${linkBrain(line.slice(4))}</h3>`
-      // Bullet points
-      if (line.startsWith('- ')) {
-        const content = line
-          .slice(2)
-          .replace(/\*\*([^*]+)\*\*/g, '<strong class="text-slate-100">$1</strong>')
-        return `<div class="pl-4 py-0.5 text-sm text-slate-300 border-l border-slate-700 ml-2">${linkBrain(content)}</div>`
+  const applyInline = (s: string): string =>
+    linkBrain(
+      s
+        .replace(/\*\*([^*]+)\*\*/g, '<strong class="text-slate-100">$1</strong>')
+        .replace(/(^|[^*])\*([^*\n]+)\*(?!\*)/g, '$1<em class="italic text-slate-400">$2</em>'),
+    )
+
+  // Split a GFM table row into raw cell strings. Handles leading/trailing
+  // pipes and escapes.
+  const splitRow = (line: string): string[] =>
+    line
+      .replace(/^\s*\|/, '')
+      .replace(/\|\s*$/, '')
+      .split('|')
+      .map((c) => c.trim())
+
+  // A separator row looks like `|---|:--:|---:|` — hyphens + optional colons
+  // for alignment, one segment per column.
+  const isSeparator = (line: string): boolean =>
+    /^\s*\|?\s*:?-{3,}:?\s*(\|\s*:?-{3,}:?\s*)+\|?\s*$/.test(line)
+
+  // Alignment marker from a separator cell (":---" left, "---:" right,
+  // ":---:" center, "---" default).
+  const alignmentOf = (cell: string): 'left' | 'right' | 'center' | null => {
+    const t = cell.trim()
+    const startsColon = t.startsWith(':')
+    const endsColon = t.endsWith(':')
+    if (startsColon && endsColon) return 'center'
+    if (endsColon) return 'right'
+    if (startsColon) return 'left'
+    return null
+  }
+
+  const lines = text.split('\n')
+  const out: string[] = []
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i]!
+
+    // ── GFM table: header row followed by separator row ────────────────
+    // Peek ahead: current line has pipes, next line is a separator.
+    if (line.includes('|') && i + 1 < lines.length && isSeparator(lines[i + 1]!)) {
+      const headerCells = splitRow(line)
+      const alignments = splitRow(lines[i + 1]!).map(alignmentOf)
+      const bodyRows: string[][] = []
+      let j = i + 2
+      while (j < lines.length && lines[j]!.includes('|') && !isSeparator(lines[j]!)) {
+        // Blank line breaks a table; a plain-text line without `|` also breaks it.
+        if (!lines[j]!.trim()) break
+        bodyRows.push(splitRow(lines[j]!))
+        j++
       }
-      // Italic line
-      if (line.startsWith('*') && line.endsWith('*') && !line.startsWith('**')) {
-        return `<p class="text-xs text-slate-500 italic mt-2">${linkBrain(line.slice(1, -1))}</p>`
+      const alignClass = (idx: number): string => {
+        const a = alignments[idx]
+        return a === 'right' ? ' text-right' : a === 'center' ? ' text-center' : ' text-left'
       }
-      // Empty line
-      if (!line.trim()) return ''
-      // Regular text with bold
-      const formatted = line.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>')
-      return `<p class="text-sm text-slate-300 my-1">${linkBrain(formatted)}</p>`
-    })
-    .join('\n')
+      const html: string[] = []
+      html.push(
+        '<div class="my-3 overflow-x-auto"><table class="w-full text-sm border border-slate-700 rounded">',
+      )
+      html.push('<thead><tr class="bg-slate-800/60">')
+      for (let c = 0; c < headerCells.length; c++) {
+        html.push(
+          `<th class="px-3 py-1.5 border-b border-slate-700 font-semibold text-amber-300${alignClass(c)}">${applyInline(headerCells[c]!)}</th>`,
+        )
+      }
+      html.push('</tr></thead><tbody>')
+      for (let r = 0; r < bodyRows.length; r++) {
+        const stripe = r % 2 === 0 ? 'bg-slate-900/40' : 'bg-slate-900/20'
+        html.push(`<tr class="${stripe}">`)
+        for (let c = 0; c < bodyRows[r]!.length; c++) {
+          html.push(
+            `<td class="px-3 py-1 border-b border-slate-800 text-slate-300${alignClass(c)}">${applyInline(bodyRows[r]![c]!)}</td>`,
+          )
+        }
+        html.push('</tr>')
+      }
+      html.push('</tbody></table></div>')
+      out.push(html.join(''))
+      i = j - 1
+      continue
+    }
+
+    // ── Headings ───────────────────────────────────────────────────────
+    if (line.startsWith('## ')) {
+      out.push(
+        `<h2 class="text-lg font-bold text-amber-400 mt-4 mb-2">${linkBrain(line.slice(3))}</h2>`,
+      )
+      continue
+    }
+    if (line.startsWith('### ')) {
+      out.push(
+        `<h3 class="text-base font-semibold text-amber-300 mt-3 mb-1">${linkBrain(line.slice(4))}</h3>`,
+      )
+      continue
+    }
+    // ── Bullet points ──────────────────────────────────────────────────
+    if (line.startsWith('- ')) {
+      out.push(
+        `<div class="pl-4 py-0.5 text-sm text-slate-300 border-l border-slate-700 ml-2">${applyInline(line.slice(2))}</div>`,
+      )
+      continue
+    }
+    // ── Italic line (whole-line *...*) ─────────────────────────────────
+    if (line.startsWith('*') && line.endsWith('*') && !line.startsWith('**')) {
+      out.push(`<p class="text-xs text-slate-500 italic mt-2">${linkBrain(line.slice(1, -1))}</p>`)
+      continue
+    }
+    // ── Empty line ─────────────────────────────────────────────────────
+    if (!line.trim()) {
+      out.push('')
+      continue
+    }
+    // ── Regular text ───────────────────────────────────────────────────
+    out.push(`<p class="text-sm text-slate-300 my-1">${applyInline(line)}</p>`)
+  }
+  return out.join('\n')
 }
 
 // ── Shared result type ───────────────────────────────────────────────────────
@@ -758,156 +848,207 @@ function AskTab({ onOpenCard, activeFilters, onFilterChange, edition }: AskTabPr
         </div>
       )}
 
-      {answer && (
-        <div className="space-y-4">
-          {factionFilter && answer.detected?.factions?.length > 0 && (
-            <FactionBanner
-              factions={answer.detected.factions}
-              onDismiss={() => setFactionFilter(false)}
-            />
-          )}
-
-          {!fallbackDismissed && answer.fallback && answer.fallbackFrom && (
-            <EditionFallbackBanner
-              fallbackFrom={answer.fallbackFrom}
-              onDismiss={() => setFallbackDismissed(true)}
-            />
-          )}
-
-          <div
-            className="bg-slate-900 border border-slate-700 rounded p-4 overflow-auto max-h-[70vh]"
-            onClick={async (e) => {
-              const target = e.target as HTMLElement
-              const nodeId = target.closest('[data-brain-node]')?.getAttribute('data-brain-node')
-              if (!nodeId) return
-              // Try reference list first
-              const node = answer.reference?.find((r) => r.id === nodeId)
-              if (node) {
-                onOpenCard(node)
-                return
-              }
-              // Fetch from API if not in reference
-              try {
-                const res = await brainFetch(`/browse/node/${encodeURIComponent(nodeId)}`, {
-                  edition,
-                })
-                if (res.ok) {
-                  const data = (await res.json()) as { node: ResultNode }
-                  if (data.node) onOpenCard(data.node)
-                }
-              } catch {
-                /* ignore fetch errors */
-              }
-            }}
-          >
-            <div
-              className="max-w-none"
-              dangerouslySetInnerHTML={{ __html: renderMarkdown(answer.answer) }}
-            />
+      {/* Loading overlay: spinner sits above (or beside) whatever's already
+          rendered, and the previous answer blurs behind it so the user knows
+          new data is on the way without losing visual continuity. */}
+      {loading && (
+        <div
+          className={`flex items-center justify-center py-10 ${
+            answer ? 'absolute inset-x-0 top-32 z-10 pointer-events-none' : ''
+          }`}
+          data-testid="ask-loading-spinner"
+        >
+          <div className="flex flex-col items-center gap-3 bg-slate-950/70 backdrop-blur-sm rounded-lg px-8 py-6 border border-slate-700">
+            <div className="animate-spin rounded-full h-10 w-10 border-4 border-amber-500 border-t-transparent"></div>
+            <span className="text-slate-300 text-sm font-medium">Thinking…</span>
           </div>
-
-          {answer.webSources && answer.webSources.length > 0 && (
-            <details className="bg-slate-900/50 border border-slate-800 rounded p-3">
-              <summary className="text-xs font-medium text-slate-400 uppercase cursor-pointer select-none hover:text-slate-300">
-                Sources ({answer.webSources.length})
-              </summary>
-              <div className="flex flex-wrap gap-2 mt-2">
-                {answer.webSources.map((s, i) => (
-                  <a
-                    key={i}
-                    href={s.url}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="inline-flex items-center gap-1 bg-slate-800 rounded px-2 py-1 text-xs text-blue-400 hover:text-blue-300 hover:bg-slate-700"
-                  >
-                    {s.title.length > 50 ? s.title.substring(0, 47) + '...' : s.title}
-                    <span className="text-slate-600">↗</span>
-                  </a>
-                ))}
-              </div>
-            </details>
-          )}
-
-          {answer.reference && answer.reference.length > 0 && (
-            <div className="mt-4">
-              <div className="flex items-center gap-2 mb-2">
-                <h4 className="text-sm font-medium text-slate-400 uppercase">Reference</h4>
-                <ActiveEditionChip edition={edition} />
-              </div>
-              {answer.reference.map((r, i) => (
-                <div key={r.id + '-' + i} className="mb-2">
-                  <button onClick={() => onOpenCard(r)} className="w-full text-left">
-                    <ResultCard
-                      index={i + 1}
-                      title={r.title}
-                      summary={r.summary}
-                      layer={r.layer}
-                      category={r.category}
-                      score={r.score}
-                      factionId={r.factionId}
-                      phase={r.phase}
-                      parentUnit={r.parentUnit}
-                      edition={r.edition}
-                    />
-                  </button>
-                  {entityMap.size > 0 && r.summary && (
-                    <p className="text-xs text-slate-400 mt-1 px-3">
-                      <LinkedText
-                        text={r.summary}
-                        entities={entityMap}
-                        onEntityClick={async (name) => {
-                          const info = entityMap.get(name.toLowerCase())
-                          if (info) {
-                            try {
-                              const res = await brainFetch(
-                                `/browse/node/${encodeURIComponent(info.nodeId)}`,
-                                { edition },
-                              )
-                              if (res.ok) {
-                                const data = (await res.json()) as { node: ResultNode }
-                                if (data.node) {
-                                  onOpenCard(data.node)
-                                  return
-                                }
-                              }
-                            } catch {
-                              /* fall through */
-                            }
-                          }
-                          onOpenCard(r)
-                        }}
-                      />
-                    </p>
-                  )}
-                </div>
-              ))}
-            </div>
-          )}
-
-          {answer.sources.length > 0 && (
-            <div className="bg-slate-900/50 border border-slate-800 rounded p-3">
-              <h4 className="text-xs font-medium text-slate-400 uppercase mb-2">
-                Sources ({answer.sources.length} nodes, {answer.connectedCount} connected)
-              </h4>
-              <div className="flex flex-wrap gap-2">
-                {answer.sources.map((s) => (
-                  <span
-                    key={s.id}
-                    className="inline-flex items-center gap-1 bg-slate-800 rounded px-2 py-1 text-xs"
-                  >
-                    <span className="text-amber-400">{s.layer}</span>
-                    <span className="text-slate-500">/</span>
-                    <span className="text-slate-300">
-                      {s.title.length > 40 ? s.title.substring(0, 37) + '...' : s.title}
-                    </span>
-                  </span>
-                ))}
-              </div>
-            </div>
-          )}
         </div>
       )}
 
+      <div
+        className={
+          loading
+            ? 'opacity-40 blur-sm pointer-events-none transition-all duration-200'
+            : 'transition-all duration-200'
+        }
+      >
+        {answer && (
+          <div className="space-y-4">
+            {factionFilter && answer.detected?.factions?.length > 0 && (
+              <FactionBanner
+                factions={answer.detected.factions}
+                onDismiss={() => setFactionFilter(false)}
+              />
+            )}
+
+            {!fallbackDismissed && answer.fallback && answer.fallbackFrom && (
+              <EditionFallbackBanner
+                fallbackFrom={answer.fallbackFrom}
+                onDismiss={() => setFallbackDismissed(true)}
+              />
+            )}
+
+            <div
+              className="bg-slate-900 border border-slate-700 rounded p-4 overflow-auto max-h-[70vh]"
+              onClick={async (e) => {
+                const target = e.target as HTMLElement
+                const nodeId = target.closest('[data-brain-node]')?.getAttribute('data-brain-node')
+                if (!nodeId) return
+                // Try reference list first
+                const node = answer.reference?.find((r) => r.id === nodeId)
+                if (node) {
+                  onOpenCard(node)
+                  return
+                }
+                // Fetch from API if not in reference
+                try {
+                  const res = await brainFetch(`/browse/node/${encodeURIComponent(nodeId)}`, {
+                    edition,
+                  })
+                  if (res.ok) {
+                    const data = (await res.json()) as { node: ResultNode }
+                    if (data.node) onOpenCard(data.node)
+                  }
+                } catch {
+                  /* ignore fetch errors */
+                }
+              }}
+            >
+              <div
+                className="max-w-none"
+                dangerouslySetInnerHTML={{ __html: renderMarkdown(answer.answer) }}
+              />
+            </div>
+
+            {(() => {
+              const webCount = answer.webSources?.length ?? 0
+              const refCount = answer.reference?.length ?? 0
+              if (webCount === 0) return null
+              // Two very different provenance stories depending on whether
+              // the brain contributed anything. Don't claim brain-sourced
+              // when the brain returned zero refs — that's the exact
+              // "answer says brain but really Gemini" bug.
+              const isWebOnly = refCount === 0
+              const label = isWebOnly
+                ? `Web sources (${webCount}) — brain has no matching content; this answer was written from web-search results only`
+                : `Related web results (${webCount}) — incidental hits from Gemini's web search; the answer above draws from the brain's own sources (shown below under Reference)`
+              const summaryColor = isWebOnly
+                ? 'text-amber-400 hover:text-amber-300'
+                : 'text-slate-400 hover:text-slate-300'
+              const noteColor = isWebOnly ? 'text-amber-500/70' : 'text-slate-500'
+              const border = isWebOnly ? 'border-amber-800/50' : 'border-slate-800'
+              // Split label so the loud part stays uppercase and the note stays normal-case.
+              const dashIdx = label.indexOf(' — ')
+              const head = dashIdx >= 0 ? label.slice(0, dashIdx) : label
+              const note = dashIdx >= 0 ? label.slice(dashIdx + 3) : ''
+              return (
+                <details className={`bg-slate-900/50 border ${border} rounded p-3`}>
+                  <summary
+                    className={`text-xs font-medium uppercase cursor-pointer select-none ${summaryColor}`}
+                  >
+                    {head}
+                    {note && (
+                      <span className={`normal-case font-normal ${noteColor}`}> — {note}</span>
+                    )}
+                  </summary>
+                  <div className="flex flex-wrap gap-2 mt-2">
+                    {answer.webSources!.map((s, i) => (
+                      <a
+                        key={i}
+                        href={s.url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="inline-flex items-center gap-1 bg-slate-800 rounded px-2 py-1 text-xs text-blue-400 hover:text-blue-300 hover:bg-slate-700"
+                      >
+                        {s.title.length > 50 ? s.title.substring(0, 47) + '...' : s.title}
+                        <span className="text-slate-600">↗</span>
+                      </a>
+                    ))}
+                  </div>
+                </details>
+              )
+            })()}
+
+            {answer.reference && answer.reference.length > 0 && (
+              <div className="mt-4">
+                <div className="flex items-center gap-2 mb-2">
+                  <h4 className="text-sm font-medium text-slate-400 uppercase">Reference</h4>
+                  <ActiveEditionChip edition={edition} />
+                </div>
+                {answer.reference.map((r, i) => (
+                  <div key={r.id + '-' + i} className="mb-2">
+                    <button onClick={() => onOpenCard(r)} className="w-full text-left">
+                      <ResultCard
+                        index={i + 1}
+                        title={r.title}
+                        summary={r.summary}
+                        layer={r.layer}
+                        category={r.category}
+                        score={r.score}
+                        factionId={r.factionId}
+                        phase={r.phase}
+                        parentUnit={r.parentUnit}
+                        edition={r.edition}
+                      />
+                    </button>
+                    {entityMap.size > 0 && r.summary && (
+                      <p className="text-xs text-slate-400 mt-1 px-3">
+                        <LinkedText
+                          text={r.summary}
+                          entities={entityMap}
+                          onEntityClick={async (name) => {
+                            const info = entityMap.get(name.toLowerCase())
+                            if (info) {
+                              try {
+                                const res = await brainFetch(
+                                  `/browse/node/${encodeURIComponent(info.nodeId)}`,
+                                  { edition },
+                                )
+                                if (res.ok) {
+                                  const data = (await res.json()) as { node: ResultNode }
+                                  if (data.node) {
+                                    onOpenCard(data.node)
+                                    return
+                                  }
+                                }
+                              } catch {
+                                /* fall through */
+                              }
+                            }
+                            onOpenCard(r)
+                          }}
+                        />
+                      </p>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {answer.sources.length > 0 && (
+              <div className="bg-slate-900/50 border border-slate-800 rounded p-3">
+                <h4 className="text-xs font-medium text-slate-400 uppercase mb-2">
+                  Sources ({answer.sources.length} nodes, {answer.connectedCount} connected)
+                </h4>
+                <div className="flex flex-wrap gap-2">
+                  {answer.sources.map((s) => (
+                    <span
+                      key={s.id}
+                      className="inline-flex items-center gap-1 bg-slate-800 rounded px-2 py-1 text-xs"
+                    >
+                      <span className="text-amber-400">{s.layer}</span>
+                      <span className="text-slate-500">/</span>
+                      <span className="text-slate-300">
+                        {s.title.length > 40 ? s.title.substring(0, 37) + '...' : s.title}
+                      </span>
+                    </span>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+      </div>
       {!answer && !loading && !error && (
         <div className="text-center py-12 text-slate-500">
           <p className="text-lg mb-2">Ask anything about Warhammer 40K rules</p>
@@ -1330,10 +1471,31 @@ function BrowseTab({ onOpenCard, edition }: BrowseTabProps) {
         </nav>
       </aside>
 
-      <div className="flex-1 p-4 max-w-4xl">
-        <div className="space-y-3">
-          {!selectedLayer && <p className="text-slate-400">Select a layer to browse rules.</p>}
-          {loading && <p className="text-slate-400">Loading...</p>}
+      <div className="flex-1 p-4 max-w-4xl relative">
+        {loading && (
+          <div
+            className={`flex items-center justify-center py-10 ${
+              nodes.length > 0 ? 'absolute inset-x-0 top-10 z-10 pointer-events-none' : ''
+            }`}
+            data-testid="browse-loading-spinner"
+          >
+            <div className="flex flex-col items-center gap-3 bg-slate-950/70 backdrop-blur-sm rounded-lg px-8 py-6 border border-slate-700">
+              <div className="animate-spin rounded-full h-10 w-10 border-4 border-amber-500 border-t-transparent"></div>
+              <span className="text-slate-300 text-sm font-medium">Loading…</span>
+            </div>
+          </div>
+        )}
+
+        <div
+          className={
+            loading && nodes.length > 0
+              ? 'space-y-3 opacity-40 blur-sm pointer-events-none transition-all duration-200'
+              : 'space-y-3 transition-all duration-200'
+          }
+        >
+          {!selectedLayer && !loading && (
+            <p className="text-slate-400">Select a layer to browse rules.</p>
+          )}
           {!loading && selectedLayer && nodes.length === 0 && (
             <p className="text-slate-400">No nodes in this layer.</p>
           )}

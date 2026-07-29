@@ -63,6 +63,15 @@ async function main() {
     }
   }
 
+  // Cube exports (fact + dim + rollup tables — see lib/cube.ts). Powers the
+  // /count endpoint. Rebuilds on every deploy.
+  const cubeDir = join(OUTPUT_DIR, 'cube')
+  if (existsSync(cubeDir)) {
+    for (const f of readdirSync(cubeDir)) {
+      files.push(`cube/${f}`)
+    }
+  }
+
   console.log(`Found ${files.length} files to upload\n`)
 
   let uploaded = 0

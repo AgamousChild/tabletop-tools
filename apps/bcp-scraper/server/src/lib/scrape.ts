@@ -23,6 +23,13 @@ interface ScrapeConfig {
   bcpPassword: string
   db: Db
   fetch?: typeof globalThis.fetch
+  /** Minimum rounds an event needs to be scraped (default 5). BCP's own
+   *  numberOfRounds query param is silently ignored, so this is a
+   *  client-side floor. Tests pass 0 to bypass. */
+  minRounds?: number
+  /** Minimum players an event needs to be scraped (default 20). Same reason
+   *  as minRounds. Tests pass 0 to bypass. */
+  minPlayers?: number
 }
 
 function buildLocation(event: BcpEvent): string | null {
@@ -40,6 +47,9 @@ interface PlayerAccumulator {
   name: string
   faction: string
   userId?: string
+  /** BCP list id — captured from any pairing round that has one so the
+   *  list-text scraper knows which URL to fetch later. */
+  listId?: string
   wins: number
   losses: number
   draws: number
@@ -90,8 +100,20 @@ export async function runScrape(
       .where(eq(metaEvents.source, 'bcp'))
     const existingSourceIds = new Set(existingEvents.map((e) => e.sourceId))
 
-    // Filter to new, non-team events
-    const newEvents = events.filter((e) => !e.isTeamEvent && !existingSourceIds.has(e.id))
+    // Filter to new, non-team events that meet the meta-relevance floor.
+    // BCP's own minPlayers/minRounds query params are silently ignored, so
+    // enforce the same 5-round / 20-player floor client-side. Only real
+    // tournament data feeds meta-driven analysis. Tests override with 0
+    // to bypass the filter.
+    const minRounds = config.minRounds ?? 5
+    const minPlayers = config.minPlayers ?? 20
+    const newEvents = events.filter(
+      (e) =>
+        !e.isTeamEvent &&
+        !existingSourceIds.has(e.id) &&
+        (e.rounds ?? 0) >= minRounds &&
+        (e.playerCount ?? 0) >= minPlayers,
+    )
 
     let eventsScraped = 0
     let totalPairings = 0
@@ -137,6 +159,7 @@ export async function runScrape(
               name: pairing.player1.name,
               faction: pairing.player1.faction,
               userId: pairing.player1.userId,
+              listId: pairing.player1.listId,
               wins: 0,
               losses: 0,
               draws: 0,
@@ -146,6 +169,8 @@ export async function runScrape(
           if (result === 'p1') p1.wins++
           else if (result === 'p2') p1.losses++
           else p1.draws++
+          // Capture listId from any round that has one
+          if (pairing.player1.listId) p1.listId = pairing.player1.listId
 
           // Player 2
           if (!playerMap.has(pairing.player2.name)) {
@@ -153,6 +178,7 @@ export async function runScrape(
               name: pairing.player2.name,
               faction: pairing.player2.faction,
               userId: pairing.player2.userId,
+              listId: pairing.player2.listId,
               wins: 0,
               losses: 0,
               draws: 0,
@@ -162,6 +188,8 @@ export async function runScrape(
           if (result === 'p2') p2.wins++
           else if (result === 'p1') p2.losses++
           else p2.draws++
+          // Capture listId from any round that has one
+          if (pairing.player2.listId) p2.listId = pairing.player2.listId
         }
 
         // Sort players by wins (descending) for placement
@@ -192,6 +220,7 @@ export async function runScrape(
             sourcePlayerId: player.userId ?? null,
             faction: factionSlug,
             placement: players.length + 1,
+            sourceListId: player.listId ?? null,
             wins: player.wins,
             losses: player.losses,
             draws: player.draws,

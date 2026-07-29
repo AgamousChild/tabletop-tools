@@ -1,0 +1,120 @@
+# bcp-scrape.yml — Weekly BCP tournament scrape + list fetch + parse.
+#
+# Three steps, each its own bounded CLI entry point (root CLAUDE.md rule 9):
+#   1. scripts/run-scrape.ts    — events + pairings for the last 7 days,
+#                                 >=20 players / >=5 rounds. Writes via the
+#                                 shared upsertMetaEvent(), which captures
+#                                 source_list_id from the pairing payload.
+#   2. scripts/scrape-lists.ts  — fetches army list text for rows that have
+#                                 source_list_id but no list_text. 100 rows
+#                                 per invocation, so it runs in a bounded loop.
+#   3. scripts/parse-lists.ts   — list_text -> list_ttt, loops until drained.
+#
+# Steps 2 and 3 are idempotent and skip rows already populated, so a partial
+# run just picks up where it left off next week.
+#
+# Required repo secrets: TURSO_DB_URL, TURSO_AUTH_TOKEN, BCP_EMAIL, BCP_PASSWORD
+
+name: BCP weekly scrape
+
+on:
+  schedule:
+    # Mondays 12:00 UTC — after weekend tournaments finish uploading results.
+    - cron: '0 12 * * 1'
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: 'Dry run: install only, skip the scrape'
+        type: boolean
+        default: false
+
+concurrency:
+  group: bcp-scrape
+  cancel-in-progress: false
+
+jobs:
+  scrape:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+
+    env:
+      TURSO_DB_URL: ${{ secrets.TURSO_DB_URL }}
+      TURSO_AUTH_TOKEN: ${{ secrets.TURSO_AUTH_TOKEN }}
+      BCP_EMAIL: ${{ secrets.BCP_EMAIL }}
+      BCP_PASSWORD: ${{ secrets.BCP_PASSWORD }}
+      # Turso/libsql hangs on broken IPv6 routes (see root CLAUDE.md).
+      NODE_OPTIONS: --dns-result-order=ipv4first
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: 'pnpm'
+
+      - name: Install workspace dependencies
+        run: pnpm install --frozen-lockfile --filter "@tabletop-tools/bcp-scraper-server..."
+
+      - name: Scrape events + pairings
+        if: ${{ !inputs.dry_run }}
+        working-directory: apps/bcp-scraper/server
+        run: npx tsx scripts/run-scrape.ts 2>&1 | tee -a /tmp/bcp-scrape.log
+
+      - name: Fetch army lists
+        if: ${{ !inputs.dry_run }}
+        working-directory: apps/bcp-scraper/server
+        # 100 rows per invocation. Bounded at 30 passes (3,000 lists) so a
+        # backlog can't run past the job timeout; leftovers are picked up on
+        # the next run since the script skips rows that already have text.
+        run: |
+          for pass in $(seq 1 30); do
+            out=$(npx tsx scripts/scrape-lists.ts 2>&1)
+            echo "$out" | tee -a /tmp/bcp-scrape.log
+            pending=$(echo "$out" | sed -n 's/^Rows still pending: //p' | tail -1)
+            fetched=$(echo "$out" | sed -n 's/^Fetched: \([0-9]*\),.*/\1/p' | tail -1)
+            echo "pass $pass: pending=${pending:-?} fetched=${fetched:-0}"
+            [ "${pending:-0}" = "0" ] && break
+            [ "${fetched:-0}" = "0" ] && echo "no progress — stopping" && break
+          done
+
+      - name: Parse lists
+        if: ${{ !inputs.dry_run }}
+        working-directory: apps/bcp-scraper/server
+        run: npx tsx scripts/parse-lists.ts 2>&1 | tee -a /tmp/bcp-scrape.log
+
+      - name: Dry run output
+        if: ${{ inputs.dry_run }}
+        run: echo "Dry run — install verified, scrape skipped."
+
+      - name: Upload scrape log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: bcp-scrape-log-${{ github.run_id }}
+          path: /tmp/bcp-scrape.log
+          if-no-files-found: ignore
+          retention-days: 30
+
+      - name: Job summary
+        if: always()
+        run: |
+          {
+            echo "## BCP Scrape Summary"
+            echo ""
+            echo "- **Run time:** $(date -u +'%Y-%m-%d %H:%M UTC')"
+            echo "- **Schedule:** Mondays 12:00 UTC"
+            echo ""
+            if [ -f /tmp/bcp-scrape.log ]; then
+              echo "<details><summary>Scrape log (tail)</summary>"
+              echo ""
+              echo '```'
+              tail -60 /tmp/bcp-scrape.log
+              echo '```'
+              echo "</details>"
+            fi
+          } >> $GITHUB_STEP_SUMMARY

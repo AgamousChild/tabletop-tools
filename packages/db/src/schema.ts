@@ -838,6 +838,7 @@ export const metaEventPlayers = sqliteTable(
     placement: integer('placement').notNull(),
     listText: text('list_text'),
     listTtt: text('list_ttt'),
+    sourceListId: text('source_list_id'),
     wins: integer('wins').notNull().default(0),
     losses: integer('losses').notNull().default(0),
     draws: integer('draws').notNull().default(0),

@@ -31,7 +31,57 @@ const SAMPLE_CSM = `++++++++++++++++++++++++++++++++++++++++++++++++ FACTION KEY
 
 const SAMPLE_EC = `++++++++++++++++++++++++++++++++++++++++++++++++ FACTION KEYWORD: Chaos - Emperor's Children+ DETACHMENT: Coterie of the Conceited (Pledges to the Dark Prince)+ TOTAL ARMY POINTS: 1990pts++ WARLORD: Char1: Daemon Prince of Slaanesh with Wings+ ENHANCEMENT: Pledge of Unholy Fortune (on Char2: Daemon Prince of Slaanesh with Wings)+ NUMBER OF UNITS: 17Char1: 1x Daemon Prince of Slaanesh with Wings (200 pts): Warlord, Hellforged weapons`
 
+// Real BCP exports are newline-separated. The two fixtures above are the same
+// format with every newline stripped, which is what let the original unit
+// regex's `(?=Char\d+:|$)` lookahead pass review — it can only be satisfied
+// when units run together on one line. Verified 2026-07-28 against 200 live
+// "No units found" rows: 200/200 contained newlines, 200/200 parsed 0 units.
+const SAMPLE_MULTILINE = `+++++++++++++++++++++++++++++++++++++++++++++++
++ FACTION KEYWORD: Chaos - Chaos Space Marines
++ DETACHMENT: Pactbound Zealots
++ TOTAL ARMY POINTS: 1995pts
++
++ WARLORD: Char1: Abaddon the Despoiler
++ ENHANCEMENT: Intoxicating Elixir (on Char2: Dark Apostle)
++++++++++++++++++++++++++++++++++++++++++++++++
+
+Char1: 1x Abaddon the Despoiler (270 pts): Warlord, Talon of Horus
+Char2: 1x Dark Apostle (75 pts): Accursed crozius, Bolt pistol
+
+5x Chaos Terminator Squad (180 pts): 5 with Combi-bolter
+10x Cultist Mob (50 pts): 10 with Autopistol
+• 1x Cultist Champion: Close Combat Weapon
+• 9x Cultist: 9 with Autopistol`
+
 describe('parseBattleScribe', () => {
+  describe('multi-line export (real BCP shape)', () => {
+    let result: TTTPackage
+
+    beforeAll(() => {
+      result = parseBattleScribe(SAMPLE_MULTILINE)
+    })
+
+    it('parses every unit across newline-separated lines', () => {
+      expect(result.parseStatus).toBe('ok')
+      expect(result.list.units.map((u) => u.name)).toEqual([
+        'Abaddon the Despoiler',
+        'Dark Apostle',
+        'Chaos Terminator Squad',
+        'Cultist Mob',
+      ])
+    })
+
+    it('parses model counts and points off non-Char lines', () => {
+      const terminators = result.list.units.find((u) => u.name === 'Chaos Terminator Squad')!
+      expect(terminators.models).toBe(5)
+      expect(terminators.points).toBe(180)
+    })
+
+    it('does not treat bullet sub-model lines as units', () => {
+      expect(result.list.units.map((u) => u.name)).not.toContain('Cultist Champion')
+    })
+  })
+
   describe('Sample 1 - Chaos Space Marines', () => {
     let result: TTTPackage
 

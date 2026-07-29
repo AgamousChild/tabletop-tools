@@ -60,6 +60,10 @@ export interface EnrichedNode {
   phase?: string
   datasheetId?: string
   edition?: string
+  /** Detachment Points cost (11e detachment nodes only). Required for the
+   *  /ask curator to compute combo counts and for retrieval to drop malformed
+   *  dupes. */
+  dp?: number
   parentUnit?: string // resolved from parentMap
   sources: Array<{
     type: string
@@ -562,14 +566,24 @@ function applyEditionFilter(
   records: AggregatedRecord[] | undefined
 } {
   if (edition === 'any') return bundle
+  // Belt-and-suspenders for 11e detachments: any surviving `category: 'detachment'`
+  // node at edition '11th' without `dp` is a malformed dupe (see
+  // combo-detection.ts's buildDetachmentNodes guard + model.ts's superRefine).
+  // Reject them from retrieval so they can't shape /ask answers.
+  // For 11e queries, also drop `detachment-rule` — the canonical 11e shape is
+  // `category: 'detachment'`; a lingering `detachment-rule` at 11th is a
+  // duplicateEleventh artifact of a 10e-only rule that wasn't merged with an
+  // MFM/pack container, and it lacks dp.
+  const isValid = (r: { edition?: string; category?: string; dp?: number }) => {
+    if (!nodeMatchesEdition({ edition: r.edition, category: r.category }, edition)) return false
+    if (edition === '11th' && r.category === 'detachment' && r.dp == null) return false
+    if (edition === '11th' && r.category === 'detachment-rule') return false
+    return true
+  }
   return {
-    results: bundle.results.filter((r) =>
-      nodeMatchesEdition({ edition: r.edition, category: r.category }, edition),
-    ),
-    connected: bundle.connected.filter((r) =>
-      nodeMatchesEdition({ edition: r.edition, category: r.category }, edition),
-    ),
-    records: bundle.records?.filter((rec) => nodeMatchesEdition(rec.primaryNode, edition)),
+    results: bundle.results.filter(isValid),
+    connected: bundle.connected.filter(isValid),
+    records: bundle.records?.filter((rec) => isValid(rec.primaryNode)),
   }
 }
 
@@ -899,6 +913,7 @@ function enrichNode(node: Node, score: number, parentMap: Map<string, string>): 
     phase: node.phase,
     datasheetId: node.datasheetId,
     edition: node.edition,
+    dp: node.dp,
     parentUnit: parentMap.get(node.id),
     sources: node.sources,
     keywords: node.keywords,

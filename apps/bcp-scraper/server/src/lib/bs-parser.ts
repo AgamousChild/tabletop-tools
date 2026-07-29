@@ -72,8 +72,14 @@ export function parseBattleScribe(text: string): TTTPackage {
   }
 
   // --- Units ---
+  // A unit ends at the next "CharN:", a line break, or end of input. The line
+  // break alternative is load-bearing: real BCP exports are newline-separated,
+  // and without it the lookahead can only ever be satisfied by units running
+  // together on a single line (the shape of the flattened test fixtures), so
+  // every real multi-line list parsed to zero units.
+  // Points suffix is `pts` or `points`, with or without a leading space.
   const unitRegex =
-    /(?:Char\d+:\s*)?(\d+)x\s+(.+?)\s+\((\d+)\s+pts\)(?::\s*(.+?))?(?=(?:Char\d+:|$))/g
+    /(?:Char\d+:\s*)?(\d+)x\s+(.+?)\s+\((\d+)\s*(?:pts|points)\)(?::\s*(.+?))?(?=[ \t]*(?:Char\d+:|\r?\n|$))/gi
   const units: TTTUnit[] = []
   let unitMatch: RegExpExecArray | null
   while ((unitMatch = unitRegex.exec(text)) !== null) {

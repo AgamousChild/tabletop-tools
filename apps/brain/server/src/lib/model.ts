@@ -141,147 +141,163 @@ export type NodeRef = z.infer<typeof NodeRefSchema>
 
 // ── Node ───────────────────────────────────────────────────────────────────
 
-export const NodeSchema = z.object({
-  id: z.string().min(1),
-  layer: NodeLayerSchema,
-  category: NodeCategorySchema,
+export const NodeSchema = z
+  .object({
+    id: z.string().min(1),
+    layer: NodeLayerSchema,
+    category: NodeCategorySchema,
 
-  // Content
-  title: z.string().min(1),
-  content: z.string().min(1),
-  summary: z.string().min(1),
+    // Content
+    title: z.string().min(1),
+    content: z.string().min(1),
+    summary: z.string().min(1),
 
-  // Taxonomy
-  phase: GamePhaseSchema.optional(),
-  factionId: z.string().optional(),
-  factionName: z.string().optional(), // Preferred display name (e.g., "SPACE MARINES")
-  detachmentId: z.string().optional(),
-  datasheetId: z.string().optional(),
+    // Taxonomy
+    phase: GamePhaseSchema.optional(),
+    factionId: z.string().optional(),
+    factionName: z.string().optional(), // Preferred display name (e.g., "SPACE MARINES")
+    detachmentId: z.string().optional(),
+    datasheetId: z.string().optional(),
 
-  // Structured fields (parsed from content text)
-  cpCost: z.number().int().min(0).optional(), // Stratagem CP cost
-  targetKeywords: z.array(z.string()).optional(), // Keywords a stratagem/detachment-rule targets (e.g., ["DEATH COMPANY"])
-  modelRestriction: z.string().optional(), // Enhancement model restriction (e.g., "PHOBOS model only")
-  isUpgrade: z.boolean().optional(), // Enhancement is a unit upgrade (not character-only)
-  isEpicHero: z.boolean().optional(), // Unit is a named character — cannot take enhancements
-  // Detachment-specific structured fields (11e Munitorum Field Manual).
-  // dp = Detachment Points cost (1–3). forceDisposition is the disposition
-  // category the detachment is tagged with — one of PRIORITY ASSETS,
-  // PURGE THE FOE, DISRUPTION, RECONNAISSANCE, TAKE AND HOLD.
-  dp: z.number().int().min(0).optional(),
-  forceDisposition: z.string().optional(),
-  points: z
-    .array(
-      z.object({
-        // Unit points costs by model count
-        models: z.string(), // e.g., "5 models", "1 model"
-        cost: z.number(),
-      }),
-    )
-    .optional(),
+    // Structured fields (parsed from content text)
+    cpCost: z.number().int().min(0).optional(), // Stratagem CP cost
+    targetKeywords: z.array(z.string()).optional(), // Keywords a stratagem/detachment-rule targets (e.g., ["DEATH COMPANY"])
+    modelRestriction: z.string().optional(), // Enhancement model restriction (e.g., "PHOBOS model only")
+    isUpgrade: z.boolean().optional(), // Enhancement is a unit upgrade (not character-only)
+    isEpicHero: z.boolean().optional(), // Unit is a named character — cannot take enhancements
+    // Detachment-specific structured fields (11e Munitorum Field Manual).
+    // dp = Detachment Points cost (1–3). forceDisposition is the disposition
+    // category the detachment is tagged with — one of PRIORITY ASSETS,
+    // PURGE THE FOE, DISRUPTION, RECONNAISSANCE, TAKE AND HOLD.
+    dp: z.number().int().min(0).optional(),
+    forceDisposition: z.string().optional(),
+    points: z
+      .array(
+        z.object({
+          // Unit points costs by model count
+          models: z.string(), // e.g., "5 models", "1 model"
+          cost: z.number(),
+        }),
+      )
+      .optional(),
 
-  // Stratagem structured fields (promoted from regex-on-content in card-display.ts)
-  when: z.string().optional(), // Stratagem WHEN clause
-  target: z.string().optional(), // Stratagem TARGET clause
-  effect: z.string().optional(), // Stratagem EFFECT clause
-  turn: z.string().optional(), // Stratagem turn restriction (e.g., "Your turn", "Either")
-  stratType: z.string().optional(), // Stratagem type label (e.g., "Battle Tactic", "Epic Deed")
+    // Stratagem structured fields (promoted from regex-on-content in card-display.ts)
+    when: z.string().optional(), // Stratagem WHEN clause
+    target: z.string().optional(), // Stratagem TARGET clause
+    effect: z.string().optional(), // Stratagem EFFECT clause
+    turn: z.string().optional(), // Stratagem turn restriction (e.g., "Your turn", "Either")
+    stratType: z.string().optional(), // Stratagem type label (e.g., "Battle Tactic", "Epic Deed")
 
-  // Enhancement structured fields
-  cost: z.number().int().min(0).optional(), // Enhancement points cost (promoted from "(N pts)" suffix regex)
-  // Whether the enhancement attaches to the leader (CHARACTER model) or to the
-  // bearer's entire unit. Populated by faction-pack.ts (sniff restriction text)
-  // and mfm-detachments.ts (leaderTo non-empty → 'leader').
-  attachesTo: z.enum(['leader', 'unit']).optional(),
+    // Enhancement structured fields
+    cost: z.number().int().min(0).optional(), // Enhancement points cost (promoted from "(N pts)" suffix regex)
+    // Whether the enhancement attaches to the leader (CHARACTER model) or to the
+    // bearer's entire unit. Populated by faction-pack.ts (sniff restriction text)
+    // and mfm-detachments.ts (leaderTo non-empty → 'leader').
+    attachesTo: z.enum(['leader', 'unit']).optional(),
 
-  // Unit structured fields (promoted from datasheet content markdown blocks)
-  wargearOptions: z
-    .array(
-      z.object({
-        name: z.string(),
-        description: z.string().optional(),
-      }),
-    )
-    .optional(),
-  damaged: z
-    .object({
-      threshold: z.string(), // e.g., "1-4 wounds"
-      effect: z.string(), // Damaged ability text
-    })
-    .optional(),
-  // Core/universal-special-rule keywords carried on a datasheet (LEADER,
-  // DEEP STRIKE, SCOUTS 6", FEEL NO PAIN 5+, DEADLY DEMISE D3, ...).
-  // Each entry has the keyword and an optional value string. Rendered as
-  // collapsed chips on UnitCard rather than expanded ability text.
-  coreAbilities: z
-    .array(
-      z.object({
-        keyword: z.string(),
-        value: z.string().optional(),
-      }),
-    )
-    .optional(),
+    // Unit structured fields (promoted from datasheet content markdown blocks)
+    wargearOptions: z
+      .array(
+        z.object({
+          name: z.string(),
+          description: z.string().optional(),
+        }),
+      )
+      .optional(),
+    damaged: z
+      .object({
+        threshold: z.string(), // e.g., "1-4 wounds"
+        effect: z.string(), // Damaged ability text
+      })
+      .optional(),
+    // Core/universal-special-rule keywords carried on a datasheet (LEADER,
+    // DEEP STRIKE, SCOUTS 6", FEEL NO PAIN 5+, DEADLY DEMISE D3, ...).
+    // Each entry has the keyword and an optional value string. Rendered as
+    // collapsed chips on UnitCard rather than expanded ability text.
+    coreAbilities: z
+      .array(
+        z.object({
+          keyword: z.string(),
+          value: z.string().optional(),
+        }),
+      )
+      .optional(),
 
-  // Mission structured fields (promoted from id pattern + keyword sniffing)
-  isFixed: z.boolean().optional(), // Secondary mission marked FIXED
-  missionSide: z.enum(['attacker', 'defender']).optional(), // Per-side secondary mission
+    // Mission structured fields (promoted from id pattern + keyword sniffing)
+    isFixed: z.boolean().optional(), // Secondary mission marked FIXED
+    missionSide: z.enum(['attacker', 'defender']).optional(), // Per-side secondary mission
 
-  // Unit stat line (parsed from Wahapedia structured data)
-  stats: z
-    .object({
-      M: z.string(), // e.g., "6\"", "12\""
-      T: z.number(),
-      SV: z.string(), // e.g., "3+", "2+"
-      W: z.number(),
-      LD: z.string(), // e.g., "6+", "5+"
-      OC: z.number(),
-      invSv: z.string().optional(), // e.g., "4+"
-    })
-    .optional(),
+    // Unit stat line (parsed from Wahapedia structured data)
+    stats: z
+      .object({
+        M: z.string(), // e.g., "6\"", "12\""
+        T: z.number(),
+        SV: z.string(), // e.g., "3+", "2+"
+        W: z.number(),
+        LD: z.string(), // e.g., "6+", "5+"
+        OC: z.number(),
+        invSv: z.string().optional(), // e.g., "4+"
+      })
+      .optional(),
 
-  // Weapon stat line (parsed from Wahapedia structured data)
-  weaponStats: z
-    .object({
-      range: z.string(), // e.g., "24\"", "Melee"
-      A: z.string(), // e.g., "2", "D6"
-      skill: z.string(), // e.g., "3+", "2+"
-      S: z.number(),
-      AP: z.number(),
-      D: z.string(), // e.g., "1", "D3"
-    })
-    .optional(),
+    // Weapon stat line (parsed from Wahapedia structured data)
+    weaponStats: z
+      .object({
+        range: z.string(), // e.g., "24\"", "Melee"
+        A: z.string(), // e.g., "2", "D6"
+        skill: z.string(), // e.g., "3+", "2+"
+        S: z.number(),
+        AP: z.number(),
+        D: z.string(), // e.g., "1", "D3"
+      })
+      .optional(),
 
-  // Source attribution
-  sources: z.array(SourceSchema).min(1),
+    // Source attribution
+    sources: z.array(SourceSchema).min(1),
 
-  // Graph
-  refs: z.array(NodeRefSchema),
+    // Graph
+    refs: z.array(NodeRefSchema),
 
-  // Errata/versioning
-  effectiveDate: z.string().optional(),
-  supersededBy: z.string().optional(),
-  version: z.number().int().positive(),
+    // Errata/versioning
+    effectiveDate: z.string().optional(),
+    supersededBy: z.string().optional(),
+    version: z.number().int().positive(),
 
-  // Edition (e.g., '10th', '11th')
-  edition: z.string().optional(),
+    // Edition (e.g., '10th', '11th')
+    edition: z.string().optional(),
 
-  // Set on a 10e node when an 11e faction pack (or other 11e source) emits a
-  // structured change targeting the same entity. Bit-flag only; the actual
-  // change is the 11e companion node. Populated by `merge-sources.ts` via the
-  // validation-delta pass after parsing all sources.
-  updatedInEleventh: z.boolean().optional(),
+    // Set on a 10e node when an 11e faction pack (or other 11e source) emits a
+    // structured change targeting the same entity. Bit-flag only; the actual
+    // change is the 11e companion node. Populated by `merge-sources.ts` via the
+    // validation-delta pass after parsing all sources.
+    updatedInEleventh: z.boolean().optional(),
 
-  // Card-side eligibility — used by 11e secondary-mission cards which are
-  // identical in attacker + defender decks. Rather than emitting two nodes
-  // we emit one and tag it `usableBy: ['attacker', 'defender']`.
-  usableBy: z.array(z.string()).optional(),
+    // Card-side eligibility — used by 11e secondary-mission cards which are
+    // identical in attacker + defender decks. Rather than emitting two nodes
+    // we emit one and tag it `usableBy: ['attacker', 'defender']`.
+    usableBy: z.array(z.string()).optional(),
 
-  // Search
-  keywords: z.array(z.string()),
+    // Search
+    keywords: z.array(z.string()),
 
-  // Data quality (set by massage layer, surfaced to UI)
-  qualityFlags: z.array(z.string()).optional(),
-})
+    // Data quality (set by massage layer, surfaced to UI)
+    qualityFlags: z.array(z.string()).optional(),
+  })
+  // 11e detachment containers MUST carry a Detachment Points cost. The 11e
+  // army-construction rule is DP-arithmetic (Strike Force = 3 DP; combos
+  // sum to the budget), so a `category: 'detachment'` node at edition '11th'
+  // without `dp` is malformed data — retrieval + the /ask curator cannot
+  // reason about combos without it. See merge-sources.ts step 2b1 and
+  // mfm-detachments.ts for the two paths that populate `dp`.
+  .superRefine((node, ctx) => {
+    if (node.category === 'detachment' && node.edition === '11th' && node.dp == null) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: `11e detachment "${node.title}" (id=${node.id}) is missing required dp (Detachment Points cost)`,
+        path: ['dp'],
+      })
+    }
+  })
 export type Node = z.infer<typeof NodeSchema>
 
 // ── Record layer ────────────────────────────────────────────────────────────

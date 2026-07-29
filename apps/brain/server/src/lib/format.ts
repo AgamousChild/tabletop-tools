@@ -284,21 +284,39 @@ export function assembleContext(
     parts.push('')
   }
 
+  // Title index — lets renderNodeGroup translate parentMap ids (like
+  // `11e:det:tau-empire:experimental-prototype-cadre`) into readable titles
+  // (like "Experimental Prototype Cadre") when tagging stratagems /
+  // enhancements / faction-abilities with their parent detachment. Without
+  // this, /ask lumps everything under whichever detachment happened to be
+  // named in the primary retrieval (observed: T'au sustained-hits answer
+  // attributed 3 different detachments' rules all to Kauyon).
+  const titleById = new Map<string, string>()
+  for (const n of [...primaryNodes, ...connectedNodes]) {
+    titleById.set(n.id, n.title)
+  }
+
   if (connectedNodes.length > 0) {
     parts.push(
       '--- Connected rules (ordered by impact: army-wide → detachment → leader/unit → weapon) ---',
     )
     parts.push('')
-    renderNodeGroup(connectedNodes, parentMap, parts)
+    renderNodeGroup(connectedNodes, parentMap, titleById, parts)
   }
 
   return parts.join('\n')
 }
 
 /** Render a group of nodes into parts, grouped by category in impact order. */
-function renderNodeGroup(nodes: Node[], parentMap: Map<string, string>, parts: string[]): void {
+function renderNodeGroup(
+  nodes: Node[],
+  parentMap: Map<string, string>,
+  titleById: Map<string, string>,
+  parts: string[],
+): void {
   const categories = [
     'faction-ability',
+    'detachment',
     'detachment-rule',
     'stratagem',
     'enhancement',
@@ -321,7 +339,13 @@ function renderNodeGroup(nodes: Node[], parentMap: Map<string, string>, parts: s
     if (catNodes.length === 0) continue
 
     for (const n of catNodes) {
-      const parent = parentMap.get(n.id)
+      const parentId = parentMap.get(n.id)
+      // Prefer the parent's human-readable title over its id in tags — the
+      // LLM writes prose based on this string, and "detachment: Kauyon"
+      // reads correctly whereas "detachment: 11e:det:tau-empire:kauyon"
+      // does not. Fall back to the id when the parent node wasn't fetched
+      // into this context window.
+      const parent = parentId ? (titleById.get(parentId) ?? parentId) : undefined
 
       if (cat === 'weapon') {
         parts.push(
@@ -348,6 +372,16 @@ function renderNodeGroup(nodes: Node[], parentMap: Map<string, string>, parts: s
         parts.push(n.content || n.summary)
       } else if (cat === 'detachment-rule') {
         parts.push(`### ${n.title} [detachment-rule${n.factionId ? `, ${n.factionId}` : ''}]`)
+        parts.push(n.content || n.summary)
+      } else if (cat === 'detachment') {
+        // 11e detachment container — surface the DP cost + force disposition
+        // inline so the LLM can reason about combos + army composition
+        // without having to parse them out of markdown.
+        const dpTag = n.dp != null ? `, ${n.dp} DP` : ''
+        const fdTag = n.forceDisposition ? `, ${n.forceDisposition}` : ''
+        parts.push(
+          `### ${n.title} [detachment${n.factionId ? `, ${n.factionId}` : ''}${dpTag}${fdTag}]`,
+        )
         parts.push(n.content || n.summary)
       } else {
         parts.push(`### ${n.title} [${n.category}]`)
