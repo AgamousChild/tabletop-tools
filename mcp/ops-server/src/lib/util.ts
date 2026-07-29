@@ -34,7 +34,7 @@ export async function runCmd(
   return await new Promise<RunResult>((resolvePromise) => {
     const child = spawn(cmd, args, {
       cwd: opts.cwd ?? REPO_ROOT,
-      env: { ...process.env, ...(opts.env ?? {}) },
+      env: { ...process.env, ...opts.env },
       shell: process.platform === 'win32',
     })
     let stdout = ''
