@@ -24,4 +24,36 @@ describe('detectFormat', () => {
   it('returns unknown for unrecognizable text', () => {
     expect(detectFormat('just some random words about warhammer')).toBe('unknown')
   })
+
+  // Players routinely paste a paragraph of commentary above the list. The
+  // points marker is then well past the first 100 characters of the input,
+  // which the original start-anchored check required.
+  it('detects GW App format when prose precedes the list', () => {
+    const text = [
+      "Look, am I toxic? Probably. Is being toxic always wrong? Probably not. Do I have any intention of becoming less toxic? That's a question for a future version of me. Anyway, here's some Death Guard",
+      '',
+      'Death Guard',
+      'Strike Force (2000 points)',
+      'Virulent Vectorium',
+    ].join('\n')
+    expect(detectFormat(text)).toBe('gw-app')
+  })
+
+  it('detects GW App format from a key-value header with no points on line 1', () => {
+    const text = [
+      'Faction: Adeptus Custodes',
+      'Detatchment: Lions of the Emperor',
+      '',
+      'CHARACTERS',
+      '',
+      'Blade Champion (120 Points)',
+    ].join('\n')
+    expect(detectFormat(text)).toBe('gw-app')
+  })
+
+  it('still returns unknown when no line carries a points marker', () => {
+    expect(detectFormat('a long rambling note\nwith several lines\nand no list at all')).toBe(
+      'unknown',
+    )
+  })
 })

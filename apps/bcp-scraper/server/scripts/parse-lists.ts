@@ -51,6 +51,18 @@ async function main() {
     return rows[0]?.cnt ?? 0
   }
 
+  // --retry-failed clears list_ttt on rows whose stored parse failed, putting
+  // them back in the pending queue. Use after a parser fix; rows that parsed
+  // ok or partial are left alone.
+  if (process.argv.includes('--retry-failed')) {
+    const res = await db.run(sql`
+      UPDATE meta_event_players
+      SET list_ttt = NULL
+      WHERE list_ttt LIKE '%"parseStatus":"failed"%'
+    `)
+    console.log(`--retry-failed: cleared ${res.rowsAffected} failed parses for re-parse`)
+  }
+
   const before = await pendingCount()
   console.log(`Rows awaiting parse: ${before}`)
   if (before === 0) {
