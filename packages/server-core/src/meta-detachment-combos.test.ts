@@ -91,6 +91,29 @@ describe('enumerateLegalCombos', () => {
     expect(combos.map((c) => c.id).sort()).toEqual(['a:one', 'b:one'])
   })
 
+  it('gives a subfaction its own detachments plus the parent pool', () => {
+    // A Blood Angels army can take Blood Angels detachments AND the generic
+    // Space Marine ones, which is where dim_detachment keeps them. Without the
+    // parent pool, none of the 103 chapter combos observed in real lists exist
+    // in the enumerated set and every one of them gets recorded illegal.
+    const combos = enumerateLegalCombos(
+      [
+        { id: 'space-marines:gladius', factionId: 'space-marines', dp: 3 },
+        { id: 'space-marines:librarius', factionId: 'space-marines', dp: 1 },
+        { id: 'blood-angels:legacy-of-grace', factionId: 'blood-angels', dp: 1 },
+      ],
+      DP_BUDGET.strikeForce,
+      { parents: new Map([['blood-angels', 'space-marines']]) },
+    )
+    const ids = combos.map((c) => c.id).sort()
+    // Keyed on the chapter, mixing a chapter detachment with a parent one.
+    expect(ids).toContain('blood-angels:legacy-of-grace+librarius')
+    expect(ids).toContain('blood-angels:gladius')
+    // The parent's own combos are unaffected and never gain chapter members.
+    expect(ids).toContain('space-marines:gladius')
+    expect(ids).not.toContain('space-marines:legacy-of-grace')
+  })
+
   it('skips detachments with no dp rather than guessing they are legal', () => {
     const combos = enumerateLegalCombos([
       { id: 'f:known', factionId: 'f', dp: 1 },

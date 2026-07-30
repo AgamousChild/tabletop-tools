@@ -58,8 +58,21 @@ export function comboId(factionId: string, detachmentIds: string[]): string {
   return `${factionId}:${slugs.join('+')}`
 }
 
+export interface EnumerateCombosOptions {
+  /**
+   * subfaction id -> parent faction id, from dim_subfaction.
+   *
+   * A subfaction can field its parent's detachments as well as its own, and
+   * dim_detachment keeps the shared marine detachments only under space-marines.
+   * Enumerating strictly by dim_detachment.faction_id therefore produces no
+   * combos at all for a chapter, and every real chapter army ends up recorded
+   * as an illegal build (measured: 103 of 110 distinct).
+   */
+  parents?: Map<string, string>
+}
+
 /**
- * Every legal combination within each faction, given a DP budget.
+ * Every legal combination available to each faction, given a DP budget.
  *
  * Detachments with no dp are skipped: without a cost there is no way to know
  * whether including them is legal, and guessing would populate the "available"
@@ -68,6 +81,7 @@ export function comboId(factionId: string, detachmentIds: string[]): string {
 export function enumerateLegalCombos(
   detachments: DetachmentWithDp[],
   budget: number = DP_BUDGET.strikeForce,
+  opts: EnumerateCombosOptions = {},
 ): DetachmentCombo[] {
   const byFaction = new Map<string, DetachmentWithDp[]>()
   for (const d of detachments) {
@@ -75,6 +89,17 @@ export function enumerateLegalCombos(
     const list = byFaction.get(d.factionId)
     if (list) list.push(d)
     else byFaction.set(d.factionId, [d])
+  }
+
+  // Give every subfaction the parent's pool on top of its own. Iterating a
+  // snapshot so a parent that is itself a subfaction cannot see a half-built
+  // pool — the relationship is one level deep in dim_subfaction.
+  const ownPools = new Map([...byFaction].map(([f, pool]) => [f, [...pool]]))
+  for (const [child, parent] of opts.parents ?? []) {
+    if (child === parent) continue
+    const inherited = ownPools.get(parent)
+    if (!inherited) continue
+    byFaction.set(child, [...(ownPools.get(child) ?? []), ...inherited])
   }
 
   const out: DetachmentCombo[] = []
@@ -154,4 +179,18 @@ export async function loadDetachmentsWithDp(db: Db): Promise<DetachmentWithDp[]>
   return (await db.all(
     sql`SELECT id, faction_id AS factionId, dp FROM dim_detachment`,
   )) as unknown as DetachmentWithDp[]
+}
+
+/**
+ * subfaction id -> parent faction id, for the inherited detachment pool.
+ *
+ * Self-references are dropped: a marine chapter appears as both a dim_faction
+ * row and a dim_subfaction row, and inheriting from itself is a no-op that only
+ * duplicates its pool.
+ */
+export async function loadSubfactionParents(db: Db): Promise<Map<string, string>> {
+  const rows = (await db.all(
+    sql`SELECT id, faction_id AS factionId FROM dim_subfaction`,
+  )) as unknown as Array<{ id: string; factionId: string }>
+  return new Map(rows.filter((r) => r.id !== r.factionId).map((r) => [r.id, r.factionId]))
 }

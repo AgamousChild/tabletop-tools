@@ -26,6 +26,7 @@ import {
   DP_BUDGET,
   enumerateLegalCombos,
   loadDetachmentsWithDp,
+  loadSubfactionParents,
   upsertCombos,
 } from '@tabletop-tools/server-core'
 
@@ -61,7 +62,13 @@ async function main(): Promise<void> {
   console.log(`  without dp: ${withoutDp.length}  (skipped — cannot judge legality)`)
   console.log(`DP budget   : ${budget}`)
 
-  const combos = enumerateLegalCombos(detachments, budget)
+  // Subfactions field the parent's detachments too — without this no chapter
+  // gets any combos, since dim_detachment keeps the shared marine detachments
+  // only under space-marines.
+  const parents = await loadSubfactionParents(db)
+  console.log(`subfactions inheriting a parent pool: ${parents.size}`)
+
+  const combos = enumerateLegalCombos(detachments, budget, { parents })
 
   const byCount = new Map<number, number>()
   for (const c of combos) byCount.set(c.memberCount, (byCount.get(c.memberCount) ?? 0) + 1)

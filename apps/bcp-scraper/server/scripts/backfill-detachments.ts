@@ -1,9 +1,10 @@
 /**
  * CLI wrapper around backfillDetachmentsFromLists() + a cube rebuild.
  *
- * Populates meta_event_players.detachment_id from the parsed list blob
- * (list_ttt), then rebuilds fact_game_results for the events it touched —
- * without that second half the cube keeps serving the old NULL detachments.
+ * Populates meta_event_player_detachment, meta_event_players.combo_id and
+ * .detachment_id from the parsed list blob (list_ttt), then rebuilds
+ * fact_game_results for the events it touched — without that second half the
+ * cube keeps serving the old NULL detachments.
  *
  * Loops the backfill (chunked per call, root CLAUDE.md rule 9) until the
  * queue drains, then rebuilds once for the union of touched events.
@@ -55,6 +56,10 @@ async function main() {
   let scanned = 0
   let updated = 0
   let noDetachment = 0
+  let detachmentRows = 0
+  let multiDetachment = 0
+  let illegalCombos = 0
+  let dpMismatch = 0
   let pass = 0
 
   // Keyset cursor. Unresolvable rows keep detachment_id NULL, so without this
@@ -73,6 +78,10 @@ async function main() {
     scanned += r.scanned
     updated += r.updated
     noDetachment += r.noDetachmentInList
+    detachmentRows += r.detachmentRows
+    multiDetachment += r.multiDetachment
+    illegalCombos += r.illegalCombos
+    dpMismatch += r.dpMismatch
     for (const id of r.eventIds) touched.add(id)
     for (const m of r.unmatched) {
       const key = `${m.factionId}::${m.raw}`
@@ -82,7 +91,9 @@ async function main() {
     }
 
     console.log(
-      `  pass ${pass + 1}: scanned=${r.scanned} updated=${r.updated} no-detachment=${r.noDetachmentInList} unresolved=${r.unmatched.reduce((a, b) => a + b.count, 0)}`,
+      `  pass ${pass + 1}: scanned=${r.scanned} updated=${r.updated} detachments=${r.detachmentRows}` +
+        ` multi=${r.multiDetachment} no-detachment=${r.noDetachmentInList}` +
+        ` unresolved=${r.unmatched.reduce((a, b) => a + b.count, 0)}`,
     )
 
     // With a cursor, an empty pass is the only honest stop condition: the
@@ -90,16 +101,17 @@ async function main() {
     // used to) gives up the moment it hits a run of unresolvable rows and
     // leaves resolvable ones behind them untouched.
     if (r.scanned === 0) break
-    // A dry run still advances the cursor, so it walks the whole set without
-    // writing; cap it so a --dry-run over a huge table stays quick.
-    if (dryRun && pass >= 9) {
-      console.log('  (dry run capped at 10 passes)')
-      break
-    }
   }
 
   console.log('\n===== BACKFILL SUMMARY =====')
   console.log(`scanned=${scanned}  updated=${updated}  no-detachment-in-list=${noDetachment}`)
+  console.log(
+    `detachment rows=${detachmentRows}  multi-detachment armies=${multiDetachment}` +
+      `  combos recorded illegal=${illegalCombos}`,
+  )
+  // A DP mismatch means the members we resolved cost a different total than the
+  // list declared — the best available signal that a split went wrong.
+  console.log(`declared-DP mismatches=${dpMismatch}`)
   console.log(`events touched: ${touched.size}`)
 
   const unresolvedTotal = [...unmatched.values()].reduce((a, b) => a + b.count, 0)

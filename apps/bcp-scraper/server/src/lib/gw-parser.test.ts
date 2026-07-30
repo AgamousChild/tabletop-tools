@@ -3,7 +3,7 @@ import { createDbFromClient } from '@tabletop-tools/db'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 
 import { loadFactionMap, resetFactionMapCache } from './faction-map'
-import { parseGwApp, splitDetachmentNames } from './gw-parser'
+import { parseGwApp } from './gw-parser'
 import type { TTTPackage } from './ttt-types'
 
 const client = createClient({ url: ':memory:' })
@@ -260,17 +260,5 @@ describe('11e detachment points and multiple detachments', () => {
   })
 })
 
-describe('splitDetachmentNames', () => {
-  it('splits on "and" and on commas', () => {
-    expect(splitDetachmentNames('Alpha and Beta')).toEqual(['Alpha', 'Beta'])
-    expect(splitDetachmentNames('Alpha, Beta')).toEqual(['Alpha', 'Beta'])
-  })
-
-  it('returns a single name unchanged', () => {
-    expect(splitDetachmentNames('Gladius Task Force')).toEqual(['Gladius Task Force'])
-  })
-
-  it('returns nothing for empty input', () => {
-    expect(splitDetachmentNames('   ')).toEqual([])
-  })
-})
+// splitDetachmentNames itself is tested in server-core, which owns it now —
+// see meta-detachment-backfill.test.ts.

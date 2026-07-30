@@ -1,3 +1,8 @@
+// splitDetachmentNames lives in server-core because that is where the
+// dim_detachment registry lives — the only place that can decide whether a
+// split is right (see resolveDeclaredDetachments). One implementation, not two.
+import { splitDetachmentNames } from '@tabletop-tools/server-core'
+
 import { normalizeFaction } from './faction-map'
 import type { TTTPackage, TTTUnit } from './ttt-types'
 
@@ -226,28 +231,6 @@ function parsePreamble(preamble: string, pkg: TTTPackage): void {
       pkg.list.detachmentId = slugifyDetachment(names[0]!)
     }
   }
-}
-
-/**
- * Split a declared detachment string into individual names.
- *
- * 11e exports join multiple detachments with " and " (418 of 600 sampled
- * DP-marked lists) or, rarely, a comma.
- *
- * This is BEST EFFORT and deliberately so: real detachment names contain "and"
- * — "Penitents and Pilgrims" is a single Adepta Sororitas detachment — so a
- * split alone cannot tell a two-detachment army from a one-detachment army with
- * a conjunction in its name. Only dim_detachment can settle that, so the
- * backfill in server-core tries the FULL string against the registry before
- * falling back to these parts. Splitting here just records the candidates.
- */
-export function splitDetachmentNames(raw: string): string[] {
-  const cleaned = raw.replace(/\s+/g, ' ').trim()
-  if (!cleaned) return []
-  return cleaned
-    .split(/\s+and\s+|\s*,\s*/i)
-    .map((s) => s.trim())
-    .filter(Boolean)
 }
 
 /**
