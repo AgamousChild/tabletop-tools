@@ -57,8 +57,19 @@ async function main() {
   let noDetachment = 0
   let pass = 0
 
+  // Keyset cursor. Unresolvable rows keep detachment_id NULL, so without this
+  // every pass re-reads the same stuck chunk.
+  let afterId: string | undefined
+
   for (; pass < MAX_PASSES; pass++) {
-    const r = await backfillDetachmentsFromLists(db, { limit: CHUNK, since, until, dryRun })
+    const r = await backfillDetachmentsFromLists(db, {
+      limit: CHUNK,
+      since,
+      until,
+      dryRun,
+      afterId,
+    })
+    afterId = r.lastId ?? afterId
     scanned += r.scanned
     updated += r.updated
     noDetachment += r.noDetachmentInList
@@ -74,13 +85,17 @@ async function main() {
       `  pass ${pass + 1}: scanned=${r.scanned} updated=${r.updated} no-detachment=${r.noDetachmentInList} unresolved=${r.unmatched.reduce((a, b) => a + b.count, 0)}`,
     )
 
-    // A dry run never writes, so rows stay pending and the query returns the
-    // same chunk forever — one pass is all the signal it can give.
-    if (dryRun) break
+    // With a cursor, an empty pass is the only honest stop condition: the
+    // queue is genuinely exhausted. Stopping on `updated === 0` (as this loop
+    // used to) gives up the moment it hits a run of unresolvable rows and
+    // leaves resolvable ones behind them untouched.
     if (r.scanned === 0) break
-    // Nothing written and nothing left to write means the rest are all
-    // unresolvable; another pass would return the identical chunk.
-    if (r.updated === 0) break
+    // A dry run still advances the cursor, so it walks the whole set without
+    // writing; cap it so a --dry-run over a huge table stays quick.
+    if (dryRun && pass >= 9) {
+      console.log('  (dry run capped at 10 passes)')
+      break
+    }
   }
 
   console.log('\n===== BACKFILL SUMMARY =====')

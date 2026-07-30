@@ -176,6 +176,29 @@ describe('backfillDetachmentsFromLists', () => {
     expect(rows.find((r) => r.id === 'p3')!.detachment_id).toBeNull()
   })
 
+  it('advances the cursor past unresolvable rows instead of re-reading them', async () => {
+    // p3 ("steel-hammer") can never resolve, so it keeps detachment_id NULL and
+    // a bare LIMIT would return it on every pass forever. Walk with the cursor
+    // one row at a time and confirm each pass sees a NEW row.
+    const seen: string[] = []
+    let afterId: string | undefined
+    for (let i = 0; i < 10; i++) {
+      const r = await backfillDetachmentsFromLists(db, { limit: 1, afterId, dryRun: true })
+      if (r.scanned === 0) break
+      expect(r.lastId).not.toBeNull()
+      expect(seen).not.toContain(r.lastId!)
+      seen.push(r.lastId!)
+      afterId = r.lastId!
+    }
+    // Each remaining row visited exactly once, in ascending id order, and the
+    // walk terminates. p3 is the unresolvable one — with a bare LIMIT it would
+    // be returned on every pass and `seen` would be ['p3','p3','p3',...].
+    expect(new Set(seen).size).toBe(seen.length)
+    expect([...seen].sort()).toEqual(seen)
+    expect(seen).toContain('p3')
+    expect(seen.length).toBeLessThan(10) // terminated rather than looping
+  })
+
   it('is idempotent — a second pass finds nothing left to do', async () => {
     const res = await backfillDetachmentsFromLists(db)
     expect(res.updated).toBe(0)

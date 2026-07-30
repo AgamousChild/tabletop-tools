@@ -109,6 +109,11 @@ export interface DetachmentBackfillResult {
   unmatched: Array<{ raw: string; factionId: string; count: number }>
   /** Distinct event ids touched — feed these to buildCubeForEvents(). */
   eventIds: string[]
+  /**
+   * Highest row id examined this pass — pass back as `afterId` to continue.
+   * Null when nothing was examined, which means the queue is drained.
+   */
+  lastId: string | null
 }
 
 export interface DetachmentBackfillOptions {
@@ -120,6 +125,17 @@ export interface DetachmentBackfillOptions {
   until?: number
   /** Resolve and report without writing. */
   dryRun?: boolean
+  /**
+   * Keyset cursor: only consider rows with `id` greater than this.
+   *
+   * Required for looping. Rows that cannot be resolved keep detachment_id NULL,
+   * so a bare LIMIT re-reads the same stuck rows on every pass — the first run
+   * of this backfill burned 17 passes over ~1,271 real updates and reported
+   * `scanned=8500` because of it. A keyset cursor advances past everything
+   * examined, resolved or not, and stays flat as the table grows (unlike
+   * OFFSET).
+   */
+  afterId?: string
 }
 
 interface PendingRow {
@@ -163,13 +179,18 @@ export async function backfillDetachmentsFromLists(
   ]
   if (opts.since !== undefined) conditions.push(`me.date >= ${opts.since}`)
   if (opts.until !== undefined) conditions.push(`me.date <= ${opts.until}`)
+  if (opts.afterId !== undefined) {
+    conditions.push(`mep.id > '${opts.afterId.replace(/'/g, "''")}'`)
+  }
 
+  // ORDER BY id is what makes the keyset cursor well-defined.
   const rows = (await db.all(
     sql.raw(`
       SELECT mep.id, mep.event_id, mep.faction_id, mep.list_ttt
       FROM meta_event_players mep
       JOIN meta_events me ON mep.event_id = me.id
       WHERE ${conditions.join(' AND ')}
+      ORDER BY mep.id
       LIMIT ${limit}
     `),
   )) as unknown as PendingRow[]
@@ -180,6 +201,7 @@ export async function backfillDetachmentsFromLists(
     noDetachmentInList: 0,
     unmatched: [],
     eventIds: [],
+    lastId: rows.length > 0 ? rows[rows.length - 1]!.id : null,
   }
 
   const missCounts = new Map<string, { raw: string; factionId: string; count: number }>()

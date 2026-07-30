@@ -8,6 +8,15 @@ export {
   type DetachmentBackfillResult,
 } from './meta-detachment-backfill'
 export {
+  comboId,
+  type DetachmentCombo,
+  type DetachmentWithDp,
+  DP_BUDGET,
+  enumerateLegalCombos,
+  loadDetachmentsWithDp,
+  upsertCombos,
+} from './meta-detachment-combos'
+export {
   applyDetachmentSync,
   type BrainDetachment,
   type DetachmentSyncPlan,
