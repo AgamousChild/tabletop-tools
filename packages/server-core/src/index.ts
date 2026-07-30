@@ -3,6 +3,19 @@ export { type Glicko2Game, type Glicko2Player, type Glicko2Result, updateGlicko2
 export { generateId } from './id'
 export { buildCubeForEvents, type EventRow, type Frame, generateFrames } from './meta-cube'
 export {
+  backfillDetachmentsFromLists,
+  type DetachmentBackfillOptions,
+  type DetachmentBackfillResult,
+} from './meta-detachment-backfill'
+export {
+  applyDetachmentSync,
+  type BrainDetachment,
+  type DetachmentSyncPlan,
+  type DimDetachmentRow,
+  parseBrainDetachments,
+  planDetachmentSync,
+} from './meta-detachment-sync'
+export {
   type MetaIngestPairing,
   type MetaIngestPlayer,
   runGlickoForEvent,

@@ -748,10 +748,65 @@ export const dimDetachment = sqliteTable(
       .notNull()
       .references(() => dimFaction.id),
     subfactionId: text('subfaction_id').references(() => dimSubfaction.id),
+    /**
+     * 11e Detachment Points cost (1-3). Null for 10e-era rows that have no 11e
+     * cost — distinct from a cost of 0, which is not a legal value.
+     */
+    dp: integer('dp'),
   },
   (table) => [
     index('idx_dim_detachment_faction').on(table.factionId),
     index('idx_dim_detachment_subfaction').on(table.subfactionId),
+  ],
+)
+
+/**
+ * A SET of detachments, as a first-class dimension.
+ *
+ * 11e armies take multiple detachments under a Detachment Points budget (2 at
+ * Incursion, 3 at Strike Force), so the meaningful unit of army identity is the
+ * combination, not a single detachment. Keying facts on this makes "which
+ * pairing wins" an indexed lookup instead of a query-time aggregate.
+ *
+ * `id` is the faction plus member slugs sorted and joined with "+", so the same
+ * set always yields the same id regardless of the order it was written in.
+ */
+export const dimDetachmentCombo = sqliteTable(
+  'dim_detachment_combo',
+  {
+    id: text('id').primaryKey(),
+    factionId: text('faction_id')
+      .notNull()
+      .references(() => dimFaction.id),
+    memberCount: integer('member_count').notNull(),
+    totalDp: integer('total_dp'),
+    /**
+     * 1 when enumerated from the DP rules as a legal build. Combos seen in real
+     * lists that are not legal still get a row (is_legal = 0) so fact rows have
+     * something to reference rather than being dropped.
+     */
+    isLegal: integer('is_legal').notNull().default(0),
+  },
+  (table) => [
+    index('idx_dim_detachment_combo_faction').on(table.factionId),
+    index('idx_dim_detachment_combo_legal').on(table.isLegal),
+  ],
+)
+
+/** Members of a combo — lets you find every combo containing a detachment. */
+export const dimDetachmentComboMember = sqliteTable(
+  'dim_detachment_combo_member',
+  {
+    comboId: text('combo_id')
+      .notNull()
+      .references(() => dimDetachmentCombo.id, { onDelete: 'cascade' }),
+    detachmentId: text('detachment_id')
+      .notNull()
+      .references(() => dimDetachment.id),
+  },
+  (table) => [
+    primaryKey({ columns: [table.comboId, table.detachmentId] }),
+    index('idx_dim_detachment_combo_member_detachment').on(table.detachmentId),
   ],
 )
 
@@ -839,6 +894,11 @@ export const metaEventPlayers = sqliteTable(
     listText: text('list_text'),
     listTtt: text('list_ttt'),
     sourceListId: text('source_list_id'),
+    /**
+     * The full detachment SET. detachmentId above holds the primary (position 1)
+     * detachment for back-compat; members live in metaEventPlayerDetachment.
+     */
+    comboId: text('combo_id').references(() => dimDetachmentCombo.id),
     wins: integer('wins').notNull().default(0),
     losses: integer('losses').notNull().default(0),
     draws: integer('draws').notNull().default(0),
@@ -852,6 +912,32 @@ export const metaEventPlayers = sqliteTable(
   (table) => [
     index('idx_meta_event_players_event').on(table.eventId),
     index('idx_meta_event_players_faction').on(table.factionId),
+    index('idx_meta_event_players_combo').on(table.comboId),
+  ],
+)
+
+/**
+ * What a player actually brought — one row per detachment.
+ *
+ * `position` preserves the order written in the list. `detachmentPoints` is
+ * denormalised on purpose: it records the cost at the time the list was played,
+ * so historical rows survive a later points change in dim_detachment.
+ */
+export const metaEventPlayerDetachment = sqliteTable(
+  'meta_event_player_detachment',
+  {
+    playerId: text('player_id')
+      .notNull()
+      .references(() => metaEventPlayers.id, { onDelete: 'cascade' }),
+    detachmentId: text('detachment_id')
+      .notNull()
+      .references(() => dimDetachment.id),
+    position: integer('position').notNull(),
+    detachmentPoints: integer('detachment_points'),
+  },
+  (table) => [
+    primaryKey({ columns: [table.playerId, table.detachmentId] }),
+    index('idx_meta_event_player_detachment_detachment').on(table.detachmentId),
   ],
 )
 
@@ -1000,7 +1086,15 @@ export const factGameResults = sqliteTable(
       .notNull()
       .references(() => dimFaction.id),
     subfactionId: text('subfaction_id').references(() => dimSubfaction.id),
+    /** Primary (position 1) detachment. Kept for back-compat; see comboId. */
     detachmentId: text('detachment_id').references(() => dimDetachment.id),
+    /**
+     * The full detachment SET this army brought. 11e armies routinely take more
+     * than one, so detachmentId alone under-describes 64% of scraped lists.
+     * Fact grain is unchanged — one row per player per game; the combo is an
+     * attribute of the army, not a reason to fan out rows.
+     */
+    comboId: text('combo_id').references(() => dimDetachmentCombo.id),
     opponentFactionId: text('opponent_faction_id').references(() => dimFaction.id),
     opponentSubfactionId: text('opponent_subfaction_id').references(() => dimSubfaction.id),
     opponentDetachmentId: text('opponent_detachment_id').references(() => dimDetachment.id),
@@ -1013,6 +1107,7 @@ export const factGameResults = sqliteTable(
     index('idx_fact_results_event').on(table.eventId),
     index('idx_fact_results_player').on(table.playerId),
     index('idx_fact_results_matchup').on(table.factionId, table.opponentFactionId),
+    index('idx_fact_game_results_combo').on(table.comboId),
   ],
 )
 

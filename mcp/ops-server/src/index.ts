@@ -18,7 +18,13 @@ import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js'
 import { z } from 'zod'
 
-import { bcpPipelineFull, bcpScrapeEvents, bcpScrapeLists } from './lib/bcp-ops.js'
+import {
+  bcpBackfillDetachments,
+  bcpParseLists,
+  bcpPipelineFull,
+  bcpScrapeEvents,
+  bcpScrapeLists,
+} from './lib/bcp-ops.js'
 import {
   brainBuild,
   brainCubeReport,
@@ -536,33 +542,152 @@ server.tool(
 )
 
 server.tool(
+  'bcp_parse_lists',
+  [
+    'STEP 3 of 4. Parse fetched list_text into the structured list_ttt blob.',
+    '',
+    'Only touches rows that have list_text and no list_ttt. Chunked at 100 rows',
+    'per underlying call; the script loops until the queue drains.',
+    '',
+    'Note: the parser has a hardcoded 2026-01-01 event-date floor, so older',
+    'events are never queued no matter how much list_text they have.',
+    '',
+    'retryFailed=true clears list_ttt on rows whose stored parse FAILED so they',
+    'are re-attempted. Use only after changing the parser — not routinely.',
+    '',
+    'Requires: TURSO_DB_URL, TURSO_AUTH_TOKEN. No BCP credentials needed.',
+    'Prerequisite: bcp_scrape_lists must have populated list_text.',
+    '',
+    'What to run next: bcp_backfill_detachments — parsing alone puts the',
+    'detachment in list_ttt, which no analytics query reads.',
+  ].join('\n'),
+  {
+    retryFailed: z
+      .boolean()
+      .optional()
+      .default(false)
+      .describe('Re-attempt rows whose stored parse failed (use after a parser change)'),
+  },
+  async ({ retryFailed }) => {
+    const r = await bcpParseLists({ retryFailed })
+    const lines = [
+      `bcp_parse_lists exit ${r.code} in ${Math.round(r.durationMs / 1000)}s`,
+      r.parsed !== undefined ? `parsed=${r.parsed} partial=${r.partial} failed=${r.failed}` : '',
+      '',
+      '--- stdout tail ---',
+      r.stdout,
+      r.stderr ? '\n--- stderr tail ---\n' + r.stderr : '',
+    ]
+    return textResult(lines.filter(Boolean).join('\n'))
+  },
+)
+
+server.tool(
+  'bcp_backfill_detachments',
+  [
+    'STEP 4 of 4. Populate meta_event_players.detachment_id from the parsed',
+    'list blob, then rebuild the cube for the events touched.',
+    '',
+    'WHY THIS STEP EXISTS: the analytics cube reads detachment_id, but the list',
+    'parser only ever writes list_ttt. Without this bridge, fact_game_results',
+    'carries NO detachment at all regardless of how many lists were scraped —',
+    'measured 2026-07-28: 0 of 33,744 fact rows had a detachment while 4,938',
+    'parsed lists named one.',
+    '',
+    'Matching is faction-scoped and normalizes both slug conventions',
+    '(dim_detachment turns punctuation into "-", the list parser keeps',
+    'apostrophes), strips a faction name baked into the slug, and tolerates',
+    'trailing battle-size noise. ~90% of parsed lists resolve.',
+    '',
+    'Unresolved values are REPORTED, never guessed. They usually mean either',
+    'dim_detachment lacks the entry, or the player row has the wrong faction',
+    '(e.g. an aeldari row naming a Death Guard detachment).',
+    '',
+    'The cube rebuild is part of the step, not a nicety: skip it and',
+    'fact_game_results keeps serving the pre-backfill NULLs. Use skipCube only',
+    'when you will rebuild yourself.',
+    '',
+    'dryRun=true resolves and reports without writing (single chunk only).',
+    '',
+    'Requires: TURSO_DB_URL, TURSO_AUTH_TOKEN. No BCP credentials needed.',
+    'Prerequisite: bcp_parse_lists must have populated list_ttt.',
+    '',
+    'What to run next: nothing — the cube is current for these events.',
+  ].join('\n'),
+  {
+    since: z.string().optional().describe('ISO date start, e.g. "2026-06-01"'),
+    until: z.string().optional().describe('ISO date end, e.g. "2026-07-31"'),
+    dryRun: z.boolean().optional().default(false).describe('Resolve and report without writing'),
+    skipCube: z
+      .boolean()
+      .optional()
+      .default(false)
+      .describe('Skip the cube rebuild — leaves fact_game_results stale'),
+  },
+  async ({ since, until, dryRun, skipCube }) => {
+    const r = await bcpBackfillDetachments({ since, until, dryRun, skipCube })
+    const lines = [
+      `bcp_backfill_detachments exit ${r.code} in ${Math.round(r.durationMs / 1000)}s`,
+      r.updated !== undefined ? `detachment_id written: ${r.updated}` : '',
+      r.eventsTouched !== undefined ? `events rebuilt: ${r.eventsTouched}` : '',
+      r.unresolved !== undefined ? `unresolved rows: ${r.unresolved}` : '',
+      '',
+      '--- stdout tail ---',
+      r.stdout,
+      r.stderr ? '\n--- stderr tail ---\n' + r.stderr : '',
+    ]
+    return textResult(lines.filter(Boolean).join('\n'))
+  },
+)
+
+server.tool(
   'bcp_pipeline_full',
   [
-    'Convenience: bcp_scrape_events → bcp_scrape_lists, in sequence.',
+    'The whole BCP pipeline in dependency order:',
     '',
-    'Use this for a full catch-up pass. Both steps are idempotent — safe to',
-    're-run if interrupted.',
+    '  1. bcp_scrape_events        events + pairings → meta_events,',
+    '                              meta_event_players, meta_pairings,',
+    '                              and source_list_id',
+    '  2. bcp_scrape_lists         army list text    → list_text',
+    '  3. bcp_parse_lists          structured parse  → list_ttt',
+    '  4. bcp_backfill_detachments detachment + cube → detachment_id,',
+    '                              fact_game_results',
     '',
-    'Scope the list-fetch pass with since/until (ISO dates). Events scrape',
-    'always uses the default 7-day window.',
+    'Each step feeds the next, so running a prefix leaves the tail STALE, not',
+    'merely incomplete. Stop after 2 and the lists are unparsed; stop after 3',
+    'and the cube reports no detachments at all.',
     '',
-    'Set skipLists=true if you only need events + pairings this pass.',
+    'Every step is idempotent — safe to re-run after an interruption.',
+    '',
+    'Scope the list-fetch and detachment passes with since/until (ISO dates).',
+    'The events scrape always uses its own rolling 7-day window; for an',
+    'arbitrary backfill window run scripts/scrape-jun-jul.ts --refresh instead.',
+    '',
+    'skipLists / skipParse / skipDetachments each drop their step.',
     '',
     'Requires: TURSO_DB_URL, TURSO_AUTH_TOKEN, BCP_EMAIL, BCP_PASSWORD.',
   ].join('\n'),
   {
-    since: z.string().optional().describe('ISO date start for list-fetch scope'),
-    until: z.string().optional().describe('ISO date end for list-fetch scope'),
+    since: z.string().optional().describe('ISO date start for list-fetch + detachment scope'),
+    until: z.string().optional().describe('ISO date end for list-fetch + detachment scope'),
     skipLists: z.boolean().optional().default(false),
+    skipParse: z.boolean().optional().default(false),
+    skipDetachments: z.boolean().optional().default(false),
   },
-  async ({ since, until, skipLists }) => {
-    const r = await bcpPipelineFull({ since, until, skipLists })
+  async ({ since, until, skipLists, skipParse, skipDetachments }) => {
+    const r = await bcpPipelineFull({ since, until, skipLists, skipParse, skipDetachments })
     const lines = [
       `bcp_pipeline_full done in ${Math.round(r.totalDurationMs / 1000)}s`,
-      `events: exit ${r.events.code}`,
+      `1. events:      exit ${r.events.code}`,
       r.lists
-        ? `lists:  exit ${r.lists.code} — fetched=${r.lists.fetched ?? '?'}, errors=${r.lists.errors ?? '?'}`
-        : 'lists:  skipped',
+        ? `2. lists:       exit ${r.lists.code} — fetched=${r.lists.fetched ?? '?'}, errors=${r.lists.errors ?? '?'}`
+        : '2. lists:       skipped',
+      r.parse
+        ? `3. parse:       exit ${r.parse.code} — parsed=${r.parse.parsed ?? '?'}, failed=${r.parse.failed ?? '?'}`
+        : '3. parse:       skipped',
+      r.detachments
+        ? `4. detachments: exit ${r.detachments.code} — written=${r.detachments.updated ?? '?'}, events rebuilt=${r.detachments.eventsTouched ?? '?'}, unresolved=${r.detachments.unresolved ?? '?'}`
+        : '4. detachments: skipped — cube detachments are STALE',
     ]
     return textResult(lines.join('\n'))
   },
