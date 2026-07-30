@@ -261,8 +261,10 @@ export async function buildCubeForEvents(db: Db, eventIds: string[]): Promise<vo
       SELECT mp.id, mp.event_id, mp.round, mp.result,
              mp.player1_id, mp.player2_id,
              mp.player1_score, mp.player2_score,
-             p1.faction_id AS p1_faction, p1.subfaction_id AS p1_subfaction, p1.detachment_id AS p1_detachment,
-             p2.faction_id AS p2_faction, p2.subfaction_id AS p2_subfaction, p2.detachment_id AS p2_detachment
+             p1.faction_id AS p1_faction, p1.subfaction_id AS p1_subfaction,
+             p1.detachment_id AS p1_detachment, p1.combo_id AS p1_combo,
+             p2.faction_id AS p2_faction, p2.subfaction_id AS p2_subfaction,
+             p2.detachment_id AS p2_detachment, p2.combo_id AS p2_combo
       FROM meta_pairings mp
       JOIN meta_event_players p1 ON mp.player1_id = p1.id
       JOIN meta_event_players p2 ON mp.player2_id = p2.id
@@ -274,20 +276,25 @@ export async function buildCubeForEvents(db: Db, eventIds: string[]): Promise<vo
       const p1Result = result === 'p1' ? 1.0 : result === 'draw' ? 0.5 : 0.0
       const p2Result = result === 'p2' ? 1.0 : result === 'draw' ? 0.5 : 0.0
 
+      // Grain is one row per player per game. The combo rides along as an
+      // attribute — fanning out per member detachment would count a
+      // two-detachment army as two games and corrupt every win rate.
       await db.run(sql`INSERT INTO fact_game_results
-        (id, event_id, player_id, opponent_id, round, faction_id, subfaction_id, detachment_id,
-         opponent_faction_id, opponent_subfaction_id, opponent_detachment_id, result, player_score, opponent_score)
+        (id, event_id, player_id, opponent_id, round, faction_id, subfaction_id, detachment_id, combo_id,
+         opponent_faction_id, opponent_subfaction_id, opponent_detachment_id, opponent_combo_id,
+         result, player_score, opponent_score)
         VALUES (${generateId()}, ${row.event_id}, ${row.player1_id}, ${row.player2_id}, ${row.round},
-                ${row.p1_faction}, ${row.p1_subfaction}, ${row.p1_detachment},
-                ${row.p2_faction}, ${row.p2_subfaction}, ${row.p2_detachment},
+                ${row.p1_faction}, ${row.p1_subfaction}, ${row.p1_detachment}, ${row.p1_combo},
+                ${row.p2_faction}, ${row.p2_subfaction}, ${row.p2_detachment}, ${row.p2_combo},
                 ${p1Result}, ${row.player1_score}, ${row.player2_score})`)
 
       await db.run(sql`INSERT INTO fact_game_results
-        (id, event_id, player_id, opponent_id, round, faction_id, subfaction_id, detachment_id,
-         opponent_faction_id, opponent_subfaction_id, opponent_detachment_id, result, player_score, opponent_score)
+        (id, event_id, player_id, opponent_id, round, faction_id, subfaction_id, detachment_id, combo_id,
+         opponent_faction_id, opponent_subfaction_id, opponent_detachment_id, opponent_combo_id,
+         result, player_score, opponent_score)
         VALUES (${generateId()}, ${row.event_id}, ${row.player2_id}, ${row.player1_id}, ${row.round},
-                ${row.p2_faction}, ${row.p2_subfaction}, ${row.p2_detachment},
-                ${row.p1_faction}, ${row.p1_subfaction}, ${row.p1_detachment},
+                ${row.p2_faction}, ${row.p2_subfaction}, ${row.p2_detachment}, ${row.p2_combo},
+                ${row.p1_faction}, ${row.p1_subfaction}, ${row.p1_detachment}, ${row.p1_combo},
                 ${p2Result}, ${row.player2_score}, ${row.player1_score})`)
     }
   }

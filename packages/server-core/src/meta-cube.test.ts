@@ -164,6 +164,47 @@ describe('buildCubeForEvents', () => {
     expect(smTop.players).toBe(1)
   })
 
+  it('carries each army detachment combo into the fact grain, both perspectives', async () => {
+    await insertEvent(client, {
+      id: 'evt-combo',
+      date: Date.UTC(2025, 5, 14),
+      source: 'native',
+      sourceId: 'tourn-combo',
+      importedAt: 1000,
+    })
+    await client.executeMultiple(`
+      INSERT INTO dim_detachment (id, name, faction_id, subfaction_id, dp) VALUES
+        ('sm:gladius','Gladius','sm',NULL,2),
+        ('sm:librarius','Librarius','sm',NULL,1),
+        ('ork:war-horde','War Horde','ork',NULL,3);
+      INSERT INTO dim_detachment_combo (id, faction_id, member_count, total_dp, is_legal) VALUES
+        ('sm:gladius+librarius','sm',2,3,1),
+        ('ork:war-horde','ork',1,3,1);
+      UPDATE meta_event_players SET detachment_id='sm:gladius', combo_id='sm:gladius+librarius'
+        WHERE id='evt-combo-p1';
+      UPDATE meta_event_players SET detachment_id='ork:war-horde', combo_id='ork:war-horde'
+        WHERE id='evt-combo-p2';
+    `)
+
+    await buildCubeForEvents(db, ['evt-combo'])
+
+    const facts = (await db.all(sql`
+      SELECT player_id, detachment_id, combo_id, opponent_combo_id FROM fact_game_results
+    `)) as Array<Record<string, unknown>>
+    // Grain unchanged: a two-detachment army is still ONE row per game, not two.
+    expect(facts).toHaveLength(2)
+
+    const p1 = facts.find((f) => f.player_id === 'evt-combo-p1')!
+    expect(p1.combo_id).toBe('sm:gladius+librarius')
+    expect(p1.opponent_combo_id).toBe('ork:war-horde')
+    // detachment_id keeps holding the primary for consumers not yet on combo_id.
+    expect(p1.detachment_id).toBe('sm:gladius')
+
+    const p2 = facts.find((f) => f.player_id === 'evt-combo-p2')!
+    expect(p2.combo_id).toBe('ork:war-horde')
+    expect(p2.opponent_combo_id).toBe('sm:gladius+librarius')
+  })
+
   it('does NOT cube events outside the given id list (regression: unscoped watermark query)', async () => {
     // Two events land in the DB with different sources/imported_at times, simulating
     // three independent writers landing rows without any single writer "owning" a global watermark.

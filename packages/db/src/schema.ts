@@ -1098,6 +1098,7 @@ export const factGameResults = sqliteTable(
     opponentFactionId: text('opponent_faction_id').references(() => dimFaction.id),
     opponentSubfactionId: text('opponent_subfaction_id').references(() => dimSubfaction.id),
     opponentDetachmentId: text('opponent_detachment_id').references(() => dimDetachment.id),
+    opponentComboId: text('opponent_combo_id').references(() => dimDetachmentCombo.id),
     result: real('result').notNull(),
     playerScore: integer('player_score'),
     opponentScore: integer('opponent_score'),
@@ -1108,6 +1109,7 @@ export const factGameResults = sqliteTable(
     index('idx_fact_results_player').on(table.playerId),
     index('idx_fact_results_matchup').on(table.factionId, table.opponentFactionId),
     index('idx_fact_game_results_combo').on(table.comboId),
+    index('idx_fact_game_results_combo_matchup').on(table.comboId, table.opponentComboId),
   ],
 )
 
