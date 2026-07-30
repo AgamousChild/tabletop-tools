@@ -1,5 +1,6 @@
 import { createClient } from '@libsql/client'
 import { createDbFromClient } from '@tabletop-tools/db'
+import { applyTestSchema, seedReferenceDims } from '@tabletop-tools/db/src/test-schema'
 import { sql } from 'drizzle-orm'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 
@@ -132,16 +133,16 @@ describe('backfillDetachmentsFromLists', () => {
   const db = createDbFromClient(client)
 
   beforeAll(async () => {
+    await applyTestSchema(client)
+    await seedReferenceDims(client)
     await client.executeMultiple(`
-      CREATE TABLE dim_faction (id TEXT PRIMARY KEY, name TEXT NOT NULL, allegiance TEXT NOT NULL);
-      CREATE TABLE dim_detachment (id TEXT PRIMARY KEY, name TEXT NOT NULL, faction_id TEXT NOT NULL, subfaction_id TEXT);
-      CREATE TABLE meta_events (id TEXT PRIMARY KEY, name TEXT NOT NULL, date INTEGER NOT NULL, format TEXT NOT NULL, player_count INTEGER NOT NULL, source TEXT NOT NULL, source_id TEXT, imported_at INTEGER NOT NULL);
-      CREATE TABLE meta_event_players (id TEXT PRIMARY KEY, event_id TEXT NOT NULL, player_name TEXT NOT NULL, faction_id TEXT NOT NULL, detachment_id TEXT, placement INTEGER NOT NULL, list_ttt TEXT, wins INTEGER NOT NULL DEFAULT 0, losses INTEGER NOT NULL DEFAULT 0, draws INTEGER NOT NULL DEFAULT 0);
       INSERT INTO dim_faction VALUES ('tau-empire','T''au Empire','xenos'),('drukhari','Drukhari','xenos');
-      INSERT INTO dim_detachment VALUES
-        ('tau-empire:mont-ka','Mont''ka','tau-empire',NULL),
-        ('drukhari:reaper-s-wager','Reaper''s Wager','drukhari',NULL);
-      INSERT INTO meta_events VALUES ('ev1','Event One',1780000000000,'GT',20,'bcp','src1',1780000000000);
+      INSERT INTO dim_detachment (id, name, faction_id, subfaction_id, dp) VALUES
+        ('tau-empire:mont-ka','Mont''ka','tau-empire',NULL,3),
+        ('drukhari:reaper-s-wager','Reaper''s Wager','drukhari',NULL,3);
+      INSERT INTO meta_events
+        (id, name, date, format, player_count, source, source_id, imported_at)
+        VALUES ('ev1','Event One',1780000000000,'GT',20,'bcp','src1',1780000000000);
     `)
 
     const ok = (detachment: string) =>
