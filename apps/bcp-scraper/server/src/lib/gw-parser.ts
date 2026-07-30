@@ -205,9 +205,49 @@ function parsePreamble(preamble: string, pkg: TTTPackage): void {
   }
 
   if (remaining) {
+    // 11e: the detachment line carries the points spent, e.g.
+    // "Librarius Conclave and Spearpoint Task Force (3 Detachment Points)".
+    const dpMatch = remaining.match(/\((\d+)\s*Detachment\s+Points?\)/i)
+    if (dpMatch) {
+      pkg.list.detachmentPoints = parseInt(dpMatch[1]!, 10)
+      remaining = (
+        remaining.slice(0, dpMatch.index!) + remaining.slice(dpMatch.index! + dpMatch[0].length)
+      ).trim()
+    }
+
     pkg.list.detachmentName = remaining
     pkg.list.detachmentId = slugifyDetachment(remaining)
+
+    const names = splitDetachmentNames(remaining)
+    pkg.list.detachments = names.map((name) => ({ name, id: slugifyDetachment(name) }))
+    // Primary is the first written detachment.
+    if (names.length > 0) {
+      pkg.list.detachmentName = names[0]!
+      pkg.list.detachmentId = slugifyDetachment(names[0]!)
+    }
   }
+}
+
+/**
+ * Split a declared detachment string into individual names.
+ *
+ * 11e exports join multiple detachments with " and " (418 of 600 sampled
+ * DP-marked lists) or, rarely, a comma.
+ *
+ * This is BEST EFFORT and deliberately so: real detachment names contain "and"
+ * — "Penitents and Pilgrims" is a single Adepta Sororitas detachment — so a
+ * split alone cannot tell a two-detachment army from a one-detachment army with
+ * a conjunction in its name. Only dim_detachment can settle that, so the
+ * backfill in server-core tries the FULL string against the registry before
+ * falling back to these parts. Splitting here just records the candidates.
+ */
+export function splitDetachmentNames(raw: string): string[] {
+  const cleaned = raw.replace(/\s+/g, ' ').trim()
+  if (!cleaned) return []
+  return cleaned
+    .split(/\s+and\s+|\s*,\s*/i)
+    .map((s) => s.trim())
+    .filter(Boolean)
 }
 
 /**

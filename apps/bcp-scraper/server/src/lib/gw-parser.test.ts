@@ -3,7 +3,7 @@ import { createDbFromClient } from '@tabletop-tools/db'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 
 import { loadFactionMap, resetFactionMapCache } from './faction-map'
-import { parseGwApp } from './gw-parser'
+import { parseGwApp, splitDetachmentNames } from './gw-parser'
 import type { TTTPackage } from './ttt-types'
 
 const client = createClient({ url: ':memory:' })
@@ -206,5 +206,71 @@ describe('parseGwApp', () => {
       const result = parseGwApp(SAMPLE_TYRANIDS)
       expect(result.exports?.rawSource).toBe(SAMPLE_TYRANIDS)
     })
+  })
+})
+
+// 11e multi-detachment. Strings taken verbatim from prod exports: 418 of 600
+// sampled DP-marked lists join detachments with " and ".
+const SAMPLE_11E_MULTI = `Ironhands (1995 points)Space MarinesStrike Force (2000 points)Ironstorm Spearhead and The Living Miracle (3 Detachment Points)CHARACTERSCaptain Sicarius (85 points)  • 1x Artisan plasma pistol`
+
+const SAMPLE_11E_SINGLE = `Faithful (1995 points)Adepta SororitasStrike Force (2000 points)Penitents and Pilgrims (2 Detachment Points)CHARACTERSCanoness (50 points)  • 1x Blessed blade`
+
+describe('11e detachment points and multiple detachments', () => {
+  it('captures the points spent and splits the declared detachments', () => {
+    const result = parseGwApp(SAMPLE_11E_MULTI)
+    expect(result.list.detachmentPoints).toBe(3)
+    expect(result.list.detachments?.map((d) => d.name)).toEqual([
+      'Ironstorm Spearhead',
+      'The Living Miracle',
+    ])
+    expect(result.list.detachments?.map((d) => d.id)).toEqual([
+      'ironstorm-spearhead',
+      'the-living-miracle',
+    ])
+  })
+
+  it('reports the first written detachment as the primary, for back-compat', () => {
+    const result = parseGwApp(SAMPLE_11E_MULTI)
+    expect(result.list.detachmentName).toBe('Ironstorm Spearhead')
+    expect(result.list.detachmentId).toBe('ironstorm-spearhead')
+  })
+
+  it('keeps the Detachment Points marker out of the detachment name', () => {
+    const result = parseGwApp(SAMPLE_11E_MULTI)
+    expect(result.list.detachmentName).not.toMatch(/Detachment Point/i)
+    expect(result.list.detachments?.some((d) => /Detachment Point/i.test(d.name))).toBe(false)
+  })
+
+  it('splits a name that legitimately contains "and" — resolution is the backfill\'s job', () => {
+    // "Penitents and Pilgrims" is ONE Adepta Sororitas detachment
+    // (adepta-sororitas:penitents-and-pilgrims). The parser cannot tell this
+    // apart from two detachments without the registry, so it records both
+    // candidates and the backfill tries the full string against dim_detachment
+    // FIRST. This test documents that limitation rather than pretending the
+    // parser resolves it.
+    const result = parseGwApp(SAMPLE_11E_SINGLE)
+    expect(result.list.detachmentPoints).toBe(2)
+    expect(result.list.detachments?.map((d) => d.name)).toEqual(['Penitents', 'Pilgrims'])
+  })
+
+  it('leaves detachmentPoints undefined for a 10e list with no marker', () => {
+    const result = parseGwApp(SAMPLE_TYRANIDS)
+    expect(result.list.detachmentPoints).toBeUndefined()
+    expect(result.list.detachments?.map((d) => d.name)).toEqual(['Subterranean Assault'])
+  })
+})
+
+describe('splitDetachmentNames', () => {
+  it('splits on "and" and on commas', () => {
+    expect(splitDetachmentNames('Alpha and Beta')).toEqual(['Alpha', 'Beta'])
+    expect(splitDetachmentNames('Alpha, Beta')).toEqual(['Alpha', 'Beta'])
+  })
+
+  it('returns a single name unchanged', () => {
+    expect(splitDetachmentNames('Gladius Task Force')).toEqual(['Gladius Task Force'])
+  })
+
+  it('returns nothing for empty input', () => {
+    expect(splitDetachmentNames('   ')).toEqual([])
   })
 })
