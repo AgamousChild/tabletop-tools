@@ -5,10 +5,14 @@
  * project Rule 4 (Everything is a callable function). The MCP tool layer in
  * ../index.ts is a thin wrapper.
  *
- * Pipeline sequence (events → lists → parse):
- *   1. bcpScrapeEvents()   — fetch events + pairings via BCP API → meta_events / meta_event_players
- *   2. bcpScrapeLists()    — fetch army list text via BCP API → meta_event_players.list_text
- *   3. bcpPipelineFull()   — convenience: scrape events → scrape lists
+ * Pipeline sequence (events → lists → parse → dims → combos → detachments):
+ *   1. bcpScrapeEvents()        — events + pairings via BCP API → meta_events / meta_event_players
+ *   2. bcpScrapeLists()         — army list text via BCP API → meta_event_players.list_text
+ *   3. bcpParseLists()          — structured parse → list_ttt
+ *   4. bcpSyncDetachmentDims()  — brain → dim_detachment(.dp)
+ *   5. bcpEnumerateCombos()     — DP rules → dim_detachment_combo
+ *   6. bcpBackfillDetachments() — list_ttt → detachments + combo_id, then cube
+ *   —  bcpPipelineFull()        — convenience: all of the above in order
  *
  * Env vars required:
  *   TURSO_DB_URL, TURSO_AUTH_TOKEN — Turso connection (from repo-root .env)
@@ -155,20 +159,109 @@ export async function bcpParseLists(
   }
 }
 
-// ── Detachment backfill (list_ttt → detachment_id → cube) ───────────────────
+// ── Detachment dimension sync (brain → dim_detachment.dp) ───────────────────
+
+export interface BcpSyncDetachmentDimsResult extends RunResult {
+  dimRows?: number
+  withDp?: number
+  added?: number
+}
+
+/**
+ * Sync dim_detachment against the brain: add missing detachments and populate
+ * the 11e Detachment Points cost.
+ *
+ * Runs BEFORE combo enumeration because dp is what makes a combo judgeable —
+ * detachments without dp are skipped by the enumerator, so a stale dim silently
+ * shrinks the legal-combo set rather than failing.
+ *
+ * Requires: TURSO_DB_URL, TURSO_AUTH_TOKEN, plus the brain cube export on disk.
+ */
+export async function bcpSyncDetachmentDims(
+  opts: { dryRun?: boolean } = {},
+): Promise<BcpSyncDetachmentDimsResult> {
+  const args: string[] = ['tsx', 'scripts/sync-detachment-dims.ts']
+  if (opts.dryRun) args.push('--dry-run')
+
+  const result = await runCmd('npx', args, {
+    cwd: BCP_SCRAPER_DIR,
+    timeoutMs: 15 * 60 * 1000,
+    tailLines: 60,
+    env: { NODE_OPTIONS: '--dns-result-order=ipv4first' },
+  })
+
+  const rows = result.stdout.match(/dim_detachment:\s*(\d+)\s*rows/)
+  const withDp = result.stdout.match(/with dp\s*:\s*(\d+)/)
+  const added = result.stdout.match(/add(?:ed)?[=:]?\s*(\d+)/i)
+
+  return {
+    ...result,
+    dimRows: rows ? parseInt(rows[1]!) : undefined,
+    withDp: withDp ? parseInt(withDp[1]!) : undefined,
+    added: added ? parseInt(added[1]!) : undefined,
+  }
+}
+
+// ── Combo enumeration (DP rules → dim_detachment_combo) ─────────────────────
+
+export interface BcpEnumerateCombosResult extends RunResult {
+  combos?: number
+  members?: number
+}
+
+/**
+ * Enumerate every legal 11e detachment combination into dim_detachment_combo.
+ *
+ * Writes combos whether or not anyone has played them, which is what makes
+ * "which legal pairing is nobody playing" answerable rather than a guess from
+ * observed data. The backfill then only has to record the combos that are NOT
+ * in this set (is_legal = 0).
+ *
+ * Depends on bcpSyncDetachmentDims() having populated dp.
+ *
+ * Requires: TURSO_DB_URL, TURSO_AUTH_TOKEN. No BCP credentials.
+ */
+export async function bcpEnumerateCombos(
+  opts: { budget?: number; dryRun?: boolean } = {},
+): Promise<BcpEnumerateCombosResult> {
+  const args: string[] = ['tsx', 'scripts/enumerate-detachment-combos.ts']
+  if (opts.budget !== undefined) args.push('--budget', String(opts.budget))
+  if (opts.dryRun) args.push('--dry-run')
+
+  const result = await runCmd('npx', args, {
+    cwd: BCP_SCRAPER_DIR,
+    timeoutMs: 60 * 60 * 1000,
+    tailLines: 60,
+    env: { NODE_OPTIONS: '--dns-result-order=ipv4first' },
+  })
+
+  const wrote = result.stdout.match(/wrote (\d+) combos,\s*(\d+) membership rows/)
+  const enumerated = result.stdout.match(/enumerated combos:\s*(\d+)/)
+
+  return {
+    ...result,
+    combos: wrote ? parseInt(wrote[1]!) : enumerated ? parseInt(enumerated[1]!) : undefined,
+    members: wrote ? parseInt(wrote[2]!) : undefined,
+  }
+}
+
+// ── Detachment backfill (list_ttt → detachments + combo → cube) ─────────────
 
 export interface BcpBackfillDetachmentsResult extends RunResult {
   updated?: number
   eventsTouched?: number
   unresolved?: number
+  detachmentRows?: number
+  multiDetachment?: number
 }
 
 /**
- * Populate meta_event_players.detachment_id from the parsed list blob, then
+ * Populate a player's detachments from the parsed list blob — the
+ * meta_event_player_detachment bridge, combo_id, and detachment_id — then
  * rebuild the cube for the events touched.
  *
- * This is the bridge between the list pipeline and analytics: the cube reads
- * detachment_id, the parser only ever wrote list_ttt, so without this step
+ * This is the bridge between the list pipeline and analytics: the cube reads the
+ * dimension columns, the parser only ever wrote list_ttt, so without this step
  * fact_game_results carries no detachment at all no matter how many lists
  * were scraped.
  *
@@ -196,12 +289,16 @@ export async function bcpBackfillDetachments(
   const updated = result.stdout.match(/updated=(\d+)/)
   const events = result.stdout.match(/events touched:\s*(\d+)/)
   const unresolved = result.stdout.match(/unresolved:\s*(\d+)\s+rows/)
+  const detachmentRows = result.stdout.match(/detachment rows=(\d+)/)
+  const multi = result.stdout.match(/multi-detachment armies=(\d+)/)
 
   return {
     ...result,
     updated: updated ? parseInt(updated[1]!) : undefined,
     eventsTouched: events ? parseInt(events[1]!) : undefined,
     unresolved: unresolved ? parseInt(unresolved[1]!) : undefined,
+    detachmentRows: detachmentRows ? parseInt(detachmentRows[1]!) : undefined,
+    multiDetachment: multi ? parseInt(multi[1]!) : undefined,
   }
 }
 
@@ -211,6 +308,8 @@ export interface BcpPipelineFullResult {
   events: BcpScrapeEventsResult
   lists?: BcpScrapeListsResult
   parse?: BcpParseListsResult
+  dims?: BcpSyncDetachmentDimsResult
+  combos?: BcpEnumerateCombosResult
   detachments?: BcpBackfillDetachmentsResult
   totalDurationMs: number
 }
@@ -218,15 +317,21 @@ export interface BcpPipelineFullResult {
 /**
  * The whole pipeline, in the order the data depends on:
  *
- *   1. bcpScrapeEvents()       events + pairings  → meta_events, meta_event_players,
- *                              meta_pairings, and source_list_id
- *   2. bcpScrapeLists()        army list text     → list_text
- *   3. bcpParseLists()         structured parse   → list_ttt
- *   4. bcpBackfillDetachments() detachment + cube → detachment_id, fact_game_results
+ *   1. bcpScrapeEvents()        events + pairings  → meta_events, meta_event_players,
+ *                               meta_pairings, and source_list_id
+ *   2. bcpScrapeLists()         army list text     → list_text
+ *   3. bcpParseLists()          structured parse   → list_ttt
+ *   4. bcpSyncDetachmentDims()  brain → dim        → dim_detachment(.dp)
+ *   5. bcpEnumerateCombos()     DP rules → dim     → dim_detachment_combo
+ *   6. bcpBackfillDetachments() detachments + cube → meta_event_player_detachment,
+ *                               combo_id, detachment_id, fact_game_results
  *
  * Each step feeds the next, so running a prefix leaves the tail stale rather
  * than merely incomplete: stopping after 2 means the lists are unparsed;
- * stopping after 3 means the cube still reports no detachments at all.
+ * stopping after 3 means the cube still reports no detachments at all. Steps 4
+ * and 5 come before 6 because the backfill resolves against dim_detachment and
+ * only records a combo as illegal when enumeration has NOT already produced it —
+ * running the backfill against a stale dim marks legal builds illegal.
  *
  * Every step is idempotent — safe to re-run after an interruption.
  * Steps 1 and 2 short-circuit rather than abort on non-zero exit, since
@@ -240,6 +345,8 @@ export async function bcpPipelineFull(
     until?: string
     skipLists?: boolean
     skipParse?: boolean
+    skipDims?: boolean
+    skipCombos?: boolean
     skipDetachments?: boolean
   } = {},
 ): Promise<BcpPipelineFullResult> {
@@ -249,6 +356,8 @@ export async function bcpPipelineFull(
 
   let lists: BcpScrapeListsResult | undefined
   let parse: BcpParseListsResult | undefined
+  let dims: BcpSyncDetachmentDimsResult | undefined
+  let combos: BcpEnumerateCombosResult | undefined
   let detachments: BcpBackfillDetachmentsResult | undefined
 
   if (!opts.skipLists) {
@@ -257,9 +366,15 @@ export async function bcpPipelineFull(
   if (!opts.skipParse) {
     parse = await bcpParseLists()
   }
+  if (!opts.skipDims) {
+    dims = await bcpSyncDetachmentDims()
+  }
+  if (!opts.skipCombos) {
+    combos = await bcpEnumerateCombos()
+  }
   if (!opts.skipDetachments) {
     detachments = await bcpBackfillDetachments({ since: opts.since, until: opts.until })
   }
 
-  return { events, lists, parse, detachments, totalDurationMs: Date.now() - started }
+  return { events, lists, parse, dims, combos, detachments, totalDurationMs: Date.now() - started }
 }

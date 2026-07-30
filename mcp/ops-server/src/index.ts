@@ -20,10 +20,12 @@ import { z } from 'zod'
 
 import {
   bcpBackfillDetachments,
+  bcpEnumerateCombos,
   bcpParseLists,
   bcpPipelineFull,
   bcpScrapeEvents,
   bcpScrapeLists,
+  bcpSyncDetachmentDims,
 } from './lib/bcp-ops.js'
 import {
   brainBuild,
@@ -583,34 +585,126 @@ server.tool(
 )
 
 server.tool(
+  'bcp_sync_detachment_dims',
+  [
+    'STEP 4 of 6. Sync dim_detachment against the brain: add detachments the dim',
+    'lacks and populate the 11e Detachment Points cost (dp).',
+    '',
+    'WHY THIS STEP EXISTS: dp is what makes a combo judgeable. The enumerator',
+    'skips any detachment with no dp, so a stale dim silently shrinks the legal',
+    'combo set instead of failing — and the backfill then records real armies as',
+    'illegal builds because no legal combo exists to match them.',
+    '',
+    'Rows with no 11e cost keep dp NULL (10e-era) — distinct from a cost of 0.',
+    '',
+    'Requires: TURSO_DB_URL, TURSO_AUTH_TOKEN, plus the brain cube export on disk.',
+    '',
+    'What to run next: bcp_enumerate_combos.',
+  ].join('\n'),
+  {
+    dryRun: z.boolean().optional().default(false).describe('Report the plan without writing'),
+  },
+  async ({ dryRun }) => {
+    const r = await bcpSyncDetachmentDims({ dryRun })
+    const lines = [
+      `bcp_sync_detachment_dims exit ${r.code} in ${Math.round(r.durationMs / 1000)}s`,
+      r.dimRows !== undefined ? `dim_detachment rows: ${r.dimRows}` : '',
+      r.withDp !== undefined ? `with dp: ${r.withDp}` : '',
+      '',
+      '--- stdout tail ---',
+      r.stdout,
+      r.stderr ? '\n--- stderr tail ---\n' + r.stderr : '',
+    ]
+    return textResult(lines.filter(Boolean).join('\n'))
+  },
+)
+
+server.tool(
+  'bcp_enumerate_combos',
+  [
+    'STEP 5 of 6. Enumerate every legal 11e detachment combination into',
+    'dim_detachment_combo.',
+    '',
+    'WHY THIS STEP EXISTS: 11e armies take MULTIPLE detachments under a',
+    'Detachment Points budget (each costs 1-3 DP; 2 DP at Incursion, 3 at Strike',
+    'Force). Combos are written whether or not anyone has played them, which is',
+    'what makes "which legal pairing is nobody playing" answerable instead of a',
+    'guess from observed data alone.',
+    '',
+    'Subfactions inherit the parent faction pool — a marine chapter can field the',
+    'generic Space Marine detachments, which is where dim_detachment keeps them.',
+    'Without that, no chapter gets any combos and every real chapter army lands',
+    'in the backfill as an illegal build (measured: 103 of 110 distinct).',
+    '',
+    'Idempotent, and never downgrades a legal combo to illegal.',
+    '',
+    'Requires: TURSO_DB_URL, TURSO_AUTH_TOKEN. No BCP credentials needed.',
+    'Prerequisite: bcp_sync_detachment_dims must have populated dp.',
+    '',
+    'What to run next: bcp_backfill_detachments.',
+  ].join('\n'),
+  {
+    budget: z.number().int().min(1).optional().describe('DP budget (default 3 = Strike Force)'),
+    dryRun: z.boolean().optional().default(false).describe('Enumerate and report without writing'),
+  },
+  async ({ budget, dryRun }) => {
+    const r = await bcpEnumerateCombos({ budget, dryRun })
+    const lines = [
+      `bcp_enumerate_combos exit ${r.code} in ${Math.round(r.durationMs / 1000)}s`,
+      r.combos !== undefined ? `combos: ${r.combos}` : '',
+      r.members !== undefined ? `membership rows: ${r.members}` : '',
+      '',
+      '--- stdout tail ---',
+      r.stdout,
+      r.stderr ? '\n--- stderr tail ---\n' + r.stderr : '',
+    ]
+    return textResult(lines.filter(Boolean).join('\n'))
+  },
+)
+
+server.tool(
   'bcp_backfill_detachments',
   [
-    'STEP 4 of 4. Populate meta_event_players.detachment_id from the parsed',
-    'list blob, then rebuild the cube for the events touched.',
+    "STEP 6 of 6. Populate a player's detachments from the parsed list blob —",
+    'the meta_event_player_detachment bridge, combo_id and detachment_id — then',
+    'rebuild the cube for the events touched.',
     '',
-    'WHY THIS STEP EXISTS: the analytics cube reads detachment_id, but the list',
-    'parser only ever writes list_ttt. Without this bridge, fact_game_results',
-    'carries NO detachment at all regardless of how many lists were scraped —',
-    'measured 2026-07-28: 0 of 33,744 fact rows had a detachment while 4,938',
-    'parsed lists named one.',
+    'WHY THIS STEP EXISTS: the analytics cube reads the dimension columns, but',
+    'the list parser only ever writes list_ttt. Without this bridge,',
+    'fact_game_results carries NO detachment at all regardless of how many lists',
+    'were scraped — measured 2026-07-28: 0 of 33,744 fact rows had a detachment',
+    'while 4,938 parsed lists named one.',
     '',
-    'Matching is faction-scoped and normalizes both slug conventions',
-    '(dim_detachment turns punctuation into "-", the list parser keeps',
-    'apostrophes), strips a faction name baked into the slug, and tolerates',
-    'trailing battle-size noise. ~90% of parsed lists resolve.',
+    'Resolution is registry-driven, in this order: the WHOLE declaration as one',
+    'detachment, then a cover of the declaration by known detachment names, then',
+    'the split parts. That order is load-bearing — real detachment names contain',
+    '"and" ("Penitents and Pilgrims" is ONE detachment), so splitting first',
+    'invents detachments that do not exist. Measured: 10,056 of 10,178 parsed',
+    'rows resolve, 2,453 of them to more than one detachment.',
+    '',
+    'Matching is faction-scoped (plus the parent faction for a subfaction) and',
+    'normalizes both slug conventions (dim_detachment turns punctuation into "-",',
+    'the list parser keeps apostrophes), strips a faction name baked into or',
+    'glued onto the declaration, and tolerates trailing battle-size noise.',
     '',
     'Unresolved values are REPORTED, never guessed. They usually mean either',
     'dim_detachment lacks the entry, or the player row has the wrong faction',
     '(e.g. an aeldari row naming a Death Guard detachment).',
     '',
+    'Watch declared-DP mismatches in the output: the members resolved cost a',
+    'different total than the list declared, which is the best available signal',
+    'that a split went wrong.',
+    '',
     'The cube rebuild is part of the step, not a nicety: skip it and',
     'fact_game_results keeps serving the pre-backfill NULLs. Use skipCube only',
     'when you will rebuild yourself.',
     '',
-    'dryRun=true resolves and reports without writing (single chunk only).',
+    'dryRun=true resolves and reports without writing.',
     '',
     'Requires: TURSO_DB_URL, TURSO_AUTH_TOKEN. No BCP credentials needed.',
-    'Prerequisite: bcp_parse_lists must have populated list_ttt.',
+    'Prerequisite: bcp_parse_lists (list_ttt) AND bcp_enumerate_combos, so a',
+    'legal combo is not recorded as illegal merely because it was never',
+    'enumerated.',
     '',
     'What to run next: nothing — the cube is current for these events.',
   ].join('\n'),
@@ -628,7 +722,9 @@ server.tool(
     const r = await bcpBackfillDetachments({ since, until, dryRun, skipCube })
     const lines = [
       `bcp_backfill_detachments exit ${r.code} in ${Math.round(r.durationMs / 1000)}s`,
-      r.updated !== undefined ? `detachment_id written: ${r.updated}` : '',
+      r.updated !== undefined ? `players written: ${r.updated}` : '',
+      r.detachmentRows !== undefined ? `detachment rows: ${r.detachmentRows}` : '',
+      r.multiDetachment !== undefined ? `multi-detachment armies: ${r.multiDetachment}` : '',
       r.eventsTouched !== undefined ? `events rebuilt: ${r.eventsTouched}` : '',
       r.unresolved !== undefined ? `unresolved rows: ${r.unresolved}` : '',
       '',
@@ -650,12 +746,17 @@ server.tool(
     '                              and source_list_id',
     '  2. bcp_scrape_lists         army list text    → list_text',
     '  3. bcp_parse_lists          structured parse  → list_ttt',
-    '  4. bcp_backfill_detachments detachment + cube → detachment_id,',
-    '                              fact_game_results',
+    '  4. bcp_sync_detachment_dims brain → dim       → dim_detachment(.dp)',
+    '  5. bcp_enumerate_combos     DP rules → dim    → dim_detachment_combo',
+    '  6. bcp_backfill_detachments detachments+cube  → meta_event_player_detachment,',
+    '                              combo_id, detachment_id, fact_game_results',
     '',
     'Each step feeds the next, so running a prefix leaves the tail STALE, not',
     'merely incomplete. Stop after 2 and the lists are unparsed; stop after 3',
-    'and the cube reports no detachments at all.',
+    'and the cube reports no detachments at all. Steps 4 and 5 precede 6 because',
+    'the backfill resolves against dim_detachment and only records a combo as',
+    'illegal when enumeration has NOT already produced it — running the backfill',
+    'against a stale dim marks legal builds illegal.',
     '',
     'Every step is idempotent — safe to re-run after an interruption.',
     '',
@@ -663,7 +764,8 @@ server.tool(
     'The events scrape always uses its own rolling 7-day window; for an',
     'arbitrary backfill window run scripts/scrape-jun-jul.ts --refresh instead.',
     '',
-    'skipLists / skipParse / skipDetachments each drop their step.',
+    'skipLists / skipParse / skipDims / skipCombos / skipDetachments each drop',
+    'their step.',
     '',
     'Requires: TURSO_DB_URL, TURSO_AUTH_TOKEN, BCP_EMAIL, BCP_PASSWORD.',
   ].join('\n'),
@@ -672,10 +774,20 @@ server.tool(
     until: z.string().optional().describe('ISO date end for list-fetch + detachment scope'),
     skipLists: z.boolean().optional().default(false),
     skipParse: z.boolean().optional().default(false),
+    skipDims: z.boolean().optional().default(false),
+    skipCombos: z.boolean().optional().default(false),
     skipDetachments: z.boolean().optional().default(false),
   },
-  async ({ since, until, skipLists, skipParse, skipDetachments }) => {
-    const r = await bcpPipelineFull({ since, until, skipLists, skipParse, skipDetachments })
+  async ({ since, until, skipLists, skipParse, skipDims, skipCombos, skipDetachments }) => {
+    const r = await bcpPipelineFull({
+      since,
+      until,
+      skipLists,
+      skipParse,
+      skipDims,
+      skipCombos,
+      skipDetachments,
+    })
     const lines = [
       `bcp_pipeline_full done in ${Math.round(r.totalDurationMs / 1000)}s`,
       `1. events:      exit ${r.events.code}`,
@@ -685,9 +797,15 @@ server.tool(
       r.parse
         ? `3. parse:       exit ${r.parse.code} — parsed=${r.parse.parsed ?? '?'}, failed=${r.parse.failed ?? '?'}`
         : '3. parse:       skipped',
+      r.dims
+        ? `4. dims:        exit ${r.dims.code} — dim_detachment=${r.dims.dimRows ?? '?'}, with dp=${r.dims.withDp ?? '?'}`
+        : '4. dims:        skipped — dp may be stale, which mislabels legal combos',
+      r.combos
+        ? `5. combos:      exit ${r.combos.code} — combos=${r.combos.combos ?? '?'}, members=${r.combos.members ?? '?'}`
+        : '5. combos:      skipped — legal combos may be missing',
       r.detachments
-        ? `4. detachments: exit ${r.detachments.code} — written=${r.detachments.updated ?? '?'}, events rebuilt=${r.detachments.eventsTouched ?? '?'}, unresolved=${r.detachments.unresolved ?? '?'}`
-        : '4. detachments: skipped — cube detachments are STALE',
+        ? `6. detachments: exit ${r.detachments.code} — players=${r.detachments.updated ?? '?'}, detachment rows=${r.detachments.detachmentRows ?? '?'}, multi=${r.detachments.multiDetachment ?? '?'}, events rebuilt=${r.detachments.eventsTouched ?? '?'}, unresolved=${r.detachments.unresolved ?? '?'}`
+        : '6. detachments: skipped — cube detachments are STALE',
     ]
     return textResult(lines.join('\n'))
   },
