@@ -252,11 +252,16 @@ export async function buildCubeForEvents(db: Db, eventIds: string[]): Promise<vo
       VALUES (${f.id}, ${f.typeId}, ${f.date}, ${f.endDate}, ${f.day}, ${f.month}, ${f.quarter}, ${f.year}, ${f.dataslateId}, ${f.packId}, ${f.editionId})`)
   }
 
-  // Rebuild fact_game_results for exactly these events — delete first so
-  // re-processing the same event (e.g. a re-export) doesn't duplicate rows.
+  // Rebuild fact_game_results for exactly these events. The delete and the
+  // inserts go in ONE batch, which libSQL runs as a transaction.
+  //
+  // Sending them as separate statements is what corrupted the table on
+  // 2026-07-30: a rebuild of 155 events left 23,995 duplicate rows (90,690
+  // where 66,695 games exist), with a contiguous tail of each event's pairings
+  // inserted twice — the signature of a retried request re-applying inserts the
+  // delete had already accounted for. Nothing failed loudly; every affected win
+  // rate simply counted those games twice.
   for (const eventId of rows.map((e) => e.id)) {
-    await db.run(sql`DELETE FROM fact_game_results WHERE event_id = ${eventId}`)
-
     const pairingRows = await db.all(sql`
       SELECT mp.id, mp.event_id, mp.round, mp.result,
              mp.player1_id, mp.player2_id,
@@ -271,32 +276,48 @@ export async function buildCubeForEvents(db: Db, eventIds: string[]): Promise<vo
       WHERE mp.event_id = ${eventId}
     `)
 
+    const factWrites = [db.run(sql`DELETE FROM fact_game_results WHERE event_id = ${eventId}`)]
+
     for (const row of pairingRows as Array<Record<string, unknown>>) {
       const result = row.result as string
       const p1Result = result === 'p1' ? 1.0 : result === 'draw' ? 0.5 : 0.0
       const p2Result = result === 'p2' ? 1.0 : result === 'draw' ? 0.5 : 0.0
 
-      // Grain is one row per player per game. The combo rides along as an
-      // attribute — fanning out per member detachment would count a
-      // two-detachment army as two games and corrupt every win rate.
-      await db.run(sql`INSERT INTO fact_game_results
-        (id, event_id, player_id, opponent_id, round, faction_id, subfaction_id, detachment_id, combo_id,
+      // Grain is one row per player per game, keyed by (pairing_id, player_id).
+      // A player can legitimately appear twice in one round — 27 such pairs
+      // exist, against different opponents — so (event, player, round) is NOT
+      // the key; the pairing is. The unique index on that pair is what makes a
+      // duplicate impossible rather than merely unlikely.
+      //
+      // The combo rides along as an attribute. Fanning out per member
+      // detachment would count a two-detachment army as two games and corrupt
+      // every win rate.
+      factWrites.push(
+        db.run(sql`INSERT OR REPLACE INTO fact_game_results
+        (id, pairing_id, event_id, player_id, opponent_id, round, faction_id, subfaction_id, detachment_id, combo_id,
          opponent_faction_id, opponent_subfaction_id, opponent_detachment_id, opponent_combo_id,
          result, player_score, opponent_score)
-        VALUES (${generateId()}, ${row.event_id}, ${row.player1_id}, ${row.player2_id}, ${row.round},
+        VALUES (${generateId()}, ${row.id}, ${row.event_id}, ${row.player1_id}, ${row.player2_id}, ${row.round},
                 ${row.p1_faction}, ${row.p1_subfaction}, ${row.p1_detachment}, ${row.p1_combo},
                 ${row.p2_faction}, ${row.p2_subfaction}, ${row.p2_detachment}, ${row.p2_combo},
-                ${p1Result}, ${row.player1_score}, ${row.player2_score})`)
+                ${p1Result}, ${row.player1_score}, ${row.player2_score})`),
+      )
 
-      await db.run(sql`INSERT INTO fact_game_results
-        (id, event_id, player_id, opponent_id, round, faction_id, subfaction_id, detachment_id, combo_id,
+      factWrites.push(
+        db.run(sql`INSERT OR REPLACE INTO fact_game_results
+        (id, pairing_id, event_id, player_id, opponent_id, round, faction_id, subfaction_id, detachment_id, combo_id,
          opponent_faction_id, opponent_subfaction_id, opponent_detachment_id, opponent_combo_id,
          result, player_score, opponent_score)
-        VALUES (${generateId()}, ${row.event_id}, ${row.player2_id}, ${row.player1_id}, ${row.round},
+        VALUES (${generateId()}, ${row.id}, ${row.event_id}, ${row.player2_id}, ${row.player1_id}, ${row.round},
                 ${row.p2_faction}, ${row.p2_subfaction}, ${row.p2_detachment}, ${row.p2_combo},
                 ${row.p1_faction}, ${row.p1_subfaction}, ${row.p1_detachment}, ${row.p1_combo},
-                ${p2Result}, ${row.player2_score}, ${row.player1_score})`)
+                ${p2Result}, ${row.player2_score}, ${row.player1_score})`),
+      )
     }
+
+    // One transaction per event: either the delete and every insert land, or
+    // none of them do. A retry re-runs the delete too, so it cannot stack.
+    await db.batch(factWrites as [(typeof factWrites)[number], ...typeof factWrites])
   }
 
   // Rebuild meta_top for every frame touched by these events (full

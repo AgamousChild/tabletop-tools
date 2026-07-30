@@ -1081,6 +1081,12 @@ export const factGameResults = sqliteTable(
       .notNull()
       .references(() => metaEventPlayers.id, { onDelete: 'cascade' }),
     opponentId: text('opponent_id').references(() => metaEventPlayers.id, { onDelete: 'cascade' }),
+    /**
+     * The game this row is one perspective of. Nullable only for rows written
+     * before the key existed — see migration 0017. (event, player, round) is
+     * NOT unique: a player can have two pairings in one round.
+     */
+    pairingId: text('pairing_id').references(() => metaPairings.id),
     round: integer('round').notNull(),
     factionId: text('faction_id')
       .notNull()
@@ -1110,6 +1116,8 @@ export const factGameResults = sqliteTable(
     index('idx_fact_results_matchup').on(table.factionId, table.opponentFactionId),
     index('idx_fact_game_results_combo').on(table.comboId),
     index('idx_fact_game_results_combo_matchup').on(table.comboId, table.opponentComboId),
+    // Makes a duplicated game impossible rather than merely unlikely.
+    uniqueIndex('uq_fact_game_results_pairing_player').on(table.pairingId, table.playerId),
   ],
 )
 

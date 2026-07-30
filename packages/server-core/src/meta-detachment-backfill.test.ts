@@ -637,6 +637,70 @@ describe('backfillDetachmentsFromLists', () => {
     expect(seen).toEqual(['p3', 'p4'])
   })
 
+  it('writes a chunk in a bounded number of round trips, not one per statement', async () => {
+    // Turso latency dominates this backfill: a statement-per-round-trip pass
+    // over 10,056 players extrapolated to 5+ hours (measured: 216 players in
+    // ~7 minutes). The writes for a whole chunk go in one batch instead.
+    const fresh = createClient({ url: ':memory:' })
+    const freshDb = createDbFromClient(fresh)
+    await applyTestSchema(fresh)
+    await seedReferenceDims(fresh)
+    await fresh.executeMultiple(`
+      INSERT INTO dim_faction VALUES ('necrons','Necrons','xenos');
+      INSERT INTO dim_detachment (id, name, faction_id, subfaction_id, dp) VALUES
+        ('necrons:cursed-legion','Cursed Legion','necrons',NULL,2),
+        ('necrons:skyshroud-spearhead','Skyshroud Spearhead','necrons',NULL,1);
+      INSERT INTO dim_detachment_combo (id, faction_id, member_count, total_dp, is_legal)
+        VALUES ('necrons:cursed-legion+skyshroud-spearhead','necrons',2,3,1);
+      INSERT INTO meta_events
+        (id, name, date, format, player_count, source, source_id, imported_at)
+        VALUES ('ev2','Event Two',1780000000000,'GT',20,'bcp','src2',1780000000000);
+    `)
+    const blob = JSON.stringify({
+      parseStatus: 'ok',
+      list: { factionId: 'necrons', detachmentName: 'Cursed Legion and Skyshroud Spearhead' },
+    }).replace(/'/g, "''")
+    const values = Array.from(
+      { length: 12 },
+      (_, i) => `('q${i}','ev2','P${i}','necrons',NULL,${i + 1},'${blob}')`,
+    ).join(',')
+    await fresh.executeMultiple(`
+      INSERT INTO meta_event_players
+        (id,event_id,player_name,faction_id,detachment_id,placement,list_ttt) VALUES ${values};
+    `)
+
+    // Count at the real network boundary — the libSQL client. Counting drizzle's
+    // db.run() would measure nothing, since a batched run() is a lazy statement
+    // builder rather than a request.
+    let roundTrips = 0
+    const countingClient = new Proxy(fresh, {
+      get(target, prop, receiver) {
+        const value = Reflect.get(target, prop, receiver)
+        if (prop === 'execute' || prop === 'batch') {
+          return (...args: unknown[]) => {
+            roundTrips++
+            return (value as (...a: unknown[]) => unknown).apply(target, args)
+          }
+        }
+        return typeof value === 'function' ? value.bind(target) : value
+      },
+    })
+
+    const res = await backfillDetachmentsFromLists(createDbFromClient(countingClient), {
+      limit: 12,
+    })
+    expect(res.updated).toBe(12)
+    expect(res.detachmentRows).toBe(24)
+    // 12 players would be 36 statements written one at a time. Reads (dims,
+    // subfactions, names, combos, the page itself) plus ONE write batch is the
+    // budget — well under a per-statement floor.
+    expect(roundTrips).toBeLessThanOrEqual(8)
+
+    const bridge = await freshDb.all(sql`SELECT * FROM meta_event_player_detachment`)
+    expect(bridge).toHaveLength(24)
+    fresh.close()
+  })
+
   it('is idempotent — a second pass finds nothing left to do', async () => {
     const res = await backfillDetachmentsFromLists(db)
     expect(res.updated).toBe(0)

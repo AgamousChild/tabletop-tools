@@ -34,9 +34,9 @@
  * (buildCubeForEvents) or fact_game_results keeps the old NULLs.
  */
 import type { Db } from '@tabletop-tools/db'
-import { sql } from 'drizzle-orm'
+import { type SQL, sql } from 'drizzle-orm'
 
-import { comboId, loadSubfactionParents, upsertCombos } from './meta-detachment-combos'
+import { comboId, comboUpsertStatements, loadSubfactionParents } from './meta-detachment-combos'
 
 /** Lowercase alphanumerics only — the one key both sides can agree on. */
 export function compactKey(input: string): string {
@@ -500,6 +500,23 @@ interface PendingRow {
   list_ttt: string
 }
 
+/**
+ * Statements per round trip. Bounded so a 500-row chunk does not build one
+ * enormous request body — the point is to stop paying latency per statement,
+ * not to send everything at once.
+ */
+const WRITES_PER_BATCH = 200
+
+/** Run the collected writes in batches. Each batch is one round trip. */
+async function flushWrites(db: Db, writes: SQL[]): Promise<void> {
+  for (let i = 0; i < writes.length; i += WRITES_PER_BATCH) {
+    const slice = writes.slice(i, i + WRITES_PER_BATCH).map((statement) => db.run(statement))
+    // drizzle's batch() types demand a non-empty tuple; the slice is non-empty
+    // by construction.
+    await db.batch(slice as [(typeof slice)[number], ...typeof slice])
+  }
+}
+
 export async function backfillDetachmentsFromLists(
   db: Db,
   opts: DetachmentBackfillOptions = {},
@@ -567,6 +584,10 @@ export async function backfillDetachmentsFromLists(
 
   const missCounts = new Map<string, { raw: string; factionId: string; count: number }>()
   const touched = new Set<string>()
+  // Every write for this chunk, executed as batches at the end. Turso latency
+  // dominates: one round trip per statement put a 10,056-row pass on course for
+  // 5+ hours (measured 216 players in ~7 minutes).
+  const writes: SQL[] = []
 
   for (const row of rows) {
     const declared = extractDeclaredDetachments(row.list_ttt, {
@@ -600,50 +621,48 @@ export async function backfillDetachmentsFromLists(
     const combo = comboId(row.faction_id, resolved.ids)
     if (!knownCombos.has(combo)) {
       // Not enumerated, so not a legal build under the DP rules. Recorded with
-      // is_legal = 0 so the fact rows have something to reference; upsertCombos
+      // is_legal = 0 so the fact rows have something to reference; the upsert
       // takes MAX(is_legal) and therefore cannot downgrade a legal row.
-      if (!opts.dryRun) {
-        await upsertCombos(
-          db,
-          [
-            {
-              id: combo,
-              factionId: row.faction_id,
-              memberIds: resolved.ids,
-              memberCount: resolved.ids.length,
-              totalDp,
-            },
-          ],
+      writes.push(
+        ...comboUpsertStatements(
+          {
+            id: combo,
+            factionId: row.faction_id,
+            memberIds: resolved.ids,
+            memberCount: resolved.ids.length,
+            totalDp,
+          },
           false,
-        )
-      }
+        ),
+      )
       knownCombos.add(combo)
       result.illegalCombos++
     }
 
-    if (!opts.dryRun) {
-      // Clear first: a re-run after dim_detachment gained an entry can resolve
-      // to a different set, and stale bridge rows would silently accumulate.
-      await db.run(sql`DELETE FROM meta_event_player_detachment WHERE player_id = ${row.id}`)
-      for (const [i, detachmentId] of resolved.ids.entries()) {
-        await db.run(sql`
-          INSERT INTO meta_event_player_detachment
-            (player_id, detachment_id, position, detachment_points)
-          VALUES (${row.id}, ${detachmentId}, ${i + 1}, ${dps[i]})
-        `)
-      }
-      // detachment_id keeps holding the position-1 detachment so the cube and
-      // existing queries keep working while consumers move to combo_id.
-      await db.run(sql`
-        UPDATE meta_event_players
-        SET detachment_id = ${resolved.ids[0]}, combo_id = ${combo}
-        WHERE id = ${row.id}
+    // Clear first: a re-run after dim_detachment gained an entry can resolve to
+    // a different set, and stale bridge rows would silently accumulate.
+    writes.push(sql`DELETE FROM meta_event_player_detachment WHERE player_id = ${row.id}`)
+    for (const [i, detachmentId] of resolved.ids.entries()) {
+      writes.push(sql`
+        INSERT INTO meta_event_player_detachment
+          (player_id, detachment_id, position, detachment_points)
+        VALUES (${row.id}, ${detachmentId}, ${i + 1}, ${dps[i]})
       `)
     }
+    // detachment_id keeps holding the position-1 detachment so the cube and
+    // existing queries keep working while consumers move to combo_id.
+    writes.push(sql`
+      UPDATE meta_event_players
+      SET detachment_id = ${resolved.ids[0]}, combo_id = ${combo}
+      WHERE id = ${row.id}
+    `)
+
     result.detachmentRows += resolved.ids.length
     result.updated++
     touched.add(row.event_id)
   }
+
+  if (!opts.dryRun) await flushWrites(db, writes)
 
   result.eventIds = [...touched]
   result.unmatched = [...missCounts.values()].sort((a, b) => b.count - a.count)

@@ -236,6 +236,50 @@ describe('buildCubeForEvents', () => {
     expect(eventFrame).toHaveLength(0)
   })
 
+  it('keys each fact row to its pairing so a duplicate game cannot be stored', async () => {
+    // The 2026-07-30 rebuild left 23,995 duplicate rows (90,690 for 66,695
+    // games) because DELETE-by-event and the INSERTs were separate statements
+    // and something re-applied a tail of them. Every affected win rate counted
+    // those games twice, silently. Two guards now: the writes go in one batch,
+    // and the pairing key makes a second copy unstorable.
+    await insertEvent(client, {
+      id: 'evt-key',
+      date: Date.UTC(2025, 5, 14),
+      source: 'native',
+      sourceId: 'tourn-key',
+      importedAt: 1000,
+    })
+    await buildCubeForEvents(db, ['evt-key'])
+
+    const facts = (await db.all(
+      sql`SELECT id, pairing_id, player_id FROM fact_game_results WHERE event_id = 'evt-key'`,
+    )) as Array<Record<string, unknown>>
+    expect(facts).toHaveLength(2)
+    expect(facts.every((f) => f.pairing_id === 'evt-key-pair1')).toBe(true)
+
+    // Re-inserting the same game under a new surrogate id must be rejected.
+    await expect(
+      db.run(sql`INSERT INTO fact_game_results
+        (id, pairing_id, event_id, player_id, opponent_id, round, faction_id, result)
+        VALUES ('dupe', 'evt-key-pair1', 'evt-key', 'evt-key-p1', 'evt-key-p2', 1, 'sm', 1.0)`),
+    ).rejects.toThrow()
+
+    // A player with TWO pairings in one round is real data (27 such pairs in
+    // prod, against different opponents) — the key is the pairing, not the
+    // round, so both games are storable.
+    await client.execute({
+      sql: `INSERT INTO meta_pairings (id, event_id, round, player1_id, player2_id, player1_score, player2_score, result)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+      args: ['evt-key-pair2', 'evt-key', 1, 'evt-key-p1', 'evt-key-p2', 50, 90, 'p2'],
+    })
+    await buildCubeForEvents(db, ['evt-key'])
+    const bothGames = (await db.all(sql`
+      SELECT pairing_id FROM fact_game_results
+      WHERE event_id = 'evt-key' AND player_id = 'evt-key-p1' AND round = 1
+    `)) as Array<Record<string, unknown>>
+    expect(bothGames.map((g) => g.pairing_id).sort()).toEqual(['evt-key-pair1', 'evt-key-pair2'])
+  })
+
   it('is idempotent — calling twice for the same event does not duplicate fact rows', async () => {
     await insertEvent(client, {
       id: 'evt1',
