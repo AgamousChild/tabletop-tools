@@ -13,6 +13,10 @@ so direct pushes to `main` are rejected. Use `gh pr create` + `gh pr merge --squ
 | — | `refactor(test)`: derive test schemas from the migrations, not by hand (−458/+61) |
 | — | `feat(meta)`: enumerate legal 11e detachment combos + keyset cursor |
 | — | `feat(bcp)`: parser emits detachment array + Detachment Points |
+| `614c0ee` | `feat(meta)`: resolve multi-detachment armies against the registry |
+| `ce50bff` | `feat(meta)`: carry the detachment combo into the cube fact grain (migration 0016) |
+| `56054ef` | `feat(ops-mcp)`: expose dim sync + combo enumeration in the BCP pipeline |
+| `33131bd` | `fix(meta)`: key fact_game_results to its pairing, and batch the meta writes (migration 0017) |
 
 Already on `main` from earlier in the session: `a0cee41` (listId capture +
 `/v1/armylists` endpoint fix), `23660f4` (parse CLI wrapper), `864a222`
@@ -21,9 +25,15 @@ scrape workflow), `7dfa982` (oxlint fix, PR #151), PR #152.
 
 ## Test counts as of this handoff
 
-`packages/db` 116 · `packages/server-core` 91 · `apps/tournament/server` 107 ·
-`apps/bcp-scraper/server` 99 · `apps/new-meta/server` 49 ·
+`packages/db` 116 · `packages/server-core` 118 · `apps/tournament/server` 107 ·
+`apps/bcp-scraper/server` 96 · `apps/new-meta/server` 49 ·
 `apps/content-ingestor` 275. oxlint clean, `drizzle-kit check` clean.
+
+server-core 91 → 118; bcp-scraper 99 → 96 because `splitDetachmentNames` and its
+3 tests moved to server-core, which owns the registry that decides whether a
+split is right. Run each package with its OWN vitest config (`pnpm -F <pkg>
+test`) — a root `vitest run --dir packages` reports 125 phantom failures in
+`packages/ui` purely from the missing jsdom environment.
 
 Compare test COUNTS after any change, not just green: a Vitest file that fails to
 PARSE is reported as fewer tests passing with **no failure**. That happened once
@@ -132,49 +142,130 @@ Also note `slugifyDetachment` keeps apostrophes while dim slugs convert
 punctuation to `-`; `compactKey` in `meta-detachment-backfill.ts` already
 normalises both sides — reuse it, don't rewrite it.
 
-### 2. Backfill writes the bridge + combo_id (NEXT)
+### 2. Backfill writes the bridge + combo_id — DONE
 
-Extend `meta-detachment-backfill.ts`:
+Applied to prod. **10,056 of 10,178 parsed rows resolved** (98.8%), 12,599 bridge
+rows, **2,479 two-detachment and 32 three-detachment armies**, 11 combos recorded
+illegal, 178 unresolved, 72 declared-DP mismatches. All integrity checks zero
+(no orphan detachments/combos, positions contiguous from 1, bridge count matches
+`member_count`, every combo row has a primary).
 
-1. Read `list.detachments[]` and `list.detachmentName` out of `list_ttt`
-   (currently `extractDetachment()` returns only a single string — it needs a
-   sibling that returns the array plus the full raw name).
-2. **Resolve the FULL `detachmentName` against dim_detachment first.** Only if
-   that fails, resolve each split part. This is what protects
-   `Penitents and Pilgrims` — see the trap in step 1.
-3. Insert `meta_event_player_detachment` rows: `position` from array order,
-   `detachment_points` copied from `dim_detachment.dp` at write time.
-4. `comboId(factionId, resolvedIds)` — already exported from
-   `meta-detachment-combos.ts`, already sorts members.
-5. The combo row usually EXISTS already (863 enumerated, `is_legal = 1`). Only
-   call `upsertCombos(..., isLegal=false)` when the resolved set isn't among
-   them. `upsertCombos` takes `MAX(is_legal)` so this can't downgrade a legal row.
-6. Set `meta_event_players.combo_id`; keep `detachment_id` = position 1.
+Three things the plan below did not anticipate, all found by measuring prod:
 
-Existing single-detachment writes to undo/overwrite: the first backfill run wrote
-`detachment_id` on **1,271 rows** under the old one-detachment model. Those are
-reversible (`SET detachment_id = NULL`) and will be superseded by this pass.
-Reuse the keyset cursor (`afterId`/`lastId`) — it's already in place.
+1. **No stored blob has the `detachments` array or `detachmentPoints` field.**
+   Every row predates the step-1 parser, so the array path is dead until
+   `parse-lists` is re-run. Extraction reads both shapes.
+2. **`detachmentName` is frequently the whole rest of the list body** — 2,109 of
+   6,000 sampled carry newlines, 1,163 a `Force Dispositions` line whose mission
+   picks ("Take and Hold", "Purge the Foe, Reconnaissance") contain their own
+   "and"s and commas. The declaration is ONE line; the DP marker terminates it.
+   Only 46 of 400 sampled blobs carry `list.factionId`, so the faction header to
+   skip comes from the player row, and some blobs glue the chapter straight on
+   ("Space WolvesSaga of the Great Wolf", 69 rows).
+3. **Marine chapters are `dim_subfaction` children of `space-marines`**, where
+   the shared detachments live (46 rows vs 3 for dark-angels). Resolution AND
+   enumeration inherit the parent pool. Without it every chapter army resolved
+   to nothing, and once resolved was recorded as an illegal build.
 
-### 3. Ingest writes them on the way in
+**The trap is worse than "Penitents and Pilgrims".** That case is a
+one-detachment army whose name contains "and". The harder case is a TWO
+-detachment army where one member's name contains "and":
+`Legends of Saga and Song and Saga of the Beastslayer` (60 rows). No split
+handles it — a flat split silently wrote one wrong detachment. Resolution is now
+registry-driven in three steps: whole string exact → cover the string with known
+names (fewest segments) → split parts. Exact-only in step 1 matters, because the
+prefix fallback would match "Cursed Legion" in "Cursed Legion and Skyshroud
+Spearhead" and drop the second detachment.
 
-`packages/server-core/src/meta-ingest.ts` — `MetaIngestPlayer` should accept a
-detachment array so new scrapes populate the bridge and `combo_id` directly
-rather than needing a backfill pass.
+Measured effect of each fix, same dry run: unresolved **1,500 → 307 → 181**;
+combos recorded illegal **11 → 389 → 32**; DP mismatches **153 → 79**.
 
-### 4. Cube carries combo_id
+Re-run enumeration after any `dim_detachment` change: **863 → 3,490 combos** once
+subfactions inherit the parent pool.
 
-`packages/server-core/src/meta-cube.ts:264` selects `p1.detachment_id` /
-`p2.detachment_id` into `fact_game_results`. Add `combo_id` (and consider
-`opponent_combo_id`). Then rebuild for affected events —
-`buildCubeForEvents(db, eventIds)`.
+### 2b. Remaining unresolved (178 rows, 160 distinct)
 
-### 5. MCP tools
+Long-tail detachments genuinely absent from `dim_detachment` — "Equatorial
+Hordes", "Vengeful Hosts", "Cavalcade of Chaos", "Grizzled Company" — plus rows
+whose `detachmentName` is raw list junk. The fix is `sync-detachment-dims.ts`
+once the brain has them, not more parser work.
 
-`mcp/ops-server/src/lib/bcp-ops.ts` + `index.ts` already expose
-`bcp_parse_lists` and `bcp_backfill_detachments` with the 4-step pipeline
-documented. Add `bcp_sync_detachment_dims` and `bcp_enumerate_combos`, and fold
-them into `bcpPipelineFull` in dependency order.
+The work unit is now a missing `combo_id`, NOT a missing `detachment_id` — the
+earlier pass had already set `detachment_id` on ~6,000 rows, and those are
+exactly the rows that still needed a combo. Keying on `detachment_id IS NULL`
+would have skipped every one of them.
+
+### 3. Ingest writes them on the way in — DELIBERATELY NOT DONE
+
+`MetaIngestPlayer.detachmentId` already exists and **no caller sets it**. Neither
+`upsertMetaEvent` caller can: BCP (`apps/bcp-scraper/server/src/lib/scrape.ts`)
+only has faction and pairing data at event-ingest time, and the list text it
+would need arrives in a LATER pass (`bcp_scrape_lists` → `bcp_parse_lists`).
+Tournament (`apps/tournament/server/src/routers/tournament.ts:436`) passes
+`listText` and no detachment.
+
+So this step is not merely unnecessary, it is impossible for BCP: the detachments
+cannot be known when the event is written. The backfill is already part of the
+pipeline and is where the knowledge exists. Adding a detachment array to the
+ingest input would be a second dead parameter.
+
+Revisit only if a source appears that supplies resolved detachment ids at ingest.
+
+### 4. Cube carries combo_id — DONE
+
+Migration 0016 adds `opponent_combo_id` + a `(combo_id, opponent_combo_id)`
+index, so combo-vs-combo is an indexed SELECT. Without it the detachment SET
+would have been the only dimension with no "versus" mirror. `buildCubeForEvents`
+writes both perspectives; **50,673 of 66,695 fact rows now carry a combo** (the
+rest are events whose lists were never parsed).
+
+Fact grain is unchanged — one row per player per game.
+
+### 5. MCP tools — DONE
+
+`bcp_sync_detachment_dims` and `bcp_enumerate_combos` added; `bcpPipelineFull`
+goes 4 steps → 6, with both inserted between parse and backfill. Order matters:
+the backfill records a combo illegal only when enumeration has NOT produced it,
+so running it against a stale dim marks legal builds illegal.
+
+## The cube was silently double-counting games — fixed
+
+The 155-event rebuild left **23,995 duplicate rows** (90,690 rows for 66,695
+games). Nothing failed; every affected game was counted twice in every win rate.
+Found only by checking the grain after the rebuild.
+
+`fact_game_results` had no key of its own. Idempotency rested on
+`buildCubeForEvents` issuing DELETE-by-event and the INSERTs as SEPARATE,
+non-transactional statements — so anything re-applying a request duplicated
+rows. The damage matched: rounds 1–2 of an event correct, a contiguous tail of
+its pairings inserted twice.
+
+Both guards are now in place:
+- delete + all inserts for an event go in ONE `db.batch` (a transaction), so a
+  retry re-runs the delete too and cannot stack
+- migration 0017 adds `pairing_id` + `UNIQUE (pairing_id, player_id)`
+
+**The key is the pairing, not `(event, player, round)`** — 27 players
+legitimately have two pairings in one round against different opponents, so the
+obvious natural key would reject real data. `pairing_id` is NULL for pre-0017
+rows; they gain protection when their event is next rebuilt.
+
+Duplicates were verified identical on every measure before removal. Win rates
+moved materially afterwards: `orks:green-tide+taktikal-brigade` 216 → 165 games.
+
+**Check `COUNT(*)` vs `COUNT(DISTINCT event_id, player_id, round, opponent_id)`
+after any cube rebuild.** That one query is what caught this.
+
+## Write batching — the round-trip cost is real
+
+One round trip per statement put the 10,056-row backfill on course for **5+
+hours** (measured: 216 players in ~7 minutes). Writes are now collected and
+flushed in bounded batches. The same applies to `upsertMetaEvent`, still
+unbatched — the 4-hour 129-event refresh in the gotchas below is the same cause.
+
+When testing this, count round trips at the **libSQL client**, not at drizzle:
+a batched `db.run()` is a lazy statement builder, so counting drizzle calls
+measures nothing (it reported 54 either way until the instrument was fixed).
 
 ## Parse state (for context on what's parseable)
 
@@ -216,5 +307,21 @@ $P/sync-detachment-dims.ts --dry-run
 $P/enumerate-detachment-combos.ts --dry-run
 $P/backfill-detachments.ts --dry-run
 $P/parse-lists.ts [--retry-failed]
-npx tsx scripts/apply-migration.ts 0015_detachment_combos --dry-run
+npx tsx scripts/apply-migration.ts 0017_fact_pairing_key --dry-run
 ```
+
+## What is worth doing next
+
+1. **Re-run `parse-lists.ts --retry-failed`** so blobs carry the parser's
+   `detachments` array and `detachmentPoints` instead of the raw-body
+   `detachmentName` the backfill currently has to clean. Then re-run the
+   backfill — extraction already prefers the array.
+2. **Feed the 160 missing detachments into the brain**, then
+   `sync-detachment-dims` → `enumerate-detachment-combos` → backfill. That is
+   the only thing standing between 98.8% and ~100% resolution.
+3. **Batch `upsertMetaEvent`'s per-player / per-pairing inserts.** Same fix as
+   above, and it is the 4-hour-refresh problem.
+4. **Surface combos in new-meta.** The data is in the cube now:
+   `SELECT combo_id, COUNT(*), AVG(result) FROM fact_game_results GROUP BY 1`
+   answers "which pairing wins" as an indexed read, and `dim_detachment_combo`
+   holds the 3,490 legal combos including the ones nobody has played.
