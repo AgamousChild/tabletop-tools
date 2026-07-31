@@ -107,6 +107,45 @@ describe('generateFrames', () => {
     expect(eventFrame.month).toBe(6)
   })
 
+  it('assigns editions across a closed boundary without leaving a gap', () => {
+    // 10th closes at the END of 2026-06-15 and 11th opens on the 16th. The
+    // matcher is `date >= start && (!end || date <= end)`, and 379 of 400 real
+    // event dates carry a time component — so closing 10th at plain
+    // '2026-06-15' (midnight) would drop every later event that day into a gap
+    // with a null edition.
+    const editions = [
+      {
+        id: 'edition-10th',
+        start_date: Date.UTC(2023, 5, 1),
+        end_date: Date.parse('2026-06-15T23:59:59.999Z'),
+      },
+      { id: 'edition-11th', start_date: Date.parse('2026-06-16T00:00:00.000Z'), end_date: null },
+    ]
+    const events = [
+      { id: 'e-early', date: Date.parse('2026-06-14T23:00:00Z'), name: '10e GT' },
+      { id: 'e-last10th', date: Date.parse('2026-06-15T00:00:00Z'), name: 'Last of 10th' },
+      { id: 'e-lateday', date: Date.parse('2026-06-15T22:00:00Z'), name: 'late on the 15th' },
+      { id: 'e-first11th', date: Date.parse('2026-06-16T00:00:00Z'), name: 'first 11e' },
+      { id: 'e-later', date: Date.parse('2026-06-21T16:00:00Z'), name: '11e GT' },
+    ]
+
+    const frames = generateFrames(events, [], [], editions)
+    const editionOf = (eventId: string) =>
+      frames.find((f) => f.id === `event:${eventId}`)!.editionId
+
+    expect(editionOf('e-early')).toBe('edition-10th')
+    expect(editionOf('e-last10th')).toBe('edition-10th')
+    // The trap: late on the closing day still belongs to 10th.
+    expect(editionOf('e-lateday')).toBe('edition-10th')
+    expect(editionOf('e-first11th')).toBe('edition-11th')
+    expect(editionOf('e-later')).toBe('edition-11th')
+
+    // Nothing may fall between the two editions.
+    expect(frames.filter((f) => f.id.startsWith('event:')).every((f) => f.editionId !== null)).toBe(
+      true,
+    )
+  })
+
   it('deduplicates frames with the same id', () => {
     const events = [
       { id: 'evt1', date: Date.UTC(2025, 5, 13), name: 'GT 1' },
@@ -278,6 +317,43 @@ describe('buildCubeForEvents', () => {
       WHERE event_id = 'evt-key' AND player_id = 'evt-key-p1' AND round = 1
     `)) as Array<Record<string, unknown>>
     expect(bothGames.map((g) => g.pairing_id).sort()).toEqual(['evt-key-pair1', 'evt-key-pair2'])
+  })
+
+  it('refreshes a frame dimension when the dim changes, instead of keeping the stale one', async () => {
+    // Frames were written with INSERT OR IGNORE, so an existing frame never
+    // picked up a dimension change. When 11th edition was added to dim_edition,
+    // all 719 existing frames kept saying edition-10th — including the events
+    // that had 11e detachment combos on them.
+    await insertEvent(client, {
+      id: 'evt-ed',
+      date: Date.parse('2026-06-21T16:00:00Z'),
+      source: 'native',
+      sourceId: 'tourn-ed',
+      importedAt: 1000,
+    })
+    await client.executeMultiple(`
+      INSERT INTO dim_edition (id, name, start_date, end_date)
+        VALUES ('edition-10th','10th Edition',${Date.UTC(2023, 5, 1)},NULL);
+    `)
+    await buildCubeForEvents(db, ['evt-ed'])
+    const before = (await db.all(
+      sql`SELECT edition_id FROM meta_for WHERE id = 'event:evt-ed'`,
+    )) as Array<{ edition_id: string | null }>
+    expect(before[0]!.edition_id).toBe('edition-10th')
+
+    // Close 10th and open 11th, exactly as the real dim change did.
+    await client.executeMultiple(`
+      UPDATE dim_edition SET end_date = ${Date.parse('2026-06-15T23:59:59.999Z')}
+        WHERE id = 'edition-10th';
+      INSERT INTO dim_edition (id, name, start_date, end_date)
+        VALUES ('edition-11th','11th Edition',${Date.parse('2026-06-16T00:00:00.000Z')},NULL);
+    `)
+    await buildCubeForEvents(db, ['evt-ed'])
+
+    const after = (await db.all(
+      sql`SELECT edition_id FROM meta_for WHERE id = 'event:evt-ed'`,
+    )) as Array<{ edition_id: string | null }>
+    expect(after[0]!.edition_id).toBe('edition-11th')
   })
 
   it('is idempotent — calling twice for the same event does not duplicate fact rows', async () => {
