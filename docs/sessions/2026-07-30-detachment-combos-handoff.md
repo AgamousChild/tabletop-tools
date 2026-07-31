@@ -260,8 +260,7 @@ after any cube rebuild.** That one query is what caught this.
 
 One round trip per statement put the 10,056-row backfill on course for **5+
 hours** (measured: 216 players in ~7 minutes). Writes are now collected and
-flushed in bounded batches. The same applies to `upsertMetaEvent`, still
-unbatched — the 4-hour 129-event refresh in the gotchas below is the same cause.
+flushed in bounded batches, in the backfill, the cube and `upsertMetaEvent`.
 
 When testing this, count round trips at the **libSQL client**, not at drizzle:
 a batched `db.run()` is a lazy statement builder, so counting drizzle calls
@@ -290,9 +289,9 @@ failed**. Remaining failures, sampled at 600:
 - Turso drops connections intermittently (`SQLITE_IOERR ... diverged from S3`,
   `tcp_refused`, `UND_ERR_SOCKET`). Two events failed mid-refresh this way; both
   survived with pre-refresh rows. Retry is usually enough.
-- `upsertMetaEvent` is delete-then-reinsert keyed on `(source, sourceId)`, and it
-  does one round-trip per player and per pairing — a 129-event refresh took ~4
-  hours. Batching those inserts is the obvious optimisation for the weekly cron.
+- `upsertMetaEvent` is delete-then-reinsert keyed on `(source, sourceId)`. It
+  used to do a round trip per player and per pairing — the ~4-hour 129-event
+  refresh — and is now batched; see "The 4-hour refresh" above.
 - A Vitest file that fails to PARSE is reported as fewer tests passing, with no
   failure. Compare test COUNTS, not just green.
 
@@ -310,18 +309,44 @@ $P/parse-lists.ts [--retry-failed]
 npx tsx scripts/apply-migration.ts 0017_fact_pairing_key --dry-run
 ```
 
-## What is worth doing next
+## The 4-hour refresh — fixed
 
-1. **Re-run `parse-lists.ts --retry-failed`** so blobs carry the parser's
-   `detachments` array and `detachmentPoints` instead of the raw-body
-   `detachmentName` the backfill currently has to clean. Then re-run the
-   backfill — extraction already prefers the array.
-2. **Feed the 160 missing detachments into the brain**, then
-   `sync-detachment-dims` → `enumerate-detachment-combos` → backfill. That is
-   the only thing standing between 98.8% and ~100% resolution.
-3. **Batch `upsertMetaEvent`'s per-player / per-pairing inserts.** Same fix as
-   above, and it is the 4-hour-refresh problem.
-4. **Surface combos in new-meta.** The data is in the cube now:
-   `SELECT combo_id, COUNT(*), AVG(result) FROM fact_game_results GROUP BY 1`
-   answers "which pairing wins" as an indexed read, and `dim_detachment_combo`
-   holds the 3,490 legal combos including the ones nobody has played.
+`upsertMetaEvent` cost three round trips per player and one per pairing:
+`resolveFaction()` ran 1–2 SELECTs each, every player and pairing was its own
+INSERT, and Glicko added an UPDATE plus a history INSERT each. **Measured: 257
+round trips for a 40-player event.**
+
+`createFactionResolver()` preloads the lookup once (same precedence as
+`resolveFaction`, so they cannot disagree) and the writes go in bounded batches.
+**Same event: 41 round trips**, and what remains is per-FRAME cube rollup work,
+not roster work. A 4× roster now stays within 10 requests of a small one.
+
+## The unresolved 178 rows are NOT a missing-code problem — verified
+
+The brain has **exactly 266 detachment nodes with dp, matching dim_detachment's
+266**, so the dim is fully in sync and `sync-detachment-dims` has nothing to add.
+Checked directly against `fact_node.jsonl`: "Equatorial Hordes", "Vengeful
+Hosts", "Cavalcade of Chaos", "Grizzled Company", "Shadow Legion", "Flyblown
+Host", "Creations of Bile", "Mercenary Oathband", "Vanguard Onslaught" are all
+absent from the brain entirely. They need upstream CONTENT, not parser or dim
+work.
+
+The rest are source-data faults, not resolution failures: a `thousand-sons` row
+naming "Wrath of the Rock" and a `world-eaters` row naming "Angelic Inheritors"
+are both Space Marine detachments on the wrong faction, and a handful of rows
+have raw list text where the detachment should be. Resolving those would mean
+guessing, which this deliberately does not do.
+
+**Re-running `parse-lists --retry-failed` buys nothing here.** It would put the
+parser's `detachments` array in the blobs, but the backfill's registry-driven
+resolution is strictly better than the parser's split — that is the whole point
+of doing it against `dim_detachment`. 98.8% is the ceiling until the brain gains
+content.
+
+## Not done, and why
+
+**Surfacing combos in new-meta** is a UI feature nobody asked for. The data is
+ready when it is wanted: `SELECT combo_id, COUNT(*), AVG(result) FROM
+fact_game_results GROUP BY 1` answers "which pairing wins" as an indexed read,
+and `dim_detachment_combo` holds all 3,490 legal combos including the ones
+nobody has played.
