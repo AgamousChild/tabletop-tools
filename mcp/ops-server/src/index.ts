@@ -19,6 +19,14 @@ import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js'
 import { z } from 'zod'
 
 import {
+  appDeployClient,
+  appDeployFull,
+  appDeployWorker,
+  appPurgeCache,
+  DEPLOYABLE_APPS,
+  deployEverything,
+} from './lib/app-ops.js'
+import {
   bcpBackfillDetachments,
   bcpEnumerateCombos,
   bcpParseLists,
@@ -807,6 +815,143 @@ server.tool(
         ? `6. detachments: exit ${r.detachments.code} — players=${r.detachments.updated ?? '?'}, detachment rows=${r.detachments.detachmentRows ?? '?'}, multi=${r.detachments.multiDetachment ?? '?'}, events rebuilt=${r.detachments.eventsTouched ?? '?'}, unresolved=${r.detachments.unresolved ?? '?'}`
         : '6. detachments: skipped — cube detachments are STALE',
     ]
+    return textResult(lines.join('\n'))
+  },
+)
+
+// ── App deploys (Worker + client + cache purge) ─────────────────────────────
+
+server.tool(
+  'app_deploy',
+  [
+    'Deploy ONE app: server Worker, then client to Pages, then purge the CDN.',
+    '',
+    'WHY THE PURGE IS PART OF THIS: a Worker deploy starts a fresh isolate, but',
+    'the CDN in front of it keeps serving the old response. `wrangler deploy`',
+    'exits 0 and the site stays stale. new-meta served pre-fix data (3 games in',
+    'a near-empty future quarter) while the fixed code returns 1,449 for the',
+    'same query. A deploy is not done until the cache is purged.',
+    '',
+    'The client build is not optional: `wrangler pages deploy dist` ships',
+    'whatever is already in dist, so skipping it republishes the old bundle.',
+    '',
+    'The brain deploys via brain_deploy_full instead — it also uploads to R2',
+    'and re-indexes, and purges for itself.',
+    '',
+    'Requires: CLOUDFLARE_API_TOKEN and CLOUDFLARE_ZONE_ID for the purge.',
+  ].join('\n'),
+  {
+    app: z.string().describe(`One of: ${DEPLOYABLE_APPS.join(', ')}`),
+    skipWorker: z.boolean().optional().default(false),
+    skipClient: z.boolean().optional().default(false),
+    skipBuild: z.boolean().optional().default(false).describe('Reuse the existing dist/ bundle'),
+  },
+  async ({ app, skipWorker, skipClient, skipBuild }) => {
+    const r = await appDeployFull(app, { skipWorker, skipClient, skipBuild })
+    const lines = [
+      `app_deploy ${r.app} ${r.ok ? 'OK' : 'FAILED'} in ${Math.round(r.totalDurationMs / 1000)}s`,
+      r.worker ? `worker:       exit ${r.worker.code}` : 'worker:       skipped',
+      r.clientBuild ? `client build: exit ${r.clientBuild.code}` : 'client build: skipped',
+      r.clientDeploy ? `client:       exit ${r.clientDeploy.code}` : 'client:       skipped',
+      `purge:        ${r.purge.ok ? 'purged' : `FAILED — ${r.purge.message}`}`,
+      r.purge.ok ? '' : 'WITHOUT THE PURGE THE SITE STILL SERVES THE OLD RESPONSE.',
+    ]
+    return textResult(lines.filter(Boolean).join('\n'))
+  },
+)
+
+server.tool(
+  'app_deploy_worker',
+  [
+    'Deploy just one app server Worker. Does NOT purge the CDN, so the change',
+    'may still be invisible — prefer app_deploy unless you will purge yourself.',
+  ].join('\n'),
+  { app: z.string().describe(`One of: ${DEPLOYABLE_APPS.join(', ')}`) },
+  async ({ app }) => {
+    const r = await appDeployWorker(app)
+    return textResult(
+      [
+        `app_deploy_worker ${app} exit ${r.code} in ${Math.round(r.durationMs / 1000)}s`,
+        '',
+        r.stdout,
+      ].join('\n'),
+    )
+  },
+)
+
+server.tool(
+  'app_deploy_client',
+  [
+    'Build and deploy one app client to Pages. Does NOT purge the CDN.',
+    'skipBuild reuses dist/, which republishes the previous bundle — only use',
+    'it when you have just built.',
+  ].join('\n'),
+  {
+    app: z.string().describe(`One of: ${DEPLOYABLE_APPS.join(', ')}`),
+    skipBuild: z.boolean().optional().default(false),
+  },
+  async ({ app, skipBuild }) => {
+    const r = await appDeployClient(app, { skipBuild })
+    return textResult(
+      [
+        `app_deploy_client ${app}`,
+        r.build ? `build:  exit ${r.build.code}` : 'build:  skipped (reused dist/)',
+        `deploy: exit ${r.deploy.code}`,
+        '',
+        r.deploy.stdout,
+      ].join('\n'),
+    )
+  },
+)
+
+server.tool(
+  'purge_cache',
+  [
+    'Purge the whole Cloudflare zone cache.',
+    '',
+    'Use after ANY deploy that did not purge for itself, and whenever the live',
+    'site disagrees with the deployed code. Zone-wide, so once is enough no',
+    'matter how many things were deployed.',
+    '',
+    'Requires CLOUDFLARE_ZONE_ID (or CF_ZONE_ID) and CLOUDFLARE_API_TOKEN.',
+  ].join('\n'),
+  {},
+  async () => {
+    const r = await appPurgeCache()
+    return textResult(r.ok ? 'purge_cache OK — purged' : `purge_cache FAILED — ${r.message}`)
+  },
+)
+
+server.tool(
+  'deploy_everything',
+  [
+    'Deploy every app Worker + client, then the gateway, then purge ONCE.',
+    '',
+    'The purge is zone-wide, so per-app purging would be N redundant requests.',
+    'This runs it at the end, after everything is in place — the only point at',
+    'which a purge is meaningful.',
+    '',
+    'The brain is NOT included; it deploys via brain_deploy_full.',
+    '',
+    'Long-running. Requires CLOUDFLARE_API_TOKEN and CLOUDFLARE_ZONE_ID.',
+  ].join('\n'),
+  {
+    apps: z.array(z.string()).optional().describe('Subset of apps; defaults to all'),
+    skipGateway: z.boolean().optional().default(false),
+    skipClients: z.boolean().optional().default(false),
+  },
+  async ({ apps, skipGateway, skipClients }) => {
+    const r = await deployEverything({ apps, skipGateway, skipClients })
+    const lines = [
+      `deploy_everything ${r.ok ? 'OK' : 'FAILED'} in ${Math.round(r.totalDurationMs / 1000)}s`,
+    ]
+    for (const a of r.apps) {
+      lines.push(
+        `  ${a.app.padEnd(14)} worker=${a.worker?.code ?? '-'} client=${a.clientDeploy?.code ?? 'skipped'}`,
+      )
+    }
+    lines.push(r.gateway ? `  gateway        exit ${r.gateway.code}` : '  gateway        skipped')
+    lines.push(`  purge          ${r.purge.ok ? 'purged' : `FAILED — ${r.purge.message}`}`)
     return textResult(lines.join('\n'))
   },
 )
