@@ -197,6 +197,41 @@ describe('resolveDefaultFrame', () => {
     expect(frame).toBe('quarter:2026:2')
   })
 
+  it('ignores a frame whose period has not started yet', async () => {
+    await seedDims()
+    // Real prod shape: BCP leagues carry an endDate months out, so 32 events
+    // were dated Oct-Dec 2026 while "now" was July. They populated
+    // quarter:2026:4 with 36 games, and picking the most-recent POPULATED
+    // frame handed every faction page a 36-game headline instead of Q3's
+    // 21,807.
+    const now = Date.now()
+    const future = now + 90 * 24 * 60 * 60 * 1000
+    const past = now - 30 * 24 * 60 * 60 * 1000
+    await client.executeMultiple(`
+      INSERT INTO meta_for (id, type_id, date, year, quarter) VALUES
+        ('quarter:future', 4, ${future}, 2026, 4),
+        ('quarter:current', 4, ${past}, 2026, 3);
+      INSERT INTO meta_top (id, meta_for_id, granularity_id, faction_id) VALUES
+        ('t1', 'quarter:future', 1, 'sm'),
+        ('t2', 'quarter:current', 1, 'sm');
+    `)
+    expect(await resolveDefaultFrame(db, 1, 'Quarter')).toBe('quarter:current')
+  })
+
+  it('still returns a future frame when it is the only data there is', async () => {
+    await seedDims()
+    // Excluding future frames must not blank the page out entirely — better a
+    // thin headline than none.
+    const future = Date.now() + 90 * 24 * 60 * 60 * 1000
+    await client.executeMultiple(`
+      INSERT INTO meta_for (id, type_id, date, year, quarter) VALUES
+        ('quarter:future', 4, ${future}, 2026, 4);
+      INSERT INTO meta_top (id, meta_for_id, granularity_id, faction_id) VALUES
+        ('t1', 'quarter:future', 1, 'sm');
+    `)
+    expect(await resolveDefaultFrame(db, 1, 'Quarter')).toBe('quarter:future')
+  })
+
   it('falls back to the most-recent populated frame of any type when preferred type has no data', async () => {
     await seedDims()
     // No quarter has any data; a month does.

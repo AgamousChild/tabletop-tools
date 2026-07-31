@@ -217,32 +217,50 @@ export async function resolveDefaultFrame(
   db: FrameFilterDb,
   granularityId: number,
   preferredTypeName?: string,
+  now: number = Date.now(),
 ): Promise<string | null> {
-  if (preferredTypeName) {
-    const preferred = (await db.all(sql`
+  // Frames whose period has not started yet are excluded from the default.
+  //
+  // BCP leagues carry an endDate months out, so 32 scraped events were dated
+  // Oct-Dec 2026 while the actual date was July. They populated
+  // quarter:2026:4 with 36 games, and "most recent populated frame" then handed
+  // every faction page a 36-game headline in place of Q3's 21,807. The frames
+  // still exist and are still selectable — they are just not the default.
+  const started = sql`AND mf.date <= ${now}`
+
+  for (const dateFilter of [started, sql``]) {
+    if (preferredTypeName) {
+      const preferred = (await db.all(sql`
+        SELECT mf.id
+        FROM meta_for mf
+        JOIN dim_for_type dft ON mf.type_id = dft.id
+        JOIN meta_top mt ON mt.meta_for_id = mf.id
+        WHERE dft.name = ${preferredTypeName}
+          AND mt.granularity_id = ${granularityId}
+          ${dateFilter}
+        GROUP BY mf.id, mf.date
+        ORDER BY mf.date DESC
+        LIMIT 1
+      `)) as Array<{ id: string }>
+      if (preferred[0]?.id) return preferred[0].id
+    }
+
+    const fallback = (await db.all(sql`
       SELECT mf.id
       FROM meta_for mf
-      JOIN dim_for_type dft ON mf.type_id = dft.id
       JOIN meta_top mt ON mt.meta_for_id = mf.id
-      WHERE dft.name = ${preferredTypeName}
-        AND mt.granularity_id = ${granularityId}
+      WHERE mt.granularity_id = ${granularityId}
+        ${dateFilter}
       GROUP BY mf.id, mf.date
       ORDER BY mf.date DESC
       LIMIT 1
     `)) as Array<{ id: string }>
-    if (preferred[0]?.id) return preferred[0].id
+    if (fallback[0]?.id) return fallback[0].id
+    // Nothing has started yet — retry unfiltered rather than show an empty
+    // page, which is what a brand-new dataset of future-dated events would hit.
   }
 
-  const fallback = (await db.all(sql`
-    SELECT mf.id
-    FROM meta_for mf
-    JOIN meta_top mt ON mt.meta_for_id = mf.id
-    WHERE mt.granularity_id = ${granularityId}
-    GROUP BY mf.id, mf.date
-    ORDER BY mf.date DESC
-    LIMIT 1
-  `)) as Array<{ id: string }>
-  return fallback[0]?.id ?? null
+  return null
 }
 
 /**
