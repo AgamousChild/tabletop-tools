@@ -245,11 +245,23 @@ export async function buildCubeForEvents(db: Db, eventIds: string[]): Promise<vo
 
   const frames = generateFrames(rows, dataslates, packs, editions)
 
-  // Insert frames (IGNORE if already exists — frames are shared across events).
+  // Frames are shared across events, so an existing row is expected — but its
+  // dimension columns are DERIVED from dim_edition / dim_dataslate /
+  // dim_tournament_pack and must be refreshed, not preserved.
+  //
+  // This was INSERT OR IGNORE, which meant a dimension change never reached the
+  // frames already written. Adding 11th edition to dim_edition left all 719
+  // existing frames still claiming edition-10th, including every event carrying
+  // 11e detachment combos. Only the derived FKs are updated; the rest of the row
+  // is frame identity and cannot change for a given id.
   for (const f of frames) {
-    await db.run(sql`INSERT OR IGNORE INTO meta_for
+    await db.run(sql`INSERT INTO meta_for
       (id, type_id, date, end_date, day, month, quarter, year, dataslate_id, tourney_pack_id, edition_id)
-      VALUES (${f.id}, ${f.typeId}, ${f.date}, ${f.endDate}, ${f.day}, ${f.month}, ${f.quarter}, ${f.year}, ${f.dataslateId}, ${f.packId}, ${f.editionId})`)
+      VALUES (${f.id}, ${f.typeId}, ${f.date}, ${f.endDate}, ${f.day}, ${f.month}, ${f.quarter}, ${f.year}, ${f.dataslateId}, ${f.packId}, ${f.editionId})
+      ON CONFLICT(id) DO UPDATE SET
+        dataslate_id = excluded.dataslate_id,
+        tourney_pack_id = excluded.tourney_pack_id,
+        edition_id = excluded.edition_id`)
   }
 
   // Rebuild fact_game_results for exactly these events. The delete and the
