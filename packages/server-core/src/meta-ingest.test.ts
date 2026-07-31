@@ -6,6 +6,13 @@ import { beforeEach, describe, expect, it } from 'vitest'
 
 import { upsertMetaEvent } from './meta-ingest'
 
+// Realistic fixture dates. These were previously 1000 and 2000 -- one and two
+// SECONDS after the Unix epoch, i.e. 1970 -- which the event-date sanity guard
+// now correctly rejects. They were only ever placeholders; nothing asserts on
+// the values.
+const EVENT_DATE = Date.UTC(2025, 5, 14)
+const EVENT_DATE_2 = Date.UTC(2025, 5, 15)
+
 function createTestDb() {
   const client = createClient({ url: ':memory:' })
   const db = createDbFromClient(client)
@@ -114,6 +121,70 @@ describe('upsertMetaEvent', () => {
     expect(rated[0]!.n).toBe(80)
   })
 
+  describe('event date sanity guard', () => {
+    // A 2026-04-29 BCP import wrote 9 real May-2025 majors with dates in 2001 --
+    // 1,540 players and 4,315 pairings filed a quarter-century early. Nothing
+    // caught it; the scraper does `new Date(raw.dates.end)` and stores whatever
+    // comes back. BCP now returns correct dates for those same event ids, so it
+    // was a transient upstream glitch that only a write-time check would catch.
+    const base = {
+      source: 'bcp',
+      name: 'Date Guard Test',
+      format: 'GT',
+      players: [],
+      pairings: [],
+    }
+
+    it('rejects a date decades in the past — the 2001 corruption', async () => {
+      await expect(
+        upsertMetaEvent(db, {
+          ...base,
+          sourceId: 'bad-past',
+          date: Date.parse('2001-05-03T00:00:00Z'),
+        }),
+      ).rejects.toThrow(/date/i)
+    })
+
+    it('rejects an unparseable date rather than storing NaN', async () => {
+      await expect(
+        upsertMetaEvent(db, {
+          ...base,
+          sourceId: 'bad-nan',
+          date: new Date('not a date').getTime(),
+        }),
+      ).rejects.toThrow(/date/i)
+    })
+
+    it('rejects a date implausibly far in the future', async () => {
+      await expect(
+        upsertMetaEvent(db, {
+          ...base,
+          sourceId: 'bad-future',
+          date: Date.now() + 5 * 365 * 24 * 60 * 60 * 1000,
+        }),
+      ).rejects.toThrow(/date/i)
+    })
+
+    it('ACCEPTS a league dated months ahead — 32 real events look like this', async () => {
+      // BCP leagues carry an endDate months out. The guard must not reject them.
+      const { eventId } = await upsertMetaEvent(db, {
+        ...base,
+        sourceId: 'good-league',
+        date: Date.now() + 150 * 24 * 60 * 60 * 1000,
+      })
+      expect(eventId).toBeTruthy()
+    })
+
+    it('ACCEPTS the oldest real event in the data', async () => {
+      const { eventId } = await upsertMetaEvent(db, {
+        ...base,
+        sourceId: 'good-old',
+        date: Date.parse('2024-05-04T00:00:00Z'),
+      })
+      expect(eventId).toBeTruthy()
+    })
+  })
+
   it('rejects an empty sourceId at runtime', async () => {
     await expect(
       upsertMetaEvent(db, {
@@ -133,7 +204,7 @@ describe('upsertMetaEvent', () => {
       source: 'bcp',
       sourceId: 'bcp-partial',
       name: 'Partial Scrape GT',
-      date: 1000,
+      date: EVENT_DATE,
       format: 'GT',
       playerCount: 32, // BCP reports 32 registered, but only 2 recovered from pairing data
       players: [
@@ -155,7 +226,7 @@ describe('upsertMetaEvent', () => {
       source: 'csv-import',
       sourceId: 'csv-default-count',
       name: 'Default Count Test',
-      date: 1000,
+      date: EVENT_DATE,
       format: 'GT',
       players: [
         { playerName: 'Alice', faction: 'aeldari', placement: 1, wins: 1, losses: 0, draws: 0 },
@@ -230,7 +301,7 @@ describe('upsertMetaEvent', () => {
       source: 'native',
       sourceId: 'tourn-dup',
       name: 'First Version',
-      date: 1000,
+      date: EVENT_DATE,
       format: 'GT',
       players: [
         { playerName: 'Alice', faction: 'aeldari', placement: 1, wins: 1, losses: 0, draws: 0 },
@@ -242,7 +313,7 @@ describe('upsertMetaEvent', () => {
       source: 'native',
       sourceId: 'tourn-dup',
       name: 'Second Version (re-export)',
-      date: 1000,
+      date: EVENT_DATE,
       format: 'GT',
       players: [
         { playerName: 'Alice', faction: 'aeldari', placement: 1, wins: 2, losses: 0, draws: 0 },
@@ -275,7 +346,7 @@ describe('upsertMetaEvent', () => {
       source: 'csv-import',
       sourceId: 'csv-1',
       name: 'Unknown Faction Test',
-      date: 1000,
+      date: EVENT_DATE,
       format: 'GT',
       players: [
         {
@@ -346,7 +417,7 @@ describe('upsertMetaEvent', () => {
       source: 'native',
       sourceId: 'tourn-glicko',
       name: 'Glicko Test',
-      date: 1000,
+      date: EVENT_DATE,
       format: 'GT',
       players: [
         { playerName: 'Alice', faction: 'aeldari', placement: 1, wins: 1, losses: 0, draws: 0 },
@@ -382,7 +453,7 @@ describe('upsertMetaEvent', () => {
       source: 'native',
       sourceId: 'tourn-glicko-2',
       name: 'Glicko Test 2',
-      date: 2000,
+      date: EVENT_DATE_2,
       format: 'GT',
       players: [
         { playerName: 'Alice', faction: 'aeldari', placement: 1, wins: 1, losses: 0, draws: 0 },
@@ -408,7 +479,7 @@ describe('upsertMetaEvent', () => {
       source: 'csv-import',
       sourceId: 'csv-no-pairings',
       name: 'CSV No Pairings',
-      date: 1000,
+      date: EVENT_DATE,
       format: 'GT',
       players: [
         { playerName: 'Eve', faction: 'aeldari', placement: 1, wins: 3, losses: 1, draws: 0 },

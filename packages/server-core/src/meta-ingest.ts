@@ -44,6 +44,48 @@ import { buildCubeForEvents } from './meta-cube'
  */
 const INGEST_WRITES_PER_BATCH = 200
 
+/**
+ * How far outside "now" an event date may plausibly sit.
+ *
+ * Expressed relative to now rather than as fixed dates so the bounds cannot rot.
+ * Real data spans ~2.2 years back (oldest event 2024-05-04) and ~5 months
+ * forward — BCP leagues legitimately carry an endDate months out, and 32 events
+ * look like that, so the future bound has to be generous.
+ */
+const MAX_EVENT_AGE_MS = 10 * 365 * 24 * 60 * 60 * 1000
+const MAX_EVENT_FUTURE_MS = 2 * 365 * 24 * 60 * 60 * 1000
+
+/**
+ * Reject an event date that cannot be real.
+ *
+ * A 2026-04-29 BCP import wrote 9 genuine May-2025 majors — 1,540 players, 4,315
+ * pairings, 1,536 army lists — with dates in 2001. The scraper does
+ * `new Date(raw.dates.end)` and stores whatever upstream returns; BCP now serves
+ * correct dates for those same event ids, so it was a transient glitch that only
+ * a write-time check could have caught. Nothing did, and the rows sat wrong for
+ * three months.
+ *
+ * Throwing is deliberate: the BCP scraper try/catches per event and collects the
+ * message, so one bad event is skipped and reported rather than poisoning the
+ * table or aborting the run.
+ */
+function assertPlausibleEventDate(date: number, sourceId: string): void {
+  if (!Number.isFinite(date)) {
+    throw new Error(
+      `upsertMetaEvent: event date is not a finite timestamp (got ${date}) for sourceId "${sourceId}". ` +
+        `An unparseable upstream date must not be stored as NaN.`,
+    )
+  }
+  const now = Date.now()
+  if (date < now - MAX_EVENT_AGE_MS || date > now + MAX_EVENT_FUTURE_MS) {
+    throw new Error(
+      `upsertMetaEvent: event date ${new Date(date).toISOString()} is implausible for sourceId ` +
+        `"${sourceId}" — outside 10 years past to 2 years future. This is the check that was ` +
+        `missing when a BCP import filed 9 real 2025 majors under 2001.`,
+    )
+  }
+}
+
 export interface MetaIngestPlayer {
   playerName: string
   sourcePlayerId?: string | null
@@ -122,6 +164,8 @@ export async function upsertMetaEvent(
         'A null/empty sourceId defeats the unique index and causes silent duplicate events on re-import.',
     )
   }
+
+  assertPlausibleEventDate(input.date, input.sourceId)
 
   // Delete-then-reinsert keyed on (source, sourceId) — mirrors
   // apps/tournament/server's existing exportToMeta pattern. Cascading FKs
