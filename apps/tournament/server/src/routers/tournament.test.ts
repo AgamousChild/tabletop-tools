@@ -6,6 +6,12 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import { createCallerFactory } from '../trpc'
 import { appRouter } from './index'
 
+// Realistic millisecond timestamp. This was 1700000000 -- a SECONDS value, which
+// as milliseconds is 1970-01-20. upsertMetaEvent now rejects implausible event
+// dates, and the tournament export path runs through it. Prod tournaments store
+// milliseconds correctly; only the fixture was wrong.
+const EVENT_DATE = Date.UTC(2025, 5, 14)
+
 const client = createClient({ url: ':memory:' })
 const db = createDbFromClient(client)
 
@@ -52,7 +58,7 @@ describe('tournament.create', () => {
     const caller = createCaller(toCtx)
     const t = await caller.tournament.create({
       name: 'Test GT',
-      eventDate: 1700000000,
+      eventDate: EVENT_DATE,
       format: '2000pts Matched Play',
       totalRounds: 5,
     })
@@ -74,7 +80,7 @@ describe('tournament.advanceStatus', () => {
     const caller = createCaller(toCtx)
     const t = await caller.tournament.create({
       name: 'Advance Test',
-      eventDate: 1700000000,
+      eventDate: EVENT_DATE,
       format: '2000pts',
       totalRounds: 3,
     })
@@ -86,7 +92,7 @@ describe('tournament.advanceStatus', () => {
     const toCaller = createCaller(toCtx)
     const t = await toCaller.tournament.create({
       name: 'Authorization Test',
-      eventDate: 1700000000,
+      eventDate: EVENT_DATE,
       format: '2000pts',
       totalRounds: 3,
     })
@@ -100,7 +106,7 @@ describe('player.register', () => {
     const toCaller = createCaller(toCtx)
     const t = await toCaller.tournament.create({
       name: 'Player Register Test',
-      eventDate: 1700000000,
+      eventDate: EVENT_DATE,
       format: '2000pts',
       totalRounds: 3,
     })
@@ -121,7 +127,7 @@ describe('player.register', () => {
     const toCaller = createCaller(toCtx)
     const t = await toCaller.tournament.create({
       name: 'Closed Registration',
-      eventDate: 1700000000,
+      eventDate: EVENT_DATE,
       format: '2000pts',
       totalRounds: 3,
     })
@@ -138,7 +144,7 @@ describe('tournament.delete', () => {
     const toCaller = createCaller(toCtx)
     const t = await toCaller.tournament.create({
       name: 'Delete Me',
-      eventDate: 1700000000,
+      eventDate: EVENT_DATE,
       format: '2000pts',
       totalRounds: 3,
     })
@@ -150,7 +156,7 @@ describe('tournament.delete', () => {
     const toCaller = createCaller(toCtx)
     const t = await toCaller.tournament.create({
       name: 'Cannot Delete',
-      eventDate: 1700000000,
+      eventDate: EVENT_DATE,
       format: '2000pts',
       totalRounds: 3,
     })
@@ -165,7 +171,7 @@ describe('result.report + result.confirm', () => {
     const toCaller = createCaller(toCtx)
     const t = await toCaller.tournament.create({
       name: 'Result Test',
-      eventDate: 1700000000,
+      eventDate: EVENT_DATE,
       format: '2000pts',
       totalRounds: 3,
     })
@@ -218,7 +224,7 @@ describe('tournament export to meta on COMPLETE', () => {
     const toCaller = createCaller(toCtx)
     const t = await toCaller.tournament.create({
       name: 'Export Test GT',
-      eventDate: 1700000000,
+      eventDate: EVENT_DATE,
       format: '2000pts',
       totalRounds: 1,
     })
@@ -299,7 +305,7 @@ describe('player.register with listId and detachment', () => {
     const toCaller = createCaller(toCtx)
     const t = await toCaller.tournament.create({
       name: 'List Integration Test',
-      eventDate: 1700000000,
+      eventDate: EVENT_DATE,
       format: '2000pts',
       totalRounds: 3,
     })
@@ -323,7 +329,7 @@ describe('tournament.standings', () => {
     const toCaller = createCaller(toCtx)
     const t = await toCaller.tournament.create({
       name: 'Standings Test',
-      eventDate: 1700000000,
+      eventDate: EVENT_DATE,
       format: '2000pts',
       totalRounds: 3,
     })
@@ -351,7 +357,7 @@ describe('tournament.search', () => {
     const toCaller = createCaller(toCtx)
     const t = await toCaller.tournament.create({
       name: 'Searchable GT',
-      eventDate: 1700000000,
+      eventDate: EVENT_DATE,
       location: 'Denver',
       format: '2000pts',
       totalRounds: 3,
@@ -390,7 +396,7 @@ describe('player.myProfile', () => {
     const toCaller = createCaller(toCtx)
     const t = await toCaller.tournament.create({
       name: 'Profile Test GT',
-      eventDate: 1700000000,
+      eventDate: EVENT_DATE,
       format: '2000pts',
       totalRounds: 1,
     })
@@ -459,7 +465,7 @@ describe('player.searchLists', () => {
     const toCaller = createCaller(toCtx)
     const t = await toCaller.tournament.create({
       name: 'List Search Test',
-      eventDate: 1700000000,
+      eventDate: EVENT_DATE,
       format: '2000pts',
       totalRounds: 3,
     })
@@ -500,7 +506,7 @@ describe('player.searchPlayers', () => {
     const toCaller = createCaller(toCtx)
     const t = await toCaller.tournament.create({
       name: 'Card Search Test',
-      eventDate: 1700000000,
+      eventDate: EVENT_DATE,
       format: '2000pts',
       totalRounds: 3,
     })
@@ -532,7 +538,7 @@ describe('round.create with startTime', () => {
     const toCaller = createCaller(toCtx)
     const t = await toCaller.tournament.create({
       name: 'Round StartTime Test',
-      eventDate: 1700000000,
+      eventDate: EVENT_DATE,
       format: '2000pts',
       totalRounds: 3,
     })
@@ -552,7 +558,7 @@ describe('round.create with startTime', () => {
     const toCaller = createCaller(toCtx)
     const t = await toCaller.tournament.create({
       name: 'Round No StartTime Test',
-      eventDate: 1700000000,
+      eventDate: EVENT_DATE,
       format: '2000pts',
       totalRounds: 3,
     })
@@ -568,7 +574,7 @@ describe('round.create with startTime', () => {
     const toCaller = createCaller(toCtx)
     const t = await toCaller.tournament.create({
       name: 'Round Get StartTime Test',
-      eventDate: 1700000000,
+      eventDate: EVENT_DATE,
       format: '2000pts',
       totalRounds: 3,
     })
