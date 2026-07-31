@@ -356,6 +356,37 @@ describe('buildCubeForEvents', () => {
     expect(after[0]!.edition_id).toBe('edition-11th')
   })
 
+  it("moves an event's frame when the event's date is corrected", async () => {
+    // An `event:{id}` frame is keyed on the event, not the date, so a corrected
+    // event date must move its frame. Nine majors were stored under 2001 by a
+    // bad BCP import and repaired to their true 2025 dates; refreshing only the
+    // dimension FKs would have left their frames stranded in 2001.
+    await insertEvent(client, {
+      id: 'evt-move',
+      date: Date.parse('2001-05-03T00:00:00Z'),
+      source: 'bcp',
+      sourceId: 'moved',
+      importedAt: 1000,
+    })
+    await buildCubeForEvents(db, ['evt-move'])
+    const before = (await db.all(
+      sql`SELECT date, year FROM meta_for WHERE id = 'evt-move' OR id = 'event:evt-move'`,
+    )) as Array<{ date: number; year: number }>
+    expect(before[0]!.year).toBe(2001)
+
+    await client.execute({
+      sql: `UPDATE meta_events SET date = ? WHERE id = 'evt-move'`,
+      args: [Date.parse('2025-05-04T00:00:00Z')],
+    })
+    await buildCubeForEvents(db, ['evt-move'])
+
+    const after = (await db.all(
+      sql`SELECT date, year FROM meta_for WHERE id = 'event:evt-move'`,
+    )) as Array<{ date: number; year: number }>
+    expect(after[0]!.year).toBe(2025)
+    expect(after[0]!.date).toBe(Date.parse('2025-05-04T00:00:00Z'))
+  })
+
   it('is idempotent — calling twice for the same event does not duplicate fact rows', async () => {
     await insertEvent(client, {
       id: 'evt1',
