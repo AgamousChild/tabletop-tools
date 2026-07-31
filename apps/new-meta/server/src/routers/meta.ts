@@ -147,7 +147,13 @@ export const metaRouter = router({
         }
       }
 
-      // Detachments
+      // Detachments — counted in ANY position, via the combo membership bridge.
+      //
+      // NOT via fact_game_results.detachment_id: that column holds the PRIMARY
+      // (position 1) detachment only. 11e armies take several, so keying on it
+      // under-reports every detachment that tends to be written second and hides
+      // some entirely — measured on prod, Warptide showed 0 games against 328
+      // real ones, and Skyshroud Spearhead 5 against 358.
       const detRows = await ctx.db.all(sql`
         SELECT dd.name AS detachment, dd.id AS detachment_id,
                COUNT(*) AS games,
@@ -157,13 +163,51 @@ export const metaRouter = router({
                AVG(f.result) AS win_rate,
                COUNT(DISTINCT f.player_id) AS players
         FROM fact_game_results f
-        JOIN dim_detachment dd ON f.detachment_id = dd.id
-        WHERE f.faction_id = ${input.factionId} AND f.detachment_id IS NOT NULL
+        JOIN dim_detachment_combo_member m ON f.combo_id = m.combo_id
+        JOIN dim_detachment dd ON m.detachment_id = dd.id
+        WHERE f.faction_id = ${input.factionId} AND f.combo_id IS NOT NULL
         GROUP BY dd.id HAVING games >= 5 ORDER BY win_rate DESC
       `)
       const detachments = (detRows as any[]).map((r) => ({
         detachment: r.detachment,
         detachmentId: r.detachment_id,
+        winRate: r.win_rate,
+        games: r.games,
+        wins: r.wins,
+        losses: r.losses,
+        draws: r.draws,
+        players: r.players,
+      }))
+
+      // Detachment COMBOS — the set an army actually brought, as one row.
+      //
+      // Distinct from the breakdown above: that answers "how does Skyshroud
+      // Spearhead do wherever it appears", this answers "how does Cursed Legion
+      // PLUS Skyshroud Spearhead do", which is the question 11e list-building
+      // actually poses. memberCount lets the UI separate single-detachment
+      // armies from real pairings.
+      const comboRows = await ctx.db.all(sql`
+        SELECT c.id AS combo_id, c.member_count, c.total_dp,
+               (SELECT GROUP_CONCAT(dd2.name, ' + ')
+                  FROM dim_detachment_combo_member m2
+                  JOIN dim_detachment dd2 ON m2.detachment_id = dd2.id
+                 WHERE m2.combo_id = c.id) AS members,
+               COUNT(*) AS games,
+               SUM(CASE WHEN f.result = 1.0 THEN 1 ELSE 0 END) AS wins,
+               SUM(CASE WHEN f.result = 0.0 THEN 1 ELSE 0 END) AS losses,
+               SUM(CASE WHEN f.result = 0.5 THEN 1 ELSE 0 END) AS draws,
+               AVG(f.result) AS win_rate,
+               COUNT(DISTINCT f.player_id) AS players
+        FROM fact_game_results f
+        JOIN dim_detachment_combo c ON f.combo_id = c.id
+        WHERE f.faction_id = ${input.factionId} AND f.combo_id IS NOT NULL
+        GROUP BY c.id HAVING games >= 5 ORDER BY win_rate DESC
+      `)
+      const combos = (comboRows as any[]).map((r) => ({
+        comboId: r.combo_id,
+        members: r.members ?? r.combo_id,
+        memberCount: r.member_count,
+        totalDp: r.total_dp,
         winRate: r.win_rate,
         games: r.games,
         wins: r.wins,
@@ -198,9 +242,18 @@ export const metaRouter = router({
       }))
 
       // Top lists
+      // The detachment label is every detachment the army brought, in the order
+      // written — ep.detachment_id alone would name only the first of them.
       const listRows = await ctx.db.all(sql`
         SELECT ep.player_name, ep.placement, ep.list_text, ep.wins, ep.losses, ep.draws,
-               dd.name AS detachment, me.name AS event_name, me.date AS event_date, me.format
+               COALESCE(
+                 (SELECT GROUP_CONCAT(dd2.name, ' + ')
+                    FROM (SELECT pd.detachment_id FROM meta_event_player_detachment pd
+                           WHERE pd.player_id = ep.id ORDER BY pd.position) ordered
+                    JOIN dim_detachment dd2 ON ordered.detachment_id = dd2.id),
+                 dd.name
+               ) AS detachment,
+               me.name AS event_name, me.date AS event_date, me.format
         FROM meta_event_players ep
         JOIN meta_events me ON ep.event_id = me.id
         LEFT JOIN dim_detachment dd ON ep.detachment_id = dd.id
@@ -220,7 +273,7 @@ export const metaRouter = router({
         draws: r.draws,
       }))
 
-      return { stat, detachments, timeline, topLists }
+      return { stat, detachments, combos, timeline, topLists }
     }),
 
   matchups: publicProcedure
