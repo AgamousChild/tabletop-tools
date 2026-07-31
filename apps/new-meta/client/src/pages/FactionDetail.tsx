@@ -238,9 +238,13 @@ function TimelineChart({
           const color =
             p.winRate >= 0.55 ? 'bg-emerald-400' : p.winRate >= 0.45 ? 'bg-amber-400' : 'bg-red-400'
           return (
+            // h-full + justify-end are load-bearing: the bar's height is a
+            // PERCENTAGE, and a percentage resolves against the parent's height.
+            // This wrapper had no height, so every bar computed to 0 and the
+            // chart rendered completely empty while holding 10 real data points.
             <div
               key={p.week}
-              className="flex flex-col items-center flex-1 min-w-0"
+              className="flex h-full flex-col items-center justify-end flex-1 min-w-0"
               title={`${p.week}: ${(p.winRate * 100).toFixed(1)}% (${p.games} games)`}
             >
               <div
