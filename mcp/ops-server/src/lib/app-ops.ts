@@ -40,6 +40,34 @@ export function assertDeployableApp(app: string): asserts app is DeployableApp {
 const serverDir = (app: string) => join(REPO_ROOT, 'apps', app, 'server')
 const clientDir = (app: string) => join(REPO_ROOT, 'apps', app, 'client')
 
+/**
+ * Cloudflare Pages project for an app's client.
+ *
+ * Confirmed against `wrangler pages project list`: every app client is
+ * `tabletop-tools-{app}` serving `{app}.tabletop-tools.net`. The bare
+ * `tabletop-tools` project is the gateway.
+ *
+ * This has to be passed explicitly. There is no wrangler.toml in any client
+ * directory, so `wrangler pages deploy dist` fails with "Must specify a project
+ * name" — which is exactly what the repo's own `deploy:new-meta` npm script
+ * does, so that script has never worked either.
+ */
+export const pagesProject = (app: string) => `tabletop-tools-${app}`
+
+/**
+ * The Pages branch that publishes to PRODUCTION.
+ *
+ * Without this, `wrangler pages deploy` uses the current git branch, and any
+ * branch other than the project's production branch lands as a PREVIEW on a
+ * throwaway hash URL while the real domain keeps serving the old build. It
+ * still exits 0.
+ *
+ * That is not hypothetical: tabletop-tools-new-meta's production deployment was
+ * five months old and on `main`, while a fresh deploy from a feature branch
+ * reported success and changed nothing users could see.
+ */
+export const PAGES_PRODUCTION_BRANCH = 'main'
+
 // ── Worker ──────────────────────────────────────────────────────────────────
 
 /** Deploy one app's server Worker. Does NOT purge — see appDeployFull. */
@@ -62,18 +90,29 @@ export async function appDeployWorker(app: string): Promise<RunResult> {
  */
 export async function appDeployClient(
   app: string,
-  opts: { skipBuild?: boolean } = {},
+  opts: { skipBuild?: boolean; branch?: string } = {},
 ): Promise<{ build?: RunResult; deploy: RunResult }> {
   assertDeployableApp(app)
   const cwd = clientDir(app)
   const build = opts.skipBuild
     ? undefined
     : await runCmd('npx', ['vite', 'build'], { cwd, timeoutMs: 15 * 60 * 1000, tailLines: 30 })
-  const deploy = await runCmd('npx', ['wrangler', 'pages', 'deploy', 'dist'], {
-    cwd,
-    timeoutMs: 15 * 60 * 1000,
-    tailLines: 40,
-  })
+  const deploy = await runCmd(
+    'npx',
+    [
+      'wrangler',
+      'pages',
+      'deploy',
+      'dist',
+      '--project-name',
+      pagesProject(app),
+      // Explicit, because the default is the current git branch — which
+      // silently produces a preview deployment nobody is looking at.
+      '--branch',
+      opts.branch ?? PAGES_PRODUCTION_BRANCH,
+    ],
+    { cwd, timeoutMs: 15 * 60 * 1000, tailLines: 40 },
+  )
   return { build, deploy }
 }
 
@@ -106,7 +145,7 @@ export interface AppDeployFullResult {
  */
 export async function appDeployFull(
   app: string,
-  opts: { skipWorker?: boolean; skipClient?: boolean; skipBuild?: boolean } = {},
+  opts: { skipWorker?: boolean; skipClient?: boolean; skipBuild?: boolean; branch?: string } = {},
 ): Promise<AppDeployFullResult> {
   assertDeployableApp(app)
   const started = Date.now()
@@ -115,7 +154,7 @@ export async function appDeployFull(
   let clientBuild: RunResult | undefined
   let clientDeploy: RunResult | undefined
   if (!opts.skipClient) {
-    const r = await appDeployClient(app, { skipBuild: opts.skipBuild })
+    const r = await appDeployClient(app, { skipBuild: opts.skipBuild, branch: opts.branch })
     clientBuild = r.build
     clientDeploy = r.deploy
   }
