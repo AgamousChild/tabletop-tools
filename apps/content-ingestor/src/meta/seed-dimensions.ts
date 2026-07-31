@@ -138,8 +138,33 @@ const TOURNAMENT_PACKS = [
   },
 ]
 
-const EDITIONS = [
-  { id: 'edition-10th', name: '10th Edition', startDate: '2023-06-01', endDate: null },
+// The 10th/11th boundary is 2026-06-16, taken from tournament data rather than
+// a press date: the first army with more than one detachment AND the first list
+// carrying a "Detachment Points" marker both appear on 2026-06-21, and every
+// event from 2026-06-07 to 2026-06-15 has zero of either across 974 armies.
+// No events at all fall between the 15th and the 21st, so any boundary in that
+// gap classifies identically — 06-16 is chosen because Micah's rule is "the last
+// two weeks of June forward are 11th edition". (The last 10th-edition event in
+// the data is even named "RT 66 @ 2D6 Last of 10th".)
+//
+// 10th closes at END of the 15th, not midnight. 379 of 400 event dates carry a
+// time component, and generateFrames matches on
+// `date >= start && (!end || date <= end)` — so an end of '2026-06-15' would put
+// any event later that day into a gap between the editions and leave its
+// edition_id null.
+const EDITIONS: Array<{ id: string; name: string; startDate: string; endDate: string | null }> = [
+  {
+    id: 'edition-10th',
+    name: '10th Edition',
+    startDate: '2023-06-01',
+    endDate: '2026-06-15T23:59:59.999Z',
+  },
+  {
+    id: 'edition-11th',
+    name: '11th Edition',
+    startDate: '2026-06-16T00:00:00.000Z',
+    endDate: null,
+  },
 ]
 
 const REGIONS = [
