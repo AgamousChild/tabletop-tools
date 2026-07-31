@@ -343,10 +343,35 @@ resolution is strictly better than the parser's split — that is the whole poin
 of doing it against `dim_detachment`. 98.8% is the ceiling until the brain gains
 content.
 
-## Not done, and why
+## new-meta — combos surfaced, and a regression this work caused
 
-**Surfacing combos in new-meta** is a UI feature nobody asked for. The data is
-ready when it is wanted: `SELECT combo_id, COUNT(*), AVG(result) FROM
-fact_game_results GROUP BY 1` answers "which pairing wins" as an indexed read,
-and `dim_detachment_combo` holds all 3,490 legal combos including the ones
-nobody has played.
+Keeping `fact_game_results.detachment_id` as "position 1, for back-compat" broke
+new-meta's detachment breakdown, because that table reads exactly that column.
+A detachment written SECOND became invisible:
+
+| detachment | shown | real |
+|---|---|---|
+| `chaos-daemons:warptide` | **0** | 328 |
+| `necrons:skyshroud-spearhead` | 5 | 358 |
+| `tyranids:talons-of-the-norn-queen` | 21 | 493 |
+| `space-marines:librarius-conclave` | 386 | 1,144 |
+
+**Anything reading `detachment_id` alone is now wrong.** The breakdown counts
+through `dim_detachment_combo_member` instead, so a detachment is credited in
+whatever position it appears. Top-list and tournament-player labels had the same
+fault — both now list every detachment in written order via
+`meta_event_player_detachment.position`.
+
+A **Detachment Combinations** table is on the faction page. It answers a
+different question from the breakdown ("how does Cursed Legion PLUS Skyshroud
+Spearhead do" vs "how does Skyshroud Spearhead do anywhere"), which is the one
+11e list-building actually poses. Single-detachment armies are filtered out, and
+the DP cost is shown because it is what constrains the pairing.
+
+Grain is unchanged and there is a test for it: a two-detachment army is six
+games, not twelve.
+
+**Known, not fixed:** new-meta's routers are typed against server-core's
+`BaseContext` while its procedures use the local `Context`, so an in-process
+tRPC caller cannot be typed. Tests go over HTTP like `server.test.ts`. Fixing it
+properly ripples through every router file.
