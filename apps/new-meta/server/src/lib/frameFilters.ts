@@ -118,28 +118,37 @@ function buildLabel(r: {
   year: number | null
   quarter: number | null
   month: number | null
+  date: number
+  /** Human name joined from the row this frame is derived from, when it has one. */
+  sourceName: string | null
 }): string {
+  const isoDate = () => new Date(r.date).toISOString().slice(0, 10)
+
   switch (r.typeName) {
     case 'Quarter':
-      return r.year != null && r.quarter != null ? `${r.year} Q${r.quarter}` : r.id
+      return r.year != null && r.quarter != null ? `${r.year} Q${r.quarter}` : isoDate()
     case 'Month':
       return r.year != null && r.month != null
         ? `${r.year}-${String(r.month).padStart(2, '0')}`
-        : r.id
+        : isoDate()
     case 'Year':
-      return r.year != null ? `${r.year}` : r.id
-    case 'DataSlate':
-      return r.id.startsWith('dataslate:') ? r.id.replace('dataslate:', 'Dataslate: ') : r.id
-    case 'Event':
-      return r.id.startsWith('event:') ? r.id.replace('event:', '') : r.id
+      return r.year != null ? `${r.year}` : isoDate()
     case 'Weekend':
-      return r.id.startsWith('weekend:') ? r.id.replace('weekend:', 'Weekend ') : r.id
+      return `Weekend ${isoDate()}`
+    // The rest name a real row. Use ITS name — never the id, and never a
+    // string carved out of the id. Every one of these used to leak: events
+    // rendered as raw nanoids, and the TournamentPack branch tested for a
+    // `tourney_pack:` prefix that generateFrames never writes (it writes
+    // `pack:`), so `pack:pack-pariah-nexus` went straight to the user.
+    case 'Event':
+      // Date included because tournament names repeat across years.
+      return r.sourceName ? `${r.sourceName} (${isoDate()})` : isoDate()
+    case 'DataSlate':
     case 'TournamentPack':
-      return r.id.startsWith('tourney_pack:') ? r.id.replace('tourney_pack:', 'Pack: ') : r.id
     case 'Edition':
-      return r.id.startsWith('edition:') ? r.id.replace('edition:', 'Edition ') : r.id
+      return r.sourceName ?? isoDate()
     default:
-      return r.id
+      return r.sourceName ?? isoDate()
   }
 }
 
@@ -162,12 +171,25 @@ export async function getFramesWithData(
       mf.month,
       mf.quarter,
       mf.year,
+      -- The human name of whatever row this frame is derived from. Joined by
+      -- type name rather than a hardcoded type_id, and by the frame's own FK
+      -- columns where it has them. Event frames key on the id suffix because
+      -- meta_for holds no event_id column.
+      COALESCE(me.name, dd.name, dtp.name, de.name) AS sourceName,
       EXISTS (
         SELECT 1 FROM meta_top mt
         WHERE mt.meta_for_id = mf.id AND mt.granularity_id = ${granularityId}
       ) AS hasData
     FROM meta_for mf
     JOIN dim_for_type dft ON mf.type_id = dft.id
+    LEFT JOIN meta_events me
+      ON dft.name = 'Event' AND me.id = substr(mf.id, 7)
+    LEFT JOIN dim_dataslate dd
+      ON dft.name = 'DataSlate' AND dd.id = mf.dataslate_id
+    LEFT JOIN dim_tournament_pack dtp
+      ON dft.name = 'TournamentPack' AND dtp.id = mf.tourney_pack_id
+    LEFT JOIN dim_edition de
+      ON dft.name = 'Edition' AND de.id = mf.edition_id
     ORDER BY mf.date DESC
   `)) as Array<{
     id: string
@@ -178,6 +200,7 @@ export async function getFramesWithData(
     month: number | null
     quarter: number | null
     year: number
+    sourceName: string | null
     hasData: number
   }>
 
@@ -196,6 +219,8 @@ export async function getFramesWithData(
       year: r.year,
       quarter: r.quarter,
       month: r.month,
+      date: r.date,
+      sourceName: r.sourceName,
     }),
     hasData: Boolean(r.hasData),
   }))
