@@ -26,7 +26,11 @@ export function FactionDetail({ factionId, onBack }: Props) {
     )
   }
 
-  const { stat, detachments, timeline, topLists } = data
+  const { stat, detachments, combos, timeline, topLists } = data
+  // 11e armies take several detachments, so a pairing is its own thing to
+  // evaluate — not the same question as how one detachment does across every
+  // army it appears in.
+  const multiCombos = combos.filter((c) => c.memberCount > 1)
 
   return (
     <div className="space-y-8">
@@ -55,9 +59,63 @@ export function FactionDetail({ factionId, onBack }: Props) {
         </div>
       </div>
 
+      {multiCombos.length > 0 && (
+        <section>
+          <h2 className="text-lg font-medium text-slate-200 mb-1">Detachment Combinations</h2>
+          <p className="text-xs text-slate-500 mb-3">
+            11th edition armies take more than one detachment under a Detachment Points budget.
+            These are the pairings actually played, scored as a whole army.
+          </p>
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="border-b border-slate-800 text-slate-400 text-left text-xs">
+                <th className="pb-2 pr-4">Combination</th>
+                <th className="pb-2 pr-3 text-right">DP</th>
+                <th className="pb-2 pr-3 text-right">Win%</th>
+                <th className="pb-2 pr-3 text-right">W</th>
+                <th className="pb-2 pr-3 text-right">L</th>
+                <th className="pb-2 pr-3 text-right">D</th>
+                <th className="pb-2 pr-3 text-right">Games</th>
+                <th className="pb-2 text-right">Players</th>
+              </tr>
+            </thead>
+            <tbody>
+              {multiCombos.map((c) => (
+                <tr key={c.comboId} className="border-b border-slate-800/50">
+                  <td className="py-1.5 pr-4 text-slate-100">{c.members}</td>
+                  <td className="py-1.5 pr-3 text-right text-slate-500">{c.totalDp ?? '—'}</td>
+                  <td className="py-1.5 pr-3 text-right">
+                    <span
+                      className={
+                        c.winRate > 0.55
+                          ? 'text-emerald-400'
+                          : c.winRate < 0.45
+                            ? 'text-red-400'
+                            : 'text-slate-300'
+                      }
+                    >
+                      {(c.winRate * 100).toFixed(1)}%
+                    </span>
+                  </td>
+                  <td className="py-1.5 pr-3 text-right text-slate-400">{c.wins}</td>
+                  <td className="py-1.5 pr-3 text-right text-slate-400">{c.losses}</td>
+                  <td className="py-1.5 pr-3 text-right text-slate-400">{c.draws}</td>
+                  <td className="py-1.5 pr-3 text-right text-slate-400">{c.games}</td>
+                  <td className="py-1.5 text-right text-slate-400">{c.players}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </section>
+      )}
+
       {detachments.length > 0 && (
         <section>
-          <h2 className="text-lg font-medium text-slate-200 mb-3">Detachments</h2>
+          <h2 className="text-lg font-medium text-slate-200 mb-1">Detachments</h2>
+          <p className="text-xs text-slate-500 mb-3">
+            Every game an army containing this detachment played, whichever position it was written
+            in.
+          </p>
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b border-slate-800 text-slate-400 text-left text-xs">

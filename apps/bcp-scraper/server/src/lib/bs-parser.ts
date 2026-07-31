@@ -44,6 +44,17 @@ export function parseBattleScribe(text: string): TTTPackage {
   const detachmentName = detachmentMatch ? detachmentMatch[1]!.trim() : undefined
   const detachmentId = detachmentName ? slugifyDetachment(detachmentName) : undefined
 
+  // BattleScribe headers carry one detachment in practice (0 of 600 sampled
+  // DP-marked lists had a conjunction here — multi-detachment shows up in the
+  // GW-app format instead). Emit the array anyway so consumers get one shape
+  // regardless of which parser ran.
+  const detachments =
+    detachmentName && detachmentId ? [{ id: detachmentId, name: detachmentName }] : undefined
+
+  // 11e Detachment Points, when the export records them.
+  const dpMatch = text.match(/\((\d+)\s*Detachment\s+Points?\)/i)
+  const detachmentPoints = dpMatch ? parseInt(dpMatch[1]!, 10) : undefined
+
   // --- Total points ---
   const pointsMatch = text.match(/TOTAL ARMY POINTS:\s*(\d+)\s*pts/i)
   const totalPoints = pointsMatch ? parseInt(pointsMatch[1]!, 10) : 0
@@ -137,6 +148,8 @@ export function parseBattleScribe(text: string): TTTPackage {
       factionName,
       ...(detachmentId ? { detachmentId } : {}),
       ...(detachmentName ? { detachmentName } : {}),
+      ...(detachments ? { detachments } : {}),
+      ...(detachmentPoints !== undefined ? { detachmentPoints } : {}),
       units,
     },
     exports: { rawSource: text },

@@ -17,8 +17,24 @@ export interface TTTPackage {
     factionName: string
     subfactionId?: string
     subfactionName?: string
+    /** Primary (position 1) detachment. Kept for back-compat; see detachments. */
     detachmentId?: string
     detachmentName?: string
+    /**
+     * Every detachment the list declared, in written order.
+     *
+     * 11e armies take more than one (measured: 64% of scraped lists carry a
+     * Detachment Points marker, and 418 of 600 join them with " and ").
+     *
+     * `id` here is a best-effort slug only. Authoritative resolution against
+     * dim_detachment happens in server-core's detachment backfill, which is the
+     * only place that has the registry — necessary because real detachment
+     * names contain "and" ("Penitents and Pilgrims"), so a split cannot be
+     * trusted without checking the full string against the dim first.
+     */
+    detachments?: Array<{ id: string; name: string }>
+    /** Total Detachment Points the list spent, from "(N Detachment Points)". */
+    detachmentPoints?: number
     units: TTTUnit[]
   }
 

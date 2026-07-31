@@ -1,3 +1,8 @@
+// splitDetachmentNames lives in server-core because that is where the
+// dim_detachment registry lives — the only place that can decide whether a
+// split is right (see resolveDeclaredDetachments). One implementation, not two.
+import { splitDetachmentNames } from '@tabletop-tools/server-core'
+
 import { normalizeFaction } from './faction-map'
 import type { TTTPackage, TTTUnit } from './ttt-types'
 
@@ -205,8 +210,26 @@ function parsePreamble(preamble: string, pkg: TTTPackage): void {
   }
 
   if (remaining) {
+    // 11e: the detachment line carries the points spent, e.g.
+    // "Librarius Conclave and Spearpoint Task Force (3 Detachment Points)".
+    const dpMatch = remaining.match(/\((\d+)\s*Detachment\s+Points?\)/i)
+    if (dpMatch) {
+      pkg.list.detachmentPoints = parseInt(dpMatch[1]!, 10)
+      remaining = (
+        remaining.slice(0, dpMatch.index!) + remaining.slice(dpMatch.index! + dpMatch[0].length)
+      ).trim()
+    }
+
     pkg.list.detachmentName = remaining
     pkg.list.detachmentId = slugifyDetachment(remaining)
+
+    const names = splitDetachmentNames(remaining)
+    pkg.list.detachments = names.map((name) => ({ name, id: slugifyDetachment(name) }))
+    // Primary is the first written detachment.
+    if (names.length > 0) {
+      pkg.list.detachmentName = names[0]!
+      pkg.list.detachmentId = slugifyDetachment(names[0]!)
+    }
   }
 }
 

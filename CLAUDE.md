@@ -416,6 +416,13 @@ These are caltrops people have stepped on. Always honor them.
   passwords, cookies, or sessions. For pages that need auth, use
   `launchPersistentContext` with a local cookie directory rather than
   the MCP browser.
+- **Run tests per package, not from the repo root.** `pnpm -F <pkg> test` uses
+  that package's own vitest config. A root `npx vitest run --dir packages`
+  ignores them and reported 125 phantom failures in `packages/ui` — every one
+  `document is not defined`, purely a missing jsdom environment. All 53 pass
+  under the package's own config.
+- **A Vitest file that fails to PARSE reports as fewer tests passing, with no
+  failure.** Compare test COUNTS between runs, not just green/red.
 
 ---
 

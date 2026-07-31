@@ -51,6 +51,35 @@ const fakeData = {
       players: 3,
     },
   ],
+  combos: [
+    {
+      comboId: 'orks:green-tide+taktikal-brigade',
+      members: 'Green Tide + Taktikal Brigade',
+      memberCount: 2,
+      totalDp: 3,
+      wins: 9,
+      losses: 3,
+      draws: 0,
+      games: 12,
+      winRate: 0.75,
+      players: 4,
+    },
+    // A single-detachment army is a combo of one. It belongs in the detachment
+    // table, not the combinations table, or every faction shows a
+    // "combination" list that is just its detachments again.
+    {
+      comboId: 'orks:war-horde',
+      members: 'War Horde',
+      memberCount: 1,
+      totalDp: 3,
+      wins: 5,
+      losses: 5,
+      draws: 0,
+      games: 10,
+      winRate: 0.5,
+      players: 2,
+    },
+  ],
   timeline: [
     { week: '2025-01-06', winRate: 0.625, games: 8, wins: 5, losses: 3, draws: 0 },
     { week: '2025-01-13', winRate: 0.538, games: 13, wins: 7, losses: 5, draws: 1 },
@@ -97,6 +126,33 @@ describe('FactionDetail', () => {
   it('shows detachment names', () => {
     mockQueryResult = { data: fakeData, isLoading: false }
     render(<FactionDetail factionId="ork-1" onBack={() => {}} />)
+    expect(screen.getByText('Waaagh! Tribe')).toBeInTheDocument()
+  })
+
+  it('shows a multi-detachment combination with its DP cost', () => {
+    mockQueryResult = { data: fakeData, isLoading: false }
+    render(<FactionDetail factionId="ork-1" onBack={() => {}} />)
+    expect(screen.getByText('Detachment Combinations')).toBeInTheDocument()
+    expect(screen.getByText('Green Tide + Taktikal Brigade')).toBeInTheDocument()
+    expect(screen.getByText('75.0%')).toBeInTheDocument()
+  })
+
+  it('keeps single-detachment armies out of the combinations table', () => {
+    mockQueryResult = { data: fakeData, isLoading: false }
+    render(<FactionDetail factionId="ork-1" onBack={() => {}} />)
+    // "War Horde" is a one-detachment army — listing it as a "combination"
+    // would just restate the detachment table.
+    expect(screen.queryByText('War Horde')).not.toBeInTheDocument()
+  })
+
+  it('hides the combinations table when nothing multi-detachment was played', () => {
+    mockQueryResult = {
+      data: { ...fakeData, combos: [fakeData.combos[1]] },
+      isLoading: false,
+    }
+    render(<FactionDetail factionId="ork-1" onBack={() => {}} />)
+    expect(screen.queryByText('Detachment Combinations')).not.toBeInTheDocument()
+    // The detachment breakdown still renders.
     expect(screen.getByText('Waaagh! Tribe')).toBeInTheDocument()
   })
 

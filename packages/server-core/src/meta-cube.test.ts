@@ -1,28 +1,10 @@
 import { createClient } from '@libsql/client'
 import { createDbFromClient } from '@tabletop-tools/db'
+import { applyTestSchema, seedReferenceDims } from '@tabletop-tools/db/src/test-schema'
 import { sql } from 'drizzle-orm'
 import { beforeEach, describe, expect, it } from 'vitest'
 
 import { buildCubeForEvents, generateFrames } from './meta-cube'
-
-const CREATE_TABLES = `
-CREATE TABLE IF NOT EXISTS dim_faction (id TEXT PRIMARY KEY, name TEXT NOT NULL, allegiance TEXT NOT NULL);
-CREATE TABLE IF NOT EXISTS dim_subfaction (id TEXT PRIMARY KEY, name TEXT NOT NULL, faction_id TEXT);
-CREATE TABLE IF NOT EXISTS dim_detachment (id TEXT PRIMARY KEY, name TEXT NOT NULL, faction_id TEXT, subfaction_id TEXT);
-CREATE TABLE IF NOT EXISTS dim_for_type (id INTEGER PRIMARY KEY, name TEXT NOT NULL);
-CREATE TABLE IF NOT EXISTS dim_granularity (id INTEGER PRIMARY KEY, name TEXT NOT NULL);
-CREATE TABLE IF NOT EXISTS dim_dataslate (id TEXT PRIMARY KEY, name TEXT NOT NULL, effective_date INTEGER NOT NULL, end_date INTEGER);
-CREATE TABLE IF NOT EXISTS dim_tournament_pack (id TEXT PRIMARY KEY, name TEXT NOT NULL, effective_date INTEGER NOT NULL, end_date INTEGER);
-CREATE TABLE IF NOT EXISTS dim_edition (id TEXT PRIMARY KEY, name TEXT NOT NULL, start_date INTEGER NOT NULL, end_date INTEGER);
-CREATE TABLE IF NOT EXISTS meta_events (id TEXT PRIMARY KEY, name TEXT NOT NULL, date INTEGER NOT NULL, location TEXT, region_id INTEGER, format TEXT NOT NULL, rounds INTEGER, player_count INTEGER NOT NULL, source TEXT NOT NULL, source_id TEXT, imported_at INTEGER NOT NULL, win_faction_id TEXT, win_subfaction_id TEXT, win_detachment_id TEXT);
-CREATE TABLE IF NOT EXISTS meta_event_players (id TEXT PRIMARY KEY, event_id TEXT NOT NULL, player_name TEXT NOT NULL, faction_id TEXT, subfaction_id TEXT, detachment_id TEXT, placement INTEGER NOT NULL, list_text TEXT, source_list_id TEXT, wins INTEGER NOT NULL DEFAULT 0, losses INTEGER NOT NULL DEFAULT 0, draws INTEGER NOT NULL DEFAULT 0, gl2_rating_start REAL, gl2_rd_start REAL, gl2_vol_start REAL, gl2_rating_end REAL, gl2_rd_end REAL, gl2_vol_end REAL);
-CREATE TABLE IF NOT EXISTS meta_pairings (id TEXT PRIMARY KEY, event_id TEXT NOT NULL, round INTEGER NOT NULL, player1_id TEXT, player2_id TEXT, player1_score INTEGER, player2_score INTEGER, player1_gl2 REAL, player2_gl2 REAL, result TEXT NOT NULL);
-CREATE TABLE IF NOT EXISTS meta_for (id TEXT PRIMARY KEY, type_id INTEGER NOT NULL, date INTEGER NOT NULL, end_date INTEGER, day INTEGER, month INTEGER, quarter INTEGER, year INTEGER NOT NULL, dataslate_id TEXT, tourney_pack_id TEXT, edition_id TEXT);
-CREATE TABLE IF NOT EXISTS fact_game_results (id TEXT PRIMARY KEY, event_id TEXT NOT NULL, player_id TEXT NOT NULL, opponent_id TEXT, round INTEGER NOT NULL, faction_id TEXT NOT NULL, subfaction_id TEXT, detachment_id TEXT, opponent_faction_id TEXT, opponent_subfaction_id TEXT, opponent_detachment_id TEXT, result REAL NOT NULL, player_score INTEGER, opponent_score INTEGER);
-CREATE TABLE IF NOT EXISTS meta_top (id TEXT PRIMARY KEY, granularity_id INTEGER NOT NULL, faction_id TEXT NOT NULL, subfaction_id TEXT, detachment_id TEXT, meta_for_id TEXT NOT NULL, win_rate REAL NOT NULL, draw_rate REAL NOT NULL, over_rep REAL NOT NULL, four_oh_start REAL NOT NULL, event_wins INTEGER NOT NULL DEFAULT 0, event_finals INTEGER NOT NULL DEFAULT 0, event_top4 INTEGER NOT NULL DEFAULT 0, event_top8 INTEGER NOT NULL DEFAULT 0, event_top16 INTEGER NOT NULL DEFAULT 0, player_pop_pct REAL NOT NULL, wins INTEGER NOT NULL DEFAULT 0, losses INTEGER NOT NULL DEFAULT 0, draws INTEGER NOT NULL DEFAULT 0, games INTEGER NOT NULL DEFAULT 0, players INTEGER NOT NULL DEFAULT 0);
-CREATE TABLE IF NOT EXISTS meta_cube_status (id INTEGER PRIMARY KEY DEFAULT 1, last_started_at INTEGER, last_completed_at INTEGER, last_event_id TEXT, status TEXT NOT NULL DEFAULT 'pending');
-INSERT OR IGNORE INTO meta_cube_status (id, status) VALUES (1, 'pending');
-`
 
 function createTestDb() {
   const client = createClient({ url: ':memory:' })
@@ -31,11 +13,9 @@ function createTestDb() {
 }
 
 async function setupTables(client: ReturnType<typeof createClient>) {
-  for (const stmt of CREATE_TABLES.split(';')
-    .map((s) => s.trim())
-    .filter(Boolean)) {
-    await client.execute(stmt)
-  }
+  // Real schema from the committed migrations — see packages/db test-schema.
+  await applyTestSchema(client)
+  await seedReferenceDims(client)
 }
 
 async function seedDims(client: ReturnType<typeof createClient>) {
@@ -47,14 +27,7 @@ async function seedDims(client: ReturnType<typeof createClient>) {
     sql: `INSERT INTO dim_faction VALUES (?, ?, ?)`,
     args: ['ork', 'Orks', 'xenos'],
   })
-  await client.execute({
-    sql: `INSERT INTO dim_granularity VALUES (?, ?)`,
-    args: [1, 'faction'],
-  })
-  await client.execute({
-    sql: `INSERT INTO dim_for_type VALUES (?, ?)`,
-    args: [1, 'event'],
-  })
+  // dim_granularity / dim_for_type come from seedReferenceDims()
 }
 
 async function insertEvent(
@@ -191,6 +164,47 @@ describe('buildCubeForEvents', () => {
     expect(smTop.players).toBe(1)
   })
 
+  it('carries each army detachment combo into the fact grain, both perspectives', async () => {
+    await insertEvent(client, {
+      id: 'evt-combo',
+      date: Date.UTC(2025, 5, 14),
+      source: 'native',
+      sourceId: 'tourn-combo',
+      importedAt: 1000,
+    })
+    await client.executeMultiple(`
+      INSERT INTO dim_detachment (id, name, faction_id, subfaction_id, dp) VALUES
+        ('sm:gladius','Gladius','sm',NULL,2),
+        ('sm:librarius','Librarius','sm',NULL,1),
+        ('ork:war-horde','War Horde','ork',NULL,3);
+      INSERT INTO dim_detachment_combo (id, faction_id, member_count, total_dp, is_legal) VALUES
+        ('sm:gladius+librarius','sm',2,3,1),
+        ('ork:war-horde','ork',1,3,1);
+      UPDATE meta_event_players SET detachment_id='sm:gladius', combo_id='sm:gladius+librarius'
+        WHERE id='evt-combo-p1';
+      UPDATE meta_event_players SET detachment_id='ork:war-horde', combo_id='ork:war-horde'
+        WHERE id='evt-combo-p2';
+    `)
+
+    await buildCubeForEvents(db, ['evt-combo'])
+
+    const facts = (await db.all(sql`
+      SELECT player_id, detachment_id, combo_id, opponent_combo_id FROM fact_game_results
+    `)) as Array<Record<string, unknown>>
+    // Grain unchanged: a two-detachment army is still ONE row per game, not two.
+    expect(facts).toHaveLength(2)
+
+    const p1 = facts.find((f) => f.player_id === 'evt-combo-p1')!
+    expect(p1.combo_id).toBe('sm:gladius+librarius')
+    expect(p1.opponent_combo_id).toBe('ork:war-horde')
+    // detachment_id keeps holding the primary for consumers not yet on combo_id.
+    expect(p1.detachment_id).toBe('sm:gladius')
+
+    const p2 = facts.find((f) => f.player_id === 'evt-combo-p2')!
+    expect(p2.combo_id).toBe('ork:war-horde')
+    expect(p2.opponent_combo_id).toBe('sm:gladius+librarius')
+  })
+
   it('does NOT cube events outside the given id list (regression: unscoped watermark query)', async () => {
     // Two events land in the DB with different sources/imported_at times, simulating
     // three independent writers landing rows without any single writer "owning" a global watermark.
@@ -220,6 +234,50 @@ describe('buildCubeForEvents', () => {
 
     const eventFrame = await db.all(sql`SELECT * FROM meta_for WHERE id = 'event:evt-csv'`)
     expect(eventFrame).toHaveLength(0)
+  })
+
+  it('keys each fact row to its pairing so a duplicate game cannot be stored', async () => {
+    // The 2026-07-30 rebuild left 23,995 duplicate rows (90,690 for 66,695
+    // games) because DELETE-by-event and the INSERTs were separate statements
+    // and something re-applied a tail of them. Every affected win rate counted
+    // those games twice, silently. Two guards now: the writes go in one batch,
+    // and the pairing key makes a second copy unstorable.
+    await insertEvent(client, {
+      id: 'evt-key',
+      date: Date.UTC(2025, 5, 14),
+      source: 'native',
+      sourceId: 'tourn-key',
+      importedAt: 1000,
+    })
+    await buildCubeForEvents(db, ['evt-key'])
+
+    const facts = (await db.all(
+      sql`SELECT id, pairing_id, player_id FROM fact_game_results WHERE event_id = 'evt-key'`,
+    )) as Array<Record<string, unknown>>
+    expect(facts).toHaveLength(2)
+    expect(facts.every((f) => f.pairing_id === 'evt-key-pair1')).toBe(true)
+
+    // Re-inserting the same game under a new surrogate id must be rejected.
+    await expect(
+      db.run(sql`INSERT INTO fact_game_results
+        (id, pairing_id, event_id, player_id, opponent_id, round, faction_id, result)
+        VALUES ('dupe', 'evt-key-pair1', 'evt-key', 'evt-key-p1', 'evt-key-p2', 1, 'sm', 1.0)`),
+    ).rejects.toThrow()
+
+    // A player with TWO pairings in one round is real data (27 such pairs in
+    // prod, against different opponents) — the key is the pairing, not the
+    // round, so both games are storable.
+    await client.execute({
+      sql: `INSERT INTO meta_pairings (id, event_id, round, player1_id, player2_id, player1_score, player2_score, result)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+      args: ['evt-key-pair2', 'evt-key', 1, 'evt-key-p1', 'evt-key-p2', 50, 90, 'p2'],
+    })
+    await buildCubeForEvents(db, ['evt-key'])
+    const bothGames = (await db.all(sql`
+      SELECT pairing_id FROM fact_game_results
+      WHERE event_id = 'evt-key' AND player_id = 'evt-key-p1' AND round = 1
+    `)) as Array<Record<string, unknown>>
+    expect(bothGames.map((g) => g.pairing_id).sort()).toEqual(['evt-key-pair1', 'evt-key-pair2'])
   })
 
   it('is idempotent — calling twice for the same event does not duplicate fact rows', async () => {

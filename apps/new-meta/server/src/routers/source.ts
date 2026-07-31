@@ -52,9 +52,19 @@ export const sourceRouter = router({
       const event = (eventRows as any[])[0]
       if (!event) return null
 
+      // Every detachment the army brought, in written order. ep.detachment_id
+      // holds only the first, so a two-detachment 11e army would be shown as
+      // something it is not.
       const playerRows = await ctx.db.all(sql`
         SELECT ep.player_name, ep.placement, ep.list_text, ep.wins, ep.losses, ep.draws,
-               df.name AS faction, dd.name AS detachment
+               df.name AS faction,
+               COALESCE(
+                 (SELECT GROUP_CONCAT(dd2.name, ' + ')
+                    FROM (SELECT pd.detachment_id FROM meta_event_player_detachment pd
+                           WHERE pd.player_id = ep.id ORDER BY pd.position) ordered
+                    JOIN dim_detachment dd2 ON ordered.detachment_id = dd2.id),
+                 dd.name
+               ) AS detachment
         FROM meta_event_players ep
         JOIN dim_faction df ON ep.faction_id = df.id
         LEFT JOIN dim_detachment dd ON ep.detachment_id = dd.id
