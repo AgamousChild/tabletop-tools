@@ -261,6 +261,14 @@ export async function buildCubeForEvents(db: Db, eventIds: string[]): Promise<vo
   // inserted twice — the signature of a retried request re-applying inserts the
   // delete had already accounted for. Nothing failed loudly; every affected win
   // rate simply counted those games twice.
+  //
+  // To check after a rebuild — these two must be equal:
+  //   SELECT COUNT(*) FROM fact_game_results;
+  //   SELECT COUNT(*) FROM (SELECT DISTINCT event_id, player_id, round,
+  //                         opponent_id FROM fact_game_results);
+  // Do NOT group by (event_id, player_id, round) alone: 27 players legitimately
+  // have two pairings in one round against different opponents, so that query
+  // reports real games as duplicates.
   for (const eventId of rows.map((e) => e.id)) {
     const pairingRows = await db.all(sql`
       SELECT mp.id, mp.event_id, mp.round, mp.result,
