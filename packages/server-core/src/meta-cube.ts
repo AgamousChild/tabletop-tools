@@ -252,13 +252,26 @@ export async function buildCubeForEvents(db: Db, eventIds: string[]): Promise<vo
   // This was INSERT OR IGNORE, which meant a dimension change never reached the
   // frames already written. Adding 11th edition to dim_edition left all 719
   // existing frames still claiming edition-10th, including every event carrying
-  // 11e detachment combos. Only the derived FKs are updated; the rest of the row
-  // is frame identity and cannot change for a given id.
+  // 11e detachment combos.
+  //
+  // The date columns are refreshed too. For weekend:/month:/quarter: frames the
+  // id encodes the date, so that is a no-op — but an `event:{id}` frame is keyed
+  // on the EVENT, and an event's date can legitimately be corrected. Nine majors
+  // stored under 2001 were repaired to their true 2025 dates; without this their
+  // frames would have stayed in 2001 while the events moved.
+  //
+  // type_id is the only column left alone: it is genuinely frame identity.
   for (const f of frames) {
     await db.run(sql`INSERT INTO meta_for
       (id, type_id, date, end_date, day, month, quarter, year, dataslate_id, tourney_pack_id, edition_id)
       VALUES (${f.id}, ${f.typeId}, ${f.date}, ${f.endDate}, ${f.day}, ${f.month}, ${f.quarter}, ${f.year}, ${f.dataslateId}, ${f.packId}, ${f.editionId})
       ON CONFLICT(id) DO UPDATE SET
+        date = excluded.date,
+        end_date = excluded.end_date,
+        day = excluded.day,
+        month = excluded.month,
+        quarter = excluded.quarter,
+        year = excluded.year,
         dataslate_id = excluded.dataslate_id,
         tourney_pack_id = excluded.tourney_pack_id,
         edition_id = excluded.edition_id`)
