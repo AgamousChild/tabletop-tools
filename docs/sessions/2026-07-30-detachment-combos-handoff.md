@@ -2,7 +2,11 @@
 
 Branch: `feat/11e-detachment-combos`, **not pushed, no PR yet**.
 Main requires PRs — an active `Protect-requirePR` ruleset with no bypass actors,
-so direct pushes to `main` are rejected. Use `gh pr create` + `gh pr merge --squash`.
+so direct pushes to `main` are rejected. Use `gh pr create`, then **ask Micah how
+to merge — he does not like squash**. This doc previously said
+`gh pr merge --squash` unconditionally, which is how PR #153 got collapsed from
+17 commits to one. The full history is preserved at
+`archive/11e-detachment-combos` and on the PR itself.
 
 ## Commits on this branch
 

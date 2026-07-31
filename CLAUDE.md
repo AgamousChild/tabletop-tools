@@ -264,6 +264,27 @@ The hook is there because someone got burned by skipping the check; you don't ge
 
 ---
 
+## Git — incremental commits, and they survive the merge
+
+**Commit incrementally.** One coherent change per commit, with the reasoning in the
+message: the measurement, the thing that looked right and wasn't, the before/after
+numbers. A branch is a record of how the work was reached, not just a diff.
+
+**Therefore: do not squash.** Squashing collapses that record into a single message and
+throws the rest away — it defeats the point of writing them. `main` requires PRs (an
+active `Protect-requirePR` ruleset, no bypass actors), so open one with `gh pr create`,
+but **ask which merge strategy before merging**. Never default to `gh pr merge --squash`.
+
+Do not infer the convention from existing history. `main` currently looks squash-merged
+(#151, #152, #153 are each one commit) because earlier sessions assumed it and a session
+doc repeated the assumption. That is propagated error, not preference. PR #153 lost 17
+commits to it; the history was preserved at `archive/11e-detachment-combos`.
+
+When deleting a branch that carries history worth keeping, push an `archive/*` ref first.
+GitHub also retains a PR's commit list after its branch is deleted.
+
+---
+
 ## Rules for Every Session
 
 ### 0. Ground first (the overarching rule)
