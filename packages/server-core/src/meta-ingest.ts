@@ -24,18 +24,25 @@
 import type { Db } from '@tabletop-tools/db'
 import {
   authUsers,
+  createFactionResolver,
   glickoHistory,
   metaEventPlayers,
   metaEvents,
   metaPairings,
   playerGlicko,
-  resolveFaction,
 } from '@tabletop-tools/db'
 import { and, eq } from 'drizzle-orm'
+import type { BatchItem } from 'drizzle-orm/batch'
 
 import { updateGlicko2 } from './glicko2'
 import { generateId } from './id'
 import { buildCubeForEvents } from './meta-cube'
+
+/**
+ * Statements per round trip. Bounded so a 200-player event does not build one
+ * enormous request body — the point is to stop paying latency per row.
+ */
+const INGEST_WRITES_PER_BATCH = 200
 
 export interface MetaIngestPlayer {
   playerName: string
@@ -146,31 +153,38 @@ export async function upsertMetaEvent(
     importedAt: now,
   })
 
-  // Insert players, resolving faction references and building the
-  // array-index -> real metaEventPlayers.id map pairings need.
+  // Faction lookup loaded ONCE. resolveFaction() costs one or two SELECTs per
+  // call; doing that per player is most of why a 129-event refresh took ~4
+  // hours, the rest being one INSERT round trip per player and per pairing.
+  // Both are now bounded by the number of events, not the roster size.
+  const resolveFactionCached = await createFactionResolver(db)
+
+  const writes: Array<BatchItem<'sqlite'>> = []
+
+  // Build players, resolving faction references and the array-index -> real
+  // metaEventPlayers.id map that pairings need.
   const playerIds: string[] = []
   for (const p of input.players) {
     const playerId = generateId()
     playerIds.push(playerId)
 
-    let factionId = await resolveFaction(db, p.faction)
-    if (!factionId) factionId = 'unknown'
-
-    await db.insert(metaEventPlayers).values({
-      id: playerId,
-      eventId,
-      playerName: p.playerName,
-      sourcePlayerId: p.sourcePlayerId ?? null,
-      factionId,
-      subfactionId: p.subfactionId ?? null,
-      detachmentId: p.detachmentId ?? null,
-      placement: p.placement,
-      listText: p.listText ?? null,
-      sourceListId: p.sourceListId ?? null,
-      wins: p.wins,
-      losses: p.losses,
-      draws: p.draws,
-    })
+    writes.push(
+      db.insert(metaEventPlayers).values({
+        id: playerId,
+        eventId,
+        playerName: p.playerName,
+        sourcePlayerId: p.sourcePlayerId ?? null,
+        factionId: resolveFactionCached(p.faction) ?? 'unknown',
+        subfactionId: p.subfactionId ?? null,
+        detachmentId: p.detachmentId ?? null,
+        placement: p.placement,
+        listText: p.listText ?? null,
+        sourceListId: p.sourceListId ?? null,
+        wins: p.wins,
+        losses: p.losses,
+        draws: p.draws,
+      }),
+    )
   }
 
   for (const pair of input.pairings) {
@@ -182,16 +196,25 @@ export async function upsertMetaEvent(
       )
     }
 
-    await db.insert(metaPairings).values({
-      id: generateId(),
-      eventId,
-      round: pair.round,
-      player1Id: p1Id,
-      player2Id: p2Id,
-      player1Score: pair.player1Score,
-      player2Score: pair.player2Score,
-      result: pair.result,
-    })
+    writes.push(
+      db.insert(metaPairings).values({
+        id: generateId(),
+        eventId,
+        round: pair.round,
+        player1Id: p1Id,
+        player2Id: p2Id,
+        player1Score: pair.player1Score,
+        player2Score: pair.player2Score,
+        result: pair.result,
+      }),
+    )
+  }
+
+  // Players before pairings within a batch, which the ordering above already
+  // guarantees — a pairing's FK needs its players to exist.
+  for (let i = 0; i < writes.length; i += INGEST_WRITES_PER_BATCH) {
+    const slice = writes.slice(i, i + INGEST_WRITES_PER_BATCH)
+    await db.batch(slice as [(typeof slice)[number], ...typeof slice])
   }
 
   await runGlickoForEvent(db, eventId)
@@ -262,6 +285,10 @@ export async function runGlickoForEvent(db: Db, eventId: string): Promise<number
 
   const metaPlayerIdToGlickoId = new Map<string, string>()
   const metaPlayerIdToGlickoData = new Map<string, GlickoRow>()
+  // Same reason as the player/pairing inserts above: one round trip per player
+  // here is the other half of the 4-hour refresh. Order is preserved, so the
+  // new-rating inserts below still land before the updates that target them.
+  const writes: Array<BatchItem<'sqlite'>> = []
 
   for (const ep of eventPlayers) {
     let glickoEntry = glickoByName.get(ep.playerName.toLowerCase())
@@ -282,17 +309,19 @@ export async function runGlickoForEvent(db: Db, eventId: string): Promise<number
         volatility: 0.06,
         gamesPlayed: 0,
       }
-      await db.insert(playerGlicko).values({
-        id: newEntry.id,
-        userId: newEntry.userId,
-        playerName: newEntry.playerName,
-        rating: newEntry.rating,
-        ratingDeviation: newEntry.ratingDeviation,
-        volatility: newEntry.volatility,
-        gamesPlayed: newEntry.gamesPlayed,
-        lastRatingPeriod: null,
-        updatedAt: Date.now(),
-      })
+      writes.push(
+        db.insert(playerGlicko).values({
+          id: newEntry.id,
+          userId: newEntry.userId,
+          playerName: newEntry.playerName,
+          rating: newEntry.rating,
+          ratingDeviation: newEntry.ratingDeviation,
+          volatility: newEntry.volatility,
+          gamesPlayed: newEntry.gamesPlayed,
+          lastRatingPeriod: null,
+          updatedAt: Date.now(),
+        }),
+      )
       glickoByName.set(ep.playerName.toLowerCase(), newEntry)
       glickoEntry = newEntry
     }
@@ -374,31 +403,35 @@ export async function runGlickoForEvent(db: Db, eventId: string): Promise<number
     )
 
     const now = Date.now()
-    await db
-      .update(playerGlicko)
-      .set({
-        rating: result.rating,
-        ratingDeviation: result.ratingDeviation,
-        volatility: result.volatility,
-        gamesPlayed: current.gamesPlayed + games.length,
-        lastRatingPeriod: eventId,
-        updatedAt: now,
-      })
-      .where(eq(playerGlicko.id, glickoId))
+    writes.push(
+      db
+        .update(playerGlicko)
+        .set({
+          rating: result.rating,
+          ratingDeviation: result.ratingDeviation,
+          volatility: result.volatility,
+          gamesPlayed: current.gamesPlayed + games.length,
+          lastRatingPeriod: eventId,
+          updatedAt: now,
+        })
+        .where(eq(playerGlicko.id, glickoId)),
+    )
 
-    await db.insert(glickoHistory).values({
-      id: generateId(),
-      playerId: glickoId,
-      ratingPeriod: eventId,
-      ratingBefore,
-      rdBefore,
-      ratingAfter: result.rating,
-      rdAfter: result.ratingDeviation,
-      volatilityAfter: result.volatility,
-      delta: result.rating - ratingBefore,
-      gamesInPeriod: games.length,
-      recordedAt: now,
-    })
+    writes.push(
+      db.insert(glickoHistory).values({
+        id: generateId(),
+        playerId: glickoId,
+        ratingPeriod: eventId,
+        ratingBefore,
+        rdBefore,
+        ratingAfter: result.rating,
+        rdAfter: result.ratingDeviation,
+        volatilityAfter: result.volatility,
+        delta: result.rating - ratingBefore,
+        gamesInPeriod: games.length,
+        recordedAt: now,
+      }),
+    )
 
     // Keep the in-loop cache current so a player's second pairing in the
     // same event (impossible for a real single round-robin round but not
@@ -413,6 +446,11 @@ export async function runGlickoForEvent(db: Db, eventId: string): Promise<number
     })
 
     updated++
+  }
+
+  for (let i = 0; i < writes.length; i += INGEST_WRITES_PER_BATCH) {
+    const slice = writes.slice(i, i + INGEST_WRITES_PER_BATCH)
+    await db.batch(slice as [(typeof slice)[number], ...typeof slice])
   }
 
   return updated

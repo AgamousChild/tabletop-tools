@@ -22,8 +22,37 @@ export interface Subfaction {
 }
 
 /**
+ * Load the whole faction lookup once and resolve from memory.
+ *
+ * resolveFaction() costs one or two SELECTs per call, which is fine for a
+ * one-off but not inside a loop: a 129-event BCP refresh resolves a faction per
+ * player, and that alone was thousands of round trips (~4 hours, with the
+ * per-row inserts). Callers resolving more than a handful should preload.
+ *
+ * Same precedence as resolveFaction — direct slug first, then alias — so the
+ * two cannot disagree.
+ */
+export async function createFactionResolver(db: Db): Promise<(input: string) => string | null> {
+  const [factions, aliases] = await Promise.all([
+    db.select({ id: dimFaction.id }).from(dimFaction),
+    db
+      .select({ alias: dimFactionAlias.alias, factionId: dimFactionAlias.factionId })
+      .from(dimFactionAlias),
+  ])
+
+  const slugs = new Set(factions.map((f) => f.id))
+  // Aliases are case-sensitive and stored as-is, matching resolveFaction.
+  const byAlias = new Map(aliases.map((a) => [a.alias, a.factionId]))
+
+  return (input: string) => (slugs.has(input) ? input : (byAlias.get(input) ?? null))
+}
+
+/**
  * Resolve any faction reference (slug, BCP name, Wahapedia code, chapter name) to a canonical slug.
  * Returns null if not found.
+ *
+ * Resolving many in a row? Use createFactionResolver() — this hits the DB on
+ * every call.
  */
 export async function resolveFaction(db: Db, input: string): Promise<string | null> {
   // Direct slug match

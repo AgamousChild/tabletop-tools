@@ -1,6 +1,7 @@
 import { createClient } from '@libsql/client'
 import { createDbFromClient } from '@tabletop-tools/db'
 import { applyTestSchema, seedReferenceDims } from '@tabletop-tools/db/src/test-schema'
+import { sql } from 'drizzle-orm'
 import { beforeEach, describe, expect, it } from 'vitest'
 
 import { upsertMetaEvent } from './meta-ingest'
@@ -35,6 +36,82 @@ describe('upsertMetaEvent', () => {
     client = testDb.client
     db = testDb.db
     await setupTables(client)
+  })
+
+  it('costs round trips per EVENT, not per player — a 4x roster is not 4x the requests', async () => {
+    // A 129-event refresh took ~4 hours. Every player cost 1-2 SELECTs inside
+    // resolveFaction plus its own INSERT, and Glicko added an update and a
+    // history insert each. Faction lookup is now preloaded once and the writes
+    // go in batches, so what remains scales with FRAMES (a handful per event),
+    // not with the roster.
+    //
+    // Asserting the ratio rather than a magic number: the absolute count
+    // depends on how many cube frames an event date produces, which is not what
+    // this is guarding.
+    const ingest = async (sourceId: string, size: number) => {
+      let roundTrips = 0
+      const countingClient = new Proxy(client, {
+        get(target, prop, receiver) {
+          const value = Reflect.get(target, prop, receiver)
+          if (prop === 'execute' || prop === 'batch') {
+            return (...args: unknown[]) => {
+              roundTrips++
+              return (value as (...a: unknown[]) => unknown).apply(target, args)
+            }
+          }
+          return typeof value === 'function' ? value.bind(target) : value
+        },
+      })
+      const { eventId } = await upsertMetaEvent(createDbFromClient(countingClient), {
+        source: 'bcp',
+        sourceId,
+        name: `Round Trip ${size}`,
+        date: Date.UTC(2025, 5, 14),
+        format: 'GT',
+        players: Array.from({ length: size }, (_, i) => ({
+          playerName: `${sourceId}-P${i}`,
+          faction: i % 2 === 0 ? 'aeldari' : 'necrons',
+          placement: i + 1,
+          wins: 3,
+          losses: 2,
+          draws: 0,
+        })),
+        pairings: Array.from({ length: size / 2 }, (_, i) => ({
+          round: 1,
+          player1Index: i * 2,
+          player2Index: i * 2 + 1,
+          player1Score: 80,
+          player2Score: 60,
+          result: 'p1' as const,
+        })),
+      })
+      return { roundTrips, eventId }
+    }
+
+    const small = await ingest('rt-small', 20)
+    const large = await ingest('rt-large', 80)
+
+    // Unbatched this was ~1 request per player: 20 -> ~130, 80 -> ~500.
+    expect(large.roundTrips).toBeLessThan(small.roundTrips + 10)
+
+    // ...and the data is still correct.
+    const rows = (await db.all(
+      sql`SELECT COUNT(*) AS n FROM meta_event_players WHERE event_id = ${large.eventId}`,
+    )) as unknown as Array<{ n: number }>
+    expect(rows[0]!.n).toBe(80)
+    const pairRows = (await db.all(
+      sql`SELECT COUNT(*) AS n FROM meta_pairings WHERE event_id = ${large.eventId}`,
+    )) as unknown as Array<{ n: number }>
+    expect(pairRows[0]!.n).toBe(40)
+    // Factions still resolve through the preloaded map, and Glicko still ran.
+    const factions = (await db.all(
+      sql`SELECT DISTINCT faction_id AS f FROM meta_event_players WHERE event_id = ${large.eventId} ORDER BY f`,
+    )) as unknown as Array<{ f: string }>
+    expect(factions.map((r) => r.f)).toEqual(['aeldari', 'necrons'])
+    const rated = (await db.all(
+      sql`SELECT COUNT(*) AS n FROM player_glicko WHERE last_rating_period = ${large.eventId}`,
+    )) as unknown as Array<{ n: number }>
+    expect(rated[0]!.n).toBe(80)
   })
 
   it('rejects an empty sourceId at runtime', async () => {
