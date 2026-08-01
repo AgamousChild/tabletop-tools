@@ -67,13 +67,27 @@ export const metaRouter = router({
         input?.frame ?? (await resolveDefaultFrame(ctx.db, granularityId, DEFAULT_PREFERRED_TYPE))
       if (!frameId) return []
 
+      // A rollup row is named by the dimension its GRANULARITY refers to, not
+      // always by its faction. This labelled every row df.name, which was
+      // invisible while only Faction rollups existed — the moment Detachment
+      // rollups landed, the table showed "Space Wolves" three times because
+      // that faction has three detachments.
+      //
+      // Exactly one of subfaction_id / detachment_id / combo_id is set per row,
+      // so COALESCE picks the right one and falls back to the faction name for
+      // granularity 1. These are primary-key lookups against small dimensions,
+      // not the fact-table joins the cube exists to remove.
       const rows = await ctx.db.all(sql`
         SELECT mt.faction_id, df.name AS faction, df.allegiance,
+               COALESCE(dd.name, dsf.name, dc.members, df.name) AS label,
                mt.win_rate, mt.draw_rate, mt.over_rep, mt.four_oh_start,
                mt.event_wins, mt.event_finals, mt.event_top4, mt.event_top8, mt.event_top16,
                mt.player_pop_pct, mt.wins, mt.losses, mt.draws, mt.games, mt.players
         FROM meta_top mt
         JOIN dim_faction df ON mt.faction_id = df.id
+        LEFT JOIN dim_subfaction dsf ON mt.subfaction_id = dsf.id
+        LEFT JOIN dim_detachment dd ON mt.detachment_id = dd.id
+        LEFT JOIN dim_detachment_combo dc ON mt.combo_id = dc.id
         WHERE mt.meta_for_id = ${frameId} AND mt.granularity_id = ${granularityId}
         ORDER BY mt.win_rate DESC
       `)
@@ -83,7 +97,12 @@ export const metaRouter = router({
         .filter((r) => r.games >= minGames)
         .map((r) => ({
           factionId: r.faction_id,
-          faction: r.faction,
+          // What this row IS at the selected granularity (a detachment, a
+          // combo, a subfaction) — falls back to the faction name.
+          faction: r.label,
+          // The faction it belongs to, kept separate so the UI can show context
+          // and still link through to the faction page.
+          factionName: r.faction,
           allegiance: r.allegiance,
           winRate: r.win_rate,
           drawRate: r.draw_rate,

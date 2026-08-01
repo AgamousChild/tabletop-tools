@@ -434,6 +434,67 @@ describe('buildCubeForEvents', () => {
     expect(combo[0]!.games).toBe(1)
   })
 
+  it('populates the SAME metric set at every granularity, not just Faction', async () => {
+    // Three near-copies of the rollup writer each filled a different subset:
+    // detachment and combo wrote zeros for player_pop_pct, over_rep and every
+    // placement column, so the dashboard showed "Meta% 0.0%" and blank 1st/T4
+    // on every row. SubFaction was never written at all while the selector
+    // still offered it, so choosing it returned an empty table.
+    //
+    // This asserts the invariant rather than the values: whatever levels exist,
+    // they all carry the same measures. A new granularity cannot ship
+    // half-populated without failing here.
+    await insertEvent(client, {
+      id: 'evt-metrics',
+      date: Date.UTC(2025, 5, 14),
+      source: 'native',
+      sourceId: 'tourn-metrics',
+      importedAt: 1000,
+    })
+    await client.executeMultiple(`
+      INSERT INTO dim_subfaction (id, name, faction_id) VALUES ('sm-sub','Ultramarines','sm');
+      INSERT INTO dim_detachment (id, name, faction_id, subfaction_id, dp) VALUES
+        ('sm:gladius','Gladius','sm',NULL,2),
+        ('sm:librarius','Librarius','sm',NULL,1);
+      INSERT INTO dim_detachment_combo (id, faction_id, member_count, total_dp, is_legal, members)
+        VALUES ('sm:gladius+librarius','sm',2,3,1,'Gladius + Librarius');
+      INSERT INTO dim_detachment_combo_member (combo_id, detachment_id) VALUES
+        ('sm:gladius+librarius','sm:gladius'),
+        ('sm:gladius+librarius','sm:librarius');
+      UPDATE meta_event_players
+        SET combo_id='sm:gladius+librarius', detachment_id='sm:gladius', subfaction_id='sm-sub'
+        WHERE id='evt-metrics-p1';
+      INSERT INTO meta_event_player_detachment (player_id, detachment_id, position, detachment_points)
+        VALUES ('evt-metrics-p1','sm:gladius',1,2), ('evt-metrics-p1','sm:librarius',2,1);
+    `)
+
+    await buildCubeForEvents(db, ['evt-metrics'])
+
+    const rows = (await db.all(sql`
+      SELECT granularity_id, games, players, player_pop_pct, over_rep, event_wins, event_top4
+      FROM meta_top WHERE meta_for_id = 'event:evt-metrics' ORDER BY granularity_id
+    `)) as Array<Record<string, number>>
+
+    // SubFaction (2), Detachment (3) and Combo (4) all present alongside Faction.
+    const levels = [...new Set(rows.map((r) => r.granularity_id))].sort()
+    expect(levels).toEqual([1, 2, 3, 4])
+
+    // The player placed 1st, so every level that describes that army must say so
+    // — not zero, which is what the old per-level copies wrote.
+    for (const level of [2, 3, 4]) {
+      const atLevel = rows.filter((r) => r.granularity_id === level)
+      expect(atLevel.length).toBeGreaterThan(0)
+      for (const r of atLevel) {
+        expect(r.games).toBeGreaterThan(0)
+        expect(r.players).toBeGreaterThan(0)
+        expect(r.player_pop_pct).toBeGreaterThan(0)
+        expect(r.over_rep).toBeGreaterThan(0)
+        expect(r.event_wins).toBe(1)
+        expect(r.event_top4).toBe(1)
+      }
+    }
+  })
+
   it('is idempotent — calling twice for the same event does not duplicate fact rows', async () => {
     await insertEvent(client, {
       id: 'evt1',
