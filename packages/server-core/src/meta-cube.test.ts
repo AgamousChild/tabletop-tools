@@ -387,6 +387,53 @@ describe('buildCubeForEvents', () => {
     expect(after[0]!.date).toBe(Date.parse('2025-05-04T00:00:00Z'))
   })
 
+  it('builds Detachment and Combo rollups so the interface never aggregates facts', async () => {
+    // The cube only ever wrote Faction rollups — 6,859 rows in prod, zero at
+    // any other granularity — so every detachment question was a runtime join
+    // over 75k fact rows: 4.3s to return 12 rows on a faction page. The whole
+    // point of the cube is that the read path is an indexed SELECT.
+    await insertEvent(client, {
+      id: 'evt-roll',
+      date: Date.UTC(2025, 5, 14),
+      source: 'native',
+      sourceId: 'tourn-roll',
+      importedAt: 1000,
+    })
+    await client.executeMultiple(`
+      INSERT INTO dim_detachment (id, name, faction_id, subfaction_id, dp) VALUES
+        ('sm:gladius','Gladius','sm',NULL,2),
+        ('sm:librarius','Librarius','sm',NULL,1);
+      INSERT INTO dim_detachment_combo (id, faction_id, member_count, total_dp, is_legal, members)
+        VALUES ('sm:gladius+librarius','sm',2,3,1,'Gladius + Librarius');
+      INSERT INTO dim_detachment_combo_member (combo_id, detachment_id) VALUES
+        ('sm:gladius+librarius','sm:gladius'),
+        ('sm:gladius+librarius','sm:librarius');
+      UPDATE meta_event_players SET combo_id='sm:gladius+librarius', detachment_id='sm:gladius'
+        WHERE id='evt-roll-p1';
+    `)
+
+    await buildCubeForEvents(db, ['evt-roll'])
+
+    const det = (await db.all(sql`
+      SELECT detachment_id, games, wins, players FROM meta_top
+      WHERE granularity_id = 3 AND meta_for_id = 'event:evt-roll' ORDER BY detachment_id
+    `)) as Array<Record<string, unknown>>
+    // BOTH members credited for the same game — the "any position" rule,
+    // resolved at build time instead of per request.
+    expect(det.map((d) => d.detachment_id)).toEqual(['sm:gladius', 'sm:librarius'])
+    expect(det[0]!.games).toBe(1)
+    expect(det[1]!.games).toBe(1)
+
+    const combo = (await db.all(sql`
+      SELECT combo_id, games, players FROM meta_top
+      WHERE granularity_id = 4 AND meta_for_id = 'event:evt-roll'
+    `)) as Array<Record<string, unknown>>
+    // ONE row for the army, not one per member — the grain is per game.
+    expect(combo).toHaveLength(1)
+    expect(combo[0]!.combo_id).toBe('sm:gladius+librarius')
+    expect(combo[0]!.games).toBe(1)
+  })
+
   it('is idempotent — calling twice for the same event does not duplicate fact rows', async () => {
     await insertEvent(client, {
       id: 'evt1',

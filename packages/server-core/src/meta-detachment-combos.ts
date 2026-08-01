@@ -147,14 +147,26 @@ export interface ComboUpsertResult {
  * Returned rather than executed so the backfill can fold them into its own
  * write batch — one round trip for a whole chunk instead of one per statement.
  */
-export function comboUpsertStatements(c: DetachmentCombo, isLegal: boolean): SQL[] {
+export function comboUpsertStatements(
+  c: DetachmentCombo,
+  isLegal: boolean,
+  memberNames?: Map<string, string>,
+): SQL[] {
+  // Display label denormalised onto the dimension so the read path never has to
+  // reassemble it from the bridge table. Falls back to the member slugs when no
+  // name map is supplied.
+  const label = c.memberIds
+    .map((id) => memberNames?.get(id) ?? id.slice(id.indexOf(':') + 1))
+    .join(' + ')
+
   const statements: SQL[] = [
     sql`
-      INSERT INTO dim_detachment_combo (id, faction_id, member_count, total_dp, is_legal)
-      VALUES (${c.id}, ${c.factionId}, ${c.memberCount}, ${c.totalDp}, ${isLegal ? 1 : 0})
+      INSERT INTO dim_detachment_combo (id, faction_id, member_count, total_dp, is_legal, members)
+      VALUES (${c.id}, ${c.factionId}, ${c.memberCount}, ${c.totalDp}, ${isLegal ? 1 : 0}, ${label})
       ON CONFLICT(id) DO UPDATE SET
         member_count = excluded.member_count,
         total_dp = excluded.total_dp,
+        members = excluded.members,
         -- never downgrade a legal combo to illegal: enumeration is authoritative
         is_legal = MAX(dim_detachment_combo.is_legal, excluded.is_legal)
     `,
@@ -179,9 +191,16 @@ export async function upsertCombos(
   combos: DetachmentCombo[],
   isLegal: boolean,
 ): Promise<ComboUpsertResult> {
+  // One lookup for the display labels, not one per combo.
+  const nameRows = (await db.all(sql`SELECT id, name FROM dim_detachment`)) as unknown as Array<{
+    id: string
+    name: string
+  }>
+  const memberNames = new Map(nameRows.map((r) => [r.id, r.name]))
+
   let members = 0
   for (const c of combos) {
-    for (const statement of comboUpsertStatements(c, isLegal)) await db.run(statement)
+    for (const statement of comboUpsertStatements(c, isLegal, memberNames)) await db.run(statement)
     members += c.memberIds.length
   }
   return { combos: combos.length, members }

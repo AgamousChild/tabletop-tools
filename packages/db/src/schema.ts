@@ -781,6 +781,11 @@ export const dimDetachmentCombo = sqliteTable(
     memberCount: integer('member_count').notNull(),
     totalDp: integer('total_dp'),
     /**
+     * Display label ("Cursed Legion + Skyshroud Spearhead"), denormalised so the
+     * read path never reassembles it from dim_detachment_combo_member.
+     */
+    members: text('members'),
+    /**
      * 1 when enumerated from the DP rules as a legal build. Combos seen in real
      * lists that are not legal still get a row (is_legal = 0) so fact rows have
      * something to reference rather than being dropped.
@@ -913,6 +918,8 @@ export const metaEventPlayers = sqliteTable(
     index('idx_meta_event_players_event').on(table.eventId),
     index('idx_meta_event_players_faction').on(table.factionId),
     index('idx_meta_event_players_combo').on(table.comboId),
+    // WHERE faction_id ORDER BY placement — one clause, one composite key.
+    index('idx_meta_event_players_faction_placement').on(table.factionId, table.placement),
   ],
 )
 
@@ -1044,6 +1051,8 @@ export const metaTop = sqliteTable(
       .references(() => dimFaction.id),
     subfactionId: text('subfaction_id').references(() => dimSubfaction.id),
     detachmentId: text('detachment_id').references(() => dimDetachment.id),
+    /** Set on Combo-granularity rollups. See migration 0018. */
+    comboId: text('combo_id').references(() => dimDetachmentCombo.id),
     metaForId: text('meta_for_id')
       .notNull()
       .references(() => metaFor.id, { onDelete: 'cascade' }),

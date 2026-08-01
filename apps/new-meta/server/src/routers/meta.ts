@@ -147,26 +147,25 @@ export const metaRouter = router({
         }
       }
 
-      // Detachments — counted in ANY position, via the combo membership bridge.
+      // Detachments — a plain indexed read off the Detachment-granularity
+      // rollup. The "any position" logic lives in the cube builder and is
+      // resolved once at build time.
       //
-      // NOT via fact_game_results.detachment_id: that column holds the PRIMARY
-      // (position 1) detachment only. 11e armies take several, so keying on it
-      // under-reports every detachment that tends to be written second and hides
-      // some entirely — measured on prod, Warptide showed 0 games against 328
-      // real ones, and Skyshroud Spearhead 5 against 358.
+      // This used to aggregate fact_game_results against the combo-member
+      // bridge on every request: 4.3s for 12 rows, because the cube only ever
+      // built Faction-granularity rollups and the interface compensated with a
+      // runtime join. Rule 6 — dashboard queries are indexed SELECTs.
+      const detachmentGranularityId = await getGranularityIdByName(ctx.db, 'Detachment')
       const detRows = await ctx.db.all(sql`
-        SELECT dd.name AS detachment, dd.id AS detachment_id,
-               COUNT(*) AS games,
-               SUM(CASE WHEN f.result = 1.0 THEN 1 ELSE 0 END) AS wins,
-               SUM(CASE WHEN f.result = 0.0 THEN 1 ELSE 0 END) AS losses,
-               SUM(CASE WHEN f.result = 0.5 THEN 1 ELSE 0 END) AS draws,
-               AVG(f.result) AS win_rate,
-               COUNT(DISTINCT f.player_id) AS players
-        FROM fact_game_results f
-        JOIN dim_detachment_combo_member m ON f.combo_id = m.combo_id
-        JOIN dim_detachment dd ON m.detachment_id = dd.id
-        WHERE f.faction_id = ${input.factionId} AND f.combo_id IS NOT NULL
-        GROUP BY dd.id HAVING games >= 5 ORDER BY win_rate DESC
+        SELECT dd.name AS detachment, mt.detachment_id,
+               mt.games, mt.wins, mt.losses, mt.draws, mt.win_rate, mt.players
+        FROM meta_top mt
+        JOIN dim_detachment dd ON mt.detachment_id = dd.id
+        WHERE mt.granularity_id = ${detachmentGranularityId}
+          AND mt.faction_id = ${input.factionId}
+          AND mt.meta_for_id = ${frameId}
+          AND mt.games >= 5
+        ORDER BY mt.win_rate DESC
       `)
       const detachments = (detRows as any[]).map((r) => ({
         detachment: r.detachment,
@@ -186,22 +185,20 @@ export const metaRouter = router({
       // PLUS Skyshroud Spearhead do", which is the question 11e list-building
       // actually poses. memberCount lets the UI separate single-detachment
       // armies from real pairings.
+      // Same shape: read the Combo-granularity rollup. The member-name label is
+      // a dimension attribute, so it joins to dim_detachment_combo, never to
+      // the fact table.
+      const comboGranularityId = await getGranularityIdByName(ctx.db, 'Combo')
       const comboRows = await ctx.db.all(sql`
-        SELECT c.id AS combo_id, c.member_count, c.total_dp,
-               (SELECT GROUP_CONCAT(dd2.name, ' + ')
-                  FROM dim_detachment_combo_member m2
-                  JOIN dim_detachment dd2 ON m2.detachment_id = dd2.id
-                 WHERE m2.combo_id = c.id) AS members,
-               COUNT(*) AS games,
-               SUM(CASE WHEN f.result = 1.0 THEN 1 ELSE 0 END) AS wins,
-               SUM(CASE WHEN f.result = 0.0 THEN 1 ELSE 0 END) AS losses,
-               SUM(CASE WHEN f.result = 0.5 THEN 1 ELSE 0 END) AS draws,
-               AVG(f.result) AS win_rate,
-               COUNT(DISTINCT f.player_id) AS players
-        FROM fact_game_results f
-        JOIN dim_detachment_combo c ON f.combo_id = c.id
-        WHERE f.faction_id = ${input.factionId} AND f.combo_id IS NOT NULL
-        GROUP BY c.id HAVING games >= 5 ORDER BY win_rate DESC
+        SELECT mt.combo_id, c.member_count, c.total_dp, c.members,
+               mt.games, mt.wins, mt.losses, mt.draws, mt.win_rate, mt.players
+        FROM meta_top mt
+        JOIN dim_detachment_combo c ON mt.combo_id = c.id
+        WHERE mt.granularity_id = ${comboGranularityId}
+          AND mt.faction_id = ${input.factionId}
+          AND mt.meta_for_id = ${frameId}
+          AND mt.games >= 5
+        ORDER BY mt.win_rate DESC
       `)
       const combos = (comboRows as any[]).map((r) => ({
         comboId: r.combo_id,
@@ -242,20 +239,17 @@ export const metaRouter = router({
       }))
 
       // Top lists
-      // The detachment label is every detachment the army brought, in the order
-      // written — ep.detachment_id alone would name only the first of them.
+      // Top lists. Not an aggregate, so not a rollup — but the label is a
+      // DIMENSION attribute, so it comes from dim_detachment_combo.members
+      // rather than a correlated GROUP_CONCAT over the bridge table per row.
+      // That subquery cost 3.7s; this is a primary-key lookup.
       const listRows = await ctx.db.all(sql`
         SELECT ep.player_name, ep.placement, ep.list_text, ep.wins, ep.losses, ep.draws,
-               COALESCE(
-                 (SELECT GROUP_CONCAT(dd2.name, ' + ')
-                    FROM (SELECT pd.detachment_id FROM meta_event_player_detachment pd
-                           WHERE pd.player_id = ep.id ORDER BY pd.position) ordered
-                    JOIN dim_detachment dd2 ON ordered.detachment_id = dd2.id),
-                 dd.name
-               ) AS detachment,
+               COALESCE(dc.members, dd.name) AS detachment,
                me.name AS event_name, me.date AS event_date, me.format
         FROM meta_event_players ep
         JOIN meta_events me ON ep.event_id = me.id
+        LEFT JOIN dim_detachment_combo dc ON ep.combo_id = dc.id
         LEFT JOIN dim_detachment dd ON ep.detachment_id = dd.id
         WHERE ep.faction_id = ${input.factionId}
         ORDER BY ep.placement ASC LIMIT 20

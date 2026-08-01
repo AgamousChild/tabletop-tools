@@ -18,7 +18,7 @@
  * the actual cube-building work to `buildCubeForEvents()` here.
  */
 import type { Db } from '@tabletop-tools/db'
-import { sql } from 'drizzle-orm'
+import { type SQL, sql } from 'drizzle-orm'
 
 import { generateId } from './id'
 
@@ -362,15 +362,7 @@ export async function buildCubeForEvents(db: Db, eventIds: string[]): Promise<vo
   }
 
   for (const frame of frames) {
-    let eventFilter = sql``
-    if (frame.typeId === 1) {
-      const eventId = frame.id.replace('event:', '')
-      eventFilter = sql`me.id = ${eventId}`
-    } else if (frame.endDate !== null) {
-      eventFilter = sql`me.date >= ${frame.date} AND me.date <= ${frame.endDate}`
-    } else {
-      eventFilter = sql`me.date >= ${frame.date} AND me.date < ${frame.date + 86400000}`
-    }
+    const eventFilter = frameEventFilter(frame)
 
     const stats = await db.all(sql`
       SELECT ep.faction_id,
@@ -417,5 +409,100 @@ export async function buildCubeForEvents(db: Db, eventIds: string[]): Promise<vo
                 ${row.event_wins}, ${row.event_finals}, ${row.event_top4}, ${row.event_top8}, ${row.event_top16},
                 ${playerPct}, ${wins}, ${losses}, ${draws}, ${games}, ${row.players})`)
     }
+
+    await buildDetachmentRollups(db, frame.id, frameEventFilter(frame))
+    await buildComboRollups(db, frame.id, frameEventFilter(frame))
+  }
+}
+
+/** The event-selection predicate for a frame, shared by every rollup pass. */
+function frameEventFilter(frame: Frame): SQL {
+  if (frame.typeId === 1) {
+    return sql`me.id = ${frame.id.replace('event:', '')}`
+  }
+  if (frame.endDate !== null) {
+    return sql`me.date >= ${frame.date} AND me.date <= ${frame.endDate}`
+  }
+  return sql`me.date >= ${frame.date} AND me.date < ${frame.date + 86400000}`
+}
+
+/**
+ * Detachment-granularity rollups (granularity 3), from the fact grain.
+ *
+ * A detachment is credited for a game whenever the army CONTAINED it, in any
+ * position — resolved here, once, at build time. Doing it per request meant a
+ * 4.3s join across 75k fact rows every time a faction page loaded.
+ *
+ * Aggregated from fact_game_results rather than meta_event_players because the
+ * fact grain is one row per player per GAME, which is what a win rate needs.
+ * meta_event_players carries self-reported event W/L/D, which is a different
+ * number and cannot be sliced by detachment at all.
+ */
+async function buildDetachmentRollups(db: Db, frameId: string, eventFilter: SQL): Promise<void> {
+  const rows = (await db.all(sql`
+    SELECT f.faction_id, m.detachment_id,
+           COUNT(*) AS games,
+           SUM(CASE WHEN f.result = 1.0 THEN 1 ELSE 0 END) AS wins,
+           SUM(CASE WHEN f.result = 0.0 THEN 1 ELSE 0 END) AS losses,
+           SUM(CASE WHEN f.result = 0.5 THEN 1 ELSE 0 END) AS draws,
+           COUNT(DISTINCT f.player_id) AS players
+    FROM fact_game_results f
+    JOIN meta_events me ON f.event_id = me.id
+    JOIN dim_detachment_combo_member m ON f.combo_id = m.combo_id
+    WHERE ${eventFilter} AND f.combo_id IS NOT NULL
+    GROUP BY f.faction_id, m.detachment_id
+  `)) as Array<Record<string, unknown>>
+
+  for (const r of rows) {
+    const games = r.games as number
+    const wins = r.wins as number
+    const draws = r.draws as number
+    await db.run(sql`INSERT OR REPLACE INTO meta_top
+      (id, granularity_id, faction_id, subfaction_id, detachment_id, combo_id, meta_for_id,
+       win_rate, draw_rate, over_rep, four_oh_start, player_pop_pct,
+       wins, losses, draws, games, players)
+      VALUES (${`det:${r.detachment_id as string}:${frameId}`}, 3, ${r.faction_id as string},
+              ${null}, ${r.detachment_id as string}, ${null}, ${frameId},
+              ${games > 0 ? (wins + draws * 0.5) / games : 0},
+              ${games > 0 ? draws / games : 0}, ${0}, ${0}, ${0},
+              ${wins}, ${r.losses}, ${draws}, ${games}, ${r.players})`)
+  }
+}
+
+/**
+ * Combo-granularity rollups (granularity 4), from the fact grain.
+ *
+ * The SET an army brought is its own level: a combination is not a detachment,
+ * so it cannot share granularity 3. Grain is unchanged — one fact row per
+ * player per game, the combo as an attribute — so a two-detachment army counts
+ * once, not twice.
+ */
+async function buildComboRollups(db: Db, frameId: string, eventFilter: SQL): Promise<void> {
+  const rows = (await db.all(sql`
+    SELECT f.faction_id, f.combo_id,
+           COUNT(*) AS games,
+           SUM(CASE WHEN f.result = 1.0 THEN 1 ELSE 0 END) AS wins,
+           SUM(CASE WHEN f.result = 0.0 THEN 1 ELSE 0 END) AS losses,
+           SUM(CASE WHEN f.result = 0.5 THEN 1 ELSE 0 END) AS draws,
+           COUNT(DISTINCT f.player_id) AS players
+    FROM fact_game_results f
+    JOIN meta_events me ON f.event_id = me.id
+    WHERE ${eventFilter} AND f.combo_id IS NOT NULL
+    GROUP BY f.faction_id, f.combo_id
+  `)) as Array<Record<string, unknown>>
+
+  for (const r of rows) {
+    const games = r.games as number
+    const wins = r.wins as number
+    const draws = r.draws as number
+    await db.run(sql`INSERT OR REPLACE INTO meta_top
+      (id, granularity_id, faction_id, subfaction_id, detachment_id, combo_id, meta_for_id,
+       win_rate, draw_rate, over_rep, four_oh_start, player_pop_pct,
+       wins, losses, draws, games, players)
+      VALUES (${`combo:${r.combo_id as string}:${frameId}`}, 4, ${r.faction_id as string},
+              ${null}, ${null}, ${r.combo_id as string}, ${frameId},
+              ${games > 0 ? (wins + draws * 0.5) / games : 0},
+              ${games > 0 ? draws / games : 0}, ${0}, ${0}, ${0},
+              ${wins}, ${r.losses}, ${draws}, ${games}, ${r.players})`)
   }
 }
