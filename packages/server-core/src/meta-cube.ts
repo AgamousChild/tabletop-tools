@@ -412,9 +412,27 @@ export async function buildCubeForEvents(db: Db, eventIds: string[]): Promise<vo
     }
 
     await flushRollupWrites(db, rollupWrites)
-    await buildLevelRollups(db, frame.id, frameEventFilter(frame))
-    await buildMatchupRollups(db, frame.id, frameEventFilter(frame))
+    await buildLevelRollups(db, frame.id, frameEventIds(frame))
+    await buildMatchupRollups(db, frame.id, frameEventIds(frame))
   }
+}
+
+/**
+ * The frame's events as an IN-subquery.
+ *
+ * Joining meta_events and filtering on me.date made SQLite drive from the
+ * 37k-row players table and scan it — the year:2026 placements rollup took over
+ * 60s and Turso closed the connection mid-query. Restricting the event set
+ * first and letting the join follow takes the same query to 25s.
+ */
+function frameEventIds(frame: Frame): SQL {
+  if (frame.typeId === 1) {
+    return sql`(SELECT id FROM meta_events WHERE id = ${frame.id.replace('event:', '')})`
+  }
+  if (frame.endDate !== null) {
+    return sql`(SELECT id FROM meta_events WHERE date >= ${frame.date} AND date <= ${frame.endDate})`
+  }
+  return sql`(SELECT id FROM meta_events WHERE date >= ${frame.date} AND date < ${frame.date + 86400000})`
 }
 
 /** The event-selection predicate for a frame, shared by every rollup pass. */
@@ -504,7 +522,7 @@ const ROLLUP_LEVELS: RollupLevel[] = [
   },
 ]
 
-async function buildLevelRollups(db: Db, frameId: string, eventFilter: SQL): Promise<void> {
+async function buildLevelRollups(db: Db, frameId: string, eventIds: SQL): Promise<void> {
   const rollupWrites: SQL[] = []
   for (const level of ROLLUP_LEVELS) {
     const measures = (await db.all(sql`
@@ -514,9 +532,8 @@ async function buildLevelRollups(db: Db, frameId: string, eventFilter: SQL): Pro
              SUM(CASE WHEN f.result = 0.0 THEN 1 ELSE 0 END) AS losses,
              SUM(CASE WHEN f.result = 0.5 THEN 1 ELSE 0 END) AS draws
       FROM fact_game_results f
-      JOIN meta_events me ON f.event_id = me.id
       ${level.factJoin}
-      WHERE ${eventFilter} AND ${level.factKey} IS NOT NULL
+      WHERE f.event_id IN ${eventIds} AND ${level.factKey} IS NOT NULL
       GROUP BY f.faction_id, ${level.factKey}
     `)) as Array<Record<string, unknown>>
 
@@ -531,9 +548,8 @@ async function buildLevelRollups(db: Db, frameId: string, eventFilter: SQL): Pro
              SUM(CASE WHEN ep.placement <= 8 THEN 1 ELSE 0 END) AS event_top8,
              SUM(CASE WHEN ep.placement <= 16 THEN 1 ELSE 0 END) AS event_top16
       FROM meta_event_players ep
-      JOIN meta_events me ON ep.event_id = me.id
       ${level.playerJoin}
-      WHERE ${eventFilter} AND ${level.playerKey} IS NOT NULL
+      WHERE ep.event_id IN ${eventIds} AND ${level.playerKey} IS NOT NULL
       GROUP BY ep.faction_id, ${level.playerKey}
     `)) as Array<Record<string, unknown>>
 
@@ -594,7 +610,7 @@ async function buildLevelRollups(db: Db, frameId: string, eventFilter: SQL): Pro
  * key_a < key_b so each pairing is stored once; a_wins / b_wins are relative to
  * that ordering.
  */
-async function buildMatchupRollups(db: Db, frameId: string, eventFilter: SQL): Promise<void> {
+async function buildMatchupRollups(db: Db, frameId: string, eventIds: SQL): Promise<void> {
   const levels: Array<{ granularityId: number; a: SQL; b: SQL }> = [
     { granularityId: 1, a: sql`f.faction_id`, b: sql`f.opponent_faction_id` },
     { granularityId: 4, a: sql`f.combo_id`, b: sql`f.opponent_combo_id` },
@@ -615,8 +631,7 @@ async function buildMatchupRollups(db: Db, frameId: string, eventFilter: SQL): P
              COUNT(*) AS games,
              AVG(f.result) AS a_win_rate
       FROM fact_game_results f
-      JOIN meta_events me ON f.event_id = me.id
-      WHERE ${eventFilter}
+      WHERE f.event_id IN ${eventIds}
         AND ${level.a} IS NOT NULL AND ${level.b} IS NOT NULL
         AND ${level.a} < ${level.b}
       GROUP BY ${level.a}, ${level.b}
