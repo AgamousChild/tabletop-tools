@@ -381,6 +381,7 @@ export async function buildCubeForEvents(db: Db, eventIds: string[]): Promise<vo
 
     if (stats.length === 0) continue
 
+    const rollupWrites: SQL[] = []
     const statRows = stats as Array<Record<string, unknown>>
     const totalPlayers = statRows.reduce((sum, r) => sum + (r.players as number), 0)
     const activeFactions = statRows.length
@@ -399,7 +400,7 @@ export async function buildCubeForEvents(db: Db, eventIds: string[]): Promise<vo
         (row.players as number) > 0 ? (row.event_top8 as number) / (row.players as number) : 0
       const topId = `faction:${row.faction_id as string}:${frame.id}`
 
-      await db.run(sql`INSERT OR REPLACE INTO meta_top
+      rollupWrites.push(sql`INSERT OR REPLACE INTO meta_top
         (id, granularity_id, faction_id, subfaction_id, detachment_id, meta_for_id,
          win_rate, draw_rate, over_rep, four_oh_start,
          event_wins, event_finals, event_top4, event_top8, event_top16,
@@ -410,6 +411,7 @@ export async function buildCubeForEvents(db: Db, eventIds: string[]): Promise<vo
                 ${playerPct}, ${wins}, ${losses}, ${draws}, ${games}, ${row.players})`)
     }
 
+    await flushRollupWrites(db, rollupWrites)
     await buildLevelRollups(db, frame.id, frameEventFilter(frame))
     await buildMatchupRollups(db, frame.id, frameEventFilter(frame))
   }
@@ -424,6 +426,24 @@ function frameEventFilter(frame: Frame): SQL {
     return sql`me.date >= ${frame.date} AND me.date <= ${frame.endDate}`
   }
   return sql`me.date >= ${frame.date} AND me.date < ${frame.date + 86400000}`
+}
+
+/**
+ * Statements per round trip for rollup writes.
+ *
+ * The rollup writers issued one INSERT per row, awaited individually. For a
+ * broad frame that is enormous: year:2026's combo matchups alone are 10,202
+ * rows, i.e. 10,202 sequential round trips to Turso. The connection died
+ * partway every time, and retrying the event just replayed the same doomed
+ * sequence — six attempts, same failure.
+ */
+const ROLLUP_WRITES_PER_BATCH = 200
+
+async function flushRollupWrites(db: Db, writes: SQL[]): Promise<void> {
+  for (let i = 0; i < writes.length; i += ROLLUP_WRITES_PER_BATCH) {
+    const slice = writes.slice(i, i + ROLLUP_WRITES_PER_BATCH).map((st) => db.run(st))
+    await db.batch(slice as [(typeof slice)[number], ...typeof slice])
+  }
 }
 
 /**
@@ -485,6 +505,7 @@ const ROLLUP_LEVELS: RollupLevel[] = [
 ]
 
 async function buildLevelRollups(db: Db, frameId: string, eventFilter: SQL): Promise<void> {
+  const rollupWrites: SQL[] = []
   for (const level of ROLLUP_LEVELS) {
     const measures = (await db.all(sql`
       SELECT f.faction_id, ${level.factKey} AS key,
@@ -531,7 +552,7 @@ async function buildLevelRollups(db: Db, frameId: string, eventFilter: SQL): Pro
       const players = (pl?.players as number) ?? 0
       const playerPct = totalPlayers > 0 ? players / totalPlayers : 0
 
-      await db.run(sql`INSERT OR REPLACE INTO meta_top
+      rollupWrites.push(sql`INSERT OR REPLACE INTO meta_top
         (id, granularity_id, faction_id, subfaction_id, detachment_id, combo_id, meta_for_id,
          win_rate, draw_rate, over_rep, four_oh_start,
          event_wins, event_finals, event_top4, event_top8, event_top16,
@@ -556,6 +577,8 @@ async function buildLevelRollups(db: Db, frameId: string, eventFilter: SQL): Pro
           ${playerPct}, ${wins}, ${r.losses}, ${draws}, ${games}, ${players})`)
     }
   }
+
+  await flushRollupWrites(db, rollupWrites)
 }
 
 /**
@@ -577,6 +600,7 @@ async function buildMatchupRollups(db: Db, frameId: string, eventFilter: SQL): P
     { granularityId: 4, a: sql`f.combo_id`, b: sql`f.opponent_combo_id` },
   ]
 
+  const matchupWrites: SQL[] = []
   for (const level of levels) {
     await db.run(sql`
       DELETE FROM meta_matchup
@@ -599,7 +623,7 @@ async function buildMatchupRollups(db: Db, frameId: string, eventFilter: SQL): P
     `)) as Array<Record<string, unknown>>
 
     for (const r of rows) {
-      await db.run(sql`INSERT OR REPLACE INTO meta_matchup
+      matchupWrites.push(sql`INSERT OR REPLACE INTO meta_matchup
         (id, granularity_id, meta_for_id, key_a, key_b, a_wins, b_wins, draws, games, a_win_rate)
         VALUES (
           ${`m${level.granularityId}:${r.key_a as string}:${r.key_b as string}:${frameId}`},
@@ -608,4 +632,6 @@ async function buildMatchupRollups(db: Db, frameId: string, eventFilter: SQL): P
           ${r.a_wins}, ${r.b_wins}, ${r.draws}, ${r.games}, ${r.a_win_rate})`)
     }
   }
+
+  await flushRollupWrites(db, matchupWrites)
 }
