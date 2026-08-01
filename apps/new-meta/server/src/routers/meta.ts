@@ -113,7 +113,17 @@ export const metaRouter = router({
       }),
     )
     .query(async ({ ctx, input }) => {
-      const granularityId = await resolveGranularityId(ctx, input)
+      // Four one-row dim lookups that do not depend on each other. Each still
+      // costs a full round trip to Turso, so resolving them serially was pure
+      // added latency on every faction page.
+      const [granularityId, detachmentGranularityId, comboGranularityId, timelineTypeId] =
+        await Promise.all([
+          resolveGranularityId(ctx, input),
+          getGranularityIdByName(ctx.db, 'Detachment'),
+          getGranularityIdByName(ctx.db, 'Combo'),
+          getTypeIdByName(ctx.db, TIMELINE_TYPE_NAME),
+        ])
+
       const frameId =
         input.frame ?? (await resolveDefaultFrame(ctx.db, granularityId, DEFAULT_PREFERRED_TYPE))
 
@@ -155,7 +165,6 @@ export const metaRouter = router({
       // bridge on every request: 4.3s for 12 rows, because the cube only ever
       // built Faction-granularity rollups and the interface compensated with a
       // runtime join. Rule 6 — dashboard queries are indexed SELECTs.
-      const detachmentGranularityId = await getGranularityIdByName(ctx.db, 'Detachment')
       const detRows = await ctx.db.all(sql`
         SELECT dd.name AS detachment, mt.detachment_id,
                mt.games, mt.wins, mt.losses, mt.draws, mt.win_rate, mt.players
@@ -188,7 +197,6 @@ export const metaRouter = router({
       // Same shape: read the Combo-granularity rollup. The member-name label is
       // a dimension attribute, so it joins to dim_detachment_combo, never to
       // the fact table.
-      const comboGranularityId = await getGranularityIdByName(ctx.db, 'Combo')
       const comboRows = await ctx.db.all(sql`
         SELECT mt.combo_id, c.member_count, c.total_dp, c.members,
                mt.games, mt.wins, mt.losses, mt.draws, mt.win_rate, mt.players
@@ -216,7 +224,6 @@ export const metaRouter = router({
       // Timeline — aggregate across the per-month rollup frames. Resolve
       // the type id from dim_for_type by name rather than baking the
       // integer into the query.
-      const timelineTypeId = await getTypeIdByName(ctx.db, TIMELINE_TYPE_NAME)
       const tlRows =
         timelineTypeId == null
           ? []
