@@ -411,6 +411,7 @@ export async function buildCubeForEvents(db: Db, eventIds: string[]): Promise<vo
     }
 
     await buildLevelRollups(db, frame.id, frameEventFilter(frame))
+    await buildMatchupRollups(db, frame.id, frameEventFilter(frame))
   }
 }
 
@@ -553,6 +554,58 @@ async function buildLevelRollups(db: Db, frameId: string, eventFilter: SQL): Pro
           ${(pl?.event_top8 as number) ?? 0},
           ${(pl?.event_top16 as number) ?? 0},
           ${playerPct}, ${wins}, ${r.losses}, ${draws}, ${games}, ${players})`)
+    }
+  }
+}
+
+/**
+ * Matchup rollups — the head-to-head matrix, precomputed per frame.
+ *
+ * Only levels with a direct opponent column on the fact grain are built:
+ * faction has (faction_id, opponent_faction_id) and combo has (combo_id,
+ * opponent_combo_id). Detachment would need the combo-member bridge joined on
+ * BOTH sides, fanning every game out by members_a x members_b — that is a real
+ * design decision about what "detachment vs detachment" even means for a
+ * two-detachment army, not something to guess at here.
+ *
+ * key_a < key_b so each pairing is stored once; a_wins / b_wins are relative to
+ * that ordering.
+ */
+async function buildMatchupRollups(db: Db, frameId: string, eventFilter: SQL): Promise<void> {
+  const levels: Array<{ granularityId: number; a: SQL; b: SQL }> = [
+    { granularityId: 1, a: sql`f.faction_id`, b: sql`f.opponent_faction_id` },
+    { granularityId: 4, a: sql`f.combo_id`, b: sql`f.opponent_combo_id` },
+  ]
+
+  for (const level of levels) {
+    await db.run(sql`
+      DELETE FROM meta_matchup
+      WHERE meta_for_id = ${frameId} AND granularity_id = ${level.granularityId}
+    `)
+
+    const rows = (await db.all(sql`
+      SELECT ${level.a} AS key_a, ${level.b} AS key_b,
+             SUM(CASE WHEN f.result = 1.0 THEN 1 ELSE 0 END) AS a_wins,
+             SUM(CASE WHEN f.result = 0.0 THEN 1 ELSE 0 END) AS b_wins,
+             SUM(CASE WHEN f.result = 0.5 THEN 1 ELSE 0 END) AS draws,
+             COUNT(*) AS games,
+             AVG(f.result) AS a_win_rate
+      FROM fact_game_results f
+      JOIN meta_events me ON f.event_id = me.id
+      WHERE ${eventFilter}
+        AND ${level.a} IS NOT NULL AND ${level.b} IS NOT NULL
+        AND ${level.a} < ${level.b}
+      GROUP BY ${level.a}, ${level.b}
+    `)) as Array<Record<string, unknown>>
+
+    for (const r of rows) {
+      await db.run(sql`INSERT OR REPLACE INTO meta_matchup
+        (id, granularity_id, meta_for_id, key_a, key_b, a_wins, b_wins, draws, games, a_win_rate)
+        VALUES (
+          ${`m${level.granularityId}:${r.key_a as string}:${r.key_b as string}:${frameId}`},
+          ${level.granularityId}, ${frameId},
+          ${r.key_a as string}, ${r.key_b as string},
+          ${r.a_wins}, ${r.b_wins}, ${r.draws}, ${r.games}, ${r.a_win_rate})`)
     }
   }
 }

@@ -495,6 +495,48 @@ describe('buildCubeForEvents', () => {
     }
   })
 
+  it('scopes matchups to their frame instead of aggregating all time', async () => {
+    // meta.matchups accepted a `frame` input and never referenced it, so the
+    // matrix showed all-time matchups whatever period was selected. Storing
+    // matchups per frame makes that impossible to get wrong.
+    await insertEvent(client, {
+      id: 'evt-m1',
+      date: Date.UTC(2025, 0, 15),
+      source: 'native',
+      sourceId: 'm1',
+      importedAt: 1000,
+    })
+    await insertEvent(client, {
+      id: 'evt-m2',
+      date: Date.UTC(2025, 6, 15),
+      source: 'native',
+      sourceId: 'm2',
+      importedAt: 1000,
+    })
+    await buildCubeForEvents(db, ['evt-m1', 'evt-m2'])
+
+    const all = (await db.all(sql`
+      SELECT meta_for_id, key_a, key_b, games FROM meta_matchup WHERE granularity_id = 1
+    `)) as Array<Record<string, unknown>>
+    expect(all.length).toBeGreaterThan(0)
+
+    // Each event's own frame sees only its own game, not both.
+    const e1 = all.filter((r) => r.meta_for_id === 'event:evt-m1')
+    const e2 = all.filter((r) => r.meta_for_id === 'event:evt-m2')
+    expect(e1).toHaveLength(1)
+    expect(e2).toHaveLength(1)
+    expect(e1[0]!.games).toBe(1)
+    expect(e2[0]!.games).toBe(1)
+
+    // The year frame covers both.
+    const year = all.filter((r) => r.meta_for_id === 'year:2025')
+    expect(year).toHaveLength(1)
+    expect(year[0]!.games).toBe(2)
+
+    // Stored once per pairing, in a stable order.
+    for (const r of all) expect(String(r.key_a) < String(r.key_b)).toBe(true)
+  })
+
   it('is idempotent — calling twice for the same event does not duplicate fact rows', async () => {
     await insertEvent(client, {
       id: 'evt1',

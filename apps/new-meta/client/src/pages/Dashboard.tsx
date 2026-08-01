@@ -20,7 +20,7 @@ export function Dashboard({ onFactionSelect }: Props) {
     minGames: 5,
   })
 
-  const { data: matchups = [] } = trpc.meta.matchups.useQuery({ frame, minGames: 3 })
+  const { data: matchups = [] } = trpc.meta.matchups.useQuery({ frame, granularityId, minGames: 3 })
 
   // Faction granularity is the default (no explicit id). Everything else is a
   // finer breakdown where one army can appear in several rows, so faction-level
@@ -29,6 +29,8 @@ export function Dashboard({ onFactionSelect }: Props) {
   const { data: filters } = trpc.meta.availableFilters.useQuery({})
   const factionGranularityId = filters?.granularities.find((g) => g.name === 'Faction')?.id
   const isFactionGranularity = granularityId == null || granularityId === factionGranularityId
+  const granularityName =
+    filters?.granularities.find((g) => g.id === granularityId)?.name ?? 'Faction'
 
   return (
     <div className="space-y-8">
@@ -65,7 +67,7 @@ export function Dashboard({ onFactionSelect }: Props) {
         ) : factions.length === 0 ? (
           <p className="text-slate-500 text-sm">No tournament data for this period.</p>
         ) : (
-          <FactionTable stats={factions} onSelect={onFactionSelect} />
+          <FactionTable stats={factions} onSelect={onFactionSelect} rowLabel={granularityName} />
         )}
       </section>
 

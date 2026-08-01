@@ -298,30 +298,48 @@ export const metaRouter = router({
 
   matchups: publicProcedure
     .input(
-      z.object({ frame: FrameSchema, minGames: z.number().int().min(1).default(3) }).optional(),
+      z
+        .object({
+          frame: FrameSchema,
+          granularityId: GranularityIdSchema,
+          granularity: GranularityNameSchema,
+          minGames: z.number().int().min(1).default(3),
+        })
+        .optional(),
     )
     .query(async ({ ctx, input }) => {
+      // Reads the precomputed matchup rollup. This was a GROUP BY across 75k
+      // fact rows on every dashboard load, and it silently ignored `frame`
+      // entirely — the matrix showed all-time data no matter which quarter was
+      // selected. It was also faction-only regardless of granularity.
+      const granularityId = await resolveGranularityId(ctx, input)
+      const frameId =
+        input?.frame ?? (await resolveDefaultFrame(ctx.db, granularityId, DEFAULT_PREFERRED_TYPE))
+      if (!frameId) return []
+
+      // Labels are dimension attributes; exactly one of these matches the key.
       const rows = await ctx.db.all(sql`
-        SELECT df1.name AS faction_a, df2.name AS faction_b,
-               SUM(CASE WHEN f.result = 1.0 THEN 1 ELSE 0 END) AS a_wins,
-               SUM(CASE WHEN f.result = 0.0 THEN 1 ELSE 0 END) AS b_wins,
-               SUM(CASE WHEN f.result = 0.5 THEN 1 ELSE 0 END) AS draws,
-               COUNT(*) AS total_games,
-               AVG(f.result) AS a_win_rate
-        FROM fact_game_results f
-        JOIN dim_faction df1 ON f.faction_id = df1.id
-        JOIN dim_faction df2 ON f.opponent_faction_id = df2.id
-        WHERE f.faction_id < f.opponent_faction_id AND f.opponent_faction_id IS NOT NULL
-        GROUP BY f.faction_id, f.opponent_faction_id
-        HAVING total_games >= ${input?.minGames ?? 3}
+        SELECT mm.key_a, mm.key_b,
+               COALESCE(fa.name, ca.members, mm.key_a) AS label_a,
+               COALESCE(fb.name, cb.members, mm.key_b) AS label_b,
+               mm.a_wins, mm.b_wins, mm.draws, mm.games, mm.a_win_rate
+        FROM meta_matchup mm
+        LEFT JOIN dim_faction fa ON mm.key_a = fa.id
+        LEFT JOIN dim_faction fb ON mm.key_b = fb.id
+        LEFT JOIN dim_detachment_combo ca ON mm.key_a = ca.id
+        LEFT JOIN dim_detachment_combo cb ON mm.key_b = cb.id
+        WHERE mm.granularity_id = ${granularityId}
+          AND mm.meta_for_id = ${frameId}
+          AND mm.games >= ${input?.minGames ?? 3}
       `)
+
       return (rows as any[]).map((r) => ({
-        factionA: r.faction_a,
-        factionB: r.faction_b,
+        factionA: r.label_a,
+        factionB: r.label_b,
         aWins: r.a_wins,
         bWins: r.b_wins,
         draws: r.draws,
-        totalGames: r.total_games,
+        totalGames: r.games,
         aWinRate: r.a_win_rate,
       }))
     }),
