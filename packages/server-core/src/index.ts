@@ -1,7 +1,19 @@
 export { startDevServer } from './dev'
 export { type Glicko2Game, type Glicko2Player, type Glicko2Result, updateGlicko2 } from './glicko2'
 export { generateId } from './id'
-export { buildCubeForEvents, type EventRow, type Frame, generateFrames } from './meta-cube'
+export {
+  buildCubeForEvents,
+  type BuildCubeOptions,
+  type EventRow,
+  type Frame,
+  generateFrames,
+} from './meta-cube'
+export {
+  type CubeCheck,
+  type CubeVerification,
+  formatVerification,
+  verifyCube,
+} from './meta-cube-verify'
 export {
   backfillDetachmentsFromLists,
   buildDetachmentIndex,
