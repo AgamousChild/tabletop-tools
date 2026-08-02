@@ -228,7 +228,23 @@ export function generateFrames(
  *
  * No-ops for an empty eventIds array.
  */
-export async function buildCubeForEvents(db: Db, eventIds: string[]): Promise<void> {
+export interface BuildCubeOptions {
+  /**
+   * Called once per event and once per frame, with a one-line progress string.
+   *
+   * A 400-event rebuild takes over an hour and used to print exactly one line,
+   * so a failure told you only that it happened somewhere in that hour. Every
+   * unit of work reports itself now: which event, how many pairings, how long.
+   */
+  onProgress?: (message: string) => void
+}
+
+export async function buildCubeForEvents(
+  db: Db,
+  eventIds: string[],
+  opts: BuildCubeOptions = {},
+): Promise<void> {
+  const report = opts.onProgress ?? (() => {})
   if (eventIds.length === 0) return
 
   const rows = (await db.all(
@@ -294,7 +310,11 @@ export async function buildCubeForEvents(db: Db, eventIds: string[]): Promise<vo
   // Do NOT group by (event_id, player_id, round) alone: 27 players legitimately
   // have two pairings in one round against different opponents, so that query
   // reports real games as duplicates.
-  for (const eventId of rows.map((e) => e.id)) {
+  let eventNo = 0
+  for (const event of rows) {
+    const eventId = event.id
+    eventNo += 1
+    const eventStarted = Date.now()
     const pairingRows = await db.all(sql`
       SELECT mp.id, mp.event_id, mp.round, mp.result,
              mp.player1_id, mp.player2_id,
@@ -358,19 +378,34 @@ export async function buildCubeForEvents(db: Db, eventIds: string[]): Promise<vo
     // That index is what the original single-transaction was really protecting
     // against, and it does the job better.
     await flushWrites(db, factWrites)
+    report(
+      `event ${eventNo}/${rows.length} ${eventId} ${event.name ?? ''} — ` +
+        `${pairingRows.length} pairings, ${factWrites.length - 1} fact rows, ` +
+        `${Date.now() - eventStarted}ms`,
+    )
   }
 
   // Rebuild meta_top for every frame touched by these events (full
   // aggregate recompute per frame, not an increment — correct even when an
   // event is re-processed).
   const affectedFrameIds = frames.map((f) => f.id)
+  report(`facts done — rebuilding ${affectedFrameIds.length} frames`)
   for (const frameId of affectedFrameIds) {
     await db.run(sql`DELETE FROM meta_top WHERE meta_for_id = ${frameId}`)
   }
 
+  let frameNo = 0
   for (const frame of frames) {
+    frameNo += 1
+    const frameStarted = Date.now()
     await buildLevelRollups(db, frame.id, frameEventIds(frame))
+    const topMs = Date.now() - frameStarted
+    const matchupStarted = Date.now()
     await buildMatchupRollups(db, frame.id, frameEventIds(frame))
+    report(
+      `frame ${frameNo}/${frames.length} ${frame.id} — ` +
+        `top ${topMs}ms, matchup ${Date.now() - matchupStarted}ms`,
+    )
   }
 }
 
@@ -406,7 +441,34 @@ const ROLLUP_WRITES_PER_BATCH = 200
 async function flushWrites(db: Db, writes: SQL[]): Promise<void> {
   for (let i = 0; i < writes.length; i += ROLLUP_WRITES_PER_BATCH) {
     const slice = writes.slice(i, i + ROLLUP_WRITES_PER_BATCH).map((st) => db.run(st))
-    await db.batch(slice as [(typeof slice)[number], ...typeof slice])
+    await runWithRetry(() => db.batch(slice as [(typeof slice)[number], ...typeof slice]))
+  }
+}
+
+/**
+ * Retry a write batch through a dropped connection.
+ *
+ * Turso closes long-lived keep-alive sockets; over an hour-long rebuild that is
+ * routine rather than exceptional, and it surfaces as UND_ERR_SOCKET / "other
+ * side closed" with no indication of which statement was in flight.
+ *
+ * A blind retry is what corrupted fact_game_results on 2026-07-30 — replaying
+ * inserts the delete had already accounted for. It is safe now, and only now,
+ * because uq_fact_game_results_pairing_player rejects a duplicated game and the
+ * rollup writers use INSERT OR REPLACE on their own keys. Every statement this
+ * wraps is idempotent by construction. Do not widen it to anything that is not.
+ */
+async function runWithRetry<T>(fn: () => Promise<T>, attempts = 3): Promise<T> {
+  for (let attempt = 1; ; attempt++) {
+    try {
+      return await fn()
+    } catch (err) {
+      const transient = String((err as Error)?.message ?? err).match(
+        /fetch failed|other side closed|UND_ERR_SOCKET|ECONNRESET|socket hang up/i,
+      )
+      if (!transient || attempt >= attempts) throw err
+      await new Promise((r) => setTimeout(r, 500 * attempt))
+    }
   }
 }
 
