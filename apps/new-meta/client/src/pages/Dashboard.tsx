@@ -1,3 +1,4 @@
+import { SkeletonTable } from '@tabletop-tools/ui'
 import { useState } from 'react'
 
 import { FactionTable } from '../components/FactionTable'
@@ -63,7 +64,7 @@ export function Dashboard({ onFactionSelect }: Props) {
           {isFactionGranularity ? 'Faction Win Rates' : 'Win Rates'}
         </h2>
         {loadingFactions ? (
-          <p className="text-slate-400 text-sm">Loading...</p>
+          <SkeletonTable rows={12} columns={6} />
         ) : factions.length === 0 ? (
           <p className="text-slate-500 text-sm">No tournament data for this period.</p>
         ) : (

@@ -47,11 +47,13 @@ describe('SourceData', () => {
     expect(screen.getByText('Source Data')).toBeInTheDocument()
   })
 
-  it('shows loading while fetching', () => {
+  it('shows a loading skeleton while fetching', () => {
     mockIsLoading = true
     mockTournaments = []
     render(<SourceData onTournamentSelect={() => {}} />)
-    expect(screen.getByText(/loading/i)).toBeInTheDocument()
+    // The affordance is what matters, not the word: skeletons stand in for
+    // the real content so a slow cube query does not read as a dead page.
+    expect(screen.getAllByRole('status').length).toBeGreaterThan(0)
   })
 
   it('shows empty state when no tournaments', () => {

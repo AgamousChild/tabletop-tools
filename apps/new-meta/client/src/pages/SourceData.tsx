@@ -1,3 +1,5 @@
+import { SkeletonTable } from '@tabletop-tools/ui'
+
 import { trpc } from '../lib/trpc'
 
 interface Props {
@@ -17,7 +19,7 @@ export function SourceData({ onTournamentSelect }: Props) {
       </div>
 
       {isLoading ? (
-        <p className="text-slate-400 text-sm">Loading...</p>
+        <SkeletonTable rows={12} columns={5} />
       ) : tournaments.length === 0 ? (
         <p className="text-slate-400 text-sm">No tournaments imported yet.</p>
       ) : (

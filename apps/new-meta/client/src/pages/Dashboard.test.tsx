@@ -77,12 +77,14 @@ describe('Dashboard', () => {
     expect(screen.getAllByText('Space Marines').length).toBeGreaterThan(0)
   })
 
-  it('shows loading text while factions are fetching', () => {
+  it('shows a loading skeleton while factions are fetching', () => {
     mockLoadingFactions = true
     mockFactions = []
     mockMatchups = []
     render(<Dashboard onFactionSelect={() => {}} />)
-    expect(screen.getByText(/loading/i)).toBeInTheDocument()
+    // The affordance is what matters, not the word: skeletons stand in for
+    // the real content so a slow cube query does not read as a dead page.
+    expect(screen.getAllByRole('status').length).toBeGreaterThan(0)
   })
 
   it('calls onFactionSelect with factionId when a faction row is clicked', () => {

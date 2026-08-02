@@ -1,3 +1,4 @@
+import { SkeletonTable } from '@tabletop-tools/ui'
 import { useState } from 'react'
 
 import { GlickoBar } from '../components/GlickoBar'
@@ -93,7 +94,7 @@ export function PlayerRanking({ onPlayerSelect }: Props) {
         </div>
 
         {isLoading && !activeSearch ? (
-          <p className="text-slate-400 text-sm p-4 text-center">Loading…</p>
+          <SkeletonTable rows={15} columns={6} className="p-4" />
         ) : displayPlayers.length === 0 ? (
           <p className="text-slate-400 text-sm p-4 text-center">
             {activeSearch

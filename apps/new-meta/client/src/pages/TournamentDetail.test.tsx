@@ -56,10 +56,12 @@ const fakeTournament = {
 }
 
 describe('TournamentDetail', () => {
-  it('shows loading while data is fetching', () => {
+  it('shows a loading skeleton while data is fetching', () => {
     mockQueryResult = { data: undefined, isLoading: true }
     render(<TournamentDetail importId="evt-1" onBack={() => {}} />)
-    expect(screen.getByText(/loading/i)).toBeInTheDocument()
+    // The affordance is what matters, not the word: skeletons stand in for
+    // the real content so a slow cube query does not read as a dead page.
+    expect(screen.getAllByRole('status').length).toBeGreaterThan(0)
   })
 
   it('shows not-found when data is null', () => {

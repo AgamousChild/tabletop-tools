@@ -1,3 +1,4 @@
+import { SkeletonTable, SkeletonText } from '@tabletop-tools/ui'
 import { useMemo } from 'react'
 
 import { ListCard } from '../components/ListCard'
@@ -12,7 +13,12 @@ export function FactionDetail({ factionId, onBack }: Props) {
   const { data, isLoading } = trpc.meta.faction.useQuery({ factionId })
 
   if (isLoading) {
-    return <p className="text-slate-400 text-sm">Loading...</p>
+    return (
+      <div className="space-y-6">
+        <SkeletonText lines={2} />
+        <SkeletonTable rows={8} columns={5} />
+      </div>
+    )
   }
 
   if (!data || !data.stat) {
