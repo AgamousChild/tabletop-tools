@@ -309,7 +309,7 @@ export async function buildCubeForEvents(db: Db, eventIds: string[]): Promise<vo
       WHERE mp.event_id = ${eventId}
     `)
 
-    const factWrites = [db.run(sql`DELETE FROM fact_game_results WHERE event_id = ${eventId}`)]
+    const factWrites: SQL[] = [sql`DELETE FROM fact_game_results WHERE event_id = ${eventId}`]
 
     for (const row of pairingRows as Array<Record<string, unknown>>) {
       const result = row.result as string
@@ -326,31 +326,38 @@ export async function buildCubeForEvents(db: Db, eventIds: string[]): Promise<vo
       // detachment would count a two-detachment army as two games and corrupt
       // every win rate.
       factWrites.push(
-        db.run(sql`INSERT OR REPLACE INTO fact_game_results
+        sql`INSERT OR REPLACE INTO fact_game_results
         (id, pairing_id, event_id, player_id, opponent_id, round, faction_id, subfaction_id, detachment_id, combo_id,
          opponent_faction_id, opponent_subfaction_id, opponent_detachment_id, opponent_combo_id,
          result, player_score, opponent_score)
         VALUES (${generateId()}, ${row.id}, ${row.event_id}, ${row.player1_id}, ${row.player2_id}, ${row.round},
                 ${row.p1_faction}, ${row.p1_subfaction}, ${row.p1_detachment}, ${row.p1_combo},
                 ${row.p2_faction}, ${row.p2_subfaction}, ${row.p2_detachment}, ${row.p2_combo},
-                ${p1Result}, ${row.player1_score}, ${row.player2_score})`),
+                ${p1Result}, ${row.player1_score}, ${row.player2_score})`,
       )
 
       factWrites.push(
-        db.run(sql`INSERT OR REPLACE INTO fact_game_results
+        sql`INSERT OR REPLACE INTO fact_game_results
         (id, pairing_id, event_id, player_id, opponent_id, round, faction_id, subfaction_id, detachment_id, combo_id,
          opponent_faction_id, opponent_subfaction_id, opponent_detachment_id, opponent_combo_id,
          result, player_score, opponent_score)
         VALUES (${generateId()}, ${row.id}, ${row.event_id}, ${row.player2_id}, ${row.player1_id}, ${row.round},
                 ${row.p2_faction}, ${row.p2_subfaction}, ${row.p2_detachment}, ${row.p2_combo},
                 ${row.p1_faction}, ${row.p1_subfaction}, ${row.p1_detachment}, ${row.p1_combo},
-                ${p2Result}, ${row.player2_score}, ${row.player1_score})`),
+                ${p2Result}, ${row.player2_score}, ${row.player1_score})`,
       )
     }
 
-    // One transaction per event: either the delete and every insert land, or
-    // none of them do. A retry re-runs the delete too, so it cannot stack.
-    await db.batch(factWrites as [(typeof factWrites)[number], ...typeof factWrites])
+    // Chunked, not one giant transaction. The largest event has 1,884 pairings
+    // -> 3,768 inserts, which went out as a single ~3MB request and got the
+    // connection closed mid-flight.
+    //
+    // Losing per-event atomicity is safe HERE specifically because the delete
+    // leads the sequence (so a retry re-clears first) and because
+    // uq_fact_game_results_pairing_player makes a duplicated game unstorable.
+    // That index is what the original single-transaction was really protecting
+    // against, and it does the job better.
+    await flushWrites(db, factWrites)
   }
 
   // Rebuild meta_top for every frame touched by these events (full
@@ -396,7 +403,7 @@ function frameEventIds(frame: Frame): SQL {
  */
 const ROLLUP_WRITES_PER_BATCH = 200
 
-async function flushRollupWrites(db: Db, writes: SQL[]): Promise<void> {
+async function flushWrites(db: Db, writes: SQL[]): Promise<void> {
   for (let i = 0; i < writes.length; i += ROLLUP_WRITES_PER_BATCH) {
     const slice = writes.slice(i, i + ROLLUP_WRITES_PER_BATCH).map((st) => db.run(st))
     await db.batch(slice as [(typeof slice)[number], ...typeof slice])
@@ -545,7 +552,7 @@ async function buildLevelRollups(db: Db, frameId: string, eventIds: SQL): Promis
     }
   }
 
-  await flushRollupWrites(db, rollupWrites)
+  await flushWrites(db, rollupWrites)
 }
 
 /**
@@ -599,5 +606,5 @@ async function buildMatchupRollups(db: Db, frameId: string, eventIds: SQL): Prom
     }
   }
 
-  await flushRollupWrites(db, matchupWrites)
+  await flushWrites(db, matchupWrites)
 }
