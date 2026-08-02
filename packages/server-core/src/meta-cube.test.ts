@@ -199,7 +199,15 @@ describe('buildCubeForEvents', () => {
     const tops = (await db.all(sql`SELECT * FROM meta_top`)) as Array<Record<string, unknown>>
     expect(tops.length).toBeGreaterThan(0)
     const smTop = tops.find((t) => t.faction_id === 'sm')!
-    expect(smTop.wins).toBe(3)
+    // ONE win, not three. The faction rollup used to sum meta_event_players'
+    // self-reported W/L/D (the fixture says 3-2-0) while every other
+    // granularity counted fact rows. The two never reconciled. Measures now
+    // come from the fact grain at every level, and this event has exactly one
+    // pairing, so it is one game won.
+    expect(smTop.wins).toBe(1)
+    expect(smTop.games).toBe(1)
+    // Players still come from the player rows — meta share must count entrants,
+    // including at events that recorded no pairings.
     expect(smTop.players).toBe(1)
   })
 

@@ -362,56 +362,6 @@ export async function buildCubeForEvents(db: Db, eventIds: string[]): Promise<vo
   }
 
   for (const frame of frames) {
-    const eventFilter = frameEventFilter(frame)
-
-    const stats = await db.all(sql`
-      SELECT ep.faction_id,
-             SUM(ep.wins) AS wins, SUM(ep.losses) AS losses, SUM(ep.draws) AS draws,
-             COUNT(*) AS players,
-             SUM(CASE WHEN ep.placement = 1 THEN 1 ELSE 0 END) AS event_wins,
-             SUM(CASE WHEN ep.placement <= 2 THEN 1 ELSE 0 END) AS event_finals,
-             SUM(CASE WHEN ep.placement <= 4 THEN 1 ELSE 0 END) AS event_top4,
-             SUM(CASE WHEN ep.placement <= 8 THEN 1 ELSE 0 END) AS event_top8,
-             SUM(CASE WHEN ep.placement <= 16 THEN 1 ELSE 0 END) AS event_top16
-      FROM meta_event_players ep
-      JOIN meta_events me ON ep.event_id = me.id
-      WHERE ${eventFilter}
-      GROUP BY ep.faction_id
-    `)
-
-    if (stats.length === 0) continue
-
-    const rollupWrites: SQL[] = []
-    const statRows = stats as Array<Record<string, unknown>>
-    const totalPlayers = statRows.reduce((sum, r) => sum + (r.players as number), 0)
-    const activeFactions = statRows.length
-    const expectedPct = activeFactions > 0 ? 1.0 / activeFactions : 0
-
-    for (const row of statRows) {
-      const wins = row.wins as number
-      const losses = row.losses as number
-      const draws = row.draws as number
-      const games = wins + losses + draws
-      const winRate = games > 0 ? (wins + draws * 0.5) / games : 0
-      const drawRate = games > 0 ? draws / games : 0
-      const playerPct = totalPlayers > 0 ? (row.players as number) / totalPlayers : 0
-      const overRep = expectedPct > 0 ? playerPct / expectedPct : 0
-      const fourOhStart =
-        (row.players as number) > 0 ? (row.event_top8 as number) / (row.players as number) : 0
-      const topId = `faction:${row.faction_id as string}:${frame.id}`
-
-      rollupWrites.push(sql`INSERT OR REPLACE INTO meta_top
-        (id, granularity_id, faction_id, subfaction_id, detachment_id, meta_for_id,
-         win_rate, draw_rate, over_rep, four_oh_start,
-         event_wins, event_finals, event_top4, event_top8, event_top16,
-         player_pop_pct, wins, losses, draws, games, players)
-        VALUES (${topId}, 1, ${row.faction_id as string}, ${null}, ${null}, ${frame.id},
-                ${winRate}, ${drawRate}, ${overRep}, ${fourOhStart},
-                ${row.event_wins}, ${row.event_finals}, ${row.event_top4}, ${row.event_top8}, ${row.event_top16},
-                ${playerPct}, ${wins}, ${losses}, ${draws}, ${games}, ${row.players})`)
-    }
-
-    await flushRollupWrites(db, rollupWrites)
     await buildLevelRollups(db, frame.id, frameEventIds(frame))
     await buildMatchupRollups(db, frame.id, frameEventIds(frame))
   }
@@ -433,17 +383,6 @@ function frameEventIds(frame: Frame): SQL {
     return sql`(SELECT id FROM meta_events WHERE date >= ${frame.date} AND date <= ${frame.endDate})`
   }
   return sql`(SELECT id FROM meta_events WHERE date >= ${frame.date} AND date < ${frame.date + 86400000})`
-}
-
-/** The event-selection predicate for a frame, shared by every rollup pass. */
-function frameEventFilter(frame: Frame): SQL {
-  if (frame.typeId === 1) {
-    return sql`me.id = ${frame.id.replace('event:', '')}`
-  }
-  if (frame.endDate !== null) {
-    return sql`me.date >= ${frame.date} AND me.date <= ${frame.endDate}`
-  }
-  return sql`me.date >= ${frame.date} AND me.date < ${frame.date + 86400000}`
 }
 
 /**
@@ -484,7 +423,7 @@ async function flushRollupWrites(db: Db, writes: SQL[]): Promise<void> {
 interface RollupLevel {
   granularityId: number
   /** meta_top column receiving the key. */
-  column: 'subfaction_id' | 'detachment_id' | 'combo_id'
+  column: 'faction_only' | 'subfaction_id' | 'detachment_id' | 'combo_id'
   /** Key expression + any extra FROM/JOIN needed, over fact_game_results f. */
   factKey: SQL
   factJoin: SQL
@@ -494,6 +433,18 @@ interface RollupLevel {
 }
 
 const ROLLUP_LEVELS: RollupLevel[] = [
+  {
+    // Faction was computed separately, summing self-reported W/L/D off
+    // meta_event_players, while every other level counted fact rows. The two
+    // never reconciled. It is now the same writer as the rest: measures from
+    // the fact grain, placements from the player rows.
+    granularityId: 1,
+    column: 'faction_only',
+    factKey: sql`f.faction_id`,
+    factJoin: sql``,
+    playerKey: sql`ep.faction_id`,
+    playerJoin: sql``,
+  },
   {
     granularityId: 2,
     column: 'subfaction_id',
