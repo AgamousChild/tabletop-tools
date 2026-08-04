@@ -824,7 +824,15 @@ server.tool(
 server.tool(
   'app_deploy',
   [
-    'Deploy ONE app: server Worker, then client to Pages, then purge the CDN.',
+    'Deploy ONE app: server Worker, client to Pages, the gateway, then purge.',
+    '',
+    'WHY THE GATEWAY IS PART OF THIS: users are on tabletop-tools.net/{app}/,',
+    'which is served by the `tabletop-tools` gateway project bundling all nine',
+    'SPAs. `tabletop-tools-{app}` only serves {app}.tabletop-tools.net. Deploying',
+    'the client without the gateway leaves the canonical path on the old bundle',
+    'while every step reports exit 0 — measured 2026-08-04, new-meta reported',
+    'worker/build/client all 0 plus "purged", and tabletop-tools.net/new-meta/',
+    'went on serving a bundle five commits behind.',
     '',
     'WHY THE PURGE IS PART OF THIS: a Worker deploy starts a fresh isolate, but',
     'the CDN in front of it keeps serving the old response. `wrangler deploy`',
@@ -834,6 +842,10 @@ server.tool(
     '',
     'The client build is not optional: `wrangler pages deploy dist` ships',
     'whatever is already in dist, so skipping it republishes the old bundle.',
+    '',
+    'The gateway rebuilds every client from source, so this is minutes, not',
+    'seconds. Deploying several apps? Pass skipGateway and run deploy_everything',
+    'or one gateway deploy at the end instead of N.',
     '',
     'The brain deploys via brain_deploy_full instead — it also uploads to R2',
     'and re-indexes, and purges for itself.',
@@ -845,16 +857,27 @@ server.tool(
     skipWorker: z.boolean().optional().default(false),
     skipClient: z.boolean().optional().default(false),
     skipBuild: z.boolean().optional().default(false).describe('Reuse the existing dist/ bundle'),
+    skipGateway: z
+      .boolean()
+      .optional()
+      .default(false)
+      .describe(
+        'Skip the gateway rebuild. Leaves tabletop-tools.net/{app}/ on the old bundle — only for the per-app subdomain, or when you will deploy the gateway yourself.',
+      ),
   },
-  async ({ app, skipWorker, skipClient, skipBuild }) => {
-    const r = await appDeployFull(app, { skipWorker, skipClient, skipBuild })
+  async ({ app, skipWorker, skipClient, skipBuild, skipGateway }) => {
+    const r = await appDeployFull(app, { skipWorker, skipClient, skipBuild, skipGateway })
     const lines = [
       `app_deploy ${r.app} ${r.ok ? 'OK' : 'FAILED'} in ${Math.round(r.totalDurationMs / 1000)}s`,
       r.worker ? `worker:       exit ${r.worker.code}` : 'worker:       skipped',
       r.clientBuild ? `client build: exit ${r.clientBuild.code}` : 'client build: skipped',
       r.clientDeploy ? `client:       exit ${r.clientDeploy.code}` : 'client:       skipped',
+      r.gateway ? `gateway:      exit ${r.gateway.code}` : 'gateway:      skipped',
       `purge:        ${r.purge.ok ? 'purged' : `FAILED — ${r.purge.message}`}`,
       r.purge.ok ? '' : 'WITHOUT THE PURGE THE SITE STILL SERVES THE OLD RESPONSE.',
+      r.gateway || skipClient
+        ? ''
+        : 'GATEWAY SKIPPED — tabletop-tools.net/' + r.app + '/ STILL SERVES THE OLD BUNDLE.',
     ]
     return textResult(lines.filter(Boolean).join('\n'))
   },
@@ -882,7 +905,16 @@ server.tool(
 server.tool(
   'app_deploy_client',
   [
-    'Build and deploy one app client to Pages. Does NOT purge the CDN.',
+    'Build and deploy one app client to its OWN Pages project.',
+    '',
+    'This updates {app}.tabletop-tools.net only. It does NOT update',
+    'tabletop-tools.net/{app}/ — that path is served by the gateway project, so',
+    'this tool alone leaves the surface users are on unchanged while exiting 0.',
+    'Use app_deploy (which runs the gateway) unless the subdomain is what you',
+    'actually want.',
+    '',
+    'Does NOT purge the CDN either.',
+    '',
     'skipBuild reuses dist/, which republishes the previous bundle — only use',
     'it when you have just built.',
   ].join('\n'),

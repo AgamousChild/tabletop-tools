@@ -51,6 +51,11 @@ const clientDir = (app: string) => join(REPO_ROOT, 'apps', app, 'client')
  * directory, so `wrangler pages deploy dist` fails with "Must specify a project
  * name" — which is exactly what the repo's own `deploy:new-meta` npm script
  * does, so that script has never worked either.
+ *
+ * IMPORTANT: this project is NOT the surface users are on. It serves the
+ * per-app subdomain only. The canonical path — tabletop-tools.net/{app}/ — is
+ * served by the gateway, a separate Pages project that bundles every SPA. See
+ * deployGateway.
  */
 export const pagesProject = (app: string) => `tabletop-tools-${app}`
 
@@ -116,6 +121,34 @@ export async function appDeployClient(
   return { build, deploy }
 }
 
+// ── Gateway ─────────────────────────────────────────────────────────────────
+
+/**
+ * Deploy the gateway — the Pages project behind tabletop-tools.net itself.
+ *
+ * This is the surface users are actually on. tabletop-tools.net/{app}/ is
+ * served by the `tabletop-tools` project, which bundles all nine SPAs under
+ * their base paths; `tabletop-tools-{app}` only serves {app}.tabletop-tools.net.
+ *
+ * Deploying an app client without this leaves the canonical path on the old
+ * bundle while every step reports success — measured 2026-08-04: app_deploy
+ * new-meta returned "worker exit 0 / client build exit 0 / client exit 0 /
+ * purged" and tabletop-tools.net/new-meta/ went on serving a five-commit-old
+ * bundle. The give-away was the request payload:
+ * factionId="genestealer-cults?frame=quarter:2026:3" — the query string being
+ * swallowed into the id, which only the pre-fix router did.
+ *
+ * scripts/deploy-gateway.sh rebuilds every app client from source (it wipes
+ * dist first, so it cannot be narrowed to one app) and purges for itself.
+ */
+export async function deployGateway(): Promise<RunResult> {
+  return runCmd('bash', ['scripts/deploy-gateway.sh'], {
+    cwd: REPO_ROOT,
+    timeoutMs: 20 * 60 * 1000,
+    tailLines: 40,
+  })
+}
+
 // ── Purge ───────────────────────────────────────────────────────────────────
 
 /** Purge the CDN cache. Re-exported so callers need not know where it lives. */
@@ -130,6 +163,7 @@ export interface AppDeployFullResult {
   worker?: RunResult
   clientBuild?: RunResult
   clientDeploy?: RunResult
+  gateway?: RunResult
   purge: PurgeResult
   totalDurationMs: number
   /** True when every step that ran reported success. */
@@ -137,7 +171,17 @@ export interface AppDeployFullResult {
 }
 
 /**
- * Worker → client → purge, in that order.
+ * Worker → client → gateway → purge, in that order.
+ *
+ * The gateway step is what puts the client in front of users. Without it this
+ * function updated only {app}.tabletop-tools.net and left the canonical
+ * tabletop-tools.net/{app}/ on the previous bundle, while reporting success on
+ * every step it ran. See deployGateway.
+ *
+ * skipGateway exists for the case where the subdomain is genuinely the target,
+ * or where the caller is deploying several apps and will run the gateway once
+ * at the end (deployEverything does exactly that) — the gateway rebuilds all
+ * nine clients, so running it per app in a sweep is nine times the work.
  *
  * The purge runs LAST and runs even if a step failed, because a partial deploy
  * plus a warm CDN is the worst state to leave: some responses new, some old,
@@ -145,7 +189,13 @@ export interface AppDeployFullResult {
  */
 export async function appDeployFull(
   app: string,
-  opts: { skipWorker?: boolean; skipClient?: boolean; skipBuild?: boolean; branch?: string } = {},
+  opts: {
+    skipWorker?: boolean
+    skipClient?: boolean
+    skipBuild?: boolean
+    skipGateway?: boolean
+    branch?: string
+  } = {},
 ): Promise<AppDeployFullResult> {
   assertDeployableApp(app)
   const started = Date.now()
@@ -158,6 +208,9 @@ export async function appDeployFull(
     clientBuild = r.build
     clientDeploy = r.deploy
   }
+  // Tied to the client: a Worker-only deploy changes no bundle, so there is
+  // nothing for the gateway to republish.
+  const gateway = opts.skipClient || opts.skipGateway ? undefined : await deployGateway()
   const purge = await appPurgeCache()
 
   return {
@@ -165,12 +218,14 @@ export async function appDeployFull(
     worker,
     clientBuild,
     clientDeploy,
+    gateway,
     purge,
     totalDurationMs: Date.now() - started,
     ok:
       (worker?.code ?? 0) === 0 &&
       (clientBuild?.code ?? 0) === 0 &&
       (clientDeploy?.code ?? 0) === 0 &&
+      (gateway?.code ?? 0) === 0 &&
       purge.ok,
   }
 }
@@ -222,13 +277,9 @@ export async function deployEverything(
     })
   }
 
-  const gateway = opts.skipGateway
-    ? undefined
-    : await runCmd('bash', ['scripts/deploy-gateway.sh'], {
-        cwd: REPO_ROOT,
-        timeoutMs: 20 * 60 * 1000,
-        tailLines: 40,
-      })
+  // Once, at the end — the gateway rebuilds every client, so per-app gateway
+  // deploys inside this loop would repeat the same work N times.
+  const gateway = opts.skipGateway ? undefined : await deployGateway()
 
   const purge = await appPurgeCache()
 
