@@ -1,10 +1,10 @@
 // splitDetachmentNames lives in server-core because that is where the
 // dim_detachment registry lives — the only place that can decide whether a
 // split is right (see resolveDeclaredDetachments). One implementation, not two.
+import type { TTTPackage, TTTUnit } from '@tabletop-tools/db'
 import { splitDetachmentNames } from '@tabletop-tools/server-core'
 
 import { normalizeFaction } from './faction-map'
-import type { TTTPackage, TTTUnit } from './ttt-types'
 
 /** Canonical faction names as they appear in GW App exports. Longer names first. */
 const FACTION_NAMES = [

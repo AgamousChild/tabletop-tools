@@ -1,5 +1,6 @@
+import type { TTTPackage, TTTUnit } from '@tabletop-tools/db'
+
 import { normalizeFaction } from './faction-map'
-import type { TTTPackage, TTTUnit } from './ttt-types'
 
 function slugifyDetachment(name: string): string {
   return name

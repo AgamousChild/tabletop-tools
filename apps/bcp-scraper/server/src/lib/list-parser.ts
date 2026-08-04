@@ -1,7 +1,8 @@
+import type { TTTPackage } from '@tabletop-tools/db'
+
 import { parseBattleScribe } from './bs-parser'
 import { detectFormat } from './format-detector'
 import { parseGwApp } from './gw-parser'
-import type { TTTPackage } from './ttt-types'
 
 export function parseList(text: string): TTTPackage {
   const format = detectFormat(text)

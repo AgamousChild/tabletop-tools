@@ -21,7 +21,16 @@ import { loadFactionMap } from '../src/lib/faction-map.js'
 import { parsePendingLists } from '../src/lib/parse-lists.js'
 
 /** Safety stop so a bug in the pending-rows query can't spin forever. */
-const MAX_PASSES = 200
+const MAX_PASSES = 2000
+
+/**
+ * The Worker path only parses current-season lists, but a CLI backfill wants
+ * everything — 2024 and 2025 were left entirely unparsed by that cutoff
+ * (measured 2026-08-03: 23,533 rows with list_text and no list_ttt, every one
+ * of them pre-2026). Pass --since=YYYY-MM-DD to narrow it again.
+ */
+const sinceArg = process.argv.find((a) => a.startsWith('--since='))
+const SINCE = sinceArg ? new Date(sinceArg.slice('--since='.length)).getTime() : 0
 
 async function main() {
   const startTime = Date.now()
@@ -46,7 +55,7 @@ async function main() {
       WHERE mep.list_ttt IS NULL
         AND mep.list_text IS NOT NULL
         AND mep.list_text != ''
-        AND me.date > ${new Date('2026-01-01').getTime()}
+        AND me.date > ${SINCE}
     `)) as Array<{ cnt: number }>
     return rows[0]?.cnt ?? 0
   }
@@ -74,7 +83,7 @@ async function main() {
   let pass = 0
 
   for (; pass < MAX_PASSES; pass++) {
-    const r = await parsePendingLists(db)
+    const r = await parsePendingLists(db, { since: SINCE })
     const touched = r.parsed + r.partial + r.failed + r.skipped
     totals.parsed += r.parsed
     totals.partial += r.partial
