@@ -6,6 +6,7 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest'
 import {
   getDimForTypes,
   getDimGranularities,
+  getFrameBounds,
   getFramesWithData,
   getFrameTypeSummaries,
   getGranularityIdByName,
@@ -56,6 +57,52 @@ async function seedDims() {
       ('sm', 'Space Marines', 'imperium');
   `)
 }
+
+describe('getFrameBounds', () => {
+  // The faction page's top-lists and timeline queries had no frame filter at
+  // all, so a 2026 Q3 selection still served lists from Oct 2024. These bounds
+  // are what those queries clamp event dates against.
+  it('returns the start and end of a bounded frame', async () => {
+    await seedDims()
+    await client.executeMultiple(`
+      INSERT INTO meta_for (id, type_id, date, end_date, year, quarter)
+        VALUES ('quarter:2026:3', 4, 1782864000000, 1790726400000, 2026, 3);
+    `)
+    const bounds = await getFrameBounds(db, 'quarter:2026:3')
+    expect(bounds).toEqual({
+      id: 'quarter:2026:3',
+      typeName: 'Quarter',
+      start: 1782864000000,
+      end: 1790726400000,
+      eventId: null,
+    })
+  })
+
+  it('closes an open-ended frame at the end of its start day', async () => {
+    await seedDims()
+    await client.executeMultiple(`
+      INSERT INTO meta_for (id, type_id, date, year) VALUES ('weekend:x', 2, 1000, 2026);
+    `)
+    const bounds = await getFrameBounds(db, 'weekend:x')
+    expect(bounds?.start).toBe(1000)
+    // A null end_date means a single day, matching frameEventIds in meta-cube.
+    expect(bounds?.end).toBe(1000 + 86400000 - 1)
+  })
+
+  it('carries the event id for Event-typed frames', async () => {
+    await seedDims()
+    await client.executeMultiple(`
+      INSERT INTO meta_for (id, type_id, date, year) VALUES ('event:abc123', 1, 5000, 2026);
+    `)
+    const bounds = await getFrameBounds(db, 'event:abc123')
+    expect(bounds?.eventId).toBe('abc123')
+  })
+
+  it('returns null for an unknown frame', async () => {
+    await seedDims()
+    expect(await getFrameBounds(db, 'nope')).toBeNull()
+  })
+})
 
 describe('getDimForTypes', () => {
   it('returns all dim_for_type rows ordered by id', async () => {

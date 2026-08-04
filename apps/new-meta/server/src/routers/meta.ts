@@ -1,7 +1,9 @@
+import type { TTTPackage } from '@tabletop-tools/db'
 import { sql } from 'drizzle-orm'
 import { z } from 'zod'
 
 import {
+  getFrameBounds,
   getFramesWithData,
   getFrameTypeSummaries,
   getGranularityIdByName,
@@ -46,6 +48,27 @@ async function resolveGranularityId(
     )
   }
   return id
+}
+
+/**
+ * The stored parse of an army list, or null.
+ *
+ * list_ttt is written by the scraper's list parser and is the only structured
+ * form of a list we hold — the raw list_text arrives from BCP with its newlines
+ * stripped, so it is a single run-on string and cannot be displayed as written.
+ * A row is null here when it predates the parser or when the parse failed; the
+ * client falls back to the raw text in that case.
+ */
+function parseTtt(raw: unknown): TTTPackage | null {
+  if (typeof raw !== 'string' || raw === '') return null
+  try {
+    const pkg = JSON.parse(raw) as TTTPackage
+    return pkg?.parseStatus === 'failed' ? null : pkg
+  } catch {
+    // A malformed blob is a data problem, not a request problem — serving the
+    // raw text beats failing the whole faction page.
+    return null
+  }
 }
 
 export const metaRouter = router({
@@ -146,6 +169,11 @@ export const metaRouter = router({
       const frameId =
         input.frame ?? (await resolveDefaultFrame(ctx.db, granularityId, DEFAULT_PREFERRED_TYPE))
 
+      // Rollups carry meta_for_id and filter on it directly. Raw event rows
+      // (top lists) and the per-month timeline need the frame's wall-clock
+      // period instead — see getFrameBounds.
+      const bounds = frameId ? await getFrameBounds(ctx.db, frameId) : null
+
       // Faction stats
       let stat = null
       if (frameId) {
@@ -243,8 +271,13 @@ export const metaRouter = router({
       // Timeline — aggregate across the per-month rollup frames. Resolve
       // the type id from dim_for_type by name rather than baking the
       // integer into the query.
+      //
+      // Clamped to the selected frame. Without the bound this returned EVERY
+      // Month frame in the database regardless of selection, so picking
+      // 2026 Q3 still drew a chart running from Sept 2024 to Aug 2026 — the
+      // one figure on the page that contradicted every other figure on it.
       const tlRows =
-        timelineTypeId == null
+        timelineTypeId == null || !bounds
           ? []
           : await ctx.db.all(sql`
               SELECT mf.date, mt.win_rate, mt.games, mt.wins, mt.losses, mt.draws
@@ -252,6 +285,8 @@ export const metaRouter = router({
               WHERE mt.faction_id = ${input.factionId}
                 AND mt.granularity_id = ${granularityId}
                 AND mf.type_id = ${timelineTypeId}
+                AND mf.date >= ${bounds.start}
+                AND mf.date <= ${bounds.end}
               ORDER BY mf.date
             `)
       const timeline = (tlRows as any[]).map((r) => ({
@@ -269,8 +304,19 @@ export const metaRouter = router({
       // DIMENSION attribute, so it comes from dim_detachment_combo.members
       // rather than a correlated GROUP_CONCAT over the bridge table per row.
       // That subquery cost 3.7s; this is a primary-key lookup.
+      // Clamped to the selected frame's period. This clause was simply absent —
+      // the query filtered on faction alone, so "top lists" meant "anyone who
+      // ever placed well", and a 2026 Q3 page led with a November 2024 event.
+      // meta_event_players has no meta_for_id, so the bound goes on the event
+      // date (or the single event, for Event-typed frames).
+      const listScope = !bounds
+        ? sql`AND 1 = 0`
+        : bounds.eventId
+          ? sql`AND me.id = ${bounds.eventId}`
+          : sql`AND me.date >= ${bounds.start} AND me.date <= ${bounds.end}`
+
       const listRows = await ctx.db.all(sql`
-        SELECT ep.player_name, ep.placement, ep.list_text, ep.wins, ep.losses, ep.draws,
+        SELECT ep.player_name, ep.placement, ep.list_text, ep.list_ttt, ep.wins, ep.losses, ep.draws,
                COALESCE(dc.members, dd.name) AS detachment,
                me.name AS event_name, me.date AS event_date, me.format
         FROM meta_event_players ep
@@ -278,12 +324,17 @@ export const metaRouter = router({
         LEFT JOIN dim_detachment_combo dc ON ep.combo_id = dc.id
         LEFT JOIN dim_detachment dd ON ep.detachment_id = dd.id
         WHERE ep.faction_id = ${input.factionId}
-        ORDER BY ep.placement ASC LIMIT 20
+          ${listScope}
+        ORDER BY ep.placement ASC, me.date DESC LIMIT 20
       `)
       const topLists = (listRows as any[]).map((r) => ({
         playerName: r.player_name,
         placement: r.placement,
         listText: r.list_text,
+        // The parsed army, written by the scraper's list parser. The client
+        // renders this; list_text is only the fallback for rows that failed to
+        // parse (measured 2026-08-03: 2,445 of 12,690 parsed 2026 rows).
+        listTtt: parseTtt(r.list_ttt),
         detachment: r.detachment,
         eventName: r.event_name,
         eventDate: r.event_date,

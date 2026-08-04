@@ -288,6 +288,57 @@ export async function resolveDefaultFrame(
   return null
 }
 
+export interface FrameBounds {
+  id: string
+  typeName: string
+  /** Inclusive start of the frame's period, epoch ms. */
+  start: number
+  /** Inclusive end of the frame's period, epoch ms. */
+  end: number
+  /** Set only for Event-typed frames, whose period is a single tournament. */
+  eventId: string | null
+}
+
+/** A frame with no end_date covers exactly one day. */
+const ONE_DAY_MS = 86400000
+
+/**
+ * The wall-clock period a frame covers.
+ *
+ * Rollup tables carry meta_for_id, so anything reading meta_top filters by the
+ * frame id directly. Raw rows do not: meta_events has only a date, and
+ * meta_event_players reaches it through event_id. Those queries need the
+ * frame's date range instead, which is what this returns.
+ *
+ * Mirrors frameEventIds() in server-core's meta-cube, which is what the cube
+ * builder uses to decide the same question at write time — one definition of
+ * "inside the frame", not two.
+ */
+export async function getFrameBounds(
+  db: FrameFilterDb,
+  frameId: string,
+): Promise<FrameBounds | null> {
+  const rows = (await db.all(sql`
+    SELECT mf.id, dft.name AS typeName, mf.date, mf.end_date AS endDate
+    FROM meta_for mf
+    JOIN dim_for_type dft ON mf.type_id = dft.id
+    WHERE mf.id = ${frameId}
+    LIMIT 1
+  `)) as Array<{ id: string; typeName: string; date: number; endDate: number | null }>
+
+  const r = rows[0]
+  if (!r) return null
+
+  return {
+    id: r.id,
+    typeName: r.typeName,
+    start: r.date,
+    end: r.endDate ?? r.date + ONE_DAY_MS - 1,
+    // meta_for holds no event_id column; Event frame ids are "event:<id>".
+    eventId: r.typeName === 'Event' ? r.id.slice('event:'.length) : null,
+  }
+}
+
 /**
  * Look up the numeric type_id for a given type name (e.g. "Month").
  * Returns null if the type is not present in dim_for_type.
