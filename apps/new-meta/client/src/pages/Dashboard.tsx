@@ -1,5 +1,4 @@
 import { SkeletonTable } from '@tabletop-tools/ui'
-import { useState } from 'react'
 
 import { FactionTable } from '../components/FactionTable'
 import { GranularitySelector } from '../components/GranularitySelector'
@@ -9,12 +8,21 @@ import { trpc } from '../lib/trpc'
 
 interface Props {
   onFactionSelect: (factionId: string) => void
+  // Owned by the URL rather than by this component, so the selection survives
+  // navigation to a faction page instead of resetting to the server default.
+  frame: string | undefined
+  granularityId: number | undefined
+  onFrameChange: (frame: string | undefined) => void
+  onGranularityChange: (granularityId: number | undefined) => void
 }
 
-export function Dashboard({ onFactionSelect }: Props) {
-  const [frame, setFrame] = useState<string | undefined>()
-  const [granularityId, setGranularityId] = useState<number | undefined>()
-
+export function Dashboard({
+  onFactionSelect,
+  frame,
+  granularityId,
+  onFrameChange,
+  onGranularityChange,
+}: Props) {
   const { data: factions = [], isLoading: loadingFactions } = trpc.meta.factions.useQuery({
     frame,
     granularityId,
@@ -38,8 +46,8 @@ export function Dashboard({ onFactionSelect }: Props) {
       <div className="flex items-center justify-between">
         <h1 className="text-2xl font-semibold text-slate-100">Meta Dashboard</h1>
         <div className="flex items-center gap-2">
-          <GranularitySelector value={granularityId} onChange={setGranularityId} />
-          <MetaWindowSelector value={frame} onChange={setFrame} />
+          <GranularitySelector value={granularityId} onChange={onGranularityChange} />
+          <MetaWindowSelector value={frame} onChange={onFrameChange} />
         </div>
       </div>
       <p className="text-xs text-slate-500 mb-4">
