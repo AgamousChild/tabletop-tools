@@ -72,6 +72,20 @@ async function main() {
     console.log(`--retry-failed: cleared ${res.rowsAffected} failed parses for re-parse`)
   }
 
+  // --retry-newlines clears the parses that findNameStart got wrong before it
+  // handled newline-delimited lists. Those rows stored parseStatus "ok" while
+  // every unit name had absorbed the units before it, so --retry-failed does
+  // not catch them — the selector has to be the input shape, not the status.
+  if (process.argv.includes('--retry-newlines')) {
+    const res = await db.run(sql`
+      UPDATE meta_event_players
+      SET list_ttt = NULL
+      WHERE list_ttt IS NOT NULL
+        AND instr(list_text, char(10)) > 0
+    `)
+    console.log(`--retry-newlines: cleared ${res.rowsAffected} newline-bearing parses`)
+  }
+
   const before = await pendingCount()
   console.log(`Rows awaiting parse: ${before}`)
   if (before === 0) {
