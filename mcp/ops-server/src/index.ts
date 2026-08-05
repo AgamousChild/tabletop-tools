@@ -19,12 +19,12 @@ import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js'
 import { z } from 'zod'
 
 import {
-  appDeployClient,
   appDeployFull,
   appDeployWorker,
   appPurgeCache,
   DEPLOYABLE_APPS,
   deployEverything,
+  deployGateway,
 } from './lib/app-ops.js'
 import {
   bcpBackfillDetachments,
@@ -824,15 +824,15 @@ server.tool(
 server.tool(
   'app_deploy',
   [
-    'Deploy ONE app: server Worker, client to Pages, the gateway, then purge.',
+    'Deploy ONE app: server Worker, then the gateway, then purge the CDN.',
     '',
-    'WHY THE GATEWAY IS PART OF THIS: users are on tabletop-tools.net/{app}/,',
-    'which is served by the `tabletop-tools` gateway project bundling all nine',
-    'SPAs. `tabletop-tools-{app}` only serves {app}.tabletop-tools.net. Deploying',
-    'the client without the gateway leaves the canonical path on the old bundle',
-    'while every step reports exit 0 — measured 2026-08-04, new-meta reported',
-    'worker/build/client all 0 plus "purged", and tabletop-tools.net/new-meta/',
-    'went on serving a bundle five commits behind.',
+    'THE GATEWAY IS THE CLIENT DEPLOY. Users are on tabletop-tools.net/{app}/,',
+    'served by the `tabletop-tools` Pages project, which builds all nine SPAs',
+    'from source in one bundle. There is no per-app client deploy — the',
+    '`tabletop-tools-{app}` projects were deleted 2026-08-05 after five months',
+    'of serving a frozen copy of every app on {app}.tabletop-tools.net with',
+    'auth CORS-blocked. Deploying to them updated nothing users could see while',
+    'reporting exit 0 on every step.',
     '',
     'WHY THE PURGE IS PART OF THIS: a Worker deploy starts a fresh isolate, but',
     'the CDN in front of it keeps serving the old response. `wrangler deploy`',
@@ -840,12 +840,9 @@ server.tool(
     'a near-empty future quarter) while the fixed code returns 1,449 for the',
     'same query. A deploy is not done until the cache is purged.',
     '',
-    'The client build is not optional: `wrangler pages deploy dist` ships',
-    'whatever is already in dist, so skipping it republishes the old bundle.',
-    '',
-    'The gateway rebuilds every client from source, so this is minutes, not',
-    'seconds. Deploying several apps? Pass skipGateway and run deploy_everything',
-    'or one gateway deploy at the end instead of N.',
+    'The gateway rebuilds every client from source, so this takes minutes.',
+    'Deploying several apps? Use deploy_everything, which runs the Workers then',
+    'the gateway once — not N times.',
     '',
     'The brain deploys via brain_deploy_full instead — it also uploads to R2',
     'and re-indexes, and purges for itself.',
@@ -855,29 +852,23 @@ server.tool(
   {
     app: z.string().describe(`One of: ${DEPLOYABLE_APPS.join(', ')}`),
     skipWorker: z.boolean().optional().default(false),
-    skipClient: z.boolean().optional().default(false),
-    skipBuild: z.boolean().optional().default(false).describe('Reuse the existing dist/ bundle'),
     skipGateway: z
       .boolean()
       .optional()
       .default(false)
       .describe(
-        'Skip the gateway rebuild. Leaves tabletop-tools.net/{app}/ on the old bundle — only for the per-app subdomain, or when you will deploy the gateway yourself.',
+        'Skip the gateway rebuild — Worker only. No client change reaches users; tabletop-tools.net/{app}/ keeps serving the current bundle.',
       ),
   },
-  async ({ app, skipWorker, skipClient, skipBuild, skipGateway }) => {
-    const r = await appDeployFull(app, { skipWorker, skipClient, skipBuild, skipGateway })
+  async ({ app, skipWorker, skipGateway }) => {
+    const r = await appDeployFull(app, { skipWorker, skipGateway })
     const lines = [
       `app_deploy ${r.app} ${r.ok ? 'OK' : 'FAILED'} in ${Math.round(r.totalDurationMs / 1000)}s`,
-      r.worker ? `worker:       exit ${r.worker.code}` : 'worker:       skipped',
-      r.clientBuild ? `client build: exit ${r.clientBuild.code}` : 'client build: skipped',
-      r.clientDeploy ? `client:       exit ${r.clientDeploy.code}` : 'client:       skipped',
-      r.gateway ? `gateway:      exit ${r.gateway.code}` : 'gateway:      skipped',
-      `purge:        ${r.purge.ok ? 'purged' : `FAILED — ${r.purge.message}`}`,
+      r.worker ? `worker:   exit ${r.worker.code}` : 'worker:   skipped',
+      r.gateway ? `gateway:  exit ${r.gateway.code}` : 'gateway:  skipped',
+      `purge:    ${r.purge.ok ? 'purged' : `FAILED — ${r.purge.message}`}`,
       r.purge.ok ? '' : 'WITHOUT THE PURGE THE SITE STILL SERVES THE OLD RESPONSE.',
-      r.gateway || skipClient
-        ? ''
-        : 'GATEWAY SKIPPED — tabletop-tools.net/' + r.app + '/ STILL SERVES THE OLD BUNDLE.',
+      r.gateway ? '' : 'GATEWAY SKIPPED — no client change reached users.',
     ]
     return textResult(lines.filter(Boolean).join('\n'))
   },
@@ -903,35 +894,24 @@ server.tool(
 )
 
 server.tool(
-  'app_deploy_client',
+  'deploy_gateway',
   [
-    'Build and deploy one app client to its OWN Pages project.',
+    'Build and deploy the gateway — every app client, in one Pages project.',
     '',
-    'This updates {app}.tabletop-tools.net only. It does NOT update',
-    'tabletop-tools.net/{app}/ — that path is served by the gateway project, so',
-    'this tool alone leaves the surface users are on unchanged while exiting 0.',
-    'Use app_deploy (which runs the gateway) unless the subdomain is what you',
-    'actually want.',
+    'This replaces the old app_deploy_client. Clients are not deployed per app:',
+    'tabletop-tools.net/{app}/ is served by the `tabletop-tools` project, which',
+    'builds all nine SPAs from source. Use this when only client code changed',
+    'and no Worker needs redeploying.',
     '',
-    'Does NOT purge the CDN either.',
-    '',
-    'skipBuild reuses dist/, which republishes the previous bundle — only use',
-    'it when you have just built.',
+    'Purges the CDN for itself (scripts/deploy-gateway.sh does it).',
   ].join('\n'),
-  {
-    app: z.string().describe(`One of: ${DEPLOYABLE_APPS.join(', ')}`),
-    skipBuild: z.boolean().optional().default(false),
-  },
-  async ({ app, skipBuild }) => {
-    const r = await appDeployClient(app, { skipBuild })
+  {},
+  async () => {
+    const r = await deployGateway()
     return textResult(
-      [
-        `app_deploy_client ${app}`,
-        r.build ? `build:  exit ${r.build.code}` : 'build:  skipped (reused dist/)',
-        `deploy: exit ${r.deploy.code}`,
-        '',
-        r.deploy.stdout,
-      ].join('\n'),
+      [`deploy_gateway exit ${r.code} in ${Math.round(r.durationMs / 1000)}s`, '', r.stdout].join(
+        '\n',
+      ),
     )
   },
 )
@@ -957,7 +937,11 @@ server.tool(
 server.tool(
   'deploy_everything',
   [
-    'Deploy every app Worker + client, then the gateway, then purge ONCE.',
+    'Deploy every app Worker, then the gateway once, then purge ONCE.',
+    '',
+    'Every client ships inside the single gateway build, so the per-app loop is',
+    'Workers only. It used to build each client twice — once per app for a Pages',
+    'project nobody was served from, and again inside the gateway build.',
     '',
     'The purge is zone-wide, so per-app purging would be N redundant requests.',
     'This runs it at the end, after everything is in place — the only point at',
@@ -969,18 +953,19 @@ server.tool(
   ].join('\n'),
   {
     apps: z.array(z.string()).optional().describe('Subset of apps; defaults to all'),
-    skipGateway: z.boolean().optional().default(false),
-    skipClients: z.boolean().optional().default(false),
+    skipGateway: z
+      .boolean()
+      .optional()
+      .default(false)
+      .describe('Workers only — no client change reaches users'),
   },
-  async ({ apps, skipGateway, skipClients }) => {
-    const r = await deployEverything({ apps, skipGateway, skipClients })
+  async ({ apps, skipGateway }) => {
+    const r = await deployEverything({ apps, skipGateway })
     const lines = [
       `deploy_everything ${r.ok ? 'OK' : 'FAILED'} in ${Math.round(r.totalDurationMs / 1000)}s`,
     ]
     for (const a of r.apps) {
-      lines.push(
-        `  ${a.app.padEnd(14)} worker=${a.worker?.code ?? '-'} client=${a.clientDeploy?.code ?? 'skipped'}`,
-      )
+      lines.push(`  ${a.app.padEnd(14)} worker=${a.worker?.code ?? '-'}`)
     }
     lines.push(r.gateway ? `  gateway        exit ${r.gateway.code}` : '  gateway        skipped')
     lines.push(`  purge          ${r.purge.ok ? 'purged' : `FAILED — ${r.purge.message}`}`)

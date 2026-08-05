@@ -38,40 +38,24 @@ export function assertDeployableApp(app: string): asserts app is DeployableApp {
 }
 
 const serverDir = (app: string) => join(REPO_ROOT, 'apps', app, 'server')
-const clientDir = (app: string) => join(REPO_ROOT, 'apps', app, 'client')
 
 /**
- * Cloudflare Pages project for an app's client.
+ * There is exactly ONE Pages project: `tabletop-tools`, the gateway, serving
+ * tabletop-tools.net. Clients are not deployed individually.
  *
- * Confirmed against `wrangler pages project list`: every app client is
- * `tabletop-tools-{app}` serving `{app}.tabletop-tools.net`. The bare
- * `tabletop-tools` project is the gateway.
+ * There used to be a `tabletop-tools-{app}` project per app, bound to
+ * {app}.tabletop-tools.net. The February 2026 consolidation (ece8879) replaced
+ * them with the gateway and deleted their wrangler.toml files — but not the
+ * Cloudflare projects, which kept serving a frozen copy of every app for the
+ * next five months. This module then found them via `wrangler pages project
+ * list` and made them the deploy target, so client deploys landed on abandoned
+ * infrastructure while the real site went stale.
  *
- * This has to be passed explicitly. There is no wrangler.toml in any client
- * directory, so `wrangler pages deploy dist` fails with "Must specify a project
- * name" — which is exactly what the repo's own `deploy:new-meta` npm script
- * does, so that script has never worked either.
- *
- * IMPORTANT: this project is NOT the surface users are on. It serves the
- * per-app subdomain only. The canonical path — tabletop-tools.net/{app}/ — is
- * served by the gateway, a separate Pages project that bundles every SPA. See
- * deployGateway.
+ * They are gone now (deleted 2026-08-05, after confirming six of seven served a
+ * different bundle from the gateway and that auth was CORS-blocked on all of
+ * them — the auth Worker only ever allowed the gateway origin). Client code
+ * reaches users through deployGateway and nowhere else.
  */
-export const pagesProject = (app: string) => `tabletop-tools-${app}`
-
-/**
- * The Pages branch that publishes to PRODUCTION.
- *
- * Without this, `wrangler pages deploy` uses the current git branch, and any
- * branch other than the project's production branch lands as a PREVIEW on a
- * throwaway hash URL while the real domain keeps serving the old build. It
- * still exits 0.
- *
- * That is not hypothetical: tabletop-tools-new-meta's production deployment was
- * five months old and on `main`, while a fresh deploy from a feature branch
- * reported success and changed nothing users could see.
- */
-export const PAGES_PRODUCTION_BRANCH = 'main'
 
 // ── Worker ──────────────────────────────────────────────────────────────────
 
@@ -83,42 +67,6 @@ export async function appDeployWorker(app: string): Promise<RunResult> {
     timeoutMs: 15 * 60 * 1000,
     tailLines: 40,
   })
-}
-
-// ── Client ──────────────────────────────────────────────────────────────────
-
-/**
- * Build and deploy one app's client to Pages.
- *
- * The build is not optional: `wrangler pages deploy dist` ships whatever is
- * already in dist, so skipping it silently republishes the previous bundle.
- */
-export async function appDeployClient(
-  app: string,
-  opts: { skipBuild?: boolean; branch?: string } = {},
-): Promise<{ build?: RunResult; deploy: RunResult }> {
-  assertDeployableApp(app)
-  const cwd = clientDir(app)
-  const build = opts.skipBuild
-    ? undefined
-    : await runCmd('npx', ['vite', 'build'], { cwd, timeoutMs: 15 * 60 * 1000, tailLines: 30 })
-  const deploy = await runCmd(
-    'npx',
-    [
-      'wrangler',
-      'pages',
-      'deploy',
-      'dist',
-      '--project-name',
-      pagesProject(app),
-      // Explicit, because the default is the current git branch — which
-      // silently produces a preview deployment nobody is looking at.
-      '--branch',
-      opts.branch ?? PAGES_PRODUCTION_BRANCH,
-    ],
-    { cwd, timeoutMs: 15 * 60 * 1000, tailLines: 40 },
-  )
-  return { build, deploy }
 }
 
 // ── Gateway ─────────────────────────────────────────────────────────────────
@@ -161,8 +109,6 @@ export async function appPurgeCache(): Promise<PurgeResult> {
 export interface AppDeployFullResult {
   app: string
   worker?: RunResult
-  clientBuild?: RunResult
-  clientDeploy?: RunResult
   gateway?: RunResult
   purge: PurgeResult
   totalDurationMs: number
@@ -171,17 +117,15 @@ export interface AppDeployFullResult {
 }
 
 /**
- * Worker → client → gateway → purge, in that order.
+ * Worker → gateway → purge, in that order.
  *
- * The gateway step is what puts the client in front of users. Without it this
- * function updated only {app}.tabletop-tools.net and left the canonical
- * tabletop-tools.net/{app}/ on the previous bundle, while reporting success on
- * every step it ran. See deployGateway.
+ * There is no per-app client step. The gateway builds every client from source
+ * and is the only Pages project serving users, so "deploy this app's client"
+ * and "deploy the gateway" are the same operation.
  *
- * skipGateway exists for the case where the subdomain is genuinely the target,
- * or where the caller is deploying several apps and will run the gateway once
- * at the end (deployEverything does exactly that) — the gateway rebuilds all
- * nine clients, so running it per app in a sweep is nine times the work.
+ * skipGateway is for deploying several apps in a row: the gateway rebuilds all
+ * nine clients, so running it per app is N times the same work. deployEverything
+ * uses it and runs the gateway once at the end.
  *
  * The purge runs LAST and runs even if a step failed, because a partial deploy
  * plus a warm CDN is the worst state to leave: some responses new, some old,
@@ -189,44 +133,22 @@ export interface AppDeployFullResult {
  */
 export async function appDeployFull(
   app: string,
-  opts: {
-    skipWorker?: boolean
-    skipClient?: boolean
-    skipBuild?: boolean
-    skipGateway?: boolean
-    branch?: string
-  } = {},
+  opts: { skipWorker?: boolean; skipGateway?: boolean } = {},
 ): Promise<AppDeployFullResult> {
   assertDeployableApp(app)
   const started = Date.now()
 
   const worker = opts.skipWorker ? undefined : await appDeployWorker(app)
-  let clientBuild: RunResult | undefined
-  let clientDeploy: RunResult | undefined
-  if (!opts.skipClient) {
-    const r = await appDeployClient(app, { skipBuild: opts.skipBuild, branch: opts.branch })
-    clientBuild = r.build
-    clientDeploy = r.deploy
-  }
-  // Tied to the client: a Worker-only deploy changes no bundle, so there is
-  // nothing for the gateway to republish.
-  const gateway = opts.skipClient || opts.skipGateway ? undefined : await deployGateway()
+  const gateway = opts.skipGateway ? undefined : await deployGateway()
   const purge = await appPurgeCache()
 
   return {
     app,
     worker,
-    clientBuild,
-    clientDeploy,
     gateway,
     purge,
     totalDurationMs: Date.now() - started,
-    ok:
-      (worker?.code ?? 0) === 0 &&
-      (clientBuild?.code ?? 0) === 0 &&
-      (clientDeploy?.code ?? 0) === 0 &&
-      (gateway?.code ?? 0) === 0 &&
-      purge.ok,
+    ok: (worker?.code ?? 0) === 0 && (gateway?.code ?? 0) === 0 && purge.ok,
   }
 }
 
@@ -241,7 +163,12 @@ export interface DeployEverythingResult {
 }
 
 /**
- * Deploy every app Worker + client, then the gateway, then purge ONCE.
+ * Deploy every app Worker, then the gateway once, then purge ONCE.
+ *
+ * Every client ships in the single gateway build, so this loop is Workers only.
+ * It used to also run a per-app client build+deploy, which meant every client
+ * was built twice — once here and once inside the gateway build — and the first
+ * copy went to a Pages project nobody was served from.
  *
  * The purge is a whole-zone operation, so doing it per app would be N redundant
  * requests. Each app therefore skips its own purge and the sweep does it at the
@@ -252,7 +179,7 @@ export interface DeployEverythingResult {
  * to R2 and re-indexes; it purges for itself.
  */
 export async function deployEverything(
-  opts: { apps?: readonly string[]; skipGateway?: boolean; skipClients?: boolean } = {},
+  opts: { apps?: readonly string[]; skipGateway?: boolean } = {},
 ): Promise<DeployEverythingResult> {
   const started = Date.now()
   const targets = opts.apps ?? DEPLOYABLE_APPS
@@ -260,21 +187,7 @@ export async function deployEverything(
 
   for (const app of targets) {
     const worker = await appDeployWorker(app)
-    let clientBuild: RunResult | undefined
-    let clientDeploy: RunResult | undefined
-    if (!opts.skipClients) {
-      const r = await appDeployClient(app)
-      clientBuild = r.build
-      clientDeploy = r.deploy
-    }
-    results.push({
-      app,
-      worker,
-      clientBuild,
-      clientDeploy,
-      totalDurationMs: 0,
-      ok: worker.code === 0,
-    })
+    results.push({ app, worker, totalDurationMs: 0, ok: worker.code === 0 })
   }
 
   // Once, at the end — the gateway rebuilds every client, so per-app gateway
