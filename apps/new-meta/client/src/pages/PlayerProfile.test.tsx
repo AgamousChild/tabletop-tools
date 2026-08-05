@@ -49,10 +49,12 @@ const fakeProfile = {
 }
 
 describe('PlayerProfile', () => {
-  it('shows loading while fetching', () => {
+  it('shows a loading skeleton while fetching', () => {
     mockProfileResult = { data: undefined, isLoading: true }
     render(<PlayerProfile playerId="p1" onBack={() => {}} />)
-    expect(screen.getByText(/loading/i)).toBeInTheDocument()
+    // The affordance is what matters, not the word: skeletons stand in for
+    // the real content so a slow cube query does not read as a dead page.
+    expect(screen.getAllByRole('status').length).toBeGreaterThan(0)
   })
 
   it('shows not found when data is null', () => {

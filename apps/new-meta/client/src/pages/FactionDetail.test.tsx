@@ -99,10 +99,12 @@ const fakeData = {
 }
 
 describe('FactionDetail', () => {
-  it('shows loading while data is fetching', () => {
+  it('shows a loading skeleton while data is fetching', () => {
     mockQueryResult = { data: undefined, isLoading: true }
     render(<FactionDetail factionId="ork-1" onBack={() => {}} />)
-    expect(screen.getByText(/loading/i)).toBeInTheDocument()
+    // The affordance is what matters, not the word: skeletons stand in for
+    // the real content so a slow cube query does not read as a dead page.
+    expect(screen.getAllByRole('status').length).toBeGreaterThan(0)
   })
 
   it('shows not-found message when data is null', () => {

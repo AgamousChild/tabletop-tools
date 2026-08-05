@@ -18,22 +18,59 @@ type Page =
   | { id: 'tournament'; importId: string }
   | { id: 'admin' }
 
-function parseHash(hash: string): Page {
-  if (hash.startsWith('#/faction/')) {
-    return { id: 'faction', faction: decodeURIComponent(hash.slice('#/faction/'.length)) }
+/**
+ * The meta window and granularity the user picked, alongside the page.
+ *
+ * These used to live in Dashboard's own useState, which meant navigating to a
+ * faction page unmounted the component holding them and the detail page queried
+ * with no frame at all — so it silently fell back to the server's default frame
+ * and showed all-time data next to a dashboard scoped to one quarter. The URL
+ * owns them now, which also makes a scoped faction page shareable.
+ */
+interface Route {
+  page: Page
+  frame?: string
+  granularityId?: number
+}
+
+function parsePath(path: string): Page {
+  if (path.startsWith('#/faction/')) {
+    return { id: 'faction', faction: decodeURIComponent(path.slice('#/faction/'.length)) }
   }
-  if (hash.startsWith('#/player/')) {
-    const playerId = hash.slice('#/player/'.length)
+  if (path.startsWith('#/player/')) {
+    const playerId = path.slice('#/player/'.length)
     if (playerId) return { id: 'player', playerId }
     return { id: 'players' }
   }
-  if (hash === '#/players') return { id: 'players' }
-  if (hash.startsWith('#/tournament/')) {
-    return { id: 'tournament', importId: hash.slice('#/tournament/'.length) }
+  if (path === '#/players') return { id: 'players' }
+  if (path.startsWith('#/tournament/')) {
+    return { id: 'tournament', importId: path.slice('#/tournament/'.length) }
   }
-  if (hash === '#/source') return { id: 'source' }
-  if (hash === '#/admin') return { id: 'admin' }
+  if (path === '#/source') return { id: 'source' }
+  if (path === '#/admin') return { id: 'admin' }
   return { id: 'dashboard' }
+}
+
+function parseHash(hash: string): Route {
+  const queryAt = hash.indexOf('?')
+  const path = queryAt === -1 ? hash : hash.slice(0, queryAt)
+  const params = new URLSearchParams(queryAt === -1 ? '' : hash.slice(queryAt + 1))
+
+  const frame = params.get('frame') ?? undefined
+  const rawGranularity = params.get('g')
+  const granularityId =
+    rawGranularity && Number.isFinite(Number(rawGranularity)) ? Number(rawGranularity) : undefined
+
+  return { page: parsePath(path), frame, granularityId }
+}
+
+/** Build a hash that carries the current meta window forward to the next page. */
+export function buildHash(path: string, frame?: string, granularityId?: number): string {
+  const params = new URLSearchParams()
+  if (frame) params.set('frame', frame)
+  if (granularityId != null) params.set('g', String(granularityId))
+  const query = params.toString()
+  return query ? `${path}?${query}` : path
 }
 
 export function navigate(hash: string) {
@@ -48,10 +85,11 @@ const NAV: { hash: string; id: Page['id']; label: string }[] = [
 ]
 
 export default function App() {
-  const [page, setPage] = useState<Page>(() => parseHash(window.location.hash))
+  const [route, setRoute] = useState<Route>(() => parseHash(window.location.hash))
+  const { page, frame, granularityId } = route
 
   const onHashChange = useCallback(() => {
-    setPage(parseHash(window.location.hash))
+    setRoute(parseHash(window.location.hash))
   }, [])
 
   useEffect(() => {
@@ -118,11 +156,24 @@ export default function App() {
       <main className="max-w-5xl mx-auto px-6 py-8">
         {page.id === 'dashboard' && (
           <Dashboard
-            onFactionSelect={(factionId) => navigate(`#/faction/${encodeURIComponent(factionId)}`)}
+            frame={frame}
+            granularityId={granularityId}
+            onFrameChange={(next) => navigate(buildHash('#/', next, granularityId))}
+            onGranularityChange={(next) => navigate(buildHash('#/', frame, next))}
+            onFactionSelect={(factionId) =>
+              navigate(
+                buildHash(`#/faction/${encodeURIComponent(factionId)}`, frame, granularityId),
+              )
+            }
           />
         )}
         {page.id === 'faction' && (
-          <FactionDetail factionId={page.faction} onBack={() => navigate('#/')} />
+          <FactionDetail
+            factionId={page.faction}
+            frame={frame}
+            granularityId={granularityId}
+            onBack={() => navigate(buildHash('#/', frame, granularityId))}
+          />
         )}
         {page.id === 'players' && (
           <PlayerRanking onPlayerSelect={(id) => navigate(`#/player/${id}`)} />

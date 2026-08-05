@@ -1,7 +1,9 @@
+import type { TTTPackage } from '@tabletop-tools/db'
 import { sql } from 'drizzle-orm'
 import { z } from 'zod'
 
 import {
+  getFrameBounds,
   getFramesWithData,
   getFrameTypeSummaries,
   getGranularityIdByName,
@@ -48,6 +50,27 @@ async function resolveGranularityId(
   return id
 }
 
+/**
+ * The stored parse of an army list, or null.
+ *
+ * list_ttt is written by the scraper's list parser and is the only structured
+ * form of a list we hold — the raw list_text arrives from BCP with its newlines
+ * stripped, so it is a single run-on string and cannot be displayed as written.
+ * A row is null here when it predates the parser or when the parse failed; the
+ * client falls back to the raw text in that case.
+ */
+function parseTtt(raw: unknown): TTTPackage | null {
+  if (typeof raw !== 'string' || raw === '') return null
+  try {
+    const pkg = JSON.parse(raw) as TTTPackage
+    return pkg?.parseStatus === 'failed' ? null : pkg
+  } catch {
+    // A malformed blob is a data problem, not a request problem — serving the
+    // raw text beats failing the whole faction page.
+    return null
+  }
+}
+
 export const metaRouter = router({
   factions: publicProcedure
     .input(
@@ -67,13 +90,27 @@ export const metaRouter = router({
         input?.frame ?? (await resolveDefaultFrame(ctx.db, granularityId, DEFAULT_PREFERRED_TYPE))
       if (!frameId) return []
 
+      // A rollup row is named by the dimension its GRANULARITY refers to, not
+      // always by its faction. This labelled every row df.name, which was
+      // invisible while only Faction rollups existed — the moment Detachment
+      // rollups landed, the table showed "Space Wolves" three times because
+      // that faction has three detachments.
+      //
+      // Exactly one of subfaction_id / detachment_id / combo_id is set per row,
+      // so COALESCE picks the right one and falls back to the faction name for
+      // granularity 1. These are primary-key lookups against small dimensions,
+      // not the fact-table joins the cube exists to remove.
       const rows = await ctx.db.all(sql`
         SELECT mt.faction_id, df.name AS faction, df.allegiance,
+               COALESCE(dd.name, dsf.name, dc.members, df.name) AS label,
                mt.win_rate, mt.draw_rate, mt.over_rep, mt.four_oh_start,
                mt.event_wins, mt.event_finals, mt.event_top4, mt.event_top8, mt.event_top16,
                mt.player_pop_pct, mt.wins, mt.losses, mt.draws, mt.games, mt.players
         FROM meta_top mt
         JOIN dim_faction df ON mt.faction_id = df.id
+        LEFT JOIN dim_subfaction dsf ON mt.subfaction_id = dsf.id
+        LEFT JOIN dim_detachment dd ON mt.detachment_id = dd.id
+        LEFT JOIN dim_detachment_combo dc ON mt.combo_id = dc.id
         WHERE mt.meta_for_id = ${frameId} AND mt.granularity_id = ${granularityId}
         ORDER BY mt.win_rate DESC
       `)
@@ -83,7 +120,12 @@ export const metaRouter = router({
         .filter((r) => r.games >= minGames)
         .map((r) => ({
           factionId: r.faction_id,
-          faction: r.faction,
+          // What this row IS at the selected granularity (a detachment, a
+          // combo, a subfaction) — falls back to the faction name.
+          faction: r.label,
+          // The faction it belongs to, kept separate so the UI can show context
+          // and still link through to the faction page.
+          factionName: r.faction,
           allegiance: r.allegiance,
           winRate: r.win_rate,
           drawRate: r.draw_rate,
@@ -113,9 +155,24 @@ export const metaRouter = router({
       }),
     )
     .query(async ({ ctx, input }) => {
-      const granularityId = await resolveGranularityId(ctx, input)
+      // Four one-row dim lookups that do not depend on each other. Each still
+      // costs a full round trip to Turso, so resolving them serially was pure
+      // added latency on every faction page.
+      const [granularityId, detachmentGranularityId, comboGranularityId, timelineTypeId] =
+        await Promise.all([
+          resolveGranularityId(ctx, input),
+          getGranularityIdByName(ctx.db, 'Detachment'),
+          getGranularityIdByName(ctx.db, 'Combo'),
+          getTypeIdByName(ctx.db, TIMELINE_TYPE_NAME),
+        ])
+
       const frameId =
         input.frame ?? (await resolveDefaultFrame(ctx.db, granularityId, DEFAULT_PREFERRED_TYPE))
+
+      // Rollups carry meta_for_id and filter on it directly. Raw event rows
+      // (top lists) and the per-month timeline need the frame's wall-clock
+      // period instead — see getFrameBounds.
+      const bounds = frameId ? await getFrameBounds(ctx.db, frameId) : null
 
       // Faction stats
       let stat = null
@@ -147,26 +204,24 @@ export const metaRouter = router({
         }
       }
 
-      // Detachments — counted in ANY position, via the combo membership bridge.
+      // Detachments — a plain indexed read off the Detachment-granularity
+      // rollup. The "any position" logic lives in the cube builder and is
+      // resolved once at build time.
       //
-      // NOT via fact_game_results.detachment_id: that column holds the PRIMARY
-      // (position 1) detachment only. 11e armies take several, so keying on it
-      // under-reports every detachment that tends to be written second and hides
-      // some entirely — measured on prod, Warptide showed 0 games against 328
-      // real ones, and Skyshroud Spearhead 5 against 358.
+      // This used to aggregate fact_game_results against the combo-member
+      // bridge on every request: 4.3s for 12 rows, because the cube only ever
+      // built Faction-granularity rollups and the interface compensated with a
+      // runtime join. Rule 6 — dashboard queries are indexed SELECTs.
       const detRows = await ctx.db.all(sql`
-        SELECT dd.name AS detachment, dd.id AS detachment_id,
-               COUNT(*) AS games,
-               SUM(CASE WHEN f.result = 1.0 THEN 1 ELSE 0 END) AS wins,
-               SUM(CASE WHEN f.result = 0.0 THEN 1 ELSE 0 END) AS losses,
-               SUM(CASE WHEN f.result = 0.5 THEN 1 ELSE 0 END) AS draws,
-               AVG(f.result) AS win_rate,
-               COUNT(DISTINCT f.player_id) AS players
-        FROM fact_game_results f
-        JOIN dim_detachment_combo_member m ON f.combo_id = m.combo_id
-        JOIN dim_detachment dd ON m.detachment_id = dd.id
-        WHERE f.faction_id = ${input.factionId} AND f.combo_id IS NOT NULL
-        GROUP BY dd.id HAVING games >= 5 ORDER BY win_rate DESC
+        SELECT dd.name AS detachment, mt.detachment_id,
+               mt.games, mt.wins, mt.losses, mt.draws, mt.win_rate, mt.players
+        FROM meta_top mt
+        JOIN dim_detachment dd ON mt.detachment_id = dd.id
+        WHERE mt.granularity_id = ${detachmentGranularityId}
+          AND mt.faction_id = ${input.factionId}
+          AND mt.meta_for_id = ${frameId}
+          AND mt.games >= 5
+        ORDER BY mt.win_rate DESC
       `)
       const detachments = (detRows as any[]).map((r) => ({
         detachment: r.detachment,
@@ -186,22 +241,19 @@ export const metaRouter = router({
       // PLUS Skyshroud Spearhead do", which is the question 11e list-building
       // actually poses. memberCount lets the UI separate single-detachment
       // armies from real pairings.
+      // Same shape: read the Combo-granularity rollup. The member-name label is
+      // a dimension attribute, so it joins to dim_detachment_combo, never to
+      // the fact table.
       const comboRows = await ctx.db.all(sql`
-        SELECT c.id AS combo_id, c.member_count, c.total_dp,
-               (SELECT GROUP_CONCAT(dd2.name, ' + ')
-                  FROM dim_detachment_combo_member m2
-                  JOIN dim_detachment dd2 ON m2.detachment_id = dd2.id
-                 WHERE m2.combo_id = c.id) AS members,
-               COUNT(*) AS games,
-               SUM(CASE WHEN f.result = 1.0 THEN 1 ELSE 0 END) AS wins,
-               SUM(CASE WHEN f.result = 0.0 THEN 1 ELSE 0 END) AS losses,
-               SUM(CASE WHEN f.result = 0.5 THEN 1 ELSE 0 END) AS draws,
-               AVG(f.result) AS win_rate,
-               COUNT(DISTINCT f.player_id) AS players
-        FROM fact_game_results f
-        JOIN dim_detachment_combo c ON f.combo_id = c.id
-        WHERE f.faction_id = ${input.factionId} AND f.combo_id IS NOT NULL
-        GROUP BY c.id HAVING games >= 5 ORDER BY win_rate DESC
+        SELECT mt.combo_id, c.member_count, c.total_dp, c.members,
+               mt.games, mt.wins, mt.losses, mt.draws, mt.win_rate, mt.players
+        FROM meta_top mt
+        JOIN dim_detachment_combo c ON mt.combo_id = c.id
+        WHERE mt.granularity_id = ${comboGranularityId}
+          AND mt.faction_id = ${input.factionId}
+          AND mt.meta_for_id = ${frameId}
+          AND mt.games >= 5
+        ORDER BY mt.win_rate DESC
       `)
       const combos = (comboRows as any[]).map((r) => ({
         comboId: r.combo_id,
@@ -219,9 +271,13 @@ export const metaRouter = router({
       // Timeline — aggregate across the per-month rollup frames. Resolve
       // the type id from dim_for_type by name rather than baking the
       // integer into the query.
-      const timelineTypeId = await getTypeIdByName(ctx.db, TIMELINE_TYPE_NAME)
+      //
+      // Clamped to the selected frame. Without the bound this returned EVERY
+      // Month frame in the database regardless of selection, so picking
+      // 2026 Q3 still drew a chart running from Sept 2024 to Aug 2026 — the
+      // one figure on the page that contradicted every other figure on it.
       const tlRows =
-        timelineTypeId == null
+        timelineTypeId == null || !bounds
           ? []
           : await ctx.db.all(sql`
               SELECT mf.date, mt.win_rate, mt.games, mt.wins, mt.losses, mt.draws
@@ -229,6 +285,8 @@ export const metaRouter = router({
               WHERE mt.faction_id = ${input.factionId}
                 AND mt.granularity_id = ${granularityId}
                 AND mf.type_id = ${timelineTypeId}
+                AND mf.date >= ${bounds.start}
+                AND mf.date <= ${bounds.end}
               ORDER BY mf.date
             `)
       const timeline = (tlRows as any[]).map((r) => ({
@@ -242,28 +300,41 @@ export const metaRouter = router({
       }))
 
       // Top lists
-      // The detachment label is every detachment the army brought, in the order
-      // written — ep.detachment_id alone would name only the first of them.
+      // Top lists. Not an aggregate, so not a rollup — but the label is a
+      // DIMENSION attribute, so it comes from dim_detachment_combo.members
+      // rather than a correlated GROUP_CONCAT over the bridge table per row.
+      // That subquery cost 3.7s; this is a primary-key lookup.
+      // Clamped to the selected frame's period. This clause was simply absent —
+      // the query filtered on faction alone, so "top lists" meant "anyone who
+      // ever placed well", and a 2026 Q3 page led with a November 2024 event.
+      // meta_event_players has no meta_for_id, so the bound goes on the event
+      // date (or the single event, for Event-typed frames).
+      const listScope = !bounds
+        ? sql`AND 1 = 0`
+        : bounds.eventId
+          ? sql`AND me.id = ${bounds.eventId}`
+          : sql`AND me.date >= ${bounds.start} AND me.date <= ${bounds.end}`
+
       const listRows = await ctx.db.all(sql`
-        SELECT ep.player_name, ep.placement, ep.list_text, ep.wins, ep.losses, ep.draws,
-               COALESCE(
-                 (SELECT GROUP_CONCAT(dd2.name, ' + ')
-                    FROM (SELECT pd.detachment_id FROM meta_event_player_detachment pd
-                           WHERE pd.player_id = ep.id ORDER BY pd.position) ordered
-                    JOIN dim_detachment dd2 ON ordered.detachment_id = dd2.id),
-                 dd.name
-               ) AS detachment,
+        SELECT ep.player_name, ep.placement, ep.list_text, ep.list_ttt, ep.wins, ep.losses, ep.draws,
+               COALESCE(dc.members, dd.name) AS detachment,
                me.name AS event_name, me.date AS event_date, me.format
         FROM meta_event_players ep
         JOIN meta_events me ON ep.event_id = me.id
+        LEFT JOIN dim_detachment_combo dc ON ep.combo_id = dc.id
         LEFT JOIN dim_detachment dd ON ep.detachment_id = dd.id
         WHERE ep.faction_id = ${input.factionId}
-        ORDER BY ep.placement ASC LIMIT 20
+          ${listScope}
+        ORDER BY ep.placement ASC, me.date DESC LIMIT 20
       `)
       const topLists = (listRows as any[]).map((r) => ({
         playerName: r.player_name,
         placement: r.placement,
         listText: r.list_text,
+        // The parsed army, written by the scraper's list parser. The client
+        // renders this; list_text is only the fallback for rows that failed to
+        // parse (measured 2026-08-03: 2,445 of 12,690 parsed 2026 rows).
+        listTtt: parseTtt(r.list_ttt),
         detachment: r.detachment,
         eventName: r.event_name,
         eventDate: r.event_date,
@@ -278,30 +349,48 @@ export const metaRouter = router({
 
   matchups: publicProcedure
     .input(
-      z.object({ frame: FrameSchema, minGames: z.number().int().min(1).default(3) }).optional(),
+      z
+        .object({
+          frame: FrameSchema,
+          granularityId: GranularityIdSchema,
+          granularity: GranularityNameSchema,
+          minGames: z.number().int().min(1).default(3),
+        })
+        .optional(),
     )
     .query(async ({ ctx, input }) => {
+      // Reads the precomputed matchup rollup. This was a GROUP BY across 75k
+      // fact rows on every dashboard load, and it silently ignored `frame`
+      // entirely — the matrix showed all-time data no matter which quarter was
+      // selected. It was also faction-only regardless of granularity.
+      const granularityId = await resolveGranularityId(ctx, input)
+      const frameId =
+        input?.frame ?? (await resolveDefaultFrame(ctx.db, granularityId, DEFAULT_PREFERRED_TYPE))
+      if (!frameId) return []
+
+      // Labels are dimension attributes; exactly one of these matches the key.
       const rows = await ctx.db.all(sql`
-        SELECT df1.name AS faction_a, df2.name AS faction_b,
-               SUM(CASE WHEN f.result = 1.0 THEN 1 ELSE 0 END) AS a_wins,
-               SUM(CASE WHEN f.result = 0.0 THEN 1 ELSE 0 END) AS b_wins,
-               SUM(CASE WHEN f.result = 0.5 THEN 1 ELSE 0 END) AS draws,
-               COUNT(*) AS total_games,
-               AVG(f.result) AS a_win_rate
-        FROM fact_game_results f
-        JOIN dim_faction df1 ON f.faction_id = df1.id
-        JOIN dim_faction df2 ON f.opponent_faction_id = df2.id
-        WHERE f.faction_id < f.opponent_faction_id AND f.opponent_faction_id IS NOT NULL
-        GROUP BY f.faction_id, f.opponent_faction_id
-        HAVING total_games >= ${input?.minGames ?? 3}
+        SELECT mm.key_a, mm.key_b,
+               COALESCE(fa.name, ca.members, mm.key_a) AS label_a,
+               COALESCE(fb.name, cb.members, mm.key_b) AS label_b,
+               mm.a_wins, mm.b_wins, mm.draws, mm.games, mm.a_win_rate
+        FROM meta_matchup mm
+        LEFT JOIN dim_faction fa ON mm.key_a = fa.id
+        LEFT JOIN dim_faction fb ON mm.key_b = fb.id
+        LEFT JOIN dim_detachment_combo ca ON mm.key_a = ca.id
+        LEFT JOIN dim_detachment_combo cb ON mm.key_b = cb.id
+        WHERE mm.granularity_id = ${granularityId}
+          AND mm.meta_for_id = ${frameId}
+          AND mm.games >= ${input?.minGames ?? 3}
       `)
+
       return (rows as any[]).map((r) => ({
-        factionA: r.faction_a,
-        factionB: r.faction_b,
+        factionA: r.label_a,
+        factionB: r.label_b,
         aWins: r.a_wins,
         bWins: r.b_wins,
         draws: r.draws,
-        totalGames: r.total_games,
+        totalGames: r.games,
         aWinRate: r.a_win_rate,
       }))
     }),

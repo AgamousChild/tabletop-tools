@@ -7,7 +7,7 @@
     "dev": "vite",
     "build": "tsc -b && vite build",
     "preview": "vite preview",
-    "deploy": "wrangler pages deploy dist",
+    "deploy": "wrangler pages deploy dist --project-name tabletop-tools-tournament --branch main",
     "test": "vitest run --passWithNoTests",
     "test:watch": "vitest"
   },

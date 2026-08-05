@@ -1,3 +1,5 @@
+import { SkeletonTable, SkeletonText } from '@tabletop-tools/ui'
+
 import { trpc } from '../lib/trpc'
 
 interface Props {
@@ -9,7 +11,12 @@ export function TournamentDetail({ importId, onBack }: Props) {
   const { data, isLoading } = trpc.source.tournament.useQuery({ eventId: importId })
 
   if (isLoading) {
-    return <p className="text-slate-400 text-sm">Loading...</p>
+    return (
+      <div className="space-y-6">
+        <SkeletonText lines={2} />
+        <SkeletonTable rows={10} columns={5} />
+      </div>
+    )
   }
 
   if (!data) {

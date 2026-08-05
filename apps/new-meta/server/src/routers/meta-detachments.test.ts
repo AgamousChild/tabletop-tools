@@ -2,6 +2,7 @@ import { createClient } from '@libsql/client'
 import { createRequestHelper, TEST_SECRET, TEST_USER } from '@tabletop-tools/auth/src/test-helpers'
 import { createDbFromClient } from '@tabletop-tools/db'
 import { applyTestSchema, seedReferenceDims } from '@tabletop-tools/db/src/test-schema'
+import { buildCubeForEvents } from '@tabletop-tools/server-core'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 
 import { createServer } from '../server.js'
@@ -40,7 +41,7 @@ interface FactionResponse {
 
 async function faction(factionId: string): Promise<FactionResponse> {
   const res = await makeRequest(
-    `/trpc/meta.faction?input=${encodeURIComponent(JSON.stringify({ factionId }))}`,
+    `/trpc/meta.faction?input=${encodeURIComponent(JSON.stringify({ factionId, frame: 'event:ev1' }))}`,
     { method: 'GET' },
   )
   expect(res.status).toBe(200)
@@ -57,9 +58,9 @@ beforeAll(async () => {
       ('necrons:cursed-legion','Cursed Legion','necrons',NULL,2),
       ('necrons:skyshroud-spearhead','Skyshroud Spearhead','necrons',NULL,1),
       ('necrons:obeisance-phalanx','Obeisance Phalanx','necrons',NULL,3);
-    INSERT INTO dim_detachment_combo (id, faction_id, member_count, total_dp, is_legal) VALUES
-      ('necrons:cursed-legion+skyshroud-spearhead','necrons',2,3,1),
-      ('necrons:obeisance-phalanx','necrons',1,3,1);
+    INSERT INTO dim_detachment_combo (id, faction_id, member_count, total_dp, is_legal, members) VALUES
+      ('necrons:cursed-legion+skyshroud-spearhead','necrons',2,3,1,'Cursed Legion + Skyshroud Spearhead'),
+      ('necrons:obeisance-phalanx','necrons',1,3,1,'Obeisance Phalanx');
     INSERT INTO dim_detachment_combo_member (combo_id, detachment_id) VALUES
       ('necrons:cursed-legion+skyshroud-spearhead','necrons:cursed-legion'),
       ('necrons:cursed-legion+skyshroud-spearhead','necrons:skyshroud-spearhead'),
@@ -78,21 +79,21 @@ beforeAll(async () => {
       ('p2','necrons:obeisance-phalanx',1,3);
   `)
 
-  // 6 games for Alice's two-detachment army (all wins), 6 for Bob's single.
-  const facts: string[] = []
-  for (let i = 0; i < 6; i++) {
-    facts.push(
-      `('fa${i}','ev1','p1','p2',${i + 1},'necrons','necrons:cursed-legion','necrons:cursed-legion+skyshroud-spearhead',1.0)`,
-    )
-    facts.push(
-      `('fb${i}','ev1','p2','p1',${i + 1},'necrons','necrons:obeisance-phalanx','necrons:obeisance-phalanx',0.0)`,
-    )
+  // Six rounds of Alice (two-detachment army) beating Bob (single). Pairings,
+  // not hand-written facts: the cube builder derives fact rows AND the
+  // Detachment/Combo rollups from these, so this exercises the real chain
+  // rather than a fixture shaped like the answer.
+  const pairings: string[] = []
+  for (let i = 1; i <= 6; i++) {
+    pairings.push(`('pair${i}','ev1',${i},'p1','p2',90,50,'p1')`)
   }
   await client.executeMultiple(`
-    INSERT INTO fact_game_results
-      (id, event_id, player_id, opponent_id, round, faction_id, detachment_id, combo_id, result)
-      VALUES ${facts.join(',')};
+    INSERT INTO meta_pairings
+      (id, event_id, round, player1_id, player2_id, player1_score, player2_score, result)
+      VALUES ${pairings.join(',')};
   `)
+
+  await buildCubeForEvents(db, ['ev1'])
 })
 
 afterAll(() => client.close())

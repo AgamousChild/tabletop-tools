@@ -199,7 +199,15 @@ describe('buildCubeForEvents', () => {
     const tops = (await db.all(sql`SELECT * FROM meta_top`)) as Array<Record<string, unknown>>
     expect(tops.length).toBeGreaterThan(0)
     const smTop = tops.find((t) => t.faction_id === 'sm')!
-    expect(smTop.wins).toBe(3)
+    // ONE win, not three. The faction rollup used to sum meta_event_players'
+    // self-reported W/L/D (the fixture says 3-2-0) while every other
+    // granularity counted fact rows. The two never reconciled. Measures now
+    // come from the fact grain at every level, and this event has exactly one
+    // pairing, so it is one game won.
+    expect(smTop.wins).toBe(1)
+    expect(smTop.games).toBe(1)
+    // Players still come from the player rows — meta share must count entrants,
+    // including at events that recorded no pairings.
     expect(smTop.players).toBe(1)
   })
 
@@ -385,6 +393,156 @@ describe('buildCubeForEvents', () => {
     )) as Array<{ date: number; year: number }>
     expect(after[0]!.year).toBe(2025)
     expect(after[0]!.date).toBe(Date.parse('2025-05-04T00:00:00Z'))
+  })
+
+  it('builds Detachment and Combo rollups so the interface never aggregates facts', async () => {
+    // The cube only ever wrote Faction rollups — 6,859 rows in prod, zero at
+    // any other granularity — so every detachment question was a runtime join
+    // over 75k fact rows: 4.3s to return 12 rows on a faction page. The whole
+    // point of the cube is that the read path is an indexed SELECT.
+    await insertEvent(client, {
+      id: 'evt-roll',
+      date: Date.UTC(2025, 5, 14),
+      source: 'native',
+      sourceId: 'tourn-roll',
+      importedAt: 1000,
+    })
+    await client.executeMultiple(`
+      INSERT INTO dim_detachment (id, name, faction_id, subfaction_id, dp) VALUES
+        ('sm:gladius','Gladius','sm',NULL,2),
+        ('sm:librarius','Librarius','sm',NULL,1);
+      INSERT INTO dim_detachment_combo (id, faction_id, member_count, total_dp, is_legal, members)
+        VALUES ('sm:gladius+librarius','sm',2,3,1,'Gladius + Librarius');
+      INSERT INTO dim_detachment_combo_member (combo_id, detachment_id) VALUES
+        ('sm:gladius+librarius','sm:gladius'),
+        ('sm:gladius+librarius','sm:librarius');
+      UPDATE meta_event_players SET combo_id='sm:gladius+librarius', detachment_id='sm:gladius'
+        WHERE id='evt-roll-p1';
+    `)
+
+    await buildCubeForEvents(db, ['evt-roll'])
+
+    const det = (await db.all(sql`
+      SELECT detachment_id, games, wins, players FROM meta_top
+      WHERE granularity_id = 3 AND meta_for_id = 'event:evt-roll' ORDER BY detachment_id
+    `)) as Array<Record<string, unknown>>
+    // BOTH members credited for the same game — the "any position" rule,
+    // resolved at build time instead of per request.
+    expect(det.map((d) => d.detachment_id)).toEqual(['sm:gladius', 'sm:librarius'])
+    expect(det[0]!.games).toBe(1)
+    expect(det[1]!.games).toBe(1)
+
+    const combo = (await db.all(sql`
+      SELECT combo_id, games, players FROM meta_top
+      WHERE granularity_id = 4 AND meta_for_id = 'event:evt-roll'
+    `)) as Array<Record<string, unknown>>
+    // ONE row for the army, not one per member — the grain is per game.
+    expect(combo).toHaveLength(1)
+    expect(combo[0]!.combo_id).toBe('sm:gladius+librarius')
+    expect(combo[0]!.games).toBe(1)
+  })
+
+  it('populates the SAME metric set at every granularity, not just Faction', async () => {
+    // Three near-copies of the rollup writer each filled a different subset:
+    // detachment and combo wrote zeros for player_pop_pct, over_rep and every
+    // placement column, so the dashboard showed "Meta% 0.0%" and blank 1st/T4
+    // on every row. SubFaction was never written at all while the selector
+    // still offered it, so choosing it returned an empty table.
+    //
+    // This asserts the invariant rather than the values: whatever levels exist,
+    // they all carry the same measures. A new granularity cannot ship
+    // half-populated without failing here.
+    await insertEvent(client, {
+      id: 'evt-metrics',
+      date: Date.UTC(2025, 5, 14),
+      source: 'native',
+      sourceId: 'tourn-metrics',
+      importedAt: 1000,
+    })
+    await client.executeMultiple(`
+      INSERT INTO dim_subfaction (id, name, faction_id) VALUES ('sm-sub','Ultramarines','sm');
+      INSERT INTO dim_detachment (id, name, faction_id, subfaction_id, dp) VALUES
+        ('sm:gladius','Gladius','sm',NULL,2),
+        ('sm:librarius','Librarius','sm',NULL,1);
+      INSERT INTO dim_detachment_combo (id, faction_id, member_count, total_dp, is_legal, members)
+        VALUES ('sm:gladius+librarius','sm',2,3,1,'Gladius + Librarius');
+      INSERT INTO dim_detachment_combo_member (combo_id, detachment_id) VALUES
+        ('sm:gladius+librarius','sm:gladius'),
+        ('sm:gladius+librarius','sm:librarius');
+      UPDATE meta_event_players
+        SET combo_id='sm:gladius+librarius', detachment_id='sm:gladius', subfaction_id='sm-sub'
+        WHERE id='evt-metrics-p1';
+      INSERT INTO meta_event_player_detachment (player_id, detachment_id, position, detachment_points)
+        VALUES ('evt-metrics-p1','sm:gladius',1,2), ('evt-metrics-p1','sm:librarius',2,1);
+    `)
+
+    await buildCubeForEvents(db, ['evt-metrics'])
+
+    const rows = (await db.all(sql`
+      SELECT granularity_id, games, players, player_pop_pct, over_rep, event_wins, event_top4
+      FROM meta_top WHERE meta_for_id = 'event:evt-metrics' ORDER BY granularity_id
+    `)) as Array<Record<string, number>>
+
+    // SubFaction (2), Detachment (3) and Combo (4) all present alongside Faction.
+    const levels = [...new Set(rows.map((r) => r.granularity_id))].sort()
+    expect(levels).toEqual([1, 2, 3, 4])
+
+    // The player placed 1st, so every level that describes that army must say so
+    // — not zero, which is what the old per-level copies wrote.
+    for (const level of [2, 3, 4]) {
+      const atLevel = rows.filter((r) => r.granularity_id === level)
+      expect(atLevel.length).toBeGreaterThan(0)
+      for (const r of atLevel) {
+        expect(r.games).toBeGreaterThan(0)
+        expect(r.players).toBeGreaterThan(0)
+        expect(r.player_pop_pct).toBeGreaterThan(0)
+        expect(r.over_rep).toBeGreaterThan(0)
+        expect(r.event_wins).toBe(1)
+        expect(r.event_top4).toBe(1)
+      }
+    }
+  })
+
+  it('scopes matchups to their frame instead of aggregating all time', async () => {
+    // meta.matchups accepted a `frame` input and never referenced it, so the
+    // matrix showed all-time matchups whatever period was selected. Storing
+    // matchups per frame makes that impossible to get wrong.
+    await insertEvent(client, {
+      id: 'evt-m1',
+      date: Date.UTC(2025, 0, 15),
+      source: 'native',
+      sourceId: 'm1',
+      importedAt: 1000,
+    })
+    await insertEvent(client, {
+      id: 'evt-m2',
+      date: Date.UTC(2025, 6, 15),
+      source: 'native',
+      sourceId: 'm2',
+      importedAt: 1000,
+    })
+    await buildCubeForEvents(db, ['evt-m1', 'evt-m2'])
+
+    const all = (await db.all(sql`
+      SELECT meta_for_id, key_a, key_b, games FROM meta_matchup WHERE granularity_id = 1
+    `)) as Array<Record<string, unknown>>
+    expect(all.length).toBeGreaterThan(0)
+
+    // Each event's own frame sees only its own game, not both.
+    const e1 = all.filter((r) => r.meta_for_id === 'event:evt-m1')
+    const e2 = all.filter((r) => r.meta_for_id === 'event:evt-m2')
+    expect(e1).toHaveLength(1)
+    expect(e2).toHaveLength(1)
+    expect(e1[0]!.games).toBe(1)
+    expect(e2[0]!.games).toBe(1)
+
+    // The year frame covers both.
+    const year = all.filter((r) => r.meta_for_id === 'year:2025')
+    expect(year).toHaveLength(1)
+    expect(year[0]!.games).toBe(2)
+
+    // Stored once per pairing, in a stable order.
+    for (const r of all) expect(String(r.key_a) < String(r.key_b)).toBe(true)
   })
 
   it('is idempotent — calling twice for the same event does not duplicate fact rows', async () => {

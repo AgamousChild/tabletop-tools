@@ -1,10 +1,10 @@
 // splitDetachmentNames lives in server-core because that is where the
 // dim_detachment registry lives — the only place that can decide whether a
 // split is right (see resolveDeclaredDetachments). One implementation, not two.
+import type { TTTPackage, TTTUnit } from '@tabletop-tools/db'
 import { splitDetachmentNames } from '@tabletop-tools/server-core'
 
 import { normalizeFaction } from './faction-map'
-import type { TTTPackage, TTTUnit } from './ttt-types'
 
 /** Canonical faction names as they appear in GW App exports. Longer names first. */
 const FACTION_NAMES = [
@@ -301,19 +301,38 @@ function parseUnits(text: string): TTTUnit[] {
 /**
  * Given text before a "(NNN Points)" paren, find where the unit name starts.
  *
- * Key insight: since there are no newlines, gear text and unit names are concatenated
- * directly (e.g. "bolterGrand Master"). The boundary is a lowercase-to-uppercase
- * transition without a space. Within proper text, words are space-separated, so
- * this transition only occurs at the gear/name boundary.
+ * Two shapes arrive here. BCP usually strips newlines before we store the text,
+ * leaving one run-on string where gear and the next unit name are concatenated
+ * directly ("bolterGrand Master"); the boundary there is a lowercase-to-uppercase
+ * transition with no space, which within ordinary space-separated text only
+ * occurs at that join. Some lists keep their newlines, and then the name simply
+ * starts on its own line.
+ *
+ * The newline case must be checked FIRST. It used to fall through to the
+ * transition scan, which finds nothing (the character before the name is "\n",
+ * neither lowercase nor uppercase) and then to "first capital in the preceding
+ * text" — so every unit name absorbed all the units before it and grew by one
+ * unit each time. Those lists still stored parseStatus "ok": on prod
+ * 2026-08-03 the winning Genestealer Cults list from Shark Tank Winter 2026 had
+ * 21 units whose names ran to 400+ characters of concatenated wargear.
  *
  * Examples:
  *   "Hive Tyrant " → start at 0
  *   "  • Enhancements: Tremor SensesHyperadapted Raveners " → start at "Hyperadapted"
  *   "  • 1x Storm bolterGrand Master in Nemesis Dreadknight " → start at "Grand"
+ *   "  • 1x Patriarch’s claws\n\nReductus Saboteur " → start at "Reductus"
  */
 function findNameStart(beforeParen: string): number {
   let end = beforeParen.length
-  while (end > 0 && beforeParen[end - 1] === ' ') end--
+  while (end > 0 && /\s/.test(beforeParen[end - 1]!)) end--
+
+  // A newline is an unambiguous boundary — a unit name begins its own line.
+  const lastNewline = beforeParen.lastIndexOf('\n', Math.max(end - 1, 0))
+  if (lastNewline !== -1 && lastNewline < end) {
+    let pos = lastNewline + 1
+    while (pos < end && /\s/.test(beforeParen[pos]!)) pos++
+    return pos
+  }
 
   // Find the LAST lowercase-to-uppercase transition (no space between).
   // This marks where gear text ends and unit name begins.

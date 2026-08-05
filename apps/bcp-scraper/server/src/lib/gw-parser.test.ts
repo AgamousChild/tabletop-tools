@@ -1,10 +1,10 @@
 import { createClient } from '@libsql/client'
+import type { TTTPackage } from '@tabletop-tools/db'
 import { createDbFromClient } from '@tabletop-tools/db'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 
 import { loadFactionMap, resetFactionMapCache } from './faction-map'
 import { parseGwApp } from './gw-parser'
-import type { TTTPackage } from './ttt-types'
 
 const client = createClient({ url: ':memory:' })
 const db = createDbFromClient(client)
@@ -205,6 +205,77 @@ describe('parseGwApp', () => {
     it('stores rawSource in exports', () => {
       const result = parseGwApp(SAMPLE_TYRANIDS)
       expect(result.exports?.rawSource).toBe(SAMPLE_TYRANIDS)
+    })
+  })
+
+  /**
+   * Lists that KEPT their newlines.
+   *
+   * Every other fixture in this file is a single run-on line, because BCP
+   * usually strips newlines before we store the text. Not always — and on a
+   * list that kept them, findNameStart's lowercase-to-uppercase heuristic found
+   * nothing (the character before a unit name is "\n", which is neither), fell
+   * back to "first capital in the preceding text", and every unit name
+   * snowballed to include all the units before it.
+   *
+   * Measured on prod 2026-08-03: the winning Genestealer Cults list from Shark
+   * Tank Winter 2026 stored parseStatus "ok" with 21 units whose names were
+   * 400+ characters of concatenated wargear.
+   */
+  describe('lists that retain newlines', () => {
+    const SAMPLE_NEWLINES = [
+      'Muscle Beach (1995 points)',
+      'Genestealer Cults',
+      'Strike Force (2000 points)',
+      'Biosanctic Broodsurge',
+      'CHARACTERS',
+      'Patriarch (80 points)',
+      '  • Warlord',
+      '  • 1x Patriarch’s claws',
+      '',
+      'Reductus Saboteur (70 points)',
+      '  • 1x Autopistol',
+      '    1x Demolition charges',
+      '',
+      'BATTLELINE',
+      'Acolyte Hybrids with Hand Flamers (75 points)',
+      '  • 4x Acolyte Hybrid',
+      '    • 4x Hand flamer',
+    ].join('\n')
+
+    it('keeps each unit name to itself instead of accumulating the previous ones', () => {
+      const result = parseGwApp(SAMPLE_NEWLINES)
+      expect(result.list.units.map((u) => u.name)).toEqual([
+        'Patriarch',
+        'Reductus Saboteur',
+        'Acolyte Hybrids with Hand Flamers',
+      ])
+    })
+
+    it('still reads points, roles, warlord and wargear', () => {
+      const result = parseGwApp(SAMPLE_NEWLINES)
+      const [patriarch, saboteur, acolytes] = result.list.units
+
+      expect(patriarch!.points).toBe(80)
+      expect(patriarch!.role).toBe('Character')
+      expect(patriarch!.isWarlord).toBe(true)
+      expect(patriarch!.wargear).toContain('Patriarch’s claws')
+
+      expect(saboteur!.points).toBe(70)
+      expect(saboteur!.wargear).toContain('Autopistol')
+      expect(saboteur!.wargear).toContain('Demolition charges')
+
+      expect(acolytes!.role).toBe('Battleline')
+      expect(acolytes!.points).toBe(75)
+    })
+
+    it('reads the list header the same as the run-on form', () => {
+      const result = parseGwApp(SAMPLE_NEWLINES)
+      expect(result.meta.name).toBe('Muscle Beach')
+      expect(result.meta.totalPoints).toBe(1995)
+      expect(result.list.factionName).toBe('Genestealer Cults')
+      expect(result.list.detachmentName).toBe('Biosanctic Broodsurge')
+      expect(result.parseStatus).toBe('ok')
     })
   })
 })

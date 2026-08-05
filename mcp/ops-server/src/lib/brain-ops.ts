@@ -18,6 +18,7 @@ import { execSync } from 'node:child_process'
 import { existsSync, readdirSync, readFileSync } from 'node:fs'
 import { join, resolve } from 'node:path'
 
+import { purgeCloudflareCache } from './cf.js'
 import { REPO_ROOT, runCmd, type RunResult } from './util.js'
 
 export const BRAIN_SERVER_DIR = join(REPO_ROOT, 'apps', 'brain', 'server')
@@ -382,27 +383,8 @@ export async function brainCubeReport(opts: { brainUrl?: string } = {}): Promise
 // ── CDN purge ──────────────────────────────────────────────────────────────
 
 export async function brainPurgeCache(): Promise<{ ok: boolean; message: string }> {
-  const zone = process.env.CLOUDFLARE_ZONE_ID
-  const token = process.env.CLOUDFLARE_API_TOKEN ?? process.env.CF_FULL_API_TOKEN
-  if (!zone || !token) {
-    return {
-      ok: false,
-      message: 'CLOUDFLARE_ZONE_ID and CLOUDFLARE_API_TOKEN required',
-    }
-  }
-  const resp = await fetch(`https://api.cloudflare.com/client/v4/zones/${zone}/purge_cache`, {
-    method: 'POST',
-    headers: {
-      Authorization: `Bearer ${token}`,
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({ purge_everything: true }),
-  })
-  const body = (await resp.json().catch(() => ({}))) as { success?: boolean; errors?: unknown[] }
-  return {
-    ok: resp.ok && !!body.success,
-    message: resp.ok && body.success ? 'purged' : `HTTP ${resp.status} ${JSON.stringify(body)}`,
-  }
+  // Shared with the app deploys — one purge implementation, not two (Rule 3).
+  return purgeCloudflareCache()
 }
 
 // ── Detachments diagnostic ──────────────────────────────────────────────────

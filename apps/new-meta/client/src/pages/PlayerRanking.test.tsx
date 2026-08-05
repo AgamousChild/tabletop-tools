@@ -32,11 +32,13 @@ describe('PlayerRanking', () => {
     expect(screen.getByText('Player Rankings')).toBeInTheDocument()
   })
 
-  it('shows loading text while fetching', () => {
+  it('shows a loading skeleton while fetching', () => {
     mockIsLoading = true
     mockPlayers = []
     render(<PlayerRanking />)
-    expect(screen.getByText(/loading/i)).toBeInTheDocument()
+    // The affordance is what matters, not the word: skeletons stand in for
+    // the real content so a slow cube query does not read as a dead page.
+    expect(screen.getAllByRole('status').length).toBeGreaterThan(0)
   })
 
   it('shows empty-state message when no players', () => {

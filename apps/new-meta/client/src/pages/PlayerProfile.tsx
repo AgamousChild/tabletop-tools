@@ -1,3 +1,4 @@
+import { SkeletonTable, SkeletonText } from '@tabletop-tools/ui'
 import { useMemo } from 'react'
 
 import { trpc } from '../lib/trpc'
@@ -16,7 +17,12 @@ export function PlayerProfile({ playerId, onBack }: Props) {
   }, [data?.history])
 
   if (isLoading) {
-    return <p className="text-slate-400 text-sm">Loading…</p>
+    return (
+      <div className="space-y-6">
+        <SkeletonText lines={2} />
+        <SkeletonTable rows={10} columns={5} />
+      </div>
+    )
   }
 
   if (!data) {

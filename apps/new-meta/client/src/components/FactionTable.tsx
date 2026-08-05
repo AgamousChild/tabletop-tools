@@ -20,11 +20,17 @@ interface FactionStat {
 }
 
 interface Props {
+  /**
+   * What a row IS at the selected granularity — "Faction", "Detachment",
+   * "Combination". The header said "Faction" at every level, which read as a
+   * bug once Detachment rollups existed and the rows were detachments.
+   */
+  rowLabel?: string
   stats: FactionStat[]
   onSelect?: (factionId: string) => void
 }
 
-export function FactionTable({ stats, onSelect }: Props) {
+export function FactionTable({ stats, onSelect, rowLabel = 'Faction' }: Props) {
   if (stats.length === 0) {
     return <p className="text-slate-400 text-sm py-4 text-center">No data yet.</p>
   }
@@ -34,7 +40,7 @@ export function FactionTable({ stats, onSelect }: Props) {
       <table className="w-full text-sm">
         <thead>
           <tr className="border-b border-slate-800 text-slate-400 text-left text-xs">
-            <th className="pb-2 pr-4">Faction</th>
+            <th className="pb-2 pr-4">{rowLabel}</th>
             <th className="pb-2 pr-3 text-right">Win%</th>
             <th className="pb-2 pr-3 text-right">W</th>
             <th className="pb-2 pr-3 text-right">L</th>

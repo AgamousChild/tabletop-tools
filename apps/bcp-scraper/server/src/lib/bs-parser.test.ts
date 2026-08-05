@@ -1,10 +1,10 @@
 import { createClient } from '@libsql/client'
+import type { TTTPackage } from '@tabletop-tools/db'
 import { createDbFromClient } from '@tabletop-tools/db'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 
 import { parseBattleScribe } from './bs-parser'
 import { loadFactionMap, resetFactionMapCache } from './faction-map'
-import type { TTTPackage } from './ttt-types'
 
 const client = createClient({ url: ':memory:' })
 const db = createDbFromClient(client)
