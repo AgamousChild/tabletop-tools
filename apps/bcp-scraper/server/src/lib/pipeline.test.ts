@@ -23,7 +23,7 @@ async function setupTables(client: ReturnType<typeof createClient>) {
   await client.executeMultiple(SEED)
 }
 
-// Seed: 1 event, 2 players (different factions), 1 pairing, 1 dataslate, 1 edition
+// Seed: 1 event, 2 players (different factions), 5 pairings, 1 dataslate, 1 edition
 async function seedData(client: ReturnType<typeof createClient>) {
   const eventDate = Date.UTC(2025, 5, 14) // June 14, 2025 (Saturday)
 
@@ -121,10 +121,27 @@ async function seedData(client: ReturnType<typeof createClient>) {
       null,
     ],
   })
-  await client.execute({
-    sql: `INSERT INTO meta_pairings VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-    args: ['pair1', 'evt1', 1, 'p1', 'p2', 80, 60, null, null, 'p1'],
-  })
+  // Five rounds, matching the records declared above: Alice (sm) 3-2, Bob
+  // (ork) 2-3. The fixture used to seed a single pairing while both players
+  // claimed a five-round record, which only passed because faction rollups
+  // copied meta_event_players.wins/losses straight across. They are derived
+  // from fact_game_results now — one row per player per game — so a rollup
+  // that sums correctly and a rollup that copies one game are no longer the
+  // same number, and the fixture has to mean what it says.
+  const rounds: Array<{ p1Score: number; p2Score: number; winner: string }> = [
+    { p1Score: 80, p2Score: 60, winner: 'p1' },
+    { p1Score: 75, p2Score: 65, winner: 'p1' },
+    { p1Score: 90, p2Score: 40, winner: 'p1' },
+    { p1Score: 55, p2Score: 70, winner: 'p2' },
+    { p1Score: 50, p2Score: 85, winner: 'p2' },
+  ]
+
+  for (const [i, r] of rounds.entries()) {
+    await client.execute({
+      sql: `INSERT INTO meta_pairings VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      args: [`pair${i + 1}`, 'evt1', i + 1, 'p1', 'p2', r.p1Score, r.p2Score, null, null, r.winner],
+    })
+  }
 }
 
 describe('generateFrames', () => {
@@ -187,8 +204,10 @@ describe('runPipeline', () => {
     await runPipeline(db)
 
     // Check meta_cube_status
-    const status = await db.all(sql`SELECT status FROM meta_cube_status WHERE id = 1`)
-    expect(status[0].status).toBe('complete')
+    const status = (await db.all(sql`SELECT status FROM meta_cube_status WHERE id = 1`)) as Array<{
+      status: string
+    }>
+    expect(status[0]!.status).toBe('complete')
 
     // Check meta_for has frames
     const frames = await db.all(sql`SELECT * FROM meta_for`)
@@ -199,21 +218,27 @@ describe('runPipeline', () => {
     expect(typeIds).toContain(1) // event
     expect(typeIds).toContain(5) // year
 
-    // Check fact_game_results — 1 pairing → 2 fact rows
+    // Check fact_game_results — 5 pairings → one row per player per game
     const facts = await db.all(sql`SELECT * FROM fact_game_results`)
-    expect(facts).toHaveLength(2)
+    expect(facts).toHaveLength(10)
 
-    // Player 1 won — result should be 1.0 for p1 perspective
-    const p1Fact = facts.find((f: any) => f.player_id === 'p1') as any
+    // Round 1: player 1 won 80-60, so result is 1.0 from the p1 perspective
+    // and 0.0 from p2's. Anchored on the round rather than taking whichever
+    // row came back first, now that each player has five of them.
+    const p1Fact = facts.find((f: any) => f.player_id === 'p1' && f.round === 1) as any
     expect(p1Fact.result).toBe(1.0)
     expect(p1Fact.faction_id).toBe('sm')
     expect(p1Fact.opponent_faction_id).toBe('ork')
     expect(p1Fact.player_score).toBe(80)
     expect(p1Fact.opponent_score).toBe(60)
 
-    const p2Fact = facts.find((f: any) => f.player_id === 'p2') as any
+    const p2Fact = facts.find((f: any) => f.player_id === 'p2' && f.round === 1) as any
     expect(p2Fact.result).toBe(0.0)
     expect(p2Fact.faction_id).toBe('ork')
+
+    // Both players' declared records are reproduced by summing the facts.
+    expect(facts.filter((f: any) => f.player_id === 'p1' && f.result === 1.0)).toHaveLength(3)
+    expect(facts.filter((f: any) => f.player_id === 'p2' && f.result === 1.0)).toHaveLength(2)
 
     // Check meta_top has rows
     const tops = await db.all(sql`SELECT * FROM meta_top`)
@@ -234,8 +259,10 @@ describe('runPipeline', () => {
 
     await expect(runPipeline(db)).rejects.toThrow()
 
-    const status = await db.all(sql`SELECT status FROM meta_cube_status WHERE id = 1`)
-    expect(status[0].status).toBe('failed')
+    const status = (await db.all(sql`SELECT status FROM meta_cube_status WHERE id = 1`)) as Array<{
+      status: string
+    }>
+    expect(status[0]!.status).toBe('failed')
   })
 
   it('clears existing cube data before rebuild', async () => {
@@ -244,7 +271,7 @@ describe('runPipeline', () => {
     await runPipeline(db)
 
     const facts = await db.all(sql`SELECT * FROM fact_game_results`)
-    // Still only 2 fact rows (1 pairing × 2 perspectives)
-    expect(facts).toHaveLength(2)
+    // Still 10 rows, not 20 — 5 pairings × 2 perspectives, written once.
+    expect(facts).toHaveLength(10)
   })
 })
